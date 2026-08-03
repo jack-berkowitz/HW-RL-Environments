@@ -1,0 +1,70 @@
+OpenSTA 3.1.0 3f4b337e30 Copyright (c) 2026, Parallax Software, Inc.
+License GPLv3: GNU GPL version 3 <http://gnu.org/licenses/gpl.html>
+
+This is free software, and you are free to change and redistribute it
+under certain conditions; type `show_copying' for details. 
+This program comes with ABSOLUTELY NO WARRANTY; for details type `show_warranty'.
+===REPORT_CHECKS===
+Startpoint: _2340_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: rd_data[0] (output port clocked by clk)
+Path Group: clk
+Path Type: max
+
+  Delay    Time   Description
+---------------------------------------------------------
+   0.00    0.00   clock clk (rise edge)
+   0.00    0.00   clock network delay (ideal)
+   0.00    0.00 ^ _2340_/CLK (sky130_fd_sc_hd__dfxtp_1)
+   4.09    4.09 ^ _2340_/Q (sky130_fd_sc_hd__dfxtp_1)
+   0.83    4.92 v _1723_/X (sky130_fd_sc_hd__mux4_2)
+   0.46    5.38 v _1725_/X (sky130_fd_sc_hd__mux4_2)
+   0.00    5.38 v rd_data[0] (out)
+           5.38   data arrival time
+
+   5.00    5.00   clock clk (rise edge)
+   0.00    5.00   clock network delay (ideal)
+   0.00    5.00   clock reconvergence pessimism
+  -0.50    4.50   output external delay
+           4.50   data required time
+---------------------------------------------------------
+           4.50   data required time
+          -5.38   data arrival time
+---------------------------------------------------------
+          -0.88   slack (VIOLATED)
+
+
+Startpoint: _1819_ (rising edge-triggered flip-flop clocked by clk)
+Endpoint: _1819_ (rising edge-triggered flip-flop clocked by clk)
+Path Group: clk
+Path Type: min
+
+  Delay    Time   Description
+---------------------------------------------------------
+   0.00    0.00   clock clk (rise edge)
+   0.00    0.00   clock network delay (ideal)
+   0.00    0.00 ^ _1819_/CLK (sky130_fd_sc_hd__dfxtp_1)
+   0.30    0.30 v _1819_/Q (sky130_fd_sc_hd__dfxtp_1)
+   0.11    0.41 ^ _1796_/Y (sky130_fd_sc_hd__a21oi_1)
+   0.00    0.41 ^ _1819_/D (sky130_fd_sc_hd__dfxtp_1)
+           0.41   data arrival time
+
+   0.00    0.00   clock clk (rise edge)
+   0.00    0.00   clock network delay (ideal)
+   0.00    0.00   clock reconvergence pessimism
+           0.00 ^ _1819_/CLK (sky130_fd_sc_hd__dfxtp_1)
+  -0.04   -0.04   library hold time
+          -0.04   data required time
+---------------------------------------------------------
+          -0.04   data required time
+          -0.41   data arrival time
+---------------------------------------------------------
+           0.45   slack (MET)
+
+
+===WNS===
+wns max -0.88
+===TNS===
+tns max -23.63
+===WORST_SLACK===
+worst slack max -0.88
+===DONE===

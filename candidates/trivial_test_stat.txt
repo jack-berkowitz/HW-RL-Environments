@@ -1,0 +1,17 @@
+
+6. Printing statistics.
+
+=== trivial_test ===
+
+        +----------Local Count, excluding submodules.
+        | 
+        8 wires
+        8 wire bits
+        5 public wires
+        5 public wire bits
+        4 ports
+        4 port bits
+        2 cells
+        1   sky130_fd_sc_hd__and2_0
+        1   sky130_fd_sc_hd__dfxtp_1
+
