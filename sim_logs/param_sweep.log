@@ -1,0 +1,46 @@
+arbiter NUM_REQ=2 VARIANT=0                    TEST_RESULT: PASS
+arbiter NUM_REQ=2 VARIANT=1                    TEST_RESULT: PASS
+arbiter NUM_REQ=2 VARIANT=2                    TEST_RESULT: PASS
+arbiter NUM_REQ=4 VARIANT=0                    TEST_RESULT: PASS
+arbiter NUM_REQ=4 VARIANT=1                    TEST_RESULT: PASS
+arbiter NUM_REQ=4 VARIANT=2                    TEST_RESULT: PASS
+arbiter NUM_REQ=8 VARIANT=0                    TEST_RESULT: PASS
+arbiter NUM_REQ=8 VARIANT=1                    TEST_RESULT: PASS
+arbiter NUM_REQ=8 VARIANT=2                    TEST_RESULT: PASS
+arbiter NUM_REQ=16 VARIANT=0                   TEST_RESULT: PASS
+arbiter NUM_REQ=16 VARIANT=1                   TEST_RESULT: PASS
+arbiter NUM_REQ=16 VARIANT=2                   TEST_RESULT: PASS
+multiplier BIT_WIDTH=8 SIGNED_MODE=0           TEST_RESULT: PASS
+multiplier BIT_WIDTH=8 SIGNED_MODE=1           TEST_RESULT: PASS
+multiplier BIT_WIDTH=16 SIGNED_MODE=0          TEST_RESULT: PASS
+multiplier BIT_WIDTH=16 SIGNED_MODE=1          TEST_RESULT: PASS
+multiplier BIT_WIDTH=32 SIGNED_MODE=0          TEST_RESULT: PASS
+multiplier BIT_WIDTH=32 SIGNED_MODE=1          TEST_RESULT: PASS
+softmax NUM_ELEMENTS=4                         TEST_RESULT: PASS
+softmax NUM_ELEMENTS=8                         TEST_RESULT: PASS
+softmax NUM_ELEMENTS=16                        TEST_RESULT: PASS
+uart DATA_BITS=7 PARITY=0 STOP_BITS=1          TEST_RESULT: PASS
+uart DATA_BITS=7 PARITY=0 STOP_BITS=2          TEST_RESULT: PASS
+uart DATA_BITS=7 PARITY=1 STOP_BITS=1          TEST_RESULT: PASS
+uart DATA_BITS=7 PARITY=1 STOP_BITS=2          TEST_RESULT: PASS
+uart DATA_BITS=7 PARITY=2 STOP_BITS=1          TEST_RESULT: PASS
+uart DATA_BITS=7 PARITY=2 STOP_BITS=2          TEST_RESULT: PASS
+uart DATA_BITS=8 PARITY=0 STOP_BITS=1          TEST_RESULT: PASS
+uart DATA_BITS=8 PARITY=0 STOP_BITS=2          TEST_RESULT: PASS
+uart DATA_BITS=8 PARITY=1 STOP_BITS=1          TEST_RESULT: PASS
+uart DATA_BITS=8 PARITY=1 STOP_BITS=2          TEST_RESULT: PASS
+uart DATA_BITS=8 PARITY=2 STOP_BITS=1          TEST_RESULT: PASS
+uart DATA_BITS=8 PARITY=2 STOP_BITS=2          TEST_RESULT: PASS
+fifo DEPTH=8 DATA_WIDTH=8                      TEST_RESULT: FAIL: illegal thresholds
+fifo DEPTH=8 DATA_WIDTH=32                     TEST_RESULT: FAIL: illegal thresholds
+fifo DEPTH=8 DATA_WIDTH=64                     TEST_RESULT: FAIL: illegal thresholds
+fifo DEPTH=16 DATA_WIDTH=8                     TEST_RESULT: PASS
+fifo DEPTH=16 DATA_WIDTH=32                    TEST_RESULT: PASS
+fifo DEPTH=16 DATA_WIDTH=64                    TEST_RESULT: PASS
+fifo DEPTH=32 DATA_WIDTH=8                     TEST_RESULT: PASS
+fifo DEPTH=32 DATA_WIDTH=32                    TEST_RESULT: PASS
+fifo DEPTH=32 DATA_WIDTH=64                    TEST_RESULT: PASS
+fifo DEPTH=64 DATA_WIDTH=8                     TEST_RESULT: PASS
+fifo DEPTH=64 DATA_WIDTH=32                    TEST_RESULT: PASS
+fifo DEPTH=64 DATA_WIDTH=64                    TEST_RESULT: PASS
+SWEEP COMPLETE
