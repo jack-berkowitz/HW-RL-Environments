@@ -1,0 +1,124 @@
+{
+  "design": "arbiter",
+  "tier": "TierOne",
+  "pdk": "sky130hd",
+  "converged_period_ns": 1.4844,
+  "achieved_fmax_mhz": 673.68,
+  "wns_at_converged_ns": null,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 5.0,
+    "period_pass": 1.4844,
+    "period_fail": 1.4062,
+    "bracket_iterations": 3
+  },
+  "search_iterations": 4,
+  "resolution_ns": 0.1,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 5.0,
+      "wns_ns": 1.15561,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 144.0,
+      "log": "fmax_results/arbiter_logs/arbiter_iter01_5.0000ns.log",
+      "note": null
+    },
+    {
+      "iteration": 2,
+      "period_ns": 2.5,
+      "wns_ns": 0.0882572,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 144.7,
+      "log": "fmax_results/arbiter_logs/arbiter_iter02_2.5000ns.log",
+      "note": null
+    },
+    {
+      "iteration": 3,
+      "period_ns": 1.25,
+      "wns_ns": -0.195374,
+      "tns_ns": -0.746054,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 143.1,
+      "log": "fmax_results/arbiter_logs/arbiter_iter03_1.2500ns.log",
+      "note": null
+    },
+    {
+      "iteration": 4,
+      "period_ns": 1.875,
+      "wns_ns": 0.0682605,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 139.3,
+      "log": "fmax_results/arbiter_logs/arbiter_iter04_1.8750ns.log",
+      "note": null
+    },
+    {
+      "iteration": 5,
+      "period_ns": 1.5625,
+      "wns_ns": 0.0661518,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 141.6,
+      "log": "fmax_results/arbiter_logs/arbiter_iter05_1.5625ns.log",
+      "note": null
+    },
+    {
+      "iteration": 6,
+      "period_ns": 1.4062,
+      "wns_ns": -0.120414,
+      "tns_ns": -0.166668,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 141.7,
+      "log": "fmax_results/arbiter_logs/arbiter_iter06_1.4062ns.log",
+      "note": null
+    },
+    {
+      "iteration": 7,
+      "period_ns": 1.4844,
+      "wns_ns": 0.033737,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 144.7,
+      "log": "fmax_results/arbiter_logs/arbiter_iter07_1.4844ns.log",
+      "note": null
+    },
+    {
+      "iteration": 8,
+      "period_ns": 1.4844,
+      "wns_ns": 0.033737,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 142.9,
+      "log": "fmax_results/arbiter_logs/arbiter_iter08_1.4844ns.log",
+      "note": null
+    }
+  ],
+  "total_wall_time_s": 1142.2,
+  "total_pnr_runs": 8,
+  "rtl_git_commit": "c1505c907f4213d93036cbdbd66ba51260930593-dirty",
+  "timestamp": "2026-08-11T18:25:54.014879+00:00",
+  "aborted_reason": null
+}

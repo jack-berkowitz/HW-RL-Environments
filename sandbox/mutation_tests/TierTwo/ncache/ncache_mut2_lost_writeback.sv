@@ -1,5 +1,5 @@
 // =============================================================================
-// ncache.sv -- REFERENCE SOLUTION (harness validation only, NOT a candidate)
+// ncache.sv -- MUTANT 2: dirty line dropped without writeback (throwaway) (harness validation only, NOT a candidate)
 // =============================================================================
 // Implements interfaces/TierTwo/ncache_iface.sv. Exists to prove the testbench
 // passes something correct and fails deliberate mutants; never a candidate.
@@ -403,7 +403,9 @@ module ncache #(
                 vic_rr = vic_rr + 1;
                 // the line being displaced OUT of the victim buffer leaves the
                 // cache entirely -- if it is dirty it must reach memory
-                if (vic_dty[v]) begin
+                // MUTANT 2: the displaced victim entry is discarded even when
+                // dirty, so its write never reaches memory.
+                if (1'b0 && vic_dty[v]) begin
                     int wq;
                     wq = free_wb();
                     if (wq >= 0) begin

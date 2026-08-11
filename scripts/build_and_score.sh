@@ -46,8 +46,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# --sim-only runs stage 1 and stops. find_fmax.py uses it to reuse this
+# script's Verilator gate once up front, instead of paying for a full P&R run
+# just to confirm the RTL still simulates, or duplicating the invocation.
+SIM_ONLY=0
+ARGS=()
+for a in "$@"; do
+  case "$a" in
+    --sim-only) SIM_ONLY=1 ;;
+    *) ARGS+=("$a") ;;
+  esac
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 <module.sv | module_name>" >&2
+  echo "Usage: $0 [--sim-only] <module.sv | module_name>" >&2
   exit 1
 fi
 
@@ -131,10 +144,21 @@ verilator "${VERILATOR_FLAGS[@]}" --top-module "${TB_TOP}" \
 SIM_OUTPUT="$("${SIM_DIR}/obj_dir/sim")"
 echo "${SIM_OUTPUT}"
 
+# persist so collect_results.py can pull METRIC: lines later, regardless
+# of pass/fail
+mkdir -p "${REPO_DIR}/sim_logs/${TIER}"
+echo "${SIM_OUTPUT}" > "${REPO_DIR}/sim_logs/${TIER}/${MODULE}.log"
+
 if ! echo "${SIM_OUTPUT}" | grep -q "^TEST_RESULT: PASS$"; then
   echo ""
   echo "=== ABORTED: ${MODULE} did not pass its testbench -- skipping ORFS build ==="
   exit 1
+fi
+
+if [ "${SIM_ONLY}" = "1" ]; then
+  echo ""
+  echo "=== --sim-only: ${MODULE} passed its testbench; stopping before ORFS ==="
+  exit 0
 fi
 
 echo ""

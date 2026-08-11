@@ -842,7 +842,11 @@ module rob_tb;
         $display("// timeout state: phase=%s cyc=%0d checks=%0d model_count=%0d head=%0d tail=%0d rob_empty=%0b free=%0d committed=%0d",
                  phase, cyc, checks, m_count, m_head, m_tail, rob_empty,
                  free_entries, expect_commit_seq);
-        $display("TEST_RESULT: FAIL: timeout -- testbench did not complete (phase %s)", phase);
+        if (errors > 0)
+            $display("TEST_RESULT: FAIL: %s (%0d failing checks before a timeout in phase %s)",
+                     fail_reason, errors, phase);
+        else
+            $display("TEST_RESULT: FAIL: timeout -- testbench did not complete (phase %s)", phase);
         $finish;
     end
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// ncache.sv -- REFERENCE SOLUTION (harness validation only, NOT a candidate)
+// ncache.sv -- MUTANT 3: crossed response tags under concurrency (throwaway) (harness validation only, NOT a candidate)
 // =============================================================================
 // Implements interfaces/TierTwo/ncache_iface.sv. Exists to prove the testbench
 // passes something correct and fails deliberate mutants; never a candidate.
@@ -422,7 +422,11 @@ module ncache #(
         msh_val[m] = 1'b0;
     endtask
 
+    logic [TAG_W-1:0] pq_tag_saved_a, pq_tag_saved_b;
+
     task automatic emit(input logic port, input int p);
+        if (port == 1'b0) pq_tag_saved_a = pq_tag[p];
+        else              pq_tag_saved_b = pq_tag[p];
         if (port == 1'b0) begin
             A_resp_valid = 1'b1;
             A_resp_tag   = pq_tag[p];
@@ -472,8 +476,18 @@ module ncache #(
             B_resp_valid = 1'b0;
 
             // 1. respond
-            if (svc_a >= 0)                  emit(1'b0, svc_a);
-            if (svc_b >= 0 && svc_b != svc_a) emit(1'b1, svc_b);
+            // MUTANT 3: with two responses in flight in the same cycle the tags
+            // are crossed between the ports -- the classic concurrent-response
+            // mix-up. Each port still answers, with the other's tag.
+            if (svc_a >= 0 && svc_b >= 0 && svc_b != svc_a) begin
+                emit(1'b0, svc_a);
+                emit(1'b1, svc_b);
+                A_resp_tag = pq_tag_saved_b;
+                B_resp_tag = pq_tag_saved_a;
+            end else begin
+                if (svc_a >= 0)                  emit(1'b0, svc_a);
+                if (svc_b >= 0 && svc_b != svc_a) emit(1'b1, svc_b);
+            end
 
             // 2. memory
             if (do_wb) begin

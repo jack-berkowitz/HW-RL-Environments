@@ -1019,7 +1019,11 @@ module lsq_tb;
         #(40 * 10 * (RANDOM_CYCLES + 4000));
         $display("// timeout state: phase=%s cyc=%0d live=%0d checks=%0d",
                  phase, cyc, live_count, checks);
-        $display("TEST_RESULT: FAIL: timeout -- testbench did not complete (phase %s)", phase);
+        if (errors > 0)
+            $display("TEST_RESULT: FAIL: %s (%0d failing checks before a timeout in phase %s)",
+                     fail_reason, errors, phase);
+        else
+            $display("TEST_RESULT: FAIL: timeout -- testbench did not complete (phase %s)", phase);
         $finish;
     end
 

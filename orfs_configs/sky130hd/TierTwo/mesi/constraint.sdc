@@ -1,6 +1,9 @@
-# Fixed, deliberately forgiving 20 ns period -- this is flow/PPA validation,
-# not an Fmax search. Modelled on designs/sky130hd/gcd/constraint.sdc.
-current_design arbiter
+# Carried over from Tier1's flat 20ns period. This is a starting point for
+# calibration, not a validated target -- ROB is structurally different
+# (pointer/comparator logic across DEPTH entries, 2-wide lanes) from the
+# Tier1 modules this period was tuned against. Check WNS after the first
+# run; if slack is large and positive, this period was never a real test.
+current_design mesi
 
 set clk_name      core_clock
 set clk_port_name clk

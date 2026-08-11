@@ -1,5 +1,5 @@
 // =============================================================================
-// ncache.sv -- REFERENCE SOLUTION (harness validation only, NOT a candidate)
+// ncache.sv -- MUTANT 1: secondary miss issues a duplicate fill (throwaway) (harness validation only, NOT a candidate)
 // =============================================================================
 // Implements interfaces/TierTwo/ncache_iface.sv. Exists to prove the testbench
 // passes something correct and fails deliberate mutants; never a candidate.
@@ -176,8 +176,11 @@ module ncache #(
         return -1;
     endfunction
     function automatic int find_mshr(input logic [ADDR_W-1:0] a);
+        // MUTANT 1: never finds an in-flight MSHR, so a secondary miss to a line
+        // already being filled allocates a second MSHR and issues a DUPLICATE
+        // fill instead of merging.
         for (int m = 0; m < MSHRS; m++)
-            if (msh_val[m] && msh_base[m] == base_of(a)) return m;
+            if (1'b0 && msh_val[m] && msh_base[m] == base_of(a)) return m;
         return -1;
     endfunction
     function automatic int free_mshr();

@@ -5,6 +5,14 @@ current_design multiplier
 set clk_name      core_clock
 set clk_port_name clk
 set clk_period    20.0
+
+# Optional override, used by scripts/find_fmax.py to sweep the period without
+# rewriting this file. Absent -> the default above, so every existing
+# invocation behaves exactly as before. Note this scales the IO constraints
+# too, since set_input_delay/set_output_delay below are derived from
+# clk_period -- the search is over a self-consistent constraint set, not just
+# a moved clock edge.
+if {[info exists ::env(CLK_PERIOD_NS)]} { set clk_period $::env(CLK_PERIOD_NS) }
 set clk_io_pct    0.2
 
 set clk_port [get_ports $clk_port_name]

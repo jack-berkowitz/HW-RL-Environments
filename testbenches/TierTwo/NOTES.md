@@ -439,6 +439,184 @@ fail under both.
 
 ---
 
+## Module 4 — Non-blocking dual-port cache with victim buffer — **COMPLETE**
+
+Files: `interfaces/TierTwo/ncache_iface.sv`, `testbenches/TierTwo/ncache_tb.sv`,
+`reference_solutions/TierTwo/ncache.sv`,
+`sandbox/mutation_tests/TierTwo/ncache/{ncache_mut1_dup_fill,ncache_mut2_lost_writeback,ncache_mut3_wrong_tag}.sv`
+plus the new shared `testbenches/common/mem_line_stub.sv`.
+
+### Scope decisions — confirmed
+
+- 2 symmetric ports, 4-way / 8 sets, 4 MSHRs, 4-entry fully-associative victim
+  buffer, write-allocate write-back, randomised fill latency.
+- Replacement policy and hit rate are **not** graded; data correctness and
+  protocol legality are.
+
+### Scope decisions — resolved (**confirm or override**)
+
+1. **Port-A-before-Port-B is stated as an ORDERING rule, not just conflict
+   resolution.** If both ports are accepted in one cycle and their ranges
+   overlap, B sees A's write. Stated this way it is checkable; as a "priority
+   hint" it would not be.
+2. **Visibility is anchored at the ACCEPT edge**: an accepted write is
+   architecturally visible immediately, and an accepted read returns the value as
+   of its own accept edge no matter how late its response arrives. This is what
+   makes out-of-order responses gradeable at all.
+3. **Memory is single-outstanding and untagged** (the port list has no memory
+   tag), so fills are serialised. Multiple MSHRs still make the CPU side
+   non-blocking, which is the property being tested.
+4. **A cache reset discards dirty lines**, so the testbench resynchronises the
+   golden memory from the memory image after every reset. Without this the
+   harness would blame the DUT for a write the spec says reset legitimately
+   throws away.
+
+### Why merging is graded by directed tests
+
+With single-outstanding memory a duplicate fill is necessarily *sequential*, and
+from outside the cache a second fill for a line is indistinguishable from a
+legitimate refill after eviction — unless the scenario is controlled. So C4 is
+graded by directed tests that start from reset, hit one line from both ports
+before any fill can complete, and assert **exactly one** memory read for that
+line. Two variants: read+read, and a three-deep read/write/read merge.
+
+### Bugs this cost me (all found by the harness)
+
+| Where | Bug |
+|---|---|
+| testbench | The request driver held `req_valid` while stepping and could be accepted *inside* the wait loop, then accepted **again** by the trailing step — duplicate accepts on one tag. Fixed by settling, sampling `req_ready`, then completing the cycle. |
+| testbench | Requests were dropped whenever `req_ready` happened to be low, so the flush sweep evicted almost nothing and C6 was near-vacuous (2 writebacks in a whole run). |
+| testbench | Mid-test resets were blamed on the DUT for losing dirty data that reset is entitled to discard. |
+| coverage | The first address pool fitted inside the cache: 99.75% hit rate, 53 fills, 11 writebacks. The victim/writeback paths were barely touched. Pool rebuilt so set 0 has **eight** competing lines against 4 ways + 4 victim entries. |
+
+That last one matters for this benchmark specifically: the harness *passed* in
+both cases, but only the second one actually tests anything.
+
+### Coverage gating
+
+Eight holes hard-checked. Representative run (20 000 random cycles):
+
+```
+accepted A=14198 B=13838 · dual-accept cycles=9642 (same line=3349, r/w overlap=1668)
+backpressure cycles A=1345 B=124 · fills=1079 writebacks=874
+HIT_RATE=92.91% (informational) · 28038 graded events
+```
+
+### Mutation testing — 3/3 caught
+
+| Mutant | Injected bug | Caught by | Where |
+|---|---|---|---|
+| 1 | secondary miss allocates its own MSHR → duplicate fill | **C4** exactly-one-fill | D1-mshr-merge (directed) |
+| 2 | dirty line displaced from the victim buffer is dropped | **C2** stale read data (20 hits), and **C6** image compare | R1-random |
+| 3 | response tags crossed when both ports answer in one cycle | **C1** port/tag mismatch | R1-random |
+
+### Robustness
+
+Golden PASSES under **both** Verilator 5.046 and Icarus 13.
+
+---
+
+## Module 5 — Two-core MESI-lite coherence — **COMPLETE**
+
+Files: `interfaces/TierTwo/mesi_iface.sv`, `testbenches/TierTwo/mesi_tb.sv`,
+`reference_solutions/TierTwo/mesi_top.sv`,
+`sandbox/mutation_tests/TierTwo/mesi/{mesi_mut1_dual_m,mesi_mut2_no_flush,mesi_mut3_busrd_to_i}.sv`
+
+### Scope decisions — confirmed
+
+- Two private, single-port, **blocking** L1s (4 sets x 2 ways). None of module
+  4's non-blocking machinery is reused, as instructed.
+- Single shared bus, one transaction in flight, **round-robin** arbitration
+  (anti-starving by construction).
+- M / E / S / I. BusRd leaves an M peer in **S** (not I) after flushing;
+  BusRdX / BusUpgr invalidate, with an M peer flushing first.
+- `debug_state` is a verification hook only.
+
+### Scope decisions — resolved (**confirm or override**)
+
+1. **`debug_state` carries the TAG as well as the 2-bit state.** The original
+   port list had state only, which makes the invariant *uncheckable*: the
+   invariant is about a LINE, and once more than one line maps to a set, a way's
+   state says nothing about which address it belongs to. Same class of addition
+   as the LSQ's `mem_req_size`.
+2. **The core deasserts `cpu_req_valid` in the same cycle it observes
+   `cpu_resp_valid`.** Without this rule a cache that latches on "idle && valid"
+   re-latches the request it just answered and responds twice — which is exactly
+   what happened on the first run.
+3. **A flush also writes the line back to memory**, so memory is a valid backing
+   store for every line not currently held in M. This is what makes the
+   end-of-run image comparison meaningful.
+4. Both caches, the arbiter and the bus live in **one module and one FSM**. The
+   protocol is a sequence of globally ordered steps
+   (SNOOP → FLUSHWB → EVICT → FETCH → INSTALL) and expressing it as one explicit
+   sequence is far easier to argue correct than two machines racing on a wire.
+   The spec constrains observable behaviour plus `debug_state`, so this is a
+   legitimate implementation of it.
+
+### The two checkers
+
+**I. State invariant, every cycle**, per line, from `debug_state`:
+I1 never M/E in both caches · I2 never M/E in one while S in the other ·
+I3 never M in one while valid at all in the other · I4 no line twice in a set.
+
+**II. Data / ordering.** Each core is blocking and single-outstanding, so at most
+two operations overlap. A read is legal iff it returns either the value as of the
+moment it was **issued**, or the value of a write on the **other** core that
+overlapped it. Every write carries a unique value, so a returned value names
+exactly which write was observed. Anything else is unreachable under any global
+order. This is a deliberately simple linearizability argument that only holds
+*because* the caches are blocking — worth remembering if the scope is ever
+widened.
+
+### Bugs this cost me
+
+| Where | Bug |
+|---|---|
+| golden | `mem_req_valid` was held high for the whole transaction. The memory then **re-accepted the same request** the cycle its response landed — duplicate reads and writes, plus 20 599 protocol violations. Now a one-cycle pulse. |
+| testbench | The driver held `cpu_req_valid` through the response cycle, so the cache latched the same request twice. |
+| testbench | Concurrent-write values were collected *after* responses were graded, so a read completing on its first cycle never saw the overlapping write as legal. |
+| testbench | The random suite exited with operations still in flight; their writes landed in the cache but never in the golden model. Now drained. |
+| testbench | Memory traffic was counted from `req_valid && !busy`, which depends on how the DUT shapes `req_valid` — not something the spec pins down. Now counted on the memory's **busy rising edge**, one count per accepted transaction. |
+
+### Coverage gating
+
+Nine holes hard-checked. Representative run (12 000 CPU ops):
+
+```
+ops core0=6097 (rd 3043/wr 3054) core1=6004 (rd 3011/wr 2993)
+both outstanding=35978 cycles (same line=2260) · concurrent-write windows=300
+snoop HITM=32781 hit-shared=2176 · states M=255951 E=121 both-S=131997
+BUS_TOTAL=6203 (BusRd 2079 / BusRdX 2092 / BusUpgr 2032) · 65584 graded events
+```
+
+### Mutation testing — 3/3 caught
+
+| Mutant | Injected bug | Caught by | Where |
+|---|---|---|---|
+| 1 | peer never invalidated on BusRdX/BusUpgr → two caches own the line | **I2** invariant | D2-busupgr-invalidate |
+| 2 | no flush before invalidate → peer's dirty data lost | **COHERENCE** data check (stale read) | D1-busrd-hitm |
+| 3 | BusRd sends the peer to I instead of S | directed state check **and** the **traffic score** | D1-busrd-hitm |
+
+**Mutant 3 is the interesting one.** It is correctness-preserving, so the prompt
+expected it to be visible only in a traffic score. It is — clearly:
+
+| | golden | mutant 3 |
+|---|---|---|
+| BUS_TOTAL | 6203 | **7375 (+19%)** |
+| bus per op | 0.513 | **0.609** |
+| BusRd on an M line → peer to S / to I | 2040 / 0 | **0 / 2085** |
+
+So the informational scoring does notice, which is what that mutant was for. It
+*also* fails a pass/fail check here, because the interface states outright that
+the peer must not go to I — a deliberate choice: the behaviour is specified, so
+it is graded, and the traffic score independently quantifies the cost.
+
+### Robustness
+
+Golden PASSES under **both** Verilator 5.046 and Icarus 13.
+
+---
+
 ## Shared verification models — **COMPLETE and self-tested**
 
 `testbenches/common/golden_mem.sv` — byte-addressable golden memory (sized
@@ -448,6 +626,10 @@ correct by returning 0, and address wrapping so a stray address folds in rather
 than killing the sim). Dense rather than sparse — originally forced by Icarus,
 now a kept choice: the small skewed address pool makes a few KB of flat array
 sufficient, and it keeps the model runnable under both simulators.
+
+`testbenches/common/mem_line_stub.sv` — the LINE-GRANULAR sibling added for
+module 4 (and reused by module 5's bus): same single-outstanding contract, same
+violation latching, line-wide transfers.
 
 `testbenches/common/mem_stub.sv` — next-level memory with **randomized**
 latency (`MIN_LAT..MAX_LAT`, default 2..6) so latency-dependent bugs cannot hide
@@ -482,11 +664,3 @@ Open item for module 4: the stub is currently scalar/sized. The cache needs
 **line-granular** fills and writebacks — extend `mem_stub` with a line mode (or
 add a thin line wrapper) during that session rather than guessing now.
 
-## Modules 4–5 — NOT STARTED
-
-Non-blocking cache and MESI coherence remain. Recommended order stands:
-Cache → Coherence.
-
-For module 4, `mem_stub` is still scalar/sized and will need a **line-granular**
-mode (or a thin line wrapper) for fills and writebacks — worth doing against the
-real consumer rather than guessing now.

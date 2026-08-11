@@ -1,0 +1,21 @@
+// directed suite: 152 checks, 0 failing
+// randomized suite: 12000 cycles, 0 failing checks
+// ---- functional coverage ----
+//   dispatch groups accepted  w0=3003 w1=3006 w2=6063
+//   dispatch stalled (valid & !ready) = 40
+//   rob_full cycles=39  exactly-one-free cycles=45
+//   commit width  w0=4151 w1=2191 w2=5814
+//   out-of-order completions = 11991
+//   flushes: squash-none=55 partial=202 all-but-head=42
+//   completion squashed same cycle (race) = 150
+//   flush+commit same cycle = 206
+//   head-flush suppressing commit lane 1 = 19
+//   exceptions completed=461  branch mispredicts=1724
+//   tail wrap events = 926
+//   instructions committed (cumulative) = 13819
+// info: 12156 checked cycles, 13819 instructions committed
+TEST_RESULT: PASS
+- /Users/jackberkowitz/Desktop/hw_rl_benchmark/testbenches/TierTwo/rob_tb.sv:836: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.046 2026-02-28
+- Verilator: $finish at 122us; walltime 0.014 s; speed 8.818 ms/s
+- Verilator: cpu 0.014 s on 1 threads; allocated 2 MB
