@@ -190,8 +190,7 @@ module softmax_tb;
             e = iabs(obs[i] - int'(expected_lsb + 0.5));
             if (e > worst_abs_err) worst_abs_err = e;
             if (e > TOL_ABS_LSB)
-                note_fail($sformatf({"%s: A1 element %0d out=%0d (%.6f) expected %.1f (%.6f) ",
-                                     "err=%0d LSB > tol %0d"},
+                note_fail($sformatf("%s: A1 element %0d out=%0d (%.6f) expected %.1f (%.6f) err=%0d LSB > tol %0d",
                                     ctx, i, obs[i], real'(obs[i])/OUT_SCALE,
                                     expected_lsb, p[i], e, TOL_ABS_LSB));
             sum_o += obs[i];
@@ -214,8 +213,7 @@ module softmax_tb;
                                             ctx, i, j, obs[i], obs[j]));
                 end else if (x[i] > x[j]) begin
                     if (obs[i] < obs[j] - TOL_ORDER_LSB)
-                        note_fail($sformatf({"%s: A4 in[%0d]=%0d > in[%0d]=%0d but ",
-                                             "out %0d < %0d"},
+                        note_fail($sformatf("%s: A4 in[%0d]=%0d > in[%0d]=%0d but out %0d < %0d",
                                             ctx, i, x[i], j, x[j], obs[i], obs[j]));
                 end
             end
@@ -250,8 +248,7 @@ module softmax_tb;
         checks++;
         for (int i = 0; i < NUM_ELEMENTS; i++)
             if (iabs(save[i] - obs[i]) > TOL_SHIFT_LSB)
-                note_fail($sformatf({"%s: A5 shift by %0d LSB changed element %0d ",
-                                     "from %0d to %0d (> tol %0d)"},
+                note_fail($sformatf("%s: A5 shift by %0d LSB changed element %0d from %0d to %0d (> tol %0d)",
                                     ctx, shift_lsb, i, save[i], obs[i], TOL_SHIFT_LSB));
         // restore
         for (int i = 0; i < NUM_ELEMENTS; i++)

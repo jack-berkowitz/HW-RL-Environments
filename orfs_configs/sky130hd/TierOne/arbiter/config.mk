@@ -5,8 +5,8 @@ export PLATFORM    = sky130hd
 export DESIGN_NAME = arbiter
 export DESIGN_NICKNAME = arbiter
 
-export VERILOG_FILES = /work/candidates/arbiter.sv
-export SDC_FILE      = /work/orfs_configs/sky130hd/arbiter/constraint.sdc
+export VERILOG_FILES = /work/candidates/TierOne/arbiter.sv
+export SDC_FILE      = /work/orfs_configs/sky130hd/TierOne/arbiter/constraint.sdc
 
 # The candidates are SystemVerilog (always_ff/always_comb, size casts,
 # unpacked arrays). ORFS defaults to `read_verilog -defer -sv`, which does

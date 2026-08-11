@@ -11,12 +11,13 @@
 //     exp = gm.rd_sized(addr, SZ_W);
 //
 // WHY IT IS DENSE, NOT SPARSE
-//   Icarus 13 has no associative arrays at all (verified: `int a[int]`,
-//   `[integer]`, `[logic[31:0]]`, `[string]` and `[*]` all fail to compile), so
-//   this is a flat unpacked byte array over a bounded space. That is not a
-//   compromise here: the Tier-2 convention is a small, deliberately skewed
-//   address pool so aliasing and sharing actually happen, and a dense array over
-//   a few KB covers that pool exactly.
+//   Originally forced: Icarus has no associative arrays at all. Verilator (the
+//   current correctness simulator) does support them, so this is now a KEPT
+//   CHOICE rather than a constraint. It stays dense because the Tier-2
+//   convention is a small, deliberately skewed address pool -- a few KB of flat
+//   array covers that pool exactly, costs nothing, and keeps this model runnable
+//   under Icarus too, which is a useful 4-state cross-check against the
+//   2-state engine Verilator uses.
 //
 // SIZE ENCODING (shared by every Tier-2 module that has a size field)
 //   2'b00 = 1 byte, 2'b01 = 2 bytes, 2'b10 = 4 bytes.

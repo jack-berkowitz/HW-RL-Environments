@@ -28,14 +28,20 @@
 // This redundancy is deliberate: a bug in the model cannot silently excuse the
 // same bug in the DUT, because the two checks are derived differently.
 //
-// SystemVerilog subset: Icarus 13 has no associative arrays, no unpacked
-// structs, no queues-of-structs and no queues inside classes, so the scoreboard
-// is procedural (module-level unpacked arrays + a queue of packed vectors).
-// See testbenches/TierTwo/NOTES.md (module 1 section).
+// SystemVerilog subset: the scoreboard is procedural (module-level unpacked
+// arrays + queues of packed vectors) rather than class-based. That was forced
+// when this was authored under Icarus; it is now a deliberate choice, because
+// the resulting harness runs unmodified under BOTH Verilator and Icarus, which
+// gives a free 4-state cross-check against Verilator's 2-state engine.
+// See testbenches/TierTwo/NOTES.md.
 //
-// Override parameters at compile time, e.g.
-//   iverilog -g2012 -o sim -P rob_tb.DEPTH=32 -P rob_tb.RANDOM_CYCLES=20000 \
-//            rob_tb.sv rob.sv
+// Run (Verilator is the supported path). NOTE: the command below is written
+// with a leading "$ " on purpose -- a comment whose first word is the tool's
+// own name is parsed as a metacomment pragma and errors out (BADVLTPRAGMA).
+//   $ verilator --binary --timing -j 0 -Wno-fatal --x-assign unique --x-initial unique --top-module rob_tb -Mdir obj_dir -o sim rob_tb.sv rob.sv
+//   $ obj_dir/sim
+// Parameter override: -GDEPTH=32 under Verilator (bare name, NOT
+// -Grob_tb.DEPTH=32, which errors), or -P rob_tb.DEPTH=32 under Icarus.
 //
 // Final line is exactly one of:
 //   TEST_RESULT: PASS
@@ -246,8 +252,7 @@ module rob_tb;
             note_fail("commit lane 1 valid without lane 0 (commit must be contiguous)");
 
         if (commit_valid !== {e_cv1, e_cv0})
-            note_fail($sformatf({"commit_valid=%0b expected %0b ",
-                                 "(head=%0d alloc=%0b done=%0b exc=%0b | h+1 alloc=%0b done=%0b | flush=%0b)"},
+            note_fail($sformatf("commit_valid=%0b expected %0b (head=%0d alloc=%0b done=%0b exc=%0b | h+1 alloc=%0b done=%0b | flush=%0b)",
                                 commit_valid, {e_cv1, e_cv0}, m_head,
                                 m_alloc[m_head], m_done[m_head], m_exc[m_head],
                                 m_alloc[e_head1], m_done[e_head1], flush_valid));
@@ -278,8 +283,7 @@ module rob_tb;
                 // program order / no-duplicate, checked against the seq stream
                 obs_seq = m_seq[dut_idx];
                 if (obs_seq != expect_commit_seq)
-                    note_fail($sformatf({"commit lane %0d out of program order: got seq %0d, ",
-                                         "expected seq %0d (idx %0d)"},
+                    note_fail($sformatf("commit lane %0d out of program order: got seq %0d, expected seq %0d (idx %0d)",
                                         L, obs_seq, expect_commit_seq, exp_idx));
                 else begin
                     // payload integrity, shadowed by seq at dispatch/completion
@@ -523,8 +527,7 @@ module rob_tb;
         guard = 0;
         while (!rob_empty && guard < 40*DEPTH) begin step(); guard++; end
         if (!rob_empty)
-            note_fail($sformatf({"%s: ROB failed to drain in %0d idle cycles ",
-                                 "(free=%0d, model_count=%0d, head=%0d)"},
+            note_fail($sformatf("%s: ROB failed to drain in %0d idle cycles (free=%0d, model_count=%0d, head=%0d)",
                                 ctx, guard, free_entries, m_count, m_head));
     endtask
 
@@ -540,8 +543,7 @@ module rob_tb;
         end
         idle_inputs();
         if (!rob_empty)
-            note_fail($sformatf({"%s: ROB failed to drain in %0d cycles with ",
-                                 "completions offered (free=%0d, model_count=%0d, head=%0d)"},
+            note_fail($sformatf("%s: ROB failed to drain in %0d cycles with completions offered (free=%0d, model_count=%0d, head=%0d)",
                                 ctx, guard, free_entries, m_count, m_head));
     endtask
 
@@ -837,8 +839,7 @@ module rob_tb;
     initial begin
         // ~40x the expected run length: bounded, but never trips on a good DUT
         #(40 * 10 * (RANDOM_CYCLES + 200*DEPTH));
-        $display({"// timeout state: phase=%s cyc=%0d checks=%0d model_count=%0d ",
-                  "head=%0d tail=%0d rob_empty=%0b free=%0d committed=%0d"},
+        $display("// timeout state: phase=%s cyc=%0d checks=%0d model_count=%0d head=%0d tail=%0d rob_empty=%0b free=%0d committed=%0d",
                  phase, cyc, checks, m_count, m_head, m_tail, rob_empty,
                  free_entries, expect_commit_seq);
         $display("TEST_RESULT: FAIL: timeout -- testbench did not complete (phase %s)", phase);

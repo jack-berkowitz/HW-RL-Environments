@@ -5,8 +5,8 @@ export PLATFORM    = sky130hd
 export DESIGN_NAME = multiplier
 export DESIGN_NICKNAME = multiplier
 
-export VERILOG_FILES = /work/candidates/multiplier.sv
-export SDC_FILE      = /work/orfs_configs/sky130hd/multiplier/constraint.sdc
+export VERILOG_FILES = /work/candidates/TierOne/multiplier.sv
+export SDC_FILE      = /work/orfs_configs/sky130hd/TierOne/multiplier/constraint.sdc
 
 # The candidates are SystemVerilog (always_ff/always_comb, size casts,
 # unpacked arrays). ORFS defaults to `read_verilog -defer -sv`, which does

@@ -1,8 +1,31 @@
+// =============================================================================
+// rob.sv
+// =============================================================================
+// 2-wide Reorder Buffer
+//
+// Features:
+//   - Circular ROB
+//   - 2-wide atomic/compacted dispatch
+//   - Out-of-order completion
+//   - In-order 2-wide commit
+//   - Exception stopping commit
+//   - Misprediction flush
+//   - Same-cycle flush/commit handling
+//   - Same-cycle completion/flush handling
+//
+// Timing:
+//   - All outputs are combinational from registered state.
+//   - Completion at cycle N is eligible for commit in cycle N+1.
+//   - Dispatch at cycle N is not eligible for commit until N+1.
+//
+// =============================================================================
+
 module rob #(
     parameter int DEPTH = 16,
     parameter int PC_W  = 32,
     parameter int TAG_W = 6,
     parameter int VAL_W = 32,
+
     parameter int IDX_W = $clog2(DEPTH),
     parameter int CNT_W = $clog2(DEPTH+1)
 ) (
@@ -20,10 +43,10 @@ module rob #(
     // ---- complete / writeback (2 lanes, out of order) ----
     input  logic [1:0]              complete_valid,
     input  logic [1:0][IDX_W-1:0]   complete_rob_idx,
-    input  logic [1:0][VAL_W-1:0]    complete_value,
+    input  logic [1:0][VAL_W-1:0]   complete_value,
     input  logic [1:0]              complete_exception,
     input  logic [1:0]              complete_mispredict,
-    input  logic [1:0][PC_W-1:0]     complete_actual_target,
+    input  logic [1:0][PC_W-1:0]    complete_actual_target,
 
     // ---- commit (2 lanes, in order, from head) ----
     output logic [1:0]              commit_valid,
@@ -42,315 +65,549 @@ module rob #(
     output logic [CNT_W-1:0]        free_entries
 );
 
+    // =========================================================================
+    // ROB ENTRY
+    // =========================================================================
+
     typedef struct packed {
-        logic                 allocated;
-        logic                 complete;
-        logic [PC_W-1:0]      pc;
-        logic [TAG_W-1:0]     dest_tag;
-        logic [VAL_W-1:0]     value;
-        logic                 exception;
-        logic                 is_branch;
-        logic                 mispredict;
-        logic [PC_W-1:0]      actual_target;
+        logic                    allocated;
+        logic                    complete;
+
+        logic [PC_W-1:0]         pc;
+        logic [TAG_W-1:0]        dest_tag;
+
+        logic [VAL_W-1:0]        value;
+        logic                    exception;
+
+        logic                    is_branch;
+        logic                    mispredict;
+        logic [PC_W-1:0]         actual_target;
     } rob_entry_t;
 
-    rob_entry_t entries [0:DEPTH-1];
+    rob_entry_t rob [0:DEPTH-1];
+
+    // =========================================================================
+    // POINTER / OCCUPANCY STATE
+    // =========================================================================
 
     logic [IDX_W-1:0] head;
     logic [IDX_W-1:0] tail;
 
+    logic [CNT_W-1:0] occupancy;
+
     logic [IDX_W-1:0] head_next;
     logic [IDX_W-1:0] tail_next;
-    logic [CNT_W-1:0] free_entries_next;
+    logic [CNT_W-1:0] occupancy_next;
 
-    integer k;
+    // Number of dispatch lanes which actually allocate.
+    logic [1:0] dispatch_count;
 
-    // -------------------------------------------------------------------------
+    // Number of entries which commit this cycle.
+    logic [1:0] commit_count;
+
+    // =========================================================================
+    // HELPER FUNCTIONS
+    // =========================================================================
+
     // Circular increment.
-    // DEPTH is a power of two, so IDX_W bits naturally wrap.
-    // -------------------------------------------------------------------------
-    function automatic [IDX_W-1:0] inc_idx(
-        input [IDX_W-1:0] idx
-    );
-        inc_idx = idx + 1'b1;
-    endfunction
-
-    // -------------------------------------------------------------------------
-    // Distance from h to idx in the circular ROB.
     //
-    // Result is 0..DEPTH-1.
-    // -------------------------------------------------------------------------
-    function automatic integer distance(
-        input [IDX_W-1:0] idx,
-        input [IDX_W-1:0] h
+    // Since DEPTH is a power of two, IDX_W bits naturally wrap around.
+    function automatic logic [IDX_W-1:0] idx_add(
+        input logic [IDX_W-1:0] idx,
+        input int unsigned      amount
     );
+        logic [IDX_W-1:0] amount_idx;
         begin
-            if (idx >= h)
-                distance = idx - h;
-            else
-                distance = idx + DEPTH - h;
+            amount_idx = amount;
+            idx_add = idx + amount_idx;
         end
     endfunction
 
-    // -------------------------------------------------------------------------
-    // Combinational outputs.
-    // -------------------------------------------------------------------------
+    // Distance from head.
+    //
+    // Because DEPTH is a power of two and IDX_W=$clog2(DEPTH),
+    // subtraction naturally performs modulo-DEPTH arithmetic.
+    function automatic logic [IDX_W-1:0] age_from_head(
+        input logic [IDX_W-1:0] idx
+    );
+        begin
+            age_from_head = idx - head;
+        end
+    endfunction
+
+    // Is an index strictly younger than flush_rob_idx?
+    //
+    // Age is relative to head:
+    //
+    //       head ---> ... ---> flush ---> younger entries ---> tail
+    //
+    // Therefore an entry is younger iff its circular age is greater than
+    // the age of the flush entry.
+    function automatic logic is_younger_than_flush(
+        input logic [IDX_W-1:0] idx
+    );
+        logic [IDX_W-1:0] idx_age;
+        logic [IDX_W-1:0] flush_age;
+
+        begin
+            idx_age   = age_from_head(idx);
+            flush_age = age_from_head(flush_rob_idx);
+
+            is_younger_than_flush = (idx_age > flush_age);
+        end
+    endfunction
+
+    // =========================================================================
+    // STATUS OUTPUTS
+    // =========================================================================
+
     always_comb begin
-        dispatch_ready = (free_entries >= 2);
+        free_entries = DEPTH - occupancy;
 
         rob_full  = (free_entries == 0);
         rob_empty = (free_entries == DEPTH);
 
-        // Compact allocation indices.
-        dispatch_rob_idx[0] = tail;
+        // Deliberately independent of dispatch_valid.
+        dispatch_ready = (free_entries >= 2);
+    end
 
-        if (dispatch_valid[0])
-            dispatch_rob_idx[1] = inc_idx(tail);
-        else
-            dispatch_rob_idx[1] = tail;
+    // =========================================================================
+    // DISPATCH INDEX OUTPUTS
+    // =========================================================================
+    //
+    // Compacted allocation:
+    //
+    //   valid = 01:
+    //       lane 0 -> tail
+    //
+    //   valid = 10:
+    //       lane 1 -> tail
+    //
+    //   valid = 11:
+    //       lane 0 -> tail
+    //       lane 1 -> tail + 1
+    //
+    // dispatch_rob_idx is don't-care for lanes which don't allocate.
+    //
+    // The specification additionally says this output is combinationally
+    // dependent on dispatch_valid.
 
-        // Defaults are don't-care by specification when commit_valid=0.
-        commit_valid     = 2'b00;
+    always_comb begin
+        dispatch_rob_idx = '0;
+
+        if (dispatch_ready) begin
+            if (dispatch_valid[0]) begin
+                dispatch_rob_idx[0] = tail;
+            end
+
+            if (dispatch_valid[1]) begin
+                if (dispatch_valid[0])
+                    dispatch_rob_idx[1] = idx_add(tail, 1);
+                else
+                    dispatch_rob_idx[1] = tail;
+            end
+        end
+    end
+
+    // =========================================================================
+    // COMMIT LOGIC
+    // =========================================================================
+    //
+    // IMPORTANT:
+    //
+    // We inspect the CURRENT registered ROB state only.
+    //
+    // Therefore a completion occurring on this cycle cannot cause commit_valid
+    // to assert on this same cycle.
+    //
+    // This is the key requirement for:
+    //
+    //   "An entry marked complete at edge N is eligible to commit in cycle N+1."
+    //
+    // -------------------------------------------------------------------------
+    //
+    // Lane 0:
+    //   head must be allocated and complete.
+    //
+    // Lane 1:
+    //   lane 0 must commit
+    //   head+1 must be allocated and complete
+    //   lane 0 must not have an exception
+    //   head+1 must survive a flush occurring this cycle
+    //
+    // The only relevant flush case for lane 1 is:
+    //
+    //   flush_valid && flush_rob_idx == head
+    //
+    // because the specification guarantees head is never younger than the
+    // flush point.
+    // =========================================================================
+
+    always_comb begin
+        commit_valid     = '0;
         commit_rob_idx   = '0;
         commit_dest_tag  = '0;
         commit_value     = '0;
         commit_exception = '0;
 
-        // Lane 0: head must be allocated and complete.
-        if (entries[head].allocated &&
-            entries[head].complete) begin
+        // -------------------------------------------------------------
+        // Commit lane 0
+        // -------------------------------------------------------------
 
+        if (rob[head].allocated && rob[head].complete) begin
+
+            // Head is guaranteed to survive the flush according to the
+            // interface contract.
             commit_valid[0]     = 1'b1;
             commit_rob_idx[0]   = head;
-            commit_dest_tag[0]  = entries[head].dest_tag;
-            commit_value[0]     = entries[head].value;
-            commit_exception[0] = entries[head].exception;
+            commit_dest_tag[0]  = rob[head].dest_tag;
+            commit_value[0]     = rob[head].value;
+            commit_exception[0] = rob[head].exception;
+        end
 
-            // Lane 1 requires:
-            //   * lane 0 commits
-            //   * lane 0 has no exception
-            //   * next entry is allocated and complete
-            //   * next entry survives a flush
-            if (!entries[head].exception) begin
-                if (entries[inc_idx(head)].allocated &&
-                    entries[inc_idx(head)].complete &&
-                    !(flush_valid && (flush_rob_idx == head))) begin
+        // -------------------------------------------------------------
+        // Commit lane 1
+        // -------------------------------------------------------------
 
-                    commit_valid[1]     = 1'b1;
-                    commit_rob_idx[1]   = inc_idx(head);
-                    commit_dest_tag[1]  = entries[inc_idx(head)].dest_tag;
-                    commit_value[1]     = entries[inc_idx(head)].value;
-                    commit_exception[1] = entries[inc_idx(head)].exception;
-                end
+        if (commit_valid[0] &&
+            !commit_exception[0] &&
+            rob[idx_add(head, 1)].allocated &&
+            rob[idx_add(head, 1)].complete) begin
+
+            // If the flush point is head, head+1 is strictly younger and
+            // must not commit.
+            if (!(flush_valid && (flush_rob_idx == head))) begin
+                commit_valid[1]     = 1'b1;
+                commit_rob_idx[1]   = idx_add(head, 1);
+                commit_dest_tag[1]  = rob[idx_add(head, 1)].dest_tag;
+                commit_value[1]     = rob[idx_add(head, 1)].value;
+                commit_exception[1] = rob[idx_add(head, 1)].exception;
             end
         end
     end
 
-    // -------------------------------------------------------------------------
-    // Next-state logic.
-    // -------------------------------------------------------------------------
-    always_comb begin : next_state
+    // =========================================================================
+    // NEXT-STATE CONTROL
+    // =========================================================================
 
-        integer alloc_count;
-        integer commit_count;
-        integer live_count_after_flush;
-        integer flush_distance;
-        integer new_free;
+    always_comb begin
 
-        alloc_count = 0;
+        // -------------------------------------------------------------
+        // Dispatch count
+        // -------------------------------------------------------------
+
+        dispatch_count = 2'd0;
 
         if (dispatch_ready) begin
-            if (dispatch_valid[0])
-                alloc_count = alloc_count + 1;
-
-            if (dispatch_valid[1])
-                alloc_count = alloc_count + 1;
+            dispatch_count =
+                {1'b0, dispatch_valid[0]} +
+                {1'b0, dispatch_valid[1]};
         end
 
-        commit_count = 0;
+        // -------------------------------------------------------------
+        // Commit count
+        // -------------------------------------------------------------
 
-        if (commit_valid[0])
-            commit_count = commit_count + 1;
+        commit_count =
+            {1'b0, commit_valid[0]} +
+            {1'b0, commit_valid[1]};
 
-        if (commit_valid[1])
-            commit_count = commit_count + 1;
+        // -------------------------------------------------------------
+        // Default pointer behavior
+        // -------------------------------------------------------------
 
-        head_next = head;
-        tail_next = tail;
+        head_next      = head;
+        tail_next      = tail;
+        occupancy_next = occupancy;
 
-        if (commit_count == 1)
-            head_next = inc_idx(head);
-        else if (commit_count == 2)
-            head_next = inc_idx(inc_idx(head));
+        // -------------------------------------------------------------
+        // HEAD
+        // -------------------------------------------------------------
+        //
+        // Flush does NOT move head.
+        //
+        // Commit advances head normally.
+        //
+        // Therefore:
+        //
+        //     head_next = head + commit_count
+        //
+
+        if (commit_count != 0)
+            head_next = idx_add(head, commit_count);
+
+        // -------------------------------------------------------------
+        // TAIL / OCCUPANCY
+        // -------------------------------------------------------------
+        //
+        // Flush has priority over normal tail allocation.
+        //
+        // If no flush:
+        //     tail += dispatch_count
+        //
+        // If flush:
+        //     tail = flush_rob_idx + 1
+        //
+        // Entries allocated in the same cycle as a flush are younger than
+        // the flush point and therefore disappear. Consequently dispatch
+        // does not contribute to the post-flush occupancy.
+        //
+        // The number of surviving entries after a flush is:
+        //
+        //     distance(head, flush_rob_idx) + 1
+        //
+        // minus anything committed this cycle.
+        // -------------------------------------------------------------
 
         if (flush_valid) begin
-            // flush_rob_idx itself survives.
+
+            tail_next = idx_add(flush_rob_idx, 1);
+
+            // Number of live entries from head through flush_rob_idx,
+            // inclusive.
             //
-            // Number of live entries from old head through flush point:
-            //     distance(head, flush) + 1
+            // age_from_head(flush_rob_idx) is:
             //
-            // Then remove entries committing this cycle.
-            flush_distance = distance(flush_rob_idx, head);
+            //   0 if flush is head
+            //   1 if flush is head+1
+            //   ...
+            //
+            // Thus number of surviving entries before commit =
+            // age + 1.
+            occupancy_next =
+                age_from_head(flush_rob_idx) + 1;
 
-            live_count_after_flush =
-                flush_distance + 1 - commit_count;
+            // Commit removes entries from the front at this same edge.
+            occupancy_next =
+                occupancy_next - commit_count;
 
-            if (live_count_after_flush < 0)
-                live_count_after_flush = 0;
-
-            new_free = DEPTH - live_count_after_flush;
-
-            free_entries_next = new_free;
-
-            // Tail is immediately after the surviving flush entry.
-            tail_next = inc_idx(flush_rob_idx);
         end
         else begin
-            // Normal occupancy:
-            //
-            // free' = free - allocations + commits
-            //
-            // Allocations are accepted only when free >= 2.
-            new_free = free_entries - alloc_count + commit_count;
 
-            free_entries_next = new_free;
+            // Normal circular-buffer operation.
+            occupancy_next =
+                occupancy
+                + dispatch_count
+                - commit_count;
 
-            if (alloc_count == 1)
-                tail_next = inc_idx(tail);
-            else if (alloc_count == 2)
-                tail_next = inc_idx(inc_idx(tail));
+            tail_next =
+                idx_add(tail, dispatch_count);
         end
     end
 
-    // -------------------------------------------------------------------------
-    // Sequential state.
-    // -------------------------------------------------------------------------
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            head         <= '0;
-            tail         <= '0;
-            free_entries <= DEPTH;
+    // =========================================================================
+    // SEQUENTIAL ROB STATE
+    // =========================================================================
 
-            for (k = 0; k < DEPTH; k = k + 1) begin
-                entries[k].allocated     <= 1'b0;
-                entries[k].complete      <= 1'b0;
-                entries[k].pc            <= '0;
-                entries[k].dest_tag      <= '0;
-                entries[k].value         <= '0;
-                entries[k].exception     <= 1'b0;
-                entries[k].is_branch     <= 1'b0;
-                entries[k].mispredict    <= 1'b0;
-                entries[k].actual_target <= '0;
+    integer i;
+
+    always_ff @(posedge clk) begin
+
+        // ---------------------------------------------------------------------
+        // Synchronous active-low reset
+        // ---------------------------------------------------------------------
+
+        if (!rst_n) begin
+
+            head      <= '0;
+            tail      <= '0;
+            occupancy <= DEPTH;
+
+            for (i = 0; i < DEPTH; i = i + 1) begin
+                rob[i].allocated      <= 1'b0;
+                rob[i].complete       <= 1'b0;
+
+                rob[i].pc             <= '0;
+                rob[i].dest_tag      <= '0;
+
+                rob[i].value          <= '0;
+                rob[i].exception      <= 1'b0;
+
+                rob[i].is_branch      <= 1'b0;
+                rob[i].mispredict     <= 1'b0;
+                rob[i].actual_target  <= '0;
             end
         end
+
+        // ---------------------------------------------------------------------
+        // Normal operation
+        // ---------------------------------------------------------------------
+
         else begin
-            head         <= head_next;
-            tail         <= tail_next;
-            free_entries <= free_entries_next;
 
-            // -------------------------------------------------------------
-            // Commit/free.
-            // -------------------------------------------------------------
-            if (commit_valid[0]) begin
-                entries[commit_rob_idx[0]].allocated <= 1'b0;
-                entries[commit_rob_idx[0]].complete  <= 1'b0;
-            end
+            // =================================================================
+            // POINTER / OCCUPANCY UPDATE
+            // =================================================================
 
-            if (commit_valid[1]) begin
-                entries[commit_rob_idx[1]].allocated <= 1'b0;
-                entries[commit_rob_idx[1]].complete  <= 1'b0;
-            end
+            head      <= head_next;
+            tail      <= tail_next;
+            occupancy <= occupancy_next;
 
-            // -------------------------------------------------------------
-            // Flush.
+            // =================================================================
+            // FLUSH
+            // =================================================================
             //
-            // Anything strictly younger than flush_rob_idx is squashed.
-            // The flush entry itself survives.
-            // -------------------------------------------------------------
-            if (flush_valid) begin
-                for (k = 0; k < DEPTH; k = k + 1) begin
-                    if (entries[k].allocated &&
-                        (k != flush_rob_idx) &&
-                        (distance(k, head) >
-                         distance(flush_rob_idx, head))) begin
+            // Clear every entry strictly younger than flush_rob_idx.
+            //
+            // We do this before/alongside allocation/completion logic below.
+            // A completion targeting one of these entries is explicitly
+            // prevented from being written later in this same clock edge.
+            // =================================================================
 
-                        entries[k].allocated <= 1'b0;
-                        entries[k].complete  <= 1'b0;
+            if (flush_valid) begin
+
+                for (i = 0; i < DEPTH; i = i + 1) begin
+
+                    if (rob[i].allocated &&
+                        is_younger_than_flush(i[IDX_W-1:0])) begin
+
+                        rob[i].allocated <= 1'b0;
+                        rob[i].complete  <= 1'b0;
+
+                        rob[i].pc             <= '0;
+                        rob[i].dest_tag       <= '0;
+                        rob[i].value          <= '0;
+                        rob[i].exception      <= 1'b0;
+                        rob[i].is_branch      <= 1'b0;
+                        rob[i].mispredict     <= 1'b0;
+                        rob[i].actual_target  <= '0;
                     end
                 end
             end
 
-            // -------------------------------------------------------------
-            // Dispatch.
+            // =================================================================
+            // DISPATCH / ALLOCATION
+            // =================================================================
             //
-            // Dispatch allocations are younger than a simultaneous flush,
-            // so they do not survive that flush.
-            // -------------------------------------------------------------
-            if (dispatch_ready && !flush_valid) begin
+            // Only allocate when dispatch_ready is asserted.
+            //
+            // If flush_valid is simultaneously asserted, the allocated entries
+            // are younger than the flush point and are therefore discarded.
+            //
+            // We still perform the allocation here because it is the natural
+            // interpretation of the dispatch transaction at this edge; the
+            // flush logic above and tail recovery make those entries dead after
+            // the edge.
+            // =================================================================
+
+            if (dispatch_ready) begin
 
                 if (dispatch_valid[0]) begin
-                    entries[dispatch_rob_idx[0]].allocated     <= 1'b1;
-                    entries[dispatch_rob_idx[0]].complete      <= 1'b0;
-                    entries[dispatch_rob_idx[0]].pc            <= dispatch_pc[0];
-                    entries[dispatch_rob_idx[0]].dest_tag      <= dispatch_dest_tag[0];
-                    entries[dispatch_rob_idx[0]].value         <= '0;
-                    entries[dispatch_rob_idx[0]].exception     <= 1'b0;
-                    entries[dispatch_rob_idx[0]].is_branch     <= dispatch_is_branch[0];
-                    entries[dispatch_rob_idx[0]].mispredict    <= 1'b0;
-                    entries[dispatch_rob_idx[0]].actual_target <= '0;
+
+                    rob[dispatch_rob_idx[0]].allocated     <= 1'b1;
+                    rob[dispatch_rob_idx[0]].complete      <= 1'b0;
+
+                    rob[dispatch_rob_idx[0]].pc            <= dispatch_pc[0];
+                    rob[dispatch_rob_idx[0]].dest_tag      <= dispatch_dest_tag[0];
+
+                    rob[dispatch_rob_idx[0]].value         <= '0;
+                    rob[dispatch_rob_idx[0]].exception     <= 1'b0;
+
+                    rob[dispatch_rob_idx[0]].is_branch     <= dispatch_is_branch[0];
+                    rob[dispatch_rob_idx[0]].mispredict    <= 1'b0;
+                    rob[dispatch_rob_idx[0]].actual_target <= '0;
                 end
 
                 if (dispatch_valid[1]) begin
-                    entries[dispatch_rob_idx[1]].allocated     <= 1'b1;
-                    entries[dispatch_rob_idx[1]].complete      <= 1'b0;
-                    entries[dispatch_rob_idx[1]].pc            <= dispatch_pc[1];
-                    entries[dispatch_rob_idx[1]].dest_tag      <= dispatch_dest_tag[1];
-                    entries[dispatch_rob_idx[1]].value         <= '0;
-                    entries[dispatch_rob_idx[1]].exception     <= 1'b0;
-                    entries[dispatch_rob_idx[1]].is_branch     <= dispatch_is_branch[1];
-                    entries[dispatch_rob_idx[1]].mispredict    <= 1'b0;
-                    entries[dispatch_rob_idx[1]].actual_target <= '0;
+
+                    rob[dispatch_rob_idx[1]].allocated     <= 1'b1;
+                    rob[dispatch_rob_idx[1]].complete      <= 1'b0;
+
+                    rob[dispatch_rob_idx[1]].pc            <= dispatch_pc[1];
+                    rob[dispatch_rob_idx[1]].dest_tag      <= dispatch_dest_tag[1];
+
+                    rob[dispatch_rob_idx[1]].value         <= '0;
+                    rob[dispatch_rob_idx[1]].exception     <= 1'b0;
+
+                    rob[dispatch_rob_idx[1]].is_branch     <= dispatch_is_branch[1];
+                    rob[dispatch_rob_idx[1]].mispredict    <= 1'b0;
+                    rob[dispatch_rob_idx[1]].actual_target <= '0;
                 end
             end
 
-            // -------------------------------------------------------------
-            // Completion lane 0.
+            // =================================================================
+            // COMMIT / FREE
+            // =================================================================
             //
-            // Drop it if its entry is strictly younger than the flush point.
-            // -------------------------------------------------------------
+            // Entries are freed when they commit.
+            //
+            // This is done independently of flush because commit and flush
+            // operate on opposite ends of the ROB.
+            //
+            // If the same entry is both the flush point and commits, it survives
+            // the flush but is then freed by commit, exactly as required.
+            // =================================================================
+
+            if (commit_valid[0]) begin
+
+                rob[commit_rob_idx[0]].allocated <= 1'b0;
+                rob[commit_rob_idx[0]].complete  <= 1'b0;
+            end
+
+            if (commit_valid[1]) begin
+
+                rob[commit_rob_idx[1]].allocated <= 1'b0;
+                rob[commit_rob_idx[1]].complete  <= 1'b0;
+            end
+
+            // =================================================================
+            // COMPLETE / WRITEBACK
+            // =================================================================
+            //
+            // Completion is applied to the CURRENT ROB entry.
+            //
+            // A completion is dropped when its target is strictly younger
+            // than the flush point in the same cycle.
+            //
+            // This prevents:
+            //
+            //   completion -> squashed entry
+            //
+            // from accidentally reviving an entry.
+            //
+            // A completion for flush_rob_idx itself is allowed.
+            //
+            // A completion for an entry committing this cycle is also harmless
+            // under the stated testbench contract because a complete entry is
+            // never completed twice. More importantly, commit_valid is based on
+            // the old registered state, so the completion cannot cause a new
+            // commit until the next cycle.
+            // =================================================================
+
             if (complete_valid[0]) begin
-                if (!flush_valid ||
-                    (complete_rob_idx[0] == flush_rob_idx) ||
-                    (distance(complete_rob_idx[0], head) <=
-                     distance(flush_rob_idx, head))) begin
 
-                    entries[complete_rob_idx[0]].complete   <= 1'b1;
-                    entries[complete_rob_idx[0]].value      <= complete_value[0];
-                    entries[complete_rob_idx[0]].exception  <= complete_exception[0];
+                if (!(flush_valid &&
+                      is_younger_than_flush(complete_rob_idx[0]))) begin
 
-                    if (entries[complete_rob_idx[0]].is_branch) begin
-                        entries[complete_rob_idx[0]].mispredict    <= complete_mispredict[0];
-                        entries[complete_rob_idx[0]].actual_target <= complete_actual_target[0];
+                    rob[complete_rob_idx[0]].complete <= 1'b1;
+                    rob[complete_rob_idx[0]].value    <= complete_value[0];
+                    rob[complete_rob_idx[0]].exception <= complete_exception[0];
+
+                    if (rob[complete_rob_idx[0]].is_branch) begin
+                        rob[complete_rob_idx[0]].mispredict =
+                            complete_mispredict[0];
+
+                        rob[complete_rob_idx[0]].actual_target =
+                            complete_actual_target[0];
                     end
                 end
             end
 
-            // -------------------------------------------------------------
-            // Completion lane 1.
-            // -------------------------------------------------------------
             if (complete_valid[1]) begin
-                if (!flush_valid ||
-                    (complete_rob_idx[1] == flush_rob_idx) ||
-                    (distance(complete_rob_idx[1], head) <=
-                     distance(flush_rob_idx, head))) begin
 
-                    entries[complete_rob_idx[1]].complete   <= 1'b1;
-                    entries[complete_rob_idx[1]].value      <= complete_value[1];
-                    entries[complete_rob_idx[1]].exception  <= complete_exception[1];
+                if (!(flush_valid &&
+                      is_younger_than_flush(complete_rob_idx[1]))) begin
 
-                    if (entries[complete_rob_idx[1]].is_branch) begin
-                        entries[complete_rob_idx[1]].mispredict    <= complete_mispredict[1];
-                        entries[complete_rob_idx[1]].actual_target <= complete_actual_target[1];
+                    rob[complete_rob_idx[1]].complete <= 1'b1;
+                    rob[complete_rob_idx[1]].value    <= complete_value[1];
+                    rob[complete_rob_idx[1]].exception <= complete_exception[1];
+
+                    if (rob[complete_rob_idx[1]].is_branch) begin
+                        rob[complete_rob_idx[1]].mispredict =
+                            complete_mispredict[1];
+
+                        rob[complete_rob_idx[1]].actual_target =
+                            complete_actual_target[1];
                     end
                 end
             end

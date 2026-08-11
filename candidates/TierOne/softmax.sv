@@ -110,8 +110,8 @@ module softmax #(
         lut_idx  = F_raw[27:20];
         frac_rem = F_raw[19:12];
 
-        val0  = EXP2_LUT[lut_idx];
-        val1  = EXP2_LUT[lut_idx + 1];
+        val0  = exp2_lut[lut_idx];
+        val1  = exp2_lut[lut_idx + 1];
         slope = val1 - val0;
 
         interpolated_2F = val0 + ((slope * frac_rem) >> 8);

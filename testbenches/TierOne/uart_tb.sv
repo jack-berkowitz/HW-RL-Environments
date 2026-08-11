@@ -184,8 +184,7 @@ module uart_tb;
         for (int b = 0; b < FRAME_BITS; b++) begin
             for (int c = 0; c < BIT_CYCLES; c++) begin
                 if (!bad && tx_serial !== exp_bit[b]) begin
-                    note_fail($sformatf({"%s: data 0x%0h -- bit %0d (%s) wrong at cycle %0d ",
-                                         "of %0d: tx_serial=%0b expected %0b"},
+                    note_fail($sformatf("%s: data 0x%0h -- bit %0d (%s) wrong at cycle %0d of %0d: tx_serial=%0b expected %0b",
                                         ctx, d, b,
                                         (b == 0) ? "start" :
                                         (b <= DATA_BITS) ? "data" :
@@ -285,8 +284,7 @@ module uart_tb;
             return;
         end
         if (rxv_t[0] < earliest || rxv_t[0] > latest)
-            note_fail($sformatf({"%s: rx_valid at t=%0t outside window [%0t,%0t] ",
-                                 "(frame started %0t)"},
+            note_fail($sformatf("%s: rx_valid at t=%0t outside window [%0t,%0t] (frame started %0t)",
                                 ctx, rxv_t[0], earliest, latest, t_start));
         // data is only meaningful when the frame was not corrupted mid-payload
         if (!exp_ferr && rxv_data[0] != int'(d))

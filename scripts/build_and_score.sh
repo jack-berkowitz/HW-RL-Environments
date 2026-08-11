@@ -15,20 +15,31 @@
 # actually has the module.
 #
 # Pipeline:
-#   1. Simulate the candidate against its testbench with iverilog/vvp
-#      (default testbench parameters, no -P overrides). For Tier2 modules,
-#      also compiles in the shared reference models under testbenches/common/
-#      (golden memory model, memory-interface stub) that those testbenches
-#      depend on. Aborts here on anything other than "TEST_RESULT: PASS" --
-#      a failing candidate isn't worth spending a P&R run on.
+#   1. Simulate the candidate against its testbench with Verilator
+#      (--binary mode: builds and runs a standalone executable directly
+#      from the SV sources, no hand-written C++ harness needed). For Tier2
+#      modules, -I points at testbenches/common/ so `include of the shared
+#      reference models (golden memory model, memory-interface stub)
+#      resolves the same way it did under Icarus. Aborts here on anything
+#      other than "TEST_RESULT: PASS" -- a failing candidate isn't worth
+#      spending a P&R run on.
 #   2. Run the full ORFS flow via run_orfs_build.sh (synth -> floorplan ->
 #      place -> CTS -> route -> report), targeting sky130hd.
 #   3. Print PPA numbers via collect_results.py.
 #
 # Stops at the first failing stage and exits non-zero.
 #
-# Assumes: iverilog/vvp on PATH, Docker running (for the ORFS stage), and
-# python3 with whatever collect_results.py needs.
+# NOTE ON THE MIGRATION FROM ICARUS: this stage previously ran on
+# iverilog/vvp. Verilator is 2-state internally (no true X-propagation),
+# unlike Icarus. --x-assign unique --x-initial unique below is a partial
+# mitigation (uninitialized reads return pseudo-random garbage per run
+# rather than a fixed value), not a substitute for real 4-state tracking --
+# see testbenches/TierTwo/NOTES.md for the full writeup of that tradeoff and
+# the re-validation done against Icarus's prior results before this switch.
+#
+# Assumes: verilator (>= 5.006, for mature --timing support) on PATH,
+# Docker running (for the ORFS stage), and python3 with whatever
+# collect_results.py needs.
 
 set -euo pipefail
 
@@ -90,24 +101,34 @@ if [ ! -f "${CONFIG}" ]; then
   exit 1
 fi
 
-echo "=== [1/3] Simulating ${MODULE} (iverilog -g2012, ${TIER}) ==="
+echo "=== [1/3] Simulating ${MODULE} (verilator, ${TIER}) ==="
 SIM_DIR="$(mktemp -d)"
 trap 'rm -rf "${SIM_DIR}"' EXIT
 
-IVERILOG_FLAGS=("-g2012")
+# TB_TOP matches your <module>_tb naming convention exactly -- passed
+# explicitly rather than relying on Verilator's top-module auto-detection,
+# same reasoning as pinning down the -I ordering issue earlier: cheap
+# insurance against another multi-round CLI debugging cycle.
+TB_TOP="$(basename "${TESTBENCH}" .sv)"
+
+VERILATOR_FLAGS=(
+  "--binary" "--timing" "-j" "0"
+  "-Wno-fatal"                # candidate RTL style warnings shouldn't block a build
+  "--x-assign" "unique" "--x-initial" "unique"   # partial 2-state mitigation, see NOTES.md
+)
+
 if [ "${TIER}" = "TierTwo" ]; then
   COMMON_DIR="${REPO_DIR}/testbenches/common"
   if [ -d "${COMMON_DIR}" ]; then
-    IVERILOG_FLAGS+=("-I${COMMON_DIR}")
+    VERILATOR_FLAGS+=("-I${COMMON_DIR}")
   fi
 fi
 
-SIM_SOURCES=("${TESTBENCH}" "${CANDIDATE}")
+verilator "${VERILATOR_FLAGS[@]}" --top-module "${TB_TOP}" \
+  -Mdir "${SIM_DIR}/obj_dir" -o sim \
+  "${TESTBENCH}" "${CANDIDATE}"
 
-iverilog "${IVERILOG_FLAGS[@]}" -o "${SIM_DIR}/sim" "${SIM_SOURCES[@]}"
-
-iverilog -g2012 -o "${SIM_DIR}/sim" "${SIM_SOURCES[@]}"
-SIM_OUTPUT="$(vvp "${SIM_DIR}/sim")"
+SIM_OUTPUT="$("${SIM_DIR}/obj_dir/sim")"
 echo "${SIM_OUTPUT}"
 
 if ! echo "${SIM_OUTPUT}" | grep -q "^TEST_RESULT: PASS$"; then

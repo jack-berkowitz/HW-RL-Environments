@@ -5,8 +5,8 @@ export PLATFORM    = sky130hd
 export DESIGN_NAME = fifo
 export DESIGN_NICKNAME = fifo
 
-export VERILOG_FILES = /work/candidates/fifo.sv
-export SDC_FILE      = /work/orfs_configs/sky130hd/fifo/constraint.sdc
+export VERILOG_FILES = /work/candidates/TierOne/fifo.sv
+export SDC_FILE      = /work/orfs_configs/sky130hd/TierOne/fifo/constraint.sdc
 
 # The candidates are SystemVerilog (always_ff/always_comb, size casts,
 # unpacked arrays). ORFS defaults to `read_verilog -defer -sv`, which does

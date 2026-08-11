@@ -5,8 +5,8 @@ export PLATFORM    = sky130hd
 export DESIGN_NAME = softmax
 export DESIGN_NICKNAME = softmax
 
-export VERILOG_FILES = /work/candidates/softmax.sv
-export SDC_FILE      = /work/orfs_configs/sky130hd/softmax/constraint.sdc
+export VERILOG_FILES = /work/candidates/TierOne/softmax.sv
+export SDC_FILE      = /work/orfs_configs/sky130hd/TierOne/softmax/constraint.sdc
 
 # The candidates are SystemVerilog (always_ff/always_comb, size casts,
 # unpacked arrays). ORFS defaults to `read_verilog -defer -sv`, which does

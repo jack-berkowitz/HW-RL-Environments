@@ -5,8 +5,8 @@ export PLATFORM    = sky130hd
 export DESIGN_NAME = uart
 export DESIGN_NICKNAME = uart
 
-export VERILOG_FILES = /work/candidates/uart.sv
-export SDC_FILE      = /work/orfs_configs/sky130hd/uart/constraint.sdc
+export VERILOG_FILES = /work/candidates/TierOne/uart.sv
+export SDC_FILE      = /work/orfs_configs/sky130hd/TierOne/uart/constraint.sdc
 
 # The candidates are SystemVerilog (always_ff/always_comb, size casts,
 # unpacked arrays). ORFS defaults to `read_verilog -defer -sv`, which does
@@ -19,3 +19,5 @@ export SYNTH_HDL_FRONTEND = slang
 export CORE_UTILIZATION = 10
 export PLACE_DENSITY = 0.50
 export TNS_END_PERCENT = 100
+
+export PLACE_PINS_ARGS = -exclude right:67-70 -exclude right:83-86 -exclude right:94-98

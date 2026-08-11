@@ -3,7 +3,10 @@
 // =============================================================================
 // golden_mem and mem_stub are depended on by three separate harnesses, so they
 // get their own self-test rather than being trusted implicitly.
-//   iverilog -g2012 -I testbenches/common -o sim testbenches/common/common_selftest.sv
+//   $ verilator --binary --timing -j 0 -Wno-fatal --top-module common_selftest -Mdir obj_dir -o sim -Itestbenches/common testbenches/common/common_selftest.sv
+//   $ obj_dir/sim
+// (-I must be ATTACHED to the path: -Idir, not -I dir.)
+// Also runs under Icarus: iverilog -g2012 -Itestbenches/common -o sim <file>
 // =============================================================================
 `timescale 1ns/1ps
 `include "mem_stub.sv"
