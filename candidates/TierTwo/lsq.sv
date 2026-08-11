@@ -1,5 +1,16 @@
 // =============================================================================
-// lsq.sv  --  Load/Store Queue Implementation
+// lsq.sv
+// =============================================================================
+// Load / Store Queue
+//
+//   - One allocation per cycle
+//   - Loads issue out of order
+//   - Conservative memory disambiguation
+//   - Exact-match store-to-load forwarding
+//   - Partial-overlap stalls
+//   - One outstanding memory transaction
+//   - Stores retire to memory in program order
+//   - Flush support
 // =============================================================================
 
 module lsq #(
@@ -12,13 +23,13 @@ module lsq #(
     input  logic                clk,
     input  logic                rst_n,
 
-    // ---- allocate (one per cycle, program order) ----
+    // ---- allocate ----
     input  logic                alloc_valid,
     input  logic                alloc_is_store,
     input  logic                alloc_addr_known,
     output logic [IDX_W-1:0]    lsq_idx,
 
-    // ---- address resolution (from AGU / execute) ----
+    // ---- address resolution ----
     input  logic                addr_valid,
     input  logic [IDX_W-1:0]    addr_lsq_idx,
     input  logic [ADDR_W-1:0]   addr_value,
@@ -29,13 +40,13 @@ module lsq #(
     input  logic [IDX_W-1:0]    store_data_lsq_idx,
     input  logic [DATA_W-1:0]   store_data_value,
 
-    // ---- load result (LSQ-internally triggered once legal) ----
+    // ---- load result ----
     output logic                load_result_valid,
     output logic [IDX_W-1:0]    load_result_lsq_idx,
     output logic [DATA_W-1:0]   load_result_value,
-    output logic                load_result_source,   // 0 = memory, 1 = forwarded
+    output logic                load_result_source,
 
-    // ---- memory interface (single outstanding) ----
+    // ---- memory interface ----
     output logic                mem_req_valid,
     output logic [ADDR_W-1:0]   mem_req_addr,
     output logic                mem_req_we,
@@ -54,272 +65,658 @@ module lsq #(
 );
 
     // =========================================================================
-    // STATE REGISTERS
+    // ENTRY
     // =========================================================================
-    logic [DEPTH-1:0]  entry_valid;
-    logic [DEPTH-1:0]  entry_is_store;
-    logic [AGE_W-1:0]  entry_age [0:DEPTH-1];
-    logic [DEPTH-1:0]  entry_addr_known;
-    logic [ADDR_W-1:0] entry_addr [0:DEPTH-1];
-    logic [1:0]        entry_size [0:DEPTH-1];
-    logic [DEPTH-1:0]  entry_data_known;
-    logic [DATA_W-1:0] entry_data [0:DEPTH-1];
-    logic [DEPTH-1:0]  entry_committed;
-    logic [DEPTH-1:0]  entry_issued;
 
-    logic [IDX_W-1:0]  alloc_ptr;
-    logic [AGE_W-1:0]  next_age;
+    typedef struct packed {
+        logic                    allocated;
+        logic                    is_store;
 
-    // Memory tracking
-    logic              mem_inflight;
-    logic              mem_inflight_is_store;
-    logic [IDX_W-1:0]  mem_inflight_idx;
-    logic [AGE_W-1:0]  mem_inflight_age;
-    logic              mem_inflight_flushed;
+        logic [AGE_W-1:0]        age;
 
-    // Output assignment for allocation
-    assign lsq_idx = alloc_ptr;
+        logic                    addr_known;
+        logic [ADDR_W-1:0]       addr;
+        logic [1:0]              size;
+
+        logic                    data_known;
+        logic [DATA_W-1:0]       data;
+
+        logic                    store_committed;
+
+        logic                    load_inflight;
+        logic                    load_done;
+    } lsq_entry_t;
+
+    lsq_entry_t entries [0:DEPTH-1];
+
+    logic [AGE_W-1:0] next_age;
 
     // =========================================================================
-    // LOAD LEGALITY & FORWARDING LOGIC
+    // MEMORY TRANSACTION
     // =========================================================================
-    logic [DEPTH-1:0] load_is_legal;
-    logic [DEPTH-1:0] load_needs_mem;
-    logic [DEPTH-1:0] load_can_fwd;
-    logic [IDX_W-1:0] load_fwd_idx [0:DEPTH-1];
+
+    logic             mem_busy;
+    logic             mem_busy_is_store;
+    logic [IDX_W-1:0] mem_busy_lsq_idx;
+
+    // =========================================================================
+    // ALLOCATION
+    // =========================================================================
+
+    logic             alloc_slot_found;
+    logic [IDX_W-1:0] alloc_slot;
+
+    // =========================================================================
+    // LOAD CANDIDATE
+    // =========================================================================
+
+    logic             load_found;
+    logic [IDX_W-1:0] load_issue_idx;
+    logic [AGE_W-1:0] load_issue_age;
+
+    logic             load_issue_forward;
+    logic [DATA_W-1:0] load_forward_value;
+
+    // =========================================================================
+    // STORE CANDIDATE
+    // =========================================================================
+
+    logic             store_found;
+    logic [IDX_W-1:0] store_issue_idx;
+    logic [AGE_W-1:0] store_issue_age;
+
+    // =========================================================================
+    // HELPERS
+    // =========================================================================
+
+    function automatic int unsigned size_bytes(
+        input logic [1:0] size
+    );
+        case (size)
+            2'b00: size_bytes = 1;
+            2'b01: size_bytes = 2;
+            2'b10: size_bytes = 4;
+            default: size_bytes = 1;
+        endcase
+    endfunction
+
+
+    function automatic logic ranges_overlap(
+        input logic [ADDR_W-1:0] a_addr,
+        input logic [1:0]        a_size,
+        input logic [ADDR_W-1:0] b_addr,
+        input logic [1:0]        b_size
+    );
+
+        logic [ADDR_W:0] a_start;
+        logic [ADDR_W:0] a_end;
+        logic [ADDR_W:0] b_start;
+        logic [ADDR_W:0] b_end;
+
+        begin
+            a_start = {1'b0, a_addr};
+            b_start = {1'b0, b_addr};
+
+            a_end = a_start + size_bytes(a_size);
+            b_end = b_start + size_bytes(b_size);
+
+            ranges_overlap =
+                (a_start < b_end) &&
+                (b_start < a_end);
+        end
+    endfunction
+
+
+    function automatic logic exact_match(
+        input logic [ADDR_W-1:0] a_addr,
+        input logic [1:0]        a_size,
+        input logic [ADDR_W-1:0] b_addr,
+        input logic [1:0]        b_size
+    );
+        begin
+            exact_match =
+                (a_addr == b_addr) &&
+                (a_size == b_size);
+        end
+    endfunction
+
+
+    function automatic logic [DATA_W-1:0] zero_extend_data(
+        input logic [DATA_W-1:0] value,
+        input logic [1:0]        size
+    );
+        begin
+            case (size)
+                2'b00:
+                    zero_extend_data =
+                        {{(DATA_W-8){1'b0}}, value[7:0]};
+
+                2'b01:
+                    zero_extend_data =
+                        {{(DATA_W-16){1'b0}}, value[15:0]};
+
+                2'b10:
+                    zero_extend_data = value;
+
+                default:
+                    zero_extend_data = '0;
+            endcase
+        end
+    endfunction
+
+
+    // =========================================================================
+    // COMBINATIONAL ALLOCATION SLOT
+    // =========================================================================
+    //
+    // LSQ slots are reusable. Program ordering comes from age, NOT slot number.
+    // =========================================================================
 
     always_comb begin
+        alloc_slot_found = 1'b0;
+        alloc_slot       = '0;
+
         for (int i = 0; i < DEPTH; i++) begin
-            load_is_legal[i]  = 1'b0;
-            load_needs_mem[i] = 1'b0;
-            load_can_fwd[i]   = 1'b0;
-            load_fwd_idx[i]   = '0;
+            if (!alloc_slot_found && !entries[i].allocated) begin
+                alloc_slot_found = 1'b1;
+                alloc_slot       = i[IDX_W-1:0];
+            end
+        end
 
-            if (entry_valid[i] && !entry_is_store[i] && !entry_issued[i]) begin
-                logic blocked;
-                logic overlap_found;
-                logic exact_match;
-                logic [AGE_W-1:0] max_age;
-                logic [IDX_W-1:0] max_idx;
-                
-                blocked       = 1'b0;
-                overlap_found = 1'b0;
-                exact_match   = 1'b0;
-                max_age       = '0;
-                max_idx       = '0;
+        lsq_idx = alloc_slot;
+    end
 
-                for (int j = 0; j < DEPTH; j++) begin
-                    if (entry_valid[j] && entry_is_store[j] && (entry_age[j] < entry_age[i])) begin
-                        if (!entry_addr_known[j]) begin
-                            blocked = 1'b1;
-                        end else begin
-                            // Check byte overlap
-                            logic [ADDR_W:0] start_i = {1'b0, entry_addr[i]};
-                            logic [ADDR_W:0] end_i   = start_i + (1 << entry_size[i]) - 1;
-                            logic [ADDR_W:0] start_j = {1'b0, entry_addr[j]};
-                            logic [ADDR_W:0] end_j   = start_j + (1 << entry_size[j]) - 1;
 
-                            logic overlap = (start_i <= end_j) && (start_j <= end_i);
-                            logic exact   = (start_i == start_j) && (entry_size[i] == entry_size[j]);
+    // =========================================================================
+    // LOAD SELECTION
+    // =========================================================================
+    //
+    // Find the oldest legal load.
+    //
+    // Every older store:
+    //   - unknown address -> blocks
+    //
+    // Youngest older overlapping store:
+    //   - exact + data ready -> forward
+    //   - exact + data unavailable -> block
+    //   - partial overlap -> block
+    //
+    // This follows the conservative rule in the specification. 
+    // =========================================================================
 
-                            if (overlap) begin
-                                if (!overlap_found || (entry_age[j] > max_age)) begin
-                                    overlap_found = 1'b1;
-                                    max_age       = entry_age[j];
-                                    max_idx       = j[IDX_W-1:0];
-                                    exact_match   = exact;
+    always_comb begin
+
+        load_found         = 1'b0;
+        load_issue_idx     = '0;
+        load_issue_age     = '0;
+        load_issue_forward = 1'b0;
+        load_forward_value = '0;
+
+        if (!mem_busy) begin
+
+            for (int l = 0; l < DEPTH; l++) begin
+
+                if (entries[l].allocated &&
+                    !entries[l].is_store &&
+                    entries[l].addr_known &&
+                    !entries[l].load_inflight &&
+                    !entries[l].load_done) begin
+
+                    logic blocked;
+                    logic overlap_found;
+
+                    logic [IDX_W-1:0] nearest_store;
+                    logic [AGE_W-1:0] nearest_store_age;
+                    logic candidate_forward;
+                    logic [DATA_W-1:0] candidate_value;
+
+                    blocked           = 1'b0;
+                    overlap_found     = 1'b0;
+                    nearest_store     = '0;
+                    nearest_store_age = '0;
+
+                    // ---------------------------------------------------------
+                    // Find older stores.
+                    // ---------------------------------------------------------
+
+                    for (int s = 0; s < DEPTH; s++) begin
+
+                        if (entries[s].allocated &&
+                            entries[s].is_store &&
+                            (entries[s].age < entries[l].age)) begin
+
+                            // Any older unresolved store address blocks.
+                            if (!entries[s].addr_known) begin
+                                blocked = 1'b1;
+                            end
+
+                            else if (ranges_overlap(
+                                entries[s].addr,
+                                entries[s].size,
+                                entries[l].addr,
+                                entries[l].size
+                            )) begin
+
+                                // Youngest older overlapping store.
+                                if (!overlap_found ||
+                                    entries[s].age > nearest_store_age) begin
+
+                                    overlap_found     = 1'b1;
+                                    nearest_store     = s[IDX_W-1:0];
+                                    nearest_store_age = entries[s].age;
                                 end
                             end
                         end
                     end
-                end
 
-                if (!blocked) begin
-                    load_is_legal[i] = 1'b1;
-                    if (!overlap_found) begin
-                        load_needs_mem[i] = 1'b1;
-                    end else if (exact_match && entry_data_known[max_idx]) begin
-                        load_can_fwd[i] = 1'b1;
-                        load_fwd_idx[i] = max_idx;
+                    candidate_forward = 1'b0;
+                    candidate_value   = '0;
+
+                    if (overlap_found && !blocked) begin
+
+                        if (exact_match(
+                            entries[nearest_store].addr,
+                            entries[nearest_store].size,
+                            entries[l].addr,
+                            entries[l].size
+                        )) begin
+
+                            if (entries[nearest_store].data_known) begin
+                                candidate_forward = 1'b1;
+
+                                candidate_value =
+                                    zero_extend_data(
+                                        entries[nearest_store].data,
+                                        entries[l].size
+                                    );
+                            end
+                            else begin
+                                blocked = 1'b1;
+                            end
+                        end
+                        else begin
+                            // Partial overlap must wait until store leaves.
+                            blocked = 1'b1;
+                        end
+                    end
+
+                    if (!blocked) begin
+
+                        if (!load_found ||
+                            entries[l].age < load_issue_age) begin
+
+                            load_found         = 1'b1;
+                            load_issue_idx     = l[IDX_W-1:0];
+                            load_issue_age     = entries[l].age;
+                            load_issue_forward = candidate_forward;
+                            load_forward_value = candidate_value;
+                        end
                     end
                 end
             end
         end
     end
 
-    // =========================================================================
-    // ARBITRATION LOGIC (Oldest First)
-    // =========================================================================
-    function automatic logic [IDX_W:0] find_oldest(
-        input logic [DEPTH-1:0] mask, 
-        input logic [AGE_W-1:0] ages [0:DEPTH-1]
-    );
-        logic [IDX_W:0] oldest_idx = '0; // MSB represents 'valid'
-        logic [AGE_W-1:0] min_age = {AGE_W{1'b1}};
-        for (int i = 0; i < DEPTH; i++) begin
-            if (mask[i]) begin
-                if (!oldest_idx[IDX_W] || (ages[i] < min_age)) begin
-                    oldest_idx[IDX_W]     = 1'b1;
-                    oldest_idx[IDX_W-1:0] = i[IDX_W-1:0];
-                    min_age               = ages[i];
-                end
-            end
-        end
-        return oldest_idx;
-    endfunction
 
-    logic [DEPTH-1:0] store_ready_mem;
+    // =========================================================================
+    // STORE SELECTION
+    // =========================================================================
+    //
+    // Only committed stores may reach memory.
+    //
+    // Among committed stores, oldest age wins.
+    // =========================================================================
+
     always_comb begin
-        for (int i = 0; i < DEPTH; i++) begin
-            store_ready_mem[i] = entry_valid[i] && entry_is_store[i] && entry_committed[i] && !entry_issued[i];
+
+        store_found     = 1'b0;
+        store_issue_idx = '0;
+        store_issue_age = '0;
+
+        if (!mem_busy) begin
+
+            for (int s = 0; s < DEPTH; s++) begin
+
+                if (entries[s].allocated &&
+                    entries[s].is_store &&
+                    entries[s].store_committed &&
+                    entries[s].addr_known &&
+                    entries[s].data_known) begin
+
+                    if (!store_found ||
+                        entries[s].age < store_issue_age) begin
+
+                        store_found     = 1'b1;
+                        store_issue_idx = s[IDX_W-1:0];
+                        store_issue_age = entries[s].age;
+                    end
+                end
+            end
         end
     end
 
-    logic [IDX_W:0] oldest_store_mem;
-    logic [IDX_W:0] oldest_load_mem;
-    logic [IDX_W:0] oldest_load_fwd;
-
-    assign oldest_store_mem = find_oldest(store_ready_mem, entry_age);
-    assign oldest_load_mem  = find_oldest(load_needs_mem, entry_age);
-    assign oldest_load_fwd  = find_oldest(load_can_fwd, entry_age);
 
     // =========================================================================
-    // MEMORY REQUEST
+    // SEQUENTIAL LOGIC
     // =========================================================================
-    logic do_store_req;
-    logic do_load_req;
-    assign do_store_req = !mem_inflight && oldest_store_mem[IDX_W];
-    assign do_load_req  = !mem_inflight && !do_store_req && oldest_load_mem[IDX_W];
 
-    assign mem_req_valid = do_store_req || do_load_req;
-    
-    logic [IDX_W-1:0] req_idx;
-    assign req_idx       = do_store_req ? oldest_store_mem[IDX_W-1:0] : oldest_load_mem[IDX_W-1:0];
-    
-    assign mem_req_addr  = entry_addr[req_idx];
-    assign mem_req_we    = do_store_req;
-    assign mem_req_wdata = entry_data[req_idx];
-    assign mem_req_size  = entry_size[req_idx];
-
-    // =========================================================================
-    // RESULT EMISSION
-    // =========================================================================
-    logic inflight_is_flushed_now;
-    assign inflight_is_flushed_now = mem_inflight_flushed || (flush_valid && (mem_inflight_age > flush_age_threshold));
-
-    logic mem_resp_is_valid_load;
-    assign mem_resp_is_valid_load = mem_resp_valid && !mem_inflight_is_store && !inflight_is_flushed_now;
-
-    logic do_fwd;
-    logic actual_do_fwd;
-    logic fwd_is_flushed_now;
-    
-    assign do_fwd = oldest_load_fwd[IDX_W];
-    assign actual_do_fwd = do_fwd && !mem_resp_is_valid_load;
-    assign fwd_is_flushed_now = flush_valid && (entry_age[oldest_load_fwd[IDX_W-1:0]] > flush_age_threshold);
-
-    assign load_result_valid   = mem_resp_is_valid_load || (actual_do_fwd && !fwd_is_flushed_now);
-    assign load_result_lsq_idx = mem_resp_is_valid_load ? mem_inflight_idx : oldest_load_fwd[IDX_W-1:0];
-    assign load_result_source  = mem_resp_is_valid_load ? 1'b0 : 1'b1;
-    assign load_result_value   = mem_resp_is_valid_load ? mem_resp_rdata : entry_data[load_fwd_idx[oldest_load_fwd[IDX_W-1:0]]];
-
-    // =========================================================================
-    // SEQUENTIAL UPDATES
-    // =========================================================================
     always_ff @(posedge clk) begin
+
         if (!rst_n) begin
-            entry_valid          <= '0;
-            alloc_ptr            <= '0;
-            next_age             <= '0;
-            mem_inflight         <= 1'b0;
-            mem_inflight_flushed <= 1'b0;
-        end else begin
 
-            // Memory inflight tracking
-            if (flush_valid && mem_inflight && (mem_inflight_age > flush_age_threshold)) begin
-                mem_inflight_flushed <= 1'b1;
+            next_age <= '0;
+
+            mem_busy          <= 1'b0;
+            mem_busy_is_store <= 1'b0;
+            mem_busy_lsq_idx  <= '0;
+
+            load_result_valid   <= 1'b0;
+            load_result_lsq_idx <= '0;
+            load_result_value   <= '0;
+            load_result_source  <= 1'b0;
+
+            mem_req_valid <= 1'b0;
+            mem_req_addr  <= '0;
+            mem_req_we    <= 1'b0;
+            mem_req_wdata <= '0;
+            mem_req_size  <= '0;
+
+            for (int i = 0; i < DEPTH; i++) begin
+
+                entries[i].allocated       <= 1'b0;
+                entries[i].is_store        <= 1'b0;
+
+                entries[i].age             <= '0;
+
+                entries[i].addr_known      <= 1'b0;
+                entries[i].addr            <= '0;
+                entries[i].size            <= '0;
+
+                entries[i].data_known      <= 1'b0;
+                entries[i].data            <= '0;
+
+                entries[i].store_committed <= 1'b0;
+
+                entries[i].load_inflight   <= 1'b0;
+                entries[i].load_done       <= 1'b0;
+            end
+        end
+
+        else begin
+
+            // =================================================================
+            // DEFAULT ONE-CYCLE OUTPUTS
+            // =================================================================
+
+            load_result_valid <= 1'b0;
+            mem_req_valid     <= 1'b0;
+
+
+            // =================================================================
+            // 1. ADDRESS RESOLUTION
+            // =================================================================
+
+            if (addr_valid &&
+                entries[addr_lsq_idx].allocated) begin
+
+                entries[addr_lsq_idx].addr_known <= 1'b1;
+                entries[addr_lsq_idx].addr       <= addr_value;
+                entries[addr_lsq_idx].size       <= addr_size;
             end
 
-            if (mem_resp_valid) begin
-                mem_inflight         <= 1'b0;
-                mem_inflight_flushed <= 1'b0;
-            end else if (mem_req_valid) begin
-                mem_inflight          <= 1'b1;
-                mem_inflight_is_store <= do_store_req;
-                mem_inflight_idx      <= req_idx;
-                mem_inflight_age      <= entry_age[req_idx];
-                mem_inflight_flushed  <= 1'b0;
+
+            // =================================================================
+            // 2. STORE DATA RESOLUTION
+            // =================================================================
+
+            if (store_data_valid &&
+                entries[store_data_lsq_idx].allocated &&
+                entries[store_data_lsq_idx].is_store) begin
+
+                entries[store_data_lsq_idx].data_known <= 1'b1;
+                entries[store_data_lsq_idx].data       <= store_data_value;
             end
 
-            // Main entry array updates
-            for (int i = 0; i < DEPTH; i = i + 1) begin
-                
-                // 1. Flush (Highest priority for clearing)
-                if (flush_valid && entry_valid[i] && (entry_age[i] > flush_age_threshold)) begin
-                    entry_valid[i] <= 1'b0;
-                end else begin
-                    // 2. Freeing Logic
-                    if (mem_resp_is_valid_load && (i[IDX_W-1:0] == mem_inflight_idx)) begin
-                        entry_valid[i] <= 1'b0;
-                    end else if (actual_do_fwd && !fwd_is_flushed_now && (i[IDX_W-1:0] == oldest_load_fwd[IDX_W-1:0])) begin
-                        entry_valid[i] <= 1'b0;
-                    end else if (mem_resp_valid && mem_inflight_is_store && (i[IDX_W-1:0] == mem_inflight_idx)) begin
-                        entry_valid[i] <= 1'b0;
+
+            // =================================================================
+            // 3. STORE COMMIT
+            // =================================================================
+
+            if (store_commit_valid &&
+                entries[store_commit_lsq_idx].allocated &&
+                entries[store_commit_lsq_idx].is_store) begin
+
+                entries[store_commit_lsq_idx].store_committed <= 1'b1;
+            end
+
+
+            // =================================================================
+            // 4. MEMORY RESPONSE
+            // =================================================================
+            //
+            // A transaction that has already been accepted cannot be recalled
+            // by a later flush.
+            // =================================================================
+
+            if (mem_resp_valid && mem_busy) begin
+
+                if (mem_busy_is_store) begin
+
+                    // ---------------------------------------------------------
+                    // STORE WRITE COMPLETED
+                    // ---------------------------------------------------------
+
+                    if (entries[mem_busy_lsq_idx].allocated) begin
+                        entries[mem_busy_lsq_idx].allocated <= 1'b0;
                     end
-                    
-                    // 3. Allocation (Overrides freeing if same slot re-allocated, but won't happen if DEPTH handled correctly)
-                    if (alloc_valid && (i[IDX_W-1:0] == alloc_ptr)) begin
-                        entry_valid[i]     <= 1'b1;
-                        entry_is_store[i]  <= alloc_is_store;
-                        entry_age[i]       <= next_age;
-                        entry_issued[i]    <= 1'b0;
-                        entry_committed[i] <= 1'b0;
-                        
-                        // Handle potential same-cycle address resolution
-                        if (addr_valid && (addr_lsq_idx == i[IDX_W-1:0])) begin
-                            entry_addr_known[i] <= 1'b1;
-                            entry_addr[i]       <= addr_value;
-                            entry_size[i]       <= addr_size;
-                        end else begin
-                            entry_addr_known[i] <= 1'b0;
-                        end
 
-                        // Handle potential same-cycle data resolution
-                        if (store_data_valid && (store_data_lsq_idx == i[IDX_W-1:0])) begin
-                            entry_data_known[i] <= 1'b1;
-                            entry_data[i]       <= store_data_value;
-                        end else begin
-                            entry_data_known[i] <= 1'b0;
-                        end
-                    end else begin
-                        // 4. Updates to existing valid entries
-                        if (addr_valid && (addr_lsq_idx == i[IDX_W-1:0])) begin
-                            entry_addr_known[i] <= 1'b1;
-                            entry_addr[i]       <= addr_value;
-                            entry_size[i]       <= addr_size;
-                        end
-                        
-                        if (store_data_valid && (store_data_lsq_idx == i[IDX_W-1:0])) begin
-                            entry_data_known[i] <= 1'b1;
-                            entry_data[i]       <= store_data_value;
-                        end
+                end
+                else begin
 
-                        if (store_commit_valid && (store_commit_lsq_idx == i[IDX_W-1:0])) begin
-                            entry_committed[i] <= 1'b1;
+                    // ---------------------------------------------------------
+                    // LOAD READ COMPLETED
+                    // ---------------------------------------------------------
+
+                    // Flush wins if it squashes this load in the same cycle.
+                    if (entries[mem_busy_lsq_idx].allocated &&
+                        !(flush_valid &&
+                          (entries[mem_busy_lsq_idx].age >
+                           flush_age_threshold))) begin
+
+                        load_result_valid   <= 1'b1;
+                        load_result_lsq_idx <= mem_busy_lsq_idx;
+                        load_result_value   <=
+                            zero_extend_data(
+                                mem_resp_rdata,
+                                entries[mem_busy_lsq_idx].size
+                            );
+                        load_result_source  <= 1'b0;
+
+                        entries[mem_busy_lsq_idx].allocated     <= 1'b0;
+                        entries[mem_busy_lsq_idx].load_inflight <= 1'b0;
+                        entries[mem_busy_lsq_idx].load_done     <= 1'b1;
+
+                    end
+                    else begin
+
+                        // Squashed load.
+                        if (entries[mem_busy_lsq_idx].allocated) begin
+                            entries[mem_busy_lsq_idx].allocated     <= 1'b0;
+                            entries[mem_busy_lsq_idx].load_inflight <= 1'b0;
+                            entries[mem_busy_lsq_idx].load_done     <= 1'b0;
                         end
-                        
-                        if (mem_req_valid && (req_idx == i[IDX_W-1:0])) begin
-                            entry_issued[i] <= 1'b1;
-                        end
+                    end
+                end
+
+                mem_busy <= 1'b0;
+            end
+
+
+            // =================================================================
+            // 5. FLUSH
+            // =================================================================
+            //
+            // Do not squash an already accepted memory transaction.
+            //
+            // For everything else, age > threshold is squashed.
+            // =================================================================
+
+            if (flush_valid) begin
+
+                for (int f = 0; f < DEPTH; f++) begin
+
+                    if (entries[f].allocated &&
+                        (entries[f].age > flush_age_threshold) &&
+                        !(mem_busy &&
+                          (mem_busy_lsq_idx == f[IDX_W-1:0]))) begin
+
+                        entries[f].allocated     <= 1'b0;
+                        entries[f].load_inflight <= 1'b0;
+                        entries[f].load_done     <= 1'b0;
                     end
                 end
             end
 
-            // Allocation pointer advance
-            if (alloc_valid) begin
-                alloc_ptr <= alloc_ptr + 1'b1;
-                next_age  <= next_age + 1'b1;
+
+            // =================================================================
+            // 6. MEMORY ARBITRATION
+            // =================================================================
+            //
+            // IMPORTANT:
+            //
+            // This MUST be one mutually-exclusive decision.
+            //
+            // The previous implementation had independent load/store "if"
+            // statements. Both observed the same old mem_busy value and could
+            // therefore launch two transactions in one cycle.
+            //
+            // Priority:
+            //   1. forwarded load (doesn't consume memory)
+            //   2. legal load memory request
+            //   3. committed store memory request
+            //
+            // Exactly one memory transaction can therefore be launched.
+            // =================================================================
+
+            if (!mem_busy) begin
+
+                // -------------------------------------------------------------
+                // 6A. FORWARDED LOAD
+                // -------------------------------------------------------------
+
+                if (load_found && load_issue_forward) begin
+
+                    // Flush wins in the same cycle.
+                    if (entries[load_issue_idx].allocated &&
+                        !(flush_valid &&
+                          (entries[load_issue_idx].age >
+                           flush_age_threshold))) begin
+
+                        load_result_valid   <= 1'b1;
+                        load_result_lsq_idx <= load_issue_idx;
+                        load_result_value   <= load_forward_value;
+                        load_result_source  <= 1'b1;
+
+                        entries[load_issue_idx].allocated <= 1'b0;
+                        entries[load_issue_idx].load_done <= 1'b1;
+                    end
+                    else if (entries[load_issue_idx].allocated) begin
+
+                        entries[load_issue_idx].allocated <= 1'b0;
+                        entries[load_issue_idx].load_done <= 1'b0;
+                    end
+                end
+
+                // -------------------------------------------------------------
+                // 6B. LOAD MEMORY REQUEST
+                // -------------------------------------------------------------
+
+                else if (load_found && !load_issue_forward) begin
+
+                    if (entries[load_issue_idx].allocated &&
+                        !(flush_valid &&
+                          (entries[load_issue_idx].age >
+                           flush_age_threshold))) begin
+
+                        mem_req_valid <= 1'b1;
+                        mem_req_addr  <= entries[load_issue_idx].addr;
+                        mem_req_we    <= 1'b0;
+                        mem_req_wdata <= '0;
+                        mem_req_size  <= entries[load_issue_idx].size;
+
+                        mem_busy          <= 1'b1;
+                        mem_busy_is_store <= 1'b0;
+                        mem_busy_lsq_idx  <= load_issue_idx;
+
+                        entries[load_issue_idx].load_inflight <= 1'b1;
+                    end
+                end
+
+                // -------------------------------------------------------------
+                // 6C. STORE MEMORY REQUEST
+                // -------------------------------------------------------------
+
+                else if (store_found) begin
+
+                    if (entries[store_issue_idx].allocated &&
+                        !(flush_valid &&
+                          (entries[store_issue_idx].age >
+                           flush_age_threshold))) begin
+
+                        mem_req_valid <= 1'b1;
+                        mem_req_addr  <= entries[store_issue_idx].addr;
+                        mem_req_we    <= 1'b1;
+                        mem_req_wdata <= entries[store_issue_idx].data;
+                        mem_req_size  <= entries[store_issue_idx].size;
+
+                        mem_busy          <= 1'b1;
+                        mem_busy_is_store <= 1'b1;
+                        mem_busy_lsq_idx  <= store_issue_idx;
+                    end
+                end
             end
+
+
+            // =================================================================
+            // 7. ALLOCATION
+            // =================================================================
+            //
+            // The combinational lsq_idx is guaranteed to point at a free slot
+            // at the beginning of this cycle.
+            // =================================================================
+
+            if (alloc_valid && alloc_slot_found) begin
+
+                entries[alloc_slot].allocated       <= 1'b1;
+                entries[alloc_slot].is_store        <= alloc_is_store;
+
+                entries[alloc_slot].age             <= next_age;
+
+                entries[alloc_slot].addr_known      <= 1'b0;
+                entries[alloc_slot].addr            <= '0;
+                entries[alloc_slot].size            <= '0;
+
+                entries[alloc_slot].data_known      <= 1'b0;
+                entries[alloc_slot].data            <= '0;
+
+                entries[alloc_slot].store_committed <= 1'b0;
+
+                entries[alloc_slot].load_inflight   <= 1'b0;
+                entries[alloc_slot].load_done       <= 1'b0;
+
+                // Same-cycle address resolution.
+                if (alloc_addr_known &&
+                    addr_valid &&
+                    (addr_lsq_idx == alloc_slot)) begin
+
+                    entries[alloc_slot].addr_known <= 1'b1;
+                    entries[alloc_slot].addr       <= addr_value;
+                    entries[alloc_slot].size       <= addr_size;
+                end
+
+                next_age <= next_age + 1'b1;
+            end
+
         end
     end
 

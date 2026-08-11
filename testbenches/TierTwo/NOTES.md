@@ -341,6 +341,104 @@ miss.
 
 ---
 
+## Module 3 — Branch Predictor (gshare + BTB + RAS) — **COMPLETE**
+
+Files: `interfaces/TierTwo/bpred_iface.sv`, `testbenches/TierTwo/bpred_tb.sv`,
+`reference_solutions/TierTwo/bpred.sv`,
+`sandbox/mutation_tests/TierTwo/bpred/{bpred_mut1_bad_ghr_restore,bpred_mut2_spurious_ras_pop,bpred_mut3_no_btb_alloc}.sv`
+
+### Scope decisions — confirmed
+
+- gshare: `pc[2 +: GHR_W] ^ ghr` into a 2-bit saturating PHT; 8-bit GHR, 256 entries.
+- Tagged BTB (16 sets x 2 ways), entries carry a 2-bit type written at update.
+- RAS (depth 8) for call/return.
+- Single-cycle combinational prediction.
+- Externally-supplied snapshot/restore — no internal checkpoint table.
+
+### Scope decisions — resolved because the prompt was ambiguous (**confirm or override**)
+
+1. **`ghr_snapshot` carries the WHOLE speculative checkpoint, packed
+   `{ras_sp, ghr}`** (width `GHR_W + RAS_PTR_W`). The prompt requires the RAS
+   depth to be restored on a squash but gives no RAS restore port; its own
+   wording is "a GHR/RAS snapshot", so one combined checkpoint word is the
+   intended reading. **No port was added.** The name is inherited from the
+   original port list — read it as "speculative state snapshot".
+2. **The RAS is a wrapping circular array with no full/empty tracking**, so the
+   pointer alone is a complete checkpoint and restore is exact. This is what
+   makes "RAS depth restored on squash" precisely testable rather than
+   implementation-defined.
+3. **Calls and returns do not shift the GHR**; only conditional branches do.
+4. **`restore` is the channel by which the core hands a branch's checkpoint back
+   when it RESOLVES, not only when it mispredicts** — see below. On a restore
+   cycle carrying a same-cycle conditional-branch update, the true outcome is
+   folded in: `ghr <= {restore.ghr[GHR_W-2:0], update_taken}`.
+5. **Reset clears the RAS contents as well as the pointer**, so a return
+   predicted before anything is pushed has a defined result instead of leaking
+   stale state. (Added after the testbench caught itself grading undefined state.)
+6. A BTB miss is **inert**: no GHR shift, no RAS push/pop.
+
+### The spec bug the accuracy tier caught
+
+First working version passed all of tier 1 but scored **12.5% on the 15T/1N loop
+(worse than always-taken) and 66% on a learnable period-6 pattern (worse than
+random)**. Cause: prediction indexed the PHT with pre-branch history while
+training indexed it with post-branch history, so the predictor learned a
+one-position-lagged correlation. Tier 1 could never have caught this — it is a
+pure quality bug — which is exactly the argument for having tier 2 at all, even
+though tier 2 is never pass/fail.
+
+Fixed by defining `restore` as the resolve-time history channel. Now: loop
+**6.62%**, unpredictable **48.5%** (correctly ~50%), correlated period-6
+**0.12%** — gshare learning the pattern essentially perfectly.
+
+### What is and is not graded
+
+**Not graded:** BTB replacement choice and conflict misses. A finite BTB may
+miss whenever it likes. The model therefore **follows the DUT's hit/miss
+decisions** and grades the data returned, rather than predicting hits. Index/tag
+aliasing between two different PCs cannot produce a wrong hit here, because set
+and tag together cover the whole PC — so a stale hit is a genuine bug.
+
+**Graded (tier 1, pass/fail):** P1 hit only for a previously-updated PC · P2 type
+· P3 replayed target · P4 return target from the modelled RAS top · P5
+`predict_taken` against the modelled counter · P6 `ghr_snapshot == {ras_sp, ghr}`
+**every cycle** (this is what continuously grades the speculative shift, the RAS
+push/pop and the exact restore) · P7 allocate-on-first-encounter.
+
+P7 is what stops a DUT gaming the "misses are always allowed" rule by never
+allocating — and that is precisely mutant 3.
+
+### Coverage gating
+
+Ten holes hard-checked. Representative run:
+
+```
+BTB hits=23208 misses=16886 · RAS push=2232 pop=2153 · return predictions=2211
+GHR shifts=18518 · restores=12444 (12258 with a same-cycle update)
+PHT saturated hi=6521 lo=3323 · BTB type rewrites=5370 · 40094 graded cycles
+```
+
+### Mutation testing — 3/3 caught
+
+| Mutant | Injected bug | Caught by | Where |
+|---|---|---|---|
+| 1 | GHR restore lands one position shifted | **D3** exact-restore | D3-ghr-shift-and-restore |
+| 2 | conditional branch also pops the RAS (pop with no push) | **P6** snapshot mismatch | D1 |
+| 3 | never allocates on a first-encounter miss | **P7** | D1-btb-allocate-first-encounter |
+
+**A vacuous-test hole found and closed:** mutant 1 initially slipped past D3
+because that test checkpointed a *zero* GHR, and a shifted zero is still zero.
+D3 and D5 now shift real history in first and **assert the checkpoint is
+non-zero**, so the test cannot silently go vacuous. Worth remembering as a
+pattern: a restore test whose checkpoint is zero proves nothing.
+
+### Robustness
+
+Golden PASSES under **both** Verilator 5.046 and Icarus 13; all three mutants
+fail under both.
+
+---
+
 ## Shared verification models — **COMPLETE and self-tested**
 
 `testbenches/common/golden_mem.sv` — byte-addressable golden memory (sized
@@ -384,10 +482,10 @@ Open item for module 4: the stub is currently scalar/sized. The cache needs
 **line-granular** fills and writebacks — extend `mem_stub` with a line mode (or
 add a thin line wrapper) during that session rather than guessing now.
 
-## Modules 3–5 — NOT STARTED
+## Modules 4–5 — NOT STARTED
 
-Branch predictor, non-blocking cache and MESI coherence remain. Recommended
-order stands: Branch Predictor → Cache → Coherence.
+Non-blocking cache and MESI coherence remain. Recommended order stands:
+Cache → Coherence.
 
 For module 4, `mem_stub` is still scalar/sized and will need a **line-granular**
 mode (or a thin line wrapper) for fills and writebacks — worth doing against the
