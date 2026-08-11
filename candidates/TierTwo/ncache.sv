@@ -366,23 +366,23 @@ module ncache #(
         dirty = 1'b0;
 
         for (int i = 0; i < PQ; i++) done[i] = 1'b0;
-            for (int drain_iter = 0; drain_iter <= PQ; drain_iter++) begin
-                oldest = -1;
-                for (int p = 0; p < PQ; p++)
-                    if (pq_val[p] && !done[p] && pq_mshr[p] == m[31:0])
-                        if (oldest < 0 || pq_seq[p] < pq_seq[oldest]) oldest = p;
-                if (oldest < 0) break;
-                if (pq_we[oldest]) begin
-                    ln    = line_merge(ln, pq_addr[oldest], pq_size[oldest], pq_wdata[oldest]);
-                    dirty = 1'b1;
-                end else begin
-                    pq_rdata[oldest] = line_extract(ln, pq_addr[oldest], pq_size[oldest]);
-                end
-                pq_ready[oldest] = 1'b1;
-                pq_hit[oldest]   = 1'b0;
-                pq_mshr[oldest]  = MSHRS[31:0];
-                done[oldest]     = 1'b1;
+        forever begin
+            oldest = -1;
+            for (int p = 0; p < PQ; p++)
+                if (pq_val[p] && !done[p] && pq_mshr[p] == m[31:0])
+                    if (oldest < 0 || pq_seq[p] < pq_seq[oldest]) oldest = p;
+            if (oldest < 0) break;
+            if (pq_we[oldest]) begin
+                ln    = line_merge(ln, pq_addr[oldest], pq_size[oldest], pq_wdata[oldest]);
+                dirty = 1'b1;
+            end else begin
+                pq_rdata[oldest] = line_extract(ln, pq_addr[oldest], pq_size[oldest]);
             end
+            pq_ready[oldest] = 1'b1;
+            pq_hit[oldest]   = 1'b0;
+            pq_mshr[oldest]  = MSHRS[31:0];   // resolved; no longer tied to an MSHR
+            done[oldest]     = 1'b1;
+        end
 
         s   = set_of(msh_base[m]);
         way = s*WAYS + (rr[s] % WAYS);
