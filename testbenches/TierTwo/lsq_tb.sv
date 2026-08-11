@@ -197,6 +197,9 @@ module lsq_tb;
     logic [31:0] x_value  [DEPTH];
     logic        x_source [DEPTH];   // 1 = forwarded at freeze time
     int          x_fwdsrc [DEPTH];   // slot forwarded from, -1 if memory
+    int          x_fwdage [DEPTH];   // and its AGE: slots get reused, so the
+                                     // slot number alone does not identify the
+                                     // store that was going to be forwarded
     int          m_wait   [DEPTH];   // cycles since becoming answerable (liveness)
 
     int age_ctr;
@@ -341,8 +344,12 @@ module lsq_tb;
         // A forward that became a memory read because the source store retired
         // in the meantime is legitimate -- the value is identical either way.
         if (load_result_source !== (exp_state == 1 ? 1'b1 : 1'b0)) begin
-            if (!(exp_state == 1 && load_result_source === 1'b0
-                  && x_fwdsrc[i] >= 0 && !m_val[x_fwdsrc[i]]))
+            // "has that store left the queue?" must be asked with its AGE, not
+            // just its slot: by the time the load answers, the slot may hold a
+            // different, younger store, which made m_val true again and turned
+            // a legitimate forward-became-memory read into a false failure.
+            if (!(exp_state == 1 && load_result_source === 1'b0 && x_fwdsrc[i] >= 0
+                  && !(m_val[x_fwdsrc[i]] && m_age[x_fwdsrc[i]] == x_fwdage[i])))
                 note_fail($sformatf("D2 load slot %0d source=%0b (says %s) but should be %s",
                                     i, load_result_source,
                                     load_result_source ? "forwarded" : "memory",
@@ -403,6 +410,7 @@ module lsq_tb;
                 x_value[i]   = zext(m_data[sfz], m_size[i]);
                 x_source[i]  = 1'b1;
                 x_fwdsrc[i]  = sfz;
+                x_fwdage[i]  = m_age[sfz];
             end else begin
                 x_value[i]   = zext(gm.rd_sized(m_addr[i], m_size[i]), m_size[i]);
                 x_source[i]  = 1'b0;
@@ -507,6 +515,7 @@ module lsq_tb;
             m_wait[i]   = 0;
             x_ready[i]  = 1'b0;
             x_fwdsrc[i] = -1;
+            x_fwdage[i] = -1;
             if (alloc_addr_known && addr_valid && int'(addr_lsq_idx) == i) begin
                 m_addr_k[i] = 1'b1;
                 cov_samecycle_addr++;

@@ -195,24 +195,44 @@ module ncache #(
 
     // a port can accept when there is a PQ slot and either the access resolves
     // without a new MSHR, or an MSHR is free
-    function automatic logic can_accept(input logic [ADDR_W-1:0] a, input int pq_free_cnt);
-        if (pq_free_cnt <= 0) return 1'b0;
-        if (find_mshr(a) >= 0) return 1'b1;               // merges
-        if (find_way(a)  >= 0) return 1'b1;               // array hit
-        if (find_vic(a)  >= 0) return 1'b1;               // victim hit
-        return (free_mshr() >= 0);
+    // Does this access need a NEW MSHR, or does it resolve without one?
+    function automatic logic needs_new_mshr(input logic [ADDR_W-1:0] a);
+        if (find_mshr(a) >= 0) return 1'b0;               // merges into one
+        if (find_way(a)  >= 0) return 1'b0;               // array hit
+        if (find_vic(a)  >= 0) return 1'b0;               // victim hit
+        return 1'b1;
     endfunction
 
-    int pq_free_n;
+    function automatic logic can_accept(input logic [ADDR_W-1:0] a,
+                                        input int pq_free_cnt,
+                                        input int mshr_free_cnt);
+        if (pq_free_cnt <= 0) return 1'b0;
+        if (!needs_new_mshr(a)) return 1'b1;
+        return (mshr_free_cnt > 0);
+    endfunction
+
+    int pq_free_n, mshr_free_n;
     always_comb begin
         pq_free_n = 0;
         for (int p = 0; p < PQ; p++) if (!pq_val[p]) pq_free_n++;
+        mshr_free_n = 0;
+        for (int m = 0; m < MSHRS; m++) if (!msh_val[m]) mshr_free_n++;
     end
 
-    assign A_req_ready = rst_n && can_accept(A_req_addr, pq_free_n);
-    // B must also leave a slot for A, which is ordered first this cycle
-    assign B_req_ready = rst_n && can_accept(B_req_addr,
-                                             pq_free_n - ((A_req_valid && A_req_ready) ? 1 : 0));
+    assign A_req_ready = rst_n && can_accept(A_req_addr, pq_free_n, mshr_free_n);
+
+    // B is ordered after A this cycle, so it must budget for whatever A takes:
+    // a PQ slot, AND an MSHR when A is a true miss. Budgeting only the PQ slot
+    // was the bug -- with one MSHR free and both ports missing to DIFFERENT
+    // lines, both ports were told ready, A took the last MSHR, and B was left
+    // accepted-but-unallocatable: never answered, and its data never written.
+    // (If both miss to the SAME line B will actually merge into the MSHR A is
+    // about to allocate, so this is conservative there -- it may refuse a
+    // request it could have taken, which is safe; the reverse never is.)
+    assign B_req_ready = rst_n && can_accept(
+        B_req_addr,
+        pq_free_n   - ((A_req_valid && A_req_ready) ? 1 : 0),
+        mshr_free_n - ((A_req_valid && A_req_ready && needs_new_mshr(A_req_addr)) ? 1 : 0));
 
     // ---------------------------------------------------------------------
     // service selection: oldest ready entry per port that is also the oldest
@@ -333,8 +353,14 @@ module ncache #(
             end
             return;
         end
-        // true miss: allocate an MSHR
+        // true miss: allocate an MSHR. req_ready guarantees one is free, but
+        // never index with -1 -- silently corrupting an entry is far worse than
+        // refusing, and this is exactly the path that used to do it.
         m = free_mshr();
+        if (m < 0) begin
+            pq_val[p] = 1'b0;      // withdraw; must be unreachable
+            return;
+        end
         msh_val[m]    = 1'b1;
         msh_issued[m] = 1'b0;
         msh_filled[m] = 1'b0;
@@ -446,11 +472,19 @@ module ncache #(
     // Order matters and is:
     //   1. respond to ready entries        (uses pre-edge selection)
     //   2. memory request / response bookkeeping
-    //   3. install any filled MSHR and drain its merged chain
-    //   4. accept new requests, A ordered before B
-    // Deallocation happens inside step 3, so a request accepted in step 4 can
-    // reuse an MSHR freed this cycle -- which is exactly what the combinational
-    // req_ready assumed when it saw a merge target that has since drained.
+    //   3. accept new requests, A ordered before B
+    //   4. install any filled MSHR and drain its merged chain
+    //
+    // ACCEPT MUST COME BEFORE INSTALL. req_ready is combinational from pre-edge
+    // state; if install ran first it could evict the very line that made the
+    // access a hit, or drain and free the MSHR that made it a merge, turning it
+    // into a true miss that then has no MSHR to allocate. That handed the entry
+    // an out-of-range MSHR index, so it never became ready (a request that is
+    // never answered) and its data was never written (a wrong read). Accepting
+    // first makes accept_req see exactly the state req_ready was computed from.
+    // A just-accepted entry carries the highest seq, so if it merges into an
+    // MSHR that fills in this same cycle, step 4 still drains it last -- program
+    // order is preserved.
     // -----------------------------------------------------------------
     always_ff @(posedge clk) begin
         if (!rst_n) begin
@@ -494,15 +528,15 @@ module ncache #(
                 end
             end
 
-            // 3. install + drain
-            for (int m = 0; m < MSHRS; m++)
-                if (msh_val[m] && msh_filled[m]) install_and_drain(m);
-
-            // 4. accept, A before B
+            // 3. accept, A before B
             if (A_req_valid && A_req_ready)
                 accept_req(1'b0, A_req_addr, A_req_we, A_req_wdata, A_req_size, A_req_tag);
             if (B_req_valid && B_req_ready)
                 accept_req(1'b1, B_req_addr, B_req_we, B_req_wdata, B_req_size, B_req_tag);
+
+            // 4. install + drain
+            for (int m = 0; m < MSHRS; m++)
+                if (msh_val[m] && msh_filled[m]) install_and_drain(m);
         end
     end
 

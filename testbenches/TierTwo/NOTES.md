@@ -8,6 +8,61 @@ wording — say the word and I'll split it.
 
 ---
 
+## CRITICAL PROCESS FINDING — single-seed validation is not validation
+
+Every "3/3 mutants caught, golden PASSES" claim in the module sections below was
+originally established from **one run per configuration, i.e. one random seed**.
+That was not enough, and it let a real bug ship.
+
+`$urandom` in these testbenches explores ONE trajectory per run. Verilator picks
+a seed per binary, so a different machine (or a different Verilator build) walks
+a different trajectory. Sweeping seeds afterwards found:
+
+| module | seeds passed (of 6) |
+|---|---|
+| rob | 6/6 |
+| lsq | **4/6** |
+| bpred | 6/6 |
+| ncache | **2/6** |
+| mesi | 6/6 |
+
+Two genuine bugs had been sitting behind the default seed:
+
+1. **`ncache` golden — a real RTL bug** (and it had already propagated into
+   `candidates/TierTwo/ncache.sv`). `B_req_ready` budgeted the PQ slot that port
+   A would consume, but **not the MSHR**. With one MSHR free and both ports
+   missing to *different* lines, both ports were told ready; A took the last
+   MSHR and B was accepted with nothing to allocate. Symptoms: a request that is
+   never answered (`C3 LIVENESS`) and a read whose data was never written
+   (`C2`). Fixed by budgeting MSHRs in `B_req_ready` exactly as PQ slots already
+   were, plus a guard so a reference model can never index with `-1`.
+   *This is the bug that failed on the Windows machine and passed on the Mac.*
+
+2. **`lsq` testbench — a false failure.** The D2 relaxation that permits a
+   forward to become a memory read once the source store retires asked "is that
+   slot still live?" using the slot number alone. Slots get reused, so a younger
+   store in the same slot made it look live again and a legitimate result was
+   failed. Fixed by tagging the frozen expectation with the store's **age** as
+   well as its slot. (Note the shape: this is the *third* slot-reuse-without-a-
+   generation-tag bug in this tier — see also the LSQ golden's in-flight memory
+   transaction and the ncache response path. It is the characteristic bug of
+   this whole design space; check for it first.)
+
+After both fixes all five goldens pass **10/10 seeds**, and the ncache mutants
+still fail.
+
+### Use `scripts/seed_sweep.sh`
+
+```
+./scripts/seed_sweep.sh ncache 20              # golden
+./scripts/seed_sweep.sh ncache 20 candidate    # a submission
+```
+
+**Treat a single-seed PASS as unvalidated** — for goldens, for mutants, and
+above all for candidate submissions, where a seed-lucky pass is a scoring error.
+
+---
+
 ## Shared: toolchain — **migrated Icarus → Verilator**
 
 Correctness simulation now runs on **Verilator 5.046** (`--binary --timing`).
