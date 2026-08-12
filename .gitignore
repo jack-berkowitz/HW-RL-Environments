@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+
+# Eval output. Rows carry full model responses, so a sweep is tens of MB and
+# churns constantly -- keep the harness in git, not the data it produces.
+results/*.jsonl
+results/*.bak
+results/prompts_sent/
+
+# Scratch from the simulators.
+obj_dir/
+*.vvp
