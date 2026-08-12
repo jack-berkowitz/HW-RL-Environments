@@ -3,7 +3,7 @@
 # (pointer/comparator logic across DEPTH entries, 2-wide lanes) from the
 # Tier1 modules this period was tuned against. Check WNS after the first
 # run; if slack is large and positive, this period was never a real test.
-current_design rob
+current_design ncache
 
 set clk_name      core_clock
 set clk_port_name clk

@@ -21,15 +21,27 @@
 // small writeback queue and a fixed arbitration (writebacks first, so evictions
 // can never back up behind a long fill chain).
 // =============================================================================
+//
+// SIZING NOTE (why these defaults are small)
+//   The geometry below is chosen so the design still contains every hazard the
+//   module exists to test -- MSHR merging, backpressure when none is free,
+//   eviction, a dirty writeback, a victim hit, dual-port same-line conflict --
+//   while staying small enough to synthesise and place-and-route in a sane time.
+//   The earlier 16-byte / 8-set / 4-way / PQ-8 version unrolled the merged-drain
+//   logic MSHRS x (PQ+1) = 36 times over a 128-bit line and pushed Yosys past
+//   4 GB. Halving the line and cutting the queues gives ~7x less of that logic.
+//   Note 2 MSHRs and 2 victim entries exercise the "none free" paths MORE often
+//   than 4 did, so this is not a weaker test -- just a cheaper one.
+// =============================================================================
 
 module ncache #(
     parameter int ADDR_W     = 10,
     parameter int DATA_W     = 32,
-    parameter int LINE_BYTES = 16,
-    parameter int SETS       = 8,
-    parameter int WAYS       = 4,
-    parameter int MSHRS      = 4,
-    parameter int VICTIM_ENT = 4,
+    parameter int LINE_BYTES = 8,
+    parameter int SETS       = 4,
+    parameter int WAYS       = 2,
+    parameter int MSHRS      = 2,
+    parameter int VICTIM_ENT = 2,
     parameter int TAG_W      = 4,
     // derived -- do not override
     parameter int LINE_W     = 8*LINE_BYTES
@@ -73,8 +85,8 @@ module ncache #(
     localparam int SET_W  = $clog2(SETS);
     localparam int LTAG_W = ADDR_W - OFF_W - SET_W;
     localparam int NLINE  = SETS*WAYS;
-    localparam int PQ     = 8;      // pending requests in flight
-    localparam int WBQ    = 8;      // queued writebacks
+    localparam int PQ     = 4;      // pending requests in flight
+    localparam int WBQ    = 4;      // queued writebacks
 
     // ---------------------------------------------------------------------
     // state

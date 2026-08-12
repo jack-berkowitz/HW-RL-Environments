@@ -109,10 +109,11 @@ its section that it is Verilator-only.
    concatenation as a bit vector and prints it as a huge decimal, then appends
    the arguments. This is a *latent grading defect*: it only shows up on failure
    paths, which is exactly when the message matters. **10 occurrences were found
-   and fixed** — 5 in `rob_tb.sv`, 3 in `TierOne/softmax_tb.sv`, 2 in
-   `TierOne/uart_tb.sv` (the Tier-1 ones were pre-existing and equally broken,
-   just never exercised because those modules pass). Rule: **format strings must
-   be a single literal.**
+   and fixed** — 5 in `rob_tb.sv`, 3 in `TierTwo/softmax_tb.sv` (Tier-1 at the
+   time; softmax has since been reclassified to Tier 2), 2 in
+   `TierOne/uart_tb.sv` (the pre-existing ones were equally broken, just never
+   exercised because those modules pass). Rule: **format strings must be a
+   single literal.**
 2. **A comment line whose first word is `verilator`/`Verilator` (any case) is
    parsed as a metacomment pragma** and hard-errors with `BADVLTPRAGMA`. Writing
    an example command line in a header comment is enough to break the build.

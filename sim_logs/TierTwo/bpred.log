@@ -15,5 +15,5 @@
 TEST_RESULT: PASS
 - /Users/jackberkowitz/Desktop/hw_rl_benchmark/testbenches/TierTwo/bpred_tb.sv:743: Verilog $finish
 - S i m u l a t i o n   R e p o r t: Verilator 5.046 2026-02-28
-- Verilator: $finish at 401us; walltime 0.033 s; speed 12.212 ms/s
-- Verilator: cpu 0.033 s on 1 threads; allocated 2 MB
+- Verilator: $finish at 401us; walltime 0.079 s; speed 5.098 ms/s
+- Verilator: cpu 0.079 s on 1 threads; allocated 2 MB

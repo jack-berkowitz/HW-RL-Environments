@@ -52,11 +52,11 @@ module ncache_tb;
 
     parameter int ADDR_W     = 10;
     parameter int DATA_W     = 32;
-    parameter int LINE_BYTES = 16;
-    parameter int SETS       = 8;
-    parameter int WAYS       = 4;
-    parameter int MSHRS      = 4;
-    parameter int VICTIM_ENT = 4;
+    parameter int LINE_BYTES = 8;
+    parameter int SETS       = 4;
+    parameter int WAYS       = 2;
+    parameter int MSHRS      = 2;
+    parameter int VICTIM_ENT = 2;
     parameter int TAG_W      = 4;
     parameter int RANDOM_CYCLES       = 20000;   // >= 10000 required
     parameter int MAX_ERRORS_REPORTED = 20;
@@ -390,29 +390,26 @@ module ncache_tb;
     int pool_size [0:NPOOL-1];
 
     task automatic build_pool();
-        int k;
+        int k, base;
         k = 0;
-        // Set 0 gets EIGHT competing lines against 4 ways + 4 victim entries, so
-        // the array, the victim buffer and the writeback path are all under real
-        // pressure rather than being incidentally exercised. Lines that share a
-        // set are 128 bytes apart (SETS=8, LINE_BYTES=16).
-        for (int i = 0; i < 8; i++) begin
-            pool_addr[k] = i*128;      pool_size[k] = 2; k++;
-            pool_addr[k] = i*128 + 8;  pool_size[k] = 2; k++;
-        end
-        // set 1: five lines -- still over-subscribed, different pattern
+        // Five lines competing for set 0 (they differ by SETS*LINE_BYTES = 32),
+        // against 2 ways + 2 victim entries -- so eviction, victim hits and
+        // dirty writebacks all happen routinely rather than by luck.
         for (int i = 0; i < 5; i++) begin
-            pool_addr[k] = 16 + i*128;     pool_size[k] = 2; k++;
-            pool_addr[k] = 16 + i*128 + 5; pool_size[k] = 0; k++;
+            base = i*32;
+            pool_addr[k] = base;      pool_size[k] = 2; k++;
+            pool_addr[k] = base + 4;  pool_size[k] = 2; k++;
         end
-        // a couple of quieter sets with mixed access sizes, so not every line is
-        // a thrash victim and sub-word merging still gets covered
-        for (int i = 0; i < 3; i++) begin
-            pool_addr[k] = 32 + i*128;      pool_size[k] = 1; k++;
-            pool_addr[k] = 32 + i*128 + 10; pool_size[k] = 1; k++;
+        // Spread over the other sets with mixed access sizes, so sub-word
+        // merging inside a line is exercised too.
+        for (int i = 0; i < 6; i++) begin
+            base = 8 + i*8;
+            pool_addr[k] = base;      pool_size[k] = 2; k++;
+            pool_addr[k] = base + 2;  pool_size[k] = 1; k++;
+            pool_addr[k] = base + 5;  pool_size[k] = 0; k++;
         end
         while (k < NPOOL) begin
-            pool_addr[k] = (48 + k*16) % (1<<ADDR_W); pool_size[k] = 2; k++;
+            pool_addr[k] = (k % 5) * 32; pool_size[k] = 2; k++;
         end
     endtask
 
@@ -438,15 +435,15 @@ module ncache_tb;
         // ---- D1b: three-deep merge, mixed read/write ----
         phase = "D1b-merge-rw";
         do_reset();
-        base_fills = fill_count_line[128/LINE_BYTES];
+        base_fills = fill_count_line[32/LINE_BYTES];
         idle_inputs();
-        issue_AB(128, 1'b1, 32'hAAAA_1111, 2, 3,  132, 1'b0, '0, 2, 4, "D1b");
-        issue_A (128, 1'b0, '0, 2, 5, "D1b");
+        issue_AB(32, 1'b1, 32'hAAAA_1111, 2, 3,  36, 1'b0, '0, 2, 4, "D1b");
+        issue_A (32, 1'b0, '0, 2, 5, "D1b");
         quiesce("D1b");
         cov_merge_tested++;
-        if (fill_count_line[128/LINE_BYTES] - base_fills != 1)
+        if (fill_count_line[32/LINE_BYTES] - base_fills != 1)
             note_fail($sformatf("C4 D1b: a merged read/write burst caused %0d fills, expected exactly 1",
-                                fill_count_line[128/LINE_BYTES] - base_fills));
+                                fill_count_line[32/LINE_BYTES] - base_fills));
 
         // ---- D2: same-cycle A write / B read to the same address; B sees A ----
         phase = "D2-portA-before-portB";
@@ -467,8 +464,8 @@ module ncache_tb;
         issue_A(0, 1'b1, 32'hDEAD_BEEF, 2, 9, "D3-write");
         quiesce("D3-write");
         // push it out of the array and then out of the victim buffer
-        for (int i = 1; i < 10; i++) begin
-            issue_A(i*128, 1'b0, '0, 2, 10, "D3-sweep");
+        for (int i = 1; i < 8; i++) begin
+            issue_A(i*32, 1'b0, '0, 2, 10, "D3-sweep");
             quiesce("D3-sweep");
         end
         cov_victim_scenarios++;
@@ -480,9 +477,9 @@ module ncache_tb;
         // ---- D4: victim-cache hit must not fabricate a memory fill ----
         phase = "D4-victim-hit";
         do_reset();
-        // fill the 4 ways of set 0, then a 5th line evicts one into the victim
+        // fill the 2 ways of set 0, then further lines evict into the victim
         for (int i = 0; i < 5; i++) begin
-            issue_A(i*128, 1'b0, '0, 2, 12, "D4-fill");
+            issue_A(i*32, 1'b0, '0, 2, 12, "D4-fill");
             quiesce("D4-fill");
         end
         cov_victim_scenarios++;

@@ -17,6 +17,7 @@ folded into it.
 """
 import json
 import os
+import re
 import sys
 
 FLOW = os.environ.get(
@@ -88,13 +89,33 @@ def load(design, stage):
 
 
 def period(design):
-    """The clock period the run was actually constrained at."""
-    path = f"{FLOW}/results/{PLATFORM}/{design}/base/clock_period.txt"
-    try:
-        with open(path) as fh:
-            return float(fh.read().strip())
-    except (OSError, ValueError):
-        return float("nan")
+    """The clock period the run was actually constrained at, in NANOSECONDS.
+
+    Read from the SDC that OpenROAD WRITES OUT, because that is the elaborated
+    constraint -- it reflects a CLK_PERIOD_NS override, whereas the source SDC
+    keeps its period behind a Tcl conditional and would always report the
+    default.
+
+    Deliberately NOT clock_period.txt. ORFS fills that file with
+    `echo $(ABC_CLOCK_PERIOD_IN_PS)`, i.e. PICOSECONDS. It used to look like
+    nanoseconds purely because ORFS's own extraction dropped the *1000; once the
+    configs set that variable correctly the file reads 20000 for a 20 ns clock,
+    and reading it as ns reports a 20 microsecond period.
+    """
+    base = f"{FLOW}/results/{PLATFORM}/{design}/base"
+    # latest stage first: all of these are written by OpenROAD and carry a
+    # literal period, unlike the copied source SDC
+    for name in ("6_final.sdc", "5_route.sdc", "5_1_grt.sdc", "4_cts.sdc",
+                 "3_place.sdc", "2_floorplan.sdc", "1_synth.sdc"):
+        try:
+            with open(os.path.join(base, name)) as fh:
+                for line in fh:
+                    m = re.search(r"create_clock.*?-period\s+([0-9]+\.?[0-9]*)", line)
+                    if m:
+                        return float(m.group(1))
+        except OSError:
+            continue
+    return float("nan")
 
 
 def sim_log_path(design, tier):

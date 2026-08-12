@@ -1,16 +1,22 @@
-# ORFS design config for the rob candidate.
+# ORFS design config for the softmax candidate.
 # RTL and SDC are referenced from the project repo, mounted at /work in the
 # container; nothing is copied into the OpenROAD-flow-scripts clone.
 export PLATFORM    = sky130hd
-export DESIGN_NAME = bpred
-export DESIGN_NICKNAME = bpred
+export DESIGN_NAME = softmax
+export DESIGN_NICKNAME = softmax
 
-export VERILOG_FILES = /work/candidates/TierTwo/bpred.sv
-export SDC_FILE      = /work/orfs_configs/sky130hd/TierTwo/bpred/constraint.sdc
+export VERILOG_FILES = /work/candidates/TierTwo/softmax.sv
+export SDC_FILE      = /work/orfs_configs/sky130hd/TierTwo/softmax/constraint.sdc
 
+# The candidates are SystemVerilog (always_ff/always_comb, size casts,
+# unpacked arrays). ORFS defaults to `read_verilog -defer -sv`, which does
+# parse all five files without error; slang is selected anyway because it is
+# a full SV elaborator rather than Yosys's partial built-in parser, so width
+# and cast semantics are less likely to be silently mis-elaborated. Drop this
+# line to fall back to the built-in frontend.
 export SYNTH_HDL_FRONTEND = slang
 
-export CORE_UTILIZATION = 20
+export CORE_UTILIZATION = 10
 export PLACE_DENSITY = 0.50
 export TNS_END_PERCENT = 100
 

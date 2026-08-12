@@ -1,0 +1,14 @@
+// directed suite: 16 checks, 0 failing
+// randomized suite: 24000 cycles, 0 failing checks
+// ---- functional coverage ----
+//   loads answered: forwarded=750 from-memory=1993
+//   load-cycles stalled by: unknown older store=9092 partial overlap=26101 awaiting store data=53
+//   same-cycle alloc+addr=421
+//   flush: entries squashed=992 squashed while blocked=135
+//   stores written to memory=1170  loads completed=2743
+// info: 5916 graded events, 2743 loads, 1170 stores written
+TEST_RESULT: PASS
+- /Users/jackberkowitz/Desktop/hw_rl_benchmark/testbenches/TierTwo/lsq_tb.sv:1024: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.046 2026-02-28
+- Verilator: $finish at 243us; walltime 0.042 s; speed 5.857 ms/s
+- Verilator: cpu 0.042 s on 1 threads; allocated 15 MB

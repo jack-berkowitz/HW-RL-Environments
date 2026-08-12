@@ -14,11 +14,11 @@
 //   ADDR_W     : byte-address width. Default 10 (a deliberately tiny space, so
 //                conflicts, evictions and victim hits happen constantly).
 //   DATA_W     : scalar access width. Fixed at 32.
-//   LINE_BYTES : line size. Default 16.
-//   SETS       : sets in the main array. Default 8.
-//   WAYS       : associativity. Default 4.
-//   MSHRS      : outstanding misses tracked. Default 4.
-//   VICTIM_ENT : victim cache entries, fully associative. Default 4.
+//   LINE_BYTES : line size. Default 8.
+//   SETS       : sets in the main array. Default 4.
+//   WAYS       : associativity. Default 2.
+//   MSHRS      : outstanding misses tracked. Default 2.
+//   VICTIM_ENT : victim cache entries, fully associative. Default 2.
 //   TAG_W      : width of the opaque request tag. Default 4.
 //   LINE_W     : DERIVED. 8*LINE_BYTES.
 //
@@ -126,15 +126,27 @@
 //   TIER 2, INFORMATIONAL: hit rate, victim-cache hit rate, fill count.
 //     Replacement choice is not graded and a low hit rate never fails.
 // =============================================================================
+//
+// SIZING NOTE (why these defaults are small)
+//   The geometry below is chosen so the design still contains every hazard the
+//   module exists to test -- MSHR merging, backpressure when none is free,
+//   eviction, a dirty writeback, a victim hit, dual-port same-line conflict --
+//   while staying small enough to synthesise and place-and-route in a sane time.
+//   The earlier 16-byte / 8-set / 4-way / PQ-8 version unrolled the merged-drain
+//   logic MSHRS x (PQ+1) = 36 times over a 128-bit line and pushed Yosys past
+//   4 GB. Halving the line and cutting the queues gives ~7x less of that logic.
+//   Note 2 MSHRs and 2 victim entries exercise the "none free" paths MORE often
+//   than 4 did, so this is not a weaker test -- just a cheaper one.
+// =============================================================================
 
 module ncache #(
     parameter int ADDR_W     = 10,
     parameter int DATA_W     = 32,
-    parameter int LINE_BYTES = 16,
-    parameter int SETS       = 8,
-    parameter int WAYS       = 4,
-    parameter int MSHRS      = 4,
-    parameter int VICTIM_ENT = 4,
+    parameter int LINE_BYTES = 8,
+    parameter int SETS       = 4,
+    parameter int WAYS       = 2,
+    parameter int MSHRS      = 2,
+    parameter int VICTIM_ENT = 2,
     parameter int TAG_W      = 4,
     // derived -- do not override
     parameter int LINE_W     = 8*LINE_BYTES

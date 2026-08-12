@@ -33,12 +33,13 @@
 #      that sed entirely.
 # Unset -> the SDC default and the sed, i.e. existing behaviour untouched.
 #
-# UNITS: the variable is named _IN_PS but this ORFS revision's generic
-# extraction feeds it the SDC's raw ns number (awk prints $1 with no *1000;
-# only the ihp-sg13g2 platform config scales it). We pass ns to match, because
-# every PPA number already collected in this repo was produced that way and
-# changing it would silently make the Fmax search non-comparable with them.
-# Worth revisiting deliberately, but not as a side effect of this script.
+# UNITS: the variable is named _IN_PS and ABC's -D really is picoseconds, but
+# this ORFS revision's generic extraction feeds it the SDC's raw ns number (awk
+# prints $1 with no *1000; only the ihp-sg13g2 platform config scales it). We
+# scale properly here. Passing ns makes ABC chase a target 1000x too tight --
+# harmless on the small Tier-1 designs, fatal on ncache, where synthesis ran
+# until it was killed. Designs whose config.mk does not set the variable still
+# inherit ORFS's unscaled default.
 #
 # WIPE_DESIGN: when set to a design name, that design's results/logs/objects/
 # reports are deleted BEFORE the build. This is mandatory whenever the period
@@ -67,7 +68,11 @@ DOCKER_ENV_ARGS=()
 MAKE_PERIOD_ARG=""
 if [ -n "${CLK_PERIOD_NS:-}" ]; then
   DOCKER_ENV_ARGS+=("-e" "CLK_PERIOD_NS=${CLK_PERIOD_NS}")
-  MAKE_PERIOD_ARG="ABC_CLOCK_PERIOD_IN_PS=${CLK_PERIOD_NS}"
+  # ABC's -D is in PICOSECONDS, so scale. Passing ns here (which the ORFS
+  # default extraction does) tells ABC to target a period 1000x too tight; on a
+  # large design that is the difference between a 3-minute synthesis and one
+  # that never finishes.
+  MAKE_PERIOD_ARG="ABC_CLOCK_PERIOD_IN_PS=$(awk -v p="${CLK_PERIOD_NS}" 'BEGIN{printf "%d", p*1000}')"
   echo "constraining to CLK_PERIOD_NS=${CLK_PERIOD_NS} (SDC + synthesis)"
 fi
 
