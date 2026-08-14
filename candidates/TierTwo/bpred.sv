@@ -1,35 +1,21 @@
 // =============================================================================
-// bpred.sv -- gshare predictor with a tagged BTB, a RAS, and checkpointed
-//             speculative-state recovery. Implements interfaces/TierTwo/bpred_iface.sv.
+// bpred.sv -- REFERENCE SOLUTION (harness validation only, NOT a candidate)
 // =============================================================================
-// Derived from the user's `branch_prediction` module. What is kept from it:
-//   * the gshare hash  pht_idx = pc[2 +: GHR_W] ^ ghr, and the shared
-//     predict/update index derivation
-//   * the 2-bit saturating counter expressed as a `saturating_change` function
-//   * the whole comb-next / single always_ff register-block structure, with a
-//     flop-array PHT and BTB and one `_next` signal per array
-//   * combinational, single-cycle predict
+// Implements interfaces/TierTwo/bpred_iface.sv exactly. Exists to prove the
+// testbench passes something correct and fails deliberate mutants; it must
+// never be placed in candidates/.
 //
-// What had to change to meet the contract (all of it is graded):
-//   * the BTB is now SET-ASSOCIATIVE and TAGGED, with a valid bit and a 2-bit
-//     type. The original was direct-mapped, untagged and valid-less, so it
-//     could not express "hit" at all -- it always returned some target. P1/P2/P3
-//     grade exactly that.
-//   * a RAS was added (it did not exist): push on a predicted call, pop on a
-//     predicted return, wrapping pointer, contents reset to 0.
-//   * `ghr_snapshot` / `restore_ghr_value` carry {ras_sp, ghr}; restore has
-//     priority over every speculative action.
-//   * calls and returns no longer shift the GHR, and the update path no longer
-//     drives the GHR at all (the original did both). History now moves only via
-//     the speculative shift or a restore.
-//   * PHT training indexes with the EFFECTIVE history (restored value when a
-//     restore lands the same cycle), so a branch trains where it predicted.
+// The interesting part is not the gshare hash -- it is that ALL speculative
+// state (GHR and the RAS pointer) lives behind one checkpoint word, and that
+// restore takes priority over the speculative update in the same cycle. The RAS
+// is a plain wrapping circular array with no full/empty tracking precisely so
+// that the pointer alone is a complete checkpoint.
 // =============================================================================
 
 module bpred #(
     parameter int PC_W        = 32,
     parameter int GHR_W       = 8,
-    parameter int PHT_ENTRIES = 256,   // must be 2**GHR_W
+    parameter int PHT_ENTRIES = 256,
     parameter int BTB_SETS    = 16,
     parameter int BTB_WAYS    = 2,
     parameter int RAS_DEPTH   = 8,
@@ -40,15 +26,13 @@ module bpred #(
     input  logic              clk,
     input  logic              rst_n,
 
-    // ---- predict (combinational) ----
     input  logic [PC_W-1:0]   predict_pc,
-    output logic              predict_valid,       // BTB hit
+    output logic              predict_valid,
     output logic              predict_taken,
     output logic [PC_W-1:0]   predict_target,
     output logic              predict_is_return,
-    output logic [SNAP_W-1:0] ghr_snapshot,        // { ras_sp, ghr }, pre-update
+    output logic [SNAP_W-1:0] ghr_snapshot,
 
-    // ---- update (ground truth) ----
     input  logic              update_valid,
     input  logic [PC_W-1:0]   update_pc,
     input  logic              update_taken,
@@ -57,204 +41,170 @@ module bpred #(
     input  logic              update_is_call,
     input  logic              update_is_return,
 
-    // ---- speculative-state recovery ----
     input  logic              restore_valid,
-    input  logic [SNAP_W-1:0] restore_ghr_value    // same packing as ghr_snapshot
+    input  logic [SNAP_W-1:0] restore_ghr_value
 );
 
-    // -----------------------------------------------------------------------
-    // derived sizes
-    // -----------------------------------------------------------------------
     localparam int SET_W = $clog2(BTB_SETS);
-    localparam int TAG_W = PC_W - 2 - SET_W;   // tag+set together cover the PC
-    localparam int NBTB  = BTB_SETS*BTB_WAYS;
-    localparam int WAY_W = (BTB_WAYS > 1) ? $clog2(BTB_WAYS) : 1;
+    localparam int TAG_W = PC_W - 2 - SET_W;
 
     localparam logic [1:0] T_BRANCH = 2'd0;
     localparam logic [1:0] T_CALL   = 2'd1;
     localparam logic [1:0] T_RETURN = 2'd2;
 
-    typedef logic [GHR_W-1:0] history_t;
-    typedef logic [1:0]       counter_t;
+    // ---------------------------------------------------------------------
+    // state
+    // ---------------------------------------------------------------------
+    logic [GHR_W-1:0]     ghr;
+    logic [RAS_PTR_W-1:0] ras_sp;
+    logic [PC_W-1:0]      ras [RAS_DEPTH];
+    logic [1:0]           pht [PHT_ENTRIES];
 
-    // kept from the original design, retyped off the enum it used to return
-    function automatic counter_t saturating_change(input counter_t state,
-                                                   input logic     taken);
-        if (taken) return (state == 2'd3) ? 2'd3 : counter_t'(state + 2'd1);
-        else       return (state == 2'd0) ? 2'd0 : counter_t'(state - 2'd1);
+    // BTB, flattened to set*WAYS+way so it stays a simple 1-D array
+    logic                 btb_val  [BTB_SETS*BTB_WAYS];
+    logic [TAG_W-1:0]     btb_tag  [BTB_SETS*BTB_WAYS];
+    logic [PC_W-1:0]      btb_tgt  [BTB_SETS*BTB_WAYS];
+    logic [1:0]           btb_type [BTB_SETS*BTB_WAYS];
+    logic                 btb_rr   [BTB_SETS];   // round-robin victim, not graded
+
+    // ---------------------------------------------------------------------
+    // address decomposition
+    // ---------------------------------------------------------------------
+    function automatic int set_of(input logic [PC_W-1:0] pc);
+        return int'(pc[2 +: SET_W]);
     endfunction
 
-    // -----------------------------------------------------------------------
-    // state
-    // -----------------------------------------------------------------------
-    history_t              history,       history_next;
-    counter_t              pht      [0:PHT_ENTRIES-1], pht_next  [0:PHT_ENTRIES-1];
+    function automatic logic [TAG_W-1:0] tag_of(input logic [PC_W-1:0] pc);
+        return pc[2+SET_W +: TAG_W];
+    endfunction
 
-    logic                  btb_val  [0:NBTB-1], btb_val_n  [0:NBTB-1];
-    logic [TAG_W-1:0]      btb_tag  [0:NBTB-1], btb_tag_n  [0:NBTB-1];
-    logic [PC_W-1:0]       btb_tgt  [0:NBTB-1], btb_tgt_n  [0:NBTB-1];
-    logic [1:0]            btb_typ  [0:NBTB-1], btb_typ_n  [0:NBTB-1];
-    logic [WAY_W-1:0]      btb_rr   [0:BTB_SETS-1], btb_rr_n [0:BTB_SETS-1];
+    function automatic int pht_idx(input logic [PC_W-1:0] pc, input logic [GHR_W-1:0] h);
+        return int'(pc[2 +: GHR_W] ^ h);
+    endfunction
 
-    logic [PC_W-1:0]       ras      [0:RAS_DEPTH-1], ras_next [0:RAS_DEPTH-1];
-    logic [RAS_PTR_W-1:0]  ras_sp,  ras_sp_next;
-
-    // =======================================================================
-    // PREDICT -- purely combinational off the registered state
-    // =======================================================================
-    logic [SET_W-1:0]  p_set;
-    logic [TAG_W-1:0]  p_tag;
-    logic              p_hit;
-    logic [WAY_W-1:0]  p_way;
-    logic [1:0]        p_typ;
-    logic [GHR_W-1:0]  p_idx;
-
-    assign p_set = predict_pc[2 +: SET_W];
-    assign p_tag = predict_pc[2+SET_W +: TAG_W];
-    assign p_idx = history_t'(predict_pc[2 +: GHR_W]) ^ history;   // gshare hash
+    // ---------------------------------------------------------------------
+    // BTB lookup (combinational)
+    // ---------------------------------------------------------------------
+    logic             hit;
+    logic [1:0]       hit_type;
+    logic [PC_W-1:0]  hit_tgt;
 
     always_comb begin
-        p_hit = 1'b0;
-        p_way = '0;
+        int s;
+        hit      = 1'b0;
+        hit_type = T_BRANCH;
+        hit_tgt  = '0;
+        s = set_of(predict_pc);
         for (int w = 0; w < BTB_WAYS; w++)
-            if (btb_val[p_set*BTB_WAYS + w] &&
-                btb_tag[p_set*BTB_WAYS + w] == p_tag) begin
-                p_hit = 1'b1;
-                p_way = WAY_W'(w);
+            if (btb_val[s*BTB_WAYS + w] && btb_tag[s*BTB_WAYS + w] == tag_of(predict_pc)) begin
+                hit      = 1'b1;
+                hit_type = btb_type[s*BTB_WAYS + w];
+                hit_tgt  = btb_tgt [s*BTB_WAYS + w];
             end
     end
 
-    assign p_typ             = btb_typ[p_set*BTB_WAYS + int'(p_way)];
-    assign predict_valid     = p_hit;
-    assign predict_is_return = p_hit && (p_typ == T_RETURN);
-    assign predict_taken     = p_hit ? ((p_typ == T_BRANCH) ? pht[p_idx][1] : 1'b1)
-                                     : 1'b0;
-    assign predict_target    = predict_is_return
-                             ? ras[ras_sp - RAS_PTR_W'(1)]
-                             : btb_tgt[p_set*BTB_WAYS + int'(p_way)];
-    assign ghr_snapshot      = {ras_sp, history};
+    // ---------------------------------------------------------------------
+    // prediction outputs
+    // ---------------------------------------------------------------------
+    logic [RAS_PTR_W-1:0] ras_top_ptr;
+    assign ras_top_ptr = ras_sp - RAS_PTR_W'(1);
 
-    // =======================================================================
-    // UPDATE decode -- resolved type, and where it lands in the BTB
-    // =======================================================================
-    logic              u_ctrl;
-    logic [1:0]        u_typ;
-    logic [SET_W-1:0]  u_set;
-    logic [TAG_W-1:0]  u_tag;
-    logic              u_hit;
-    logic [WAY_W-1:0]  u_way;
-    logic [WAY_W-1:0]  u_inv;
-    logic              u_inv_v;
-    logic [WAY_W-1:0]  u_sel;
-    history_t          eff_ghr;
-    logic [GHR_W-1:0]  u_idx;
+    assign predict_valid     = hit;
+    assign predict_is_return = hit && (hit_type == T_RETURN);
+    assign predict_taken     = hit ? ((hit_type == T_BRANCH)
+                                       ? pht[pht_idx(predict_pc, ghr)][1]
+                                       : 1'b1)
+                                   : 1'b0;
+    assign predict_target    = predict_is_return ? ras[ras_top_ptr] : hit_tgt;
+    assign ghr_snapshot      = {ras_sp, ghr};
 
-    assign u_ctrl = update_valid &&
-                    (update_is_branch || update_is_call || update_is_return);
-    assign u_typ  = update_is_call   ? T_CALL   :
-                    update_is_return ? T_RETURN : T_BRANCH;
-
-    assign u_set  = update_pc[2 +: SET_W];
-    assign u_tag  = update_pc[2+SET_W +: TAG_W];
-
+    // ---------------------------------------------------------------------
+    // update-side decode
+    // ---------------------------------------------------------------------
+    logic       upd_ctrl;
+    logic [1:0] upd_type;
     always_comb begin
-        u_hit = 1'b0; u_way = '0;
-        u_inv_v = 1'b0; u_inv = '0;
-        for (int w = BTB_WAYS-1; w >= 0; w--) begin
-            if (btb_val[u_set*BTB_WAYS + w] &&
-                btb_tag[u_set*BTB_WAYS + w] == u_tag) begin
-                u_hit = 1'b1; u_way = WAY_W'(w);
-            end
-            if (!btb_val[u_set*BTB_WAYS + w]) begin
-                u_inv_v = 1'b1; u_inv = WAY_W'(w);
-            end
+        upd_ctrl = 1'b0;
+        upd_type = T_BRANCH;
+        if (update_valid) begin
+            if (update_is_call)        begin upd_ctrl = 1'b1; upd_type = T_CALL;   end
+            else if (update_is_return) begin upd_ctrl = 1'b1; upd_type = T_RETURN; end
+            else if (update_is_branch) begin upd_ctrl = 1'b1; upd_type = T_BRANCH; end
         end
     end
 
-    // refresh in place > fill an invalid way > round-robin. Not graded.
-    assign u_sel = u_hit ? u_way : (u_inv_v ? u_inv : btb_rr[u_set]);
+    // effective history for training: a same-cycle restore applies first, so a
+    // recovery trains with the branch's own pre-branch history
+    logic [GHR_W-1:0] eff_ghr;
+    assign eff_ghr = restore_valid ? restore_ghr_value[GHR_W-1:0] : ghr;
 
-    // effective history for training: the restored value when a restore lands
-    // this cycle, so a branch trains at the index it predicted with
-    assign eff_ghr = restore_valid ? restore_ghr_value[GHR_W-1:0] : history;
-    assign u_idx   = history_t'(update_pc[2 +: GHR_W]) ^ eff_ghr;
-
-    // =======================================================================
-    // Next state
-    // =======================================================================
+    // way to write in the BTB: refresh on tag match, else the round-robin victim
+    logic [31:0] wr_way;
     always_comb begin
-        // ---- defaults: hold ----
-        history_next = history;
-        ras_sp_next  = ras_sp;
-        for (int i = 0; i < PHT_ENTRIES; i++) pht_next[i] = pht[i];
-        for (int i = 0; i < NBTB; i++) begin
-            btb_val_n[i] = btb_val[i]; btb_tag_n[i] = btb_tag[i];
-            btb_tgt_n[i] = btb_tgt[i]; btb_typ_n[i] = btb_typ[i];
-        end
-        for (int i = 0; i < BTB_SETS;  i++) btb_rr_n[i]  = btb_rr[i];
-        for (int i = 0; i < RAS_DEPTH; i++) ras_next[i]  = ras[i];
-
-        // ---- speculative state: RESTORE WINS over everything speculative ----
-        if (restore_valid) begin
-            ras_sp_next = restore_ghr_value[GHR_W +: RAS_PTR_W];
-            // fold this cycle's conditional-branch outcome into the restored
-            // history, so recovery ends architecturally correct
-            if (update_valid && update_is_branch &&
-                !update_is_call && !update_is_return)
-                history_next = {restore_ghr_value[GHR_W-2:0], update_taken};
-            else
-                history_next = restore_ghr_value[GHR_W-1:0];
-        end else if (predict_valid) begin
-            case (p_typ)
-                T_BRANCH: history_next = {history[GHR_W-2:0], predict_taken};
-                T_CALL: begin
-                    ras_next[ras_sp] = predict_pc + PC_W'(4);
-                    ras_sp_next      = ras_sp + RAS_PTR_W'(1);
-                end
-                default: ras_sp_next = ras_sp - RAS_PTR_W'(1);   // RETURN
-            endcase
-        end
-
-        // ---- non-speculative training (independent of restore) ----
-        if (u_ctrl) begin
-            // BTB: allocate or refresh, for all three control types
-            btb_val_n[u_set*BTB_WAYS + int'(u_sel)] = 1'b1;
-            btb_tag_n[u_set*BTB_WAYS + int'(u_sel)] = u_tag;
-            btb_tgt_n[u_set*BTB_WAYS + int'(u_sel)] = update_target;
-            btb_typ_n[u_set*BTB_WAYS + int'(u_sel)] = u_typ;
-            if (!u_hit && !u_inv_v)
-                btb_rr_n[u_set] = WAY_W'((int'(btb_rr[u_set]) + 1) % BTB_WAYS);
-
-            // PHT: conditional branches only
-            if (u_typ == T_BRANCH)
-                pht_next[u_idx] = saturating_change(pht[u_idx], update_taken);
-        end
+        int s;
+        s      = set_of(update_pc);
+        wr_way = {31'b0, btb_rr[s]};
+        for (int w = 0; w < BTB_WAYS; w++)
+            if (btb_val[s*BTB_WAYS + w] && btb_tag[s*BTB_WAYS + w] == tag_of(update_pc))
+                wr_way = w[31:0];
     end
 
-    // =======================================================================
-    // Registers -- rst_n is ACTIVE-LOW and SYNCHRONOUS
-    // =======================================================================
+    // ---------------------------------------------------------------------
+    // sequential
+    // ---------------------------------------------------------------------
     always_ff @(posedge clk) begin
         if (!rst_n) begin
-            history <= '0;
-            ras_sp  <= '0;
-            for (int i = 0; i < PHT_ENTRIES; i++) pht[i] <= 2'd1;  // weakly NT
-            for (int i = 0; i < NBTB; i++) begin
-                btb_val[i] <= 1'b0; btb_tag[i] <= '0;
-                btb_tgt[i] <= '0;   btb_typ[i] <= T_BRANCH;
-            end
-            for (int i = 0; i < BTB_SETS;  i++) btb_rr[i] <= '0;
-            for (int i = 0; i < RAS_DEPTH; i++) ras[i]    <= '0;
+            ghr    <= '0;
+            ras_sp <= '0;
+            for (int i = 0; i < PHT_ENTRIES; i++)      pht[i]     <= 2'd1;
+            for (int i = 0; i < RAS_DEPTH; i++)         ras[i]     <= '0;
+            for (int i = 0; i < BTB_SETS*BTB_WAYS; i++) btb_val[i] <= 1'b0;
+            for (int i = 0; i < BTB_SETS; i++)          btb_rr[i]  <= 1'b0;
         end else begin
-            history <= history_next;
-            ras_sp  <= ras_sp_next;
-            for (int i = 0; i < PHT_ENTRIES; i++) pht[i] <= pht_next[i];
-            for (int i = 0; i < NBTB; i++) begin
-                btb_val[i] <= btb_val_n[i]; btb_tag[i] <= btb_tag_n[i];
-                btb_tgt[i] <= btb_tgt_n[i]; btb_typ[i] <= btb_typ_n[i];
+            // ---- speculative state: restore beats the speculative update ----
+            if (restore_valid) begin
+                // Fold the resolved outcome into the recovered history when the
+                // branch's own update lands in the same cycle, so recovery ends
+                // architecturally correct rather than one branch short.
+                if (upd_ctrl && upd_type == T_BRANCH)
+                    ghr <= {restore_ghr_value[GHR_W-2:0], update_taken};
+                else
+                    ghr <= restore_ghr_value[GHR_W-1:0];
+                ras_sp <= restore_ghr_value[GHR_W +: RAS_PTR_W];
+            end else if (predict_valid) begin
+                case (hit_type)
+                    T_BRANCH: ghr <= {ghr[GHR_W-2:0], predict_taken};
+                    T_CALL: begin
+                        ras[ras_sp] <= predict_pc + PC_W'(4);
+                        ras_sp      <= ras_sp + RAS_PTR_W'(1);
+                    end
+                    default: ras_sp <= ras_sp - RAS_PTR_W'(1);   // T_RETURN
+                endcase
             end
-            for (int i = 0; i < BTB_SETS;  i++) btb_rr[i] <= btb_rr_n[i];
-            for (int i = 0; i < RAS_DEPTH; i++) ras[i]    <= ras_next[i];
+
+            // ---- non-speculative training, independent of restore ----
+            if (upd_ctrl) begin
+                int s, wi;
+                s  = set_of(update_pc);
+                wi = s*BTB_WAYS + int'(wr_way);
+                btb_val [wi] <= 1'b1;
+                btb_tag [wi] <= tag_of(update_pc);
+                btb_tgt [wi] <= update_target;
+                btb_type[wi] <= upd_type;
+                // only advance the victim pointer when actually allocating
+                if (!btb_val[wi] || btb_tag[wi] != tag_of(update_pc))
+                    btb_rr[s] <= ~btb_rr[s];
+
+                if (upd_type == T_BRANCH) begin
+                    int pi;
+                    pi = pht_idx(update_pc, eff_ghr);
+                    if (update_taken) begin
+                        if (pht[pi] != 2'd3) pht[pi] <= pht[pi] + 2'd1;
+                    end else begin
+                        if (pht[pi] != 2'd0) pht[pi] <= pht[pi] - 2'd1;
+                    end
+                end
+            end
         end
     end
 

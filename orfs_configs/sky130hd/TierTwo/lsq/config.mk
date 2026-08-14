@@ -10,6 +10,21 @@ export SDC_FILE      = /work/orfs_configs/sky130hd/TierTwo/lsq/constraint.sdc
 
 export SYNTH_HDL_FRONTEND = slang
 
+# NO TOOL OVERRIDES NEEDED HERE -- recorded because one was nearly added.
+#
+# At DEPTH=16 this design would not synthesise: Yosys's SAT-based `share` pass
+# has cost quadratic in the arithmetic-operator count, and the DEPTH*DEPTH
+# disambiguation sweep put ~550 AGE_W-wide magnitude comparators in front of it
+# (~150k candidate pairs, each a SAT call). Synthesis sat at
+#   3.15. Executing SHARE pass (SAT-based resource sharing)
+# on 100% of one core for 26 minutes without emitting a netlist, twice.
+#
+# `export SYNTH_ARGS = -noshare` was the tempting fix. It turned out to be
+# unnecessary: reducing DEPTH to 8 (already a legal value per lsq_iface.sv) cuts
+# the sweep 4x, and synthesis then completes in ~5 minutes WITH `share` enabled.
+# Stock settings are kept so this module's PPA stays comparable to the rest of
+# the suite. Do not add the override without first showing `share` cannot finish.
+
 export CORE_UTILIZATION = 20
 export PLACE_DENSITY = 0.50
 export TNS_END_PERCENT = 100

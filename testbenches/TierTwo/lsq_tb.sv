@@ -53,7 +53,7 @@
 module lsq_tb;
 
     // ---------------- configuration ----------------
-    parameter int DEPTH               = 16;    // 8 / 16 / 32
+    parameter int DEPTH               = 8;     // 8 / 16 / 32
     parameter int ADDR_W              = 10;
     parameter int DATA_W              = 32;
     parameter int AGE_W               = 16;

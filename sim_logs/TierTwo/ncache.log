@@ -1,16 +1,16 @@
 // directed suite: 22 checks, 0 failing
 // randomized suite: 20000 cycles, 0 failing checks
 // ---- functional coverage (tier 1) ----
-//   accepted: A=9343 B=3925  dual-accept cycles=1232 (same line=468, r/w overlap=224)
-//   backpressure cycles: A=8109 B=10083
-//   memory: fills=1125 writebacks=661
+//   accepted: A=9668 B=3922  dual-accept cycles=1254 (same line=482, r/w overlap=238)
+//   backpressure cycles: A=11339 B=10081
+//   memory: fills=1511 writebacks=658
 //   directed merge scenarios=2 victim scenarios=2
 // ---- TIER 2 (INFORMATIONAL -- never pass/fail) ----
-//   responses reporting hit=11658 miss=1610  HIT_RATE=87.87%
-//   FILL_COUNT=1125 WRITEBACK_COUNT=661
-// info: 13270 graded events
+//   responses reporting hit=11601 miss=1989  HIT_RATE=85.36%
+//   FILL_COUNT=1511 WRITEBACK_COUNT=658
+// info: 13592 graded events
 TEST_RESULT: PASS
-- /Users/jackberkowitz/Desktop/hw_rl_benchmark/testbenches/TierTwo/ncache_tb.sv:637: Verilog $finish
+- /Users/jackberkowitz/Desktop/hw_rl_benchmark/testbenches/TierTwo/ncache_tb.sv:651: Verilog $finish
 - S i m u l a t i o n   R e p o r t: Verilator 5.046 2026-02-28
-- Verilator: $finish at 277us; walltime 0.019 s; speed 14.220 ms/s
-- Verilator: cpu 0.019 s on 1 threads; allocated 2 MB
+- Verilator: $finish at 312us; walltime 0.013 s; speed 23.773 ms/s
+- Verilator: cpu 0.013 s on 1 threads; allocated 2 MB

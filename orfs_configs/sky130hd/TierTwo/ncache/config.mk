@@ -10,13 +10,22 @@ export SDC_FILE      = /work/orfs_configs/sky130hd/TierTwo/ncache/constraint.sdc
 
 export SYNTH_HDL_FRONTEND = slang
 
-# Lower the global-routing layer derate from the platform's hard-coded 0.2.
-# See the header of that file for why ROUTING_LAYER_ADJUSTMENT cannot be used
-# on sky130hd and why the platform tcl has to be replaced rather than disabled.
-export FASTROUTE_TCL = /work/orfs_configs/sky130hd/TierTwo/ncache/fastroute.tcl
-
+# Tool settings are deliberately left at platform/flow defaults, matching every
+# other design in the suite (bpred, lsq, mesi, rob all use CORE_UTILIZATION 20 /
+# PLACE_DENSITY 0.50). Three earlier per-design overrides were tried here and
+# have been reverted, because tuning the tool per design makes ncache's PPA
+# numbers incomparable to the designs that close on defaults:
+#   * FASTROUTE_TCL pointing at a local copy with the layer derate at 0.12
+#     instead of the platform's 0.2
+#   * PLACE_DENSITY 0.30 instead of 0.50
+#   * DETAILED_ROUTE_END_ITERATION 40 instead of the default 64
+# bpred, rob and softmax all complete the full flow on stock settings. If ncache
+# cannot, that is a property of ncache's RTL -- its average net is 139 um against
+# 39-78 um for the rest of the suite -- and is legitimate benchmark signal rather
+# than something to configure away.
 export CORE_UTILIZATION = 20
-export PLACE_DENSITY = 0.30
+export PLACE_DENSITY = 0.50
+
 export TNS_END_PERCENT = 100
 
 # Disable adder extraction/mapping for this design.

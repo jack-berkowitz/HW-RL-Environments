@@ -14,7 +14,7 @@
 //   ADDR_W     : byte-address width. Default 10 (a deliberately tiny space, so
 //                conflicts, evictions and victim hits happen constantly).
 //   DATA_W     : scalar access width. Fixed at 32.
-//   LINE_BYTES : line size. Default 8.
+//   LINE_BYTES : line size. Default 4. (Was 8 -- see SIZING NOTE.)
 //   SETS       : sets in the main array. Default 4.
 //   WAYS       : associativity. Default 2.
 //   MSHRS      : outstanding misses tracked. Default 2.
@@ -137,12 +137,33 @@
 //   4 GB. Halving the line and cutting the queues gives ~7x less of that logic.
 //   Note 2 MSHRs and 2 victim entries exercise the "none free" paths MORE often
 //   than 4 did, so this is not a weaker test -- just a cheaper one.
+//
+//   SECOND DOWNSIZING: LINE_BYTES 8 -> 4. A correct, congestion-free
+//   implementation still took ~19.5 h in detailed routing at 8 bytes, and
+//   LINE_W dominates this design -- the line arrays (main + victim + MSHR +
+//   writeback) hold most of its flops, and every byte-merge / byte-extract
+//   datapath is LINE_W wide and replicated per port and per drain path.
+//
+//   IMPORTANT, IF YOU CHANGE LINE_BYTES AGAIN: the testbench stimulus must move
+//   with it. ncache_tb.sv used to hardcode a 32-byte set stride and 4-byte
+//   intra-line offsets, both of which silently assumed LINE_BYTES==8. Flipping
+//   the parameter alone made "base" and "base+4" different lines, which turned
+//   the two MSHR-merge directed tests into ordinary misses and doubled the
+//   working set: hit rate fell 87.9% -> 42.4% and the run failed the coverage
+//   gate below with 3945 graded events. That was the STIMULUS breaking, not the
+//   geometry. The stride and offsets are now derived (SETSTRIDE / HALF_OFF /
+//   HALF_SZ), and with them matched the 4-byte line costs 2.5 points of hit rate
+//   and nothing else: 13592 graded events vs 13208, identical dual-accept,
+//   same-line and read/write-overlap counts, both merge and victim scenarios
+//   still covered.
+//
+//   PPA numbers taken at LINE_BYTES=8 are NOT comparable to numbers taken here.
 // =============================================================================
 
 module ncache #(
     parameter int ADDR_W     = 10,
     parameter int DATA_W     = 32,
-    parameter int LINE_BYTES = 8,
+    parameter int LINE_BYTES = 4,
     parameter int SETS       = 4,
     parameter int WAYS       = 2,
     parameter int MSHRS      = 2,

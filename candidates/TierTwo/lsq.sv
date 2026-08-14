@@ -31,7 +31,7 @@
 // =============================================================================
 
 module lsq #(
-    parameter int DEPTH  = 16,   // 8 / 16 / 32, power of 2
+    parameter int DEPTH  = 8,    // 8 / 16 / 32, power of 2
     parameter int ADDR_W = 10,
     parameter int DATA_W = 32,
     parameter int AGE_W  = 16,
@@ -98,6 +98,32 @@ module lsq #(
 
     logic [AGE_W-1:0]  age_ctr, age_ctr_n;
 
+    // -----------------------------------------------------------------------
+    // AGE-ORDER MATRIX.  older[i][j] == 1 means "entry j is older than entry i".
+    //
+    // Every ordering rule in lsq_iface.sv is relative ("every older store", "the
+    // youngest older overlapping store", "the oldest committed store"), and none
+    // of them needs the numeric age -- only the order. Comparing e_age directly
+    // put an AGE_W-wide magnitude comparator in every cell of the DEPTH*DEPTH
+    // disambiguation sweep, plus more in the store/load selectors: ~160
+    // 16-bit comparators in a module that is otherwise only 651 flops. That is
+    // both the bulk of the area and the reason Yosys's SAT-based `share` pass
+    // (cost quadratic in arithmetic-operator count) dominated synthesis.
+    //
+    // The matrix is the standard fix: order is decided ONCE, at allocation, and
+    // every later query is a single-bit lookup. It costs DEPTH*DEPTH = 64 bits.
+    //
+    // Maintenance is entirely at allocation: the entry being allocated is by
+    // construction the youngest, so its row is "every currently-live entry is
+    // older than me" and its column is all-zero. Rewriting the COLUMN matters as
+    // much as the row -- without it a reused slot would still be recorded as
+    // older than entries allocated before it was freed.
+    //
+    // e_age itself is kept, but is now used only where a real number is required:
+    // the external flush threshold compare, and identifying an in-flight memory
+    // transaction across slot reuse. That is ~9 comparators instead of ~160.
+    logic older [0:DEPTH-1][0:DEPTH-1], older_n [0:DEPTH-1][0:DEPTH-1];
+
     // memory port bookkeeping. The owner is identified by slot AND AGE: a slot
     // freed by a flush can be reallocated while its read is still in flight, and
     // the slot number alone would then deliver stale data to the new occupant.
@@ -134,14 +160,39 @@ module lsq #(
     // -----------------------------------------------------------------------
     // byte-range helpers (size 2'b00=1B, 2'b01=2B, 2'b10=4B, naturally aligned)
     // -----------------------------------------------------------------------
-    function automatic int nb_of(input logic [1:0] s);
-        nb_of = (s == 2'b00) ? 1 : (s == 2'b01) ? 2 : 4;
-    endfunction
+    // Byte-range arithmetic is done in ADDR_W+1 bits, NOT in `int`.
+    //
+    // rng_ovl is instantiated DEPTH*DEPTH times inside the disambiguation sweep
+    // below, twice per call. Returning `int` from nb_of and casting with int'()
+    // made every one of those a 32-bit adder feeding a 32-bit magnitude
+    // comparator, when the widest value involved is addr + 4 <= 1027. That one
+    // detail is the largest single area term in this module. ADDR_W+1 = 11 bits
+    // covers the sum exactly, with no change in behaviour.
+    localparam int AW1 = ADDR_W + 1;
 
+    // Overlap test with NO arithmetic.
+    //
+    // The iface guarantees accesses are NATURALLY ALIGNED and sizes are 1/2/4
+    // bytes, so a smaller access always lies wholly inside one block of the
+    // larger size. Two accesses therefore overlap iff their addresses agree
+    // above the coarser of the two size granularities. The 2-bit size encoding
+    // is exactly log2(nbytes) (00->1, 01->2, 10->4), so that granularity is
+    // just max(s0,s1) and the whole test collapses to a masked equality:
+    //
+    //     overlap  <=>  (a0 >> k) == (a1 >> k),   k = max(s0,s1)
+    //
+    // This replaces two adders and two magnitude comparators -- instantiated
+    // DEPTH*DEPTH times in the sweep below -- with an XOR and a zero test.
+    // Yosys's SAT-based SHARE pass is quadratic in the number of arithmetic
+    // operators it has to consider, and this removes them from the module
+    // entirely, which is what makes lsq synthesise in reasonable time.
     function automatic logic rng_ovl(input logic [ADDR_W-1:0] a0, input logic [1:0] s0,
                                      input logic [ADDR_W-1:0] a1, input logic [1:0] s1);
-        rng_ovl = (int'(a0) < int'(a1) + nb_of(s1)) &&
-                  (int'(a1) < int'(a0) + nb_of(s0));
+        logic [1:0] k;
+        begin
+            k = (s0 > s1) ? s0 : s1;
+            rng_ovl = ((a0 ^ a1) >> k) == '0;
+        end
     endfunction
 
     function automatic logic rng_exact(input logic [ADDR_W-1:0] a0, input logic [1:0] s0,
@@ -182,8 +233,12 @@ module lsq #(
 
     always_comb begin
         for (int i = 0; i < DEPTH; i++) begin
-            logic unknown_older;   // "ambiguous store" older than this load
-            int   best;            // youngest older overlapping store, -1 = none
+            logic unknown_older;             // "ambiguous store" older than this load
+            // Youngest older overlapping store, as valid+index. "j is younger
+            // than the incumbent" is older[j][best_idx] -- a one-bit lookup,
+            // where this used to be an AGE_W magnitude compare.
+            logic             best_v;
+            logic [IDX_W-1:0] best_idx;
 
             ld_legal[i] = 1'b0;
             ld_fwd  [i] = 1'b0;
@@ -192,15 +247,19 @@ module lsq #(
 
             if (e_val[i] && !e_store[i] && e_addr_k[i]) begin
                 unknown_older = 1'b0;
-                best          = -1;
+                best_v        = 1'b0;
+                best_idx      = '0;
 
                 for (int j = 0; j < DEPTH; j++) begin
-                    if (e_val[j] && e_store[j] && (e_age[j] < e_age[i])) begin
+                    if (e_val[j] && e_store[j] && older[i][j]) begin
                         if (!e_addr_k[j]) begin
                             unknown_older = 1'b1;
                         end else if (rng_ovl(e_addr[j], e_size[j],
                                              e_addr[i], e_size[i])) begin
-                            if (best < 0 || e_age[j] > e_age[best]) best = j;
+                            if (!best_v || older[j][best_idx]) begin
+                                best_v   = 1'b1;
+                                best_idx = IDX_W'(j);
+                            end
                         end
                     end
                 end
@@ -208,13 +267,13 @@ module lsq #(
                 // conservative: ONE unknown older store blocks the load outright
                 if (!unknown_older) begin
                     ld_legal[i] = 1'b1;
-                    if (best < 0) begin
+                    if (!best_v) begin
                         ld_mem[i] = 1'b1;                       // -> SRC_MEM
-                    end else if (rng_exact(e_addr[best], e_size[best],
+                    end else if (rng_exact(e_addr[best_idx], e_size[best_idx],
                                            e_addr[i], e_size[i]) &&
-                                 e_data_k[best]) begin
+                                 e_data_k[best_idx]) begin
                         ld_fwd[i] = 1'b1;                       // -> SRC_FWD
-                        ld_src[i] = IDX_W'(best);
+                        ld_src[i] = best_idx;
                     end
                     // else: exact-match-without-data or PARTIAL overlap -> stall
                 end
@@ -224,12 +283,18 @@ module lsq #(
 
     // oldest committed store that has not yet been handed to memory: the only
     // store allowed to go next, which is what keeps writes in program order
-    int st_go;
+    logic             st_v;
+    logic [IDX_W-1:0] st_idx;
     always_comb begin
-        st_go = -1;
+        st_v   = 1'b0;
+        st_idx = '0;
         for (int i = 0; i < DEPTH; i++)
             if (e_val[i] && e_store[i] && e_commit[i] && !e_sent[i])
-                if (st_go < 0 || e_age[i] < e_age[st_go]) st_go = i;
+                // "i is older than the incumbent" -> older[st_idx][i]
+                if (!st_v || older[st_idx][i]) begin
+                    st_v   = 1'b1;
+                    st_idx = IDX_W'(i);
+                end
     end
 
     // ...but a store may not reach memory ahead of ANY older load that has not
@@ -249,24 +314,28 @@ module lsq #(
     // one of the stores this rule holds back.
     logic st_ok;
     always_comb begin
-        st_ok = (st_go >= 0);
-        if (st_go >= 0)
+        st_ok = st_v;
+        if (st_v)
             for (int j = 0; j < DEPTH; j++)
-                if (e_val[j] && !e_store[j] &&
-                    (e_age[j] < e_age[st_go])) st_ok = 1'b0;
+                if (e_val[j] && !e_store[j] && older[st_idx][j]) st_ok = 1'b0;
     end
 
     // oldest forwardable load, and oldest memory-bound load with no read yet
-    int ld_go_fwd, ld_go_mem;
+    logic             ldf_v, ldm_v;
+    logic [IDX_W-1:0] ldf_idx, ldm_idx;
     always_comb begin
-        ld_go_fwd = -1;
-        ld_go_mem = -1;
+        ldf_v = 1'b0; ldf_idx = '0;
+        ldm_v = 1'b0; ldm_idx = '0;
         for (int i = 0; i < DEPTH; i++) begin
             if (ld_fwd[i])
-                if (ld_go_fwd < 0 || e_age[i] < e_age[ld_go_fwd]) ld_go_fwd = i;
+                if (!ldf_v || older[ldf_idx][i]) begin
+                    ldf_v = 1'b1; ldf_idx = IDX_W'(i);
+                end
             if (ld_mem[i] && !(mem_infl && !mem_iswr && mem_own == IDX_W'(i) &&
                                mem_age == e_age[i]))
-                if (ld_go_mem < 0 || e_age[i] < e_age[ld_go_mem]) ld_go_mem = i;
+                if (!ldm_v || older[ldm_idx][i]) begin
+                    ldm_v = 1'b1; ldm_idx = IDX_W'(i);
+                end
         end
     end
 
@@ -285,6 +354,7 @@ module lsq #(
             e_size_n[i]=e_size[i];     e_data_k_n[i]=e_data_k[i];
             e_data_n[i]=e_data[i];     e_age_n[i]=e_age[i];
             e_commit_n[i]=e_commit[i]; e_sent_n[i]=e_sent[i];
+            for (int j = 0; j < DEPTH; j++) older_n[i][j] = older[i][j];
         end
         age_ctr_n  = age_ctr;
         mem_infl_n = mem_infl;
@@ -322,13 +392,13 @@ module lsq #(
             e_val_n[mem_own] = 1'b0;             // freed as the result is given
             res_age  = e_age[mem_own];
             res_pick = 1'b1;
-        end else if (ld_go_fwd >= 0) begin
+        end else if (ldf_v) begin
             lr_v_n = 1'b1;
-            lr_i_n = IDX_W'(ld_go_fwd);
-            lr_d_n = zext(e_data[ld_src[ld_go_fwd]], e_size[ld_go_fwd]);
+            lr_i_n = ldf_idx;
+            lr_d_n = zext(e_data[ld_src[ldf_idx]], e_size[ldf_idx]);
             lr_s_n = 1'b1;                       // SRC_FWD
-            e_val_n[ld_go_fwd] = 1'b0;
-            res_age  = e_age[ld_go_fwd];
+            e_val_n[ldf_idx] = 1'b0;
+            res_age  = e_age[ldf_idx];
             res_pick = 1'b1;
         end
 
@@ -336,20 +406,20 @@ module lsq #(
         // Writes go first so a load stalled on a partial overlap cannot be
         // starved by the very store it is waiting to see leave the queue.
         if (!mem_infl && !mem_rv_q) begin
-            if (st_go >= 0 && st_ok) begin
+            if (st_v && st_ok) begin
                 mem_rv_n = 1'b1; mem_rw_n = 1'b1;
-                mem_ra_n = e_addr[st_go];
-                mem_rs_n = e_size[st_go];
-                mem_rd_n = e_data[st_go];
-                mem_infl_n = 1'b1; mem_iswr_n = 1'b1; mem_own_n = IDX_W'(st_go);
-                mem_age_n  = e_age[st_go];
-                e_sent_n[st_go] = 1'b1;
-            end else if (ld_go_mem >= 0 && !res_pick) begin
+                mem_ra_n = e_addr[st_idx];
+                mem_rs_n = e_size[st_idx];
+                mem_rd_n = e_data[st_idx];
+                mem_infl_n = 1'b1; mem_iswr_n = 1'b1; mem_own_n = st_idx;
+                mem_age_n  = e_age[st_idx];
+                e_sent_n[st_idx] = 1'b1;
+            end else if (ldm_v && !res_pick) begin
                 mem_rv_n = 1'b1; mem_rw_n = 1'b0;
-                mem_ra_n = e_addr[ld_go_mem];
-                mem_rs_n = e_size[ld_go_mem];
-                mem_infl_n = 1'b1; mem_iswr_n = 1'b0; mem_own_n = IDX_W'(ld_go_mem);
-                mem_age_n  = e_age[ld_go_mem];
+                mem_ra_n = e_addr[ldm_idx];
+                mem_rs_n = e_size[ldm_idx];
+                mem_infl_n = 1'b1; mem_iswr_n = 1'b0; mem_own_n = ldm_idx;
+                mem_age_n  = e_age[ldm_idx];
             end
         end
 
@@ -363,6 +433,17 @@ module lsq #(
             e_sent_n  [lsq_idx] = 1'b0;
             e_age_n   [lsq_idx] = age_ctr;
             age_ctr_n           = age_ctr + AGE_W'(1);
+
+            // The allocated entry is by construction the YOUNGEST live entry:
+            // its row records every currently-live entry as older, and its
+            // column is cleared so nothing regards it as older. Clearing the
+            // column is what makes slot reuse safe -- without it, an entry
+            // allocated before this slot was freed would still see the fresh
+            // occupant as older than itself.
+            for (int j = 0; j < DEPTH; j++) begin
+                older_n[lsq_idx][j] = e_val[j] && (IDX_W'(j) != lsq_idx);
+                older_n[j][lsq_idx] = 1'b0;
+            end
         end
 
         // ---- address / data / commit resolution ----
@@ -429,6 +510,7 @@ module lsq #(
                 e_addr[i] <= '0;  e_size[i] <= 2'b10; e_data_k[i] <= 1'b0;
                 e_data[i] <= '0;  e_age[i] <= '0;
                 e_commit[i] <= 1'b0; e_sent[i] <= 1'b0;
+                for (int j = 0; j < DEPTH; j++) older[i][j] <= 1'b0;
             end
             age_ctr  <= '0;
             mem_infl <= 1'b0; mem_iswr <= 1'b0; mem_own <= '0; mem_age <= '0;
@@ -445,6 +527,7 @@ module lsq #(
                 e_size[i] <= e_size_n[i]; e_data_k[i] <= e_data_k_n[i];
                 e_data[i] <= e_data_n[i]; e_age[i] <= e_age_n[i];
                 e_commit[i] <= e_commit_n[i]; e_sent[i] <= e_sent_n[i];
+                for (int j = 0; j < DEPTH; j++) older[i][j] <= older_n[i][j];
             end
             age_ctr  <= age_ctr_n;
             mem_infl <= mem_infl_n; mem_iswr <= mem_iswr_n; mem_own <= mem_own_n;

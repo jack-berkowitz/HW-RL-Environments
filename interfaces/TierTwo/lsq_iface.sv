@@ -8,7 +8,20 @@
 // PARAMETERS
 // -----------------------------------------------------------------------------
 //   DEPTH   : number of LSQ entries (loads and stores share one slot space).
-//             Legal: 8, 16, 32. Must be a power of 2.
+//             Legal: 8, 16, 32. Must be a power of 2. Default 8.
+//
+//             DOWNSIZED FROM 16. Every rule in this file is order-sensitive
+//             ("every older store", "the youngest older overlapping store"), so
+//             a conforming implementation contains a DEPTH x DEPTH comparison
+//             sweep. At DEPTH=16 that is 256 cells, each carrying an AGE_W-wide
+//             magnitude compare, and Yosys's SAT-based `share` pass -- whose
+//             cost grows with the SQUARE of the arithmetic-operator count --
+//             failed to finish synthesis in 26 minutes on the reference machine.
+//             DEPTH=8 cuts the sweep 4x. Every ordering, forwarding and stall
+//             case in this spec still occurs; there are simply fewer entries to
+//             be simultaneously in flight.
+//
+//             PPA numbers taken at DEPTH=16 are NOT comparable to numbers here.
 //   ADDR_W  : byte-address width.
 //   DATA_W  : data width. Fixed at 32 for the shipped harness.
 //   AGE_W   : width of the monotonic age counter. Must be wide enough that it
@@ -173,7 +186,7 @@
 // =============================================================================
 
 module lsq #(
-    parameter int DEPTH  = 16,   // 8 / 16 / 32, power of 2
+    parameter int DEPTH  = 8,    // 8 / 16 / 32, power of 2
     parameter int ADDR_W = 10,
     parameter int DATA_W = 32,
     parameter int AGE_W  = 16,

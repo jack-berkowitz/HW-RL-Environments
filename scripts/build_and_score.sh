@@ -24,7 +24,12 @@
 #      other than "TEST_RESULT: PASS" -- a failing candidate isn't worth
 #      spending a P&R run on.
 #   2. Run the full ORFS flow via run_orfs_build.sh (synth -> floorplan ->
-#      place -> CTS -> route -> report), targeting sky130hd.
+#      place -> CTS -> route -> report), targeting sky130hd. That script now
+#      WIPES the design's results/logs/objects/reports first, so every build is
+#      clean and the reported PPA always corresponds to the RTL and config
+#      currently on disk. make keys off timestamps and does not rebuild on a
+#      changed config.mk/SDC, so incremental builds here silently reported stale
+#      numbers. Set NO_WIPE=1 to opt out for a deliberate resume.
 #   3. Print PPA numbers via collect_results.py.
 #
 # Stops at the first failing stage and exits non-zero.

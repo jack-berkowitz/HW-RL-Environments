@@ -52,7 +52,7 @@ module ncache_tb;
 
     parameter int ADDR_W     = 10;
     parameter int DATA_W     = 32;
-    parameter int LINE_BYTES = 8;
+    parameter int LINE_BYTES = 4;
     parameter int SETS       = 4;
     parameter int WAYS       = 2;
     parameter int MSHRS      = 2;
@@ -64,6 +64,17 @@ module ncache_tb;
     parameter int MEM_MAX_LAT = 9;
 
     localparam int LINE_W = 8*LINE_BYTES;
+
+    // ---- geometry-derived stimulus constants ----------------------------
+    // The directed suite and the address pool used to hardcode a 32-byte set
+    // stride and 4/8-byte intra-line offsets, which silently assumed
+    // LINE_BYTES==8: at a smaller line, "base" and "base+4" stop sharing a line,
+    // which turns the MSHR-merge tests into ordinary misses and doubles the
+    // working set. Deriving them keeps the stimulus meaning the same thing at
+    // any legal geometry.
+    localparam int SETSTRIDE = SETS*LINE_BYTES;        // same set, different line
+    localparam int HALF_OFF  = LINE_BYTES/2;           // second access, same line
+    localparam int HALF_SZ   = $clog2(LINE_BYTES)-1;   // size code covering HALF_OFF
     localparam int NTAG   = 1 << TAG_W;
     localparam int NLINES = (1 << ADDR_W) / LINE_BYTES;
 
@@ -392,24 +403,25 @@ module ncache_tb;
     task automatic build_pool();
         int k, base;
         k = 0;
-        // Five lines competing for set 0 (they differ by SETS*LINE_BYTES = 32),
+        // Five lines competing for set 0 (they differ by SETS*LINE_BYTES),
         // against 2 ways + 2 victim entries -- so eviction, victim hits and
         // dirty writebacks all happen routinely rather than by luck.
         for (int i = 0; i < 5; i++) begin
-            base = i*32;
-            pool_addr[k] = base;      pool_size[k] = 2; k++;
-            pool_addr[k] = base + 4;  pool_size[k] = 2; k++;
+            base = i*SETSTRIDE;
+            pool_addr[k] = base;            pool_size[k] = HALF_SZ; k++;
+            pool_addr[k] = base + HALF_OFF; pool_size[k] = HALF_SZ; k++;
         end
-        // Spread over the other sets with mixed access sizes, so sub-word
-        // merging inside a line is exercised too.
+        // Spread over consecutive lines (hence other sets) with mixed access
+        // sizes INSIDE one line, so sub-word merging is exercised too. All three
+        // offsets stay within the same line at any LINE_BYTES >= 4.
         for (int i = 0; i < 6; i++) begin
-            base = 8 + i*8;
-            pool_addr[k] = base;      pool_size[k] = 2; k++;
-            pool_addr[k] = base + 2;  pool_size[k] = 1; k++;
-            pool_addr[k] = base + 5;  pool_size[k] = 0; k++;
+            base = LINE_BYTES + i*LINE_BYTES;
+            pool_addr[k] = base;                pool_size[k] = HALF_SZ; k++;
+            pool_addr[k] = base + HALF_OFF;     pool_size[k] = HALF_SZ; k++;
+            pool_addr[k] = base + HALF_OFF + 1; pool_size[k] = 0;       k++;
         end
         while (k < NPOOL) begin
-            pool_addr[k] = (k % 5) * 32; pool_size[k] = 2; k++;
+            pool_addr[k] = (k % 5) * SETSTRIDE; pool_size[k] = HALF_SZ; k++;
         end
     endtask
 
@@ -425,7 +437,7 @@ module ncache_tb;
         do_reset();
         base_fills = fill_count_line[0];
         idle_inputs();
-        issue_AB(0, 1'b0, '0, 2, 1,  4, 1'b0, '0, 2, 2, "D1");
+        issue_AB(0, 1'b0, '0, HALF_SZ, 1,  HALF_OFF, 1'b0, '0, HALF_SZ, 2, "D1");
         quiesce("D1");
         cov_merge_tested++;
         if (fill_count_line[0] - base_fills != 1)
@@ -435,25 +447,27 @@ module ncache_tb;
         // ---- D1b: three-deep merge, mixed read/write ----
         phase = "D1b-merge-rw";
         do_reset();
-        base_fills = fill_count_line[32/LINE_BYTES];
+        base_fills = fill_count_line[SETSTRIDE/LINE_BYTES];
         idle_inputs();
-        issue_AB(32, 1'b1, 32'hAAAA_1111, 2, 3,  36, 1'b0, '0, 2, 4, "D1b");
-        issue_A (32, 1'b0, '0, 2, 5, "D1b");
+        issue_AB(SETSTRIDE, 1'b1, 32'hAAAA_1111, HALF_SZ, 3,
+                 SETSTRIDE + HALF_OFF, 1'b0, '0, HALF_SZ, 4, "D1b");
+        issue_A (SETSTRIDE, 1'b0, '0, HALF_SZ, 5, "D1b");
         quiesce("D1b");
         cov_merge_tested++;
-        if (fill_count_line[32/LINE_BYTES] - base_fills != 1)
+        if (fill_count_line[SETSTRIDE/LINE_BYTES] - base_fills != 1)
             note_fail($sformatf("C4 D1b: a merged read/write burst caused %0d fills, expected exactly 1",
-                                fill_count_line[32/LINE_BYTES] - base_fills));
+                                fill_count_line[SETSTRIDE/LINE_BYTES] - base_fills));
 
         // ---- D2: same-cycle A write / B read to the same address; B sees A ----
         phase = "D2-portA-before-portB";
         do_reset();
         // bring the line in first so both are hits
         idle_inputs();
-        issue_A(64, 1'b0, '0, 2, 6, "D2-warm");
+        issue_A(2*SETSTRIDE, 1'b0, '0, HALF_SZ, 6, "D2-warm");
         quiesce("D2-warm");
         // C2 grades B against the value A wrote in the SAME cycle
-        issue_AB(64, 1'b1, 32'h1234_5678, 2, 7,  64, 1'b0, '0, 2, 8, "D2");
+        issue_AB(2*SETSTRIDE, 1'b1, 32'h1234_5678, HALF_SZ, 7,
+                 2*SETSTRIDE, 1'b0, '0, HALF_SZ, 8, "D2");
         quiesce("D2");
 
         // ---- D3: dirty eviction must reach memory (no silently dropped write) --
@@ -461,17 +475,17 @@ module ncache_tb;
         do_reset();
         // dirty one line in set 0
         idle_inputs();
-        issue_A(0, 1'b1, 32'hDEAD_BEEF, 2, 9, "D3-write");
+        issue_A(0, 1'b1, 32'hDEAD_BEEF, HALF_SZ, 9, "D3-write");
         quiesce("D3-write");
         // push it out of the array and then out of the victim buffer
         for (int i = 1; i < 8; i++) begin
-            issue_A(i*32, 1'b0, '0, 2, 10, "D3-sweep");
+            issue_A(i*SETSTRIDE, 1'b0, '0, HALF_SZ, 10, "D3-sweep");
             quiesce("D3-sweep");
         end
         cov_victim_scenarios++;
         // read it back: whether it comes from the victim buffer or memory, the
         // value must survive
-        issue_A(0, 1'b0, '0, 2, 11, "D3-readback");
+        issue_A(0, 1'b0, '0, HALF_SZ, 11, "D3-readback");
         quiesce("D3-readback");
 
         // ---- D4: victim-cache hit must not fabricate a memory fill ----
@@ -479,7 +493,7 @@ module ncache_tb;
         do_reset();
         // fill the 2 ways of set 0, then further lines evict into the victim
         for (int i = 0; i < 5; i++) begin
-            issue_A(i*32, 1'b0, '0, 2, 12, "D4-fill");
+            issue_A(i*SETSTRIDE, 1'b0, '0, HALF_SZ, 12, "D4-fill");
             quiesce("D4-fill");
         end
         cov_victim_scenarios++;

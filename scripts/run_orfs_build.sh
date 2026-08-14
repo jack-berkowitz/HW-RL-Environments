@@ -41,27 +41,73 @@
 # until it was killed. Designs whose config.mk does not set the variable still
 # inherit ORFS's unscaled default.
 #
-# WIPE_DESIGN: when set to a design name, that design's results/logs/objects/
-# reports are deleted BEFORE the build. This is mandatory whenever the period
-# changes: make keys off file timestamps and does not treat a changed constraint
-# as a reason to rebuild, so without the wipe the flow silently reuses the
-# previous period's results.
+# CLEAN BUILDS ARE THE DEFAULT. This design's results/logs/objects/reports are
+# deleted BEFORE every build, so what comes out always corresponds to what is on
+# disk right now.
+#
+# This used to be opt-in via WIPE_DESIGN, and that was a trap. make keys off file
+# timestamps and does NOT treat a changed config.mk, constraint.sdc or FASTROUTE_TCL
+# as a reason to rebuild -- so a forgotten wipe silently reuses the previous
+# geometry's or period's results and reports them as if they were current.
+# find_fmax.py always set WIPE_DESIGN; build_and_score.sh never did, which meant
+# the full-flow path was exactly the one that could go stale. Observed failure
+# modes from this: a config edit appearing to have no effect, and a synth_stat.txt
+# two days older than the RTL being read as the current area.
+#
+# The design name is derived from the config file itself (DESIGN_NICKNAME, which
+# is what ORFS names its output directories after, else DESIGN_NAME), so it cannot
+# drift from what is actually being built. WIPE_DESIGN still overrides the name if
+# set. If the name cannot be determined the script WARNS rather than silently
+# skipping the clean.
+#
+# NO_WIPE=1 keeps existing results for a deliberate incremental/resume build.
 set -e
 ORFS_FLOW_DIR="${ORFS_FLOW_DIR:-/Users/jackberkowitz/tools/OpenROAD-flow-scripts/flow}"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="${2:-}"
 LEC_CHECK="${LEC_CHECK:-0}"
-PLATFORM="${PLATFORM:-sky130hd}"
 
 if [ -z "${DOCKER_PLATFORM_ARGS+x}" ]; then
   DOCKER_PLATFORM_ARGS="--platform linux/amd64"
 fi
 
-if [ -n "${WIPE_DESIGN:-}" ]; then
+# ---- work out what is actually being built, from the config itself ----------
+# $1 is normally the CONTAINER path (/work/...); map it back to a host path so
+# the file can be read. A host path is accepted unchanged.
+case "$1" in
+  /work/*) HOST_CONFIG="${REPO_DIR}/${1#/work/}" ;;
+  *)       HOST_CONFIG="$1" ;;
+esac
+
+# Reads `export NAME = value`, `:=` and `?=` alike; last assignment wins.
+cfg_var() {
+  [ -f "${HOST_CONFIG}" ] || return 0
+  awk -v key="$1" '
+    $0 ~ ("^[[:space:]]*export[[:space:]]+" key "[[:space:]]*[:?]?=") {
+      sub(/^[^=]*=/, ""); gsub(/[[:space:]]/, ""); val = $0
+    }
+    END { if (val != "") print val }
+  ' "${HOST_CONFIG}"
+}
+
+# ORFS names results/logs/objects/reports after DESIGN_NICKNAME when it is set,
+# falling back to DESIGN_NAME -- match that, or the wipe would miss the directory.
+PLATFORM="${PLATFORM:-$(cfg_var PLATFORM)}"
+PLATFORM="${PLATFORM:-sky130hd}"
+DESIGN="${WIPE_DESIGN:-$(cfg_var DESIGN_NICKNAME)}"
+[ -n "${DESIGN}" ] || DESIGN="$(cfg_var DESIGN_NAME)"
+[ -n "${DESIGN}" ] || DESIGN="$(basename "$(dirname "${HOST_CONFIG}")")"
+
+if [ "${NO_WIPE:-0}" = "1" ]; then
+  echo "NO_WIPE=1: reusing any existing ${PLATFORM}/${DESIGN} results (INCREMENTAL build)"
+elif [ -n "${DESIGN}" ]; then
   for d in results logs objects reports; do
-    rm -rf "${ORFS_FLOW_DIR}/${d}/${PLATFORM}/${WIPE_DESIGN}"
+    rm -rf "${ORFS_FLOW_DIR}/${d}/${PLATFORM}/${DESIGN}"
   done
-  echo "wiped ${PLATFORM}/${WIPE_DESIGN} (results, logs, objects, reports)"
+  echo "clean build: wiped ${PLATFORM}/${DESIGN} (results, logs, objects, reports)"
+else
+  echo "WARNING: could not determine the design name from '${HOST_CONFIG}'." >&2
+  echo "         NOT wiping -- this build may reuse stale results." >&2
 fi
 
 DOCKER_ENV_ARGS=()

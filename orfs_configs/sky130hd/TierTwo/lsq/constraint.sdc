@@ -7,7 +7,7 @@ current_design lsq
 
 set clk_name      core_clock
 set clk_port_name clk
-set clk_period    20.0
+set clk_period    20
 
 # Optional override, used by scripts/find_fmax.py to sweep the period without
 # rewriting this file. Absent -> the default above, so every existing
