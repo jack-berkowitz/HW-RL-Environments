@@ -92,6 +92,13 @@ inputs are all vendored. The top-level module is **`idma_backend_rw_axi`**, not
 parameters, so a concrete-type wrapper is required before the DUT can be shipped.
 That wrapper is Part 2 work and is a known open item.
 
+**Constraint on that wrapper — same standard as a thin shim.** It must be
+**TYPE BINDING ONLY**: `AXI_TYPEDEF_*` macro expansion and parameter binding,
+no logic, no behaviour, no glue. If bridging turns out to need behaviour, then
+we would be partly authoring the shipped DUT, which is the precise trust problem
+verification tasks exist to eliminate — and **`ai_v01` is CUT rather than
+shipped**. Same rule that cut `dsp_v04`.
+
 ---
 
 ## Networking — Verification (6)
