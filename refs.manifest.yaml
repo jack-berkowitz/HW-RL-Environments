@@ -1,0 +1,394 @@
+# refs.manifest.yaml — Phase 0 Step 0.1
+#
+# Covers BOTH parts of the project: 21 design tasks (DESIGN_CATALOG.md) and
+# 20 verification tasks (VERIFICATION_CATALOG.md, dsp_v04 already cut).
+# There is no second network window, so verification references are fetched now.
+#
+# STATUS OF THIS FILE: proposed allowlist, awaiting approval. Nothing cloned yet.
+#
+# Path provenance: every path under `files:` is transcribed from the catalog's
+# "golden reference" column, which both catalogs state is "best identification
+# and NOT verified". Paths marked `path_confidence: low` are ones I expect to
+# have moved or been renamed upstream. Step 0.2 resolves the real paths and
+# Step 0.8 reports every catalog path that turned out wrong.
+#
+# `deps_anticipated:` is a PRE-CLOSURE ESTIMATE, not a checkout list. Step 0.2
+# resolves actual dependency closure by elaboration, adds what is really needed
+# to this manifest, and reports the additions before vendoring.
+#
+# Modes:
+#   vendor            -> files copied into refs/<repo>/ and committed
+#   model_of_record   -> GPL; NEVER copied into the repo. Cloned to the external
+#                        scratch dir, consulted to validate a locally-written
+#                        Python model; only that model is committed.
+#   cross_check_only  -> not copied into the repo (contamination policy, not
+#                        licence). Cloned to scratch, consulted once to confirm a
+#                        locally-generated artifact, SHA recorded in refs.lock.
+
+scratch_dir: /Users/jackberkowitz/hw_rl_benchmark_refs_scratch
+# Outside the repo, and deliberately NOT the session scratchpad: model_of_record
+# consultation (dsp_d01, dsp_d02) must stay available for all of Phase 1.
+
+repos:
+
+  # ---------------------------------------------------------------- basejump_stl
+  - repo: https://github.com/bespoke-silicon-group/basejump_stl
+    tasks: [ca_d01, ca_d03, ca_d05, nw_d05, ca_v06]
+    expected_licence: BSD-3
+    mode: vendor
+    files:
+      - bsg_cache/bsg_cache.v                              # ca_d01
+      - bsg_cache/bsg_cache_non_blocking_mhu.v             # ca_d03
+      - bsg_cache/bsg_cache_non_blocking_miss_fifo.v       # ca_d03
+      - bsg_mem/bsg_mem_multiport.v                        # ca_d05
+      - bsg_noc/bsg_wormhole_router.v                      # nw_d05
+      - bsg_noc/bsg_wormhole_router_input_control.v        # nw_d05
+      - bsg_noc/bsg_wormhole_router_output_control.v       # nw_d05
+      - bsg_misc/bsg_lru_pseudo_tree_decode.v              # ca_v06
+      - bsg_misc/bsg_lru_pseudo_tree_encode.v              # ca_v06
+      - bsg_misc/bsg_lru_pseudo_tree_backup.v              # ca_v06
+    deps_anticipated:
+      - bsg_misc/bsg_defines.sv    # required by essentially every bsg module
+      - bsg_mem/bsg_mem_1rw_sync*  # bsg_cache instantiates SRAM macros
+      - bsg_misc/bsg_mux*, bsg_misc/bsg_encode_one_hot.v, bsg_misc/bsg_priority_encode.v
+    path_confidence: low          # bsg_mem_multiport.v may be bsg_mem_multiport_latch.v
+    notes: >
+      ca_d01 (bsg_cache) is a Class A shim-feasibility risk per DESIGN_CATALOG
+      § Shim feasibility. ca_d03 is the highest-value task in Comp Arch and the
+      two non-blocking files are its whole anchor; if they do not carry
+      secondary-miss merge, ca_d03 loses its reference.
+
+  # ---------------------------------------------------------------- common_cells
+  - repo: https://github.com/pulp-platform/common_cells
+    tasks: [ca_v01, ca_v02, ca_v03]
+    expected_licence: SHL-0.51
+    mode: vendor
+    files:
+      - src/rr_arb_tree.sv                                 # ca_v01
+      - src/id_queue.sv                                    # ca_v02
+      - src/cdc_fifo_gray.sv                               # ca_v03
+    deps_anticipated:
+      - src/cf_math_pkg.sv, src/lzc.sv, src/counter.sv, src/delta_counter.sv
+      - src/spill_register.sv, src/stream_fifo.sv, src/fifo_v3.sv
+      - src/graycode.sv, src/sync.sv, src/cdc_reset_ctrlr*.sv   # cdc_fifo_gray
+      - include/common_cells/registers.svh
+    notes: >
+      This repo is ALSO the transitive dependency of axi, idma, redmule,
+      hwpe-stream, ne16 and cvfpu. Its vendored file set will grow well beyond
+      the three ca_v* files during Step 0.2 closure. Vendoring one shared copy
+      under refs/common_cells/ rather than per-consumer duplicates.
+
+  # ------------------------------------------------------------------ pulp axi
+  - repo: https://github.com/pulp-platform/axi
+    tasks: [nw_d02, nw_v01, nw_v02, nw_v03]
+    expected_licence: SHL-0.51
+    mode: vendor
+    files:
+      - src/axi_burst_splitter.sv                          # nw_d02
+      - src/axi_lite_xbar.sv                               # nw_v01
+      - src/axi_id_remap.sv                                # nw_v02
+      - src/axi_atop_filter.sv                             # nw_v03
+    deps_anticipated:
+      - src/axi_pkg.sv
+      - include/axi/typedef.svh, include/axi/assign.svh
+      - src/axi_demux.sv, src/axi_mux.sv, src/axi_err_slv.sv   # xbar closure
+      - common_cells: cf_math_pkg, rr_arb_tree, spill_register, id_queue, counter
+    notes: >
+      *** nw_d02 SEMANTIC RISK — flagged by DESIGN_CATALOG and resolved in Step
+      0.5, not later. *** axi_burst_splitter is believed to split bursts into
+      SINGLE BEATS, not at 4 KiB boundaries. If Step 0.5 confirms that, it is
+      not a reference for nw_d02 as described and there is no behaviour-free
+      shim. I will report the finding with the two catalog-sanctioned options
+      (restate nw_d02 as beat-splitting and keep the reference, OR keep the
+      4 KiB spec and downgrade to local model_of_record) and let you choose.
+      I will not pick one silently.
+
+  # --------------------------------------------------------------------- cvfpu
+  - repo: https://github.com/pulp-platform/cvfpu
+    tasks: [dsp_d04, dsp_v01, dsp_v02, dsp_v03]
+    expected_licence: SHL-0.51 / Apache-2.0
+    mode: vendor
+    files:
+      - src/fpnew_fma.sv                                   # dsp_d04, dsp_v01
+      - src/fpnew_divsqrt_multi.sv                         # dsp_v02
+      - src/fpnew_cast_multi.sv                            # dsp_v03
+    deps_anticipated:
+      - src/fpnew_pkg.sv, src/fpnew_rounding.sv, src/fpnew_classifier.sv
+      - divsqrt core: either vendor/opene906/** (newer) or fpu_div_sqrt_mvp (older)
+      - common_cells: cf_math_pkg, lzc, rr_arb_tree, registers.svh
+    licence_risk: >
+      Dual-licence repo. The vendored divsqrt subtree carries its own licence
+      distinct from the top-level SHL-0.51. Step 0.3 records the licence found
+      in the SUBTREE the file actually lives in, not the top-level LICENSE.
+      If the divsqrt subtree is GPL-family, dsp_v02 is a verification task with
+      no vendorable DUT and is CUT under the standing rule, exactly as dsp_v04.
+    notes: >
+      dsp_d04 (design, bf16_fma) and dsp_v01 (verification, fpnew_fma) share one
+      upstream file. Different tasks, one reference — vendored once.
+
+  # -------------------------------------------------------------- hwpe-stream
+  - repo: https://github.com/pulp-platform/hwpe-stream
+    tasks: [ai_d04, ai_v02]
+    expected_licence: SHL-0.51
+    mode: vendor
+    files:
+      - rtl/basic/hwpe_stream_fifo.sv                      # ai_d04
+      - rtl/basic/hwpe_stream_split.sv                     # ai_v02
+      - rtl/basic/hwpe_stream_merge.sv                     # ai_v02
+      - rtl/hwpe_stream_interfaces.sv
+      - rtl/hwpe_stream_package.sv
+    deps_anticipated:
+      - rtl/fifo/hwpe_stream_fifo_earlystall.sv and siblings
+      - common_cells: cf_math_pkg
+    notes: >
+      ai_v02 is "rtl/*" in the catalog — deliberately open-ended. Step 0.2 pins
+      it to a concrete, closed file list and reports it. Uses SystemVerilog
+      interfaces on its ports, which is a known shim-feasibility risk for ai_d04
+      (Step 0.6) — an interface-typed port cannot be bridged to a flat iface.sv
+      by renaming alone if the interface carries modports with logic.
+
+  # ---------------------------------------------------------------------- ne16
+  - repo: https://github.com/pulp-platform/ne16
+    tasks: [ai_d02]
+    expected_licence: SHL-0.51
+    mode: vendor
+    files:
+      - rtl/array/ne16_compute_array.sv                    # ai_d02 (MAC array)
+    deps_anticipated:
+      - rtl/ne16_package.sv, rtl/array/ne16_binconv_*.sv, rtl/array/ne16_scale*.sv
+      - hwpe-stream interfaces
+    path_confidence: low
+    notes: >
+      ai_d02 is cross-referenced against NVDLA nv_small CMAC as well. ne16's MAC
+      array is binary/mixed-precision oriented; if Step 0.5 finds it is not a
+      plain INT8 output-stationary tile, NVDLA CMAC becomes the primary and ne16
+      the cross-check. Reported, not silently swapped.
+
+  # ------------------------------------------------------------------- redmule
+  - repo: https://github.com/pulp-platform/redmule
+    tasks: [ai_v03]
+    expected_licence: SHL-0.51
+    mode: vendor
+    files:
+      - rtl/redmule_ctrl.sv                                # ai_v03
+      - rtl/redmule_scheduler.sv                           # ai_v03
+      - rtl/redmule_pkg.sv
+    deps_anticipated:
+      - hwpe-stream, hwpe-ctrl, common_cells, cf_math_pkg
+    notes: >
+      Catalog ships this as ONE fat multi-file DUT under one top-level spec.
+      Depends on hwpe-ctrl, which is NOT on the approved repo list. If Step 0.2
+      closure confirms hwpe-ctrl is required to elaborate, that is a new repo
+      and I will STOP and ask before adding it, per your instruction.
+
+  # ---------------------------------------------------------------------- idma
+  - repo: https://github.com/pulp-platform/idma
+    tasks: [ai_v01]
+    expected_licence: SHL-0.51
+    mode: vendor
+    files:
+      - src/backend/idma_backend.sv                        # ai_v01
+    deps_anticipated:
+      - src/idma_pkg.sv, src/frontend/**, src/backend/idma_{channel_coupler,transport_layer}*.sv
+      - common_cells, axi typedef headers
+    path_confidence: low
+    build_risk: >
+      idma generates much of its RTL from templates at build time (morty /
+      bender / Python generators). A generated-RTL backend may not exist as a
+      checked-in .sv file at all. If elaboration needs a generator that needs
+      the network, that is a Phase 0 blocker for ai_v01 and I report it here
+      rather than discovering it in Part 2. ai_v01 may need to be cut.
+
+  # ------------------------------------------------------------------ nvdla/hw
+  - repo: https://github.com/nvdla/hw
+    tasks: [ai_v04, ai_d01, ai_d02]
+    expected_licence: NVDLA Open HW
+    mode: vendor
+    files:
+      - nv_small/vmod/nvdla/sdp/**                         # ai_v04 (DUT, vendored)
+      - nv_small/vmod/nvdla/cmac/**                        # ai_d02 cross-check
+    deps_anticipated:
+      - nv_small/vmod/include/**, nv_small/spec/defs/**
+    notes: >
+      Mode is `vendor` because ai_v04 is a VERIFICATION task and must ship a DUT
+      derived from vendored upstream RTL. ai_d01 and ai_d02 consult the same
+      vendored tree as cross-check only — for ai_d01 the artifact of record is
+      the locally-written Python TFLite MultiplyByQuantizedMultiplier model
+      (Class B), and NVDLA SDP only sanity-checks the vectors.
+    size_note: large repo; blobless + sparse checkout of nv_small/ only.
+
+  # ------------------------------------------------------------- verilog-axis
+  - repo: https://github.com/alexforencich/verilog-axis
+    tasks: [nw_d01, nw_v05]
+    expected_licence: MIT
+    mode: vendor
+    files:
+      - rtl/axis_adapter.v                                 # nw_d01
+      - rtl/axis_arb_mux.v                                 # nw_v05
+    deps_anticipated:
+      - rtl/arbiter.v, rtl/priority_encoder.v              # axis_arb_mux closure
+
+  # --------------------------------------------------------- verilog-ethernet
+  - repo: https://github.com/alexforencich/verilog-ethernet
+    tasks: [nw_d03, nw_d04, nw_v04, nw_v06]
+    expected_licence: MIT
+    mode: vendor
+    files:
+      - rtl/lfsr.v                                         # nw_d03 (CRC32 config)
+      - rtl/mac_ctrl_tx.v                                  # nw_d04
+      - rtl/mac_ctrl_rx.v                                  # nw_d04
+      - rtl/mac_pause_ctrl_tx.v                            # nw_d04
+      - rtl/arp.v                                          # nw_v04
+      - rtl/arp_cache.v                                    # nw_v04
+      - rtl/arp_eth_rx.v                                   # nw_v04
+      - rtl/arp_eth_tx.v                                   # nw_v04
+      - rtl/eth_mac_1g_rx.v                                # nw_v06
+    deps_anticipated:
+      - rtl/axis_fifo.v, rtl/eth_crc_8.v / lfsr instantiations
+      - verilog-axis modules pulled in by the ARP assembly
+    notes: >
+      nw_d03 is a genuine oracle mismatch to watch in Step 0.5: lfsr.v is a
+      PARAMETERISABLE LFSR GENERATOR, not a CRC32 module. It anchors nw_d03 only
+      once instantiated with the Ethernet FCS-32 parameter set. If it cannot be
+      driven to produce a byte-enabled partial-final-beat FCS directly, nw_d03
+      becomes Class B (local Python CRC model of record) and I report that.
+
+  # ---------------------------------------------------------------------- cva6
+  - repo: https://github.com/openhwgroup/cva6
+    tasks: [ca_d02, ca_d04, ca_d05, ca_d06, ca_v04, ca_v05, ca_v07]
+    expected_licence: Apache-2.0 / SHL
+    mode: vendor
+    files:
+      - core/load_store_unit.sv                            # ca_d02
+      - core/store_buffer.sv                               # ca_d02, ca_d06
+      - core/frontend/bht.sv                               # ca_d04
+      - core/frontend/btb.sv                               # ca_d04
+      - core/frontend/ras.sv                               # ca_d04
+      - core/ariane_regfile_ff.sv                          # ca_d05
+      - core/mmu_sv39/tlb.sv                               # ca_v04
+      - core/scoreboard.sv                                 # ca_v05
+      - core/serdiv.sv                                     # ca_v07
+    deps_anticipated:
+      - core/include/ariane_pkg.sv, config_pkg.sv, riscv_pkg.sv, cv32a6/cv64a6 cfg pkgs
+      - core/include/instr_tracer_pkg.sv (may be avoidable)
+    path_confidence: low
+    notes: >
+      Heaviest dependency closure in the manifest and the anchor most likely to
+      cost tasks. Per DESIGN_CATALOG § Shim feasibility, ca_d02 and ca_d04 are
+      EXPECTED to fail thin-shim and convert to verification tasks; ca_d06 is
+      genuinely uncertain; ca_v07 (serdiv) is self-contained and should survive.
+      Your stop-rule: if MORE THAN THREE design tasks convert, CVA6 was the wrong
+      anchor and I stop rather than converting a fourth. CVA6 has exactly four
+      design tasks at risk (ca_d02, ca_d04, ca_d05, ca_d06), so that rule can
+      actually trip here.
+      Licence is per-file: core/ is Apache-2.0 but some subtrees are SHL-0.51.
+      Step 0.3 records what the tree says, per file.
+    size_note: blobless + sparse checkout of core/ only; do NOT init submodules.
+
+  # ----------------------------------------------------------------- opentitan
+  - repo: https://github.com/lowRISC/opentitan
+    tasks: [ca_d07]
+    expected_licence: Apache-2.0
+    mode: cross_check_only
+    files:
+      - hw/ip/prim/rtl/prim_secded_*.sv                    # ca_d07 matrix check only
+    vendored_to: null
+    notes: >
+      NOT vendored — this is a contamination exclusion, not a licence one.
+      OpenTitan is otherwise excluded from the whole project and this is the
+      single sanctioned exception. Artifact of record is a locally-written
+      Python Hsiao parity-matrix generator; prim_secded is consulted ONCE to
+      confirm the generated matrix matches a known-good one, and the SHA is
+      recorded in refs.lock. Aggressive renaming in the iface.sv.
+      Per catalog: if the cross-check cannot be done cleanly, DROP ca_d07
+      rather than ship a contaminated task — design becomes 20, Comp Arch 7.
+      That decision is made in Phase 0, not after the spec is written.
+    size_note: very large repo; blobless + sparse checkout of hw/ip/prim/rtl only.
+
+  # ------------------------------------------------------------------ ZipCPU x2
+  - repo: https://github.com/ZipCPU/cordic
+    tasks: [dsp_d01]
+    expected_licence: GPL — verify in tree
+    mode: model_of_record
+    files:
+      - rtl/cordic.v (or generated equivalent)             # consulted, never vendored
+    vendored_to: null
+    path_confidence: low
+    notes: >
+      ZipCPU/cordic is a GENERATOR (C++ producing Verilog), not a fixed RTL
+      file, so "the reference" may have to be generated in the scratch dir
+      during the network window. Doing that in Step 0.2.
+      GPL => never enters the repo. Committed artifact is a locally-written
+      Python CORDIC model + vectors. dsp_d01 is Class B.
+
+  - repo: https://github.com/ZipCPU/dspfilters
+    tasks: [dsp_d02]
+    expected_licence: GPL — verify in tree
+    mode: model_of_record
+    files:
+      - rtl/subfildown.v                                   # consulted, never vendored
+    vendored_to: null
+    notes: >
+      Sharpest case in the project per DESIGN_CATALOG § Oracle classes: dsp_d02
+      is model_of_record AND on the mandatory second-source list, so BOTH
+      implementations exercising the TB are locally authored. Keep the task; it
+      must not be described as externally validated, and its mutant set carries
+      the entire sharpness argument alone.
+
+  # --------------------------------------------------- ca_d08 trace cross-check
+  - repo: https://github.com/olofk/serv
+    tasks: [ca_d08]
+    expected_licence: ISC
+    mode: cross_check_only
+    vendored_to: null
+    files:
+      - rtl/**                                             # consulted, never vendored
+    notes: >
+      Confirms the locally-written Python RV32I ISS traces. NOT a design
+      reference (bit-serial; catalog says so explicitly).
+
+  - repo: https://github.com/darklife/darkriscv
+    tasks: [ca_d08]
+    expected_licence: BSD
+    mode: cross_check_only
+    vendored_to: null
+    files:
+      - rtl/darkriscv.v                                    # consulted, never vendored
+    approval_flag: >
+      *** DELIBERATE DEVIATION — NEEDS YOUR OK. *** Your table says "olofk/serv
+      *or* darklife/darkriscv". I am asking to clone BOTH, and this is the one
+      place my manifest is wider than your list.
+      Reason: the job is extracting a per-retire trace (PC, rd, value, store
+      addr/data) to cross-check my Python ISS. SERV is bit-serial — retire is
+      not cleanly observable and it needs the servant SoC wrapper to run a
+      program at all. darkriscv is a conventional core where writeback is
+      directly observable, but has known ISA-compliance quirks that make it the
+      weaker oracle. I cannot tell which yields a usable trace without running
+      them, and if I pick wrong I need the network back, which is exactly the
+      failure mode Phase 0 exists to prevent.
+      Both are permissively licensed, both are cross_check_only so NEITHER is
+      vendored into the repo, and the cost is two small clones into scratch.
+      Step 0.5 reports which one actually produced a usable trace; refs.lock
+      records that one as the cross-check of record and the other as unused.
+      If you would rather I commit to one now, say which and I will drop the
+      other from the manifest.
+
+# ---------------------------------------------------------------------------
+# Tasks with NO reference repo — listed so all 41 tasks are auditable
+# ---------------------------------------------------------------------------
+no_reference_repo:
+  - task: ai_d03   # online_softmax  — Class B, locally-written bit-exact Python model
+  - task: dsp_d03  # cic_decimator   — Class B, locally-written bit-exact Python integer model
+  # ai_d01 and ca_d08 are also Class B but DO have a cross-check repo above.
+
+# ---------------------------------------------------------------------------
+# Task coverage audit
+# ---------------------------------------------------------------------------
+coverage:
+  design_tasks_total: 21          # ca_d01-08, ai_d01-04, nw_d01-05, dsp_d01-04
+  verification_tasks_total: 20    # ca_v01-07, ai_v01-04, nw_v01-06, dsp_v01-03
+  dsp_v04: cut_before_phase0      # model_of_record invalid for verification
+  all_tasks_mapped: true
+  repos_proposed: 16
+  repos_on_your_approved_list: 16 # counting serv and darkriscv as the one "or" row
+  repos_not_on_your_list: 0
