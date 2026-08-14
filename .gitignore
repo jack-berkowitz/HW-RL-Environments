@@ -6,11 +6,19 @@ __pycache__/
 results/*.jsonl
 results/*.bak
 results/prompts_sent/
-refs/
 
 # Scratch from the simulators.
 obj_dir/
 *.vvp
 
-# Phase 0 reference scratch lives OUTSIDE the repo (GPL model_of_record
-# consultation must never enter the tree). Path recorded in refs.lock.
+# refs/ is DELIBERATELY TRACKED -- do not add it here.
+# It holds the Phase 0 vendored reference RTL, pinned by SHA in refs.lock.
+# The benchmark's claim to rigor is that every testbench was proven against
+# externally-authored known-correct RTL; a refs.lock naming a tree we cannot
+# restore is a manifest for nothing. Egress is closed after Phase 0, so an
+# untracked refs/ is unrecoverable. All vendored subtrees are
+# SHL-0.51 / Apache-2.0 / MIT / BSD / NVDLA Open HW -- redistributable with
+# attribution, and each subtree carries its upstream LICENSE alongside.
+#
+# GPL/LGPL sources (ZipCPU cordic, dspfilters) are NEVER vendored here; they
+# are consulted in a scratch dir outside the repo, recorded in refs.lock.

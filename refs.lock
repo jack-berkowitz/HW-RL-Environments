@@ -111,6 +111,9 @@ repos:
     vendored_to: refs/idma/
     tasks: [ai_v01]
     generated_rtl: true
+    generator_versions: {mako: "1.4.1", pyyaml: "6.0.3", python: "3.14.4"}
+    generation_deterministic: true    # regeneration is byte-identical, sha256 confirmed
+    generated_sha256: d386c77e561783c5   # first 16 hex of idma_backend_rw_axi.sv
     generation_note: >
       No checked-in idma_backend.sv — it is mako-templated. Generation runs
       FULLY OFFLINE (util/gen_idma.py + src/db/*.yml + src/backend/tpl/).
@@ -223,33 +226,47 @@ task_status:
   # --- cut before Phase 0 ---
   dsp_v04: {cut: true, reason: model_of_record_not_valid_for_verification}
 
-  # --- semantic mismatches: reference does NOT do what the catalog claims ---
+  # --- semantic mismatches: RESOLVED. Governing principle: the spec follows
+  #     the reference, never the reverse. ---
   nw_d02:
     semantic_confirmed: false
     finding: >
       axi_burst_splitter's own docstring reads "Split AXI4 bursts into
-      single-beat transactions." Zero occurrences of 4096 / 0x1000 / page in
-      the file. The catalog's suspicion is CONFIRMED: this is not a 4 KiB
-      boundary splitter and no behaviour-free shim can make it one.
-    decision: AWAITING_USER    # restate as beat-splitting, or keep 4KiB + model_of_record
+      single-beat transactions." Zero occurrences of 4096 / 0x1000 / page.
+    decision: RESTATED_AS_BEAT_SPLITTING
+    anchor_retained: refs/axi/src/axi_burst_splitter.sv
+    note: >
+      A 4 KiB-boundary variant is a possible harder task later, with this module
+      as a CORRECTNESS but not OPTIMALITY reference: single-beat splitting
+      trivially satisfies a 4 KiB constraint, so it passes a 4 KiB TB without
+      being a minimal solution. Recorded in the task NOTES.md when built.
   nw_d05:
     semantic_confirmed: false
     finding: >
-      NEW mismatch, not previously flagged. bsg_wormhole_router uses
-      ready/valid/yumi handshaking. "credit" appears ZERO times in
-      bsg_wormhole_router*.sv — it appears only in bsg_wormhole_concentrator_in,
-      bsg_router_crossbar_o_by_i and bsg_mesh_router_buffered. The catalog
-      describes nw_d05 as "credit-based input-port flow control, per-VC credit
-      counters", which this reference does not implement.
-    decision: AWAITING_USER
+      "credit" appears ZERO times in bsg_wormhole_router*.sv, and bsg_noc has NO
+      virtual-channel concept at all. All three candidate re-anchors
+      (bsg_wormhole_concentrator_in, bsg_router_crossbar_o_by_i,
+      bsg_mesh_router_buffered) merely gate on a use_credits_p parameter and emit
+      a delayed yumi as a credit RETURN — none counts credits. Real credit
+      counting lives in bsg_flow_counter / bsg_ready_to_credit_flow_converter,
+      which are not wormhole modules.
+    decision: RESTATED_AS_READY_VALID_YUMI    # fallback path, none of the 3 was a clean fit
+    anchor: refs/basejump_stl/bsg_noc/bsg_wormhole_router{,_input_control,_output_control}.sv
+    spec_changes: ["drop 'credit'", "drop 'per-VC'", "keep head/body/tail flit tracking (real, in _input_control flit counter)"]
   ai_d02:
     semantic_confirmed: false
     finding: >
-      ne16 array is ne16_binconv_* — binary/mixed-precision convolution, not a
-      plain INT8 output-stationary MAC tile. Also fails to elaborate
-      (cluster_clock_gating absent from every approved repo). NVDLA CMAC is
-      vendored and is the recommended primary anchor instead.
-    decision: AWAITING_USER
+      BOTH catalog anchors rejected. ne16 array is ne16_binconv_* (binary/mixed
+      precision, not INT8 OS) and fails to elaborate (cluster_clock_gating absent
+      from every approved repo). NVDLA CMAC carries 297 fp16/Winograd references
+      — a multi-precision Winograd convolution MAC — and its project-spec macro
+      headers are not in the tree, so it needs NVDLA's build flow to elaborate.
+      Neither admits a thin shim.
+    decision: MODEL_OF_RECORD_DESIGN_TASK     # NOT converted to verification
+    oracle: "locally-written bit-exact Python model of the 4x4 OS INT8 tile + committed vectors"
+    class: B
+    second_source: true                       # stays on the mandatory list
+    ne16_status: "vendored but no longer an anchor (redmule closure may want it)"
 
   # --- semantic confirmations (reference IS what the catalog claims) ---
   ca_d03: {semantic_confirmed: true, evidence: "mhu has is_secondary (tag&index match vs in-flight) + 'Dequeue and process secondary miss'"}
