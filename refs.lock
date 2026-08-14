@@ -1,0 +1,271 @@
+# refs.lock — Phase 0 output. Generated 2026-08-14.
+#
+# Pinned, licence-verified, elaboration-checked reference set for all 41 tasks.
+# Everything after Phase 0 is offline. Nothing here may be re-fetched.
+
+generated: 2026-08-14
+verilator: "5.046 2026-02-28 rev vUNKNOWN-built20260228"
+icarus: "13.0 (stable) v13_0"
+yosys_host: "0.67+post (b8e7da6f)"
+formal: "eqy + sby v0.67 inside openroad/orfs:latest (read_slang frontend); no host install"
+scratch_dir: /Users/jackberkowitz/hw_rl_benchmark_refs_scratch
+
+# ---------------------------------------------------------------------------
+# VENDORED (in refs/, committed)
+# ---------------------------------------------------------------------------
+repos:
+  - repo: https://github.com/bespoke-silicon-group/basejump_stl
+    sha: b48037e28544425839dbd617d45b1a82631bc1a9
+    licence: SHL-0.51          # catalog predicted BSD-3 — WRONG, still permissive
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/basejump_stl/
+    tasks: [ca_d01, ca_d03, ca_d05, nw_d05, ca_v06]
+    path_correction: "ALL files are .sv upstream, catalog said .v"
+    elaborates: true           # requires explicit -G params (BSG_INV_PARAM style)
+    semantic_confirmed: partial   # ca_d03 YES, nw_d05 NO — see task_status
+
+  - repo: https://github.com/pulp-platform/common_cells
+    sha: 9ca8a7655f741e7dd5736669a20a301325194c28   # tag v1.39.0
+    licence: SHL-0.51
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/common_cells/
+    tasks: [ca_v01, ca_v02, ca_v03]
+    pin_reason: >
+      master is a v2.0.0-beta refactor that prefixes every module cc_* and
+      introduces cc_pkg. Every consumer in this manifest (axi 1.39.0, cvfpu
+      1.21.0, idma 1.33.0, redmule 1.38.0, hwpe-* 1.39) requires the 1.x API.
+      Vendoring master would have broken all of them. Pinned to v1.39.0, the
+      lowest tag satisfying every consumer.
+    elaborates: true
+    semantic_confirmed: true
+
+  - repo: https://github.com/pulp-platform/axi
+    sha: 4da15979747f326bde2f9869c64e587ce599772c
+    licence: SHL-0.51
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/axi/
+    tasks: [nw_d02, nw_v01, nw_v02, nw_v03]
+    elaborates: partial        # xbar OK; id_remap/atop_filter need concrete types
+    semantic_confirmed: true   # and nw_d02 is confirmed NOT what the catalog says
+
+  - repo: https://github.com/pulp-platform/cvfpu
+    sha: 6e5267e2fe75198f91ef9304ddd56c0028eea526
+    licence: SHL-0.51          # per-file SPDX; repo has NO top-level LICENSE
+    licence_verified: true
+    licence_note: "vendor/opene906 subtree is Apache-2.0 -> dsp_v02 SURVIVES"
+    mode: vendor
+    vendored_to: refs/cvfpu/
+    tasks: [dsp_d04, dsp_v01, dsp_v02, dsp_v03]
+    elaborates: true           # all three tops lint clean
+    semantic_confirmed: true
+
+  - repo: https://github.com/pulp-platform/fpu_div_sqrt_mvp
+    sha: 917dd79cb2dc1a8f43df1a84e0e4231508a980e9
+    licence: SHL-0.51
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/fpu_div_sqrt_mvp/
+    tasks: [dsp_v02]
+    added_in_phase0: true
+    reason: "defines div_sqrt_top_mvp, instantiated by fpnew_divsqrt_multi; not in cvfpu"
+
+  - repo: https://github.com/pulp-platform/hwpe-stream
+    sha: 24ce836892e244ac00ce607d26a3b3df8650dbff
+    licence: SHL-0.51
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/hwpe-stream/
+    tasks: [ai_d04, ai_v02]
+    path_correction: "hwpe_stream_fifo.sv is rtl/fifo/, not rtl/basic/"
+    elaborates: true
+    semantic_confirmed: true
+
+  - repo: https://github.com/pulp-platform/ne16
+    sha: 6bd727206d49e5febbe4d1037eda91d064d203e1
+    licence: SHL-0.51          # LICENSE.hw / LICENSE.sw, no plain LICENSE
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/ne16/
+    tasks: [ai_d02]
+    path_correction: "no ne16_compute_array.sv; array is ne16_binconv_{array,block,column}.sv"
+    elaborates: false          # needs cluster_clock_gating, absent from all clones
+    semantic_confirmed: false  # binary-conv oriented, NOT a plain INT8 OS MAC tile
+
+  - repo: https://github.com/pulp-platform/redmule
+    sha: 7fa9fbe8a29e8572810ae12b92c19749045ac860
+    licence: SHL-0.51
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/redmule/
+    tasks: [ai_v03]
+    elaborates: false          # needs fpnew_pkg + tc_clk_gating wiring
+
+  - repo: https://github.com/pulp-platform/idma
+    sha: 3c0cc3fbaa8f4b35f82cc028b795cb12c35f90d9
+    licence: SHL-0.51
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/idma/
+    tasks: [ai_v01]
+    generated_rtl: true
+    generation_note: >
+      No checked-in idma_backend.sv — it is mako-templated. Generation runs
+      FULLY OFFLINE (util/gen_idma.py + src/db/*.yml + src/backend/tpl/).
+      Generated refs/idma/generated/idma_backend_rw_axi.sv (705 lines) during
+      the network window; generator, templates and DB inputs are vendored so
+      it is reproducible. ai_v01 is NOT cut.
+    module_name: idma_backend_rw_axi    # not "idma_backend"
+    elaborates: false          # type-parameterized; needs concrete-type wrapper
+
+  # PULP support repos — dependency closure, added in Phase 0 under your
+  # standing authorization. All SHL-0.51, all dependencies not anchors.
+  - {repo: https://github.com/pulp-platform/hwpe-ctrl, sha: 558fe3db3413909878c03aed543257d94a57bae5, licence: SHL-0.51, licence_verified: true, mode: vendor, vendored_to: refs/hwpe-ctrl/, reason: redmule/ne16 dependency, added_in_phase0: true}
+  - {repo: https://github.com/pulp-platform/hci, sha: d6a4872b6327a4da7749cd0c4ac8bd24e1b0d73b, licence: SHL-0.51, licence_verified: true, mode: vendor, vendored_to: refs/hci/, reason: "hci_package, required by ne16+redmule", added_in_phase0: true}
+  - {repo: https://github.com/pulp-platform/tech_cells_generic, sha: 81dc29f14024343e8c14a674718121517d729549, licence: SHL-0.51, licence_verified: true, mode: vendor, vendored_to: refs/tech_cells_generic/, reason: "tc_clk_gating etc.", added_in_phase0: true}
+
+  - repo: https://github.com/nvdla/hw
+    sha: 8e06b1b9d85aab65b40d43d08eec5ea4681ff715
+    licence: NVIDIA Open HW
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/nvdla_hw/
+    tasks: [ai_v04, ai_d01, ai_d02]
+    path_correction: "there is NO nv_small/ directory; RTL lives at vmod/nvdla/<unit>/"
+    elaborates: not_checked    # Verilog-2001 multi-file assembly, Part 2 scope
+
+  - repo: https://github.com/alexforencich/verilog-axis
+    sha: 48ff7a7e2ef782cf778d47910cf85835c64b1bce
+    licence: MIT
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/verilog-axis/
+    tasks: [nw_d01, nw_v05]
+    elaborates: true
+    semantic_confirmed: true
+
+  - repo: https://github.com/alexforencich/verilog-ethernet
+    sha: 77320a9471d19c7dd383914bc049e02d9f4f1ffb
+    licence: MIT
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/verilog-ethernet/
+    tasks: [nw_d03, nw_d04, nw_v04, nw_v06]
+    path_correction: >
+      eth_mac_1g_rx.v does not exist. The 1G receive datapath is
+      rtl/axis_gmii_rx.v (wrapped by rtl/eth_mac_1g.v). nw_v06 re-anchored.
+    elaborates: true
+    semantic_confirmed: true   # lfsr.v documents CRC32 Ethernet FCS 32'h04c11db7
+
+  - repo: https://github.com/openhwgroup/cva6
+    sha: 6cb200105fb9441d170e45786125a737fab98e91
+    licence: SHL-0.51          # catalog predicted Apache-2.0 — WRONG for core/
+    licence_verified: true
+    mode: vendor
+    vendored_to: refs/cva6/
+    tasks: [ca_d02, ca_d04, ca_d05, ca_d06, ca_v04, ca_v05, ca_v07]
+    path_corrections:
+      - "core/mmu_sv39/tlb.sv -> core/cva6_mmu/cva6_tlb.sv"
+      - "core/ariane_regfile_ff.sv declares module `ariane_regfile`, not `ariane_regfile_ff`"
+    elaborates: partial        # serdiv + ariane_regfile clean; rest need concrete types
+    semantic_confirmed: true
+
+# ---------------------------------------------------------------------------
+# NOT VENDORED — consulted in scratch only
+# ---------------------------------------------------------------------------
+  - repo: https://github.com/lowRISC/opentitan
+    sha: e6fb888ff636ad15425df7316b6429a9f3d336b0
+    licence: Apache-2.0
+    licence_verified: true
+    mode: cross_check_only     # contamination exclusion, not a licence one
+    vendored_to: null
+    tasks: [ca_d07]
+
+  - repo: https://github.com/ZipCPU/cordic
+    sha: 8ede08a1865d87a357a3a2c188206e843dd9bde6
+    licence: GPL-3.0-or-later  # confirmed in rtl/cordic.v header
+    licence_verified: true
+    mode: model_of_record
+    vendored_to: null
+    tasks: [dsp_d01]
+
+  - repo: https://github.com/ZipCPU/dspfilters
+    sha: 16d7dc3b23af167759693da9caff7c7111805873
+    licence: LGPL              # confirmed in rtl/subfildown.v header
+    licence_verified: true
+    mode: model_of_record
+    vendored_to: null
+    tasks: [dsp_d02]
+
+  - repo: https://github.com/olofk/serv
+    sha: 41e8aeedfd1e9ad5f95902c5b0dfc83d1c99e5d2
+    licence: ISC
+    licence_verified: true
+    mode: cross_check_only
+    vendored_to: null
+    tasks: [ca_d08]
+
+  - repo: https://github.com/darklife/darkriscv
+    sha: 4aa437997cd35253c9111f10a449de13ccaeee78
+    licence: BSD
+    licence_verified: true
+    mode: cross_check_only
+    vendored_to: null
+    tasks: [ca_d08]
+    note: "both cloned per your approval; usable-oracle choice made empirically in ca_d08"
+
+# ---------------------------------------------------------------------------
+# TASK STATUS
+# ---------------------------------------------------------------------------
+task_status:
+  # --- cut before Phase 0 ---
+  dsp_v04: {cut: true, reason: model_of_record_not_valid_for_verification}
+
+  # --- semantic mismatches: reference does NOT do what the catalog claims ---
+  nw_d02:
+    semantic_confirmed: false
+    finding: >
+      axi_burst_splitter's own docstring reads "Split AXI4 bursts into
+      single-beat transactions." Zero occurrences of 4096 / 0x1000 / page in
+      the file. The catalog's suspicion is CONFIRMED: this is not a 4 KiB
+      boundary splitter and no behaviour-free shim can make it one.
+    decision: AWAITING_USER    # restate as beat-splitting, or keep 4KiB + model_of_record
+  nw_d05:
+    semantic_confirmed: false
+    finding: >
+      NEW mismatch, not previously flagged. bsg_wormhole_router uses
+      ready/valid/yumi handshaking. "credit" appears ZERO times in
+      bsg_wormhole_router*.sv — it appears only in bsg_wormhole_concentrator_in,
+      bsg_router_crossbar_o_by_i and bsg_mesh_router_buffered. The catalog
+      describes nw_d05 as "credit-based input-port flow control, per-VC credit
+      counters", which this reference does not implement.
+    decision: AWAITING_USER
+  ai_d02:
+    semantic_confirmed: false
+    finding: >
+      ne16 array is ne16_binconv_* — binary/mixed-precision convolution, not a
+      plain INT8 output-stationary MAC tile. Also fails to elaborate
+      (cluster_clock_gating absent from every approved repo). NVDLA CMAC is
+      vendored and is the recommended primary anchor instead.
+    decision: AWAITING_USER
+
+  # --- semantic confirmations (reference IS what the catalog claims) ---
+  ca_d03: {semantic_confirmed: true, evidence: "mhu has is_secondary (tag&index match vs in-flight) + 'Dequeue and process secondary miss'"}
+  nw_d01: {semantic_confirmed: true, evidence: "43 tkeep/tlast refs in axis_adapter.v"}
+  nw_d03: {semantic_confirmed: true, evidence: "lfsr.v documents CRC32 Galois 32'h04c11db7, Ethernet FCS, invert final"}
+  dsp_d04: {semantic_confirmed: true, evidence: "fpnew_pkg carries FP16ALT/bf16 + RNE round modes"}
+
+  # --- shim feasibility (PROVISIONAL: from elaboration + coupling evidence) ---
+  ca_d01: {shim_feasible: true,  note: "bsg_cache lints clean with concrete params; flat bsg-style ports"}
+  ca_d02: {shim_feasible: false, converted_to: verification, note: "fails standalone elab; type-parameterized dcache/MMU structs — as predicted"}
+  ca_d03: {shim_feasible: true,  note: "mhu + miss_fifo both lint clean with concrete params"}
+  ca_d04: {shim_feasible: false, converted_to: verification, note: "bht/btb config-dependent bit ranges, ras struct member call — as predicted"}
+  ca_d05: {shim_feasible: true,  note: "ariane_regfile lints clean"}
+  ca_d06: {shim_feasible: false, converted_to: verification, note: "SWING TASK — store_buffer needs concrete dcache req/rsp types"}
+  ca_d07: {mode: cross_check_only, shim: n/a}
+  ca_d08: {mode: local_model, shim: n/a}
+
+conversion_count: 3    # ca_d02, ca_d04, ca_d06 — AT your limit, not over it.
+conversion_rule: "3 or fewer -> convert and continue. 4 -> CVA6 was the wrong anchor, stop."

@@ -6,7 +6,11 @@ __pycache__/
 results/*.jsonl
 results/*.bak
 results/prompts_sent/
+refs/
 
 # Scratch from the simulators.
 obj_dir/
 *.vvp
+
+# Phase 0 reference scratch lives OUTSIDE the repo (GPL model_of_record
+# consultation must never enter the tree). Path recorded in refs.lock.
