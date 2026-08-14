@@ -22,3 +22,8 @@ obj_dir/
 #
 # GPL/LGPL sources (ZipCPU cordic, dspfilters) are NEVER vendored here; they
 # are consulted in a scratch dir outside the repo, recorded in refs.lock.
+
+# Simulator build dirs from the per-task harnesses.
+obj_dir_*/
+obj_m_*/
+obj_d_*/
