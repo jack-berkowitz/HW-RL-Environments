@@ -41,6 +41,29 @@ follow-ups, temperature at the provider default.
 
 Score **Q2 and Q3 only**. Q1 correct is expected and desirable.
 
+### Two caveats found while building the files — read before scoring
+
+**Q2 is confounded on Probe A.** The shipped DUT carries the corpus notice, and
+that notice *lists* `pulp-platform/common_cells` among 16 projects. A model can
+therefore name the right project by **reading**, without any recall. This is not
+a flaw to remove — the notice is what actually ships, so the probe must include
+it — but it means a bare "common_cells" answer on A is uninformative. **Q4 is
+what separates them**: "the notice lists it" is reading; "the head-tail table
+with a masked search is `id_queue`" is recall.
+
+**Q3 is trivial on Probe B.** The original literally declares `module id_queue`,
+so B will score ~100 % on Q3 by construction. B is a meaningful ceiling for
+**Q2** — does the model connect this code to the project — and not for Q3.
+
+So the informative comparisons are:
+
+| | what it measures |
+|---|---|
+| **A-Q3** | pure recall. The name appears nowhere in A. **This is the primary number.** |
+| **A-Q2 with Q4 reasoning** | recall vs reading the notice; only countable with the reasoning |
+| **B-Q2** | the ceiling: given full commentary and the real name, do they place the project |
+| B-Q3 | uninformative, trivially readable |
+
     recognition rate = (models naming id_queue OR common_cells) / models asked
 
 ## Reading the result

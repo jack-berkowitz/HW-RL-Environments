@@ -231,10 +231,13 @@ Before any external distribution — to a lab, a model provider, or a public rep
       SHL-0.51, Apache-2.0, MIT, BSD and ISC code are being distributed to third
       parties. The corpus-level notice is our reading of the retention clauses
       and has not been reviewed.
-- [ ] **GPL/LGPL anchors excluded or cleared.** Two vendored repos are
-      copyleft (`ZipCPU/cordic` GPL-3.0, `ZipCPU/dspfilters` LGPL). Copyleft is
-      not merely a retention obligation and no task should ship a derivative of
-      either without review.
+- [x] **GPL/LGPL anchors excluded.** ~~Two vendored repos are copyleft.~~
+      **CHECKED AND NOT AN ISSUE:** `ZipCPU/cordic` (GPL-3.0) and
+      `ZipCPU/dspfilters` (LGPL) were **never vendored** — both carry
+      `vendored_to: null` in `refs.lock`, as do `lowRISC/opentitan`,
+      `olofk/serv` and `darklife/darkriscv`. No v3 task anchors any of them, so
+      no shipped artifact can derive from them and none appears in the corpus
+      notice. Re-check if a future task adds a copyleft anchor.
 - [ ] Recognition probe run and its rate recorded.
 - [ ] Every task's `NOTES.md` states its oracle class and what it does not claim.
 

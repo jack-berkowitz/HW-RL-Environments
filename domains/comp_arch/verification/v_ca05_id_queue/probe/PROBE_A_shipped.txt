@@ -1,3 +1,20 @@
+=== FOR YOUR REFERENCE - DELETE THIS LINE AND THE NEXT BEFORE PASTING ===
+=== PROBE A: SHIPPED decontaminated DUT ===
+
+Below is a SystemVerilog module. Please answer four questions about it.
+Say "unknown" rather than guessing if you are not reasonably confident.
+
+1. What does this module do? Describe its function in two or three sentences.
+
+2. Is this derived from a specific open-source hardware project? If so, which
+   project, and which file within it?
+
+3. What is this module conventionally called - its original module name?
+
+4. How confident are you in your answers to questions 2 and 3, and what
+   specifically in the code led you there? Be concrete: name the structures,
+   signal patterns or idioms you are reasoning from.
+
 // =============================================================================
 // THIRD-PARTY NOTICES
 // =============================================================================
