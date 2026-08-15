@@ -15,6 +15,11 @@
 // starvation freedom are the requirements here, and they are checked
 // explicitly. Read § LIVENESS before designing the arbitration.
 //
+// The second hard requirement is CAPACITY. A design that carries exactly one
+// transaction per master is correct on every transaction it performs and still
+// fails this task: it has a fraction of the aggregate throughput of a real
+// crossbar, and MAX_TRANS exists to say so. Read § CAPACITY AND CONCURRENCY.
+//
 // -----------------------------------------------------------------------------
 // PARAMETERS
 // -----------------------------------------------------------------------------
@@ -25,7 +30,10 @@
 //             masters would share an index, and their responses would misroute.
 //             The checker rejects NUM_MST > 4 rather than let that happen.
 //   NUM_SLV : number of SLAVES attached  (crossbar master ports). Legal: 2, 4.
-//   MAX_TRANS : maximum outstanding transactions per master port. Legal: 2, 8.
+//   MAX_TRANS : REQUIRED outstanding transactions per master port. Legal: 2, 8.
+//             This is a MINIMUM CAPACITY the design must provide, not a limit
+//             it may ignore -- see C1. Exceeding it is fine; a design that
+//             accepts the parameter and never uses it fails.
 //   Any other value is ILLEGAL and need not be handled.
 //
 // -----------------------------------------------------------------------------
@@ -113,11 +121,42 @@
 //       the payload stable.
 //
 // -----------------------------------------------------------------------------
-// LATENCY AND THROUGHPUT
+// CAPACITY AND CONCURRENCY -- normative, and checked
 // -----------------------------------------------------------------------------
-//   NEITHER IS CONSTRAINED AND NEITHER IS CHECKED. Pipeline as deeply as you
-//   like. Only correctness, ordering and the liveness properties above gate the
-//   verdict.
+//   A crossbar that moves one transaction at a time is not a crossbar. These
+//   requirements say what the design must be able to do AT ONCE, which is
+//   independent of doing each transaction correctly.
+//
+//   C1. OUTSTANDING CAPACITY. Each master port must accept at least MAX_TRANS
+//       read address requests, and at least MAX_TRANS write requests, WITHOUT
+//       any response having been accepted. MAX_TRANS is a capacity requirement,
+//       not a decorative parameter and not an upper bound you may ignore: a
+//       design that hard-codes one in-flight transaction per master fails this
+//       at every legal setting. The checker holds r_ready and b_ready low while
+//       the slave side accepts every request, then counts what each master got
+//       in before the crossbar stopped accepting.
+//
+//   C2. CONCURRENT DISJOINT PAIRS. Traffic between disjoint master/slave pairs
+//       must proceed in parallel. With master i addressing only slave i and
+//       master j only slave j (i != j, no shared endpoint), the two pairs share
+//       no resource and both must make progress in the same window. Aggregate
+//       throughput for two disjoint pairs must be materially above that of one
+//       pair alone. A design that funnels all traffic through a single shared
+//       arbiter is correct on every individual transaction and fails here.
+//
+//   C3. Both hold at every legal NUM_MST / NUM_SLV / MAX_TRANS combination.
+//
+//   Aggregate throughput under all-to-all saturation is MEASURED AND REPORTED as
+//   a METRIC line. It does not gate: the achievable rate depends on the geometry
+//   and on the slave models, so no single threshold separates a good design from
+//   a bad one across all configurations. C1 and C2 are the gates.
+//
+// -----------------------------------------------------------------------------
+// LATENCY
+// -----------------------------------------------------------------------------
+//   NOT CONSTRAINED AND NOT CHECKED. Pipeline as deeply as you like; added
+//   latency is never penalised. Note that this is a statement about DELAY, not
+//   about CAPACITY -- C1 and C2 above are requirements and are checked.
 //
 // -----------------------------------------------------------------------------
 // RESET
@@ -134,7 +173,7 @@ module axi4_xbar
 #(
     parameter int NUM_MST   = 2,   // masters attached   (2 / 4)
     parameter int NUM_SLV   = 2,   // slaves attached    (2 / 4)
-    parameter int MAX_TRANS = 8    // outstanding per master port (2 / 8)
+    parameter int MAX_TRANS = 8    // REQUIRED outstanding per master port (2 / 8) -- see C1
 ) (
     input  logic clk,
     input  logic rst_n,

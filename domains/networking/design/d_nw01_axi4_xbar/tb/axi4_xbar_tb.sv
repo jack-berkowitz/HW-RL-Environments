@@ -110,6 +110,35 @@ module axi4_xbar_tb
     int cov_burst_gt1 = 0, cov_cross_id = 0, cov_same_id_two_slv = 0;
     int last_rid [0:NUM_MST-1];
 
+    // ---- controlled preamble (spec C1/C2) ----------------------------------
+    // tmode 0 = the randomised all-to-all phase (everything below behaves as
+    // before). 1 = capacity: slaves sink every AR and return nothing, masters
+    // accept nothing. 2 = concurrency/throughput: zero-latency slaves, masters
+    // drain, addressing chosen by the sequencer. The randomised generator and
+    // every scoreboard check are gated off while tmode != 0, so the preamble
+    // cannot perturb the phase that does the data checking.
+    bit [1:0]           tmode = 2'd0;
+    bit                 cap_drain;
+    logic [NUM_MST-1:0] cap_en;
+    int                 cap_tgt      [0:NUM_MST-1];
+    int                 cap_ar_cnt   [0:NUM_MST-1];
+    int                 cap_done_cnt [0:NUM_MST-1];
+
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            for (int m = 0; m < NUM_MST; m++) begin
+                cap_ar_cnt[m] <= 0; cap_done_cnt[m] <= 0;
+            end
+        end else if (tmode != 0) begin
+            for (int m = 0; m < NUM_MST; m++) begin
+                if (mst_req[m].ar_valid && mst_resp[m].ar_ready)
+                    cap_ar_cnt[m] <= cap_ar_cnt[m] + 1;
+                if (mst_resp[m].r_valid && mst_req[m].r_ready && mst_resp[m].r.last)
+                    cap_done_cnt[m] <= cap_done_cnt[m] + 1;
+            end
+        end
+    end
+
     // ---- traffic generation ------------------------------------------------
     int  txn_sent [0:NUM_MST-1];
     int  outstanding_r [0:NUM_MST-1];
@@ -123,7 +152,18 @@ module axi4_xbar_tb
     addr_t   w_addr  [0:NUM_MST-1];
 
     for (genvar m = 0; m < NUM_MST; m++) begin : g_mst
-        always_comb begin
+        always_comb if (tmode != 0) begin
+            // controlled preamble: single-beat reads at one chosen slave
+            mst_req[m]          = '0;
+            mst_req[m].r_ready  = cap_drain;
+            mst_req[m].b_ready  = cap_drain;
+            mst_req[m].ar_valid = cap_en[m];
+            mst_req[m].ar.id    = slv_id_t'(m % NID);
+            mst_req[m].ar.addr  = addr_t'(cap_tgt[m] * 32'h0001_0000 + 32'h40);
+            mst_req[m].ar.len   = 8'd0;
+            mst_req[m].ar.size  = 3'd3;
+            mst_req[m].ar.burst = BURST_INCR;
+        end else begin
             mst_req[m]          = '0;
             mst_req[m].r_ready  = 1'b1;
             mst_req[m].b_ready  = 1'b1;
@@ -158,18 +198,50 @@ module axi4_xbar_tb
     // W-contiguity tracking: which transaction's beats are in flight here
     int      s_w_inflight [0:NUM_SLV-1];
 
+    // Preamble slave: a real pipeline -- accepts an AR every cycle and returns
+    // an R every cycle. Without this the slave is the bottleneck (one
+    // transaction in flight => 0.5 bursts/cycle), the crossbar is never the
+    // limiting resource, and C2 cannot fail: a design that serialises all
+    // traffic still keeps up with a slave that slow. Measured and confirmed --
+    // the serialisation mutant scored 199 % against the one-at-a-time model.
+    localparam int PQD = 32;
+    mst_id_t pq_id  [0:NUM_SLV-1][0:PQD-1];
+    addr_t   pq_adr [0:NUM_SLV-1][0:PQD-1];
+    int      pq_hd  [0:NUM_SLV-1];
+    int      pq_tl  [0:NUM_SLV-1];
+
+    for (genvar s = 0; s < NUM_SLV; s++) begin : g_pslv
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin pq_hd[s] <= 0; pq_tl[s] <= 0; end
+            else if (tmode == 2'd2) begin
+                if (slv_req[s].ar_valid && slv_resp[s].ar_ready) begin
+                    pq_id [s][pq_tl[s] % PQD] <= slv_req[s].ar.id;
+                    pq_adr[s][pq_tl[s] % PQD] <= slv_req[s].ar.addr;
+                    pq_tl[s] <= pq_tl[s] + 1;
+                end
+                if (slv_resp[s].r_valid && slv_req[s].r_ready) pq_hd[s] <= pq_hd[s] + 1;
+            end
+        end
+    end
+
     for (genvar s = 0; s < NUM_SLV; s++) begin : g_slv
         localparam int RATE = (s % 2 == 0) ? 0 : 4;   // slave 1 is slower
         always_comb begin
             slv_resp[s]          = '0;
-            slv_resp[s].ar_ready = (s_rbeats[s] == 0);
+            slv_resp[s].ar_ready = (tmode == 2'd1) ? 1'b1
+                                   : (tmode == 2'd2) ? ((pq_tl[s] - pq_hd[s]) < PQD)
+                                   : (s_rbeats[s] == 0);
             slv_resp[s].aw_ready = (s_wbeats[s] == 0) && !s_bpend[s];
             slv_resp[s].w_ready  = (s_wbeats[s] > 0);
-            slv_resp[s].r_valid  = (s_rbeats[s] != 0) && (s_rdelay[s] == 0);
-            slv_resp[s].r.id     = s_rid[s];
-            slv_resp[s].r.data   = expected_beat(s_raddr[s], s_rn[s] - s_rbeats[s]);
+            slv_resp[s].r_valid  = (tmode == 2'd1) ? 1'b0
+                                   : (tmode == 2'd2) ? (pq_tl[s] != pq_hd[s])
+                                   : ((s_rbeats[s] != 0) && (s_rdelay[s] == 0));
+            slv_resp[s].r.id     = (tmode == 2'd2) ? pq_id[s][pq_hd[s] % PQD] : s_rid[s];
+            slv_resp[s].r.data   = (tmode == 2'd2)
+                                   ? expected_beat(pq_adr[s][pq_hd[s] % PQD], 0)
+                                   : expected_beat(s_raddr[s], s_rn[s] - s_rbeats[s]);
             slv_resp[s].r.resp   = RESP_OKAY;
-            slv_resp[s].r.last   = (s_rbeats[s] == 1);
+            slv_resp[s].r.last   = (tmode == 2'd2) ? 1'b1 : (s_rbeats[s] == 1);
             slv_resp[s].b_valid  = s_bpend[s];
             slv_resp[s].b.id     = s_wid[s];
             slv_resp[s].b.resp   = RESP_OKAY;
@@ -181,16 +253,16 @@ module axi4_xbar_tb
                 s_bpend[s] <= 1'b0; s_w_inflight[s] <= -1;
             end else begin
                 // reads
-                if (slv_req[s].ar_valid && slv_resp[s].ar_ready) begin
+                if (slv_req[s].ar_valid && slv_resp[s].ar_ready && tmode == 2'd0) begin
                     s_rbeats[s] <= int'(slv_req[s].ar.len) + 1;
                     s_rn[s]     <= int'(slv_req[s].ar.len) + 1;
                     s_rid[s]    <= slv_req[s].ar.id;
                     s_raddr[s]  <= slv_req[s].ar.addr;
-                    s_rdelay[s] <= RATE;
+                    s_rdelay[s] <= (tmode == 0) ? RATE : 0;
                 end else if (s_rdelay[s] > 0) s_rdelay[s] <= s_rdelay[s] - 1;
                 else if (slv_resp[s].r_valid && slv_req[s].r_ready) begin
                     s_rbeats[s] <= s_rbeats[s] - 1;
-                    s_rdelay[s] <= RATE;
+                    s_rdelay[s] <= (tmode == 0) ? RATE : 0;
                 end
                 // writes
                 if (slv_req[s].aw_valid && slv_resp[s].aw_ready) begin
@@ -203,9 +275,9 @@ module axi4_xbar_tb
                     // arrive contiguously; a crossbar that interleaves W bursts
                     // from different masters onto one slave is broken in a way a
                     // data-only scoreboard would not notice.
-                    if (s_wbeats[s] == 0)
+                    if (s_wbeats[s] == 0 && tmode == 0)
                         note_fail($sformatf("slave %0d: W beat with no AW outstanding (O3)", s));
-                    if (slv_req[s].w.last != (s_wbeats[s] == 1))
+                    if (slv_req[s].w.last != (s_wbeats[s] == 1) && tmode == 0)
                         note_fail($sformatf(
                             "slave %0d: WLAST on beat %0d of a %0d-beat write (O3)",
                             s, s_wbeats[s], s_wbeats[s]));
@@ -220,7 +292,7 @@ module axi4_xbar_tb
     // =========================================================================
     // response checking
     // =========================================================================
-    always_ff @(posedge clk) if (rst_n) begin
+    always_ff @(posedge clk) if (rst_n && tmode == 0) begin
         for (int m = 0; m < NUM_MST; m++) begin
             automatic int i;
             // ---- read data ----
@@ -248,7 +320,7 @@ module axi4_xbar_tb
                         if (mst_resp[m].r.data !== expected_beat(rq_addr[m][i][rq_head[m][i] % QD],
                                                                 rq_beat[m][i]))
                             note_fail($sformatf(
-                                "master %0d id %0d beat %0d: data=0x%0h expected 0x%0h (C1)",
+                                "master %0d id %0d beat %0d: data=0x%0h expected 0x%0h (D1/O1)",
                                 m, i, rq_beat[m][i], mst_resp[m].r.data,
                                 expected_beat(rq_addr[m][i][rq_head[m][i] % QD], rq_beat[m][i])));
                     end
@@ -302,7 +374,7 @@ module axi4_xbar_tb
         assign lm_srv[m] = (mst_resp[m].r_valid && mst_req[m].r_ready && mst_resp[m].r.last)
                            || (mst_resp[m].b_valid && mst_req[m].b_ready);
     end
-    always_ff @(posedge clk) if (rst_n) begin
+    always_ff @(posedge clk) if (rst_n && tmode == 0) begin
         `LM_TICK(lm_off, lm_srv)
     end
 
@@ -320,7 +392,7 @@ module axi4_xbar_tb
                     wq_head[m][i] <= 0; wq_tail[m][i] <= 0;
                 end
             end
-        end else begin
+        end else if (tmode == 0) begin
             for (int m = 0; m < NUM_MST; m++) begin
                 // record accepted requests into the per-(master,ID) queue
                 if (mst_req[m].ar_valid && mst_resp[m].ar_ready) begin
@@ -377,7 +449,9 @@ module axi4_xbar_tb
     end
 
     // ---- main --------------------------------------------------------------
+    localparam int CWIN = 3000;   // measurement window, cycles
     int guard;
+    int c2_one, c2_two, agg_bursts;
     initial begin
         if (NUM_MST != 2 && NUM_MST != 4) begin
             $display("TEST_RESULT: FAIL: illegal NUM_MST=%0d (legal: 2,4 -- the widened id field caps it at 4)", NUM_MST); $finish;
@@ -395,6 +469,77 @@ module axi4_xbar_tb
         if (|{mst_resp[0].r_valid, mst_resp[0].b_valid})
             note_fail("response valid asserted while rst_n low (R1)");
         rst_n = 1'b1;
+
+        // =====================================================================
+        // C1 -- OUTSTANDING CAPACITY
+        // Slaves accept every AR and return nothing; masters accept nothing.
+        // The only thing that can stop a master issuing is the crossbar's own
+        // capacity, so the accepted count IS the capacity. A design that
+        // hard-codes one transaction per master reports 1 here at every
+        // MAX_TRANS and is caught; before this check existed it passed, because
+        // the randomised phase throttles offered load to MAX_TRANS and simply
+        // waits when ar_ready goes low.
+        // =====================================================================
+        phase = "capacity";
+        tmode = 2'd1; cap_drain = 1'b0;
+        for (int m = 0; m < NUM_MST; m++) cap_tgt[m] = m % NUM_SLV;
+        cap_en = '1;
+        repeat (128 + 32 * MAX_TRANS) @(posedge clk);
+        cap_en = '0;
+        for (int m = 0; m < NUM_MST; m++) begin
+            $display("METRIC: outstanding_master%0d=%0d", m, cap_ar_cnt[m]);
+            if (cap_ar_cnt[m] < MAX_TRANS)
+                note_fail($sformatf(
+                    "master %0d accepted only %0d outstanding reads with no response drained; MAX_TRANS=%0d is required (C1)",
+                    m, cap_ar_cnt[m], MAX_TRANS));
+        end
+
+        // =====================================================================
+        // C2 -- CONCURRENT DISJOINT PAIRS
+        // One pair alone, then two pairs sharing no endpoint. A crossbar serves
+        // them in parallel; a shared-arbiter funnel does not. Requiring only
+        // 1.5x of the ideal 2x leaves room for arbitration overhead while still
+        // separating parallel from serial by a wide margin.
+        // =====================================================================
+        phase = "concurrency-1";
+        tmode = 2'd2; cap_drain = 1'b1;
+        rst_n = 1'b0; repeat (6) @(posedge clk); rst_n = 1'b1;
+        cap_tgt[0] = 0; cap_en = '0; cap_en[0] = 1'b1;
+        repeat (CWIN) @(posedge clk);
+        cap_en = '0; c2_one = cap_done_cnt[0];
+
+        phase = "concurrency-2";
+        rst_n = 1'b0; repeat (6) @(posedge clk); rst_n = 1'b1;
+        cap_tgt[0] = 0; cap_tgt[1] = 1;
+        cap_en = '0; cap_en[0] = 1'b1; cap_en[1] = 1'b1;
+        repeat (CWIN) @(posedge clk);
+        cap_en = '0; c2_two = cap_done_cnt[0] + cap_done_cnt[1];
+
+        $display("METRIC: disjoint_one_pair=%0d disjoint_two_pairs=%0d speedup_pct=%0d",
+                 c2_one, c2_two, (c2_one == 0) ? 0 : (c2_two * 100) / c2_one);
+        if (c2_one == 0)
+            note_fail("no progress on a single master/slave pair (C2)");
+        else if (c2_two * 10 < c2_one * 15)
+            note_fail($sformatf(
+                "disjoint pairs do not run in parallel: two pairs retired %0d vs %0d for one pair (%0d%%, need >=150%%) -- traffic is serialising through a shared resource (C2)",
+                c2_two, c2_one, (c2_two * 100) / c2_one));
+
+        // Aggregate throughput: REPORTED, never gating. The achievable rate
+        // depends on the geometry, so no single threshold separates a good
+        // design from a bad one across configs -- C1 and C2 are the gates.
+        phase = "throughput";
+        rst_n = 1'b0; repeat (6) @(posedge clk); rst_n = 1'b1;
+        for (int m = 0; m < NUM_MST; m++) cap_tgt[m] = m % NUM_SLV;
+        cap_en = '1;
+        repeat (CWIN) @(posedge clk);
+        cap_en = '0;
+        agg_bursts = 0;
+        for (int m = 0; m < NUM_MST; m++) agg_bursts += cap_done_cnt[m];
+        $display("METRIC: aggregate_bursts_per_1000cyc=%0d", (agg_bursts * 1000) / CWIN);
+
+        // Back to the scored phase from a clean reset.
+        tmode = 2'd0; cap_drain = 1'b0;
+        rst_n = 1'b0; repeat (10) @(posedge clk); rst_n = 1'b1;
 
         phase = "all-to-all";
         guard = 0;

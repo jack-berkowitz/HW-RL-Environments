@@ -188,6 +188,36 @@ reported DEADLOCK on the *correct* reference because its own driver models had
 wedged. Without both a known-good and a known-bad input to compare against,
 there is no way to know which side is broken.
 
+#### Corollary added after the `d_nw01` capability audit
+
+> **A negative control validates a check only if the known-bad input fails
+> THAT check and not something else — and only if the harness around it can
+> saturate whatever the check measures.**
+
+Building the C2 concurrency control took three attempts, and every failure was a
+hole in the *check* rather than in the mutant:
+
+1. The mutant failed C1 as well as C2, so it proved nothing about C2 in
+   particular. **A control that fails several checks at once validates none of
+   them.**
+2. The harness's own slave models were the bottleneck, so a design that
+   serialised all traffic still kept up and scored 199 % — passing. **A
+   throughput-shaped check is only as sharp as the load the harness can offer;
+   if the harness is the limiting resource, the check measures the harness.**
+3. The mutant throttled the single-pair baseline as much as the concurrent case,
+   leaving the *ratio* unchanged. **A check expressed as a ratio is blind to any
+   defect that scales both of its terms.**
+
+The same audit produced the most expensive instance of the general rule so far,
+and it was in the runner rather than in any checker: `sim_candidate.sh` picked
+the scoring testbench with `ls tb/*_tb.sv | head -1`, so a task carrying both a
+liveness rig and a full checker silently scored **whichever name sorted first**
+and reported passes for it. **A weaker checker substituted in silence is
+indistinguishable from a strong one passing.** The scoring testbench is now
+required to be `tb/<dut>_tb.sv`, and the runner refuses to run rather than
+choose a neighbour. Any harness that *selects* among artefacts needs the same
+scrutiny as any check that fires on absence.
+
 Therefore, for every task using a liveness monitor, and **before** the full
 testbench is built on top of it:
 

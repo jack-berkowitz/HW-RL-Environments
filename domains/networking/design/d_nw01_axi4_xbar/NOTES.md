@@ -220,3 +220,209 @@ closure must be listed explicitly in `VERILOG_FILES`, packages first. A
 The 25-file list was extracted from the working Verilator build's dependency
 file rather than assembled by hand — hand-assembling a closure this size is how
 a missing file becomes a silent mis-elaboration later.
+
+---
+
+# CAPABILITY AUDIT — and the spec correctness gap it exposed
+
+A candidate came back **67 % smaller** than the vendored reference while passing
+every correctness config. That gap was too large to be an optimisation, so
+before the result went anywhere it was audited on four measurements. The audit
+found a **correctness gap in the spec, not a difficulty complaint**: the
+contract never said how much the crossbar had to do *at once*, so a design that
+carries one transaction per master is a conforming answer to the question that
+was actually asked.
+
+## The four measurements
+
+Rig: `tb/audit/axi4_xbar_capability_rig.sv` — measurement only, emits
+`CAPABILITY:` lines, decides nothing.
+
+### 1. Outstanding capacity — DEFICIENT
+
+Slaves accept every AR and return nothing; masters accept nothing. The only
+thing that can stop a master issuing is the crossbar's own capacity.
+
+| MAX_TRANS | reference | candidate |
+|---|---|---|
+| 2 | 3 | **1** |
+| 8 | 9 | **1** |
+
+The reference delivers `MAX_TRANS + 1` and scales with the parameter. The
+candidate returns 1 at both settings, because **`MAX_TRANS` appears exactly once
+in its 732 lines — the parameter declaration — and is never referenced again.**
+Its own comment: *"Only one write from this master can be outstanding."*
+
+A first version of this measurement had the slave stop accepting once one
+transaction was in flight, and reported 4 for the reference at `MAX_TRANS=8`. It
+was measuring the depth of the harness's own slave model, not the DUT. A spec
+requirement written off that number would have failed the reference.
+
+### 2. Concurrency — NOT deficient
+
+Both designs score **200 %** on disjoint pairs at every config: master0→slave0
+and master1→slave1 genuinely run in parallel. The candidate has per-slave FSMs
+and per-slave round-robin tokens. It is a real crossbar in this sense, and the
+hypothesis that it funnels through a shared arbiter is **refuted**.
+
+### 3. Aggregate throughput — HALF
+
+999 vs 500 bursts per 1000 cycles at 4×2. A direct consequence of (1): with one
+transaction in flight a master must see its response before issuing again.
+
+### 4. Reference configuration — and 45 % of its area is off-spec
+
+```
+MaxMstTrans: MAX_TRANS   MaxSlvTrans: MAX_TRANS   FallThrough: 0
+LatencyMode: axi_pkg::CUT_ALL_AX   PipelineStages: 0   UniqueIds: 0
+```
+
+`CUT_ALL_AX` is `DemuxAw|DemuxAr|MuxAw|MuxAr` — full AX channel cuts, which the
+spec never asked for. That was **this shim's choice**, not upstream's
+requirement. Rebuilding the reference with `NO_LATENCY` and synthesising both:
+
+| build | synth area |
+|---|---|
+| reference, `CUT_ALL_AX` (as shipped) | 107 891 µm² |
+| reference, `NO_LATENCY` (spec-minimal) | 59 209 µm² |
+| candidate | 34 733 µm² |
+
+So the 3.1× headline gap is **1.82× spec-irrelevant pipelining × 1.70× genuine
+missing capability**. Neither factor is an optimisation the candidate earned,
+and the headline number should never have been quoted on its own.
+
+## The spec fix
+
+`§ LATENCY AND THROUGHPUT` previously read *"NEITHER IS CONSTRAINED AND NEITHER
+IS CHECKED."* That sentence is what the candidate answered correctly. It is
+replaced by `§ CAPACITY AND CONCURRENCY`, normative and checked:
+
+* **C1** each master accepts ≥ `MAX_TRANS` reads and writes with nothing drained
+* **C2** disjoint master/slave pairs proceed in parallel
+* **C3** both hold at every legal geometry
+
+Latency remains explicitly unconstrained — the distinction the old wording lost
+is between **delay**, which is free, and **capacity**, which is required.
+
+Aggregate throughput is reported as a `METRIC:` line and **does not gate**. The
+reference's worst config (666 bursts/1000 cyc) equals the candidate's best, so no
+flat threshold separates them; a throughput gate would either fail a correct
+design or pass a deficient one. C1 and C2 are the gates.
+
+## Result of the fix
+
+| input | verdict |
+|---|---|
+| reference | **8/8 PASS** |
+| candidate | **0/8 FAIL** — C1 at every config |
+| `mC2_serialised_xbar` | **FAIL** — C2 only |
+
+The scored-phase coverage numbers are **unchanged** by the new preamble
+(`rd_ok=2788`, `cross_id_switches=2283`, identical to before), which is the
+evidence that the added phases do not perturb the data checking.
+
+## NEGATIVE CONTROLS for the new checks
+
+Both C1 and C2 fail by silence, so per the standing procedure neither is trusted
+until something known-bad fails it.
+
+**C1** — the candidate is a real-world negative control: it reports 1 at every
+`MAX_TRANS` and is killed at all 8 configs.
+
+**C2** — needed a purpose-built mutant, `mC2_serialised_xbar`, and getting it
+right took three attempts. Each failure is worth recording because each was a
+hole in the *check*, not in the mutant:
+
+1. **Gated the master side.** Failed C1 as well as C2, so it proved nothing
+   about C2 specifically. Moved the grant to the slave side, downstream of the
+   crossbar's id queues, where it leaves capacity intact.
+2. **One-at-a-time preamble slaves.** The mutant scored **199 %** and passed.
+   With the slave accepting one transaction at a time, a single pair runs at
+   0.5 bursts/cycle and the *slave* is the bottleneck — a serialising crossbar
+   keeps up with it easily. The preamble slaves are now pipelined so the
+   crossbar is the resource being measured.
+3. **Blind round-robin grant.** Scored **199 %** again. A blind rotation
+   throttles a solo pair exactly as much as a concurrent one, so the
+   one-pair/two-pair *ratio* is unchanged. The grant is now demand-driven: a
+   single pair gets the full rate and two pairs must share it.
+
+Final: mutant passes C1 (all masters 9) and fails C2 alone at **100 %**, one
+failing check. Reference scores 200 %.
+
+### Where C2 is blunt — stated, not hidden
+
+| MAX_TRANS | mutant speedup | caught? |
+|---|---|---|
+| 8 | 100 % | yes |
+| 2 | 200 % | **no** |
+
+At `MAX_TRANS = 2` a single pair cannot saturate the shared datapath, so the
+ratio stays at 2× and serialisation is invisible. The sweep always includes
+`MAX_TRANS = 8`, so a serialising design still fails overall — but C2 is sharp
+only at the higher setting, and a future task reusing this check should not
+assume otherwise.
+
+## THE HARNESS BUG THIS AUDIT UNCOVERED
+
+`sim_candidate.sh` selected the scoring testbench with `ls tb/*_tb.sv | head -1`
+— **alphabetically**. `axi4_xbar_liveness_tb.sv` sorts before
+`axi4_xbar_tb.sv`, so since commit `6337d3f` every d_nw01 run through
+`sim_candidate.sh` or `build_and_score.sh` scored the **read-only liveness rig**
+and reported 8/8 for it. The liveness rig contains none of the scoreboard or
+coverage code; the reported passes covered a fraction of the contract.
+
+This is the worst failure this harness can have, and it is the same shape as the
+one the standing procedure already names: it does not error, it just quietly
+stops testing most of the contract. A weaker checker substituted in silence is
+indistinguishable from a strong one passing.
+
+Fixed: the scoring TB must be `tb/<dut>_tb.sv`. Auxiliary rigs live under any
+other name and are run deliberately. If the required file is absent the runner
+**refuses to run** rather than picking a neighbour. Verified against all five
+registered tasks. The capability rig is kept in `tb/audit/` so it can never be
+picked up by the scoring path.
+
+Re-run through the corrected path: reference 8/8, and the candidate also passes
+the real data checker 8/8 — its correctness result stands, it had simply never
+been demonstrated through that path. The capacity deficit is the entire story.
+
+## Simulator coverage — corrected claim
+
+**d_nw01 is Verilator-only, and always has been.** The checker does not compile
+under Icarus: it uses `automatic` in procedural blocks
+(`sorry: Overriding the default variable lifetime is not yet supported`). The
+pre-change checker fails identically, so this is not a regression from the
+audit — but it means d_nw01 has no dual-simulator evidence and none should be
+claimed for it.
+
+## Still outstanding
+
+* **The candidate must be re-solicited against the fixed spec.** The current one
+  fails C1 by construction; its PPA numbers are no longer a comparison of two
+  designs doing the same job.
+* **PPA at a binding clock period.** The reference closed at **+7.83 ns** and the
+  candidate at **+6.67 ns**, so the constraint never bound and neither design was
+  pushed. No area comparison from this task — or from `ai_d01` or `d_ca04` — is
+  evidence about difficulty until it has been rerun at a period that actually
+  constrains the reference.
+* Second source: still not written, still recorded as such.
+
+## A second harness gap found by the same regression
+
+Re-running every task's reference through the corrected runner exposed an
+unrelated pre-existing failure: **`nw_d01`'s reference failed all 16 configs**
+with `MODMISSING: Cannot find file containing module: 'axis_adapter'`. Its
+`ref/sim_flags_verilator.txt` was **empty**, so the vendored `verilog-axis`
+search path the shim needs was never passed.
+
+Confirmed pre-existing — the same failure reproduces with the pre-change script,
+so the TB-selection fix did not cause it.
+
+It survived this long because of its asymmetry: a **self-contained candidate
+compiles fine and only the REFERENCE fails**, which reads as a broken reference
+rather than a broken flags file. That is the same shape as the d_nw01 gap where
+the reference failed through the shared path while the candidate passed.
+
+Fixed, and `nw_d01` is back to 16/16. Full regression, all references through
+the corrected runner: `ai_d01` 4/4, `nw_d01` 16/16, `ca_d08` 3/3, `d_ca04`
+18/18, `d_nw01` 8/8.

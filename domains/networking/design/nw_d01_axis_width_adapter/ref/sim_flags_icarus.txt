@@ -1,0 +1,3 @@
+# Icarus counterpart -- see the Verilator file for why this exists.
+-y%REPO%/refs/verilog-axis/rtl
+-Y.v

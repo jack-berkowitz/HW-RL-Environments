@@ -57,10 +57,30 @@ else
     exit 2; }
 fi
 
-TB="$(ls "$TASK_DIR"/tb/*_tb.sv 2>/dev/null | head -1)"
-[ -n "$TB" ] || { echo "no tb/*_tb.sv in $TASK_DIR" >&2; exit 2; }
-TB_MOD="$(basename "$TB" .sv)"
 DUT_MOD="$(grep -m1 '^module' "$TASK_DIR"/spec/*_iface.sv | sed 's/^module \([A-Za-z0-9_]*\).*/\1/')"
+
+# --- select the SCORING testbench -------------------------------------------
+# This was `ls tb/*_tb.sv | head -1`, which picks alphabetically. d_nw01 has
+# three tb/*_tb.sv files and `axi4_xbar_liveness_tb.sv` sorts ahead of
+# `axi4_xbar_tb.sv`, so the runner silently scored the read-only liveness rig
+# instead of the data checker and reported 8/8 PASS for it. A weaker checker
+# substituted without a word is the worst failure this harness can have: it
+# does not error, it just stops testing most of the contract.
+#
+# The scoring TB is now REQUIRED to be tb/<dut>_tb.sv. Auxiliary rigs (liveness
+# probes, capability audits, second sources) live alongside it under any other
+# name and are run deliberately, never picked up by accident.
+TB="$TASK_DIR/tb/${DUT_MOD}_tb.sv"
+if [ ! -f "$TB" ]; then
+  CAND_TBS="$(ls "$TASK_DIR"/tb/*_tb.sv 2>/dev/null)"
+  [ -n "$CAND_TBS" ] || { echo "no tb/*_tb.sv in $TASK_DIR" >&2; exit 2; }
+  echo "REJECTED: no scoring testbench tb/${DUT_MOD}_tb.sv in $TASK_DIR." >&2
+  echo "Found instead:" >&2; echo "$CAND_TBS" | sed 's|.*/|  |' >&2
+  echo "Rename the scoring TB to match the DUT module, or this run would score" >&2
+  echo "whichever file happened to sort first. Nothing was run." >&2
+  exit 2
+fi
+TB_MOD="$(basename "$TB" .sv)"
 TASK_NAME="$(basename "$TASK_DIR")"
 
 # --- legal configs per task. Keep in step with each task.yaml `configs:`. -----
