@@ -222,6 +222,24 @@ repos:
 # ---------------------------------------------------------------------------
 # TASK STATUS
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# CATALOG v3 (hard rebuild) -- anchor availability audit, 2026-08-14
+# ---------------------------------------------------------------------------
+# All 32 v3 anchors resolve inside the 21 repos pinned above. NO network was
+# needed and none is available. 29 were already in refs/; 3 existed only in the
+# local full clones under scratch_dir and were copied across at the SAME pinned
+# SHAs:
+#   d_nw03  verilog-axis/rtl/axis_switch.v      (+ axis_demux, axis_register, axis_fifo)
+#   v_nw04  verilog-ethernet/rtl/ptp_clock.v    (+ ptp_clock_cdc, ptp_perout, ptp_td_leaf)
+#   d_ai02  nvdla_hw/vmod/nvdla/cacc + cdma     (40 files)
+# All three elaborate standalone. Recorded so the tree is self-sufficient if the
+# scratch clones are ever deleted.
+v3_anchor_audit:
+  anchors_total: 32
+  resolved_in_refs: 32
+  required_network: false
+  newly_vendored_from_scratch: [axis_switch, ptp_clock, nvdla_cacc, nvdla_cdma]
+
 task_status:
   # --- cut before Phase 0 ---
   dsp_v04: {cut: true, reason: model_of_record_not_valid_for_verification}
