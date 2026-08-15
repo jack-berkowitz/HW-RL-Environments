@@ -85,6 +85,10 @@
 //       restriction on issuing same-ID requests to multiple slaves.
 //   O2. Responses with DIFFERENT IDs may be returned in any order. AXI permits
 //       it and the checker does not require any particular interleaving.
+//       *** THIS IS A PERMISSION, NOT AN OBLIGATION. *** A crossbar that is
+//       strictly in-order across IDs is conforming, and nothing scores it down
+//       for that: reordering is reported as a METRIC and gates nothing. What
+//       you may NOT do is refuse to ACCEPT a second ID -- see C1.
 //   O3. WRITE DATA ORDER. W beats are not tagged with an ID; they belong to the
 //       AW transactions in the order those were accepted on that port. A
 //       crossbar that reorders W beats relative to their AW corrupts data.
@@ -162,6 +166,11 @@
 //       The floor applies PER MASTER, so it also catches head-of-line blocking:
 //       a design where one master's un-retiring transaction shuts other masters
 //       out of a shared slave fails even where the depth requirement is weak.
+//
+//       CAPACITY IS CAPACITY WHATEVER THE ID MIX. The checker issues DISTINCT
+//       IDs while filling, so a design that holds MAX_TRANS of a single ID but
+//       refuses a second ID fails here. O2 grants you the right to RETURN
+//       different IDs out of order; it does not grant the right to REFUSE them.
 //
 //   C2. CONCURRENT DISJOINT PAIRS. Traffic between disjoint master/slave pairs
 //       must proceed in parallel. With master i addressing only slave i and

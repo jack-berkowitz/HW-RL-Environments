@@ -674,3 +674,125 @@ METRIC: liveness worst_wait            per-master wait under progress elsewhere
 Single-pair and aggregate are recorded separately on purpose: the candidate's
 **5× single-pair gap against a 1.25× aggregate gap** localises its bottleneck to
 per-pair latency rather than total switching capacity.
+
+---
+
+# TASK C — the cross-ID coverage floor could not be validated, and why
+
+The floor was changed from a fixed count (`>= 100`) to a rate after the
+*reference* tripped it. The reasoning was sound, but by the standing rules a
+changed floor is untrusted until a known-failing input fails it. Building that
+control found two defects in the floor itself and ended with the floor removed.
+
+## The control
+
+`mutants/mX1_no_cross_id_interleaving.sv` — derived from the second source, one
+injected restriction: **a master may have only one ID in flight at a time.**
+Otherwise correct, and deliberately so: AXI permits a crossbar to be more
+ordered than required, so no data, ordering, decode or liveness check can see it.
+
+## What it found
+
+### The counter did not measure what its name claimed
+
+```systemverilog
+if (last_rid[m] != i) begin cov_cross_id++; last_rid[m] <= i; end
+```
+
+That counts **ID changes in the delivered stream**, which a strictly in-order
+crossbar still produces whenever consecutive transactions carry different IDs.
+mX1 — incapable of any reordering whatsoever — scored **2234 against a floor of
+20** and passed comfortably. *The floor could not have failed anything.*
+
+Replaced with a real detector: issue order is recorded per master, and a burst
+completing while an older burst with a different ID is still outstanding counts
+as one reordering. Under the corrected counter mX1 scores **0**.
+
+### The corrected counter gates a legal design choice
+
+With the real detector, the **vendored reference scores 0 at `MAX_TRANS=2` in
+all eight of those configurations** — and fails its own coverage floor.
+
+Not a stimulus problem. The independently written second source scores **218 on
+the same stimulus at the same setting.** The hazard is reachable; the reference
+simply chooses not to reorder at that depth.
+
+`O2` grants a crossbar the right to return different IDs out of order. It does
+not oblige it. **Reordering is a DUT choice, so a floor on it fails a correct
+design** — the rediscover-the-reference trap arriving from the opposite
+direction, and this time it would have been *written into the contract* rather
+than caught.
+
+## What replaced it
+
+The requirement the floor was groping toward is **capacity with mixed IDs**, and
+that belongs in C1, where the defect actually is.
+
+The capacity phase previously drove **one ID per master**, so a design holding
+`MAX_TRANS` of a single ID while refusing any second ID passed. Two attempts
+were needed:
+
+1. a free-running ID counter — **not enough.** Its pattern repeats every `NID`
+   cycles, so mX1 simply waited for its own ID to come round again and still
+   reached 8.
+2. an ID keyed to how many that master has already had **accepted**, so the
+   outstanding set holds distinct IDs. mX1 now stalls at **1**.
+
+| input | outstanding @ `MAX_TRANS=8` | reorderings | verdict |
+|---|---|---|---|
+| reference (`CUT_ALL_AX`) | 27 | 914 | **PASS** |
+| reference (`NO_LATENCY`) | 25 | — | **PASS** |
+| second source | 8 | 234 | **PASS** |
+| `mX1` | **1** | 0 | **FAIL — C1 only, 4 failing checks** |
+
+Reordering is now a `METRIC:` line and gates nothing.
+
+## Sweep, and the blind spot
+
+| input | configs |
+|---|---|
+| reference | **16/16** |
+| second source | **16/16** |
+| candidate | **16/16** |
+| `mX1` | **8/16** — fails every `MAX_TRANS=8` config |
+
+**mX1 survives all eight `MAX_TRANS=2` configurations**, and this is structural,
+not an oversight. The C1 floor is `ceil(MAX_TRANS/2)`, which is 1 there, and the
+floor cannot be raised: the `NO_LATENCY` anchor — a correct crossbar — still
+delivers exactly **1** at that setting even with mixed IDs. Any floor that
+catches mX1 at `MAX_TRANS=2` also fails a correct design.
+
+The same blind spot as C2's at `MAX_TRANS=2`, from the same cause: at two
+outstanding there is too little room for capacity defects to show. Both checks
+bite at `MAX_TRANS=8`, which every sweep includes.
+
+---
+
+# d_nw01 candidate — PPA: DID NOT COMPLETE
+
+The re-solicited candidate fixed its capacity gap by provisioning a 256-entry
+per-master read buffer (36 864 bits). The ORFS build reached detailed routing
+and **failed with 2003 DRC violations**, after passing synthesis, floorplan,
+placement, CTS and global route.
+
+| stage | reference | candidate |
+|---|---|---|
+| synth area | 107 891 µm² | **1 540 648 µm²** — 14× |
+| post-placement area | 146 818 µm² | **1 835 465 µm²** — 12.5× |
+| timing at global route | +7.83 ns final | +5.22 ns worst slack, TNS 0 |
+| detailed route | completed, DRC 0 | **FAILED, 2003 violations** |
+
+**Timing was never the problem — congestion was.** 36 kbit of read buffering as
+flip-flops creates routing demand the flow cannot satisfy.
+
+**Not retried, and not to be retried.** Failing to close is the result, and it
+is consistent with the other two measurements on this candidate: over-building
+cost it 14× area, 5× single-pair throughput, and now physical closure.
+
+*Caveat, stated rather than buried:* a 12 % utilisation floorplan on a
+1.8 M µm² design is an unusual corner, so the DRC count is not a precise measure
+of anything. The robust finding is the **12–14× area**, which two independent
+stages agree on. Raising `SYNTH_MEMORY_MAX_BITS` to let the build proceed was
+the right call — aborting at synthesis would have hidden a real physical
+consequence behind a tool guard — but it does mean this is not a routine
+configuration.

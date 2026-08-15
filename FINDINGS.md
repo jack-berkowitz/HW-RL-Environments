@@ -363,8 +363,29 @@ reference scored, because **loosening a floor because the reference tripped it
 is the purest form of the rediscover-the-reference trap.** The count scales with
 transaction count; the property does not.
 
-*This floor has not yet been validated against a known-failing input. It is
-recorded in `TASK_CATALOG.md` as outstanding.*
+**Validated, and it did not survive.** The control — a crossbar restricted to
+one ID in flight per master, and therefore incapable of any reordering — scored
+**2234 against a floor of 20** and passed. The counter was measuring ID
+*changes* in the delivered stream, which a strictly in-order design still
+produces whenever consecutive transactions carry different IDs. *The floor could
+not have failed anything.*
+
+Replacing it with a real out-of-order-completion detector made it worse: the
+**vendored reference then scored 0** at `MAX_TRANS=2` in eight configurations
+and failed its own floor, while an independently written second source scored
+218 on identical stimulus. The hazard was reachable; the reference simply
+declines to reorder at that depth, which `O2` permits.
+
+**So the floor was removed.** Reordering is a DUT choice, and gating it fails a
+correct design — the rediscover-the-reference trap arriving from the opposite
+direction, and this time it would have been written *into the contract*. The
+requirement underneath was capacity with **mixed IDs**, which now lives in the
+capacity check where the defect actually is: the capacity phase previously drove
+one ID per master, so a design holding `MAX_TRANS` of a single ID while refusing
+any second ID passed it.
+
+**A coverage floor must measure what the harness controls — the stimulus — not
+what the design chose to do with it.**
 
 ---
 

@@ -165,15 +165,18 @@ module axi4_xbar_tb
     bit                 cap_drain;
     logic [NUM_MST-1:0] cap_en;
     int                 cap_tgt      [0:NUM_MST-1];
+    int                 cap_idseq;
     int                 cap_ar_cnt   [0:NUM_MST-1];
     int                 cap_done_cnt [0:NUM_MST-1];
 
     always_ff @(posedge clk) begin
         if (!rst_n) begin
+            cap_idseq <= 0;
             for (int m = 0; m < NUM_MST; m++) begin
                 cap_ar_cnt[m] <= 0; cap_done_cnt[m] <= 0;
             end
         end else if (tmode != 0) begin
+            cap_idseq <= cap_idseq + 1;
             for (int m = 0; m < NUM_MST; m++) begin
                 if (mst_req[m].ar_valid && mst_resp[m].ar_ready)
                     cap_ar_cnt[m] <= cap_ar_cnt[m] + 1;
@@ -202,7 +205,17 @@ module axi4_xbar_tb
             mst_req[m].r_ready  = cap_drain;
             mst_req[m].b_ready  = cap_drain;
             mst_req[m].ar_valid = cap_en[m];
-            mst_req[m].ar.id    = slv_id_t'(m % NID);
+            // MIXED IDs, deliberately. Driving one ID per master let a design
+            // that holds MAX_TRANS of a single ID -- while refusing any second
+            // ID -- pass C1. AXI grants a crossbar the right to RETURN
+            // different IDs out of order (O2); it does not grant the right to
+            // REFUSE them. Capacity is capacity whatever the ID mix.
+            // Keyed to how many this master has already had ACCEPTED, so the
+            // outstanding set holds DISTINCT ids rather than a repeating cycle.
+            // A free-running counter was not enough: its pattern repeats, and a
+            // design that refuses a second id simply waits for the first to come
+            // round again and still reached MAX_TRANS.
+            mst_req[m].ar.id    = slv_id_t'(cap_ar_cnt[m] % NID);
             mst_req[m].ar.addr  = addr_t'(cap_tgt[m] * 32'h0001_0000 + 32'h40);
             mst_req[m].ar.len   = 8'd0;
             mst_req[m].ar.size  = 3'd3;
@@ -384,7 +397,7 @@ module axi4_xbar_tb
                         if ((cyc - rq_t0[m][i][rq_head[m][i] % QD]) > lat_max)
                             lat_max <= cyc - rq_t0[m][i][rq_head[m][i] % QD];
                     end else rq_beat[m][i] <= rq_beat[m][i] + 1;
-                    if (last_rid[m] != i) begin cov_cross_id++; last_rid[m] <= i; end
+                    last_rid[m] <= i;
                 end
             end
             // ---- write response ----
@@ -432,6 +445,66 @@ module axi4_xbar_tb
     end
     always_ff @(posedge clk) if (rst_n && tmode == 0) begin
         `LM_TICK(lm_off, lm_srv)
+    end
+
+    // ---- CROSS-ID REORDERING, measured properly -----------------------------
+    // The previous counter was `if (last_rid[m] != i) cov_cross_id++`: it
+    // counted ID CHANGES in the delivered stream, which a STRICTLY IN-ORDER
+    // crossbar still produces whenever consecutive transactions carry different
+    // IDs. A mutant restricted to one ID in flight per master -- incapable of
+    // any reordering whatsoever -- still scored 2234 against a floor of 20. The
+    // counter did not measure the property its name claimed, and the floor
+    // built on it could not have failed anything.
+    //
+    // What matters is whether a burst COMPLETED OUT OF ISSUE ORDER relative to
+    // a different ID: that is the hazard the per-(master,ID) scoreboard exists
+    // to survive, and the thing a global-order scoreboard would get wrong.
+    //
+    // Self-contained: this block is the ONLY writer of every ord_* signal, so
+    // it cannot race the scoreboard or the issue engine.
+    localparam int ORDD = 64;
+    int  ord_id   [0:NUM_MST-1][0:ORDD-1];
+    bit  ord_done [0:NUM_MST-1][0:ORDD-1];
+    int  ord_hd   [0:NUM_MST-1];
+    int  ord_tl   [0:NUM_MST-1];
+
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            for (int m = 0; m < NUM_MST; m++) begin
+                ord_hd[m] <= 0; ord_tl[m] <= 0;
+                for (int q = 0; q < ORDD; q++) ord_done[m][q] <= 1'b0;
+            end
+        end else if (tmode == 0) begin
+            for (int m = 0; m < NUM_MST; m++) begin
+                automatic int hit = -1;
+                automatic int hd  = ord_hd[m];
+
+                // a read burst just completed -- was it the oldest outstanding?
+                if (mst_resp[m].r_valid && mst_req[m].r_ready && mst_resp[m].r.last) begin
+                    for (int q = 0; q < ORDD; q++) begin
+                        automatic int idx = hd + q;
+                        if (hit < 0 && idx < ord_tl[m] && !ord_done[m][idx % ORDD]
+                            && ord_id[m][idx % ORDD] == int'(mst_resp[m].r.id))
+                            hit = idx;
+                    end
+                    if (hit >= 0) begin
+                        if (hit != hd) cov_cross_id++;      // completed out of order
+                        ord_done[m][hit % ORDD] <= 1'b1;
+                    end
+                end
+
+                // a read was just issued -- record its place in issue order
+                if (mst_req[m].ar_valid && mst_resp[m].ar_ready) begin
+                    ord_id  [m][ord_tl[m] % ORDD] <= int'(nxt_id[m]);
+                    ord_done[m][ord_tl[m] % ORDD] <= 1'b0;
+                    ord_tl[m] <= ord_tl[m] + 1;
+                end
+
+                // retire completed entries so ord_hd names the oldest OUTSTANDING
+                if (hd < ord_tl[m] && (ord_done[m][hd % ORDD] || hit == hd))
+                    ord_hd[m] <= hd + 1;
+            end
+        end
     end
 
     // ---- request issue -----------------------------------------------------
@@ -654,13 +727,15 @@ module axi4_xbar_tb
             $display("METRIC: fairness_spread=%0d (min=%0d max=%0d)", hi - lo, lo, hi);
         end
         $display("METRIC: backpressure_stalls r=%0d b=%0d", bp_r_stalls, bp_b_stalls);
+        $display("METRIC: cross_id_reorderings=%0d (DUT choice -- reported, never gated)",
+                 cov_cross_id);
         `LM_CHECK(note_fail)
 
         begin
             int miss; miss = 0;
             $display("// coverage: rd_ok=%0d rd_decerr=%0d wr_ok=%0d wr_decerr=%0d",
                      cov_rd_ok, cov_rd_dec, cov_wr_ok, cov_wr_dec);
-            $display("// coverage: multi_beat_bursts=%0d cross_id_switches=%0d",
+            $display("// coverage: multi_beat_bursts=%0d cross_id_REORDERINGS=%0d",
                      cov_burst_gt1, cov_cross_id);
             if (cov_rd_ok  == 0) begin miss++; $display("// COVERAGE HOLE: no successful read"); end
             if (cov_wr_ok  == 0) begin miss++; $display("// COVERAGE HOLE: no successful write"); end
@@ -678,24 +753,29 @@ module axi4_xbar_tb
             // If responses never switched ID at a master, the run never
             // exercised cross-ID interleaving and a global-order scoreboard
             // would have passed. That is precisely the blind spot.
-            // RATE, not count. The property is "cross-ID reordering genuinely
-            // occurred", and the count scales with how many transactions the
-            // run performs -- which EFF_TXN deliberately reduces at long bursts
-            // to hold total beats constant. A fixed floor of 100 was therefore
-            // measuring the harness's own transaction scaling, not the DUT: at
-            // MAX_BURST_LEN=255 the reference interleaves at 32 % (76 switches
-            // in 240 transactions) and still tripped it. Rate-based, with a
-            // small absolute minimum so a tiny run cannot pass vacuously.
-            begin
-                int min_cross;
-                min_cross = (EFF_TXN * NUM_MST) / 32;
-                if (min_cross < 20) min_cross = 20;
-                if (cov_cross_id < min_cross) begin
-                    miss++;
-                    $display("// COVERAGE HOLE: too little cross-ID interleaving (%0d switches, need %0d)",
-                             cov_cross_id, min_cross);
-                end
-            end
+            // CROSS-ID REORDERING IS NOT A COVERAGE FLOOR AND MUST NOT GATE.
+            // It was one, twice, and both versions were wrong:
+            //
+            //   v1 counted ID CHANGES in the delivered stream, which a strictly
+            //      in-order crossbar still produces. A mutant incapable of any
+            //      reordering scored 2234 against a floor of 20.
+            //   v2 counted genuine out-of-order completions -- and the VENDORED
+            //      REFERENCE scored 0 at MAX_TRANS=2 in all eight of those
+            //      configurations, while an independently written second source
+            //      scored 218 on the same stimulus. The hazard was reachable;
+            //      the reference simply chose not to reorder.
+            //
+            // AXI permits a crossbar to be MORE ordered than required (O2 grants
+            // the right to return different IDs out of order; it does not oblige
+            // it). So reordering is a DUT CHOICE, and a floor on it fails a
+            // correct design -- the rediscover-the-reference trap arriving from
+            // the opposite direction.
+            //
+            // The real requirement underneath was CAPACITY WITH MIXED IDS, and
+            // that is now C1: the capacity phase issues distinct IDs, so a
+            // design that cannot hold MAX_TRANS across several IDs fails there,
+            // where the defect actually is. Reordering is reported below as a
+            // METRIC and gates nothing.
             if (miss > 0) note_fail($sformatf("%0d coverage holes", miss));
         end
 

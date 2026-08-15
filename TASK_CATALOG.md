@@ -209,11 +209,11 @@ Reference 16/16, second source 16/16, candidate 16/16 across
 
 **OUTSTANDING WORK — recorded here so it stops living only in conversation:**
 
-1. **Task C negative control.** The cross-ID interleaving coverage floor was
-   changed from a fixed count to a rate after the reference tripped it. The
-   reasoning was sound but the changed floor has never been validated against a
-   known-failing input. Needs a mutant that serialises per-ID with no cross-ID
-   interleaving, confirmed to fail the floor at **all 16 configs**.
+1. ~~Task C negative control.~~ **DONE, and it removed the floor.** The control
+   showed the counter measured ID *changes*, not reordering; the corrected
+   counter then failed the *reference* at `MAX_TRANS=2`, because reordering is a
+   DUT choice AXI permits a design to decline. The requirement underneath was
+   capacity with mixed IDs, now enforced in C1. See `NOTES.md § TASK C`.
 2. **Decide the canonical reference configuration.** The shim binds
    `LatencyMode: CUT_ALL_AX`, which is full AX channel cuts the spec never asked
    for and which account for **45 % of the reference's synthesised area**

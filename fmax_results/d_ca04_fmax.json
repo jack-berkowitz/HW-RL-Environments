@@ -2,43 +2,103 @@
   "design": "d_ca04",
   "tier": "comp_arch",
   "pdk": "sky130hd",
-  "converged_period_ns": null,
-  "achieved_fmax_mhz": null,
-  "wns_at_converged_ns": null,
+  "converged_period_ns": 2.625,
+  "achieved_fmax_mhz": 380.95,
+  "wns_at_converged_ns": 0.0318037,
   "confirming_rerun": {
-    "ran": false,
-    "passed": false,
+    "ran": true,
+    "passed": true,
     "fell_back": false
   },
   "bracket": {
     "seed_period_ns": 3.0,
-    "period_pass": null,
-    "period_fail": null,
-    "bracket_iterations": 1
+    "period_pass": 3.0,
+    "period_fail": 1.5,
+    "bracket_iterations": 2
   },
   "final_interval": {
-    "period_pass": null,
-    "period_fail": null
+    "period_pass": 2.625,
+    "period_fail": 2.4375
   },
-  "search_iterations": 0,
+  "search_iterations": 3,
   "resolution_ns": 0.25,
   "search_trajectory": [
     {
       "iteration": 1,
       "period_ns": 3.0,
-      "wns_ns": null,
-      "tns_ns": null,
-      "drc": null,
-      "pass": false,
-      "status": "tool_error",
-      "wall_time_s": 115.5,
+      "wns_ns": 0.167407,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 156.4,
       "log": "fmax_results/d_ca04_logs/d_ca04_iter01_3.0000ns.log",
-      "note": "run_orfs_build.sh exited 2; see fmax_results/d_ca04_logs/d_ca04_iter01_3.0000ns.log"
+      "note": null
+    },
+    {
+      "iteration": 2,
+      "period_ns": 1.5,
+      "wns_ns": -0.854271,
+      "tns_ns": -160.971,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 206.1,
+      "log": "fmax_results/d_ca04_logs/d_ca04_iter02_1.5000ns.log",
+      "note": null
+    },
+    {
+      "iteration": 3,
+      "period_ns": 2.25,
+      "wns_ns": -0.269082,
+      "tns_ns": -0.269082,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 149.0,
+      "log": "fmax_results/d_ca04_logs/d_ca04_iter03_2.2500ns.log",
+      "note": null
+    },
+    {
+      "iteration": 4,
+      "period_ns": 2.625,
+      "wns_ns": 0.0318037,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 156.3,
+      "log": "fmax_results/d_ca04_logs/d_ca04_iter04_2.6250ns.log",
+      "note": null
+    },
+    {
+      "iteration": 5,
+      "period_ns": 2.4375,
+      "wns_ns": -0.162591,
+      "tns_ns": -0.162591,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 170.7,
+      "log": "fmax_results/d_ca04_logs/d_ca04_iter05_2.4375ns.log",
+      "note": null
+    },
+    {
+      "iteration": 6,
+      "period_ns": 2.625,
+      "wns_ns": 0.0318037,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 156.1,
+      "log": "fmax_results/d_ca04_logs/d_ca04_iter06_2.6250ns.log",
+      "note": null
     }
   ],
-  "total_wall_time_s": 115.5,
-  "total_pnr_runs": 1,
-  "rtl_git_commit": "1fac219f47fa0bd3d0190dc42d485887096d2df1-dirty",
-  "timestamp": "2026-08-15T17:01:49.189520+00:00",
-  "aborted_reason": "seed run failed as a tool error: run_orfs_build.sh exited 2; see fmax_results/d_ca04_logs/d_ca04_iter01_3.0000ns.log"
+  "total_wall_time_s": 994.8,
+  "total_pnr_runs": 6,
+  "rtl_git_commit": "d70024da38a01a5588f76d85a5aba7f8d4e2f79e-dirty",
+  "timestamp": "2026-08-15T17:17:58.943128+00:00",
+  "aborted_reason": null
 }
