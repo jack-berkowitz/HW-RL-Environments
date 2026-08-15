@@ -27,3 +27,8 @@ obj_dir/
 obj_dir_*/
 obj_m_*/
 obj_d_*/
+
+# Generated ORFS run dirs for candidate PPA builds (scripts/ppa_candidate.sh).
+# The generated config and normalised source are reproducible from the answer
+# file, so they are build scratch rather than artifacts.
+orfs_runs/
