@@ -505,3 +505,60 @@ shim's choice of `CUT_ALL_AX`, not a requirement of the task and not something
 the candidate competed against. The capability gap is missing function, not
 efficiency. **Neither factor is an optimisation the candidate earned, and this
 task should not be cited as evidence of one.**
+
+---
+
+# SECOND SOURCE — the over-constraint control for C1 and C2
+
+`tb/audit/axi4_xbar_second_source.sv`. **A falsifier, not an oracle.** Written
+because C1 and C2 were new normative checks and nothing had ever passed them
+except the module they were measured from.
+
+Deliberate structural differences from the anchor:
+
+| anchor (PULP `axi_xbar`) | second source |
+|---|---|
+| per-master demux + per-slave mux hierarchy | one flat routing matrix, no hierarchy |
+| `rr_arb_tree` | rotating-priority mask arbiter, written out |
+| spill registers on AW/AR (`CUT_ALL_AX`) | **no channel registers anywhere** |
+| `id_queue` structures | flat per-(master,ID) counter + destination |
+| `MAX_TRANS + 1` observable outstanding | **exactly `MAX_TRANS`** |
+
+It **passes 8/8**, and is genuinely exercised rather than trivially passing:
+1116–2270 cross-ID switches per run against a floor of 100, plus the DECERR
+paths, at every geometry.
+
+| config | outstanding | speedup |
+|---|---|---|
+| MAX_TRANS=2 (all geometries) | **2** | 200 % |
+| MAX_TRANS=8 (all geometries) | **8** | 200 % |
+
+Exactly `MAX_TRANS`, never `MAX_TRANS+1`. That is the number that would have
+exposed C1 as pinned to the anchor's buffering, and it clears the floor.
+
+## The validated matrix
+
+| design | structure | outstanding | speedup | configs |
+|---|---|---|---|---|
+| anchor, `CUT_ALL_AX` | demux/mux + spill | `MAX_TRANS+1` | 200 % | **8/8** |
+| anchor, `NO_LATENCY` | demux/mux, no spill | `MAX_TRANS-1` | 200 % | **8/8** |
+| second source | flat matrix, mask arbiter | `MAX_TRANS` | 200 % | **8/8** |
+| candidate | one-deep | 1 | 200 % | 3/8 |
+| `mC2_serialised_xbar` | one shared AR datapath | `MAX_TRANS+1` | 100 % | 4/8 |
+
+**Three structurally different correct crossbars pass; the two deficient ones
+fail.** C1's floor of `ceil(MAX_TRANS/2)` sits below all three passing capacity
+values and well above the candidate's 1. C2's 150 % sits 50 points below three
+passing designs and 50 above the mutant. Neither check is pinned to the anchor.
+
+## Two honest caveats
+
+**It passed first try.** A second source that never fails is weaker evidence
+than one that struggles, and I wrote both it and the checker, so it is not
+independent in the way an externally-authored implementation would be.
+
+**The stronger evidence is the `NO_LATENCY` probe**, because that is
+externally-authored RTL in a different configuration, and it **failed the
+original C1** — which is what proved the check was pinned in the first place.
+The second source confirms the relaxed floor admits a genuinely different
+architecture; the probe is what found the defect.

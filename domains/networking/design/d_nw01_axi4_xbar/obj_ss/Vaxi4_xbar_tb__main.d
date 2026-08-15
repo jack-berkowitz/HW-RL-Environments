@@ -1,0 +1,12 @@
+Vaxi4_xbar_tb__main.o: \
+  /Users/jackberkowitz/Desktop/hw_rl_benchmark/domains/networking/design/d_nw01_axi4_xbar/obj_ss/Vaxi4_xbar_tb__pch.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_config.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilatedos.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_types.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_funcs.h \
+  /Users/jackberkowitz/Desktop/hw_rl_benchmark/domains/networking/design/d_nw01_axi4_xbar/obj_ss/Vaxi4_xbar_tb__Syms.h \
+  /Users/jackberkowitz/Desktop/hw_rl_benchmark/domains/networking/design/d_nw01_axi4_xbar/obj_ss/Vaxi4_xbar_tb.h \
+  /Users/jackberkowitz/Desktop/hw_rl_benchmark/domains/networking/design/d_nw01_axi4_xbar/obj_ss/Vaxi4_xbar_tb___024root.h \
+  /opt/homebrew/Cellar/verilator/5.046/share/verilator/include/verilated_timing.h \
+  Vaxi4_xbar_tb__main.cpp Vaxi4_xbar_tb.h
