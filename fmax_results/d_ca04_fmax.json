@@ -2,55 +2,43 @@
   "design": "d_ca04",
   "tier": "comp_arch",
   "pdk": "sky130hd",
-  "converged_period_ns": 3.0,
-  "achieved_fmax_mhz": 333.33,
-  "wns_at_converged_ns": 0.167407,
+  "converged_period_ns": null,
+  "achieved_fmax_mhz": null,
+  "wns_at_converged_ns": null,
   "confirming_rerun": {
     "ran": false,
     "passed": false,
     "fell_back": false
   },
   "bracket": {
-    "seed_period_ns": 6.0,
-    "period_pass": 3.0,
+    "seed_period_ns": 3.0,
+    "period_pass": null,
     "period_fail": null,
-    "bracket_iterations": 2
+    "bracket_iterations": 1
   },
   "final_interval": {
-    "period_pass": 3.0,
+    "period_pass": null,
     "period_fail": null
   },
   "search_iterations": 0,
-  "resolution_ns": 1.0,
+  "resolution_ns": 0.25,
   "search_trajectory": [
     {
       "iteration": 1,
-      "period_ns": 6.0,
-      "wns_ns": 2.02024,
-      "tns_ns": 0,
-      "drc": 0,
-      "pass": true,
-      "status": "pass",
-      "wall_time_s": 167.6,
-      "log": "fmax_results/d_ca04_logs/d_ca04_iter01_6.0000ns.log",
-      "note": null
-    },
-    {
-      "iteration": 2,
       "period_ns": 3.0,
-      "wns_ns": 0.167407,
-      "tns_ns": 0,
-      "drc": 0,
-      "pass": true,
-      "status": "pass",
-      "wall_time_s": 145.4,
-      "log": "fmax_results/d_ca04_logs/d_ca04_iter02_3.0000ns.log",
-      "note": null
+      "wns_ns": null,
+      "tns_ns": null,
+      "drc": null,
+      "pass": false,
+      "status": "tool_error",
+      "wall_time_s": 115.5,
+      "log": "fmax_results/d_ca04_logs/d_ca04_iter01_3.0000ns.log",
+      "note": "run_orfs_build.sh exited 2; see fmax_results/d_ca04_logs/d_ca04_iter01_3.0000ns.log"
     }
   ],
-  "total_wall_time_s": 313.1,
-  "total_pnr_runs": 2,
-  "rtl_git_commit": "471af6b7ddff4f22cd6839c273f1f1fe34e01d7a-dirty",
-  "timestamp": "2026-08-15T01:59:09.367381+00:00",
-  "aborted_reason": "still meeting timing at 3.0000 ns after 2 bracketing runs -- never found a failing period. The design may be trivially fast for this PDK, or the seed is far too loose. Re-run with a much smaller --seed-period-ns (try 0.750)."
+  "total_wall_time_s": 115.5,
+  "total_pnr_runs": 1,
+  "rtl_git_commit": "1fac219f47fa0bd3d0190dc42d485887096d2df1-dirty",
+  "timestamp": "2026-08-15T17:01:49.189520+00:00",
+  "aborted_reason": "seed run failed as a tool error: run_orfs_build.sh exited 2; see fmax_results/d_ca04_logs/d_ca04_iter01_3.0000ns.log"
 }
