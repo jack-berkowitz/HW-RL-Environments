@@ -905,3 +905,36 @@ them, never that the designs are equivalent.**
 **Mutant quality is deferred to the cross-model run.** It is a posterior — a
 mutant everything kills is filler, a mutant nothing kills is too hard — and
 neither is knowable before submissions exist.
+
+---
+
+# CUT_ALL_AX Fmax — CONVERGED, closed by one targeted build
+
+The sweep aborted at 5.25 ns on a missing metrics file and reported 6.0 ns /
+166.67 MHz. The flow had in fact completed (+0.04 ns, DRC 0), so the report
+fallback moved the lower bound to 5.25 ns — but the bracket [4.5, 5.25] was
+0.75 ns wide against a 0.5 ns resolution, so `find_fmax` correctly refused to
+call it an Fmax.
+
+**Closed by one build at 4.875 ns, which FAILS**: worst slack −0.22 ns,
+TNS −5.84, DRC 0.
+
+| | |
+|---|---|
+| final bracket | **[4.875, 5.25] ns — 0.375 wide, inside the 0.5 resolution** |
+| **Fmax** | **190.48 MHz at 5.25 ns, CONVERGED** |
+| area at own Fmax | 154 245 µm² |
+
+One build, ~15 minutes, rather than a 2.5-hour re-sweep — the bisection only
+needed its last point. **Nothing in this task now ships an unconverged Fmax.**
+
+## The envelope, both points converged
+
+| | `CUT_ALL_AX` | `NO_LATENCY` |
+|---|---|---|
+| Fmax | **190.48 MHz** (converged) | **126.98 MHz** (converged) |
+| area at own Fmax | 154 245 µm² | 100 277 µm² |
+| elasticity, closing range | +5.0 % | +16.4 % |
+
+**1.50× faster for 54 % more area.** Neither dominates. The second source is the
+third point and its sweep is running.

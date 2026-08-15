@@ -1,6 +1,6 @@
 {
-  "aborted_reason": "Aborted at 5.25 ns on a missing metrics JSON and originally reported 6.0 ns / 166.67 MHz. The flow had COMPLETED with +0.04 ns slack and DRC 0; recovered from the reports, which moved the lower bound to 5.25 ns / 190.48 MHz. Still not converged -- see fmax_invalid_reason. find_fmax now (a) falls back to the reports instead of aborting and (b) refuses to report an Fmax when the bracket is wider than the resolution.",
-  "achieved_fmax_mhz": null,
+  "aborted_reason": "Originally aborted at 5.25 ns on a missing metrics JSON and reported 6.0 ns / 166.67 MHz. The flow had completed (+0.04 ns, DRC 0); recovered from the reports. The bracket [4.5, 5.25] was then still 0.75 ns wide -- wider than the 0.5 ns resolution -- so find_fmax correctly refused to report an Fmax. Closed by one targeted build at 4.875 ns, which FAILS (-0.22 ns, TNS -5.84). Final bracket [4.875, 5.25] is 0.375 ns wide. CONVERGED at 5.25 ns / 190.48 MHz.",
+  "achieved_fmax_mhz": 190.48,
   "bracket": {
     "bracket_iterations": 3,
     "period_fail": 3.0,
@@ -12,13 +12,13 @@
     "passed": false,
     "ran": false
   },
-  "converged_period_ns": null,
+  "converged_period_ns": 5.25,
   "design": "d_nw01",
   "final_interval": {
-    "period_fail": 4.5,
+    "period_fail": 4.875,
     "period_pass": 5.25
   },
-  "fmax_invalid_reason": "NOT CONVERGED: bracket [4.5000, 5.2500] ns is 0.7500 ns wide, wider than the requested resolution of 0.5000 ns. What IS established: 5.25 ns passes (+0.04 ns slack, DRC 0, area 154245 um2) and 4.5 ns fails (-0.636 ns), so Fmax lies in [190.48, 222.22) MHz. The last passing period is a LOWER BOUND, not an Fmax, and must not be quoted as one.",
+  "fmax_invalid_reason": null,
   "pdk": "sky130hd",
   "resolution_ns": 0.5,
   "rtl_git_commit": "53a3deff402bc4e713e1a5ad4308b751a70d1d56-dirty",
@@ -83,11 +83,21 @@
       "tns_ns": 0.0,
       "wall_time_s": 1011.0,
       "wns_ns": 0.04
+    },
+    {
+      "drc": 0,
+      "iteration": 6,
+      "note": "Added by a targeted single build to close the bracket, after the sweep aborted at iteration 5. Reports read directly per the find_fmax fallback.",
+      "pass": false,
+      "period_ns": 4.875,
+      "status": "timing_fail",
+      "tns_ns": -5.84,
+      "wns_ns": -0.22
     }
   ],
   "tier": "networking",
   "timestamp": "2026-08-15T20:47:49.333936+00:00",
   "total_pnr_runs": 5,
   "total_wall_time_s": 8620.4,
-  "wns_at_converged_ns": null
+  "wns_at_converged_ns": 0.04
 }

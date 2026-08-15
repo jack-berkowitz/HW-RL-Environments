@@ -22,14 +22,33 @@ reference:
 spec: [spec/axi4_xbar_iface.sv, spec/axi4_xbar_pkg.sv]
 
 configs:
-  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 2}
-  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 8}
-  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 2}
-  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 8}
-  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 2}
-  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 8}
-  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 2}
-  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 8}
+  # NUM_MST x NUM_SLV x MAX_TRANS x MAX_BURST_LEN = 16
+  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 2, MAX_BURST_LEN: 3}
+  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 2, MAX_BURST_LEN: 255}
+  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 8, MAX_BURST_LEN: 3}
+  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 8, MAX_BURST_LEN: 255}
+  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 2, MAX_BURST_LEN: 3}
+  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 2, MAX_BURST_LEN: 255}
+  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 8, MAX_BURST_LEN: 3}
+  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 8, MAX_BURST_LEN: 255}
+  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 2, MAX_BURST_LEN: 3}
+  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 2, MAX_BURST_LEN: 255}
+  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 8, MAX_BURST_LEN: 3}
+  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 8, MAX_BURST_LEN: 255}
+  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 2, MAX_BURST_LEN: 3}
+  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 2, MAX_BURST_LEN: 255}
+  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 8, MAX_BURST_LEN: 3}
+  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 8, MAX_BURST_LEN: 255}
+
+capability_blind_spot: >
+  NO CAPABILITY CHECK DISCRIMINATES AT MAX_TRANS=2. C1's floor is
+  ceil(MAX_TRANS/2)=1 there and cannot be raised -- the NO_LATENCY anchor, a
+  correct crossbar, also delivers exactly 1 -- and C2 is blind at that depth
+  too. The capability mutant mX1 survives all eight MAX_TRANS=2 configs. Those
+  configs still bind the whole data contract, liveness and decode behaviour, but
+  A PASS AT MAX_TRANS=2 IS NOT CAPABILITY EVIDENCE. Adding MAX_TRANS=4 is the
+  route to low-depth discrimination; raising the floor is not available.
+
 illegal_configs: >
   NUM_MST > 4 is a HARD CAP -- the widened id field supplies exactly 2
   master-index bits, so at 8 masters two would share an index and their
@@ -48,14 +67,22 @@ simulators_verified: [verilator-5.046]
 # also cannot parse.
 simulators_unsupported: [icarus-13.0]
 
-second_source: false
+second_source: true
+second_source_file: tb/audit/axi4_xbar_second_source.sv
+second_source_result: 16/16 on the tightened spec
+second_source_differences:
+  - one flat routing matrix, not a per-master demux + per-slave mux hierarchy
+  - rotating-priority mask arbiter written out, not rr_arb_tree
+  - flat per-(master,ID) counters, not id_queue structures
+  - NO channel registers, so exactly MAX_TRANS observable outstanding rather
+    than the anchor's MAX_TRANS+1
 second_source_note: >
-  Not written. An independent AXI4 crossbar is a task-sized piece of work. The
-  over-constraint risk it covers is addressed differently and the evidence is in
-  NOTES.md: the scoreboard is per-(master,ID) by construction, slaves respond at
-  deliberately different rates, the correct reference passes with 2283 cross-ID
-  switches, and the per-ID ordering mutant is killed. Weaker than a second
-  source; recorded as such rather than claimed as equivalent.
+  A FALSIFIER, NOT AN ORACLE -- its only job is to fail, and if it fails the
+  checker is over-constrained. It earned its place twice: the exactly-MAX_TRANS
+  capacity is the number that would have exposed C1 as pinned to the anchor's
+  buffering, and it scored 218 cross-ID reorderings at MAX_TRANS=2 where the
+  vendored reference scores 0, which is what proved the reordering coverage
+  floor was gating a legal design choice rather than measuring stimulus.
 
 negative_controls:
   liveness:
@@ -69,27 +96,79 @@ negative_controls:
     reorder_mutant: mD1 -> killed by the per-(master,ID) comparison
 
 mutants:
-  - {id: mL1, class: liveness-deadlock,   kill: "LM_STALL"}
-  - {id: mL2, class: liveness-starvation, kill: "LM_STARVE, not LM_STALL"}
-  - {id: mD1, class: ordering-per-id,     kill: "per-(master,ID) data mismatch"}
-  - {id: mD2, class: decode-beatcount,    kill: "RLAST on wrong beat"}
-  - {id: mD3, class: decode-liveness,     kill: "LM_STALL -- data-path bug caught by liveness"}
+  # "witness" records HOW non-equivalence was demonstrated. Witnessing through
+  # the checker -- it passes the reference and fails the mutant under identical
+  # stimulus -- is NOT weaker than a direct diff; it is the same proof observed
+  # through the checker. The differential harness cannot cover mutants of a
+  # SHARED VENDORED MODULE, since both instances resolve to the same file.
+  #
+  # DIFF RATE IS DEMOTED and deliberately absent from this table. It rated the
+  # CAPABILITY mutant (100%) and a crude one identically, and rated a killable
+  # mutant at 0%. See FINDINGS.md. Mutant quality is a posterior and is deferred
+  # to the cross-model run.
+  - {id: mCAP1, class: CAPABILITY,           kill: "C1 capacity, 4 checks, nothing else", witness: "differential, cycle 0"}
+  - {id: mX1,   class: capacity-mixed-id,    kill: "C1 capacity (MAX_TRANS=8 only)",      witness: "differential, cycle 0"}
+  - {id: mC2,   class: concurrency,          kill: "C2, at exactly 100% speedup",         witness: "checker"}
+  - {id: mL1,   class: liveness-deadlock,    kill: "LM_STALL",                            witness: "checker"}
+  - {id: mL2,   class: liveness-starvation,  kill: "LM_STARVE, not LM_STALL",             witness: "checker"}
+  - {id: mD1,   class: ordering-per-id,      kill: "per-(master,ID) data mismatch",       witness: "checker"}
+  - {id: mD2,   class: decode-beatcount,     kill: "RLAST on wrong beat",                 witness: "checker"}
+  - {id: mD3,   class: decode-liveness,      kill: "LM_STALL -- data bug caught by liveness", witness: "checker"}
 
-ppa_baseline:
+capability_mutant_note: >
+  mCAP1 is not hand-written. It is a real model submission recovered from git
+  6337d3f that passed EVERY correctness configuration of the checker as it then
+  stood -- right data, right order, right beat counts, no deadlock, no
+  starvation -- while carrying one eighth of the required capacity and half the
+  aggregate throughput. MAX_TRANS appears exactly once in its 732 lines: the
+  parameter declaration. It is why the CAPABILITY class exists.
+
+ppa_reference_envelope:
+  # BOTH configurations are the baseline. The spec does not constrain latency,
+  # so picking one would build an arbitrary preference into every candidate
+  # comparison: with NO_LATENCY canonical a pipelining candidate looks bad on
+  # area; with CUT_ALL_AX canonical a non-pipelining one looks good on it.
+  # Candidates are reported against the envelope, not against a point.
   platform: sky130hd
-  num_mst: 2
-  num_slv: 2
+  geometry: {NUM_MST: 2, NUM_SLV: 2}
+  build_default: CUT_ALL_AX      # only because the harness and history use it
+  points:
+    - config: CUT_ALL_AX
+      fmax_mhz: 190.48
+      fmax_period_ns: 5.25
+      fmax_converged: true
+      fmax_bracket_ns: [4.875, 5.25]     # 0.375 wide, within the 0.5 resolution
+      area_um2_at_own_fmax: 154245
+      area_um2_at_12ns: 146951
+      synth_area_um2: 107891
+      elasticity_closing_range_pct: 5.0
+    - config: NO_LATENCY
+      fmax_mhz: 126.98
+      fmax_period_ns: 7.875
+      fmax_converged: true
+      fmax_bracket_ns: [7.5, 7.875]
+      area_um2_at_own_fmax: 100277
+      area_um2_at_12ns: 86133
+      synth_area_um2: 59209
+      elasticity_closing_range_pct: 16.4
+    - config: second_source
+      status: PENDING -- Fmax sweep running
+      note: the third envelope point; functionally 16/16 but never synthesised
+  summary: >
+    CUT_ALL_AX is 1.50x faster and 54% larger at own Fmax. Neither dominates.
+    Anything quoted against one configuration must say which.
+
+ppa_historical_20ns:
+  # Kept for provenance. NOT a baseline: at 20 ns the reference closes with
+  # +7.83 ns of slack, so the clock never bound and the design was never pushed.
   clk_period_ns: 20.0
   area_um2: 146818
   synth_area_um2: 107891
   power_mw: 21.86
   wns_ns: 7.831
-  tns_ns: 0.0
   instances: 147097
   drc: 0
-  timing_closed: true
-  flow_completed: true
   note: >
-    2x2 geometry; a baseline at another geometry is not comparable. slang
-    requires the full dependency closure listed explicitly in VERILOG_FILES --
-    25 files, packages first -- extracted from the Verilator dependency file.
+    slang requires the full dependency closure listed explicitly in
+    VERILOG_FILES -- 25 files, packages first -- extracted from the Verilator
+    dependency file rather than hand-assembled.

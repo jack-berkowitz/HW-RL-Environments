@@ -309,10 +309,11 @@ Reference 16/16, second source 16/16, candidate 16/16 across
    currently exists only as prose. The original one-deep candidate is a
    ready-made instance: correct on every transaction, one outstanding per
    master, caught only by C1.
-4. **`find_fmax.py`** on the reference and on the second source. Neither has a
-   measured Fmax; the recorded PPA closed with +7.83 ns of slack, so the clock
-   never bound and no area comparison from this task is evidence about
-   difficulty yet.
+4. ~~`find_fmax.py` on the reference and the second source.~~ **REFERENCE DONE
+   AND CONVERGED**: `CUT_ALL_AX` 190.48 MHz at 5.25 ns, bracket [4.875, 5.25]
+   (0.375 ns, inside resolution), area 154 245 µm² at own Fmax. `NO_LATENCY`
+   126.98 MHz. **This task no longer ships an unconverged Fmax.** Second-source
+   sweep running — it is the third envelope point.
 5. **Second-source synthesis.** It has never been through ORFS, so its area is
    unknown and it cannot yet appear in a three-way comparison.
 6. **`task.yaml` completion** — the Verilator-only flag (the checker uses
