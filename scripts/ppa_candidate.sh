@@ -109,6 +109,21 @@ export SDC_FILE      = /work/$REL_SDC
 $INC_LINE
 
 export SYNTH_HDL_FRONTEND = slang
+
+# ORFS guards against accidentally inferring a large memory, defaulting to 4096
+# bits, and ABORTS the build above it. That guard is aimed at designs that meant
+# to instantiate a RAM macro; a candidate that writes a plain SystemVerilog array
+# has asked for registers, and there is no macro in this flow to map it to.
+#
+# Raising it does NOT flatter the candidate. Synthesising 36 kbit as flip-flops
+# produces a very large, slow result -- which is the honest consequence of what
+# the design asked for, and the number we want to see. Aborting instead would
+# hide a real area cost behind a tool guard.
+#
+# The reference builds are unaffected: they infer no memories, so this setting
+# changes nothing for them and the comparison stays like-for-like.
+export SYNTH_MEMORY_MAX_BITS = 65536
+
 export CORE_UTILIZATION = 10
 export PLACE_DENSITY    = 0.50
 export TNS_END_PERCENT  = 100

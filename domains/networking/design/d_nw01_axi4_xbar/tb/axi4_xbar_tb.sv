@@ -43,9 +43,16 @@ module axi4_xbar_tb
     parameter int NUM_MST   = 4,
     parameter int NUM_SLV   = 2,
     parameter int MAX_TRANS = 8,
+    parameter int MAX_BURST_LEN = 3,   // ARLEN/AWLEN the design must support
     parameter int N_TXN     = 1500,   // transactions per master
     parameter int MAX_ERRORS_REPORTED = 20
 );
+
+    // Transactions are scaled so total BEATS stay roughly constant: a 256-beat
+    // burst carries 64x the data of a 4-beat one, and sweeping MAX_BURST_LEN
+    // without this makes the long configs dominate runtime for no extra
+    // coverage.
+    localparam int EFF_TXN = (MAX_BURST_LEN >= 64) ? 120 : N_TXN;
 
     localparam int NID  = 4;     // distinct IDs each master uses -- >1 so that
                                  // cross-ID interleaving genuinely occurs
@@ -101,6 +108,7 @@ module axi4_xbar_tb
     int    rq_head [0:NUM_MST-1][0:NID-1];
     int    rq_tail [0:NUM_MST-1][0:NID-1];
     int    rq_beat [0:NUM_MST-1][0:NID-1];
+    int    rq_t0   [0:NUM_MST-1][0:NID-1][0:QD-1];
 
     bit    wq_dec  [0:NUM_MST-1][0:NID-1][0:QD-1];
     int    wq_head [0:NUM_MST-1][0:NID-1];
@@ -108,7 +116,43 @@ module axi4_xbar_tb
 
     int cov_rd_ok = 0, cov_rd_dec = 0, cov_wr_ok = 0, cov_wr_dec = 0;
     int cov_burst_gt1 = 0, cov_cross_id = 0, cov_same_id_two_slv = 0;
+    int cov_max_len = 0;
+    int lat_sum = 0, lat_n = 0, lat_max = 0, cyc = 0;
+    int scored_beats = 0, scored_cyc = 0;
     int last_rid [0:NUM_MST-1];
+
+    // ---- MASTER-SIDE BACKPRESSURE (spec L3) --------------------------------
+    // L3 requires liveness under response backpressure and was DECORATIVE until
+    // now: r_ready and b_ready were hardwired to 1, so the condition it names
+    // was never created. A stated requirement with no binding check is the
+    // defect class this whole exercise is about.
+    //
+    // The pattern is free-running and never reads *_valid, so it cannot violate
+    // the H1-style rule that a ready must not depend on its own valid, and it
+    // cannot wedge the way a handshake-derived stall would.
+    logic [15:0] bp_lfsr [0:NUM_MST-1];
+    logic [NUM_MST-1:0] bp_r, bp_b;
+    always_ff @(posedge clk) begin
+        if (!rst_n)
+            for (int m = 0; m < NUM_MST; m++) bp_lfsr[m] <= 16'hACE1 + 16'(m * 7919);
+        else
+            for (int m = 0; m < NUM_MST; m++)
+                bp_lfsr[m] <= {bp_lfsr[m][14:0],
+                               bp_lfsr[m][15] ^ bp_lfsr[m][13] ^ bp_lfsr[m][12] ^ bp_lfsr[m][10]};
+    end
+    // ~25 % stall on R, ~25 % on B, independently per master
+    always_comb for (int m = 0; m < NUM_MST; m++) begin
+        bp_r[m] = (bp_lfsr[m][1:0] != 2'b00);
+        bp_b[m] = (bp_lfsr[m][5:4] != 2'b00);
+    end
+    int bp_r_stalls, bp_b_stalls;
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin bp_r_stalls <= 0; bp_b_stalls <= 0; end
+        else if (tmode == 0) for (int m = 0; m < NUM_MST; m++) begin
+            if (mst_resp[m].r_valid && !mst_req[m].r_ready) bp_r_stalls <= bp_r_stalls + 1;
+            if (mst_resp[m].b_valid && !mst_req[m].b_ready) bp_b_stalls <= bp_b_stalls + 1;
+        end
+    end
 
     // ---- controlled preamble (spec C1/C2) ----------------------------------
     // tmode 0 = the randomised all-to-all phase (everything below behaves as
@@ -165,8 +209,8 @@ module axi4_xbar_tb
             mst_req[m].ar.burst = BURST_INCR;
         end else begin
             mst_req[m]          = '0;
-            mst_req[m].r_ready  = 1'b1;
-            mst_req[m].b_ready  = 1'b1;
+            mst_req[m].r_ready  = bp_r[m];
+            mst_req[m].b_ready  = bp_b[m];
             mst_req[m].ar_valid = ar_hold[m];
             mst_req[m].ar.id    = nxt_id[m];
             mst_req[m].ar.addr  = nxt_addr[m];
@@ -335,6 +379,10 @@ module axi4_xbar_tb
                         if (rq_len[m][i][rq_head[m][i] % QD] > 0) cov_burst_gt1++;
                         rq_head[m][i] <= rq_head[m][i] + 1;
                         rq_beat[m][i] <= 0;
+                        lat_sum <= lat_sum + (cyc - rq_t0[m][i][rq_head[m][i] % QD]);
+                        lat_n   <= lat_n + 1;
+                        if ((cyc - rq_t0[m][i][rq_head[m][i] % QD]) > lat_max)
+                            lat_max <= cyc - rq_t0[m][i][rq_head[m][i] % QD];
                     end else rq_beat[m][i] <= rq_beat[m][i] + 1;
                     if (last_rid[m] != i) begin cov_cross_id++; last_rid[m] <= i; end
                 end
@@ -374,6 +422,14 @@ module axi4_xbar_tb
         assign lm_srv[m] = (mst_resp[m].r_valid && mst_req[m].r_ready && mst_resp[m].r.last)
                            || (mst_resp[m].b_valid && mst_req[m].b_ready);
     end
+    always_ff @(posedge clk) if (rst_n) begin
+        cyc <= cyc + 1;
+        if (tmode == 0) begin
+            scored_cyc <= scored_cyc + 1;
+            for (int m = 0; m < NUM_MST; m++)
+                if (mst_resp[m].r_valid && mst_req[m].r_ready) scored_beats <= scored_beats + 1;
+        end
+    end
     always_ff @(posedge clk) if (rst_n && tmode == 0) begin
         `LM_TICK(lm_off, lm_srv)
     end
@@ -396,6 +452,8 @@ module axi4_xbar_tb
             for (int m = 0; m < NUM_MST; m++) begin
                 // record accepted requests into the per-(master,ID) queue
                 if (mst_req[m].ar_valid && mst_resp[m].ar_ready) begin
+                    if (nxt_len[m] > cov_max_len) cov_max_len <= nxt_len[m];
+                    rq_t0  [m][int'(nxt_id[m])][rq_tail[m][int'(nxt_id[m])] % QD] <= cyc;
                     rq_addr[m][int'(nxt_id[m])][rq_tail[m][int'(nxt_id[m])] % QD] <= nxt_addr[m];
                     rq_len [m][int'(nxt_id[m])][rq_tail[m][int'(nxt_id[m])] % QD] <= nxt_len[m];
                     rq_dec [m][int'(nxt_id[m])][rq_tail[m][int'(nxt_id[m])] % QD] <= nxt_dec[m];
@@ -405,6 +463,7 @@ module axi4_xbar_tb
                     txn_sent[m] <= txn_sent[m] + 1;
                 end
                 if (mst_req[m].aw_valid && mst_resp[m].aw_ready) begin
+                    if (nxt_len[m] > cov_max_len) cov_max_len <= nxt_len[m];
                     wq_dec[m][int'(nxt_id[m])][wq_tail[m][int'(nxt_id[m])] % QD] <= nxt_dec[m];
                     wq_tail[m][int'(nxt_id[m])] <= wq_tail[m][int'(nxt_id[m])] + 1;
                     outstanding_w[m] <= outstanding_w[m] + 1;
@@ -423,7 +482,7 @@ module axi4_xbar_tb
 
                 // launch the next request
                 if (!ar_hold[m] && !aw_hold[m] && w_left[m] == 0
-                    && txn_sent[m] < N_TXN
+                    && txn_sent[m] < EFF_TXN
                     && outstanding_r[m] < MAX_TRANS && outstanding_w[m] < MAX_TRANS) begin
                     // Two INDEPENDENT draws. An earlier version used one, with
                     // r<8 meaning unmapped and r<50 meaning read -- so every
@@ -433,7 +492,10 @@ module axi4_xbar_tb
                     automatic int r    = $urandom_range(0, 99);   // mapped vs not
                     automatic int rw   = $urandom_range(0, 99);   // read vs write
                     nxt_id[m]   <= slv_id_t'($urandom_range(0, NID-1));
-                    nxt_len[m]  <= $urandom_range(0, 3);
+                    if ($urandom_range(0, 3) == 0)
+                        nxt_len[m] <= MAX_BURST_LEN;              // drive the parameter
+                    else
+                        nxt_len[m] <= $urandom_range(0, MAX_BURST_LEN);
                     if (r < 8) begin           // unmapped -> must DECERR
                         nxt_addr[m] <= UNMAPPED + addr_t'($urandom_range(0, 255) * 8);
                         nxt_dec[m]  <= 1'b1;
@@ -562,10 +624,10 @@ module axi4_xbar_tb
 
         phase = "all-to-all";
         guard = 0;
-        while (guard < 400*N_TXN) begin
+        while (guard < 400*EFF_TXN*(MAX_BURST_LEN+1)) begin
             automatic bit done = 1'b1;
             for (int m = 0; m < NUM_MST; m++)
-                if (txn_sent[m] < N_TXN || outstanding_r[m] > 0 || outstanding_w[m] > 0)
+                if (txn_sent[m] < EFF_TXN || outstanding_r[m] > 0 || outstanding_w[m] > 0)
                     done = 1'b0;
             if (done) break;
             @(posedge clk); guard++;
@@ -574,6 +636,24 @@ module axi4_xbar_tb
 
         phase = "final";
         $display("METRIC: checks=%0d", checks);
+        // ---- PPA-adjacent axes. Throughput is the P in PPA and was being
+        // treated as diagnostic output; it is reported here as a first-class
+        // axis alongside area, power and Fmax. Still ungated -- no flat
+        // threshold separates a good design from a bad one across geometries.
+        $display("METRIC: scored_beats_per_1000cyc=%0d over %0d cycles",
+                 (scored_cyc == 0) ? 0 : (scored_beats * 1000) / scored_cyc, scored_cyc);
+        $display("METRIC: read_latency_avg=%0d max=%0d n=%0d",
+                 (lat_n == 0) ? 0 : lat_sum / lat_n, lat_max, lat_n);
+        begin
+            int lo, hi;
+            lo = lm_served_count[0]; hi = lm_served_count[0];
+            for (int m = 1; m < NUM_MST; m++) begin
+                if (lm_served_count[m] < lo) lo = lm_served_count[m];
+                if (lm_served_count[m] > hi) hi = lm_served_count[m];
+            end
+            $display("METRIC: fairness_spread=%0d (min=%0d max=%0d)", hi - lo, lo, hi);
+        end
+        $display("METRIC: backpressure_stalls r=%0d b=%0d", bp_r_stalls, bp_b_stalls);
         `LM_CHECK(note_fail)
 
         begin
@@ -586,11 +666,36 @@ module axi4_xbar_tb
             if (cov_wr_ok  == 0) begin miss++; $display("// COVERAGE HOLE: no successful write"); end
             if (cov_rd_dec == 0) begin miss++; $display("// COVERAGE HOLE: no unmapped read (DECERR path untested)"); end
             if (cov_wr_dec == 0) begin miss++; $display("// COVERAGE HOLE: no unmapped write"); end
-            if (cov_burst_gt1 == 0) begin miss++; $display("// COVERAGE HOLE: no multi-beat burst"); end
+            if (cov_burst_gt1 == 0 && MAX_BURST_LEN > 0) begin miss++; $display("// COVERAGE HOLE: no multi-beat burst"); end
+            $display("// coverage: max_burst_seen=%0d (MAX_BURST_LEN=%0d) bp_r_stalls=%0d bp_b_stalls=%0d",
+                     cov_max_len, MAX_BURST_LEN, bp_r_stalls, bp_b_stalls);
+            if (cov_max_len < MAX_BURST_LEN) begin
+                miss++; $display("// COVERAGE HOLE: never drove a burst of the full MAX_BURST_LEN=%0d (longest was %0d)",
+                                 MAX_BURST_LEN, cov_max_len); end
+            // L3 is only tested if backpressure actually created stalls.
+            if (bp_r_stalls == 0) begin miss++; $display("// COVERAGE HOLE: R backpressure never stalled a response (L3 untested)"); end
+            if (bp_b_stalls == 0) begin miss++; $display("// COVERAGE HOLE: B backpressure never stalled a response (L3 untested)"); end
             // If responses never switched ID at a master, the run never
             // exercised cross-ID interleaving and a global-order scoreboard
             // would have passed. That is precisely the blind spot.
-            if (cov_cross_id < 100) begin miss++; $display("// COVERAGE HOLE: too little cross-ID interleaving (%0d switches)", cov_cross_id); end
+            // RATE, not count. The property is "cross-ID reordering genuinely
+            // occurred", and the count scales with how many transactions the
+            // run performs -- which EFF_TXN deliberately reduces at long bursts
+            // to hold total beats constant. A fixed floor of 100 was therefore
+            // measuring the harness's own transaction scaling, not the DUT: at
+            // MAX_BURST_LEN=255 the reference interleaves at 32 % (76 switches
+            // in 240 transactions) and still tripped it. Rate-based, with a
+            // small absolute minimum so a tiny run cannot pass vacuously.
+            begin
+                int min_cross;
+                min_cross = (EFF_TXN * NUM_MST) / 32;
+                if (min_cross < 20) min_cross = 20;
+                if (cov_cross_id < min_cross) begin
+                    miss++;
+                    $display("// COVERAGE HOLE: too little cross-ID interleaving (%0d switches, need %0d)",
+                             cov_cross_id, min_cross);
+                end
+            end
             if (miss > 0) note_fail($sformatf("%0d coverage holes", miss));
         end
 

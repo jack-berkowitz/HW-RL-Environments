@@ -1,0 +1,60 @@
+// Verilated -*- C++ -*-
+// DESCRIPTION: Verilator output: Symbol table internal header
+//
+// Internal details; most calling programs do not need this header,
+// unless using verilator public meta comments.
+
+#ifndef VERILATED_VAXI4_XBAR_TB__SYMS_H_
+#define VERILATED_VAXI4_XBAR_TB__SYMS_H_  // guard
+
+#include "verilated.h"
+
+// INCLUDE MODEL CLASS
+
+#include "Vaxi4_xbar_tb.h"
+
+// INCLUDE MODULE CLASSES
+#include "Vaxi4_xbar_tb___024root.h"
+#include "Vaxi4_xbar_tb_axi_mux__pi3.h"
+#include "Vaxi4_xbar_tb_axi_demux__pi4.h"
+#include "Vaxi4_xbar_tb_axi_err_slv__pi5.h"
+#include "Vaxi4_xbar_tb_axi_demux_id_counters__pi10.h"
+
+// SYMS CLASS (contains all model state)
+class alignas(VL_CACHE_LINE_BYTES) Vaxi4_xbar_tb__Syms final : public VerilatedSyms {
+  public:
+    // INTERNAL STATE
+    Vaxi4_xbar_tb* const __Vm_modelp;
+    VlDeleter __Vm_deleter;
+    bool __Vm_didInit = false;
+
+    // MODULE INSTANCE STATE
+    Vaxi4_xbar_tb___024root        TOP;
+    Vaxi4_xbar_tb_axi_mux__pi3     TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__gen_mst_port_mux__BRA__0__KET____DOT__i_axi_mux;
+    Vaxi4_xbar_tb_axi_mux__pi3     TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__gen_mst_port_mux__BRA__1__KET____DOT__i_axi_mux;
+    Vaxi4_xbar_tb_axi_demux__pi4   TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__0__KET____DOT__i_axi_demux;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__0__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_ar_id_counter__DOT__i_ar_id_counter;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__0__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_aw_id_counter__DOT__i_aw_id_counter;
+    Vaxi4_xbar_tb_axi_err_slv__pi5 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__0__KET____DOT__i_axi_err_slv;
+    Vaxi4_xbar_tb_axi_demux__pi4   TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__1__KET____DOT__i_axi_demux;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__1__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_ar_id_counter__DOT__i_ar_id_counter;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__1__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_aw_id_counter__DOT__i_aw_id_counter;
+    Vaxi4_xbar_tb_axi_err_slv__pi5 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__1__KET____DOT__i_axi_err_slv;
+    Vaxi4_xbar_tb_axi_demux__pi4   TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__2__KET____DOT__i_axi_demux;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__2__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_ar_id_counter__DOT__i_ar_id_counter;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__2__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_aw_id_counter__DOT__i_aw_id_counter;
+    Vaxi4_xbar_tb_axi_err_slv__pi5 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__2__KET____DOT__i_axi_err_slv;
+    Vaxi4_xbar_tb_axi_demux__pi4   TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__3__KET____DOT__i_axi_demux;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__3__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_ar_id_counter__DOT__i_ar_id_counter;
+    Vaxi4_xbar_tb_axi_demux_id_counters__pi10 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__3__KET____DOT__i_axi_demux__i_demux_simple__DOT__genblk1__DOT__gen_aw_id_counter__DOT__i_aw_id_counter;
+    Vaxi4_xbar_tb_axi_err_slv__pi5 TOP__axi4_xbar_tb__DOT__dut__DOT__u_xbar__DOT__i_xbar_unmuxed__DOT__gen_slv_port_demux__BRA__3__KET____DOT__i_axi_err_slv;
+
+    // CONSTRUCTORS
+    Vaxi4_xbar_tb__Syms(VerilatedContext* contextp, const char* namep, Vaxi4_xbar_tb* modelp);
+    ~Vaxi4_xbar_tb__Syms();
+
+    // METHODS
+    const char* name() const { return TOP.vlNamep; }
+};
+
+#endif  // guard

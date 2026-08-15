@@ -95,8 +95,8 @@ case "$TASK_NAME" in
   ai_d01_int8_requant)
       CFGS=("LANES=1" "LANES=2" "LANES=4" "LANES=8") ;;
   d_nw01_axi4_xbar)
-      CFGS=(); for m in 2 4; do for sv in 2 4; do for t in 2 8; do
-        CFGS+=("NUM_MST=$m NUM_SLV=$sv MAX_TRANS=$t"); done; done; done ;;
+      CFGS=(); for m in 2 4; do for sv in 2 4; do for t in 2 8; do for bl in 3 255; do
+        CFGS+=("NUM_MST=$m NUM_SLV=$sv MAX_TRANS=$t MAX_BURST_LEN=$bl"); done; done; done; done ;;
   d_ca04_async_fifo_cdc)
       CFGS=(); for w in 8 32 64; do for l in 2 3 4; do for y in 2 3; do
         CFGS+=("DATA_W=$w LOG_DEPTH=$l SYNC_STAGES=$y"); done; done; done ;;

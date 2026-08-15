@@ -562,3 +562,113 @@ externally-authored RTL in a different configuration, and it **failed the
 original C1** — which is what proved the check was pinned in the first place.
 The second source confirms the relaxed floor admits a genuinely different
 architecture; the probe is what found the defect.
+
+---
+
+# L3 WAS DECORATIVE, AND MAX_BURST_LEN IS NOW A PARAMETER
+
+Third consecutive spec gap found *after* a candidate passed. The re-solicited
+candidate provisioned a **256-entry read buffer per master** — 36 864 bits at
+NUM_MST=2 — and said why in its own comment: *"A read burst may contain up to
+256 beats. One full-burst buffer per master lets the crossbar absorb a mapped R
+burst even if the originating master applies backpressure."*
+
+It was reading the spec correctly. **L3 states liveness under backpressure, and
+AXI4 permits ARLEN up to 255.** The checker did neither: `r_ready` and `b_ready`
+were hardwired to 1, so backpressure was never applied, and bursts were drawn
+from `$urandom_range(0, 3)`. **L3 had been decorative since it was written.**
+
+## The measurement that decided the fix
+
+Narrowing the spec would have punished the candidate for being more compliant
+than the anchor. So the question was whether the anchor can actually satisfy L3,
+and at what burst length. Measured before anything was changed:
+
+| reference, backpressure ON | verdict | evidence |
+|---|---|---|
+| `MAX_BURST_LEN = 3` | **PASS** | 3509 R stalls, 1397 B stalls |
+| `MAX_BURST_LEN = 255` | **PASS** | 14 231 R stalls, 255-beat bursts driven |
+
+**The anchor satisfies L3 at full AXI4 burst length while buffering no read data
+at all.** So there is no anchor limitation to document, the upper sweep value is
+255 rather than something the reference forced down, and the candidate's
+full-burst buffer is over-provisioning rather than a requirement.
+
+## What changed
+
+1. **Master-side backpressure, unconditional.** Free-running LFSR per master,
+   ~25 % stall on R and on B independently. It never reads `*_valid`, so it
+   cannot violate the ready-not-dependent-on-valid rule or wedge the way a
+   handshake-derived stall would. **A coverage floor fails the run if
+   backpressure never actually stalled a response**, so L3 cannot pass by never
+   being exercised again.
+2. **`MAX_BURST_LEN` is a swept parameter**, legal {3, 255}. One burst in four
+   is driven at exactly the parameter, and a coverage floor fails the run if the
+   full value was never reached. The spec states it is also a **ceiling** —
+   nothing longer is ever driven, so provisioning beyond it is wasted area.
+3. Configs go 8 → **16**. `EFF_TXN` drops to 120 at long bursts so total beats
+   stay roughly constant instead of the long configs dominating runtime.
+
+## A coverage floor that was measuring the harness
+
+The reference failed 2 of 16 on `COVERAGE HOLE: too little cross-ID
+interleaving` — 76 switches against a floor of 100. Not a reference defect: at
+`MAX_BURST_LEN=255` there are only 120 transactions per master, and 76 switches
+out of 240 transactions is a **32 % interleaving rate**, higher than the long
+runs achieve. The fixed floor of 100 was measuring `EFF_TXN`, which is my own
+scaling knob, not the DUT.
+
+Now rate-based — `(EFF_TXN * NUM_MST) / 32`, minimum 20 — which is the form the
+property actually has. Loosening a floor because the reference tripped it is the
+rediscover-the-reference trap, so the justification is deliberately independent
+of what the reference scored: the count scales with transaction count, the
+property does not.
+
+## Verdict matrix, 16 configs
+
+| input | configs |
+|---|---|
+| reference | **16/16** |
+| second source | **16/16** |
+| re-solicited candidate | **16/16** |
+
+The second source clearing the new checks is the over-constraint control: L3
+backpressure and `MAX_BURST_LEN=255` do not encode the anchor's architecture.
+
+## The re-solicited candidate: capacity fixed, area and throughput lost
+
+| axis | reference | candidate |
+|---|---|---|
+| outstanding per master | 9 | **8** (was 1) |
+| disjoint-pair concurrency | 200 % | 200 % |
+| **single-pair throughput** | 2999 | **599** — 5× worse |
+| aggregate throughput | 999 | 798 |
+| **synth area** | 107 891 µm² | **1 540 648 µm²** — 14× larger |
+
+**The pendulum swung all the way over.** The first candidate was 3× smaller with
+one-eighth the capacity; this one has full capacity and is 14× larger and
+slower. The 36 kbit buffer synthesised as flip-flops is the entire difference.
+
+This is the first time a candidate has been materially **worse** than the
+reference on a real axis, and the throughput half of it was visible only because
+throughput is reported. It is now a first-class scored axis.
+
+## Broadened metric set
+
+Every one of the last four findings came from a number that happened to be
+printed rather than from a gate, so the checker now prints:
+
+```
+METRIC: outstanding_master<N>          per-master capacity
+METRIC: disjoint_one_pair / two_pairs  single-pair and concurrent throughput, separately
+METRIC: aggregate_bursts_per_1000cyc   all-to-all saturation
+METRIC: scored_beats_per_1000cyc       throughput under the real mixed workload
+METRIC: read_latency_avg / max / n     AR-accept to RLAST, in cycles
+METRIC: fairness_spread                max minus min served across masters
+METRIC: backpressure_stalls r= b=      proof L3 was exercised
+METRIC: liveness worst_wait            per-master wait under progress elsewhere
+```
+
+Single-pair and aggregate are recorded separately on purpose: the candidate's
+**5× single-pair gap against a 1.25× aggregate gap** localises its bottleneck to
+per-pair latency rather than total switching capacity.

@@ -30,6 +30,12 @@
 //             masters would share an index, and their responses would misroute.
 //             The checker rejects NUM_MST > 4 rather than let that happen.
 //   NUM_SLV : number of SLAVES attached  (crossbar master ports). Legal: 2, 4.
+//   MAX_BURST_LEN : the largest ARLEN/AWLEN the design must support, in the
+//             AXI encoding (beats - 1). Legal: 3, 255. This is a REQUIRED
+//             capability, checked: the checker drives bursts at exactly this
+//             value and fails if the design cannot carry them. It is also a
+//             CEILING -- nothing above it is ever driven, so provisioning for
+//             longer bursts is wasted area, not insurance.
 //   MAX_TRANS : REQUIRED outstanding transactions per master port. Legal: 2, 8.
 //             This is a MINIMUM CAPACITY the design must provide, not a limit
 //             it may ignore -- see C1. Exceeding it is fine; a design that
@@ -98,8 +104,18 @@
 //       being served. The checker tracks per-master wait time measured only
 //       while OTHER masters are making progress, so a uniformly slow crossbar
 //       is not penalised — only an unfair one.
-//   L3. Both hold with backpressure applied on any subset of slave response
-//       channels, and with masters offering load at different rates.
+//   L3. Both hold under RESPONSE BACKPRESSURE -- masters deassert r_ready and
+//       b_ready at arbitrary times, independently of each other -- and with
+//       masters offering load at different rates. The checker applies pseudo-
+//       random backpressure on both response channels of every master and
+//       fails if it never actually stalls a response, so this requirement
+//       cannot pass by never being exercised.
+//
+//       Backpressure is bounded in TIME, never in total: a master always
+//       resumes. You do not need to absorb a whole burst to satisfy L3 -- the
+//       vendored reference satisfies it at MAX_BURST_LEN=255 while buffering
+//       NO read data at all. Stalling your input is a legitimate response to a
+//       stalled output.
 //
 //   The classic way to fail L1 is a shared resource claimed in a different
 //   order by different paths — for example accepting an AW without reserving
@@ -190,7 +206,8 @@ module axi4_xbar
 #(
     parameter int NUM_MST   = 2,   // masters attached   (2 / 4)
     parameter int NUM_SLV   = 2,   // slaves attached    (2 / 4)
-    parameter int MAX_TRANS = 8    // REQUIRED outstanding per master port (2 / 8) -- see C1
+    parameter int MAX_TRANS = 8,   // REQUIRED outstanding per master port (2 / 8) -- see C1
+    parameter int MAX_BURST_LEN = 3 // largest ARLEN/AWLEN to support (3 / 255)
 ) (
     input  logic clk,
     input  logic rst_n,
