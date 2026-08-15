@@ -251,8 +251,26 @@ echo "--------------------------------------------------------------------------
 for cand in "${CANDS[@]}"; do
   name="$(basename "$cand")"
   # cheap pre-checks: these are failed attempts, not harness breakage
-  if grep -q "TEST_RESULT" "$cand"; then
-    printf '%-26s %-9s %s\n' "$name" "REJECT" "forges a TEST_RESULT line"
+  # LEAK TOKENS -- the full set, ported from runner/extract.py::_LEAKS. Until
+  # now the domains path enforced ONE of the six (TEST_RESULT), so every
+  # candidate solicited was checked for verdict forgery and nothing else: a
+  # submission reaching into the testbench hierarchy ("<dut>_tb.signal") or
+  # including a shared reference model would have passed. All candidates
+  # solicited before this change were re-scanned retroactively against the full
+  # set and are clean, so no earlier result is affected.
+  #
+  # -F: these are literal strings, not patterns. "_tb." contains a regex
+  # metacharacter and would otherwise match "_tbX".
+  leak=""
+  for tok in "TEST_RESULT" "_tb." "_tb " "golden_mem" "mem_stub" "reference_solutions"; do
+    if LC_ALL=C grep -qF -- "$tok" "$cand"; then leak="$tok"; break; fi
+  done
+  if [ -n "$leak" ]; then
+    case "$leak" in
+      TEST_RESULT) why="forges a TEST_RESULT line" ;;
+      *)           why="references harness-private '$leak' -- the submission may not see the testbench" ;;
+    esac
+    printf '%-26s %-9s %s\n' "$name" "REJECT" "$why"
     NREJECT=$((NREJECT+1)); continue
   fi
   if ! grep -qE "^[[:space:]]*module[[:space:]]+$DUT_MOD\b" "$cand"; then
