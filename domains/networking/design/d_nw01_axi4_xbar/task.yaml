@@ -1,0 +1,87 @@
+id: d_nw01
+module: axi4_xbar
+domain: networking
+type: design
+catalog: CATALOG_V3_HARD.md
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/axi
+  sha: 4da15979747f326bde2f9869c64e587ce599772c
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/axi/src/axi_xbar.sv
+  shim: ref/axi4_xbar_ref.sv
+  shim_note: >
+    Type binding plus struct pack/unpack. axi_xbar takes 14 type parameters plus
+    a struct Cfg and an address map -- the shape that blocked ai_v01 -- and it
+    bridges cleanly. Verified at all four geometries. The one non-trivial mapping
+    is the widened id field, resized because the spec fixes it at SLV_ID_W+2
+    while upstream computes SLV_ID_W+clog2(NoSlvPorts).
+
+spec: [spec/axi4_xbar_iface.sv, spec/axi4_xbar_pkg.sv]
+
+configs:
+  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 2}
+  - {NUM_MST: 2, NUM_SLV: 2, MAX_TRANS: 8}
+  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 2}
+  - {NUM_MST: 2, NUM_SLV: 4, MAX_TRANS: 8}
+  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 2}
+  - {NUM_MST: 4, NUM_SLV: 2, MAX_TRANS: 8}
+  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 2}
+  - {NUM_MST: 4, NUM_SLV: 4, MAX_TRANS: 8}
+illegal_configs: >
+  NUM_MST > 4 is a HARD CAP -- the widened id field supplies exactly 2
+  master-index bits, so at 8 masters two would share an index and their
+  responses would misroute as an apparent ordering bug. Enforced by an
+  elaboration-time $error in the shim and by the checker's parameter guard.
+  NUM_SLV outside {2,4} and MAX_TRANS outside {2,8} are also illegal.
+
+sim_timeout_s: 900
+simulators_verified: [verilator-5.046]
+
+second_source: false
+second_source_note: >
+  Not written. An independent AXI4 crossbar is a task-sized piece of work. The
+  over-constraint risk it covers is addressed differently and the evidence is in
+  NOTES.md: the scoreboard is per-(master,ID) by construction, slaves respond at
+  deliberately different rates, the correct reference passes with 2283 cross-ID
+  switches, and the per-ID ordering mutant is killed. Weaker than a second
+  source; recorded as such rather than claimed as equivalent.
+
+negative_controls:
+  liveness:
+    procedure: CATALOG_V3_HARD.md standing procedure
+    correct_reference: PASS, neither check fires
+    deadlock_mutant: mL1 -> LM_STALL fires
+    starvation_mutant: mL2 -> LM_STARVE fires, LM_STALL does NOT
+    slow_but_fair: SLOW_SLAVE 0/5/20 all PASS, throughput drops 14x, monitor silent
+  ordering:
+    correct_reference: PASS with 2283 cross-ID switches
+    reorder_mutant: mD1 -> killed by the per-(master,ID) comparison
+
+mutants:
+  - {id: mL1, class: liveness-deadlock,   kill: "LM_STALL"}
+  - {id: mL2, class: liveness-starvation, kill: "LM_STARVE, not LM_STALL"}
+  - {id: mD1, class: ordering-per-id,     kill: "per-(master,ID) data mismatch"}
+  - {id: mD2, class: decode-beatcount,    kill: "RLAST on wrong beat"}
+  - {id: mD3, class: decode-liveness,     kill: "LM_STALL -- data-path bug caught by liveness"}
+
+ppa_baseline:
+  platform: sky130hd
+  num_mst: 2
+  num_slv: 2
+  clk_period_ns: 20.0
+  area_um2: 146818
+  synth_area_um2: 107891
+  power_mw: 21.86
+  wns_ns: 7.831
+  tns_ns: 0.0
+  instances: 147097
+  drc: 0
+  timing_closed: true
+  flow_completed: true
+  note: >
+    2x2 geometry; a baseline at another geometry is not comparable. slang
+    requires the full dependency closure listed explicitly in VERILOG_FILES --
+    25 files, packages first -- extracted from the Verilator dependency file.
