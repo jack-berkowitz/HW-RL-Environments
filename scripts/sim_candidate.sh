@@ -90,7 +90,7 @@ echo "==========================================================================
 
 # --- run one candidate over every config; echoes "<pass> <total>|<firstfail>" -
 run_one() {
-  local cand="$1" p=0 t=0 first=""
+  local cand="$1" p=0 t=0 first="" cerr="" CERR=""
   for cfg in "${CFGS[@]}"; do
     t=$((t+1))
     local tag out v
@@ -99,17 +99,17 @@ run_one() {
       local pargs=""
       for kv in $cfg; do pargs="$pargs -P${TB_MOD}.${kv%%=*}=${kv##*=}"; done
       rm -f "/tmp/cand_${tag}.vvp"
-      iverilog -g2012 -o "/tmp/cand_${tag}.vvp" $pargs "$TB" "$cand" >/dev/null 2>&1
+      cerr="$(iverilog -g2012 -o "/tmp/cand_${tag}.vvp" $pargs "$TB" "$cand" 2>&1)"
       if [ -f "/tmp/cand_${tag}.vvp" ]; then out="$(timeout 600 vvp "/tmp/cand_${tag}.vvp" 2>&1)"
-      else out="COMPILE_ERROR"; fi
+      else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -viE "warning" | grep -m1 . | cut -c1-90)"; fi
     else
       local gargs="" d="obj_cand_${tag}"
       for kv in $cfg; do gargs="$gargs -G$kv"; done
       rm -rf "$d"
-      verilator --binary --timing -j 0 -Wno-fatal --x-assign unique --x-initial unique \
-        --top-module "$TB_MOD" $gargs "$TB" "$cand" -o sim --Mdir "$d" >/dev/null 2>&1
+      cerr="$(verilator --binary --timing -j 0 -Wno-fatal --x-assign unique --x-initial unique \
+        --top-module "$TB_MOD" $gargs "$TB" "$cand" -o sim --Mdir "$d" 2>&1)"
       if [ -x "$d/sim" ]; then out="$(timeout 600 "./$d/sim" 2>&1)"
-      else out="COMPILE_ERROR"; fi
+      else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -m1 "%Error" | sed "s|.*/candidates/|candidates/|" | cut -c1-90)"; fi
       rm -rf "$d"
     fi
     v="$(echo "$out" | grep -oE 'TEST_RESULT: (PASS|FAIL)' | head -1 | awk '{print $2}')"
@@ -119,7 +119,8 @@ run_one() {
     if [ "$v" = "PASS" ] && echo "$out" | grep -q "COVERAGE HOLE"; then v="HOLES"; fi
     if [ "$v" = "PASS" ]; then p=$((p+1))
     elif [ -z "$first" ]; then
-      first="$cfg -> $v: $(echo "$out" | grep -m1 -E '^\[FAIL\]|COVERAGE HOLE' | sed 's/^\[FAIL\] //' | cut -c1-44)"
+      if [ "$v" = "COMPILE" ]; then first="$cfg -> COMPILE: $CERR"
+      else first="$cfg -> $v: $(echo "$out" | grep -m1 -E '^\[FAIL\]|COVERAGE HOLE' | sed 's/^\[FAIL\] //' | cut -c1-44)"; fi
     fi
   done
   echo "$p $t|$first"
@@ -139,7 +140,19 @@ for cand in "${CANDS[@]}"; do
   if ! grep -qE "^[[:space:]]*module[[:space:]]+$DUT_MOD\b" "$cand"; then
     printf '%-26s %-9s %s\n' "$name" "REJECT" "does not declare 'module $DUT_MOD'"; continue
   fi
-  res="$(run_one "$cand")"
+  # Chat UIs paste U+00A0 (non-breaking space) in place of ordinary spaces.
+  # Verilator's lexer rejects it with a misleading "unexpected $end", so the
+  # answer looks broken when only the transport was. Normalise a COPY -- the
+  # original answer file is never modified -- and say so in the report.
+  nbsp="$(LC_ALL=C grep -c $'\xc2\xa0' "$cand" 2>/dev/null || echo 0)"
+  runfile="$cand"
+  if [ "$nbsp" -gt 0 ] || [ -n "$(tail -c 1 "$cand")" ]; then
+    runfile="/tmp/sanitised_$(basename "$cand")"
+    LC_ALL=C sed $'s/\xc2\xa0/ /g' "$cand" > "$runfile"
+    printf '\n' >> "$runfile"
+    [ "$nbsp" -gt 0 ] && echo "  note: $name had non-breaking spaces on $nbsp lines; ran a normalised copy"
+  fi
+  res="$(run_one "$runfile")"
   pt="${res%%|*}"; ff="${res#*|}"
   set -- $pt; p=$1; t=$2
   printf '%-26s %-9s %s\n' "$name" "$p/$t" "$ff"
