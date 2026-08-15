@@ -426,3 +426,82 @@ the reference failed through the shared path while the candidate passed.
 Fixed, and `nw_d01` is back to 16/16. Full regression, all references through
 the corrected runner: `ai_d01` 4/4, `nw_d01` 16/16, `ca_d08` 3/3, `d_ca04`
 18/18, `d_nw01` 8/8.
+
+---
+
+# C1 AND C2 AS FLOORS — the over-constraint check, and what it caught
+
+C1 and C2 were derived from measurements of one implementation, which is exactly
+how a rediscover-the-reference test gets written. Both were therefore checked
+against a **correct design that differs from the anchor**, before anything else
+ran.
+
+The probe is the vendored `axi_xbar` reconfigured with `LatencyMode: NO_LATENCY`
+— same crossbar, same `MaxMstTrans = MAX_TRANS`, two fewer buffering stages.
+
+## C1 was over-constrained, and the probe proved it
+
+| design | MAX_TRANS=2 | MAX_TRANS=8 |
+|---|---|---|
+| anchor, `CUT_ALL_AX` (shipped) | 3 | 9 |
+| anchor, `NO_LATENCY` | **1** | **7** |
+| candidate | 1 (`1 1 0 0`) | 1 |
+
+**Observable capacity depends on pipeline depth, not only on configured queue
+depth.** The same `MaxMstTrans` yields `MAX_TRANS+1` with cuts and `MAX_TRANS-1`
+without. The original check required `>= MAX_TRANS`, so the no-cut anchor —
+a correct crossbar differing only in buffering — **failed at both settings**.
+The shipped reference passed only because `CUT_ALL_AX` handed it two spare
+slots. That is PULP's pipelining choice encoded into the contract.
+
+**Fixed: the floor is `ceil(MAX_TRANS / 2)`.** At `MAX_TRANS=8` that is 4, with
+the anchor at 9, the no-cut anchor at 7 and a one-deep design at 1 — margin on
+both sides rather than a threshold resting on the reference's exact figure.
+
+### The floor is per master, which matters more than the depth at MAX_TRANS=2
+
+At `MAX_TRANS=2` the floor is 1 and looks inert. It is not, because it is
+applied per master:
+
+```
+no-cut anchor   1 1 1 1     PASS
+candidate       1 1 0 0     FAIL
+```
+
+Masters 2 and 3 get **nothing**. One un-retiring transaction occupies the
+candidate's per-slave read path and shuts out every other master targeting that
+slave. So C1 catches *depth* at `MAX_TRANS=8` and *head-of-line blocking* at
+`MAX_TRANS=2` — a different defect, caught by the same floor.
+
+## C2's threshold, and why it sits at 150 %
+
+Ideal parallelism is 200 %, complete serialisation is 100 %, and the threshold
+is the midpoint. It tolerates a quarter of ideal throughput being lost to
+arbitration overhead while still failing anything sharing one datapath.
+
+Four designs measured: anchor **200 %**, no-cut anchor **200 %**, candidate
+**200 %**, serialisation mutant **100 %**. Three structurally different passing
+designs all land at 200 %, and the only thing near the threshold is the mutant,
+50 points below it.
+
+## Verdict matrix after the relaxation
+
+| input | configs |
+|---|---|
+| anchor, as shipped | **8/8** |
+| anchor, `NO_LATENCY` | **8/8** |
+| candidate | 3/8 |
+| `mC2_serialised_xbar` | 4/8 |
+
+The candidate now passes 3 configs rather than 0 — the honest consequence of
+removing the over-constraint. It still fails overall, on capacity, which is the
+defect that is actually there.
+
+## d_nw01 contains roughly zero genuine optimisation win
+
+Recording the decomposition as the headline finding: the 3.1× area gap is
+**1.82× off-spec pipelining × 1.70× capability gap**. The pipelining was this
+shim's choice of `CUT_ALL_AX`, not a requirement of the task and not something
+the candidate competed against. The capability gap is missing function, not
+efficiency. **Neither factor is an optimisation the candidate earned, and this
+task should not be cited as evidence of one.**

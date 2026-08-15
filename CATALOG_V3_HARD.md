@@ -190,9 +190,8 @@ there is no way to know which side is broken.
 
 #### Corollary added after the `d_nw01` capability audit
 
-> **A negative control validates a check only if the known-bad input fails
-> THAT check and not something else — and only if the harness around it can
-> saturate whatever the check measures.**
+> **A control validates a check only if it fails that check and nothing else,
+> and only if the harness can saturate what the check measures.**
 
 Building the C2 concurrency control took three attempts, and every failure was a
 hole in the *check* rather than in the mutant:
@@ -217,6 +216,22 @@ indistinguishable from a strong one passing.** The scoring testbench is now
 required to be `tb/<dut>_tb.sv`, and the runner refuses to run rather than
 choose a neighbour. Any harness that *selects* among artefacts needs the same
 scrutiny as any check that fires on absence.
+
+### STANDING PROCEDURE — the runner never discovers its artifacts
+
+> **THE RUNNER NAMES ITS ARTIFACTS EXPLICITLY AND REFUSES WHEN THEY ARE ABSENT;
+> IT NEVER DISCOVERS THEM BY PATTERN.**
+
+Same family as the wedging harness: the run looked clean while measuring the
+wrong thing. `sim_candidate.sh` selected the scoring testbench with
+`ls tb/*_tb.sv | head -1`, so a task carrying both a liveness rig and a full
+checker scored whichever name sorted first — and reported passes for it.
+
+Globbing, sorting, and silent defaults are all the same defect: they turn a
+missing or ambiguous artifact into a *different* run rather than an error. A
+selection that cannot fail is a selection that cannot be trusted. Any shared
+path that picks among artifacts must name what it wants and stop when it is not
+there.
 
 Therefore, for every task using a liveness monitor, and **before** the full
 testbench is built on top of it:

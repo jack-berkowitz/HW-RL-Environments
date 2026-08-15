@@ -127,22 +127,39 @@
 //   requirements say what the design must be able to do AT ONCE, which is
 //   independent of doing each transaction correctly.
 //
-//   C1. OUTSTANDING CAPACITY. Each master port must accept at least MAX_TRANS
-//       read address requests, and at least MAX_TRANS write requests, WITHOUT
-//       any response having been accepted. MAX_TRANS is a capacity requirement,
-//       not a decorative parameter and not an upper bound you may ignore: a
-//       design that hard-codes one in-flight transaction per master fails this
-//       at every legal setting. The checker holds r_ready and b_ready low while
-//       the slave side accepts every request, then counts what each master got
-//       in before the crossbar stopped accepting.
+//   C1. OUTSTANDING CAPACITY. Each master port must be able to carry MAX_TRANS
+//       transactions at once. MAX_TRANS is a capacity requirement, not a
+//       decorative parameter and not an upper bound you may ignore: a design
+//       that hard-codes one in-flight transaction per master fails this.
+//
+//       The checker holds r_ready and b_ready low while the slave side accepts
+//       every request, then counts what each master got in before the crossbar
+//       stopped accepting. IT REQUIRES AT LEAST ceil(MAX_TRANS / 2) PER MASTER,
+//       not MAX_TRANS. That gap is deliberate tolerance, not slack: observable
+//       capacity depends on pipeline depth as well as queue depth, so a design
+//       with fewer buffering stages legitimately reports a smaller number from
+//       the same configured depth. Requiring the full MAX_TRANS would fail a
+//       correct crossbar for being less pipelined, which is not a requirement
+//       this spec makes. Honour the parameter and you will clear the floor
+//       comfortably.
+//
+//       The floor applies PER MASTER, so it also catches head-of-line blocking:
+//       a design where one master's un-retiring transaction shuts other masters
+//       out of a shared slave fails even where the depth requirement is weak.
 //
 //   C2. CONCURRENT DISJOINT PAIRS. Traffic between disjoint master/slave pairs
 //       must proceed in parallel. With master i addressing only slave i and
 //       master j only slave j (i != j, no shared endpoint), the two pairs share
-//       no resource and both must make progress in the same window. Aggregate
-//       throughput for two disjoint pairs must be materially above that of one
-//       pair alone. A design that funnels all traffic through a single shared
-//       arbiter is correct on every individual transaction and fails here.
+//       no resource and both must make progress in the same window. A design
+//       that funnels all traffic through a single shared arbiter is correct on
+//       every individual transaction and fails here.
+//
+//       The checker requires two disjoint pairs to retain AT LEAST 150 % of the
+//       throughput of one pair alone. Ideal parallelism is 200 % and complete
+//       serialisation is 100 %, so the threshold sits at the midpoint: it
+//       tolerates up to a quarter of the ideal being lost to arbitration
+//       overhead, while still failing anything sharing one datapath. No
+//       particular arbitration is required and none is rewarded.
 //
 //   C3. Both hold at every legal NUM_MST / NUM_SLV / MAX_TRANS combination.
 //

@@ -51,6 +51,13 @@ if [ -d "$TASK_ARG" ]; then
 elif [ -d "$REPO/$TASK_ARG" ]; then
   TASK_DIR="$(cd "$REPO/$TASK_ARG" && pwd)"
 else
+  N_MATCH="$(ls -d "$REPO"/domains/*/design/"${TASK_ARG}"_* 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$N_MATCH" -gt 1 ]; then
+    echo "REJECTED: task id '$TASK_ARG' matches $N_MATCH directories:" >&2
+    ls -d "$REPO"/domains/*/design/"${TASK_ARG}"_* | sed 's|.*/|  |' >&2
+    echo "Name the task unambiguously. Nothing was run." >&2
+    exit 2
+  fi
   TASK_DIR="$(ls -d "$REPO"/domains/*/design/"${TASK_ARG}"_* 2>/dev/null | head -1)"
   [ -n "$TASK_DIR" ] || { echo "cannot resolve task '$TASK_ARG'" >&2
     echo "known tasks: $(ls -d "$REPO"/domains/*/design/*/ 2>/dev/null | xargs -n1 basename | grep -oE '^[a-z]+_[a-z0-9]+' | sort -u | tr '\n' ' ')" >&2
@@ -97,8 +104,14 @@ case "$TASK_NAME" in
       CFGS=("IMEM_AW=8 DMEM_AW=8" "IMEM_AW=10 DMEM_AW=10" "IMEM_AW=12 DMEM_AW=12") ;;
   nw_d01_axis_width_adapter)
       CFGS=(); for s in 1 2 4 8; do for m in 1 2 4 8; do CFGS+=("S_BYTES=$s M_BYTES=$m"); done; done ;;
-  *)  echo "note: no config list registered for $TASK_NAME; running TB defaults"
-      CFGS=("") ;;
+  *)  # REFUSE. This used to print a note and run the TB's own defaults, which
+      # reported "1 config" for a task with eight legal ones -- a partial sweep
+      # presented as a full one. That is the same defect as picking a testbench
+      # by sort order: the run does not fail, it just silently tests less.
+      echo "REJECTED: no config list registered for $TASK_NAME." >&2
+      echo "Add its legal configs to the case block in scripts/sim_candidate.sh," >&2
+      echo "keeping them in step with the task's task.yaml. Nothing was run." >&2
+      exit 2 ;;
 esac
 [ "$SMOKE" = "--smoke" ] && CFGS=("${CFGS[0]}")
 

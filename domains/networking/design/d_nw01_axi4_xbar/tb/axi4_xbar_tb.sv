@@ -451,7 +451,7 @@ module axi4_xbar_tb
     // ---- main --------------------------------------------------------------
     localparam int CWIN = 3000;   // measurement window, cycles
     int guard;
-    int c2_one, c2_two, agg_bursts;
+    int c2_one, c2_two, agg_bursts, cap_floor;
     initial begin
         if (NUM_MST != 2 && NUM_MST != 4) begin
             $display("TEST_RESULT: FAIL: illegal NUM_MST=%0d (legal: 2,4 -- the widened id field caps it at 4)", NUM_MST); $finish;
@@ -486,12 +486,31 @@ module axi4_xbar_tb
         cap_en = '1;
         repeat (128 + 32 * MAX_TRANS) @(posedge clk);
         cap_en = '0;
+        // THE FLOOR IS HALF OF MAX_TRANS, NOT MAX_TRANS. Observable capacity
+        // depends on pipeline depth, not only on the configured queue depth:
+        // the vendored anchor reports MAX_TRANS+1 with CUT_ALL_AX and
+        // MAX_TRANS-1 with NO_LATENCY, from the SAME MaxMstTrans setting.
+        // Requiring MAX_TRANS would fail the second of those -- a correct
+        // crossbar differing from the anchor only in buffering -- which is
+        // encoding one implementation's pipelining into the contract.
+        //
+        // Half leaves margin on both sides at MAX_TRANS=8: anchor 9, no-cut
+        // anchor 7, floor 4, one-deep design 1.
+        //
+        // At MAX_TRANS=2 the floor is 1, which looks inert but is not: it is
+        // applied PER MASTER, and the interesting failure there is head-of-line
+        // blocking rather than depth. Measured at MAX_TRANS=2, all four
+        // masters: no-cut anchor 1 1 1 1, one-deep candidate 1 1 0 0 -- in the
+        // latter a single un-retiring transaction occupies the per-slave path
+        // and every other master targeting that slave is shut out completely.
+        // So C1 catches depth at MAX_TRANS=8 and decoupling at MAX_TRANS=2.
+        cap_floor = (MAX_TRANS + 1) / 2;
         for (int m = 0; m < NUM_MST; m++) begin
             $display("METRIC: outstanding_master%0d=%0d", m, cap_ar_cnt[m]);
-            if (cap_ar_cnt[m] < MAX_TRANS)
+            if (cap_ar_cnt[m] < cap_floor)
                 note_fail($sformatf(
-                    "master %0d accepted only %0d outstanding reads with no response drained; MAX_TRANS=%0d is required (C1)",
-                    m, cap_ar_cnt[m], MAX_TRANS));
+                    "master %0d accepted only %0d outstanding reads with no response drained; floor is %0d for MAX_TRANS=%0d (C1)",
+                    m, cap_ar_cnt[m], cap_floor, MAX_TRANS));
         end
 
         // =====================================================================

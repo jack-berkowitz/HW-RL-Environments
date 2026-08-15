@@ -39,6 +39,14 @@ illegal_configs: >
 
 sim_timeout_s: 900
 simulators_verified: [verilator-5.046]
+# VERILATOR ONLY -- do not claim dual-simulator coverage for this task.
+# tb/axi4_xbar_tb.sv uses `automatic` inside procedural blocks, which Icarus
+# rejects outright ("sorry: Overriding the default variable lifetime is not yet
+# supported"). This is not a regression from the capability audit: the
+# pre-audit checker fails identically. The reference additionally depends on
+# vendored axi/common_cells sources that use `type` parameters, which Icarus
+# also cannot parse.
+simulators_unsupported: [icarus-13.0]
 
 second_source: false
 second_source_note: >

@@ -91,11 +91,24 @@ MODULE="$(basename "${RAW}")"
 MODULE="${MODULE%.sv}"
 
 # ---- domains/ task id? then take that path and stop --------------------------
+N_MATCH="$(ls -d "${REPO_DIR}"/domains/*/design/"${MODULE}"_* 2>/dev/null | wc -l | tr -d ' ')"
+if [ "${N_MATCH}" -gt 1 ]; then
+  echo "REJECTED: module id '${MODULE}' matches ${N_MATCH} task directories:" >&2
+  ls -d "${REPO_DIR}"/domains/*/design/"${MODULE}"_* | sed 's|.*/|  |' >&2
+  echo "Name the task unambiguously. Nothing was run." >&2
+  exit 2
+fi
 TASK_DIR="$(ls -d "${REPO_DIR}"/domains/*/design/"${MODULE}"_* 2>/dev/null | head -1 || true)"
 if [ -n "${TASK_DIR}" ]; then
   TASK_NAME="$(basename "${TASK_DIR}")"
   DUT="${2:-}"
   if [ -z "${DUT}" ]; then
+    N_REF="$(ls "${TASK_DIR}"/ref/*_ref.sv 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${N_REF}" -gt 1 ]; then
+      echo "REJECTED: ${TASK_DIR} has ${N_REF} ref/*_ref.sv files; naming one is required." >&2
+      ls "${TASK_DIR}"/ref/*_ref.sv | sed 's|.*/|  |' >&2
+      exit 2
+    fi
     DUT="$(ls "${TASK_DIR}"/ref/*_ref.sv 2>/dev/null | head -1 || true)"
     WHAT="reference"
     if [ -z "${DUT}" ]; then
