@@ -167,13 +167,26 @@ once, reuse it across all four. It lives in
 
 ### STANDING PROCEDURE — negative control for silent-failure checkers
 
-> **A checker whose failure mode is SILENCE must be validated against a
-> known-failing input before it is trusted.**
+> **Any check whose failure mode is ABSENCE rather than MISMATCH must be
+> validated against a known-failing input before it is trusted.**
 
-A scoreboard that compares outputs announces itself when it is broken: it stops
-matching. A liveness monitor does not. A monitor that never fires is
-indistinguishable from a design that never deadlocks, so an unvalidated one
-looks exactly like coverage while providing none.
+This is general, not specific to liveness. A scoreboard that compares outputs
+announces itself when it is broken: it stops matching. A check that fires on the
+*absence* of something cannot. It looks exactly like coverage while providing
+none, and there is no way to tell the two apart from a passing run.
+
+The house conventions already contain one member of this family — the coverage
+floor, which exists precisely because "the run passed" and "the run never
+reached the interesting state" are indistinguishable without it. Liveness
+monitors are the second. Any future check of the form "X should eventually
+happen" is a third.
+
+**The sharpest form of the problem: a broken harness and a broken DUT produce
+identical output.** A wedged testbench and a deadlocked design both emit
+nothing. Building `d_nw01`'s liveness rig hit exactly this — the first version
+reported DEADLOCK on the *correct* reference because its own driver models had
+wedged. Without both a known-good and a known-bad input to compare against,
+there is no way to know which side is broken.
 
 Therefore, for every task using a liveness monitor, and **before** the full
 testbench is built on top of it:

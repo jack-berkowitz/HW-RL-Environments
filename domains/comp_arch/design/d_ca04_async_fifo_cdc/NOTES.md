@@ -199,6 +199,54 @@ to the read domain and were previously being constrained against the write
 clock.
 
 
+## Candidate audit — throughput, not just area
+
+Follow-up on the ChatGPT candidate's 26 % smaller area and 45 % lower power.
+Two questions were open: did it cheat on synchroniser depth, and did it buy the
+area with throughput?
+
+**Synchroniser depth: honoured.** It builds a real `SYNC_STAGES`-deep chain for
+both pointer crossings and uses only the final stage. Not an MTBF regression.
+
+**Where the area actually went.** Sequential cells are close (reference 346,
+candidate 288). The gap is combinational: **666 vs 158**, 4.2×. Upstream
+`cdc_fifo_gray` exposes the *entire* FIFO array combinationally
+(`assign async_data_o = data_q`), rebuilds it on every write, and muxes
+DEPTH-to-1 in the destination domain; the candidate uses an addressed memory.
+That is an architectural difference, and upstream's is deliberately the more
+expensive one — it is what makes its CDC argument work.
+
+**Throughput: identical.** Measured with `tb/async_fifo_cdc_thru.sv`, which
+holds `wr_valid` and `rd_ready` high for the whole run so the number is the
+design's own ceiling:
+
+| wr:rd half-period | reference | candidate |
+|---|---|---|
+| 5000 : 5000 (equal) | 100 % / 99 % | 100 % / 99 % |
+| 5000 : 9000 (slow read) | 55 % / 99 % | 55 % / 99 % |
+| 9000 : 5000 (slow write) | 100 % / 55 % | 100 % / 55 % |
+| 5000 : 5100 (drift) | 98 % / 99 % | 98 % / 99 % |
+
+Both saturate at the theoretical ceiling — full rate when the clocks match,
+limited by the slower clock otherwise. **The area win was not bought with
+throughput**, and upstream's `spill_register` costs area here without buying
+sustained rate at full offered load. (It would plausibly matter under
+*intermittent* `rd_ready`, which this measurement does not exercise.)
+
+### The spec gap this leaves
+
+`spec/async_fifo_cdc_iface.sv` states that throughput is deliberately not
+constrained and not checked. That is the right call for a correctness contract —
+a throughput floor would encode one implementation's pipelining. But it means
+**a submission could trade sustained throughput for area and nothing would
+notice.** It did not bite here because the two designs happen to be equal, which
+is luck rather than coverage.
+
+This is the same class of gap as the synchroniser-depth question: something the
+spec chooses not to pin, which therefore cannot be scored. If throughput is
+wanted as a scored axis it has to be measured and reported separately, as it is
+above — not gated in the checker.
+
 ## Open items
 
 * PPA build result pending.
