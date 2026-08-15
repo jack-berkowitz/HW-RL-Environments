@@ -44,6 +44,14 @@ module axi4_xbar
     input  xbar_rule_t [NUM_SLV-1:0] addr_map
 );
 
+    // Elaboration-time guard. The spec caps NUM_MST at 4 because the fixed
+    // MST_IDX_W = 2 index field cannot name more masters than that. Catching it
+    // here as well as in the checker means a bad geometry fails at build time
+    // rather than as a mysterious response-misrouting failure at run time.
+    if (NUM_MST > 4)
+        $error("NUM_MST=%0d exceeds the cap of 4 imposed by MST_IDX_W=%0d",
+               NUM_MST, MST_IDX_W);
+
     // ---- upstream's own types, built from the spec's widths ----------------
     localparam int U_MST_ID_W = SLV_ID_W + ((NUM_MST == 1) ? 1 : $clog2(NUM_MST));
 

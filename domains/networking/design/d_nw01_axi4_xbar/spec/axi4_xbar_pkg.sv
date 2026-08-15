@@ -29,11 +29,21 @@ package axi4_xbar_pkg;
   typedef logic [SLV_ID_W-1:0] slv_id_t;
 
   // Slave-side IDs are widened so a response can name the master it belongs to.
-  // The width is fixed at SLV_ID_W + 2, sized for the largest legal NUM_MST (4),
-  // rather than varying with the parameter -- a package cannot be
-  // parameterised, and one fixed layout keeps the struct definitions below
-  // valid at every configuration. With NUM_MST == 2 only the low bit of the
-  // master-index field is used and the upper bit is always 0.
+  // The width is fixed at SLV_ID_W + MST_IDX_W rather than varying with the
+  // parameter -- a SystemVerilog package cannot be parameterised, and one fixed
+  // layout has to keep the struct definitions below valid at every legal
+  // configuration.
+  //
+  // *** THIS CAPS NUM_MST AT 4. ***
+  // MST_IDX_W = 2 supplies exactly enough index bits for 4 masters:
+  //     NUM_MST = 2  -> needs 1 bit, one spare
+  //     NUM_MST = 4  -> needs 2 bits, exact
+  //     NUM_MST = 8  -> needs 3 bits, WHICH THIS LAYOUT CANNOT SUPPLY.
+  // At NUM_MST = 8 two masters would share an index, their responses would
+  // misroute, and the failure would look like an ordering bug rather than a
+  // width bug. NUM_MST > 4 is therefore ILLEGAL and the checker aborts on it
+  // rather than producing a plausible-looking wrong answer. Raising the cap
+  // means widening MST_IDX_W here and re-verifying every geometry.
   parameter int unsigned MST_IDX_W = 2;
   parameter int unsigned MST_ID_W  = SLV_ID_W + MST_IDX_W;
   typedef logic [MST_ID_W-1:0] mst_id_t;

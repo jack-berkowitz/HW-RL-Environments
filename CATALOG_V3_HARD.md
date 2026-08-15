@@ -162,7 +162,36 @@ not draining the design side.
 are not caught by output comparison. `d_ca01`, `d_nw01`, `d_nw02`, `d_nw04` all
 need forward-progress monitors: per-requester watchdogs that fail if any request
 goes unserviced for N cycles under continuous offered load. Build that harness
-once, reuse it across all four.
+once, reuse it across all four. It lives in
+`testbenches/common/liveness_monitor.svh`.
+
+### STANDING PROCEDURE — negative control for silent-failure checkers
+
+> **A checker whose failure mode is SILENCE must be validated against a
+> known-failing input before it is trusted.**
+
+A scoreboard that compares outputs announces itself when it is broken: it stops
+matching. A liveness monitor does not. A monitor that never fires is
+indistinguishable from a design that never deadlocks, so an unvalidated one
+looks exactly like coverage while providing none.
+
+Therefore, for every task using a liveness monitor, and **before** the full
+testbench is built on top of it:
+
+1. **Build the liveness mutants first.** Break the design so it genuinely
+   deadlocks — a response-channel arbiter, an ID-tracking freelist — and confirm
+   the deadlock check fires.
+2. **Build a separate starvation mutant**: one requester permanently
+   deprioritised while others continue to be served. Confirm the starvation
+   check fires and the deadlock check does **not**. The two failures have
+   different causes and must be distinguishable.
+3. **Confirm the inverse.** Run the monitor against the correct reference with
+   deliberately slow-but-fair arbitration and verify it does NOT fire. A monitor
+   that penalises slowness silently encodes one arbitration policy into the
+   contract, which is exactly what the second-source rule exists to prevent.
+
+The negative-control result goes in `NOTES.md` **alongside the mutant table**,
+not buried in prose. A liveness claim without it is unsupported.
 
 **ORFS runtime grows a lot.** A 16×16 systolic array or a full AXI4 crossbar is a
 different P&R proposition than a width adapter. `find_fmax.py`'s three-phase

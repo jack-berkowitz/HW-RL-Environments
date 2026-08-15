@@ -19,6 +19,11 @@
 // PARAMETERS
 // -----------------------------------------------------------------------------
 //   NUM_MST : number of MASTERS attached (crossbar slave ports). Legal: 2, 4.
+//             *** HARD CAP AT 4. *** The widened slave-side id field is fixed
+//             at SLV_ID_W + 2 bits (see spec/axi4_xbar_pkg.sv), which supplies
+//             exactly 2 master-index bits. NUM_MST = 8 would need 3, two
+//             masters would share an index, and their responses would misroute.
+//             The checker rejects NUM_MST > 4 rather than let that happen.
 //   NUM_SLV : number of SLAVES attached  (crossbar master ports). Legal: 2, 4.
 //   MAX_TRANS : maximum outstanding transactions per master port. Legal: 2, 8.
 //   Any other value is ILLEGAL and need not be handled.
