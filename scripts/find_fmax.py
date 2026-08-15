@@ -40,6 +40,7 @@ On a native x86_64 host (e.g. WSL2) export these first:
 """
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -61,22 +62,75 @@ STATUS_TOOL = "tool_error"
 # design resolution
 # ---------------------------------------------------------------------------
 def resolve_design(design, pdk):
-    """Locate the design's ORFS config and work out its tier, the same way
-    build_and_score.sh does -- by probing both tier directories rather than
-    trusting a hardcoded list."""
+    """Locate the design's ORFS config, across all three layouts.
+
+    Returns (group, host_cfg_path, container_cfg_path, wipe_name).
+
+      * tier modules       orfs_configs/<pdk>/<tier>/<design>/config.mk
+      * catalog-v3 tasks   domains/*/design/<design>_*/orfs/config.mk
+      * candidate P&R runs orfs_runs/<design>/config.mk   (from ppa_candidate.sh)
+
+    `wipe_name` is what ORFS names its results/logs/reports directories after,
+    which is DESIGN_NICKNAME when set and NOT the argument the user typed. Using
+    the typed name would wipe nothing and the sweep would silently reuse stale
+    results from the previous period -- the exact failure run_orfs_build.sh's
+    clean-build default exists to prevent.
+    """
     hits = []
     for tier in ("TierOne", "TierTwo"):
         cfg = os.path.join(REPO_DIR, "orfs_configs", pdk, tier, design, "config.mk")
         if os.path.isfile(cfg):
-            hits.append((tier, cfg))
+            hits.append((tier, cfg, f"/work/orfs_configs/{pdk}/{tier}/{design}/config.mk", design))
+
+    for cfg in sorted(glob.glob(os.path.join(
+            REPO_DIR, "domains", "*", "design", f"{design}_*", "orfs", "config.mk"))):
+        rel = os.path.relpath(cfg, REPO_DIR)
+        nick = read_config_var(cfg, "DESIGN_NICKNAME") or design
+        hits.append((cfg.split(os.sep)[-5], cfg, f"/work/{rel}", nick))
+
+    cand = os.path.join(REPO_DIR, "orfs_runs", design, "config.mk")
+    if os.path.isfile(cand):
+        nick = read_config_var(cand, "DESIGN_NICKNAME") or design
+        hits.append(("candidate", cand, f"/work/orfs_runs/{design}/config.mk", nick))
+
     if not hits:
         sys.exit(
-            f"ERROR: no ORFS config for '{design}' under "
-            f"orfs_configs/{pdk}/{{TierOne,TierTwo}}/{design}/config.mk"
+            f"ERROR: no ORFS config for '{design}'. Looked under\n"
+            f"  orfs_configs/{pdk}/{{TierOne,TierTwo}}/{design}/config.mk\n"
+            f"  domains/*/design/{design}_*/orfs/config.mk\n"
+            f"  orfs_runs/{design}/config.mk"
         )
     if len(hits) > 1:
-        sys.exit(f"ERROR: '{design}' exists in more than one tier -- ambiguous")
+        sys.exit(f"ERROR: '{design}' resolves to more than one config -- ambiguous")
     return hits[0]
+
+
+def second_clock_ratio(cfg_path):
+    """If the design's SDC declares a second clock, return rd_period/wr_period.
+
+    A two-clock design has no single Fmax. Sweeping CLK_PERIOD_NS alone would
+    move only the write clock and silently change the ratio between the domains,
+    so the number produced would not describe any real operating point. Instead
+    the ratio is held fixed and BOTH clocks are scaled together, which is a
+    meaningful sweep: "how fast can this run with the domains in their intended
+    relationship".
+    """
+    sdc = read_config_var(cfg_path, "SDC_FILE") or ""
+    sdc = sdc.replace("/work/", "")
+    host = os.path.join(REPO_DIR, sdc)
+    if not os.path.isfile(host):
+        return None
+    wr = rd = None
+    with open(host) as fh:
+        for line in fh:
+            t = line.strip().split()
+            if len(t) >= 3 and t[0] == "set" and t[1] == "wr_period":
+                wr = float(t[2])
+            if len(t) >= 3 and t[0] == "set" and t[1] == "rd_period":
+                rd = float(t[2])
+    if wr and rd:
+        return rd / wr
+    return None
 
 
 def read_config_var(cfg_path, name):
@@ -131,7 +185,7 @@ def git_commit():
 # ---------------------------------------------------------------------------
 # one P&R run
 # ---------------------------------------------------------------------------
-def collect(design):
+def collect(design):   # `design` here is the ORFS output name (nickname)
     """Read this design's ORFS metrics through collect_results.py, which is the
     single place that knows ORFS metric names."""
     r = subprocess.run(
@@ -150,7 +204,8 @@ def collect(design):
     return None
 
 
-def run_period(design, tier, pdk, period, iteration, log_dir, verbose):
+def run_period(design, tier, pdk, period, iteration, log_dir, verbose,
+               cfg_container=None, wipe_name=None, rd_ratio=None):
     """Wipe, build at `period`, and classify the outcome.
 
     Returns a trajectory record. Classification:
@@ -163,11 +218,19 @@ def run_period(design, tier, pdk, period, iteration, log_dir, verbose):
         wns < 0                      -> timing_fail
         otherwise                    -> pass
     """
-    cfg_container = f"/work/orfs_configs/{pdk}/{tier}/{design}/config.mk"
+    if cfg_container is None:
+        cfg_container = f"/work/orfs_configs/{pdk}/{tier}/{design}/config.mk"
     env = os.environ.copy()
     env["CLK_PERIOD_NS"] = f"{period:.4f}"
-    env["WIPE_DESIGN"] = design
+    # WIPE_DESIGN must be the ORFS output directory name (DESIGN_NICKNAME),
+    # not the id the user typed, or the wipe misses and the sweep reuses the
+    # previous period's results.
+    env["WIPE_DESIGN"] = wipe_name or design
     env["PLATFORM"] = pdk
+    if rd_ratio is not None:
+        # Two-clock design: scale the second clock with the first so the ratio
+        # between the domains is preserved across the sweep.
+        env["RD_CLK_PERIOD_NS"] = f"{period * rd_ratio:.4f}"
 
     log_path = os.path.join(log_dir, f"{design}_iter{iteration:02d}_{period:.4f}ns.log")
     t0 = time.time()
@@ -197,7 +260,7 @@ def run_period(design, tier, pdk, period, iteration, log_dir, verbose):
         rec["note"] = f"run_orfs_build.sh exited {proc.returncode}; see {rec['log']}"
         return rec
 
-    m = collect(design)
+    m = collect(wipe_name or design)
     if not m or not m.get("completed"):
         rec["note"] = "ORFS produced no final metrics (6_report.json missing)"
         return rec
@@ -266,7 +329,8 @@ def main():
     if args.seed_period_ns <= 0 or args.resolution_ns <= 0:
         sys.exit("ERROR: --seed-period-ns and --resolution-ns must be positive")
 
-    tier, cfg_path = resolve_design(args.design, args.pdk)
+    tier, cfg_path, cfg_container, wipe_name = resolve_design(args.design, args.pdk)
+    rd_ratio = second_clock_ratio(cfg_path)
     validate_inputs(args, cfg_path)
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -275,15 +339,22 @@ def main():
 
     print(f"design {args.design} ({tier}, {args.pdk})")
     print(f"config {os.path.relpath(cfg_path, REPO_DIR)}")
+    if wipe_name != args.design:
+        print(f"orfs output directory: {wipe_name}")
+    if rd_ratio is not None:
+        print(f"TWO-CLOCK design: second clock scaled with the first at "
+              f"ratio {rd_ratio:.4f} so the domain relationship is held fixed")
 
     # ---- dry run -------------------------------------------------------
     if args.dry_run:
         print("\n--dry-run: no ORFS runs will be executed.\n")
         print("Each iteration runs exactly:")
-        print(f"  CLK_PERIOD_NS=<period> WIPE_DESIGN={args.design} PLATFORM={args.pdk} \\")
-        print(f"    scripts/run_orfs_build.sh "
-              f"/work/orfs_configs/{args.pdk}/{tier}/{args.design}/config.mk")
-        print(f"  then: scripts/collect_results.py --json {args.design}")
+        rd_env = (f" RD_CLK_PERIOD_NS=<period*{rd_ratio:.4f}>"
+                  if rd_ratio is not None else "")
+        print(f"  CLK_PERIOD_NS=<period>{rd_env} WIPE_DESIGN={wipe_name} "
+              f"PLATFORM={args.pdk} \\")
+        print(f"    scripts/run_orfs_build.sh {cfg_container}")
+        print(f"  then: scripts/collect_results.py --json {wipe_name}")
         print("\nPlanned bracketing probe order from the seed "
               f"({args.seed_period_ns} ns), whichever direction is needed:")
         up, dn = [], []
@@ -309,10 +380,23 @@ def main():
     # run it once rather than per-iteration: the RTL does not change during the
     # search, only the constraint does.
     if not args.skip_sim_check:
-        print("\n=== simulation gate (once) ===")
-        r = subprocess.run(
-            [os.path.join(SCRIPT_DIR, "build_and_score.sh"), "--sim-only", args.design]
-        )
+        if tier == "candidate":
+            # A generated candidate run is keyed by its ORFS nickname
+            # (<task>_cand_<label>), which build_and_score.sh cannot resolve --
+            # it is not a task id. Recover the task and the answer file from the
+            # generated config so the gate still runs rather than being skipped
+            # silently, which would let a broken candidate consume a whole sweep.
+            src = read_config_var(cfg_path, "VERILOG_FILES") or ""
+            src_host = os.path.join(REPO_DIR, src.replace("/work/", "").strip())
+            task_id = args.design.split("_cand_")[0]
+            gate = [os.path.join(SCRIPT_DIR, "sim_candidate.sh"), task_id, src_host]
+            print(f"\n=== simulation gate (once): {task_id} <- "
+                  f"{os.path.relpath(src_host, REPO_DIR)} ===")
+        else:
+            gate = [os.path.join(SCRIPT_DIR, "build_and_score.sh"),
+                    "--sim-only", args.design]
+            print("\n=== simulation gate (once) ===")
+        r = subprocess.run(gate)
         if r.returncode != 0:
             sys.exit(
                 f"ERROR: {args.design} does not pass its testbench. "
@@ -328,7 +412,9 @@ def main():
     def do(period):
         nonlocal it
         it += 1
-        rec = run_period(args.design, tier, args.pdk, period, it, log_dir, True)
+        rec = run_period(args.design, tier, args.pdk, period, it, log_dir, True,
+                         cfg_container=cfg_container, wipe_name=wipe_name,
+                         rd_ratio=rd_ratio)
         trajectory.append(rec)
         return rec
 
