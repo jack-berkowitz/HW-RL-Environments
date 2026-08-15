@@ -1,0 +1,103 @@
+id: d_ca04
+module: async_fifo_cdc
+domain: comp_arch
+type: design
+catalog: CATALOG_V3_HARD.md
+
+# CLASS A -- external RTL oracle, proven against vendored PULP RTL.
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/common_cells
+  sha: 9ca8a7655f741e7dd5736669a20a301325194c28    # tag v1.39.0
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/common_cells/src/cdc_fifo_gray.sv
+  shim: ref/async_fifo_cdc_ref.sv
+  shim_note: >
+    Renaming and parameter mapping only. No polarity inversion needed -- upstream
+    already uses active-low resets in both domains, so every connection is
+    wire-for-wire.
+
+spec: spec/async_fifo_cdc_iface.sv
+two_clock: true
+
+configs:   # all 18 verified against the reference AND the second source
+  - {DATA_W: 8,  LOG_DEPTH: 2, SYNC_STAGES: 2}
+  - {DATA_W: 8,  LOG_DEPTH: 2, SYNC_STAGES: 3}
+  - {DATA_W: 8,  LOG_DEPTH: 3, SYNC_STAGES: 2}
+  - {DATA_W: 8,  LOG_DEPTH: 3, SYNC_STAGES: 3}
+  - {DATA_W: 8,  LOG_DEPTH: 4, SYNC_STAGES: 2}
+  - {DATA_W: 8,  LOG_DEPTH: 4, SYNC_STAGES: 3}
+  - {DATA_W: 32, LOG_DEPTH: 2, SYNC_STAGES: 2}
+  - {DATA_W: 32, LOG_DEPTH: 2, SYNC_STAGES: 3}
+  - {DATA_W: 32, LOG_DEPTH: 3, SYNC_STAGES: 2}
+  - {DATA_W: 32, LOG_DEPTH: 3, SYNC_STAGES: 3}
+  - {DATA_W: 32, LOG_DEPTH: 4, SYNC_STAGES: 2}
+  - {DATA_W: 32, LOG_DEPTH: 4, SYNC_STAGES: 3}
+  - {DATA_W: 64, LOG_DEPTH: 2, SYNC_STAGES: 2}
+  - {DATA_W: 64, LOG_DEPTH: 2, SYNC_STAGES: 3}
+  - {DATA_W: 64, LOG_DEPTH: 3, SYNC_STAGES: 2}
+  - {DATA_W: 64, LOG_DEPTH: 3, SYNC_STAGES: 3}
+  - {DATA_W: 64, LOG_DEPTH: 4, SYNC_STAGES: 2}
+  - {DATA_W: 64, LOG_DEPTH: 4, SYNC_STAGES: 3}
+illegal_configs: >
+  DATA_W outside {8,32,64}, LOG_DEPTH outside 2..4, SYNC_STAGES outside {2,3}.
+  The checker aborts with "TEST_RESULT: FAIL: illegal ...".
+
+sim_timeout_s: 600
+simulator_pinning:
+  reference_build: verilator-5.046-only
+  reason: >
+    The vendored anchor uses a `type` parameter and (* async *) attributes on
+    port connections; Icarus 13.0 rejects both. This is a property of the
+    ANCHOR, not the harness.
+  checker_is_dual_simulator: true
+  evidence: >
+    The checker builds and reaches TEST_RESULT: PASS under Icarus 13.0 when
+    given a plain-SystemVerilog DUT (the second source). Submissions can
+    therefore be graded under either simulator.
+
+second_source: true
+second_source_file: tb/async_fifo_cdc_alt_ref.sv
+second_source_note: >
+  Classic dual-pointer async FIFO; single module rather than upstream's
+  _src/_dst split, real dual-port memory instead of an exposed async_data array.
+  All 18 configs pass. Found no over-constraint.
+
+mutants:
+  - {id: m01, class: cdc-encoding,  kill: "C5 phantom beat"}
+  - {id: m02, class: cdc-encoding,  kill: "C1/C3 data mismatch"}
+  - {id: m03, class: boundary,      kill: "C1/C3 data mismatch"}
+  - {id: m04, class: control-flow,  kill: "C5 phantom at beat 0"}
+  - {id: m05, class: cdc-encoding,  kill: "C5 phantom beat"}
+  - {id: m06, class: boundary,      kill: "C1/C3 data mismatch"}
+  - {id: m07, class: reset,         kill: "C5 phantom at beat 0"}
+mutant_withdrawn:
+  id: m05_original
+  what: forced SYNC_STAGES to 1
+  why: >
+    SURVIVED, correctly. Synchroniser depth changes no logical value in a
+    zero-delay simulation, so the mutant is functionally equivalent under the
+    semantics the checker can observe. Replaced with a Gray-decode bug.
+
+known_limitation: >
+  This checker verifies the FUNCTIONAL half of CDC correctness (Gray encode and
+  decode, pointer boundaries, full/empty, reset, no loss or reorder at 7 clock
+  ratios). It CANNOT verify the timing half -- synchroniser depth and whether a
+  submission's crossings are constrained at all. That needs CDC static analysis
+  or formal. Report it alongside any d_ca04 result.
+
+ppa_baseline:
+  platform: sky130hd
+  data_w: 32
+  log_depth: 3
+  sync_stages: 2
+  wr_clk_period_ns: 10.0
+  rd_clk_period_ns: 13.0
+  area_um2: 19695
+  synth_area_um2: 15361
+  power_mw: 6.26
+  wns_ns: 5.22
+  tns_ns: 0.0
+  timing_closed: true
+  flow_completed: true

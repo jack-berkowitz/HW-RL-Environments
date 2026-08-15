@@ -67,6 +67,9 @@ TASK_NAME="$(basename "$TASK_DIR")"
 case "$TASK_NAME" in
   ai_d01_int8_requant)
       CFGS=("LANES=1" "LANES=2" "LANES=4" "LANES=8") ;;
+  d_ca04_async_fifo_cdc)
+      CFGS=(); for w in 8 32 64; do for l in 2 3 4; do for y in 2 3; do
+        CFGS+=("DATA_W=$w LOG_DEPTH=$l SYNC_STAGES=$y"); done; done; done ;;
   ca_d08_tiny_core)
       CFGS=("IMEM_AW=8 DMEM_AW=8" "IMEM_AW=10 DMEM_AW=10" "IMEM_AW=12 DMEM_AW=12") ;;
   nw_d01_axis_width_adapter)
