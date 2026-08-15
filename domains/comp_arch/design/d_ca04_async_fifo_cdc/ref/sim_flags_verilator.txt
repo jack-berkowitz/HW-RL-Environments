@@ -1,0 +1,13 @@
+# Extra Verilator arguments needed to build the REFERENCE for this task.
+# One token per line; %REPO% expands to the repository root. Blank lines and
+# lines starting with # are ignored.
+#
+# The shim instantiates PULP cdc_fifo_gray, which in turn pulls in sync,
+# binary_to_gray, gray_to_binary and spill_register, and includes
+# common_cells/registers.svh. A candidate is self-contained and needs none of
+# this, but the flags are harmless there -- -y is only consulted for modules
+# that are otherwise unresolved.
++incdir+%REPO%/refs/common_cells/include
+-y
+%REPO%/refs/common_cells/src
+%REPO%/refs/common_cells/src/cf_math_pkg.sv

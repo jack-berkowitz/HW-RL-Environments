@@ -1,0 +1,14 @@
+# Extra Icarus arguments for the REFERENCE build. Same format as the Verilator
+# file; kept separate rather than translated, because the flag spellings differ
+# (-I vs +incdir+, and -y needs -Y .sv to search SystemVerilog files at all).
+#
+# NOTE: the vendored anchor does NOT build under Icarus regardless of these
+# flags -- it uses a `type` parameter and (* async *) port attributes that
+# Icarus 13.0 rejects. See NOTES.md; the reference build is Verilator-only and
+# this file exists for symmetry and for candidates that need the same deps.
+-I%REPO%/refs/common_cells/include
+-y
+%REPO%/refs/common_cells/src
+-Y
+.sv
+%REPO%/refs/common_cells/src/cf_math_pkg.sv

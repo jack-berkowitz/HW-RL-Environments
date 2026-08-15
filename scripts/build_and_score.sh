@@ -10,6 +10,19 @@
 #   ./scripts/build_and_score.sh candidates/TierOne/fifo.sv
 #   ./scripts/build_and_score.sh rob
 #
+# It also accepts a domains/ TASK ID, which is the layout every catalog-v3 task
+# uses:
+#
+#   ./scripts/build_and_score.sh d_ca04                       # the reference
+#   ./scripts/build_and_score.sh d_ca04 candidates/d_ca04/x.sv  # a candidate
+#
+# The two layouts are genuinely different -- a domains task has MANY legal
+# parameter configurations rather than one, its ORFS config lives beside it
+# instead of under orfs_configs/, and its reference may pull in vendored support
+# RTL -- so the domains path delegates to the scripts that already model that
+# (sim_candidate.sh for stage 1, ppa_candidate.sh for a candidate P&R) instead
+# of duplicating the config lists here, where they would drift.
+#
 # Tier is auto-detected: candidates/ and testbenches/ are each split into
 # TierOne/ and TierTwo/, so the script looks in both and uses whichever one
 # actually has the module.
@@ -77,6 +90,66 @@ RAW="$1"
 MODULE="$(basename "${RAW}")"
 MODULE="${MODULE%.sv}"
 
+# ---- domains/ task id? then take that path and stop --------------------------
+TASK_DIR="$(ls -d "${REPO_DIR}"/domains/*/design/"${MODULE}"_* 2>/dev/null | head -1 || true)"
+if [ -n "${TASK_DIR}" ]; then
+  TASK_NAME="$(basename "${TASK_DIR}")"
+  DUT="${2:-}"
+  if [ -z "${DUT}" ]; then
+    DUT="$(ls "${TASK_DIR}"/ref/*_ref.sv 2>/dev/null | head -1 || true)"
+    WHAT="reference"
+    if [ -z "${DUT}" ]; then
+      echo "ERROR: ${TASK_NAME} has no ref/*_ref.sv and no candidate was given." >&2
+      echo "  Class B tasks whose oracle is a Python model have no RTL reference;" >&2
+      echo "  pass a candidate explicitly:  $0 ${MODULE} candidates/${MODULE}/<file>.sv" >&2
+      exit 1
+    fi
+  else
+    WHAT="candidate $(basename "${DUT}")"
+  fi
+
+  echo "=== [1/3] Simulating ${TASK_NAME} (${WHAT}) over every legal config ==="
+  "${SCRIPT_DIR}/sim_candidate.sh" "${MODULE}" "${DUT}"
+  SIM_RC=$?
+  if [ "${SIM_RC}" -ne 0 ]; then
+    echo ""
+    echo "=== ABORTED: ${WHAT} did not pass every config -- skipping ORFS ==="
+    exit "${SIM_RC}"
+  fi
+
+  if [ "${SIM_ONLY}" = "1" ]; then
+    echo ""
+    echo "=== --sim-only: ${TASK_NAME} passed; stopping before ORFS ==="
+    exit 0
+  fi
+
+  if [ ! -f "${TASK_DIR}/orfs/config.mk" ]; then
+    echo ""
+    echo "=== [2/3] SKIPPED: ${TASK_NAME} has no orfs/ harness ==="
+    echo "  PPA is deferred for tasks without an external RTL golden model."
+    echo "  See DESIGN_TASKS_NO_GOLDEN_RTL.md. Correctness above still stands."
+    exit 0
+  fi
+
+  echo ""
+  echo "=== [2/3] Running full ORFS build for ${TASK_NAME} (this is the slow part) ==="
+  if [ -n "${2:-}" ]; then
+    # A candidate needs a generated config pointing at IT, not at the reference.
+    "${SCRIPT_DIR}/ppa_candidate.sh" "${MODULE}" "${DUT}"
+    NICK="${MODULE}_cand_$(basename "${DUT}" .sv)"
+  else
+    "${SCRIPT_DIR}/run_orfs_build.sh" "/work/${TASK_DIR#${REPO_DIR}/}/orfs/config.mk"
+    NICK="${TASK_NAME}"
+  fi
+
+  echo ""
+  echo "=== [3/3] Collecting PPA results for ${NICK} ==="
+  python3 "${SCRIPT_DIR}/collect_results.py" "${NICK}" || {
+    echo "(collect_results.py could not summarise ${NICK}; the raw reports are under" >&2
+    echo " \$ORFS_FLOW_DIR/reports/sky130hd/${NICK}/base/)" >&2; }
+  exit 0
+fi
+
 # ---- locate candidate + testbench, auto-detecting TierOne vs TierTwo ----
 CANDIDATE=""
 TESTBENCH=""
@@ -103,7 +176,10 @@ for T in TierOne TierTwo; do
 done
 
 if [ -z "${TIER}" ]; then
-  echo "ERROR: module '${MODULE}' not found under candidates/{TierOne,TierTwo}/ (derived from argument '${RAW}')" >&2
+  echo "ERROR: '${MODULE}' matched neither layout (derived from argument '${RAW}')." >&2
+  echo "  Not found under candidates/{TierOne,TierTwo}/ as a tier module," >&2
+  echo "  and not found under domains/*/design/ as a task id." >&2
+  echo "  Known task ids: $(ls -d "${REPO_DIR}"/domains/*/design/*/ 2>/dev/null | xargs -n1 basename 2>/dev/null | grep -oE '^[a-z]+_[a-z0-9]+' | sort -u | tr '\n' ' ')" >&2
   exit 1
 fi
 

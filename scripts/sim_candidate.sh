@@ -111,7 +111,22 @@ if [ -n "$CAND_HINT" ] && [ "$CAND_HINT" != "$TASK_ID" ] && [ -d "$REPO/candidat
   echo
 fi
 
-echo "task=$TASK_NAME  dut=$DUT_MOD  sim=$SIM  configs=${#CFGS[@]}  candidates=${#CANDS[@]}"
+# --- extra build flags declared by the task ---------------------------------
+# A task whose REFERENCE pulls in vendored support modules declares them once in
+# ref/sim_flags_<sim>.txt rather than every caller re-deriving them. One token
+# per line, %REPO% expands to the repo root, # and blank lines ignored.
+# Harmless for a self-contained candidate: -y is only consulted for modules that
+# are otherwise unresolved.
+EXTRA=()
+FLAGFILE="$TASK_DIR/ref/sim_flags_${SIM}.txt"
+if [ -f "$FLAGFILE" ]; then
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    EXTRA+=("${line//%REPO%/$REPO}")
+  done < "$FLAGFILE"
+fi
+
+echo "task=$TASK_NAME  dut=$DUT_MOD  sim=$SIM  configs=${#CFGS[@]}  candidates=${#CANDS[@]}${EXTRA:+  extra_flags=${#EXTRA[@]}}"
 echo "================================================================================"
 
 # --- run one candidate over every config; echoes "<pass> <total>|<firstfail>" -
@@ -125,7 +140,7 @@ run_one() {
       local pargs=""
       for kv in $cfg; do pargs="$pargs -P${TB_MOD}.${kv%%=*}=${kv##*=}"; done
       rm -f "/tmp/cand_${tag}.vvp"
-      cerr="$(iverilog -g2012 -o "/tmp/cand_${tag}.vvp" $pargs "$TB" "$cand" 2>&1)"
+      cerr="$(iverilog -g2012 -o "/tmp/cand_${tag}.vvp" $pargs ${EXTRA[@]+"${EXTRA[@]}"} "$TB" "$cand" 2>&1)"
       if [ -f "/tmp/cand_${tag}.vvp" ]; then out="$(timeout 600 vvp "/tmp/cand_${tag}.vvp" 2>&1)"
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -viE "warning" | grep -m1 . | cut -c1-90)"; fi
     else
@@ -133,7 +148,7 @@ run_one() {
       for kv in $cfg; do gargs="$gargs -G$kv"; done
       rm -rf "$d"
       cerr="$(verilator --binary --timing -j 0 -Wno-fatal --x-assign unique --x-initial unique \
-        --top-module "$TB_MOD" $gargs "$TB" "$cand" -o sim --Mdir "$d" 2>&1)"
+        --top-module "$TB_MOD" $gargs ${EXTRA[@]+"${EXTRA[@]}"} "$TB" "$cand" -o sim --Mdir "$d" 2>&1)"
       if [ -x "$d/sim" ]; then out="$(timeout 600 "./$d/sim" 2>&1)"
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -m1 "%Error" | sed "s|.*/candidates/|candidates/|" | cut -c1-90)"; fi
       rm -rf "$d"
