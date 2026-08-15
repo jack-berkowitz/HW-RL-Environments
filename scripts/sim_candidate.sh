@@ -87,6 +87,27 @@ else
   CANDS=("$CP")
 fi
 
+# Which task does a given DUT module belong to? Used to turn "wrong module"
+# from a bare rejection into an actionable "you meant this task".
+task_for_module() {
+  local want="$1" d m
+  for d in "$REPO"/domains/*/design/*/; do
+    [ -d "$d" ] || continue
+    m="$(grep -m1 '^module' "$d"spec/*_iface.sv 2>/dev/null | sed 's/^module \([A-Za-z0-9_]*\).*/\1/')"
+    if [ "$m" = "$want" ]; then basename "$d" | grep -oE '^[a-z]+_[a-z0-9]+'; return; fi
+  done
+}
+
+# If the candidate path looks like it belongs to a different task, say so before
+# running anything -- this is the most common invocation mistake.
+CAND_HINT="$(basename "${CP%/}" | grep -oE '^[a-z]+_[a-z0-9]+' || true)"
+TASK_ID="$(basename "$TASK_DIR" | grep -oE '^[a-z]+_[a-z0-9]+')"
+if [ -n "$CAND_HINT" ] && [ "$CAND_HINT" != "$TASK_ID" ] && [ -d "$REPO/candidates/$CAND_HINT" ]; then
+  echo "WARNING: task is '$TASK_ID' but the candidate path is under 'candidates/$CAND_HINT'."
+  echo "         Did you mean:  ./scripts/sim_candidate.sh $CAND_HINT $CAND_ARG"
+  echo
+fi
+
 echo "task=$TASK_NAME  dut=$DUT_MOD  sim=$SIM  configs=${#CFGS[@]}  candidates=${#CANDS[@]}"
 echo "================================================================================"
 
@@ -130,17 +151,28 @@ run_one() {
 
 cd "$TASK_DIR" || exit 2     # gotcha 1: vectors resolve relative to here
 
-ALLPASS=0
+ALLPASS=0; NFAIL=0; NREJECT=0
 printf '%-26s %-9s %s\n' "candidate" "configs" "first failure"
 echo "--------------------------------------------------------------------------------"
 for cand in "${CANDS[@]}"; do
   name="$(basename "$cand")"
   # cheap pre-checks: these are failed attempts, not harness breakage
   if grep -q "TEST_RESULT" "$cand"; then
-    printf '%-26s %-9s %s\n' "$name" "REJECT" "forges a TEST_RESULT line"; continue
+    printf '%-26s %-9s %s\n' "$name" "REJECT" "forges a TEST_RESULT line"
+    NREJECT=$((NREJECT+1)); continue
   fi
   if ! grep -qE "^[[:space:]]*module[[:space:]]+$DUT_MOD\b" "$cand"; then
-    printf '%-26s %-9s %s\n' "$name" "REJECT" "does not declare 'module $DUT_MOD'"; continue
+    # Name the module it DOES declare, and if that module is another task's
+    # DUT, name that task. A wrong-task invocation is a usage error, not a
+    # failing implementation, and must not be reported as one.
+    got="$(grep -m1 -E '^[[:space:]]*module[[:space:]]+' "$cand" | sed 's/^[[:space:]]*module[[:space:]]*\([A-Za-z0-9_]*\).*/\1/')"
+    owner="$(task_for_module "$got")"
+    if [ -n "$owner" ]; then
+      printf '%-26s %-9s %s\n' "$name" "REJECT" "declares '$got' -- that is task $owner, not $TASK_ID"
+    else
+      printf '%-26s %-9s %s\n' "$name" "REJECT" "declares '${got:-<none>}', expected '$DUT_MOD'"
+    fi
+    NREJECT=$((NREJECT+1)); continue
   fi
   # Chat UIs paste U+00A0 (non-breaking space) in place of ordinary spaces.
   # Verilator's lexer rejects it with a misleading "unexpected $end", so the
@@ -158,9 +190,21 @@ for cand in "${CANDS[@]}"; do
   pt="${res%%|*}"; ff="${res#*|}"
   set -- $pt; p=$1; t=$2
   printf '%-26s %-9s %s\n' "$name" "$p/$t" "$ff"
-  [ "$p" -eq "$t" ] && ALLPASS=$((ALLPASS+1))
+  if [ "$p" -eq "$t" ]; then ALLPASS=$((ALLPASS+1)); else NFAIL=$((NFAIL+1)); fi
 done
 
 echo "--------------------------------------------------------------------------------"
-echo "$ALLPASS/${#CANDS[@]} candidates passed every config"
-[ "$ALLPASS" -eq "${#CANDS[@]}" ] && exit 0 || exit 1
+NRUN=$((ALLPASS + NFAIL))
+if [ "$NREJECT" -gt 0 ] && [ "$NRUN" -eq 0 ]; then
+  # Nothing was actually simulated. Reporting "0 passed" here would read as an
+  # implementation failure for code that never ran.
+  echo "NOTHING RUN: $NREJECT candidate(s) rejected as ineligible for task $TASK_ID."
+  echo "This is a setup problem, not a result. No implementation was evaluated."
+  exit 2
+fi
+if [ "$NREJECT" -gt 0 ]; then
+  echo "$ALLPASS/$NRUN evaluated candidates passed every config (plus $NREJECT rejected as ineligible, not evaluated)"
+else
+  echo "$ALLPASS/$NRUN candidates passed every config"
+fi
+[ "$ALLPASS" -eq "$NRUN" ] && [ "$NREJECT" -eq 0 ] && exit 0 || exit 1
