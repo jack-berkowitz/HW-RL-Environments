@@ -3,14 +3,14 @@
 #
 #   ./scripts/sim_candidate.sh <task> <candidate.sv | dir> [verilator|icarus] [--smoke]
 #
-# <task> is a task id (ai_d01) or a full path to the task directory.
+# <task> is a task id (d_ca04) or a full path to the task directory.
 # <candidate> is one .sv file, or a DIRECTORY of them -- a directory runs every
 # answer and prints a pass rate, which is how you tell whether a task is hard
 # enough to discriminate.
 #
-#   ./scripts/sim_candidate.sh ai_d01 candidates/ai_d01/opus5_t0.sv
-#   ./scripts/sim_candidate.sh ai_d01 candidates/ai_d01
-#   ./scripts/sim_candidate.sh nw_d01 candidates/nw_d01 icarus
+#   ./scripts/sim_candidate.sh d_nw01 candidates/d_nw01/chat.sv
+#   ./scripts/sim_candidate.sh d_ca04 candidates/d_ca04
+#   ./scripts/sim_candidate.sh d_ca04 candidates/d_ca04 icarus
 #
 # WHY THIS EXISTS RATHER THAN runner/: runner/config.py models tasks as
 # interfaces/<tier>/ + testbenches/<tier>/ and has no notion of
@@ -18,7 +18,7 @@
 # work. This is the stopgap so candidates can be scored today.
 #
 # THREE THINGS THAT WILL SILENTLY GIVE WRONG ANSWERS, all handled here:
-#   1. ai_d01's checker reads tb/vectors/*.hex by RELATIVE path, so the working
+#   1. a checker may read tb/vectors/*.hex by RELATIVE path, so the working
 #      directory must be the task directory. From the repo root it loads no
 #      vectors, every comparison comes out X, and it still prints a verdict.
 #   2. The candidate replaces the DUT entirely -- do NOT also pass ref/ or the
@@ -92,18 +92,12 @@ TASK_NAME="$(basename "$TASK_DIR")"
 
 # --- legal configs per task. Keep in step with each task.yaml `configs:`. -----
 case "$TASK_NAME" in
-  ai_d01_int8_requant)
-      CFGS=("LANES=1" "LANES=2" "LANES=4" "LANES=8") ;;
   d_nw01_axi4_xbar)
       CFGS=(); for m in 2 4; do for sv in 2 4; do for t in 2 8; do for bl in 3 255; do
         CFGS+=("NUM_MST=$m NUM_SLV=$sv MAX_TRANS=$t MAX_BURST_LEN=$bl"); done; done; done; done ;;
   d_ca04_async_fifo_cdc)
       CFGS=(); for w in 8 32 64; do for l in 2 3 4; do for y in 2 3; do
         CFGS+=("DATA_W=$w LOG_DEPTH=$l SYNC_STAGES=$y"); done; done; done ;;
-  ca_d08_tiny_core)
-      CFGS=("IMEM_AW=8 DMEM_AW=8" "IMEM_AW=10 DMEM_AW=10" "IMEM_AW=12 DMEM_AW=12") ;;
-  nw_d01_axis_width_adapter)
-      CFGS=(); for s in 1 2 4 8; do for m in 1 2 4 8; do CFGS+=("S_BYTES=$s M_BYTES=$m"); done; done ;;
   *)  # REFUSE. This used to print a note and run the TB's own defaults, which
       # reported "1 config" for a task with eight legal ones -- a partial sweep
       # presented as a full one. That is the same defect as picking a testbench

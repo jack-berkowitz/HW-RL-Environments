@@ -76,11 +76,9 @@ def resolve_design(design, pdk):
     results from the previous period -- the exact failure run_orfs_build.sh's
     clean-build default exists to prevent.
     """
+    # The orfs_configs/<tier>/ tree was removed with the tier layout; the two
+    # sources below are the only ones now.
     hits = []
-    for tier in ("TierOne", "TierTwo"):
-        cfg = os.path.join(REPO_DIR, "orfs_configs", pdk, tier, design, "config.mk")
-        if os.path.isfile(cfg):
-            hits.append((tier, cfg, f"/work/orfs_configs/{pdk}/{tier}/{design}/config.mk", design))
 
     for cfg in sorted(glob.glob(os.path.join(
             REPO_DIR, "domains", "*", "design", f"{design}_*", "orfs", "config.mk"))):
@@ -96,7 +94,6 @@ def resolve_design(design, pdk):
     if not hits:
         sys.exit(
             f"ERROR: no ORFS config for '{design}'. Looked under\n"
-            f"  orfs_configs/{pdk}/{{TierOne,TierTwo}}/{design}/config.mk\n"
             f"  domains/*/design/{design}_*/orfs/config.mk\n"
             f"  orfs_runs/{design}/config.mk"
         )

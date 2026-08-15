@@ -1,5 +1,20 @@
 #!/bin/bash
-# seed_sweep.sh -- run one Tier-2 testbench across many random seeds.
+# seed_sweep.sh -- run one testbench across many random seeds.
+#
+# *** BROKEN BY THE TIER REMOVAL. NEEDS REPOINTING AT domains/. ***
+# It resolved its testbench and DUT from testbenches/TierTwo/,
+# candidates/TierTwo/ and reference_solutions/TierTwo/, all of which were
+# deleted. Repointing is not a path substitution: a domains/ reference needs the
+# per-task ref/sim_flags_verilator.txt search paths that sim_candidate.sh
+# assembles, which this script has no equivalent of.
+#
+# It REFUSES rather than searching paths that no longer exist -- a sweep that
+# silently finds nothing is worse than one that stops.
+#
+# THE METHODOLOGY IT ENCODES IS STILL LIVE and is why this file is kept rather
+# than deleted: see testbenches/conventions/NOTES.md, "single-seed validation is
+# not validation". The ncache reference passed the default seed and FAILED 4 of
+# 6 others on a real bug. Nothing currently sweeps seeds for d_ca04 or d_nw01.
 #
 #   ./scripts/seed_sweep.sh ncache            # golden, 10 seeds
 #   ./scripts/seed_sweep.sh ncache 30         # golden, 30 seeds
@@ -26,6 +41,12 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MODULE="${1:?usage: seed_sweep.sh <module> [n_seeds] [golden|candidate]}"
 NSEEDS="${2:-10}"
 WHICH="${3:-golden}"
+
+echo "REFUSED: seed_sweep.sh has not been repointed at the domains/ layout." >&2
+echo "  It resolved from testbenches/TierTwo/ and reference_solutions/TierTwo/," >&2
+echo "  which were removed. Repointing needs the per-task sim_flags mechanism" >&2
+echo "  that sim_candidate.sh uses; see the header. Nothing was run." >&2
+exit 2
 
 TB="${REPO_DIR}/testbenches/TierTwo/${MODULE}_tb.sv"
 if [ "${WHICH}" = "candidate" ]; then

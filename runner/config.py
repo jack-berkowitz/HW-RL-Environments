@@ -1,4 +1,32 @@
 """
+*** NON-FUNCTIONAL AFTER THE TIER REMOVAL — EVERY TASK IN THIS REGISTRY IS GONE. ***
+
+This is the OpenRouter eval pipeline, and it is built ENTIRELY on the
+TierOne/TierTwo layout: it resolves interfaces/<tier>/<name>_iface.sv and
+testbenches/<tier>/<name>_tb.sv, and its TASKS registry lists only tier modules
+(fifo, arbiter, multiplier, softmax, uart, rob, lsq, bpred). Those directories
+and those tasks were deleted. It knows nothing about domains/.
+
+It is kept, not deleted, because the CROSS-MODEL BREADTH RUN needs a pipeline of
+this shape and this one already has the pieces worth reusing: model fan-out
+(models.py), answer extraction with leak detection (extract.py::_LEAKS), and
+scoring (score.py). What it does not have is any notion of a domains/ task.
+
+WHAT IS ACTUALLY MISSING for the cross-model run, recorded here so it is not
+discovered mid-experiment:
+  1. a TASKS registry for domains/ tasks (d_ca04, d_nw01) — this file
+  2. capability/coverage metrics in the result row — scoring stops at PASS/FAIL
+  3. an ORFS leg — nothing here calls ppa_candidate.sh
+  4. leak detection on the domains path — sim_candidate.sh checks ONLY a forged
+     TEST_RESULT, not the other five tokens in extract.py::_LEAKS
+  5. persisted sim logs — collect_results.py reads sim_logs/<design>.log and
+     nothing in the domains path writes one
+
+The domains path (scripts/sim_candidate.sh + scripts/ppa_candidate.sh) is
+independent of this package and is unaffected.
+"""
+
+"""
 Task definitions: what modules exist, what parameter configurations they are
 graded under, and where the tools live.
 

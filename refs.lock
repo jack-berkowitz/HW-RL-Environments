@@ -1,3 +1,8 @@
+# NOTE (post-cleanup): ai_d01, ca_d08 and nw_d01 were removed from domains/ as
+# too easy to carry forward. Task ids below are the PHASE 0 RECORD of what was
+# vendored and why, and are deliberately NOT edited -- rewriting them would
+# falsify provenance. The vendored repos they name are still present and still
+# used by other tasks. See RESULTS_ARCHIVE_V2_TASKS.md.
 # refs.lock — Phase 0 output. Generated 2026-08-14.
 #
 # Pinned, licence-verified, elaboration-checked reference set for all 41 tasks.

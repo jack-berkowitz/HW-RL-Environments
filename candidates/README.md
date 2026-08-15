@@ -4,8 +4,7 @@ Two layouts live here, because the repo is mid-migration.
 
 | layout | for | example |
 |---|---|---|
-| `candidates/<tier>/<module>.sv` | the **old** tier-based tasks, driven by `runner/` | `candidates/TierOne/fifo.sv` |
-| `candidates/<task_id>/<label>.sv` | the **new** `domains/` tasks | `candidates/ai_d01/opus5_run1.sv` |
+| `candidates/<task_id>/<label>.sv` | the `domains/` tasks | `candidates/d_nw01/chat.sv` |
 
 ## Putting an answer in
 
@@ -13,10 +12,9 @@ One file per attempt, named however you like — the filename is just a label in
 the report, so use it to record what produced it:
 
 ```
-candidates/ai_d01/opus5_t0.sv
-candidates/ai_d01/opus5_t1_retry.sv
-candidates/ai_d01/sonnet5_t0.sv
-candidates/nw_d01/opus5_t0.sv
+candidates/d_nw01/chat.sv
+candidates/d_nw01/opus5_t0.sv
+candidates/d_ca04/chat.sv
 ```
 
 The file must contain **only** the module, declaring the exact name from the
@@ -29,24 +27,24 @@ second module; the candidate replaces the DUT entirely.
 One answer:
 
 ```bash
-./scripts/sim_candidate.sh ai_d01 candidates/ai_d01/opus5_t0.sv
+./scripts/sim_candidate.sh d_nw01 candidates/d_nw01/chat.sv
 ```
 
 Every answer for a task, with a pass-rate summary — this is the one that
 answers "are these hard enough":
 
 ```bash
-./scripts/sim_candidate.sh ai_d01 candidates/ai_d01
+./scripts/sim_candidate.sh d_ca04 candidates/d_ca04
 ```
 
-A task id (`ai_d01`) resolves to its directory under `domains/`; a full path
+A task id (`d_ca04`) resolves to its directory under `domains/`; a full path
 still works. Add `icarus` to run the other simulator, `--smoke` for one config
 instead of the full sweep.
 
 ## What counts as passing
 
-**Every legal config, zero coverage holes.** `LANES ∈ {1,2,4,8}` for `ai_d01`;
-all 16 `S_BYTES`×`M_BYTES` pairs for `nw_d01`. A candidate that passes one
+**Every legal config, zero coverage holes.** 16 configs for `d_nw01`
+(`NUM_MST`×`NUM_SLV`×`MAX_TRANS`×`MAX_BURST_LEN`); 18 for `d_ca04`. A candidate that passes one
 config and fails another has not solved the task, and a run that reports PASS
 while printing `// COVERAGE HOLE:` never reached the states that matter.
 

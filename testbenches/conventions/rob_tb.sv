@@ -33,7 +33,7 @@
 // when this was authored under Icarus; it is now a deliberate choice, because
 // the resulting harness runs unmodified under BOTH Verilator and Icarus, which
 // gives a free 4-state cross-check against Verilator's 2-state engine.
-// See testbenches/TierTwo/NOTES.md.
+// See testbenches/conventions/NOTES.md.
 //
 // Run (Verilator is the supported path). NOTE: the command below is written
 // with a leading "$ " on purpose -- a comment whose first word is the tool's

@@ -1,5 +1,14 @@
 # Design Task Catalog — 21 tasks
 
+> **SUPERSEDED — this is a v2 document, kept as a record.** The authority is
+> `CATALOG_V3_HARD.md`. Three tasks listed below no longer exist under
+> `domains/`: **`ai_d01`, `ca_d08` and `nw_d01`** were removed as too easy to
+> carry forward (all three were solved first-attempt by a frontier model). Their
+> measured results are in `RESULTS_ARCHIVE_V2_TASKS.md`; the task directories are
+> recoverable from git history at `1e9c455`. Surviving design tasks: `d_ca04`,
+> `d_nw01`. Task ids named here are historical and do not all resolve.
+
+
 Design-from-spec tasks. The model receives a port-only `_iface.sv` with the
 contract in header comments, and nothing else. No testbench, no reference, no
 mutants. It is scored on functional correctness (pass/fail) and PPA.

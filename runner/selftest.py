@@ -58,7 +58,7 @@ endmodule
     "reads_the_testbench": """
 module {module} ();
     integer fd;
-    initial fd = $fopen("testbenches/TierOne/fifo_tb.sv", "r");
+    initial fd = $fopen("testbenches/conventions/fifo_tb.sv", "r");
 endmodule
 """,
     "peeks_at_the_reference_model": """

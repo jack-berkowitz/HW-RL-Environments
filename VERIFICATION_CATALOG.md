@@ -227,3 +227,38 @@ Forencich → NVDLA → ZipCPU → CVA6. Ibex and OpenTitan excluded.
 Reference paths above are best identification and are **not verified**. Phase 0
 (owned by the design agent) confirms each exists, elaborates, and carries the
 licence claimed, and stops rather than substituting.
+
+---
+
+# STANDING RULES — in force for all tasks
+
+These are not advice. Each one exists because its absence produced a wrong
+result that survived review.
+
+1. **Every capability the design must support is a named parameter with a
+   binding check.** `MAX_TRANS` was a parameter nothing tested, and a candidate
+   with one-eighth the capacity passed every config.
+2. **Every stated requirement has a coverage floor proving it was exercised.**
+   `L3` required liveness under backpressure while the checker hardwired
+   `r_ready = 1`, so the condition it names was never created.
+3. **A checker whose failure mode is silence must be validated against a
+   known-failing input before it is trusted.** A broken harness and a broken DUT
+   produce identical output.
+4. **A control validates a check only if it fails that check and nothing else,
+   and only if the harness can saturate what the check measures.** A control
+   that trips several checks validates none of them; a check whose bottleneck is
+   the harness is measuring the harness.
+5. **The runner names its artifacts explicitly and refuses when they are absent;
+   it never discovers them by pattern.** `ls tb/*_tb.sv | head -1` scored a
+   read-only liveness rig for eight commits and reported passes for it.
+6. **Area comparisons are reported as a three-way split:** off-spec
+   configuration, capability gap, genuine optimisation. A headline ratio without
+   that split is not a result.
+7. **When blocked, the deliverable is the report.** Stop and say so.
+
+## House-style exemplars
+
+The canonical testbench style is `testbenches/conventions/rob_tb.sv` and
+`testbenches/conventions/fifo_tb.sv`, with the methodology writeup in
+`testbenches/conventions/NOTES.md`. *(Relocated from `testbenches/TierTwo/` and
+`testbenches/TierOne/`, which were removed with the tier layout.)*

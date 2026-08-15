@@ -1,4 +1,12 @@
-# Tier-2 harness notes
+# Harness conventions and Tier-2 build notes
+
+> **RELOCATED from `testbenches/TierTwo/NOTES.md`.** The tier task directories
+> were removed; this file survives because it is the companion to the canonical
+> style exemplars `testbenches/conventions/rob_tb.sv` and `fifo_tb.sv`, and
+> because the shared sections below are methodology that still applies. The
+> per-module sections are a historical record — those RTL files no longer exist
+> and are recoverable from git history.
+
 
 One file rather than five near-identical ones: the toolchain findings below are
 identical for every Tier-2 module, and duplicating them per module would mean
@@ -199,7 +207,7 @@ r = q.pop_front();                // implicit unpack
 
 ## Module 1 — Reorder Buffer (ROB) — **COMPLETE**
 
-Files: `interfaces/TierTwo/rob_iface.sv`, `testbenches/TierTwo/rob_tb.sv`,
+Files: `interfaces/TierTwo/rob_iface.sv` (removed), `testbenches/conventions/rob_tb.sv`,
 `reference_solutions/TierTwo/rob.sv`,
 `sandbox/mutation_tests/TierTwo/rob/{rob_mut1_ooo_commit,rob_mut2_double_commit,rob_mut3_flush_offbyone}.sv`
 

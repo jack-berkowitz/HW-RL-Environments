@@ -3,8 +3,8 @@
 #
 #   ./scripts/ppa_candidate.sh <task> <candidate.sv> [label]
 #
-#   ./scripts/ppa_candidate.sh nw_d01 candidates/nw_d01/chat.sv
-#   ./scripts/ppa_candidate.sh ai_d01 candidates/ai_d01/chat.sv gpt5run1
+#   ./scripts/ppa_candidate.sh d_nw01 candidates/d_nw01/chat.sv
+#   ./scripts/ppa_candidate.sh d_ca04 candidates/d_ca04/chat.sv gpt5run1
 #
 # For the REFERENCE build, use the task's own config directly instead:
 #   ./scripts/run_orfs_build.sh /work/domains/<...>/orfs/config.mk

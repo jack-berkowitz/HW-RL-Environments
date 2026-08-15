@@ -26,34 +26,13 @@ FLOW = os.environ.get(
 )
 PLATFORM = "sky130hd"
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TIERS = ("TierOne", "TierTwo")
 
 
 def discover_designs():
-    """Every design with an ORFS config under orfs_configs/sky130hd/{Tier},
-    as (design_name, tier) pairs. design_name is read from each config.mk's
-    DESIGN_NAME line rather than assumed to match the folder name."""
+    """Every design with an ORFS config, as (design_name, group) pairs.
+    Sources: domains/*/design/*/orfs/ and orfs_runs/. The old
+    orfs_configs/<tier>/ tree was removed with the tier layout."""
     found = []
-    configs_root = os.path.join(REPO_DIR, "orfs_configs", PLATFORM)
-    for tier in TIERS:
-        tier_dir = os.path.join(configs_root, tier)
-        if not os.path.isdir(tier_dir):
-            continue
-        for entry in sorted(os.listdir(tier_dir)):
-            config_path = os.path.join(tier_dir, entry, "config.mk")
-            if not os.path.isfile(config_path):
-                continue
-            design_name = entry
-            try:
-                with open(config_path) as fh:
-                    for line in fh:
-                        line = line.strip()
-                        if line.startswith("export DESIGN_NAME"):
-                            design_name = line.split("=", 1)[1].strip()
-                            break
-            except OSError:
-                pass
-            found.append((design_name, tier))
 
     # Catalog-v3 tasks keep their ORFS config beside the task rather than under
     # orfs_configs/<tier>/, and there is no tier -- the domain is the useful
@@ -82,7 +61,7 @@ def discover_designs():
 
 
 DISCOVERED = discover_designs()
-TIER_OF = dict(DISCOVERED)
+GROUP_OF = dict(DISCOVERED)   # design -> domain / 'candidate'; no tiers any more
 
 # --json emits the same metrics dicts as machine-readable JSON instead of the
 # table. Added so find_fmax.py can read WNS/DRC/period without a second parser
@@ -95,13 +74,13 @@ if ARGV:
     # A design named explicitly that discovery did not find gets "-" rather than
     # "?": it is usually a one-off ORFS run, not a broken lookup, and a question
     # mark reads like an error.
-    DESIGNS = [(d, TIER_OF.get(d, "-")) for d in ARGV]
+    DESIGNS = [(d, GROUP_OF.get(d, "-")) for d in ARGV]
 else:
     DESIGNS = DISCOVERED
     if not DESIGNS and not JSON_MODE:
         print(
             f"No designs found under {REPO_DIR}/orfs_configs/{PLATFORM}/"
-            f"{{{','.join(TIERS)}}}/, domains/*/design/*/orfs/, or orfs_runs/ "
+            f"domains/*/design/*/orfs/ or orfs_runs/ "
             f"-- pass design names explicitly, or check ORFS configs exist.",
             file=sys.stderr,
         )
@@ -147,19 +126,17 @@ def period(design):
 
 
 def sim_log_path(design, tier):
-    """Find sim_logs/<tier>/<design>.log -- tries the known tier first,
-    falls back to checking both if the tier wasn't resolved (e.g. a
-    design name passed explicitly on the command line that isn't in
-    orfs_configs/ yet)."""
-    if tier in TIERS:
-        candidate = os.path.join(REPO_DIR, "sim_logs", tier, f"{design}.log")
-        if os.path.isfile(candidate):
-            return candidate
-    for t in TIERS:
-        candidate = os.path.join(REPO_DIR, "sim_logs", t, f"{design}.log")
-        if os.path.isfile(candidate):
-            return candidate
-    return None
+    """Find a saved simulation log for `design`, as sim_logs/<design>.log.
+
+    The old layout was sim_logs/<tier>/<design>.log and was removed with the
+    tier directories. FLAT LAYOUT NOW, and note the gap this leaves: nothing
+    in the domains path currently WRITES these logs -- sim_candidate.sh prints
+    METRIC lines to stdout and does not persist them. So METRIC columns stay
+    empty until the submission path saves its output here. That is a known gap
+    for the cross-model run, recorded rather than hidden behind a silent {}.
+    """
+    candidate = os.path.join(REPO_DIR, "sim_logs", f"{design}.log")
+    return candidate if os.path.isfile(candidate) else None
 
 
 def load_sim_metrics(design, tier):

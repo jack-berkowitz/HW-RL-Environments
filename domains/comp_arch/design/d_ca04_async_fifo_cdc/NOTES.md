@@ -186,7 +186,8 @@ Write clock 10 ns, read clock 13 ns, deliberately non-integer-ratio.
 | read clock | 13 ns (deliberately non-integer ratio) |
 | flow | completed to `6_finish` |
 
-Closes on both domains. Area is ~6× `nw_d01`'s 3 115 µm², which is the expected
+Closes on both domains. Area is ~6× `nw_d01`'s 3 115 µm² (that task has since been removed; its
+numbers are in `RESULTS_ARCHIVE_V2_TASKS.md`), which is the expected
 shape: the storage array plus two Gray pointer paths and their synchroniser
 chains, against a width adapter's muxing.
 
