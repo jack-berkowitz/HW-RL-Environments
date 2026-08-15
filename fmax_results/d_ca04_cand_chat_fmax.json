@@ -1,0 +1,80 @@
+{
+  "design": "d_ca04_cand_chat",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": 4.5,
+  "achieved_fmax_mhz": 222.22,
+  "wns_at_converged_ns": 0.0571434,
+  "confirming_rerun": {
+    "ran": false,
+    "passed": false,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 6.0,
+    "period_pass": 6.0,
+    "period_fail": 3.0,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 4.5,
+    "period_fail": 3.75
+  },
+  "search_iterations": 2,
+  "resolution_ns": 1.0,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 6.0,
+      "wns_ns": 1.23721,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 137.3,
+      "log": "fmax_results/d_ca04_cand_chat_logs/d_ca04_cand_chat_iter01_6.0000ns.log",
+      "note": null
+    },
+    {
+      "iteration": 2,
+      "period_ns": 3.0,
+      "wns_ns": -1.43869,
+      "tns_ns": -45.1352,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 129.3,
+      "log": "fmax_results/d_ca04_cand_chat_logs/d_ca04_cand_chat_iter02_3.0000ns.log",
+      "note": null
+    },
+    {
+      "iteration": 3,
+      "period_ns": 4.5,
+      "wns_ns": 0.0571434,
+      "tns_ns": 0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 128.4,
+      "log": "fmax_results/d_ca04_cand_chat_logs/d_ca04_cand_chat_iter03_4.5000ns.log",
+      "note": null
+    },
+    {
+      "iteration": 4,
+      "period_ns": 3.75,
+      "wns_ns": -0.694563,
+      "tns_ns": -21.3339,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 123.9,
+      "log": "fmax_results/d_ca04_cand_chat_logs/d_ca04_cand_chat_iter04_3.7500ns.log",
+      "note": null
+    }
+  ],
+  "total_wall_time_s": 519.0,
+  "total_pnr_runs": 4,
+  "rtl_git_commit": "471af6b7ddff4f22cd6839c273f1f1fe34e01d7a-dirty",
+  "timestamp": "2026-08-15T02:07:48.485521+00:00",
+  "aborted_reason": null
+}
