@@ -35,6 +35,23 @@ deadlock property and a starvation property measured **only while other
 requesters are making progress** — so a uniformly slow design is not penalised,
 only an unfair one.
 
+## No metric may be quoted from a run that failed its own gate
+
+A build that misses timing still produces an area number, a power number and a
+cell count. They are real numbers from a real run, and they are **not results**:
+they describe a configuration the design cannot be operated at.
+
+This is easy to violate while assembling a sweep table, because the failing runs
+sit in the same directory as the passing ones and look identical. An elasticity
+table for `d_nw01` was first built from four periods, of which **two did not
+close** — the headline "+17.6 % area" came from 3.0 ns, where the design misses
+timing by 2.15 ns. The honest figure across the closing range was +5.0 %, a third
+of what had been written down.
+
+Before any number enters a table, check that its run passed its own gate:
+timing closed, DRC clean, flow completed. If it did not, the row is excluded —
+or marked as a failing point and never used in a ratio.
+
 ## Timing closure has ONE authoritative source
 
 **Closure comes from `find_fmax.py`'s own classification, which reads the ORFS

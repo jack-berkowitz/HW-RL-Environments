@@ -21,7 +21,7 @@ Two definitions used throughout:
 
 # THE PATTERN: work that looks like work and measures nothing
 
-Four independent instances, in four different parts of the system, none of
+Five independent instances, in five different parts of the system, none of
 which produced an error. This is the failure mode the project is organised
 against, and it deserves naming before the individual findings.
 
@@ -103,7 +103,51 @@ Collection reads only those records and **never the live directory**. A task
 with no record is reported ABSENT rather than filled in from disk.
 **Rule**: a missing row is honest; a stale row is not.
 
-**What the four have in common:** exit code 0, plausible-looking output, and no
+### 5. A self-consistent wrong answer — the worst of the five
+
+An Fmax sweep aborted mid-bisection on a missing metrics file and wrote:
+
+```json
+"converged_period_ns": 6.0,
+"achieved_fmax_mhz": 166.67,
+"wns_at_converged_ns": 0.188814
+```
+
+Three fields, mutually consistent, all wrong. The true answer was at least
+190.48 MHz — **understated by 14 %** — because the run the sweep gave up on had
+in fact *completed*, leaving +0.04 ns slack and DRC 0 in its reports. The abort
+reason was recorded, in a field below the headline numbers that nobody reads
+before quoting them.
+
+**The other four instances announce themselves the moment you look at the
+number. This one does not.** There is nothing on the surface to notice: the JSON
+is well-formed, the fields agree with each other, and the value is plausible for
+the design.
+
+**How it was caught, stated plainly: by a habit, not by a check.** The bracket
+`[4.5, 6.0]` is 1.5 ns wide against a requested resolution of 0.5 ns — so the
+search had not converged and the headline could not be a converged answer. That
+comparison was only made because an earlier Fmax number on another task had been
+sent back for exactly this reason, and checking bracket width against resolution
+had become reflex. **A finding caught by a habit is a finding that was one
+distraction away from being missed**, and it is reported that way rather than as
+diligence.
+
+**Fixes, both structural:**
+
+1. Fall back to the reports when the metrics file is missing, rather than
+   aborting — the flow had completed and the data was on disk.
+2. **If the bracket is wider than the requested resolution, refuse to report an
+   Fmax at all.** The trajectory is still written; it is simply not dressed up
+   as a converged answer. This is the check that would have caught it with no
+   human involved.
+
+Applied to its own case, (2) also **rejects the corrected value**: the bracket
+`[4.5, 5.25]` is 0.75 ns wide, so 190.48 MHz is a lower bound too. What is
+established is that Fmax lies in **[190.48, 222.22) MHz** — and that is what the
+record now says, instead of a number.
+
+**What the five have in common:** exit code 0, plausible-looking output, and no
 error anywhere. A test suite cannot catch these, because from the inside they
 are indistinguishable from success. The only defence is to check that the thing
 you think ran actually ran, against a known-failing input.
@@ -529,27 +573,33 @@ Two consequences:
 Elasticity is a property of the individual design, and the two tasks built so
 far sit at opposite ends of it:
 
-| period | `d_ca04` FIFO | | `d_nw01` crossbar | |
-|---|---|---|---|---|
-| relaxed | 19 809 µm² | — | 146 951 µm² | — |
-| mid | 19 955 µm² | +0.7 % | 150 399 µm² | +2.3 % |
-| tighter | — | — | 164 370 µm² | **+11.9 %** |
-| near limit | 20 101 µm² | **+1.5 %** | 172 830 µm² | **+17.6 %** |
+**Only runs that closed are in this table.** A first version included 3.0 ns and
+4.5 ns for the crossbar and reported "+17.6 %" — both are periods the design
+misses timing at, by 2.15 ns and 0.64 ns. See `CONVENTIONS.md`, *no metric may be
+quoted from a run that failed its own gate.*
 
-**+1.5 % against +17.6 %.** The FIFO is storage-dominated — its cell count is set
-by `DATA_W × 2**LOG_DEPTH` and the tool has almost nothing to buy speed with. The
-crossbar is logic and buffering heavy, so the tool trades area for timing
-throughout the range.
+| period | area | vs relaxed | |
+|---|---|---|---|
+| **`d_ca04` FIFO** | | | |
+| 6.000 ns | 19 809 µm² | — | closes |
+| 3.000 ns | 19 955 µm² | +0.7 % | closes |
+| 2.625 ns | 20 101 µm² | **+1.5 %** | closes, its limit |
+| **`d_nw01` crossbar** | | | |
+| 12.00 ns | 146 951 µm² | — | closes |
+| 6.00 ns | 150 399 µm² | +2.3 % | closes |
+| 5.25 ns | 154 245 µm² | **+5.0 %** | closes, fastest measured |
 
-Two consequences:
+**+1.5 % against +5.0 %** — the crossbar is more elastic, but not by the margin a
+first pass suggested. The honest conclusion is weaker than the one originally
+drawn from it:
 
-1. **For the FIFO, area × delay carries no independent information.** For the
-   crossbar it may. The precondition must be tested per design, never assumed —
-   which is the whole point of putting these two sweeps next to each other.
-2. **Any crossbar area quoted at a relaxed period understates area at Fmax by
-   roughly 18 %.** That does not overturn the candidate conclusion there — a
-   12–14× gap survives an 18 % correction comfortably — but every reference and
-   second-source number must be re-derived at its own Fmax before being quoted.
+**Both tasks built so far are largely inelastic, and no design has yet been found
+where area × delay carries information independent of area and Fmax.** At 5 %
+across the closing range, AD for the crossbar is still delay-dominated and still
+close to redundant — just less so than for the FIFO. The precondition stands as a
+thing to *test*, but it has not yet earned its place by finding a case where it
+changes an answer. If a genuinely elastic design turns up later, that is when it
+does.
 
 The general form: **a composite of two measurements you already have is not a
 third measurement.** It is worth computing only when you can show the terms are

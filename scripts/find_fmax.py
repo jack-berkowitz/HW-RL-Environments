@@ -583,8 +583,31 @@ def main():
                 wns_at = t["wns_ns"]
                 break
 
+    # ---- VALIDITY: the bracket must be no wider than the resolution asked for.
+    # A sweep that stops early -- max iterations, a tool error, an abort -- still
+    # has a "last passing period", and reporting that as the Fmax produces a JSON
+    # whose converged_period_ns, achieved_fmax_mhz and wns_at_converged_ns are
+    # all internally consistent AND ALL WRONG. That happened on d_nw01: aborted
+    # at 5.25 ns, reported 6.0 ns / 166.67 MHz, true answer 190.48 MHz -- a 14 %
+    # understatement with nothing on the surface to notice.
+    #
+    # So: if the interval is wider than the resolution, the run did not converge
+    # and it REFUSES TO REPORT AN FMAX AT ALL. The trajectory is still written --
+    # the data is not lost, it is just not dressed up as a converged answer.
+    invalid = None
+    if converged is not None and period_pass is not None and period_fail is not None:
+        width = abs(period_pass - period_fail)
+        if width > args.resolution_ns + 1e-9:
+            invalid = (f"NOT CONVERGED: bracket [{period_fail:.4f}, {period_pass:.4f}] ns is "
+                       f"{width:.4f} ns wide, wider than the requested resolution of "
+                       f"{args.resolution_ns:.4f} ns. The last passing period is NOT an Fmax. "
+                       f"Re-run with more iterations, or fix whatever stopped the search.")
+            converged = None
+            wns_at = None
+
     total = time.time() - t_start
     result = {
+        "fmax_invalid_reason": invalid,
         "design": args.design,
         "tier": tier,
         "pdk": args.pdk,

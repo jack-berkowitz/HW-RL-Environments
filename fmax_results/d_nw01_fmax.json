@@ -1,6 +1,6 @@
 {
-  "aborted_reason": "ORIGINALLY aborted at 5.25 ns on a missing metrics JSON and recorded 6.0 ns / 166.67 MHz. The flow had in fact COMPLETED with +0.04 ns slack and DRC 0; recovered from the reports. find_fmax.py now falls back to the reports rather than aborting. Corrected value: 5.25 ns / 190.48 MHz.",
-  "achieved_fmax_mhz": 190.48,
+  "aborted_reason": "Aborted at 5.25 ns on a missing metrics JSON and originally reported 6.0 ns / 166.67 MHz. The flow had COMPLETED with +0.04 ns slack and DRC 0; recovered from the reports, which moved the lower bound to 5.25 ns / 190.48 MHz. Still not converged -- see fmax_invalid_reason. find_fmax now (a) falls back to the reports instead of aborting and (b) refuses to report an Fmax when the bracket is wider than the resolution.",
+  "achieved_fmax_mhz": null,
   "bracket": {
     "bracket_iterations": 3,
     "period_fail": 3.0,
@@ -12,12 +12,13 @@
     "passed": false,
     "ran": false
   },
-  "converged_period_ns": 5.25,
+  "converged_period_ns": null,
   "design": "d_nw01",
   "final_interval": {
     "period_fail": 4.5,
     "period_pass": 5.25
   },
+  "fmax_invalid_reason": "NOT CONVERGED: bracket [4.5000, 5.2500] ns is 0.7500 ns wide, wider than the requested resolution of 0.5000 ns. What IS established: 5.25 ns passes (+0.04 ns slack, DRC 0, area 154245 um2) and 4.5 ns fails (-0.636 ns), so Fmax lies in [190.48, 222.22) MHz. The last passing period is a LOWER BOUND, not an Fmax, and must not be quoted as one.",
   "pdk": "sky130hd",
   "resolution_ns": 0.5,
   "rtl_git_commit": "53a3deff402bc4e713e1a5ad4308b751a70d1d56-dirty",
@@ -88,5 +89,5 @@
   "timestamp": "2026-08-15T20:47:49.333936+00:00",
   "total_pnr_runs": 5,
   "total_wall_time_s": 8620.4,
-  "wns_at_converged_ns": 0.04
+  "wns_at_converged_ns": null
 }
