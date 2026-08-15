@@ -1,0 +1,80 @@
+id: nw_d01
+module: axis_width_adapter
+domain: networking
+type: design
+
+# CLASS A -- external RTL oracle. The checker was proven against RTL nobody on
+# this project wrote, and sharpened against mutants of that same RTL.
+oracle_class: A
+reference:
+  refs_lock_repo: alexforencich/verilog-axis
+  sha: 48ff7a7e2ef782cf778d47910cf85835c64b1bce
+  licence: MIT
+  mode: vendor
+  file: refs/verilog-axis/rtl/axis_adapter.v
+  shim: ref/axis_width_adapter_ref.sv
+  shim_note: >
+    Port renaming and parameter mapping only. The single non-identity mapping is
+    reset polarity (our active-low rst_n to upstream active-high rst), one
+    stateless inverter on a control input.
+
+spec: spec/axis_width_adapter_iface.sv
+
+# Every legal config. All 16 pairs verified against BOTH the vendored reference
+# and the second source; a subset cross-checked under Icarus.
+configs:
+  - {S_BYTES: 1, M_BYTES: 1}
+  - {S_BYTES: 1, M_BYTES: 2}
+  - {S_BYTES: 1, M_BYTES: 4}
+  - {S_BYTES: 1, M_BYTES: 8}
+  - {S_BYTES: 2, M_BYTES: 1}
+  - {S_BYTES: 2, M_BYTES: 2}
+  - {S_BYTES: 2, M_BYTES: 4}
+  - {S_BYTES: 2, M_BYTES: 8}
+  - {S_BYTES: 4, M_BYTES: 1}
+  - {S_BYTES: 4, M_BYTES: 2}
+  - {S_BYTES: 4, M_BYTES: 4}
+  - {S_BYTES: 4, M_BYTES: 8}
+  - {S_BYTES: 8, M_BYTES: 1}
+  - {S_BYTES: 8, M_BYTES: 2}
+  - {S_BYTES: 8, M_BYTES: 4}
+  - {S_BYTES: 8, M_BYTES: 8}
+illegal_configs: >
+  S_BYTES or M_BYTES outside {1,2,4,8}, USER_W outside 1..8, or a pair where
+  neither width divides the other. The checker aborts with
+  "TEST_RESULT: FAIL: illegal ...".
+
+sim_timeout_s: 600
+simulators_verified: [verilator-5.046, iverilog-13.0]
+
+# MANDATORY for nw_d01 and actually performed. It caught two over-constraints.
+second_source: true
+second_source_file: tb/axis_width_adapter_alt_ref.sv
+
+mutants:
+  - {id: m01, class: control-flow,           kill: "S1->M4 D4", diff_rate_ppm: 4875}
+  - {id: m02, class: boundary,               kill: "S1->M4 D4", diff_rate_ppm: 58710}
+  - {id: m03, class: protocol-tlast,         kill: "S4->M1 D4", diff_rate_ppm: 17066}
+  - {id: m04, class: boundary,               kill: "S4->M1 D4", diff_rate_ppm: 432234}
+  - {id: m05, class: protocol-backpressure,  kill: "S1->M4 D4", diff_rate_ppm: 989199}
+  - {id: m06, class: reset,                  kill: "S1->M4 D8", diff_rate_ppm: 11}
+  - {id: m07, class: staleness,              kill: "S1->M4 D4", diff_rate_ppm: 462360}
+
+ppa_baseline:
+  platform: sky130hd
+  s_bytes: 1
+  m_bytes: 4
+  clk_period_ns: 20.0
+  area_um2: 3115            # post-route design area, 15% utilisation
+  synth_area_um2: 2079
+  power_uw: 245
+  wns_ns: 14.30             # closes comfortably
+  tns_ns: 0.0
+  timing_closed: true
+  sequential_cells: 52
+  reg2reg_fmax_mhz: 483
+  flow_completed: true
+  note: >
+    Baseline is for S_BYTES=1, M_BYTES=4 only. A baseline at a different width
+    pair is NOT comparable -- both the datapath width and the segment count
+    change.
