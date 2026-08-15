@@ -67,6 +67,15 @@
   int lm_worst_req  = -1;                                                     \
   bit lm_stall_fired  = 1'b0;                                                 \
   bit lm_starve_fired = 1'b0;                                                 \
+  /* scratch for LM_TICK. Declared here rather than inside the macro's         \
+     begin/end: SystemVerilog forbids declarations in an unnamed block, and a  \
+     named block inside the caller's always_ff would collide if the macro were \
+     used twice. */                                                            \
+  bit lm_any_off, lm_any_srv;                                                 \
+  /* the masks are copied into these before indexing. `(expr)[i]` is not legal \
+     SystemVerilog -- only an identifier may be bit-selected -- so the macro    \
+     cannot index its arguments directly and must land them somewhere first. */ \
+  logic [(NREQ)-1:0] lm_off_s, lm_srv_s;                                      \
   string lm_reason = "";                                                      \
   int lm_stall_limit  = 4000;                                                 \
   int lm_starve_limit = 8000;                                                 \
@@ -77,9 +86,10 @@
 // One clocked update. `off` and `srv` are LM_N-bit masks.
 `define LM_TICK(off, srv)                                                     \
   begin                                                                       \
-    bit lm_any_off, lm_any_srv;                                               \
-    lm_any_off = ((off) != '0);                                               \
-    lm_any_srv = ((srv) != '0);                                               \
+    lm_off_s = (off);                                                         \
+    lm_srv_s = (srv);                                                         \
+    lm_any_off = (lm_off_s != '0);                                            \
+    lm_any_srv = (lm_srv_s != '0);                                               \
     if (lm_any_srv) lm_global_idle = 0;                                       \
     else if (lm_any_off) lm_global_idle = lm_global_idle + 1;                 \
     if (lm_global_idle > lm_stall_limit && !lm_stall_fired) begin             \
@@ -89,10 +99,10 @@
         lm_global_idle);                                                      \
     end                                                                       \
     for (int i = 0; i < LM_N; i++) begin                                      \
-      if ((srv)[i]) begin                                                     \
+      if (lm_srv_s[i]) begin                                                     \
         lm_wait[i] = 0;                                                       \
         lm_served_count[i] = lm_served_count[i] + 1;                          \
-      end else if ((off)[i] && lm_any_srv) begin                              \
+      end else if (lm_off_s[i] && lm_any_srv) begin                              \
         /* waiting WHILE someone else progressed -- the starvation condition */ \
         lm_wait[i] = lm_wait[i] + 1;                                          \
         if (lm_wait[i] > lm_worst_wait) begin                                 \

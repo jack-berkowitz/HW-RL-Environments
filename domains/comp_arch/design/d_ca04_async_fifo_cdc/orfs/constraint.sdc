@@ -14,8 +14,8 @@
 
 current_design async_fifo_cdc
 
-set wr_period 10.0
-set rd_period 13.0
+set wr_period 5
+set rd_period 8
 if {[info exists ::env(CLK_PERIOD_NS)]}    { set wr_period $::env(CLK_PERIOD_NS) }
 if {[info exists ::env(RD_CLK_PERIOD_NS)]} { set rd_period $::env(RD_CLK_PERIOD_NS) }
 
