@@ -254,3 +254,158 @@ above — not gated in the checker.
 * The CDC timing-verification gap above is inherent to a simulation-only flow
   and is the main thing I would want a second opinion on before scoring this
   task.
+
+---
+
+# AUDIT against the standing rules, and the re-run
+
+`d_ca04` was built before the rule that *every capability the design must
+support is a named parameter with a binding check, and every stated requirement
+has a coverage floor proving it was exercised*. Audited against it here.
+
+**Method: probes, not reading.** For each parameter, a probe was built that is a
+fully correct FIFO — loses nothing, duplicates nothing, preserves order — and
+differs only in ignoring that one parameter. If the checker passes it, the
+parameter is unbound. Probes live in `tb/audit/`.
+
+## B.1 — findings
+
+### Parameters
+
+| parameter | swept | bound before | evidence |
+|---|---|---|---|
+| `DATA_W` | {8,32,64} | **NO, above bit 31** | `p1` drops bits [63:32] and **PASSED** at `DATA_W=64` |
+| `LOG_DEPTH` | {2,3,4} | incidentally | `p2`/`p2b` were caught, but only by a *coverage hole* |
+| `SYNC_STAGES` | {2,3} | **NO** | `p3` hard-codes 2 stages and **PASSED** at `SYNC_STAGES=3` |
+
+**`DATA_W`** — the payload generator was `DATA_W'(wr_idx + 32'h1000_0000)`: a
+32-bit value zero-extended, so at `DATA_W=64` **bits [63:32] were always zero**
+and a FIFO that dropped them passed every config.
+
+**`LOG_DEPTH`** — bound only through the `depth_reached` coverage counter, which
+is computed from `occ = wr_idx - rd_idx`: a cross-domain difference this very
+checker documents as unmeasurable and *overstating*. It also **misattributed the
+defect** — it reported "the run did not exercise the target hazards" when the
+truth was "the design is too small". A reader debugging that goes to the
+testbench, not the design.
+
+**`SYNC_STAGES`** — the parameter the audit most expected to be unbound, and it
+was. The previous conclusion (recorded when a `SYNC_STAGES=1` mutant survived)
+was that synchroniser depth is not simulation-observable. **That conclusion was
+too strong** — see the fix below.
+
+### Prose requirements
+
+| requirement | condition created | floor | verdict |
+|---|---|---|---|
+| H1 ready not comb. on valid | **no** | no | **DEFECT — never checked** |
+| H3 stability under backpressure | yes | `cov_rd_stall` | ok |
+| C1/C2/C3 loss / dup / order | yes | scoreboard + drain | ok |
+| C4 no overflow | via consequences | — | ok |
+| **C4 minimum depth** | **only incidentally** | coverage only | **DEFECT** |
+| C5 no phantom data | yes | `cov_empty` | ok |
+| C6 all clock ratios | 7 phases | `cov_phases >= 7` | ok |
+| CDC Gray coding | yes | `m01`/`m02` killed | ok |
+| R1/R2/R4/R5 reset | yes | `cov_stagger` | ok |
+| liveness, 64-cycle bound | **no** | no | **DEFECT — see below** |
+
+## B.2 — fixes, each with an isolated negative control
+
+| check | control | result |
+|---|---|---|
+| payload spans all `DATA_W` bits | `p1` | **FAIL** — `rd_data=0x10000000 expected 0xffffffff10000000` |
+| C4 minimum capacity | `p2` (4 entries) | **FAIL** — "accepted only 4 beats … requires at least 16 (C4)" |
+| C4 minimum capacity | `p2b` (half depth) | **FAIL** — "accepted only 8 … requires at least 16" |
+| `SYNC_STAGES` depth | `p3` @ `SS=3` | **FAIL** — "minimum crossing latency was 2 … requires at least 3" |
+| `SYNC_STAGES` depth | `p3` @ `SS=2` | **PASS** — correct, it is not wrong there |
+| H1 | `p4b` | **FAIL** — "wr_ready changed combinationally with wr_valid (H1)", 1 failing check |
+
+### How `SYNC_STAGES` was bound after all
+
+Not by counting flops — by the one consequence that *is* observable. A beat
+cannot reach the read side until the write pointer has crossed `SYNC_STAGES`
+flops clocked by `rd_clk`, so **minimum crossing latency ≥ `SYNC_STAGES`
+`rd_clk` cycles**. Measured before the bound was written:
+
+| design | `SS=2` | `SS=3` |
+|---|---|---|
+| vendored reference | 3 | 3 |
+| second source | 2 | 3 |
+| `p3` (always 2 stages) | 2 | **2** |
+
+The floor passes both correct designs at both settings and fails the probe
+exactly where it is wrong. It is a **lower** bound implied by the CDC
+requirement, not a latency budget — backpressure can only make a crossing
+slower, so the minimum is uncontaminated by the harness stalling.
+
+**Maximum latency is reported and never gated.** It includes time the beat spent
+waiting for `rd_ready`, which is the checker's own backpressure. The reference
+measures 67 `rd_clk` cycles against the spec's stated 64-cycle visibility bound
+for exactly that reason — the spec's 64 is about *visibility*, my measurement is
+*acceptance to delivery*, and conflating them would fail a correct design. The
+stated bound remains unchecked and is recorded as such rather than papered over.
+
+### A bug in the new code, caught by its own control
+
+`p4b` initially **passed** the new H1 check. The check was vacuous:
+`capacity_phase()` sets `rd_weight = 0` to stop the reader and the drain that
+follows restored `rd_en` but **not** `rd_weight`, so `rd_ready` never asserted,
+the FIFO stayed full, and `wr_ready` was 0 regardless of `wr_valid`. The H1
+check now fails explicitly if it finds itself in that state rather than passing
+on a condition it never created.
+
+The first H1 control (`p4`, the textbook `wr_ready = wr_valid && !full`) was
+**rejected as a control**: it fails `R4` as a side effect, because ready is low
+while the producer is idle. A control that trips a second check validates
+neither. `p4b` arms the dependence only after the first beat, so `R4` still
+passes and only H1 fires.
+
+## B.3 — no over-constraint
+
+**Reference 18/18, second source 18/18** on the tightened spec. The second
+source is structurally unlike the vendored FIFO (dual-port RAM with a read
+address, versus exposing the whole array and selecting in the destination
+domain), so the new checks do not encode the anchor's architecture.
+
+## B.4 — the candidate against the fixed spec
+
+**18/18.** It honours every parameter, including the two that were unbound
+before, and it tracks `SYNC_STAGES` *more faithfully than the vendored
+reference*: its minimum crossing latency moves 3 → 4 as `SYNC_STAGES` goes
+2 → 3, while the reference sits at 3 for both because its own minimum is
+dominated by an output spill register.
+
+| capability, `DATA_W=64` | reference | candidate |
+|---|---|---|
+| capacity @ `LOG_DEPTH=2` (DEPTH 4) | 6 | **4** |
+| capacity @ `LOG_DEPTH=4` (DEPTH 16) | 18 | **16** |
+| min latency @ `SS=2` / `SS=3` | 3 / 3 | 3 / **4** |
+
+### PPA, and the three-way split
+
+| metric | reference | candidate | |
+|---|---|---|---|
+| cell area | 19 942 µm² | 14 644 µm² | candidate 27 % smaller |
+| instances | 20 225 | 14 107 | candidate 30 % fewer |
+| power | 12.14 mW | 6.75 mW | candidate 44 % lower |
+| WNS @ 5.0 ns | +1.192 ns | +1.219 ns | level |
+| **Fmax** | **333 MHz** (period 3.0 ns) | **222 MHz** (period 4.5 ns) | **reference 50 % faster** |
+
+1. **Off-spec configuration — small.** The reference accepts `DEPTH + 2`, the
+   candidate exactly `DEPTH`; the extra two entries are an output spill register
+   the spec never asked for. At the build config that is ~64 flops out of a
+   6 118-instance gap — about 1 %. Not the explanation.
+2. **Capability gap — none.** The candidate meets every requirement and binds
+   `SYNC_STAGES` more tightly than the reference does. This is the first task
+   where the audit came back clean on capability.
+3. **Genuine optimisation — yes, but it is not free.** The remaining area and
+   power advantage is real. **It is bought with speed:** the candidate tops out
+   at 222 MHz against the reference's 333 MHz, and the reference's sweep never
+   even found a failing period, so 333 is a lower bound.
+
+**At 5.0 ns neither design is constrained** — both carry ~24 % slack, which is
+why the area comparison looked like a free win. At a period that actually binds,
+the comparison inverts. That is the caution about non-binding clocks, confirmed
+on real numbers rather than asserted: **d_ca04's candidate trades 33 % of Fmax
+for 27 % of area**, which is an ordinary engineering tradeoff and not evidence
+that the task is easy.

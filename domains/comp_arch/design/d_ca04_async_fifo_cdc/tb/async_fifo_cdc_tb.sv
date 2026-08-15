@@ -84,6 +84,11 @@ module async_fifo_cdc_tb;
 
     // ---------------- scoreboard: one writer per index ----------------
     logic [DATA_W-1:0] model [0:MAXQ-1];
+    // $time when each beat was accepted. Written ONLY by the write monitor and
+    // read ONLY by the read monitor, same one-writer-per-index discipline as
+    // `model`. $time is global simulation time, so this is not a cross-domain
+    // sample of a moving counter -- it cannot race.
+    time t_accept [0:MAXQ-1];
     int wr_idx = 0;          // written ONLY by the write-domain monitor
     int rd_idx = 0;          // written ONLY by the read-domain monitor
 
@@ -95,6 +100,8 @@ module async_fifo_cdc_tb;
     int cov_depth_reached = 0;   // occupancy actually hit DEPTH
     int cov_stagger = 0;         // reset released at different times per domain
     int occ_max = 0;
+    int lat_min_cyc = 1_000_000, lat_max_cyc = 0, lat_n = 0;
+    int cov_high_bits = 0;    // a payload bit above 31 was actually set
 
     // ---------------- write-domain driver + monitor ----------------
     bit wr_en = 1'b0;
@@ -113,7 +120,12 @@ module async_fifo_cdc_tb;
             end else begin
                 if (wr_en && ($urandom_range(0,99) < wr_weight)) begin
                     wr_valid <= 1'b1;
-                    wr_data  <= DATA_W'(wr_idx + 32'h1000_0000);
+                    // Every bit of DATA_W must vary. The old generator was
+                    // DATA_W'(wr_idx + 32'h1000_0000): a 32-bit value
+                    // zero-extended, so at DATA_W=64 bits [63:32] were ALWAYS
+                    // ZERO and a FIFO that dropped them passed. Confirmed with
+                    // an audit probe -- see tb/audit/p1_*.
+                    wr_data  <= DATA_W'({~32'(wr_idx), 32'(wr_idx + 32'h1000_0000)});
                 end else begin
                     wr_valid <= 1'b0;
                 end
@@ -125,6 +137,7 @@ module async_fifo_cdc_tb;
     always_ff @(posedge wr_clk) begin
         if (wr_rst_n && wr_valid && wr_ready) begin
             model[wr_idx % MAXQ] <= wr_data;
+            t_accept[wr_idx % MAXQ] <= $time;
             wr_idx <= wr_idx + 1;
         end
     end
@@ -165,9 +178,19 @@ module async_fifo_cdc_tb;
                         "phantom beat %0d: read side delivered data with only %0d writes accepted (C5)",
                         rd_idx, wr_idx));
                 end else if (rd_data !== model[rd_idx % MAXQ]) begin
+                    // (latency accounting happens below, on correct beats)
                     note_fail($sformatf(
                         "beat %0d: rd_data=0x%0h expected 0x%0h (C1/C3)",
                         rd_idx, rd_data, model[rd_idx % MAXQ]));
+                end
+                if (rd_idx < wr_idx) begin
+                    automatic int lat_cyc;
+                    lat_cyc = int'(($time - t_accept[rd_idx % MAXQ]) / (2 * rd_half));
+                    if (lat_cyc < lat_min_cyc) lat_min_cyc <= lat_cyc;
+                    if (lat_cyc > lat_max_cyc) lat_max_cyc <= lat_cyc;
+                    lat_n <= lat_n + 1;
+                    if (DATA_W > 32 && |model[rd_idx % MAXQ][DATA_W-1:32])
+                        cov_high_bits <= cov_high_bits + 1;
                 end
                 rd_idx <= rd_idx + 1;
             end
@@ -224,6 +247,73 @@ module async_fifo_cdc_tb;
         join
         repeat (4) @(posedge wr_clk);
         repeat (4) @(posedge rd_clk);
+    endtask
+
+    // ---------------- C4 CAPACITY: a direct check, one domain ---------------
+    // C4 has two halves and only the overflow half was enforced. The MINIMUM
+    // capacity half -- "must accept at least 2**LOG_DEPTH beats before
+    // backpressuring" -- was caught only incidentally, by the
+    // `depth_reached` COVERAGE counter, which is computed from `occ`: a
+    // cross-domain difference this checker documents as unmeasurable and
+    // OVERSTATING. It also misattributes the defect, reporting "the run did not
+    // exercise a hazard" when the truth is "the design is too small".
+    //
+    // This is the d_nw01 MAX_TRANS pattern: stop draining, offer writes, and
+    // count what is accepted before the design stops accepting. Everything is
+    // observed in the WRITE domain, so nothing races.
+    int cap_accepted = 0;
+    task automatic capacity_phase();
+        int guard, quiet;
+        phase = "capacity";
+        wr_half = 5000; rd_half = 5000;
+        wr_weight = 100; rd_weight = 0;
+        do_reset(2, 2);
+        wr_en = 1'b1; rd_en = 1'b0;        // never drain
+        guard = 0; quiet = 0;
+        while (guard < 4000 && quiet < 64) begin
+            @(posedge wr_clk);
+            guard++;
+            if (wr_valid && !wr_ready) quiet++; else quiet = 0;
+        end
+        cap_accepted = wr_idx;
+        wr_en = 1'b0;
+        $display("METRIC: capacity_beats_accepted=%0d (DEPTH=%0d)", cap_accepted, DEPTH);
+        if (cap_accepted < DEPTH)
+            note_fail($sformatf(
+                "accepted only %0d beats with the reader stopped; LOG_DEPTH=%0d requires at least %0d (C4)",
+                cap_accepted, LOG_DEPTH, DEPTH));
+        // let the read side drain what we just wrote before the next phase.
+        // rd_weight MUST be restored: it was set to 0 to stop the reader, and
+        // leaving it there made the drain loop spin without ever asserting
+        // rd_ready -- which left the FIFO full and made the H1 check below
+        // VACUOUS, since wr_ready is 0 when full whatever wr_valid does.
+        rd_weight = 100;
+        rd_en = 1'b1;
+        guard = 0;
+        while (rd_idx < wr_idx && guard < 20000) begin @(posedge rd_clk); guard++; end
+        rd_en = 1'b0;
+    endtask
+
+    // ---------------- H1: ready must not depend combinationally on valid ----
+    // H1 was stated and NEVER CHECKED. Toggle wr_valid between clock edges and
+    // require wr_ready not to move: a purely combinational path shows up
+    // immediately, a registered one cannot.
+    task automatic check_h1();
+        logic ready_before, ready_after;
+        phase = "H1";
+        wr_en = 1'b0; rd_en = 1'b0;
+        @(posedge wr_clk);
+        #1000;                       // settle, mid-cycle (half period is 5000 ps)
+        wr_valid = 1'b0; #500;  ready_before = wr_ready;
+        wr_valid = 1'b1; #500;  ready_after  = wr_ready;
+        // The test only means anything if the FIFO could accept: when it is
+        // full, wr_ready is 0 for both samples and the comparison is vacuous.
+        if (ready_before !== 1'b1 && ready_after !== 1'b1)
+            note_fail("H1 check was vacuous -- FIFO was full, wr_ready could not move either way");
+        else if (ready_after !== ready_before)
+            note_fail("wr_ready changed combinationally with wr_valid (H1)");
+        wr_valid = 1'b0; #500;
+        checks++;
     endtask
 
     // ---------------- one traffic phase ----------------
@@ -301,11 +391,15 @@ module async_fifo_cdc_tb;
         run_phase("E-odd-ratio",          3000,   7000,  85, 60,  5,  2);
         run_phase("F-wr-burst-rd-slow",   2500,   8000, 100, 25,  4,  6);
         run_phase("G-rd-hungry",          8000,   2500,  35,100,  6,  4);
+        capacity_phase();
+        check_h1();
 
         phase = "final";
         $display("METRIC: beats_checked=%0d phases=%0d peak_occupancy_estimate=%0d (DEPTH=%0d)",
                  checks, cov_phases, occ_max, DEPTH);
         $display("METRIC: wr_stall_cycles=%0d rd_stall_cycles=%0d", cov_wr_stall, cov_rd_stall);
+        $display("METRIC: crossing_latency_rdclk min=%0d max=%0d n=%0d (SYNC_STAGES=%0d)",
+                 lat_min_cyc, lat_max_cyc, lat_n, SYNC_STAGES);
 
         begin
             int cov_missing;
@@ -319,11 +413,35 @@ module async_fifo_cdc_tb;
             if (cov_rd_stall      == 0) begin cov_missing++; $display("// COVERAGE HOLE: read side never backpressured"); end
             if (cov_depth_reached == 0) begin cov_missing++; $display("// COVERAGE HOLE: FIFO never approached full occupancy"); end
             if (cov_stagger       == 0) begin cov_missing++; $display("// COVERAGE HOLE: resets never released at staggered times"); end
+            if (DATA_W > 32 && cov_high_bits == 0) begin cov_missing++; $display("// COVERAGE HOLE: no payload above bit 31 was ever set -- upper DATA_W bits untested"); end
+            if (cap_accepted      == 0) begin cov_missing++; $display("// COVERAGE HOLE: capacity phase never ran"); end
             if (cov_phases        <  7) begin cov_missing++; $display("// COVERAGE HOLE: only %0d of 7 clock-ratio phases completed", cov_phases); end
             if (cov_missing > 0)
                 note_fail($sformatf("%0d coverage holes -- run did not exercise the target hazards",
                                     cov_missing));
         end
+
+        // SYNC_STAGES had NO binding check: an audit probe hard-coding two
+        // synchroniser flops passed at SYNC_STAGES=3. It is bound here by the
+        // one consequence that IS observable -- a beat cannot reach the read
+        // side until the write pointer has crossed SYNC_STAGES flops clocked by
+        // rd_clk, so at least SYNC_STAGES rd_clk edges must elapse.
+        //
+        // This is a LOWER bound implied by the CDC requirement, not a latency
+        // budget: backpressure can only make a crossing slower, never faster,
+        // so the MINIMUM is uncontaminated by the read side stalling.
+        // Measured: vendored reference 3/3 at SYNC_STAGES 2/3, second source
+        // 2/3, probe 2/2 -- so the floor passes both correct designs at both
+        // settings and catches the probe exactly where it is wrong.
+        if (lat_n > 0 && lat_min_cyc < SYNC_STAGES)
+            note_fail($sformatf(
+                "minimum crossing latency was %0d rd_clk cycles but SYNC_STAGES=%0d requires at least %0d -- the synchroniser chain is shorter than the parameter asks for (CDC)",
+                lat_min_cyc, SYNC_STAGES, SYNC_STAGES));
+
+        // The MAXIMUM is reported but never gated: it includes time the beat
+        // spent waiting for rd_ready, which is the checker's own backpressure,
+        // not the design's latency. The reference measures 67 against the
+        // spec's 64-cycle visibility bound for exactly that reason.
 
         if (checks < MIN_CHECKS)
             note_fail($sformatf("insufficient coverage: only %0d beats checked", checks));

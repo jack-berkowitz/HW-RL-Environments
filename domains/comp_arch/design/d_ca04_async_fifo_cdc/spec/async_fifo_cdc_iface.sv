@@ -15,12 +15,21 @@
 // -----------------------------------------------------------------------------
 // PARAMETERS
 // -----------------------------------------------------------------------------
-//   DATA_W      : payload width in bits. Legal: 8, 32, 64.
+//   DATA_W      : payload width in bits. Legal: 8, 32, 64. Every bit is
+//                 carried and every bit is checked -- the payload varies across
+//                 the full width, so dropping the upper half of a 64-bit word
+//                 is caught.
 //   LOG_DEPTH   : FIFO depth is 2**LOG_DEPTH entries. Legal: 2, 3, 4.
 //                 Depth is a power of two by construction; do not support
 //                 non-power-of-two depths.
 //   SYNC_STAGES : number of synchroniser flops on each value crossing the
-//                 boundary. Legal: 2, 3.
+//                 boundary. Legal: 2, 3. THIS IS A REQUIRED DEPTH, NOT A HINT.
+//                 It is checked through the one consequence that is visible in
+//                 simulation: a beat cannot reach the read side until the write
+//                 pointer has crossed SYNC_STAGES flops clocked by `rd_clk`, so
+//                 the MINIMUM observed crossing latency must be at least
+//                 SYNC_STAGES `rd_clk` cycles. A design that hard-codes two
+//                 stages fails at SYNC_STAGES = 3.
 //   Any other value of any parameter is ILLEGAL and need not be handled.
 //
 // -----------------------------------------------------------------------------
@@ -31,7 +40,9 @@
 //   and ready are high.
 //
 //   H1. `wr_ready` MUST NOT depend combinationally on `wr_valid`, and
-//       `rd_valid` MUST NOT depend combinationally on `rd_ready`.
+//       `rd_valid` MUST NOT depend combinationally on `rd_ready`. CHECKED: the
+//       harness toggles `wr_valid` between clock edges and requires `wr_ready`
+//       not to move.
 //   H2. Once `wr_valid` is asserted the producer holds it, and holds `wr_data`
 //       stable, until the beat is accepted. The checker honours this.
 //   H3. When `rd_valid` is high and `rd_ready` is low, `rd_valid` must REMAIN
@@ -44,10 +55,15 @@
 //       on the read side.
 //   C2. NO DUPLICATION. Delivered exactly once.
 //   C3. ORDER PRESERVED. Beat N in is beat N out. This is a FIFO.
-//   C4. NO OVERFLOW. `wr_ready` must be low whenever accepting another beat
-//       would overwrite an entry that has not yet been read. With 2**LOG_DEPTH
-//       entries the FIFO must accept at least 2**LOG_DEPTH beats before
-//       backpressuring, and must never accept more than it can hold.
+//   C4. NO OVERFLOW, AND THE DEPTH YOU WERE ASKED FOR. `wr_ready` must be low
+//       whenever accepting another beat would overwrite an entry that has not
+//       yet been read, and must never accept more than the FIFO can hold.
+//       EQUALLY BINDING, AND CHECKED DIRECTLY: with the reader stopped
+//       entirely, the FIFO must accept AT LEAST 2**LOG_DEPTH beats before it
+//       backpressures. LOG_DEPTH is a required capacity, not a suggestion; a
+//       design that builds a smaller FIFO than asked for fails even though it
+//       loses no data. The count is observed entirely in the write domain, so
+//       it is not the unmeasurable cross-domain occupancy.
 //   C5. NO UNDERFLOW / NO PHANTOM DATA. `rd_valid` must be low unless a beat
 //       written on the other side is genuinely available. It must NEVER assert
 //       on the strength of a pointer value that is still in flight through the
