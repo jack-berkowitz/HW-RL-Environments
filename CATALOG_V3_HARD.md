@@ -2,9 +2,29 @@
 
 32 tasks: 16 design, 16 verification. Replaces the v2 lists.
 
-Rebuilt after a frontier model beat the upstream reference on area and power for
-`nw_d01` (AXI-Stream width adapter) at slightly lower Fmax. Small combinational
-and dataflow blocks are the wrong difficulty band — the headroom isn't there.
+Rebuilt after a frontier model appeared to beat the upstream reference on area
+and power for `nw_d01` (AXI-Stream width adapter) at slightly lower Fmax. Small
+combinational and dataflow blocks are the wrong difficulty band — the headroom
+isn't there.
+
+> **CORRECTION — the triggering claim did not survive re-derivation.** `nw_d01`'s
+> reference had never passed the correctness gate at all (its `sim_flags` file
+> was empty, so the vendored search path was never passed and it failed every
+> config on `MODMISSING`), which means the original comparison put a gated
+> candidate against an ungated reference. Both now pass 16/16, and with the
+> reference actually simulated the result decomposes as: **no off-spec
+> configuration, a real capability gap — the candidate sustains HALF the
+> reference's throughput at matched widths — and essentially no genuine
+> optimisation.** The area figures disagree in sign between synthesis (candidate
+> 1.8 % larger) and post-route (candidate 3.2 % smaller), which is noise; the
+> 25 % power advantage is largely a consequence of doing 20 % less work per
+> cycle. Normalised for throughput the candidate is 21 % worse on area and 6 %
+> better on power. See `nw_d01`'s NOTES.md § RE-DERIVATION.
+>
+> **The rebuild still stands** — the v3 tasks are harder and more discriminating
+> on their own merits, and the capability audits have earned their place. But the
+> specific empirical claim above should be corrected rather than repeated, and
+> neither `nw_d01` nor `d_nw01` contains a demonstrated optimisation win.
 
 ## Two hard constraints this rebuild respects
 

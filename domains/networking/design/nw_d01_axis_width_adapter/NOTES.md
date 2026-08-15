@@ -205,3 +205,93 @@ that is a scoring decision, not something to change quietly here.
 * Nothing blocking.
 * The diff-rate recommendation above changed materially between `ai_d01` and
   `nw_d01`. Worth one more module before adopting anything.
+
+---
+
+# RE-DERIVATION — the reference had never passed the correctness gate
+
+`ref/sim_flags_verilator.txt` was **empty**, so the vendored `verilog-axis`
+search path the shim needs was never passed and the reference failed all 16
+configs on `MODMISSING`. Every earlier "candidate beats reference" statement for
+this task therefore compared a **gated candidate against an ungated reference**.
+
+Fixed. Both now pass the same gate: **reference 16/16, candidate 16/16.** The
+correctness side is sound. What changes is the PPA interpretation.
+
+## Three-way decomposition, same as d_nw01
+
+### 1. Off-spec configuration — CLEAN
+
+Unlike `d_nw01`, where this shim chose `CUT_ALL_AX` and handed the reference 45 %
+of its area in pipelining the spec never required, this shim sets
+`ID_ENABLE = 0` and `DEST_ENABLE = 0`. The vendored adapter carries no feature
+here that the spec did not ask for. **No off-spec area.**
+
+### 2. Capability gap — REAL
+
+Rig: `tb/audit/axis_width_adapter_capability_rig.sv`. Both sides saturated, no
+backpressure, so the DUT is the only limit.
+
+| S→M | reference | candidate | candidate / reference |
+|---|---|---|---|
+| 1→1 | 1000 | 500 | **0.50** |
+| 1→4 | 1000 | 800 | 0.80 |
+| 2→2 | 2000 | 1000 | **0.50** |
+| 4→4 | 4000 | 2000 | **0.50** |
+| 8→8 | 8000 | 4000 | **0.50** |
+| 8→4 | 4000 | 2666 | 0.67 |
+
+bytes per 1000 cycles. **At matched widths the candidate sustains exactly half
+the reference's throughput** — the signature of a design that cannot accept a
+new input beat while emitting an output beat. The narrow-to-wide cases follow
+`k/(k+1)`: it spends one extra cycle per output beat.
+
+Stalling is legal and the spec deliberately permits a zero-storage bypass, so
+every correctness config still passes. This is a capability difference, and
+nothing in the checker sees it.
+
+### 3. Genuine optimisation — ESSENTIALLY NONE
+
+PPA at the built config, **S_BYTES=1 M_BYTES=4**, where the candidate runs at
+0.80 of the reference's rate:
+
+| metric | reference | candidate | |
+|---|---|---|---|
+| synth area | 2 079 µm² | 2 117 µm² | candidate **1.8 % larger** |
+| design area (post-route) | 3 115 µm² | 3 014 µm² | candidate 3.2 % smaller |
+| total power | 245 µW | 184 µW | candidate 25 % lower |
+| WNS | +14.30 ns | +13.71 ns | candidate slightly worse |
+
+The two area numbers **disagree in sign** — the candidate is larger by synthesis
+and smaller after place-and-route, both by about 3 %. That is noise, not a win.
+
+Normalising for the throughput it actually delivers:
+
+| | reference | candidate | |
+|---|---|---|---|
+| area per unit throughput | 3.12 | 3.77 | candidate **21 % worse** |
+| power per unit throughput | 0.245 | 0.230 | candidate 6 % better |
+
+## What this means for the v3 rebuild premise
+
+`CATALOG_V3_HARD.md` opens by saying the rebuild was triggered because *a
+frontier model beat the upstream reference on area and power for `nw_d01`*.
+**That claim does not survive this re-derivation.** The area result is
+noise-level and sign-dependent on which number is quoted, and the power result
+is substantially a consequence of doing 20 % less work per cycle — normalised,
+the candidate is worse on area and roughly level on power.
+
+This does **not** invalidate the v3 rebuild: those tasks are harder and more
+discriminating on their own merits, and the capability audits have earned their
+place. But the specific empirical claim in the catalog's opening paragraph
+should be corrected rather than repeated.
+
+**Neither `nw_d01` nor `d_nw01` contains a demonstrated optimisation win.** In
+both cases the apparent advantage decomposed into off-spec configuration
+(d_nw01) or reduced capability (both), with nothing left over.
+
+## Caveat that applies to every number above
+
+WNS is **+14.30 ns and +13.71 ns** — the clock never bound, so neither design
+was pushed and neither was optimised against a real constraint. These numbers
+are not evidence about difficulty until rerun at a binding period.
