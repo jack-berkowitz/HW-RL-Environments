@@ -150,6 +150,24 @@ grep -E "Chip area" "$RPT/synth_stat.txt" 2>/dev/null
 grep -iE "^Design area" "$LOG/6_report.log" 2>/dev/null | tail -1
 grep -E "^tns |^wns |worst slack" "$RPT/6_finish.rpt" 2>/dev/null | head -3
 grep -A11 "finish report_power" "$RPT/6_finish.rpt" 2>/dev/null | grep -E "^Total"
+
+# --- immutable run record ----------------------------------------------------
+# Collection reads these, never the live ORFS output directory. That directory
+# is shared and mutable: during an Fmax sweep it reported DID NOT COMPLETE for a
+# task whose candidate genuinely does not complete -- a stale value that
+# coincidentally matched the truth. See scripts/write_run_record.py.
+AREA="$(grep -iE '^Design area' "$LOG/6_report.log" 2>/dev/null | tail -1 | grep -oE '[0-9]+' | head -1)"
+SYNTH="$(grep -E 'Chip area' "$RPT/synth_stat.txt" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' | head -1)"
+WNS="$(grep -E '^wns ' "$RPT/6_finish.rpt" 2>/dev/null | head -1 | grep -oE '[-0-9.]+' | head -1)"
+PWR="$(grep -A11 'finish report_power' "$RPT/6_finish.rpt" 2>/dev/null | grep -E '^Total' | awk '{print $4}')"
+PER="$(awk '/^set clk_period/{print $3; exit}' "$TASK_DIR/orfs/constraint.sdc" 2>/dev/null)"
+[ -n "${CLK_PERIOD_NS:-}" ] && PER="$CLK_PERIOD_NS"
+if [ -n "$AREA" ]; then STATUS=completed; else STATUS=DID_NOT_COMPLETE; fi
+REC="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$CAND" ppa "$LABEL" \
+        "status=$STATUS" "design_area_um2=${AREA:-}" "synth_area_um2=${SYNTH:-}" \
+        "wns_ns=${WNS:-}" "power_w=${PWR:-}" "clk_period_ns=${PER:-}" 2>/dev/null)"
+[ -n "$REC" ] && echo "record: $REC"
+
 echo
 echo "Compare against the task baseline in $TASK_DIR/NOTES.md."
 echo "A candidate is only comparable to that baseline if the clock period and"

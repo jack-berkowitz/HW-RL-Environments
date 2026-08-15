@@ -21,7 +21,7 @@ Two definitions used throughout:
 
 # THE PATTERN: work that looks like work and measures nothing
 
-Three independent instances, in three different parts of the system, none of
+Four independent instances, in four different parts of the system, none of
 which produced an error. This is the failure mode the project is organised
 against, and it deserves naming before the individual findings.
 
@@ -78,7 +78,32 @@ the run had been given `3.0`.
 **Rule**: a result file must record the parameters it was produced with, so a
 stale read is detectable.
 
-**What the three have in common:** exit code 0, plausible-looking output, and no
+### 4. A results table reporting a live directory — the worst of the four
+
+`collect_results.py` read the ORFS output directory directly. That directory is
+shared and mutable: any concurrent build rewrites it. During an Fmax sweep the
+`d_nw01` row read **`DID NOT COMPLETE`**.
+
+`DID NOT COMPLETE` is *also the genuine finding about that task's candidate* — it
+provisions 36 kbit of read buffering and fails detailed routing at 2003 DRC
+violations.
+
+**So the table displayed the right answer for the wrong reason, and nothing about
+it looked wrong.** A stale entry that coincidentally matches a real result is the
+most dangerous form of this defect: the other three announce themselves the
+moment you look at the number, and this one does not. It would have gone into a
+writeup unchallenged.
+
+**Found by**: noticing the row while a sweep was knowingly running, and only
+because the sweep had been started deliberately minutes earlier.
+**Hid**: nothing — by luck. It was one concurrent build away from hiding anything.
+**Fix, structural rather than a lock**: every run writes an immutable record
+keyed by task, submission identity *and content hash*, timestamp and git SHA.
+Collection reads only those records and **never the live directory**. A task
+with no record is reported ABSENT rather than filled in from disk.
+**Rule**: a missing row is honest; a stale row is not.
+
+**What the four have in common:** exit code 0, plausible-looking output, and no
 error anywhere. A test suite cannot catch these, because from the inside they
 are indistinguishable from success. The only defence is to check that the thing
 you think ran actually ran, against a known-failing input.
@@ -498,6 +523,33 @@ Two consequences:
    and that is a property of the individual design, not an assumption. Test it
    by sweeping area across periods, as was done here. A logic-dominated design
    would behave completely differently, and there AD may carry real information.
+
+## The two sweeps, side by side
+
+Elasticity is a property of the individual design, and the two tasks built so
+far sit at opposite ends of it:
+
+| period | `d_ca04` FIFO | | `d_nw01` crossbar | |
+|---|---|---|---|---|
+| relaxed | 19 809 µm² | — | 146 951 µm² | — |
+| mid | 19 955 µm² | +0.7 % | 150 399 µm² | +2.3 % |
+| tighter | — | — | 164 370 µm² | **+11.9 %** |
+| near limit | 20 101 µm² | **+1.5 %** | 172 830 µm² | **+17.6 %** |
+
+**+1.5 % against +17.6 %.** The FIFO is storage-dominated — its cell count is set
+by `DATA_W × 2**LOG_DEPTH` and the tool has almost nothing to buy speed with. The
+crossbar is logic and buffering heavy, so the tool trades area for timing
+throughout the range.
+
+Two consequences:
+
+1. **For the FIFO, area × delay carries no independent information.** For the
+   crossbar it may. The precondition must be tested per design, never assumed —
+   which is the whole point of putting these two sweeps next to each other.
+2. **Any crossbar area quoted at a relaxed period understates area at Fmax by
+   roughly 18 %.** That does not overturn the candidate conclusion there — a
+   12–14× gap survives an 18 % correction comfortably — but every reference and
+   second-source number must be re-derived at its own Fmax before being quoted.
 
 The general form: **a composite of two measurements you already have is not a
 third measurement.** It is worth computing only when you can show the terms are

@@ -35,3 +35,6 @@ obj_[a-z]*/
 # The generated config and normalised source are reproducible from the answer
 # file, so they are build scratch rather than artifacts.
 orfs_runs/
+
+# Run records are DELIBERATELY TRACKED -- they are the results, and the whole
+# point is that they are immutable and reviewable. Do not add runs/ here.

@@ -35,6 +35,26 @@ deadlock property and a starvation property measured **only while other
 requesters are making progress** — so a uniformly slow design is not penalised,
 only an unfair one.
 
+## Timing closure has ONE authoritative source
+
+**Closure comes from `find_fmax.py`'s own classification, which reads the ORFS
+metrics. Never from grepping an intermediate log.**
+
+Logs contain several things that look like the answer and are not. The most
+misleading is `[INFO GPL-0106] Timing-driven: worst slack ...`, emitted during
+global placement — it is **negative at periods that ultimately close**, because
+placement has not yet been optimised. A log-grep heuristic built on it reports
+failure for every design at every period, including designs that close
+comfortably.
+
+That was caught here only because a design known to close at 20 ns appeared to
+fail at 12 ns. Had the numbers been less obviously wrong it would have stood.
+
+Same family as the defects in `FINDINGS.md`: **a measurement that looks
+authoritative and is not.** If a number is going to decide something, take it
+from the tool that owns the decision, not from text that happens to contain a
+similar word.
+
 ---
 
 ## CRITICAL PROCESS FINDING — single-seed validation is not validation

@@ -168,6 +168,11 @@ echo "==========================================================================
 # --- run one candidate over every config; echoes "<pass> <total>|<firstfail>" -
 run_one() {
   local cand="$1" p=0 t=0 first="" cerr="" CERR=""
+  # RAW_DIR is created by the CALLER: run_one executes inside a command
+  # substitution, i.e. a subshell, so anything it sets here would be invisible
+  # outside. Raw per-config output is kept so the run record can carry the
+  # METRIC and coverage lines -- they used to print to stdout and vanish, which
+  # is why collect_results.py's METRIC columns were structurally always empty.
   for cfg in "${CFGS[@]}"; do
     t=$((t+1))
     local tag out v
@@ -189,6 +194,7 @@ run_one() {
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -m1 "%Error" | sed "s|.*/candidates/|candidates/|" | cut -c1-90)"; fi
       rm -rf "$d"
     fi
+    printf '%s\n' "$out" > "$RAW_DIR/${tag}.txt"
     v="$(echo "$out" | grep -oE 'TEST_RESULT: (PASS|FAIL)' | head -1 | awk '{print $2}')"
     [ "$out" = "COMPILE_ERROR" ] && v="COMPILE"
     [ -z "$v" ] && v="NO_VERDICT"
@@ -318,10 +324,17 @@ for cand in "${CANDS[@]}"; do
        fi ;;
   esac
 
+  RAW_DIR="$(mktemp -d)"
   res="$(run_one "$runfile")"
   pt="${res%%|*}"; ff="${res#*|}"
   set -- $pt; p=$1; t=$2
   printf '%-26s %-9s %s\n' "$name" "$p/$t" "$ff"
+  # Immutable run record. Collection reads ONLY these, never the live ORFS
+  # directory -- see scripts/write_run_record.py for why.
+  rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+          "$(basename "$cand" .sv)" "$RAW_DIR" 2>/dev/null)"
+  [ -n "$rec" ] && echo "  record: $rec"
+  rm -rf "$RAW_DIR"
   if [ "$p" -eq "$t" ]; then ALLPASS=$((ALLPASS+1)); else NFAIL=$((NFAIL+1)); fi
 done
 
