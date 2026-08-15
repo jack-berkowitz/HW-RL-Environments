@@ -607,6 +607,91 @@ not locked together.
 
 ---
 
+# WE MEASURED CONTAMINATION INSTEAD OF ASSUMING IT AWAY — AND IT WAS TOTAL
+
+Every verification task in this benchmark ships its DUT. The whole half rests on
+an assumption carried since the corpus was vendored: that a module renamed and
+stripped of commentary is not recognisable as the upstream file it derives from.
+
+**That assumption had never been tested. It is false, at least for the first
+anchor we tested it on.**
+
+## The constraint that shapes the experiment
+
+Decontamination cannot be total, because it is bounded by licence. SHL-0.51 §4 —
+and the equivalent clauses in Apache-2.0, MIT, BSD and ISC — require attribution
+notices to be **retained** in redistributed derivatives. Shipping a DUT to a
+model provider is distribution.
+
+The mitigation was a **corpus-level notice**: one block listing all 16 vendored
+projects, attached to every shipped DUT, rather than the file's own upstream
+header. Retention is satisfied, the statement is truthful, and it says "derives
+from one of these sixteen" rather than naming the project.
+
+Everything else was stripped: module renamed, every port and internal signal
+renamed, all comments removed, includes removed, assertion macros inlined. The
+result was verified **functionally identical to the original** — 160 000
+cycle-by-cycle comparisons, zero differences — because a rename that changed
+behaviour would have invalidated the task.
+
+## The experiment
+
+Two prompts, identical wording, one variable:
+
+- **A** — the shipped, decontaminated DUT.
+- **B** — the untouched original, as a positive control. Without B, a low score
+  on A is ambiguous: it could mean renaming worked, or that the model never knew
+  the module. Only the gap says what decontamination bought.
+
+Four questions: what does it do, what project is it from, what is it originally
+called, and — the important one — **how confident are you and what specifically
+in the code led you there.** Without the reasoning, "it's `id_queue`" and "the
+notice lists common_cells" are indistinguishable in the output.
+
+## The result
+
+| | A (shipped) | B (original) |
+|---|---|---|
+| project + file | **correct** | correct |
+| **original module name** | **correct** | correct |
+| stated confidence | **>99 %** | ~100 % |
+
+**Delta: approximately zero.** Decontamination bought nothing.
+
+And the reasoning shows it was recall rather than reading the notice. The model
+**reconstructed the upstream identifier set from structure alone** — every one of
+these appears *zero* times in the shipped file:
+
+`HtCapacity`, `head_tail_t`, `linked_data_t`, `ID_WIDTH`, `CAPACITY`, `inp_*`,
+`oup_*`, `exists_*`, and `id_queue` itself.
+
+It gave the full rename mapping in the correct direction, and singled out the
+simultaneous pop/push reuse path as "nearly dispositive". **The structure is the
+fingerprint, and the structure is the thing the task requires us to ship.**
+
+## What follows
+
+**One unresolved question first:** whether the model had web search enabled. The
+answer cites specific upstream commit dates, which is either deep pretraining
+knowledge or a live lookup. Pretraining recall can be mitigated by choosing
+less-reproduced anchors; **live retrieval cannot be mitigated by obscurity at
+all**, and would affect the design half too, where a model could look up the
+reference rather than solve the spec.
+
+Sample is **one model, unlabelled** — a single observation, not a rate. It does
+not establish that every anchor behaves this way; `id_queue` is small,
+distinctive and widely vendored. It does establish that licence-bounded
+decontamination is not, by itself, protection.
+
+**The methodological point stands independently of the number.** Running the
+probe cost two prompts and converted an assumption the project had carried since
+Phase 0 into a measured result — before fifteen more tasks were built on it,
+rather than after. A benchmark that measures and reports its own contamination
+rate is more credible than one that claims none; after this, claiming none is not
+available to us.
+
+---
+
 # CHOOSING ANCHORS: contamination, and why the order matters
 
 Every Class A task is anchored on vendored open-source RTL, which raises an

@@ -1,6 +1,3 @@
-=== FOR YOUR REFERENCE - DELETE THIS LINE AND THE NEXT BEFORE PASTING ===
-=== PROBE B: UNTOUCHED original, positive control ===
-
 Below is a SystemVerilog module. Please answer four questions about it.
 Say "unknown" rather than guessing if you are not reasonably confident.
 

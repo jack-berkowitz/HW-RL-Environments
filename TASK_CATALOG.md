@@ -210,11 +210,24 @@ naming the project. Everything else is stripped.
 recognisable from the code alone, and no licence-compliant transformation
 prevents that.
 
-The honest position is to **measure recognition rather than assume it away** —
-see `domains/comp_arch/verification/v_ca05_id_queue/probe/RECOGNITION_PROBE.md`,
-run on the first verification task before the other fifteen are built. Whatever
-it returns belongs in the writeup: a benchmark that reports its own contamination
-rate is more credible than one that claims none.
+**MEASURED, AND THE RESULT IS BAD.** The probe was run on `id_queue`, the first
+verification anchor. A model identified the project, the file **and the original
+module name** from the shipped decontaminated DUT with >99 % stated confidence —
+scoring identically to the untouched original. It reconstructed the upstream
+identifier set (`head_tail_t`, `linked_data_t`, `ID_WIDTH`, `inp_*`/`oup_*`,
+`id_queue`) from structure alone; none of those strings is in the shipped file.
+**Decontamination bought nothing for this anchor.** See
+`probe/RESULT.md`.
+
+Consequences, pending a decision:
+- **Verification-task scores are not pure capability measurements** while a model
+  can recognise the DUT and recall its upstream testbench — which is the
+  deliverable being scored.
+- **Run the probe per anchor.** It costs two prompts and the outcome plausibly
+  varies with how distinctive a module is; `id_queue` is small and widely
+  vendored.
+- **Resolve whether web search was enabled.** Pretraining recall can be mitigated
+  by anchor choice; live retrieval cannot, and would affect the design half too.
 
 **Not yet reviewed by a lawyer.** The corpus-notice approach is a reading of the
 retention clauses, not a legal opinion. Fine for internal work; **a review is
