@@ -35,12 +35,13 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TASK_ARG="${1:?usage: sim_candidate.sh <task> <candidate.sv|dir> [verilator|icarus] [--smoke]}"
 CAND_ARG="${2:?missing candidate .sv or directory}"
 
-SIM="verilator"; SMOKE=""
+SIM="verilator"; SMOKE=""; SLANG=1
 shift 2 2>/dev/null || true
 for a in "$@"; do
   case "$a" in
     icarus|verilator) SIM="$a" ;;
     --smoke)          SMOKE="--smoke" ;;
+    --no-slang)       SLANG=0 ;;
     *) echo "unknown argument: $a" >&2; exit 2 ;;
   esac
 done
@@ -202,9 +203,49 @@ run_one() {
   echo "$p $t|$first"
 }
 
+# --- SYNTHESIS-FRONTEND GATE -------------------------------------------------
+# Simulation uses Verilator; ORFS synthesis uses slang. They DISAGREE about what
+# is legal, so a submission can pass every config here and then fail synthesis on
+# a parse error -- which surfaces much later as an unexplained mid-pipeline
+# failure. A Gemini d_nw01 answer hit exactly this: illegal for both, but it also
+# carried an anonymous-struct type parameter Verilator accepts and slang rejects.
+#
+# Gates at the same point as simulation, and reports SLANG rather than COMPILE so
+# a frontend-portability failure is never confused with a correctness failure.
+#
+# VALIDATED against known inputs before being trusted (standing rule 3):
+#   d_nw01 chat.sv    exit 0,   0 errors  -> pass
+#   d_nw01 gemini.sv  exit 133, 13 errors -> fail
+#   d_ca04 chat.sv    exit 0,   0 errors  -> pass
+# Detection keys on the EXIT STATUS, not on grepping stdout: yosys aborts on a
+# slang error, and with stdout piped it is block-buffered and the message is lost
+# -- an early version of this check reported "0 errors" for the known-bad file.
+SLANG_IMG="openroad/orfs"
+slang_check() {   # $1 = design file (host path); echoes a reason on failure
+  local f="$1" pkgs="" rel
+  for pk in "$TASK_DIR"/spec/*_pkg.sv; do
+    [ -f "$pk" ] || continue
+    pkgs="$pkgs /work/${pk#$REPO/}"
+  done
+  case "$f" in "$REPO"/*) rel="/work/${f#$REPO/}" ;; *) rel="/hostfile/$(basename "$f")" ;; esac
+  local mnt=""
+  [ "${rel#/hostfile/}" != "$rel" ] && mnt="-v $(dirname "$f"):/hostfile"
+  docker run --rm --platform linux/amd64 -v "$REPO:/work" $mnt "$SLANG_IMG" \
+    bash -c "yosys -p 'read_slang --top $DUT_MOD$pkgs $rel' >/tmp/slang.log 2>&1; \
+             rc=\$?; if [ \$rc -ne 0 ]; then \
+               n=\$(grep -cE ': error:' /tmp/slang.log); \
+               first=\$(grep -m1 -E ': error:' /tmp/slang.log | sed 's|.*/||'); \
+               echo \"\$n error(s); first: \${first:-exit \$rc}\"; fi" 2>/dev/null
+}
+if [ "$SLANG" = "1" ] && ! docker info >/dev/null 2>&1; then
+  echo "note: docker unavailable -- SKIPPING the slang synthesis-frontend gate."
+  echo "      a candidate that passes here may still fail ORFS on a parse error."
+  SLANG=0
+fi
+
 cd "$TASK_DIR" || exit 2     # gotcha 1: vectors resolve relative to here
 
-ALLPASS=0; NFAIL=0; NREJECT=0
+ALLPASS=0; NFAIL=0; NREJECT=0; NSLANG=0
 printf '%-26s %-9s %s\n' "candidate" "configs" "first failure"
 echo "--------------------------------------------------------------------------------"
 for cand in "${CANDS[@]}"; do
@@ -239,6 +280,26 @@ for cand in "${CANDS[@]}"; do
     printf '\n' >> "$runfile"
     [ "$nbsp" -gt 0 ] && echo "  note: $name had non-breaking spaces on $nbsp lines; ran a normalised copy"
   fi
+
+  # Synthesis frontend, before spending a full config sweep on something that
+  # cannot be synthesised. Runs on $runfile, i.e. AFTER the U+00A0 normalisation
+  # above -- an earlier version ran on the raw paste and rejected a candidate
+  # that passes 16/16 and synthesises cleanly, because slang reports the
+  # non-breaking spaces as "UTF-8 sequence in source text". ppa_candidate.sh
+  # normalises before synthesising too, so this now sees exactly what ORFS will.
+  # References are skipped: their closure lives in the task's orfs/config.mk,
+  # not in spec/ + one file.
+  case "$cand" in
+    "$TASK_DIR"/ref/*) ;;
+    *) if [ "$SLANG" = "1" ]; then
+         slang_why="$(slang_check "$runfile")"
+         if [ -n "$slang_why" ]; then
+           printf '%-26s %-9s %s\n' "$name" "SLANG" "$(echo "$slang_why" | cut -c1-72)"
+           NSLANG=$((NSLANG+1)); continue
+         fi
+       fi ;;
+  esac
+
   res="$(run_one "$runfile")"
   pt="${res%%|*}"; ff="${res#*|}"
   set -- $pt; p=$1; t=$2
@@ -248,6 +309,15 @@ done
 
 echo "--------------------------------------------------------------------------------"
 NRUN=$((ALLPASS + NFAIL))
+if [ "$NSLANG" -gt 0 ]; then
+  echo "--------------------------------------------------------------------------------"
+  echo "$NSLANG candidate(s) FAILED THE SYNTHESIS FRONTEND (slang) and were not simulated."
+  echo "This IS a result about the submission -- the design does not build, so it has no"
+  echo "correctness, capability or PPA numbers. It is not a harness or setup problem."
+  echo "Verilator and slang disagree about what is legal; ORFS synthesis uses slang, so a"
+  echo "design rejected here could never have produced a PPA number. Re-run with"
+  echo "--no-slang to simulate anyway and see how far it gets."
+fi
 if [ "$NREJECT" -gt 0 ] && [ "$NRUN" -eq 0 ]; then
   # Nothing was actually simulated. Reporting "0 passed" here would read as an
   # implementation failure for code that never ran.
@@ -260,4 +330,4 @@ if [ "$NREJECT" -gt 0 ]; then
 else
   echo "$ALLPASS/$NRUN candidates passed every config"
 fi
-[ "$ALLPASS" -eq "$NRUN" ] && [ "$NREJECT" -eq 0 ] && exit 0 || exit 1
+[ "$ALLPASS" -eq "$NRUN" ] && [ "$NREJECT" -eq 0 ] && [ "$NSLANG" -eq 0 ] && exit 0 || exit 1
