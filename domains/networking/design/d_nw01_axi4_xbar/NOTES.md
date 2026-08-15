@@ -936,5 +936,27 @@ needed its last point. **Nothing in this task now ships an unconverged Fmax.**
 | area at own Fmax | 154 245 µm² | 100 277 µm² |
 | elasticity, closing range | +5.0 % | +16.4 % |
 
-**1.50× faster for 54 % more area.** Neither dominates. The second source is the
-third point and its sweep is running.
+**1.50× faster for 54 % more area.** Neither dominates.
+
+## The second source is NOT an envelope point
+
+The envelope contains **only the anchor's legitimate configurations** —
+externally authored, production RTL — and that is the entire reason a comparison
+against it means anything.
+
+**The second source is ours.** It exists as an over-constraint control and it is
+only as good as our engineering. Folding it into the baseline would judge
+candidates partly against our own implementation quality, which is precisely the
+criticism we would level at anyone using a self-authored oracle. It cuts both
+ways: a weak second source flatters every candidate, a strong one penalises them,
+and in neither case is the number about the candidate.
+
+So it is plotted as a **distinctly labelled third point — internally authored,
+control, not baseline** — and candidate claims are stated against the envelope
+only. If it lands inside the envelope, that is worth saying: confirmation the
+contract is achievable by more than one design. If it lands outside on some axis,
+that is recorded as interesting and **does not move the bar**.
+
+`task.yaml` keeps it under a separate `ppa_internal_control` key rather than as a
+third row of `ppa_reference_envelope.points`, for the same reason the run records
+are immutable: **if two things can be confused, eventually they will be.**

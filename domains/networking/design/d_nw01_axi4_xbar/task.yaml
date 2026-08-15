@@ -151,12 +151,41 @@ ppa_reference_envelope:
       area_um2_at_12ns: 86133
       synth_area_um2: 59209
       elasticity_closing_range_pct: 16.4
-    - config: second_source
-      status: PENDING -- Fmax sweep running
-      note: the third envelope point; functionally 16/16 but never synthesised
   summary: >
     CUT_ALL_AX is 1.50x faster and 54% larger at own Fmax. Neither dominates.
     Anything quoted against one configuration must say which.
+  membership_rule: >
+    THE ENVELOPE CONTAINS ONLY EXTERNALLY-AUTHORED ANCHOR CONFIGURATIONS. That
+    is the entire reason a comparison against it means anything: the RTL was
+    written by someone with no stake in this benchmark. Nothing internally
+    authored is ever added to this list -- see ppa_internal_control below for
+    why, and do not merge the two.
+
+# =============================================================================
+# NOT A BASELINE. Kept in a separate key ON PURPOSE.
+# =============================================================================
+ppa_internal_control:
+  what: second source, tb/audit/axi4_xbar_second_source.sv
+  authored_by: this project
+  role: over-constraint control
+  status: PENDING -- Fmax sweep running
+  is_baseline: false
+  never_use_for: candidate scoring, dominance counts, Pareto claims
+  why_separate: >
+    The second source is OURS, and it is only as good as our engineering. If it
+    joined the baseline, candidates would be judged partly against our own
+    implementation quality -- exactly the criticism we would level at anyone
+    using a self-authored oracle. It cuts both ways: a weak second source would
+    flatter every candidate, a strong one would penalise them, and in neither
+    case would the number be about the candidate.
+
+    Plotted as a distinctly labelled third point, never as an envelope member.
+    If it lands INSIDE the envelope that is worth saying -- confirmation the
+    contract is achievable by more than one design. If it lands OUTSIDE on some
+    axis that is interesting and gets recorded, but IT DOES NOT MOVE THE BAR.
+
+    Structural rather than a note, for the same reason the run records are
+    immutable: if two things can be confused, eventually they will be.
 
 ppa_historical_20ns:
   # Kept for provenance. NOT a baseline: at 20 ns the reference closes with

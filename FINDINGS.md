@@ -8,6 +8,17 @@ project has produced. Every one of them was found *after* something passed, and
 almost all of them are cases where **a check reported success while measuring
 nothing**. Written for a reader who has seen none of this.
 
+**One line to carry away, if only one:**
+
+> **An automated proxy for a property you cannot yet observe is a guess with a
+> number attached.**
+
+It is stated here because a reader should hit it early. It was learned from
+mutant quality — a plausible, cheap metric that survived weeks of being quoted
+before it turned out to rank the most valuable mutant in the project as
+unremarkable — but it generalises to every derived score in this document, and to
+most of them outside it.
+
 Two definitions used throughout:
 
 - **Reference / anchor** — externally-authored RTL (PULP, basejump, Forencich,
