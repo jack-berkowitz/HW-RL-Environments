@@ -1,0 +1,395 @@
+// =============================================================================
+// THIRD-PARTY NOTICES
+// =============================================================================
+// This file is a derivative work of one or more of the open-source hardware
+// projects listed below, and is distributed under the terms of that project's
+// licence. It has been modified: identifiers, formatting and commentary differ
+// from the original.
+//
+// The notices below are retained in full as required by those licences. They are
+// listed together for the whole corpus rather than per file.
+//
+//   bespoke-silicon-group/basejump_stl   SHL-0.51
+//   pulp-platform/common_cells           SHL-0.51
+//   pulp-platform/axi                    SHL-0.51
+//   pulp-platform/cvfpu                  SHL-0.51
+//   pulp-platform/fpu_div_sqrt_mvp       SHL-0.51
+//   pulp-platform/hwpe-stream            SHL-0.51
+//   pulp-platform/ne16                   SHL-0.51
+//   pulp-platform/redmule                SHL-0.51
+//   pulp-platform/idma                   SHL-0.51
+//   nvdla/hw                             NVIDIA
+//   alexforencich/verilog-axis           MIT
+//   alexforencich/verilog-ethernet       MIT
+//   openhwgroup/cva6                     SHL-0.51
+//   lowRISC/opentitan                    Apache-2.0
+//   ZipCPU/cordic                        GPL-3.0-or-later
+//   ZipCPU/dspfilters                    LGPL
+//   olofk/serv                           ISC
+//   darklife/darkriscv                   BSD
+//
+// Copyright is held by the respective projects and their contributors,
+// including ETH Zurich, the University of Bologna, the University of
+// Washington / Bespoke Silicon Group, Alex Forencich, NVIDIA Corporation,
+// the OpenHW Group, lowRISC, Gisselquist Technology, and others named in
+// those repositories.
+//
+// Licence texts: http://solderpad.org/licenses/SHL-0.51 ,
+// https://www.apache.org/licenses/LICENSE-2.0 , and the MIT, BSD, ISC,
+// LGPL and GPL texts as published by their stewards.
+// =============================================================================
+`timescale 1ns/1ps
+
+`include "common_cells/assertions.svh"
+
+module tag_tracker #(
+    parameter int TAG_W  = 0,
+    parameter int SLOTS  = 0,
+    parameter bit FULL_RATE   = 0,
+    parameter bit CUT_POP_PATH = 0,
+    parameter int N_MATCH = 1,
+    parameter type payload_t   = logic[31:0],
+    
+    localparam type tag_t    = logic[TAG_W-1:0]
+) (
+    input  logic    clk_i,
+    input  logic    rst_ni,
+
+    input  tag_t     push_tag_i,
+    input  payload_t   push_data_i,
+    input  logic    push_req_i,
+    output logic    push_gnt_o,
+
+    input  payload_t [N_MATCH-1:0] match_data_i,
+    input  payload_t [N_MATCH-1:0] match_mask_i,
+    input  logic  [N_MATCH-1:0] match_req_i,
+    output logic  [N_MATCH-1:0] match_hit_o,
+    output logic  [N_MATCH-1:0] match_gnt_o,
+
+    input  tag_t     pop_tag_i,
+    input  logic    pop_en_i,
+    input  logic    pop_req_i,
+    output payload_t   pop_data_o,
+    output logic    pop_data_valid_o,
+    output logic    pop_gnt_o,
+
+    output logic    full_o,
+    output logic    empty_o
+);
+
+    
+    localparam int NIds = 2**TAG_W;
+    localparam int N_ANCHOR = (NIds <= SLOTS) ? NIds : SLOTS;
+    localparam int unsigned HtIdxWidth = cf_math_pkg::idx_width(N_ANCHOR);
+    localparam int unsigned LdIdxWidth = cf_math_pkg::idx_width(SLOTS);
+
+    typedef logic [HtIdxWidth-1:0] ht_idx_t;
+
+    typedef logic [LdIdxWidth-1:0] cell_idx_t;
+
+    typedef struct packed {
+        tag_t        id;
+        cell_idx_t    head,
+                    tail;
+        logic       free;
+    } anchor_t;
+
+    typedef struct packed {
+        payload_t      data;
+        cell_idx_t    next;
+        logic       free;
+    } cell_t;
+
+    anchor_t [N_ANCHOR-1:0]    anchor_d,    anchor_q;
+
+    cell_t [SLOTS-1:0]    cell_d,  cell_q;
+
+    logic                           full,
+                                    match_in_id_valid,
+                                    match_out_id_valid,
+                                    no_in_id_match,
+                                    no_out_id_match;
+
+    logic [N_ANCHOR-1:0]         head_tail_free,
+                                    idx_matches_in_id,
+                                    idx_matches_out_id;
+
+    logic [N_MATCH-1:0][SLOTS-1:0] match_found;
+    logic [SLOTS-1:0]            linked_data_free;
+
+    tag_t                            match_in_id, match_out_id;
+
+    ht_idx_t                        head_tail_free_idx,
+                                    match_in_idx,
+                                    match_out_idx;
+
+    cell_idx_t                        linked_data_free_idx,
+                                    pop_free_idx;
+
+    logic                           pop_data_taken,
+                                    pop_anchor_taken;
+
+    for (genvar i = 0; i < N_ANCHOR; i++) begin: gen_idx_match
+        assign idx_matches_in_id[i] = match_in_id_valid && (anchor_q[i].id == match_in_id) &&
+                !anchor_q[i].free;
+        assign idx_matches_out_id[i] = match_out_id_valid && (anchor_q[i].id == match_out_id) &&
+                !anchor_q[i].free;
+    end
+    assign no_in_id_match = !(|idx_matches_in_id);
+    assign no_out_id_match = !(|idx_matches_out_id);
+    onehot_to_bin #(
+        .ONEHOT_WIDTH ( N_ANCHOR )
+    ) i_id_ohb_in (
+        .onehot ( idx_matches_in_id ),
+        .bin    ( match_in_idx      )
+    );
+    onehot_to_bin #(
+        .ONEHOT_WIDTH ( N_ANCHOR )
+    ) i_id_ohb_out (
+        .onehot ( idx_matches_out_id ),
+        .bin    ( match_out_idx      )
+    );
+
+    for (genvar i = 0; i < N_ANCHOR; i++) begin: gen_head_tail_free
+        assign head_tail_free[i] = anchor_q[i].free;
+    end
+    lzc #(
+        .WIDTH ( N_ANCHOR ),
+        .MODE  ( 0          ) 
+    ) i_ht_free_lzc (
+        .in_i    ( head_tail_free     ),
+        .cnt_o   ( head_tail_free_idx ),
+        .empty_o (                    )
+    );
+
+    for (genvar i = 0; i < SLOTS; i++) begin: gen_linked_data_free
+        assign linked_data_free[i] = cell_q[i].free;
+    end
+    lzc #(
+        .WIDTH ( SLOTS ),
+        .MODE  ( 0        ) 
+    ) i_ld_free_lzc (
+        .in_i    ( linked_data_free     ),
+        .cnt_o   ( linked_data_free_idx ),
+        .empty_o (                      )
+    );
+
+    assign full = !(|linked_data_free);
+    
+    assign empty = &linked_data_free;
+    
+    assign pop_free_idx = anchor_q[match_out_idx].head;
+
+    
+    assign push_gnt_o = ~full || (pop_data_taken && FULL_RATE && ~CUT_POP_PATH);
+    always_comb begin
+        match_in_id         = '0;
+        match_out_id        = '0;
+        match_in_id_valid   = 1'b0;
+        match_out_id_valid  = 1'b0;
+        anchor_d         = anchor_q;
+        cell_d       = cell_q;
+        pop_gnt_o           = 1'b0;
+        pop_data_o          = payload_t'('0);
+        pop_data_valid_o    = 1'b0;
+        pop_data_taken     = 1'b0;
+        pop_anchor_taken       = 1'b0;
+
+        if (!FULL_RATE) begin
+            if (push_req_i && !full) begin
+                match_in_id = push_tag_i;
+                match_in_id_valid = 1'b1;
+                
+                if (no_in_id_match) begin
+                    anchor_d[head_tail_free_idx] = '{
+                        id: push_tag_i,
+                        head: linked_data_free_idx,
+                        tail: linked_data_free_idx,
+                        free: 1'b0
+                    };
+                
+                end else begin
+                    cell_d[anchor_q[match_in_idx].tail].next = linked_data_free_idx;
+                    anchor_d[match_in_idx].tail = linked_data_free_idx;
+                end
+                cell_d[linked_data_free_idx] = '{
+                    data: push_data_i,
+                    next: '0,
+                    free: 1'b0
+                };
+            end else if (pop_req_i) begin
+                match_in_id = pop_tag_i;
+                match_in_id_valid = 1'b1;
+                if (!no_in_id_match) begin
+                    pop_data_o = payload_t'(cell_q[anchor_q[match_in_idx].head].data);
+                    pop_data_valid_o = 1'b1;
+                    if (pop_en_i) begin
+                        
+                        cell_d[anchor_q[match_in_idx].head]      = '0;
+                        cell_d[anchor_q[match_in_idx].head].free = 1'b1;
+                        if (anchor_q[match_in_idx].head == anchor_q[match_in_idx].tail) begin
+                            anchor_d[match_in_idx] = '{free: 1'b1, default: '0};
+                        end else begin
+                            anchor_d[match_in_idx].head =
+                                    cell_q[anchor_q[match_in_idx].head].next;
+                        end
+                    end
+                end
+
+                pop_gnt_o = 1'b1;
+            end
+        end else begin
+            
+            if (pop_req_i) begin
+                match_out_id = pop_tag_i;
+                match_out_id_valid = 1'b1;
+                if (!no_out_id_match) begin
+                    pop_data_o = payload_t'(cell_q[anchor_q[match_out_idx].head].data);
+                    pop_data_valid_o = 1'b1;
+                    if (pop_en_i) begin
+                        pop_data_taken = 1'b1;
+                        
+                        cell_d[anchor_q[match_out_idx].head]      = '0;
+                        cell_d[anchor_q[match_out_idx].head].free = 1'b1;
+                        if (anchor_q[match_out_idx].head
+                                          == anchor_q[match_out_idx].tail) begin
+                            pop_anchor_taken = 1'b1;
+                            anchor_d[match_out_idx] = '{free: 1'b1, default: '0};
+                        end else begin
+                            anchor_d[match_out_idx].head =
+                                    cell_q[anchor_q[match_out_idx].head].next;
+                        end
+                    end
+                end
+
+                pop_gnt_o = 1'b1;
+            end
+            if (push_req_i && push_gnt_o) begin
+                match_in_id = push_tag_i;
+                match_in_id_valid = 1'b1;
+                
+                if (pop_anchor_taken && (pop_tag_i==push_tag_i)) begin
+
+                    anchor_d[match_out_idx] = '{
+                        id: push_tag_i,
+                        head: pop_free_idx,
+                        tail: pop_free_idx,
+                        free: 1'b0
+                    };
+                    cell_d[pop_free_idx] = '{
+                        data: push_data_i,
+                        next: '0,
+                        free: 1'b0
+                    };
+                end else if (no_in_id_match) begin
+                    
+                    if (pop_anchor_taken) begin
+                        anchor_d[match_out_idx] = '{
+                            id: push_tag_i,
+                            head: pop_free_idx,
+                            tail: pop_free_idx,
+                            free: 1'b0
+                        };
+                        cell_d[pop_free_idx] = '{
+                            data: push_data_i,
+                            next: '0,
+                            free: 1'b0
+                        };
+                    end else begin
+                        if (pop_data_taken) begin
+                          anchor_d[head_tail_free_idx] = '{
+                            id: push_tag_i,
+                            head: pop_free_idx,
+                            tail: pop_free_idx,
+                            free: 1'b0
+                          };
+                          cell_d[pop_free_idx] = '{
+                              data: push_data_i,
+                              next: '0,
+                              free: 1'b0
+                          };
+                        end else begin
+                            anchor_d[head_tail_free_idx] = '{
+                              id: push_tag_i,
+                              head: linked_data_free_idx,
+                              tail: linked_data_free_idx,
+                              free: 1'b0
+                            };
+                            cell_d[linked_data_free_idx] = '{
+                                data: push_data_i,
+                                next: '0,
+                                free: 1'b0
+                            };
+                        end
+                    end
+                end else begin
+                    
+                    if (pop_data_taken) begin
+                        cell_d[anchor_q[match_in_idx].tail].next = pop_free_idx;
+                        anchor_d[match_in_idx].tail = pop_free_idx;
+                        cell_d[pop_free_idx] = '{
+                            data: push_data_i,
+                            next: '0,
+                            free: 1'b0
+                        };
+                    end else begin
+                        cell_d[anchor_q[match_in_idx].tail].next = linked_data_free_idx;
+                        anchor_d[match_in_idx].tail = linked_data_free_idx;
+                        cell_d[linked_data_free_idx] = '{
+                            data: push_data_i,
+                            next: '0,
+                            free: 1'b0
+                        };
+                    end
+                end
+            end
+        end
+    end
+
+    for (genvar k = 0; k < N_MATCH; k++) begin: gen_lookup_port
+        for (genvar i = 0; i < SLOTS; i++) begin: gen_lookup
+
+            assign match_found[k][i] = ~cell_q[i].free &
+                    ((cell_q[i].data & match_mask_i[k]) ==
+                     (match_data_i[k]      & match_mask_i[k]));
+        end
+        always_comb begin
+            match_gnt_o[k] = 1'b0;
+            match_hit_o[k] = '0;
+            if (match_req_i[k]) begin
+                match_gnt_o[k] = 1'b1;
+                match_hit_o[k] = (|match_found[k]);
+            end
+        end
+    end
+
+    for (genvar i = 0; i < N_ANCHOR; i++) begin: gen_ht_ffs
+        always_ff @(posedge clk_i, negedge rst_ni) begin
+            if (!rst_ni) begin
+                anchor_q[i] <= '{free: 1'b1, default: '0};
+            end else begin
+                anchor_q[i] <= anchor_d[i];
+            end
+        end
+    end
+    for (genvar i = 0; i < SLOTS; i++) begin: gen_data_ffs
+        always_ff @(posedge clk_i, negedge rst_ni) begin
+            if (!rst_ni) begin
+                
+                cell_q[i]      <= '0;
+                cell_q[i].free <= 1'b1;
+            end else begin
+                cell_q[i]    <= cell_d[i];
+            end
+        end
+    end
+
+    assign full_o  = full;
+    assign empty_o = empty;
+
+`ifndef COMMON_CELLS_ASSERTS_OFF
+    `ASSERT_INIT(id_width_0, TAG_W >= 1, "The ID must at least be one bit wide!")
+    `ASSERT_INIT(capacity_0, SLOTS >= 1, "The queue must have capacity of at least one entry!")
+`endif
+
+endmodule

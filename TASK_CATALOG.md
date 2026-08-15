@@ -190,6 +190,56 @@ Anchors disjoint from every design task above.
 
 ---
 
+# A LIMITATION OF THE VERIFICATION HALF — state it, do not let a reviewer find it
+
+**Class A verification tasks carry irreducible recognition risk.**
+
+A verification task ships its DUT, and every DUT derives from a vendored project
+whose licence requires attribution notices be **retained** in redistributed
+derivatives — SHL-0.51 §4, and the equivalent clauses in Apache-2.0, MIT, BSD and
+ISC. Decontamination is therefore bounded by law: the module can be renamed, its
+ports and internals renamed, its commentary stripped, but it cannot be shipped
+without a notice identifying the corpus it came from.
+
+Mitigation, applied to every shipped DUT: **one corpus-level notice** listing all
+18 vendored projects and their licences, rather than a per-file header. That
+satisfies retention while saying "this derives from one of these" instead of
+naming the project. Everything else is stripped.
+
+**This bounds the risk; it does not remove it.** A distinctive structure may be
+recognisable from the code alone, and no licence-compliant transformation
+prevents that.
+
+The honest position is to **measure recognition rather than assume it away** —
+see `domains/comp_arch/verification/v_ca05_id_queue/probe/RECOGNITION_PROBE.md`,
+run on the first verification task before the other fifteen are built. Whatever
+it returns belongs in the writeup: a benchmark that reports its own contamination
+rate is more credible than one that claims none.
+
+**Not yet reviewed by a lawyer.** The corpus-notice approach is a reading of the
+retention clauses, not a legal opinion. Fine for internal work; **a review is
+required before anything is distributed to a model provider or released
+publicly** — see the pre-release checklist below.
+
+---
+
+# PRE-RELEASE CHECKLIST
+
+Before any external distribution — to a lab, a model provider, or a public repo:
+
+- [ ] **Legal review of the third-party notice approach.** Derivatives of
+      SHL-0.51, Apache-2.0, MIT, BSD and ISC code are being distributed to third
+      parties. The corpus-level notice is our reading of the retention clauses
+      and has not been reviewed.
+- [ ] **GPL/LGPL anchors excluded or cleared.** Two vendored repos are
+      copyleft (`ZipCPU/cordic` GPL-3.0, `ZipCPU/dspfilters` LGPL). Copyleft is
+      not merely a retention obligation and no task should ship a derivative of
+      either without review.
+- [ ] Recognition probe run and its rate recorded.
+- [ ] Every task's `NOTES.md` states its oracle class and what it does not claim.
+
+---
+
 # BUILT TASKS — status detail
 
 ## `d_ca04` `async_fifo_cdc` — Class A, built and audited
