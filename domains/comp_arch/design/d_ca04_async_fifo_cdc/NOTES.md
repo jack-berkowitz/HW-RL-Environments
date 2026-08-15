@@ -409,3 +409,80 @@ the comparison inverts. That is the caution about non-binding clocks, confirmed
 on real numbers rather than asserted: **d_ca04's candidate trades 33 % of Fmax
 for 27 % of area**, which is an ordinary engineering tradeoff and not evidence
 that the task is easy.
+
+---
+
+# AREA RE-MEASURED AT BINDING PERIODS
+
+The first area-delay figure mixed measurements taken under different
+constraints: areas from the 5.0 ns run, where both designs carried ~24 % slack,
+multiplied by delays from each design's own Fmax. That penalises whichever
+design has furthest to go, which is the reference. **The objection is
+methodologically correct.** Re-measured properly below.
+
+## Area versus constraint — the reference barely moves
+
+| period | reference area | vs relaxed |
+|---|---|---|
+| 6.000 ns | 19 809 µm² | — |
+| 4.500 ns | 19 887 µm² | +0.4 % |
+| 3.000 ns | 19 955 µm² | +0.7 % |
+| **2.625 ns** (its Fmax) | **20 101 µm²** | **+1.5 %** |
+| 2.4375 ns (fails) | 20 418 µm² | +3.1 % |
+
+**The expected effect is not there.** Squeezing the reference from a relaxed
+6.0 ns to its 2.625 ns limit costs **1.5 % of area**, not the large growth that
+would have narrowed the gap.
+
+The reason is structural and worth stating, because it decides whether
+area-delay is a meaningful metric for a given design at all: **this DUT is
+storage-dominated.** The FIFO array is the bulk of the cells and its size is set
+by `DATA_W × 2**LOG_DEPTH`, not by timing. Only the Gray-pointer and
+synchroniser logic is on the critical path, and it is small, so the tool has
+little to buy area with. A logic-dominated design would behave completely
+differently and the original objection would have bitten hard.
+
+The candidate behaves the same way: 14 620 µm² at 6.0 ns against 14 754 µm² at
+its 4.5 ns limit, +0.9 %.
+
+## Corrected area-delay, both terms at each design's own Fmax
+
+| design | area at own Fmax | period | area × delay |
+|---|---|---|---|
+| reference | 20 101 µm² | 2.625 ns | **52 765** |
+| candidate | 14 754 µm² | 4.500 ns | **66 393** |
+
+**Reference better by 25.8 %.** The provisional figure was 25.9 %, so the
+correction moves it by 0.1 points — the methodology was wrong and the answer was
+not, for the reason above. The number is now measured rather than assembled.
+
+## The apples-to-apples number: both at 4.5 ns
+
+The comparison a design team would actually ask for — one period, binding for
+the candidate, both closing:
+
+| metric | reference | candidate | |
+|---|---|---|---|
+| area @ 4.5 ns | 19 887 µm² | 14 754 µm² | candidate **25.8 % smaller** |
+| WNS @ 4.5 ns | **+0.79 ns** | +0.06 ns | reference has headroom; candidate is at its limit |
+| closes | yes | yes | |
+
+At 4.5 ns the candidate is a quarter smaller **and has nothing left**, while the
+reference still has 0.79 ns in hand and goes on to 2.625 ns. That is the whole
+tradeoff in one row.
+
+## What this settles
+
+**Neither design wins, and the ranking depends entirely on a frequency target
+the specification never states.**
+
+- Below ~222 MHz, the candidate is strictly better: same throughput, 26 % less
+  area, 44 % less power, nothing given up.
+- Above 222 MHz the candidate cannot compete at all, and the reference runs to
+  381 MHz.
+- Integrated over the range, area-delay favours the reference by 26 %.
+
+`d_ca04` therefore **does not discriminate on PPA**. It produces a Pareto
+tradeoff rather than a ranking, which is itself the finding: a PPA-scored
+benchmark needs either a stated frequency target or an Fmax gate, or it is
+scoring an arbitrary point on someone's tradeoff curve.
