@@ -692,6 +692,71 @@ available to us.
 
 ---
 
+# RETRACTED: DIFF RATE AS A MUTANT-QUALITY BAND
+
+**This was a proposed heuristic, it was tested, and it is wrong. Recording it as
+a failed idea rather than quietly dropping it.**
+
+The proposal — made by the project lead, falsified by the measurement — was that
+diff rate, the fraction of cycles on which a mutant and the reference diverge
+under identical stimulus, could band mutant quality: **too high means the mutant
+is filler** (a change so coarse any testbench catches it), **too low means it is
+effectively unkillable**. Flag anything above roughly 25 %, flag anything near
+zero, keep the middle.
+
+Both ends are wrong, and the counter-examples came from the same task.
+
+| mutant | diff rate | what it actually is |
+|---|---|---|
+| `mCAP1` one-outstanding-per-master | **100 %** | **the most valuable mutant in the project** |
+| `mC2` serialised datapath | **0 %** | not unkillable at all — the checker kills it |
+
+**`mCAP1` is a real model submission**, recovered from git, that passed *every*
+correctness configuration of the checker as it then stood: right data, right
+order, right beat counts, no deadlock, no starvation — while carrying one eighth
+of the required capacity. It is the reason the CAPABILITY class exists. The band
+would have flagged it as filler.
+
+**`mC2` scores zero because the differential harness holds slave responses at
+zero** to keep its stimulus protocol-legal, so nothing completes and a
+slave-side serialisation defect never manifests. The mutant is comfortably
+killable — the concurrency check fails it at exactly 100 % speedup. The band
+would have flagged it as unkillable.
+
+**The metric measures pervasiveness under one particular stimulus, and that turns
+out to be uncorrelated with the property it was meant to proxy for.** A defect
+that perturbs a handshake every cycle scores 100 % whether it is profound or
+trivial; a defect invisible to the chosen stimulus scores 0 % whether it is
+subtle or merely unexercised.
+
+## What diff rate is demoted to
+
+**A witness that non-equivalence was demonstrated under a given stimulus.**
+Nothing more. In particular:
+
+> **A zero does not mean equivalent. It means this stimulus did not distinguish
+> them.**
+
+That distinction now lives in the field name rather than only in prose — the
+harness reports `non_equivalence_demonstrated` and, when it is false, says so
+explicitly instead of printing a number that reads like a score.
+
+## And mutant quality is left with no prior — deliberately
+
+There is no replacement heuristic and **none should be built.** Mutant quality
+is a *posterior*, not a prior: a mutant every submission kills is filler, a
+mutant nobody kills is too hard, and **neither is knowable before submissions
+exist.** It is deferred to the cross-model run, where the kill matrix answers it
+directly.
+
+The general lesson, which is the reason this is written up at all: **an
+automated proxy for a property you cannot yet observe is a guess with a number
+attached.** This one survived several weeks of being quoted because it was
+plausible and cheap, and it took building the highest-value mutant in the project
+to notice it ranked that mutant as unremarkable.
+
+---
+
 # CHOOSING ANCHORS: contamination, and why the order matters
 
 Every Class A task is anchored on vendored open-source RTL, which raises an

@@ -856,3 +856,52 @@ information independent of area and Fmax. It is still only 16 %, so the
 conclusion in `FINDINGS.md` stands — no design yet found where AD changes an
 answer — but it is the closest case so far and worth re-testing if a candidate
 lands near the envelope.
+
+---
+
+# MUTANT TABLE
+
+| mutant | class | killing check | non-equivalence witness |
+|---|---|---|---|
+| `mCAP1_one_outstanding_per_master` | **CAPABILITY** | **C1** capacity, 4 checks, nothing else | differential, cycle 0 |
+| `mX1_no_cross_id_interleaving` | capacity / mixed-ID | **C1** capacity, `MAX_TRANS=8` only | differential, cycle 0 |
+| `mC2_serialised_xbar` | concurrency | **C2**, at exactly 100 % speedup | **checker** — see below |
+| `mL1_ar_arbiter_never_grants` | liveness / deadlock | `LM_STALL` | **checker** |
+| `mL2_master0_starved` | liveness / starvation | `LM_STARVE` in the liveness rig; `LM_STALL` in the full checker | **checker** |
+| `mD1_same_id_two_slaves` | ordering, per-ID | per-(master,ID) data mismatch | **checker** |
+| `mD2_decerr_truncates_burst` | decode / beat count | RLAST-on-wrong-beat | **checker** |
+| `mD3_decerr_drops_beats` | decode / liveness | `LM_STALL` — a data defect caught by the liveness monitor | **checker** |
+
+## Two ways of witnessing non-equivalence, and neither is weaker
+
+**Differential** — reference and mutant instantiated together, identical
+stimulus, outputs compared, witness cycle recorded.
+
+**Through the checker** — the checker passes the reference and fails the mutant
+under identical stimulus. **That is a witness of behavioural difference by the
+same logic as a direct diff**, observed through the checker rather than through a
+comparator. It is not a weaker standard, and the column records the named killing
+check rather than being left blank.
+
+**The differential harness cannot cover mutants of a shared module.** `mL1`,
+`mL2`, `mD1`, `mD2` and `mD3` mutate a *vendored* module, and both instances in
+the harness would resolve to the same mutated file, so there is nothing to
+compare. Building renamed duplicate copies of the vendored closure to force them
+through would buy nothing — the checker already provides the witness, and diff
+rate is demoted (see below).
+
+## Diff rate is demoted — do not read the numbers as quality
+
+`mCAP1` diverges on **100 %** of cycles and is the most valuable mutant here.
+`mC2` diverges on **0 %** and is comfortably killable — the harness holds slave
+responses at zero to keep its stimulus protocol-legal, so nothing completes and a
+slave-side defect cannot manifest. The metric measures pervasiveness under one
+stimulus and is uncorrelated with value. See `FINDINGS.md § RETRACTED`.
+
+The harness now reports `non_equivalence_demonstrated` and a `witness_cycle`
+rather than a rate, because **a zero means this stimulus did not distinguish
+them, never that the designs are equivalent.**
+
+**Mutant quality is deferred to the cross-model run.** It is a posterior — a
+mutant everything kills is filler, a mutant nothing kills is too hard — and
+neither is knowable before submissions exist.

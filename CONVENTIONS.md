@@ -52,6 +52,45 @@ Before any number enters a table, check that its run passed its own gate:
 timing closed, DRC clean, flow completed. If it did not, the row is excluded —
 or marked as a failing point and never used in a ratio.
 
+## Leave upstream assertions ENABLED while developing a harness
+
+Vendored RTL usually ships its own assertions. **Leave them on.** They check the
+one thing we are least able to check ourselves: whether *our own stimulus* is
+legal.
+
+This is not hypothetical. A differential harness drove AXI channels from a
+free-running LFSR — mutating `valid` before `ready` — and the vendored
+`rr_arb_tree`'s own assertion caught it immediately:
+
+```
+[ASSERT FAILED] req1: Req out implies req in.  (rr_arb_tree.sv:317)
+```
+
+Without it the run would have produced a confident diff-rate number derived
+entirely from illegal stimulus, and nothing downstream would have questioned it.
+
+**It is a control we get for nothing**, and it is the same shape as everything
+else that has worked here: an independent check that fires on a condition we did
+not think to test. Disable upstream assertions only with a stated reason, and
+never merely because they are inconvenient.
+
+## Recovered and pasted files carry U+00A0
+
+Chat interfaces substitute non-breaking spaces for ordinary ones. **Two candidate
+files have now been affected**, and a third instance appeared when a candidate
+was recovered out of git history for reuse as a mutant — the NBSPs are committed,
+so they come back with the file.
+
+Verilator's lexer rejects them with a misleading `unexpected $end`, and slang
+reports `UTF-8 sequence in source text`, so in both cases the answer looks broken
+when only the transport was.
+
+`sim_candidate.sh` and `ppa_candidate.sh` normalise a **copy** and never modify
+the original, and the slang gate runs on the normalised copy for the same reason.
+**Anything else that consumes a candidate file must normalise too** — including
+one-off harnesses built during development, which is where the third instance
+appeared.
+
 ## Timing closure has ONE authoritative source
 
 **Closure comes from `find_fmax.py`'s own classification, which reads the ORFS
