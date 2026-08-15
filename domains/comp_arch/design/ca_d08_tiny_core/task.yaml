@@ -1,0 +1,62 @@
+id: ca_d08
+module: tiny_core
+domain: comp_arch
+type: design
+
+# CLASS B -- local model of record. No external RTL oracle runs for this task.
+# "The checker passes known-correct external RTL" is NOT a claim available here.
+oracle_class: B
+reference:
+  refs_lock_repo: darklife/darkriscv
+  sha: 4aa437997cd35253c9111f10a449de13ccaeee78
+  licence: BSD
+  mode: cross_check_only
+  note: >
+    Encoding cross-check only, and it passed: all 9 opcodes and all three
+    scrambled immediate formats (S/B/J) match darkriscv's independently-written
+    decoder bit-for-bit. NO co-simulation was run, so agreement on execution
+    semantics is NOT established. olofk/serv (41e8aeed, ISC) was cloned for the
+    same purpose and not used -- bit-serial with no clean retire point.
+    Neither is vendored. See ref/PROVENANCE.md.
+
+spec: spec/tiny_core_iface.sv
+oracle: ref/model/rv32i_iss.py
+vectors: tb/vectors/          # 20 programs, 831 retires; regenerate with --emit
+
+configs:
+  - {IMEM_AW: 8,  DMEM_AW: 8}
+  - {IMEM_AW: 10, DMEM_AW: 10}
+  - {IMEM_AW: 12, DMEM_AW: 12}
+illegal_configs: >
+  IMEM_AW or DMEM_AW outside {8,10,12}. The checker aborts with
+  "TEST_RESULT: FAIL: illegal ...".
+
+sim_timeout_s: 600
+simulators_verified: [verilator-5.046, iverilog-13.0]
+
+# MANDATORY for ca_d08 and actually performed.
+second_source: true
+second_source_file: tb/tiny_core_alt_ref.sv
+second_source_note: >
+  Multi-cycle FSM against the reference's single-cycle structure: retires every
+  3-4 cycles instead of every cycle, with a variable instruction-dependent
+  cadence. Passes all configs on both simulators. Same suite runs in 9us on the
+  reference and 27us on this, which is the evidence that the order-based
+  comparison was genuinely exercised rather than assumed.
+
+mutants:
+  - {id: m01, class: spec-violation-x0,  kill: "P4 x0_hardwired",  diff_rate_ppm: 906611}
+  - {id: m02, class: arithmetic-sign,    kill: "P2 sign_boundaries", diff_rate_ppm: 222}
+  - {id: m03, class: boundary,           kill: "P3 shift_mask",    diff_rate_ppm: 944}
+  - {id: m04, class: boundary,           kill: "P8b jalr_corners", diff_rate_ppm: 111}
+  - {id: m05, class: control-flow,       kill: "P7 branch_signed", diff_rate_ppm: 6833}
+  - {id: m06, class: reset,              kill: "cross-program reset", diff_rate_ppm: 900500}
+  - {id: m07, class: decode,             kill: "P9 mem_roundtrip", diff_rate_ppm: 2277}
+
+ppa_baseline:
+  status: deferred
+  reason: >
+    Class B. Per owner direction, ORFS builds are deferred for every design task
+    without an external RTL golden model; clock and area baselines are set later.
+    See DESIGN_TASKS_NO_GOLDEN_RTL.md. orfs/ is intentionally absent rather than
+    present and empty.
