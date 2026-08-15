@@ -91,7 +91,7 @@ TEST_RESULT: PASS
 
 ## Simulator pinning — the question the catalog asked
 
-`CATALOG_V3_HARD.md` (and v2 before it) asked that a two-clock task record which
+`TASK_CATALOG.md` (and v2 before it) asked that a two-clock task record which
 simulator it is pinned to if the two disagree. The answer is more useful than
 expected:
 

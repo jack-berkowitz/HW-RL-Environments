@@ -1,3 +1,8 @@
+# NOTE: DESIGN_CATALOG.md and VERIFICATION_CATALOG.md, referenced below, were
+# consolidated into TASK_CATALOG.md and deleted. Their content is recoverable at
+# git c7609fa. The references below are left as written because this file is the
+# Phase 0 record of what was vendored and why -- rewriting it would falsify
+# provenance.
 # NOTE (post-cleanup): ai_d01, ca_d08 and nw_d01 were removed from domains/ as
 # too easy to carry forward. Task ids below are the PHASE 0 RECORD of what was
 # vendored and why, and are deliberately NOT edited -- rewriting them would

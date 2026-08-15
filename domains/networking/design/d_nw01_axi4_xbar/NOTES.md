@@ -44,7 +44,7 @@ Bit placement, not behaviour.
 
 ## NEGATIVE CONTROL — liveness monitor validated before the checker was built
 
-Per the standing procedure in `CATALOG_V3_HARD.md`: *a checker whose failure
+Per the standing rules in `FINDINGS.md`: *a checker whose failure
 mode is silence must be validated against a known-failing input before it is
 trusted.* The liveness mutants were therefore built **first**, and the monitor
 was proven on them before any data checking existed.
@@ -424,7 +424,9 @@ rather than a broken flags file. That is the same shape as the d_nw01 gap where
 the reference failed through the shared path while the candidate passed.
 
 Fixed, and `nw_d01` is back to 16/16. Full regression, all references through
-the corrected runner: `ai_d01` 4/4, `nw_d01` 16/16, `ca_d08` 3/3, `d_ca04`
+the corrected runner (`ai_d01`, `nw_d01` and `ca_d08` have since been removed
+from `domains/` — see `RESULTS_ARCHIVE_V2_TASKS.md`): `ai_d01` 4/4,
+`nw_d01` 16/16, `ca_d08` 3/3, `d_ca04`
 18/18, `d_nw01` 8/8.
 
 ---

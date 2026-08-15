@@ -10,7 +10,7 @@
 // correct on every individual transaction -- right data, right order, right
 // beat counts, no deadlock, no starvation -- so every data check in the suite
 // passes. It is simply not a crossbar. Per the standing procedure in
-// CATALOG_V3_HARD.md a check whose failure mode is absence must be validated
+// FINDINGS.md a check whose failure mode is absence must be validated
 // against a known-failing input, and nothing else available fails C2: the
 // vendored reference and the candidate both serve disjoint pairs in parallel.
 //

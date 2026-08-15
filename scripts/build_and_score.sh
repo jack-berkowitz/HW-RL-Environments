@@ -47,7 +47,7 @@
 # unlike Icarus. --x-assign unique --x-initial unique below is a partial
 # mitigation (uninitialized reads return pseudo-random garbage per run
 # rather than a fixed value), not a substitute for real 4-state tracking --
-# see testbenches/conventions/NOTES.md for the full writeup of that tradeoff and
+# see CONVENTIONS.md for the full writeup of that tradeoff and
 # the re-validation done against Icarus's prior results before this switch.
 #
 # Assumes: verilator (>= 5.006, for mature --timing support) on PATH,
@@ -135,7 +135,7 @@ if [ -n "${TASK_DIR}" ]; then
     echo ""
     echo "=== [2/3] SKIPPED: ${TASK_NAME} has no orfs/ harness ==="
     echo "  PPA is deferred for tasks without an external RTL golden model."
-    echo "  See DESIGN_TASKS_NO_GOLDEN_RTL.md. Correctness above still stands."
+    echo "  See TASK_CATALOG.md. Correctness above still stands."
     exit 0
   fi
 

@@ -3,7 +3,7 @@
 // =============================================================================
 // This is NOT the task's checker. It is the rig that proves the liveness
 // monitor works, built and run BEFORE the full checker, per the standing
-// procedure in CATALOG_V3_HARD.md:
+// procedure in FINDINGS.md:
 //
 //   A checker whose failure mode is SILENCE must be validated against a
 //   known-failing input before it is trusted.

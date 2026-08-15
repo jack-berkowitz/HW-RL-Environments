@@ -40,7 +40,7 @@ TASK_ID="$(echo "$TASK_NAME" | grep -oE '^[a-z]+_[a-z0-9]+')"
 
 [ -f "$TASK_DIR/orfs/constraint.sdc" ] || {
   echo "task $TASK_ID has no orfs/ harness." >&2
-  echo "Class B tasks have ORFS deferred by design -- see DESIGN_TASKS_NO_GOLDEN_RTL.md." >&2
+  echo "Class B tasks have ORFS deferred by design -- see TASK_CATALOG.md." >&2
   exit 2; }
 
 DUT_MOD="$(grep -m1 '^module' "$TASK_DIR"/spec/*_iface.sv | sed 's/^module \([A-Za-z0-9_]*\).*/\1/')"

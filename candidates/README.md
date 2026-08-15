@@ -1,6 +1,6 @@
 # candidates/ — where model answers go
 
-Two layouts live here, because the repo is mid-migration.
+One layout: `candidates/<task_id>/<label>.sv`, one directory per task.
 
 | layout | for | example |
 |---|---|---|

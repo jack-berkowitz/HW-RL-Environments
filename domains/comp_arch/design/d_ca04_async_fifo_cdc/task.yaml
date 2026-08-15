@@ -2,7 +2,7 @@ id: d_ca04
 module: async_fifo_cdc
 domain: comp_arch
 type: design
-catalog: CATALOG_V3_HARD.md
+catalog: TASK_CATALOG.md
 
 # CLASS A -- external RTL oracle, proven against vendored PULP RTL.
 oracle_class: A

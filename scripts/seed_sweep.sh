@@ -12,7 +12,7 @@
 # silently finds nothing is worse than one that stops.
 #
 # THE METHODOLOGY IT ENCODES IS STILL LIVE and is why this file is kept rather
-# than deleted: see testbenches/conventions/NOTES.md, "single-seed validation is
+# than deleted: see CONVENTIONS.md, "single-seed validation is
 # not validation". The ncache reference passed the default seed and FAILED 4 of
 # 6 others on a real bug. Nothing currently sweeps seeds for d_ca04 or d_nw01.
 #

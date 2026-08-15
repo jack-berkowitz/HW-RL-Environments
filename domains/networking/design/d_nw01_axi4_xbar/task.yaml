@@ -2,7 +2,7 @@ id: d_nw01
 module: axi4_xbar
 domain: networking
 type: design
-catalog: CATALOG_V3_HARD.md
+catalog: TASK_CATALOG.md
 
 oracle_class: A
 reference:
@@ -59,7 +59,7 @@ second_source_note: >
 
 negative_controls:
   liveness:
-    procedure: CATALOG_V3_HARD.md standing procedure
+    procedure: FINDINGS.md standing rules
     correct_reference: PASS, neither check fires
     deadlock_mutant: mL1 -> LM_STALL fires
     starvation_mutant: mL2 -> LM_STARVE fires, LM_STALL does NOT

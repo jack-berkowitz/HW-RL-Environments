@@ -1,0 +1,427 @@
+# Task Catalog
+
+**The single current task list.** Version history lives in this file, not in its
+name — four differently-versioned catalogs is how the previous set drifted apart.
+
+| | |
+|---|---|
+| **v1 / v2** | a two-tier layout, then a 21+23-task domain list. Both removed. |
+| **v3** | this list, rebuilt on failure modes rather than line count. |
+| **v3.1** | `ai_d01`, `ca_d08` and `nw_d01` removed as too easy; `DESIGN_CATALOG.md`, `DESIGN_TASKS_NO_GOLDEN_RTL.md` and `VERIFICATION_CATALOG.md` folded in here and deleted. |
+
+**The v2 task set — 21 design and 23 verification tasks with their anchors and
+per-task reasoning — is recoverable at git `c7609fa`**, the commit before the
+tier layout was removed. Measured results from the three removed tasks are in
+`RESULTS_ARCHIVE_V2_TASKS.md`. Methodology findings are in `FINDINGS.md`.
+
+The v3 rebuild followed a frontier model appearing to beat the upstream
+reference on area and power for `nw_d01`. **That triggering claim did not
+survive re-derivation** — the reference had never passed the correctness gate at
+all, and once it did, the result decomposed into a real capability gap (half
+throughput at matched widths) with essentially no genuine optimisation. The
+rebuild stands on the tasks' own merits; the claim does not. See
+`RESULTS_ARCHIVE_V2_TASKS.md`.
+
+---
+
+# ORACLE CLASSES — what evidence each task can produce
+
+Not every task has an external RTL oracle, and the ones that don't carry a
+weaker guarantee. Stated up front, so that "the testbench passes correct RTL"
+means something specific per task rather than something vague everywhere.
+
+**Class A — external RTL oracle.** Vendored upstream RTL behind a port shim is
+what the testbench is proven against. This is the strong case and the one the
+methodology's claim to rigour actually rests on: *the testbench passed RTL
+nobody on this project wrote.* The shim is combinational renaming and struct
+pack/unpack only — if bridging needs behaviour, the shim has failed and the task
+converts to a verification task rather than having its spec reshaped to fit.
+
+**Class B — local model of record.** No outside RTL ever runs. The oracle is a
+Python model written from the published algorithm or ISA, plus committed
+vectors. The only RTL available to prove the testbench is RTL this project
+wrote, so **"the testbench passes known-correct external RTL" is NOT AVAILABLE
+for these tasks and must never be claimed.** The substitute guarantee is three
+things, each recorded in the task's `NOTES.md`:
+
+1. the model is derived from the documented algorithm, **not transcribed from a
+   reference implementation**;
+2. the model, its generator and the vectors are committed, so the oracle is
+   reproducible and auditable by a reader who distrusts it;
+3. mutation testing carries the sharpness argument *by itself* — there is no
+   second signal, so the mutant set has to be better here, not worse.
+
+**Class C — cross-check only.** Upstream is consulted once to confirm a
+locally-generated artifact matches a known-good one, and is never vendored.
+
+### Why model_of_record is valid for design tasks and never for verification
+
+A **design** task ships a port-only `_iface.sv` and asks the model to write RTL.
+The oracle's job is to decide whether that RTL is correct, and a Python model
+derived from a published algorithm can do that: it is an independent statement
+of the same specification, and the mutants test whether the checker built on it
+is sharp.
+
+A **verification** task ships the DUT and asks the model to write the testbench.
+The oracle's job is now to decide whether a *testbench* is adequate — which
+requires knowing that the testbench passes correct RTL and fails incorrect RTL.
+A locally-written model cannot supply the first half: the RTL it would validate
+against is RTL this project wrote against the same understanding, so a shared
+misreading of the spec is invisible. **Verification tasks therefore require
+Class A anchors.** A verification task with no external RTL is not a weaker
+task; it is not a task.
+
+---
+
+## Two hard constraints this rebuild respects
+
+**1. Egress is closed and `refs.lock` is frozen.** Every Class A task below
+anchors on a module inside one of the 21 repos vendored in Phase 0. Nothing here
+requires reopening the network.
+
+**2. Design and verification anchors are disjoint at module level.** A
+verification task ships a decontaminated copy of its golden RTL. If that same
+module were a design task's hidden reference, a model working both would be
+handed the answer. Shared *repo* is fine; shared *module* is not. The partition
+below is built around this.
+
+## What difficulty means here
+
+The v2 tasks were sized by line count, which turned out to be the wrong proxy.
+These are selected on failure modes frontier models actually hit:
+
+- **Liveness under concurrency** — deadlock and starvation are not data
+  properties, and no amount of output checking finds them by accident
+- **Rare interleavings** — bugs that need a specific concurrent condition across
+  large state
+- **Multiple clock domains** — almost absent from v2
+- **Bit-exact arithmetic across a full corner space** — subnormals, rounding
+  modes, tininess
+- **Allocation and scheduling** — allocators, multi-bank arbitration at width
+- **Naive-correct far from PPA-competitive** — where the easy answer works and
+  loses badly
+
+---
+
+# DESIGN TASKS (16)
+
+## Comp Arch (5)
+
+| id | module | why it's hard | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `d_ca01` | `nonblocking_dcache` | Full hit-under-miss and miss-under-miss: MSHR allocation, secondary merge, fill/replay ordering, store merging, forward progress under saturating traffic. Deadlock freedom is the real requirement. | basejump `bsg_cache_non_blocking` | A | not started |
+| `d_ca02` | `speculative_lsq` | Speculative load issue with memory-order-violation detection and replay. The violation detector only fails under specific store/load interleavings. | CVA6 `load_store_unit` subsystem | A | not started |
+| `d_ca03` | `mmu_sv39_full` | Integrated MMU: PTW, TLB, ASID handling, superpages, fault generation and prioritization, walk arbitration between I- and D-side. | CVA6 `cva6_mmu` (PTW + `cva6_tlb`) | A | not started |
+| `d_ca04` | `async_fifo_cdc` | **Two-clock.** Gray pointers, synchronizer depth, full/empty with no false assertion at any clock ratio, reset sequencing across domains. | PULP `common_cells/cdc_fifo_gray.sv` | A | **BUILT + AUDITED** |
+| `d_ca05` | `miss_handler_arb` | Multi-requester miss handler: arbitration among cache controllers, AMO handling, refill sequencing, no requester starvation. | CVA6 `miss_handler` / `std_nbdcache` | A | not started |
+
+## Networking (4)
+
+| id | module | why it's hard | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `d_nw01` | `axi4_xbar` | Full AXI4 crossbar: outstanding-ID tracking, no per-ID response reordering, deadlock freedom under all-to-all traffic, QoS arbitration. Correctness is a liveness property. | PULP `axi/src/axi_xbar.sv` | A | **BUILT + AUDITED** |
+| `d_nw02` | `vc_router_alloc` | Separable VC allocation plus switch allocation. Allocator design is research-adjacent and the naive answer starves under load. | basejump `bsg_wormhole_router` + `bsg_router_crossbar_o_by_i` | A | not started |
+| `d_nw03` | `axis_switch_oq` | Output-queued stream switch: per-output scheduling, frame atomicity, no head-of-line blocking across inputs. | Forencich `verilog-axis/rtl/axis_switch.v` | A | not started |
+| `d_nw04` | `tcdm_log_interconnect` | Many-master/many-bank interconnect: single-cycle bank conflict resolution at width, fairness under hotspotting. | PULP `hci` | A | not started |
+
+## AI Acceleration (4)
+
+| id | module | why it's hard | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `d_ai01` | `systolic_16x16_dbuf` | 16×16 array with weight double-buffering and accumulator drain overlapping compute. The scheduling is the task; the MAC is trivial. | PULP `redmule` datapath | A | not started |
+| `d_ai02` | `gemm_tiler` | Full GEMM tiling control: loop bounds, edge tiles, accumulator reuse, double-buffered operand fetch overlapping compute. | NVDLA CACC/CDMA control | A | not started |
+| `d_ai03` | `dma_2d_chained` | 2D/3D strided DMA: descriptor chaining, unaligned source and destination, mid-transfer reconfiguration, completion ordering. | PULP `idma` | A | not started |
+| `d_ai04` | `sdp_requant_pipeline` | Accumulate → bias → scale → requant → clamp at full rate: per-channel parameters, saturation boundaries, no bubble. | NVDLA SDP | A | not started |
+
+## DSP / Arithmetic (3)
+
+| id | module | why it's hard | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `d_dsp01` | `fp_divsqrt_srt` | Radix-4 SRT divide/sqrt with on-the-fly quotient conversion, all IEEE rounding modes, subnormals, fixed initiation interval. Bit-exactness across the corner space is brutal. | PULP `fpu_div_sqrt_mvp` + `cvfpu` | B | not started |
+| `d_dsp02` | `fp32_fma_ii1` | fp32 FMA at II=1: five rounding modes, subnormals handled in-pipeline rather than via a slow path, correct tininess-after-rounding. | PULP `cvfpu/fpnew_fma.sv` | B | not started |
+| `d_dsp03` | `multifmt_slice` | Format-parametric datapath sharing hardware across fp32/fp16/bf16 with correct per-format rounding and exception flags. Resource sharing is the difficulty. | PULP `cvfpu/fpnew_opgroup_multifmt_slice.sv` | B | not started |
+
+---
+
+# VERIFICATION TASKS (16)
+
+Anchors disjoint from every design task above.
+
+## Comp Arch (5)
+
+| id | module | why it's hard to verify | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `v_ca01` | `issue_stage` | Full issue: scoreboard, operand read, WAW/RAW tracking, flush and precise recovery. Deep state, rare interleavings. | CVA6 `issue_stage` + `scoreboard` | A | not started |
+| `v_ca02` | `cache_ctrl` | Per-port cache controller: miss sequencing, AMO, replay, interaction with the shared miss handler. | CVA6 `cache_ctrl` | A | not started |
+| `v_ca03` | `axi_iw_converter` | ID-width conversion: table pressure, stall when no free ID, per-ID ordering preserved across the conversion. | PULP `axi/src/axi_iw_converter.sv` | A | not started |
+| `v_ca04` | `stream_xbar` | Stream crossbar: fairness, no data loss, deadlock freedom under all-to-all. | PULP `common_cells/stream_xbar.sv` | A | not started |
+| `v_ca05` | `id_queue` | Out-of-order occupancy by ID, per-ID FIFO ordering, exists-lookup, full/empty edges. | PULP `common_cells/id_queue.sv` | A | not started |
+
+## Networking (4)
+
+| id | module | why it's hard to verify | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `v_nw01` | `eth_stack` | ARP plus the surrounding RX/TX path shipped whole: request/reply, cache insert and evict, timeout and retry, gratuitous ARP, broadcast. | Forencich `arp*` + `axis_gmii_rx` | A | not started |
+| `v_nw02` | `axi_atop_filter` | Atomic-op filtering: synthesised B/R responses, no protocol violation on filtered ATOPs. | PULP `axi/src/axi_atop_filter.sv` | A | not started |
+| `v_nw03` | `axis_arb_mux` | Frame atomicity, arbitration fairness over long horizons, `tlast` under backpressure. | Forencich `verilog-axis/rtl/axis_arb_mux.v` | A | not started |
+| `v_nw04` | `ptp_clock` | Time-base correctness: fractional-ns accumulation, drift, adjustment without discontinuity. | Forencich `verilog-ethernet/rtl/ptp_clock.v` | A | not started |
+
+## AI Acceleration (4)
+
+| id | module | why it's hard to verify | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `v_ai01` | `idma_backend` | Descriptor-driven DMA: unaligned src/dst, 2D strides, mid-transfer backpressure, completion ordering. **Blocked on the concrete-type wrapper** — see open items. | PULP `idma` (generated backend) | A | not started |
+| `v_ai02` | `hwpe_stream_fabric` | Streamer split/merge/fifo: no data loss across width changes, valid/ready never deadlocks. | PULP `hwpe-stream` | A | not started |
+| `v_ai03` | `redmule_ctrl` | GEMM control: loop bounds, edge tiles, accumulator reuse across tiles. Disjoint from `d_ai01`, which uses the datapath. | PULP `redmule` control | A | not started |
+| `v_ai04` | `binconv_array` | Mixed/binary-precision convolution array: precision-mode switching, accumulation correctness per mode. | PULP `ne16` | A | not started |
+
+## DSP / Arithmetic (3)
+
+| id | module | why it's hard to verify | anchor (vendored) | Class | status |
+|---|---|---|---|---|---|
+| `v_dsp01` | `fp_cast_multi` | Saturation vs wraparound, RTZ vs RNE, out-of-range, NaN→int, every format pair. | PULP `cvfpu/fpnew_cast_multi.sv` | A | not started |
+| `v_dsp02` | `fp_noncomp` | Comparisons, min/max, classification, sign injection: NaN payloads, signed zero, quiet vs signalling. Enormous corner space, trivial-looking module. | PULP `cvfpu/fpnew_noncomp.sv` | A | not started |
+| `v_dsp03` | `cdc_fifo_gray` | **Two-clock.** Gray pointer correctness, no loss or duplication at arbitrary clock ratios, reset skew. Verification counterpart to `d_ca04`, and permitted because a design task's reference is never shipped. | PULP `common_cells/cdc_fifo_gray.sv` | A | not started |
+
+> `v_dsp03` is the one deliberate near-collision with `d_ca04`. It is acceptable
+> because the design task ships only an `_iface.sv` and never exposes its
+> reference. If you would rather have zero overlap at all, drop `v_dsp03` and run
+> 15 verification tasks.
+
+---
+
+# BUILT TASKS — status detail
+
+## `d_ca04` `async_fifo_cdc` — Class A, built and audited
+
+Reference 18/18, second source 18/18, candidate 18/18 on the tightened spec.
+Audited against the standing rules; `DATA_W` (above bit 31), `SYNC_STAGES` and
+C4's minimum-depth half were all found unbound and are now bound, each with an
+isolated negative control. **First task whose capability audit came back clean.**
+
+Outstanding: none blocking. `find_fmax` on the second source would complete the
+picture but is not required for a result.
+
+## `d_nw01` `axi4_xbar` — Class A, built and audited
+
+Reference 16/16, second source 16/16, candidate 16/16 across
+`NUM_MST` × `NUM_SLV` × `MAX_TRANS` × `MAX_BURST_LEN`.
+
+**OUTSTANDING WORK — recorded here so it stops living only in conversation:**
+
+1. **Task C negative control.** The cross-ID interleaving coverage floor was
+   changed from a fixed count to a rate after the reference tripped it. The
+   reasoning was sound but the changed floor has never been validated against a
+   known-failing input. Needs a mutant that serialises per-ID with no cross-ID
+   interleaving, confirmed to fail the floor at **all 16 configs**.
+2. **Decide the canonical reference configuration.** The shim binds
+   `LatencyMode: CUT_ALL_AX`, which is full AX channel cuts the spec never asked
+   for and which account for **45 % of the reference's synthesised area**
+   (107 891 → 59 209 µm² with `NO_LATENCY`). Every number quoted against the
+   other configuration must be re-derived once this is decided.
+3. **A CAPABILITY-class mutant.** The class was discovered on this task and
+   currently exists only as prose. The original one-deep candidate is a
+   ready-made instance: correct on every transaction, one outstanding per
+   master, caught only by C1.
+4. **`find_fmax.py`** on the reference and on the second source. Neither has a
+   measured Fmax; the recorded PPA closed with +7.83 ns of slack, so the clock
+   never bound and no area comparison from this task is evidence about
+   difficulty yet.
+5. **Second-source synthesis.** It has never been through ORFS, so its area is
+   unknown and it cannot yet appear in a three-way comparison.
+6. **`task.yaml` completion** — the Verilator-only flag (the checker uses
+   `automatic` in procedural blocks, which Icarus rejects), the `NUM_MST <= 4`
+   cap from the fixed `MST_IDX_W = 2` id layout, and the `MAX_BURST_LEN` sweep.
+
+**Candidate PPA is `DID NOT COMPLETE`.** The re-solicited candidate fixed its
+capacity gap by provisioning a 256-entry per-master read buffer (36 864 bits),
+and that over-build cost it 14× area, 5× single-pair throughput, and physical
+closure: the build reached detailed routing and failed with 2003 DRC violations.
+Not retried. See `FINDINGS.md`.
+
+---
+
+# What was dropped and why
+
+Everything below fell out of the difficulty band. Not bad tasks — wrong band.
+
+`int8_requant`, `crc32_eth`, `regfile_multiport_bypass`, `plru_way_select`,
+`store_buffer_fwd`, `ecc_secded_wrapper`, `cordic_rot`, `cic_decimator`,
+`fir_polyphase_decim`, `fft_stage_r2`, `boxcar_filter`, `nco_sintable`,
+`axis_width_adapter`, `axi_burst_splitter`, `mac_pause_ctrl`,
+`wormhole_flow_ctrl`, `tiny_core`, `mshr_file` (subsumed by `d_ca01`),
+`frontend_bpu`, `l1_dcache` (subsumed by `d_ca01`), `rr_arb_tree`,
+`tlb` (subsumed by `d_ca03`), `serdiv`, `axi_lite_xbar`, `axi_id_remap`,
+`eth_mac_1g_rx`, `fpnew_fma` and `fpnew_divsqrt` as verification tasks (both are
+now design tasks).
+
+**`ai_d01`, `nw_d01` and `ca_d08` have since been REMOVED from `domains/`.** All
+three were solved by a frontier model on the first attempt, and carrying them as
+calibration tasks was not worth the maintenance: every harness change had to keep
+five tasks green instead of two. Their measured results are preserved in
+`RESULTS_ARCHIVE_V2_TASKS.md` because they are still evidence about where the
+difficulty floor sits, and the task directories are recoverable from git history
+at `1e9c455`. The surviving design tasks are `d_ca04` and `d_nw01`.
+
+---
+
+# Costs of this rebuild — read before committing
+
+**Build time per task roughly triples.** These DUTs are 5–20× larger. Testbenches
+for `d_ca01` or `d_nw01` need traffic generators and liveness monitors, not
+directed vectors plus a soak. Budget accordingly; 32 hard tasks is not 32 v2
+tasks.
+
+**Shim risk is much higher.** CVA6 already produced three conversions on smaller
+modules. `d_ca02`, `d_ca03`, and `d_ca05` are all CVA6 subsystems with heavy
+package coupling. Expect the shim check to fail on at least one. The
+stop-and-report rule at a fourth conversion still applies, and here it is more
+likely to fire — if it does, the fix is substituting a basejump or PULP anchor,
+not draining the design side.
+
+**Liveness needs testbench machinery you haven't built.** Deadlock and starvation
+are not caught by output comparison. `d_ca01`, `d_nw01`, `d_nw02`, `d_nw04` all
+need forward-progress monitors: per-requester watchdogs that fail if any request
+goes unserviced for N cycles under continuous offered load. Build that harness
+once, reuse it across all four. It lives in
+`testbenches/common/liveness_monitor.svh`.
+
+### STANDING PROCEDURE — negative control for silent-failure checkers
+
+> **Any check whose failure mode is ABSENCE rather than MISMATCH must be
+> validated against a known-failing input before it is trusted.**
+
+This is general, not specific to liveness. A scoreboard that compares outputs
+announces itself when it is broken: it stops matching. A check that fires on the
+*absence* of something cannot. It looks exactly like coverage while providing
+none, and there is no way to tell the two apart from a passing run.
+
+The house conventions already contain one member of this family — the coverage
+floor, which exists precisely because "the run passed" and "the run never
+reached the interesting state" are indistinguishable without it. Liveness
+monitors are the second. Any future check of the form "X should eventually
+happen" is a third.
+
+**The sharpest form of the problem: a broken harness and a broken DUT produce
+identical output.** A wedged testbench and a deadlocked design both emit
+nothing. Building `d_nw01`'s liveness rig hit exactly this — the first version
+reported DEADLOCK on the *correct* reference because its own driver models had
+wedged. Without both a known-good and a known-bad input to compare against,
+there is no way to know which side is broken.
+
+#### Corollary added after the `d_nw01` capability audit
+
+> **A control validates a check only if it fails that check and nothing else,
+> and only if the harness can saturate what the check measures.**
+
+Building the C2 concurrency control took three attempts, and every failure was a
+hole in the *check* rather than in the mutant:
+
+1. The mutant failed C1 as well as C2, so it proved nothing about C2 in
+   particular. **A control that fails several checks at once validates none of
+   them.**
+2. The harness's own slave models were the bottleneck, so a design that
+   serialised all traffic still kept up and scored 199 % — passing. **A
+   throughput-shaped check is only as sharp as the load the harness can offer;
+   if the harness is the limiting resource, the check measures the harness.**
+3. The mutant throttled the single-pair baseline as much as the concurrent case,
+   leaving the *ratio* unchanged. **A check expressed as a ratio is blind to any
+   defect that scales both of its terms.**
+
+The same audit produced the most expensive instance of the general rule so far,
+and it was in the runner rather than in any checker: `sim_candidate.sh` picked
+the scoring testbench with `ls tb/*_tb.sv | head -1`, so a task carrying both a
+liveness rig and a full checker silently scored **whichever name sorted first**
+and reported passes for it. **A weaker checker substituted in silence is
+indistinguishable from a strong one passing.** The scoring testbench is now
+required to be `tb/<dut>_tb.sv`, and the runner refuses to run rather than
+choose a neighbour. Any harness that *selects* among artefacts needs the same
+scrutiny as any check that fires on absence.
+
+### STANDING PROCEDURE — the runner never discovers its artifacts
+
+> **THE RUNNER NAMES ITS ARTIFACTS EXPLICITLY AND REFUSES WHEN THEY ARE ABSENT;
+> IT NEVER DISCOVERS THEM BY PATTERN.**
+
+Same family as the wedging harness: the run looked clean while measuring the
+wrong thing. `sim_candidate.sh` selected the scoring testbench with
+`ls tb/*_tb.sv | head -1`, so a task carrying both a liveness rig and a full
+checker scored whichever name sorted first — and reported passes for it.
+
+Globbing, sorting, and silent defaults are all the same defect: they turn a
+missing or ambiguous artifact into a *different* run rather than an error. A
+selection that cannot fail is a selection that cannot be trusted. Any shared
+path that picks among artifacts must name what it wants and stop when it is not
+there.
+
+Therefore, for every task using a liveness monitor, and **before** the full
+testbench is built on top of it:
+
+1. **Build the liveness mutants first.** Break the design so it genuinely
+   deadlocks — a response-channel arbiter, an ID-tracking freelist — and confirm
+   the deadlock check fires.
+2. **Build a separate starvation mutant**: one requester permanently
+   deprioritised while others continue to be served. Confirm the starvation
+   check fires and the deadlock check does **not**. The two failures have
+   different causes and must be distinguishable.
+3. **Confirm the inverse.** Run the monitor against the correct reference with
+   deliberately slow-but-fair arbitration and verify it does NOT fire. A monitor
+   that penalises slowness silently encodes one arbitration policy into the
+   contract, which is exactly what the second-source rule exists to prevent.
+
+The negative-control result goes in `NOTES.md` **alongside the mutant table**,
+not buried in prose. A liveness claim without it is unsupported.
+
+**ORFS runtime grows a lot.** A 16×16 systolic array or a full AXI4 crossbar is a
+different P&R proposition than a width adapter. `find_fmax.py`'s three-phase
+search over designs this size may need its bracket widened and its per-run
+timeout raised.
+
+**Class B is nearly gone**, which is a real gain — only the two-clock tasks and
+the arithmetic ones lean on locally-written vectors, and those are bit-exactly
+specifiable. Every other task has external RTL as the oracle.
+
+# Suggested build order
+
+1. `d_ca04` `async_fifo_cdc` — smallest of the hard set, and the first two-clock
+   design task; validates that flow before anything expensive
+2. `d_nw01` `axi4_xbar` — builds the liveness-monitor harness the others reuse
+3. `v_ca05` `id_queue` — smallest verification task; validates decontamination
+   and mutant flow at the new scale
+4. `d_ca01` `nonblocking_dcache` — the flagship, and the one closest to the
+   `ncache` work already in flight
+
+---
+
+# STANDING RULES — in force for all tasks
+
+These are not advice. Each one exists because its absence produced a wrong
+result that survived review.
+
+1. **Every capability the design must support is a named parameter with a
+   binding check.** `MAX_TRANS` was a parameter nothing tested, and a candidate
+   with one-eighth the capacity passed every config.
+2. **Every stated requirement has a coverage floor proving it was exercised.**
+   `L3` required liveness under backpressure while the checker hardwired
+   `r_ready = 1`, so the condition it names was never created.
+3. **A checker whose failure mode is silence must be validated against a
+   known-failing input before it is trusted.** A broken harness and a broken DUT
+   produce identical output.
+4. **A control validates a check only if it fails that check and nothing else,
+   and only if the harness can saturate what the check measures.** A control
+   that trips several checks validates none of them; a check whose bottleneck is
+   the harness is measuring the harness.
+5. **The runner names its artifacts explicitly and refuses when they are absent;
+   it never discovers them by pattern.** `ls tb/*_tb.sv | head -1` scored a
+   read-only liveness rig for eight commits and reported passes for it.
+6. **Area comparisons are reported as a three-way split:** off-spec
+   configuration, capability gap, genuine optimisation. A headline ratio without
+   that split is not a result.
+7. **When blocked, the deliverable is the report.** Stop and say so.
+
+## House-style exemplars
+
+The canonical testbench style is `testbenches/conventions/rob_tb.sv` and
+`testbenches/conventions/fifo_tb.sv`. Conventions, toolchain decisions and the
+shared-model contract are in `CONVENTIONS.md`. Methodology findings — what went
+wrong and the rule each defect produced — are in `FINDINGS.md`.
