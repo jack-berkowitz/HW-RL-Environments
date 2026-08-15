@@ -796,3 +796,63 @@ stages agree on. Raising `SYNTH_MEMORY_MAX_BITS` to let the build proceed was
 the right call — aborting at synthesis would have hidden a real physical
 consequence behind a tool guard — but it does mean this is not a routine
 configuration.
+
+---
+
+# CANONICAL REFERENCE CONFIG — reported as a Pareto envelope, not a winner
+
+Both configurations pass all 16 configs. Both are legitimate implementations of
+a spec that **explicitly does not constrain latency**. Measured at each one's own
+Fmax, with only closing runs counted:
+
+| | `CUT_ALL_AX` (shipped) | `NO_LATENCY` |
+|---|---|---|
+| Fmax | **≥ 190.48 MHz** (5.25 ns) | **126.98 MHz** (7.875 ns) |
+| converged? | **no** — bracket [4.5, 5.25] is 0.75 ns wide | yes — [7.5, 7.875], 0.375 ns |
+| area at own Fmax | 154 245 µm² | **100 277 µm²** |
+| area at 12 ns | 146 951 µm² | 86 133 µm² |
+| synth area | 107 891 µm² | 59 209 µm² |
+| elasticity, closing range | +5.0 % | **+16.4 %** |
+
+**`CUT_ALL_AX` is at least 1.50× faster and 54 % larger at its own Fmax.**
+Neither dominates. Which is "better" depends entirely on a frequency target the
+specification never states — the same shape as the `d_ca04` result, on a
+different axis.
+
+## Therefore the baseline is the envelope, not a point
+
+The reference exists to be the thing candidates are compared against, and the
+choice of configuration silently picks a side:
+
+- with `NO_LATENCY` canonical, a candidate that pipelines looks **bad on area**
+  and good on Fmax;
+- with `CUT_ALL_AX` canonical, a candidate that does not pipeline looks **good on
+  area** and bad on Fmax.
+
+Since the spec permits either strategy, **picking one configuration as "the"
+reference builds an arbitrary preference into every comparison.** Both are
+therefore recorded as the baseline, and a candidate is reported against the
+envelope: does it land inside, on, or outside the line joining these two points.
+
+`CUT_ALL_AX` remains the **build default**, purely because the ORFS harness and
+every historical number use it — not because it is the better design. Any figure
+quoted against it must say so.
+
+## Consequence for previously quoted numbers
+
+The 3.1× decomposition — *1.82× off-spec pipelining × 1.70× capability gap* —
+was computed against synthesis area. It stands, and the envelope now makes the
+first factor concrete: `CUT_ALL_AX` really does cost 54 % more area at own Fmax,
+and buys at least 1.5× the speed for it. It is off-spec, not free.
+
+## Elasticity — the first design where area moves materially
+
+`NO_LATENCY` grows **+16.4 %** across its closing range, against `CUT_ALL_AX`'s
++5.0 % and `d_ca04`'s +1.5 %. Removing the pipeline registers forces the tool to
+buy timing out of logic instead, which is exactly where area is elastic.
+
+This is the first configuration measured where area × delay could carry
+information independent of area and Fmax. It is still only 16 %, so the
+conclusion in `FINDINGS.md` stands — no design yet found where AD changes an
+answer — but it is the closest case so far and worth re-testing if a candidate
+lands near the envelope.

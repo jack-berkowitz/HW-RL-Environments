@@ -297,11 +297,14 @@ Reference 16/16, second source 16/16, candidate 16/16 across
    counter then failed the *reference* at `MAX_TRANS=2`, because reordering is a
    DUT choice AXI permits a design to decline. The requirement underneath was
    capacity with mixed IDs, now enforced in C1. See `NOTES.md § TASK C`.
-2. **Decide the canonical reference configuration.** The shim binds
-   `LatencyMode: CUT_ALL_AX`, which is full AX channel cuts the spec never asked
-   for and which account for **45 % of the reference's synthesised area**
-   (107 891 → 59 209 µm² with `NO_LATENCY`). Every number quoted against the
-   other configuration must be re-derived once this is decided.
+2. ~~Decide the canonical reference configuration.~~ **DONE — reported as a
+   Pareto envelope rather than a winner.** `CUT_ALL_AX` reaches ≥190.48 MHz at
+   154 245 µm²; `NO_LATENCY` reaches 126.98 MHz at 100 277 µm². At least 1.50×
+   faster for 54 % more area, neither dominating, and the spec does not
+   constrain latency — so picking one would build an arbitrary preference into
+   every candidate comparison. **Both are the baseline; candidates are reported
+   against the envelope.** `CUT_ALL_AX` stays the build default only because the
+   harness and historical numbers use it. See `NOTES.md § CANONICAL`.
 3. **A CAPABILITY-class mutant.** The class was discovered on this task and
    currently exists only as prose. The original one-deep candidate is a
    ready-made instance: correct on every transaction, one outstanding per
