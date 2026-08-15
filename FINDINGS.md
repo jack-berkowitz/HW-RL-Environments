@@ -384,8 +384,88 @@ capacity check where the defect actually is: the capacity phase previously drove
 one ID per master, so a design holding `MAX_TRANS` of a single ID while refusing
 any second ID passed it.
 
-**A coverage floor must measure what the harness controls — the stimulus — not
-what the design chose to do with it.**
+### Neither control alone would have found it
+
+This is the clearest argument for the second-source rule the project has, so it
+is worth stating rather than leaving implicit.
+
+**With only the reference**, the sequence is: the corrected counter makes the
+reference score 0, the reference is known-good, so the floor must be too tight —
+loosen it, move on. The conclusion is wrong in a way that looks responsible, and
+*the counter is never suspected at all.*
+
+**With only the mutant**, the sequence is: mX1 scores 0 and fails, the floor
+caught a known-bad input, the floor works. Also wrong, and this one closes the
+investigation with a green tick.
+
+It took **both**, plus an independently written second source scoring 218 on
+identical stimulus, to establish the actual fact: **the hazard was reachable and
+the reference declined to take it.** The second source is what converts "the
+reference scores 0" from evidence about the floor into evidence about the
+reference. Without it, 0 is uninterpretable — you cannot tell a stimulus that
+never created the opportunity from a design that never took one.
+
+A known-good input tells you a check is not too tight. A known-bad input tells
+you it is not too loose. **Neither tells you the check is measuring the right
+quantity** — for that you need two correct designs that disagree.
+
+
+
+---
+
+# A COVERAGE FLOOR MUST MEASURE WHAT THE HARNESS CONTROLS — THE STIMULUS — NOT WHAT THE DESIGN CHOSE TO DO WITH IT
+
+This is the most transferable thing in this document and it is not specific to
+hardware. It is the general reason coverage metrics decay into implementation
+constraints.
+
+A coverage floor exists to answer one question: **did this run actually exercise
+the situation the checker was built to survive?** It guards against a passing
+result that passed only because the interesting case never arose — a random draw
+that happened to miss it, a stimulus generator with a correlated bug, a
+transaction count scaled down for runtime.
+
+That question is about the **stimulus**, which the harness controls.
+
+The failure mode is to measure the **outcome** instead, because the outcome is
+easier to instrument. "Did reordering occur?" is one line; "did the harness
+create conditions under which reordering was possible?" needs bookkeeping. So
+the outcome gets measured, and for a while it correlates well enough that nobody
+notices.
+
+It stops correlating the moment a **conforming design declines to produce the
+outcome.** Then the floor fails a correct design, and the floor has silently
+become a requirement — one that was never written in the specification, never
+agreed, and is now enforced. In this project that requirement would have been
+*"a crossbar must reorder across IDs"*, in a contract whose ordering clause
+explicitly grants the right **not** to.
+
+The test for whether a floor is on the right side of the line:
+
+> **Could a correct implementation score zero here?**
+>
+> If yes, it is measuring a design choice and must be a `METRIC`, not a gate.
+> If no — because the harness itself creates the condition — it is coverage.
+
+Applied to the floors in this project:
+
+| floor | measures | verdict |
+|---|---|---|
+| unmapped-address requests were issued | stimulus — the generator chose the address | **coverage**, correctly gating |
+| both a read and a write reached each slave | stimulus | **coverage** |
+| backpressure actually stalled a response | stimulus — the harness drives ready | **coverage** |
+| a burst of the full `MAX_BURST_LEN` was driven | stimulus | **coverage** |
+| **cross-ID reordering occurred** | **the DUT's arbitration** | **removed — became a METRIC** |
+
+The same test disposes of the near-miss cases. "Did the FIFO reach full
+occupancy?" is a design choice if the design may legally be deeper than asked;
+it is coverage only because the depth is *required*, and even then it was
+measuring an unmeasurable cross-domain quantity and had to be replaced by a
+direct capacity check.
+
+**The general form:** a coverage metric measures the *input distribution*. The
+instant it starts measuring the *output distribution*, it has become a
+specification clause that nobody wrote down.
 
 ---
 

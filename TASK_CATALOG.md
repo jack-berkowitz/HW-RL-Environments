@@ -207,6 +207,23 @@ picture but is not required for a result.
 Reference 16/16, second source 16/16, candidate 16/16 across
 `NUM_MST` × `NUM_SLV` × `MAX_TRANS` × `MAX_BURST_LEN`.
 
+> **NO CAPABILITY CHECK DISCRIMINATES AT `MAX_TRANS = 2`.** Both C1 (capacity)
+> and C2 (concurrency) are blind there, and the capability mutant
+> `mX1_no_cross_id_interleaving` survives **all eight** of those configurations.
+> The cause is structural rather than an oversight: the C1 floor is
+> `ceil(MAX_TRANS/2)` = 1, and it cannot be raised because the `NO_LATENCY`
+> anchor — a correct crossbar — also delivers exactly 1 at that setting. Any
+> floor that catches the mutant there fails a correct design.
+>
+> The eight `MAX_TRANS = 2` configurations still bind something real: a design
+> requiring depth ≥ 4 fails them, and the whole data contract, liveness and
+> decode behaviour is checked as usual. **But a pass at `MAX_TRANS = 2` is not
+> capability evidence and must not be reported as any.**
+>
+> If discrimination at low depth is wanted later, **add `MAX_TRANS = 4`** rather
+> than trying to raise the `T = 2` floor — the anchor's own behaviour makes that
+> floor unraisable.
+
 **OUTSTANDING WORK — recorded here so it stops living only in conversation:**
 
 1. ~~Task C negative control.~~ **DONE, and it removed the floor.** The control
