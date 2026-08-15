@@ -201,6 +201,37 @@ def collect(design):   # `design` here is the ORFS output name (nickname)
     return None
 
 
+def _fallback_from_reports(nickname, pdk="sky130hd"):
+    """Recover WNS/TNS/DRC from the ORFS *reports* when the metrics JSON is gone.
+
+    Only used when the flow completed but did not leave a metrics file. Returns
+    None if the reports are not there either, in which case it really was a tool
+    error. Deliberately conservative: if anything is unreadable, give up rather
+    than invent a data point.
+    """
+    flow = os.environ.get("ORFS_FLOW_DIR",
+                          os.path.expanduser("~/tools/OpenROAD-flow-scripts/flow"))
+    rpt = os.path.join(flow, "reports", pdk, nickname, "base", "6_finish.rpt")
+    drc = os.path.join(flow, "reports", pdk, nickname, "base", "5_route_drc.rpt")
+    if not os.path.isfile(rpt):
+        return None
+    try:
+        txt = open(rpt, errors="replace").read()
+        mslack = re.search(r"worst slack max\s+([-\d.]+)", txt)
+        mtns = re.search(r"^tns max\s+([-\d.]+)", txt, re.M)
+        if mslack is None:
+            return None
+        wns = float(mslack.group(1))
+        tns = float(mtns.group(1)) if mtns else 0.0
+        nviol = 0
+        if os.path.isfile(drc):
+            nviol = sum(1 for ln in open(drc, errors="replace") if "violation" in ln.lower())
+        return {"wns_ns": wns, "tns_ns": tns, "drc": nviol,
+                "pass": wns >= 0 and nviol == 0}
+    except (OSError, ValueError):
+        return None
+
+
 def run_period(design, tier, pdk, period, iteration, log_dir, verbose,
                cfg_container=None, wipe_name=None, rd_ratio=None):
     """Wipe, build at `period`, and classify the outcome.
@@ -259,7 +290,22 @@ def run_period(design, tier, pdk, period, iteration, log_dir, verbose,
 
     m = collect(wipe_name or design)
     if not m or not m.get("completed"):
-        rec["note"] = "ORFS produced no final metrics (6_report.json missing)"
+        # FALL BACK TO THE REPORTS BEFORE GIVING UP. A missing metrics JSON does
+        # not mean the flow failed: on d_nw01 at 5.25 ns the flow ran all the way
+        # through 6_report and left complete, clean reports on disk, but the JSON
+        # was absent -- and the sweep aborted, recorded 6.0 ns as the answer, and
+        # UNDERSTATED Fmax BY 14 % (166.67 vs the true 190.48 MHz). The number
+        # looked authoritative and was not, which is the defect class this
+        # project keeps finding.
+        fb = _fallback_from_reports(wipe_name or design)
+        if fb is not None:
+            rec.update(fb)
+            rec["note"] = ("metrics JSON missing; recovered from 6_finish.rpt "
+                           "and 5_route_drc.rpt -- flow had completed")
+            rec["status"] = STATUS_PASS if rec["pass"] else STATUS_TIMING
+            return rec
+        rec["note"] = ("ORFS produced no final metrics AND no usable reports "
+                       "(6_report.json and 6_finish.rpt both missing)")
         return rec
 
     # Defence 2 against stale results: did the flow actually run at the period

@@ -1,0 +1,92 @@
+{
+  "aborted_reason": "ORIGINALLY aborted at 5.25 ns on a missing metrics JSON and recorded 6.0 ns / 166.67 MHz. The flow had in fact COMPLETED with +0.04 ns slack and DRC 0; recovered from the reports. find_fmax.py now falls back to the reports rather than aborting. Corrected value: 5.25 ns / 190.48 MHz.",
+  "achieved_fmax_mhz": 190.48,
+  "bracket": {
+    "bracket_iterations": 3,
+    "period_fail": 3.0,
+    "period_pass": 6.0,
+    "seed_period_ns": 12.0
+  },
+  "confirming_rerun": {
+    "fell_back": false,
+    "passed": false,
+    "ran": false
+  },
+  "converged_period_ns": 5.25,
+  "design": "d_nw01",
+  "final_interval": {
+    "period_fail": 4.5,
+    "period_pass": 5.25
+  },
+  "pdk": "sky130hd",
+  "resolution_ns": 0.5,
+  "rtl_git_commit": "53a3deff402bc4e713e1a5ad4308b751a70d1d56-dirty",
+  "search_iterations": 2,
+  "search_trajectory": [
+    {
+      "drc": 0,
+      "iteration": 1,
+      "log": "fmax_results/d_nw01_logs/d_nw01_iter01_12.0000ns.log",
+      "note": null,
+      "pass": true,
+      "period_ns": 12.0,
+      "status": "pass",
+      "tns_ns": 0,
+      "wall_time_s": 594.0,
+      "wns_ns": 3.11712
+    },
+    {
+      "drc": 0,
+      "iteration": 2,
+      "log": "fmax_results/d_nw01_logs/d_nw01_iter02_6.0000ns.log",
+      "note": null,
+      "pass": true,
+      "period_ns": 6.0,
+      "status": "pass",
+      "tns_ns": 0,
+      "wall_time_s": 732.3,
+      "wns_ns": 0.188814
+    },
+    {
+      "drc": 0,
+      "iteration": 3,
+      "log": "fmax_results/d_nw01_logs/d_nw01_iter03_3.0000ns.log",
+      "note": null,
+      "pass": false,
+      "period_ns": 3.0,
+      "status": "timing_fail",
+      "tns_ns": -1935.26,
+      "wall_time_s": 5625.5,
+      "wns_ns": -2.1477
+    },
+    {
+      "drc": 0,
+      "iteration": 4,
+      "log": "fmax_results/d_nw01_logs/d_nw01_iter04_4.5000ns.log",
+      "note": null,
+      "pass": false,
+      "period_ns": 4.5,
+      "status": "timing_fail",
+      "tns_ns": -101.355,
+      "wall_time_s": 657.4,
+      "wns_ns": -0.636392
+    },
+    {
+      "drc": 0,
+      "iteration": 5,
+      "log": "fmax_results/d_nw01_logs/d_nw01_iter05_5.2500ns.log",
+      "note": "RECOVERED from 6_finish.rpt/5_route_drc.rpt: flow completed, metrics JSON was missing. Originally recorded as tool_error.",
+      "pass": true,
+      "period_ns": 5.25,
+      "status": "pass",
+      "tns_ns": 0.0,
+      "wall_time_s": 1011.0,
+      "wns_ns": 0.04
+    }
+  ],
+  "tier": "networking",
+  "timestamp": "2026-08-15T20:47:49.333936+00:00",
+  "total_pnr_runs": 5,
+  "total_wall_time_s": 8620.4,
+  "wns_at_converged_ns": 0.04
+}
