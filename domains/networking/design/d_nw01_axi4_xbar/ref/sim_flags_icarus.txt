@@ -1,0 +1,3 @@
+# Icarus counterpart. The spec-shipped package must be compiled for candidates
+# too, not just the reference.
+%REPO%/domains/networking/design/d_nw01_axi4_xbar/spec/axi4_xbar_pkg.sv

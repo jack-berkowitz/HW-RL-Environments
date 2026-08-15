@@ -1,0 +1,25 @@
+# Extra Verilator arguments for this task. One token per line; %REPO% expands to
+# the repository root.
+#
+# TWO DISTINCT NEEDS, and they are not the same:
+#
+# 1. The spec SHIPS a package (axi4_xbar_pkg) defining the AXI4 channel structs.
+#    Both the checker AND any candidate import it, so it must be compiled for a
+#    CANDIDATE too -- unlike d_ca04, where the extra files were reference-only.
+#    It is listed first: SystemVerilog requires a package to be elaborated
+#    before anything importing it.
+#
+# 2. The REFERENCE is a shim over vendored PULP RTL (axi_xbar and its closure:
+#    axi_demux, axi_mux, axi_err_slv, rr_arb_tree, spill_register, ...). Those
+#    need include paths and library search paths. A self-contained candidate
+#    needs none of it, but the flags are harmless there -- -y is consulted only
+#    for modules that are otherwise unresolved.
+%REPO%/domains/networking/design/d_nw01_axi4_xbar/spec/axi4_xbar_pkg.sv
++incdir+%REPO%/refs/axi/include
++incdir+%REPO%/refs/common_cells/include
+-y
+%REPO%/refs/axi/src
+-y
+%REPO%/refs/common_cells/src
+%REPO%/refs/axi/src/axi_pkg.sv
+%REPO%/refs/common_cells/src/cf_math_pkg.sv
