@@ -144,7 +144,7 @@ for cand in "${CANDS[@]}"; do
   # Verilator's lexer rejects it with a misleading "unexpected $end", so the
   # answer looks broken when only the transport was. Normalise a COPY -- the
   # original answer file is never modified -- and say so in the report.
-  nbsp="$(LC_ALL=C grep -c $'\xc2\xa0' "$cand" 2>/dev/null || echo 0)"
+  nbsp="$(LC_ALL=C grep -c $'\xc2\xa0' "$cand" 2>/dev/null)"; nbsp="${nbsp:-0}"
   runfile="$cand"
   if [ "$nbsp" -gt 0 ] || [ -n "$(tail -c 1 "$cand")" ]; then
     runfile="/tmp/sanitised_$(basename "$cand")"
