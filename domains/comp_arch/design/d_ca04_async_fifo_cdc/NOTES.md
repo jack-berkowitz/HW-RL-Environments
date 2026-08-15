@@ -434,13 +434,33 @@ methodologically correct.** Re-measured properly below.
 6.0 ns to its 2.625 ns limit costs **1.5 % of area**, not the large growth that
 would have narrowed the gap.
 
-The reason is structural and worth stating, because it decides whether
-area-delay is a meaningful metric for a given design at all: **this DUT is
-storage-dominated.** The FIFO array is the bulk of the cells and its size is set
-by `DATA_W × 2**LOG_DEPTH`, not by timing. Only the Gray-pointer and
+**When area is fixed by storage parameters rather than elastic with respect to
+timing, area is roughly constant across the sweep — so area × delay becomes
+proportional to delay alone, and the AD ranking simply reproduces the Fmax
+ranking.** It contributes no information beyond what area and Fmax already say.
+
+Here that is exact, not approximate:
+
+| quantity | value |
+|---|---|
+| speed ratio (reference faster) | 4.500 / 2.625 = **1.714** |
+| area ratio (reference bigger) | 20 101 / 14 754 = **1.362** |
+| AD ratio | 1.714 / 1.362 = **1.258** |
+
+The 25.8 % is those two numbers divided. It is a composite of measurements
+already reported, not a third finding standing beside them.
+
+**AD is therefore not a scoring axis and must never become one.** The PPA axes
+stay separate precisely so it is visible *which* axis moved — collapsing them
+hides the thing worth seeing. Use AD in a writeup as engineering interpretation
+if it helps a reader weigh a tradeoff; do not present it as independent evidence.
+
+**The precondition for quoting it at all is that area is elastic under
+constraint, and that must be tested per design by sweeping rather than
+assumed.** Here it is not: the FIFO array is the bulk of the cells and its size
+is set by `DATA_W × 2**LOG_DEPTH`, not by timing. Only the Gray-pointer and
 synchroniser logic is on the critical path, and it is small, so the tool has
-little to buy area with. A logic-dominated design would behave completely
-differently and the original objection would have bitten hard.
+little to buy area with.
 
 The candidate behaves the same way: 14 620 µm² at 6.0 ns against 14 754 µm² at
 its 4.5 ns limit, +0.9 %.

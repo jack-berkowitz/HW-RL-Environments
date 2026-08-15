@@ -469,6 +469,42 @@ specification clause that nobody wrote down.
 
 ---
 
+# AREA × DELAY IS NOT AN INDEPENDENT AXIS UNLESS AREA IS ELASTIC
+
+A composite metric is only worth quoting when its terms move independently. For
+`d_ca04` they do not, and the arithmetic shows exactly why:
+
+| quantity | value |
+|---|---|
+| speed ratio (reference faster) | **1.714** |
+| area ratio (reference bigger) | **1.362** |
+| area × delay ratio | 1.714 / 1.362 = **1.258** |
+
+Area barely moves under constraint — 1.5 % from a relaxed 6.0 ns to the design's
+2.625 ns limit — because the design is **storage-dominated**: its cell count is
+set by `DATA_W × 2**LOG_DEPTH`, and only a small amount of pointer logic sits on
+the critical path. With area effectively constant, area × delay is proportional
+to delay, and **the AD ranking is the Fmax ranking wearing a different unit.**
+
+Two consequences:
+
+1. **AD must not become a scoring axis.** PPA axes are kept separate so that it
+   is visible which one moved; a composite hides precisely the information the
+   separation exists to preserve. AD is legitimate as engineering interpretation
+   in prose — it answers "which would I take for a fixed silicon budget?" — but
+   it is not evidence, and it must never be reported as a third result standing
+   beside area and Fmax.
+2. **The precondition for quoting it is that area is elastic under constraint**,
+   and that is a property of the individual design, not an assumption. Test it
+   by sweeping area across periods, as was done here. A logic-dominated design
+   would behave completely differently, and there AD may carry real information.
+
+The general form: **a composite of two measurements you already have is not a
+third measurement.** It is worth computing only when you can show the terms are
+not locked together.
+
+---
+
 # CHOOSING ANCHORS: contamination, and why the order matters
 
 Every Class A task is anchored on vendored open-source RTL, which raises an
