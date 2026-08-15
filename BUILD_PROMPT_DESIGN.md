@@ -73,6 +73,58 @@ State explicitly what is *not* constrained. Latency and throughput usually are
 not; capacity and concurrency usually are. The distinction between *delay*
 (free) and *capacity* (required) has been mistaken before.
 
+
+### 2a. C3 — sustained acceptance rate, a standard contract term
+
+Most blocks in this benchmark move transactions, and "how fast" is the axis a
+model is most likely to trade away silently. Capacity alone does not catch that:
+a design can accept `MAX_TRANS` outstanding and still idle between acceptances.
+
+**Do not gate raw throughput.** Bursts per 1000 cycles is the *product* of
+capacity, latency and arbitration policy, and gating it fails a correct design
+that trades speed for area — the same defect as gating cross-ID reordering, in
+new clothes. Throughput stays a scored `METRIC:` axis and never a gate.
+
+Gate the **capability** instead, where C1 already draws the line:
+
+| | | |
+|---|---|---|
+| capacity | how many the design must hold at once | **C1**, gated |
+| **sustained acceptance rate** | **how often it must be able to take a new one** | **C3, gated** |
+| bursts per 1000 cycles | what it achieved | METRIC, never gated |
+
+**C3.** Under continuously offered load with every response accepted
+immediately, the design must accept a new request **at least once every K
+cycles**, with no dead cycle beyond that. The harness controls the offered load;
+the requirement is what the design must be able to absorb.
+
+Three conditions on how K is written. All three are mandatory.
+
+**(i) K comes from the task's intent, stated in the spec — never from measuring
+the reference.** Decide what the block is *for*, state the rate that purpose
+implies, then check the anchor meets it. Deriving K from the anchor writes
+"match this implementation's arbitration" into the contract by a longer route,
+which is exactly the trap the ordering and reordering checks fell into. If you
+find yourself running the reference to pick K, stop: you are about to encode it.
+
+**(ii) If the reference or the second source fails K, the number is wrong, not
+the design.** Same rule as every other check. **Verify both before the check
+ships** — not after a candidate fails it, because by then there is pressure to
+conclude the candidate is bad.
+
+**(iii) It needs a negative control that fails C3 and nothing else:** a design
+with full C1 capacity that stalls between acceptances — correct, full depth,
+dead cycles. If you cannot build one that fails C3 alone, **C3 is entangled with
+C1 and must be reworded** until you can. A control that trips both validates
+neither.
+
+**Pair C3 with a stimulus-side coverage floor** proving the offered load was
+actually continuous across the measurement window — no cycle in which the
+harness had nothing to offer. An acceptance-rate check that runs while the
+harness is the bottleneck measures the harness. That mistake has already been
+made once here: a concurrency control scored 199 % and passed because the
+harness's slave models, not the design, were the limiting resource.
+
 ### 3. The shim — Class A only
 
 `ref/<module>_ref.sv` is **combinational renaming and struct pack/unpack only.**
