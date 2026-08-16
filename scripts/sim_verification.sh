@@ -69,6 +69,7 @@ CONF="$TASK_DIR/conformant/conformant_perturbations.sv"
 # explicitly, never discovered by pattern -- rule 10.
 GOLDEN_TOP="tag_tracker"
 TB_MOD="tag_tracker_tb"
+SIM_TIMEOUT_S="${SIM_TIMEOUT_S:-25}"
 
 # --- collect submissions -----------------------------------------------------
 SUBS=()
@@ -100,9 +101,17 @@ DUTS=("golden")
 if [ -f "$CONF" ]; then
   while read -r m; do DUTS+=("$m"); done < <(grep -oE "^module (tt_c[A-Za-z0-9_]+)" "$CONF" | awk '{print $2}')
 fi
+# Mutants VIOLATE the spec and must be KILLED -- opposite sign to conformant.
+MUT="$TASK_DIR/mutants/mutants.sv"
+MUTS=()
+if [ -f "$MUT" ]; then
+  while read -r m; do MUTS+=("$m"); DUTS+=("$m"); done \
+    < <(grep -oE "^module (tt_m[A-Za-z0-9_]+)" "$MUT" | awk '{print $2}')
+fi
 
 build_variant() {   # $1 = golden | tt_cN_...  -> writes variant.sv + extra.sv
-  python3 "$REPO/scripts/_verif_variant.py" "$WORK" "$1" "$CONF" "$GOLDEN_TOP" || exit 2
+  case "$1" in tt_m*) SRC="$MUT" ;; *) SRC="$CONF" ;; esac
+  python3 "$REPO/scripts/_verif_variant.py" "$WORK" "$1" "$SRC" "$GOLDEN_TOP" || exit 2
 }
 
 echo "task=$TASK_NAME  golden=$GOLDEN_TOP  tb=$TB_MOD  duts=${#DUTS[@]}  submissions=${#SUBS[@]}"
@@ -134,7 +143,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     continue
   fi
 
-  allok=1; buildfail=0
+  allok=1; buildfail=0; NKILL=0; NMUT=0
   for v in "${DUTS[@]}"; do
     build_variant "$v"
     rm -rf "$WORK/obj"
@@ -156,11 +165,36 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
       fi
       continue
     fi
-    out="$("$WORK/obj/run" 2>&1)"
-    if echo "$out" | grep -qE "^RESULT: *PASS"; then verdict=PASS; else verdict=FAIL; fi
-    # golden and every conformant perturbation must PASS
-    [ "$verdict" = "PASS" ] || allok=0
-    printf "  %-26s %s\n" "$v" "$verdict"
+    # WATCHDOG. A submission with no timeout of its own hangs forever on the
+    # starvation mutant -- it waits for a grant that never comes. A hang is NOT
+    # a kill: the testbench did not detect starvation, it just stopped. Reported
+    # as its own verdict so the two are never conflated.
+    "$WORK/obj/run" >"$WORK/run.log" 2>&1 &
+    rpid=$!
+    waited=0
+    while kill -0 "$rpid" 2>/dev/null && [ "$waited" -lt "$SIM_TIMEOUT_S" ]; do
+      sleep 1; waited=$((waited+1))
+    done
+    if kill -0 "$rpid" 2>/dev/null; then
+      kill -9 "$rpid" 2>/dev/null; wait "$rpid" 2>/dev/null
+      verdict=TIMEOUT
+    else
+      wait "$rpid" 2>/dev/null
+      out="$(cat "$WORK/run.log")"
+      if echo "$out" | grep -qE "^RESULT: *PASS"; then verdict=PASS; else verdict=FAIL; fi
+    fi
+    case "$v" in
+      tt_m*)   # a mutant must be KILLED: PASS here means the defect was missed
+        case "$verdict" in
+          FAIL)    printf "  %-26s killed\n" "$v"; NKILL=$((NKILL+1)) ;;
+          TIMEOUT) printf "  %-26s HUNG  <- no watchdog; not a kill\n" "$v"; allok=0 ;;
+          *)       printf "  %-26s SURVIVED  <- defect not caught\n" "$v"; allok=0 ;;
+        esac
+        NMUT=$((NMUT+1)) ;;
+      *)       # golden and conformant must be ACCEPTED
+        [ "$verdict" = "PASS" ] || allok=0
+        printf "  %-26s %s\n" "$v" "$verdict" ;;
+    esac
   done
 
   if [ "$allok" -eq 1 ]; then
@@ -186,7 +220,14 @@ done
 echo "================================================================================"
 echo "$NPASS of ${#SUBS[@]} submission(s) passed the validity gate."
 echo
-echo "MUTANT KILL RATE NOT MEASURED -- $TASK_NAME has no mutant set."
-echo "This score says the testbench does not reject correct hardware and relies on"
-echo "nothing unpromised. It says NOTHING about whether it finds bugs, which is"
-echo "what the mutants would measure. Do not report it as a verification score."
+if [ "${NMUT:-0}" -eq 0 ]; then
+  echo "MUTANT KILL RATE NOT MEASURED -- $TASK_NAME has no mutant set."
+  echo "This score says the testbench does not reject correct hardware and relies"
+  echo "on nothing unpromised, and NOTHING about whether it finds bugs."
+else
+  echo "Kill rate is reported PER MUTANT above, not as a total. Which mutant"
+  echo "survived is the informative part; a rate averages that away."
+  echo
+  echo "A kill from a submission that FAILED the golden carries no information --"
+  echo "a testbench that rejects everything appears to kill everything (rule 16)."
+fi
