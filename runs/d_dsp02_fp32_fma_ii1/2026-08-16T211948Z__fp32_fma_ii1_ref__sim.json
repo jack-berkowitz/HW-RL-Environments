@@ -1,0 +1,49 @@
+{
+  "all_passed": true,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "RDN": "884",
+      "RMM": "837",
+      "RNE": "850",
+      "RTZ": "840",
+      "RUP": "879",
+      "disagree": "80",
+      "exact": "640",
+      "overflow": "486",
+      "qnan_a": "46",
+      "qnan_b": "42",
+      "snan": "31",
+      "subn_op": "1223",
+      "subn_res": "146",
+      "tiny_edge": "195",
+      "underflow": "103",
+      "zero_res": "40"
+    }
+  },
+  "git_sha": "c022310958193b984080ef5c4073609add069d8b-dirty",
+  "kind": "sim",
+  "label": "fp32_fma_ii1_ref",
+  "metrics": {
+    "": {
+      "c3_accepted": "4290",
+      "c3_dead_cycles": "0",
+      "c3_offered": "4290",
+      "checks": "4290",
+      "init_interval": "1",
+      "latency_cycles": "3",
+      "vectors": "4290"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "domains/dsp/design/d_dsp02_fp32_fma_ii1/ref/fp32_fma_ii1_ref.sv",
+  "submission_sha256_16": "47a8351a62e5afe3",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "timestamp_utc": "2026-08-16T21:19:48Z"
+}

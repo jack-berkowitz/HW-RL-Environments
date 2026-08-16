@@ -1304,3 +1304,1509 @@ repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -match_cell_footpri
           | Buffers |  Gates  | Buffers  |  Gates | Swaps |          |          |            |            | Endpts | St/EnPt 
 ------------------------------------------------------------------------------------------------------------------------------
        0* |       0 |       0 |        0 |      0 |     0 |    +0.0% |   -1.492 |      -35.4 |      -79.6 |     76 | u_fma.sum_q\[70\]$_DFFE_PN0P_/D
+      10* |       0 |       9 |        0 |      0 |     0 |    +0.1% |   -0.846 |      -17.9 |      -31.7 |     76 | u_fma.sum_q\[70\]$_DFFE_PN0P_/D
+      20* |       0 |      15 |        0 |      0 |     4 |    +0.1% |   -0.693 |      -12.9 |      -21.2 |     76 | u_fma.sum_q\[70\]$_DFFE_PN0P_/D
+      30* |       0 |      21 |        1 |      0 |     7 |    +0.1% |   -0.499 |       -8.4 |      -10.7 |     76 | u_fma.sum_q\[70\]$_DFFE_PN0P_/D
+      40* |       0 |      27 |        1 |      0 |    11 |    +0.2% |   -0.391 |       -5.9 |       -8.0 |     76 | u_fma.sum_q\[70\]$_DFFE_PN0P_/D
+      50* |       0 |      37 |        1 |      0 |    11 |    +0.3% |   -0.328 |       -4.4 |       -5.5 |     76 | u_fma.sum_q\[70\]$_DFFE_PN0P_/D
+      60* |       0 |      45 |        1 |      0 |    13 |    +0.3% |   -0.274 |       -3.2 |       -3.7 |     76 | u_fma.sum_q\[75\]$_DFFE_PN0P_/D
+      70* |       0 |      50 |        2 |      0 |    17 |    +0.4% |   -0.206 |       -1.8 |       -2.3 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+      80* |       0 |      56 |        2 |      0 |    21 |    +0.4% |   -0.269 |       -3.1 |       -2.8 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+      90* |       0 |      62 |        3 |      0 |    24 |    +0.5% |   -0.249 |       -2.7 |       -2.7 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     100* |       0 |      66 |        8 |      0 |    26 |    +0.6% |   -0.491 |       -8.2 |      -11.8 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     110* |       0 |      72 |       10 |      0 |    28 |    +0.6% |   -0.180 |       -1.6 |       -1.1 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     120* |       0 |      78 |       12 |      0 |    30 |    +0.7% |   -0.163 |       -1.3 |       -0.9 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     130* |       1 |      81 |       13 |      0 |    35 |    +0.7% |   -0.136 |       -0.9 |       -0.7 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     140* |       1 |      84 |       18 |      0 |    37 |    +0.8% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     150* |       1 |      84 |       28 |      0 |    37 |    +0.9% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     160* |       1 |      84 |       38 |      0 |    37 |    +1.0% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     170* |       1 |      84 |       48 |      0 |    37 |    +1.1% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     180* |       1 |      84 |       58 |      0 |    37 |    +1.2% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     186* |       1 |      84 |       14 |      0 |    37 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     190* |       1 |      84 |       16 |      0 |    38 |    +0.8% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     200* |       1 |      84 |       26 |      0 |    38 |    +0.9% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     210* |       1 |      84 |       36 |      0 |    38 |    +1.0% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     220* |       1 |      84 |       46 |      0 |    38 |    +1.1% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     230* |       1 |      84 |       56 |      0 |    38 |    +1.2% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     238* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     240* |       1 |      84 |       15 |      0 |    38 |    +0.8% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     250* |       1 |      84 |       25 |      0 |    38 |    +0.9% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     260* |       1 |      84 |       35 |      0 |    38 |    +1.0% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     270* |       1 |      84 |       45 |      0 |    38 |    +1.1% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     280* |       1 |      84 |       55 |      0 |    38 |    +1.2% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     289* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     290* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     300* |       1 |      85 |       22 |      0 |    39 |    +0.8% |   -0.070 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     310* |       1 |      85 |       32 |      0 |    39 |    +1.0% |   -0.070 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     320* |       1 |      85 |       42 |      0 |    39 |    +1.1% |   -0.070 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     330* |       1 |      85 |       52 |      0 |    39 |    +1.2% |   -0.070 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     340* |       1 |      85 |       62 |      0 |    39 |    +1.3% |   -0.070 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     340* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     342* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     343* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     345* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     346* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     347* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     348* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     349* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     350* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     350* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     351* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     352* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     353* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     354* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     355* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     356* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     357* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     358* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     359* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     360* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     360* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     361* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     362* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     363* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     364* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     365* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     366* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     367* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     368* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     369* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     370* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     370* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     371* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     372* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     373* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     374* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     375* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     376* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     377* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     378* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     379* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     380* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     380* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     381* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     382* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     383* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     384* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     385* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     386* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     387* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     388* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     389* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     390* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     390* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     391* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     392* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     393* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     394* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     395* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     396* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     397* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     398* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     399* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     400* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     400* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     401* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     402* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     403* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     404* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     405* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     406* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     407* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     408* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     409* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     410* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     410* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     411* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     412* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     413* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     414* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     414* |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |     76 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     415+ |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     416+ |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     417+ |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     418+ |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     419+ |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     420+ |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     420+ |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+    final |       1 |      84 |       14 |      0 |    38 |    +0.7% |   -0.069 |       -0.4 |       -0.2 |      6 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+------------------------------------------------------------------------------------------------------------------------------
+[INFO RSZ-0059] Removed 1 buffers.
+[INFO RSZ-0045] Inserted 14 buffers, 1 to split loads.
+[INFO RSZ-0051] Resized 84 instances: 84 up, 0 up match, 0 down, 0 VT
+[INFO RSZ-0043] Swapped pins on 38 instances.
+[WARNING RSZ-0062] Unable to repair all setup violations.
+[INFO RSZ-0505] Runtime: 4.87s
+[INFO RSZ-0033] No hold violations found.
+[INFO RSZ-0506] Runtime: 0.00s
+Took 5 seconds: repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -match_cell_footprint -verbose
+detailed_placement
+[INFO DPL-0006] Core area: 493898.69 um^2
+[INFO DPL-0007] Movable instances area: 58870.21 um^2
+[INFO DPL-0008] Fixed instances area within core: 8132.80 um^2
+[INFO DPL-0009] Utilization: 13.6%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 13215 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 0.
+[INFO DPL-0500] Runtime: 0.04s
+Placement Analysis
+---------------------------------
+total displacement        187.9 u
+average displacement        0.0 u
+max displacement           10.9 u
+original HPWL          184005.5 u
+legalized HPWL         184192.9 u
+delta HPWL                    0 %
+
+Report metrics stage 4, cts final...
+
+==========================================================================
+cts final report_design_area
+--------------------------------------------------------------------------
+Design area 67003 um^2 14% utilization.
+write_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/4_1_cts.odb
+write_sdc -no_timestamp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/4_cts.sdc
+Elapsed time: 0:08.02[h:]min:sec. CPU time: user 12.35 sys 2.75 (188%). Peak memory: 255968KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+4_1_cts                   .odb            8            249 dad1a2a36936feb340d1
+cp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/4_1_cts.odb ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/4_cts.odb
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 5_1_grt global_route
+Running global_route.tcl, stage 5_1_grt
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/4_cts.odb
+read_sdc ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/4_cts.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+pin_access
+[INFO DRT-0149] Reading tech and libs.
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer mcon
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer mcon
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via2
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via2
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via3
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via3
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via4
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via4
+
+Units:                1000
+Number of layers:     13
+Number of macros:     441
+Number of vias:       29
+Number of viarulegen: 25
+
+[INFO DRT-0150] Reading design.
+[WARNING DRT-0120] Large net net1941 has 119 pins which may impact routing performance. Consider optimization.
+[WARNING DRT-0120] Large net net2058 has 120 pins which may impact routing performance. Consider optimization.
+
+Design:                   fp32_fma_ii1
+Die area:                 ( 0 0 ) ( 706360 706360 )
+Number of track patterns: 12
+Number of DEF vias:       0
+Number of components:     13215
+Number of terminals:      143
+Number of snets:          2
+Number of nets:           7551
+
+[INFO DRT-0167] List of default vias:
+  Layer via
+    default via: M1M2_PR
+  Layer via2
+    default via: M2M3_PR
+  Layer via3
+    default via: M3M4_PR
+  Layer via4
+    default via: M4M5_PR
+[INFO DRT-0162] Library cell analysis.
+[INFO DRT-0163] Instance analysis.
+[INFO DRT-0164] Number of unique instances = 250.
+[INFO DRT-0168] Init region query.
+[INFO DRT-0024]   Complete FR_MASTERSLICE.
+[INFO DRT-0024]   Complete Fr_VIA.
+[INFO DRT-0024]   Complete li1.
+[INFO DRT-0024]   Complete mcon.
+[INFO DRT-0024]   Complete met1.
+[INFO DRT-0024]   Complete via.
+[INFO DRT-0024]   Complete met2.
+[INFO DRT-0024]   Complete via2.
+[INFO DRT-0024]   Complete met3.
+[INFO DRT-0024]   Complete via3.
+[INFO DRT-0024]   Complete met4.
+[INFO DRT-0024]   Complete via4.
+[INFO DRT-0024]   Complete met5.
+[INFO DRT-0033] FR_MASTERSLICE shape region query size = 0.
+[INFO DRT-0033] FR_VIA shape region query size = 0.
+[INFO DRT-0033] li1 shape region query size = 208816.
+[INFO DRT-0033] mcon shape region query size = 114011.
+[INFO DRT-0033] met1 shape region query size = 46505.
+[INFO DRT-0033] via shape region query size = 33025.
+[INFO DRT-0033] met2 shape region query size = 19930.
+[INFO DRT-0033] via2 shape region query size = 26420.
+[INFO DRT-0033] met3 shape region query size = 19841.
+[INFO DRT-0033] via3 shape region query size = 26420.
+[INFO DRT-0033] met4 shape region query size = 7957.
+[INFO DRT-0033] via4 shape region query size = 1301.
+[INFO DRT-0033] met5 shape region query size = 1403.
+[INFO DRT-0165] Start pin access.
+[INFO DRT-0076]   Complete 1000 pins.
+[INFO DRT-0076]   Complete 2000 pins.
+[INFO DRT-0078]   Complete 2086 pins.
+[INFO DRT-0079]   Complete 100 unique inst patterns.
+[INFO DRT-0079]   Complete 200 unique inst patterns.
+[INFO DRT-0081]   Complete 250 unique inst patterns.
+[INFO DRT-0084]   Complete 4774 groups.
+#scanned instances     = 13215
+#unique  instances     = 250
+#stdCellGenAp          = 9070
+#stdCellValidPlanarAp  = 103
+#stdCellValidViaAp     = 6345
+#stdCellPinNoAp        = 8
+#stdCellPinCnt         = 23830
+#instTermValidViaApCnt = 0
+#macroGenAp            = 0
+#macroValidPlanarAp    = 0
+#macroValidViaAp       = 0
+#macroNoAp             = 0
+[INFO DRT-0166] Complete pin access.
+[INFO DRT-0267] cpu time = 00:03:19, elapsed time = 00:00:25, memory = 216.02 (MB), peak = 215.03 (MB)
+Took 25 seconds: pin_access
+global_route -congestion_report_file ./reports/sky130hd/d_dsp02_fp32_fma_ii1/base/congestion.rpt -congestion_iterations 30 -congestion_report_iter_step 5 -verbose
+[INFO GRT-0020] Min routing layer: met1
+[INFO GRT-0021] Max routing layer: met5
+[INFO GRT-0022] Global adjustment: 0%
+[INFO GRT-0023] Grid origin: (0, 0)
+[INFO GRT-0088] Layer li1     Track-Pitch = 0.4600  line-2-Via Pitch: 0.3400
+[INFO GRT-0088] Layer met1    Track-Pitch = 0.3400  line-2-Via Pitch: 0.3400
+[INFO GRT-0088] Layer met2    Track-Pitch = 0.4600  line-2-Via Pitch: 0.3500
+[INFO GRT-0088] Layer met3    Track-Pitch = 0.6800  line-2-Via Pitch: 0.6150
+[INFO GRT-0088] Layer met4    Track-Pitch = 0.9200  line-2-Via Pitch: 1.0400
+[INFO GRT-0088] Layer met5    Track-Pitch = 3.4000  line-2-Via Pitch: 3.1100
+[INFO GRT-0003] Macros: 0
+[INFO GRT-0004] Blockages: 6407
+[INFO GRT-0019] Found 36 clock nets.
+[INFO GRT-0001] Minimum degree: 2
+[INFO GRT-0002] Maximum degree: 120
+
+[INFO GRT-0053] Routing resources analysis:
+          Routing      Original      Derated      Resource
+Layer     Direction    Resources     Resources    Reduction (%)
+---------------------------------------------------------------
+li1        Vertical            0             0          0.00%
+met1       Horizontal     152011        118007          22.37%
+met2       Vertical       133623        102616          23.20%
+met3       Horizontal      98054         76599          21.88%
+met4       Vertical        66054         47369          28.29%
+met5       Horizontal      14342         10403          27.46%
+---------------------------------------------------------------
+
+[INFO GRT-0101] Running extra iterations to remove congestion.
+[INFO GRT-0102] Start extra iteration 1/30
+[INFO GRT-0102] Start extra iteration 2/30
+[INFO GRT-0102] Start extra iteration 3/30
+[INFO GRT-0197] Via related to pin nodes: 39319
+[INFO GRT-0198] Via related Steiner nodes: 767
+[INFO GRT-0199] Via filling finished.
+[INFO GRT-0111] Final number of vias: 49381
+[INFO GRT-0112] Final usage 3D: 178923
+
+[INFO GRT-0096] Final congestion report:
+Layer         Resource        Demand        Usage (%)    Max H / Max V / Total Congestion
+---------------------------------------------------------------------------------------
+li1                  0             0            0.00%             0 /  0 /  0
+met1            118007         13566           11.50%             0 /  0 /  0
+met2            102616         14854           14.48%             0 /  0 /  0
+met3             76599          1079            1.41%             0 /  0 /  0
+met4             47369          1281            2.70%             0 /  0 /  0
+met5             10403             0            0.00%             0 /  0 /  0
+---------------------------------------------------------------------------------------
+Total           354994         30780            8.67%             0 /  0 /  0
+
+[INFO GRT-0018] Total wirelength: 324789 um
+[INFO GRT-0014] Routed nets: 7541
+[INFO GRT-0303] Global routing runtime = 00:00:00
+estimate_parasitics -global_routing
+Perform buffer insertion and gate resizing...
+repair_design -verbose
+Iteration |   Area    | Resized | Buffers | Nets repaired | Remaining
+---------------------------------------------------------------------
+        0 |     +0.0% |       0 |       0 |             0 |      7579
+     1000 |     +0.0% |       0 |       0 |             0 |      6579
+     2000 |     +0.0% |       0 |       0 |             0 |      5579
+     3000 |     +0.0% |       0 |       0 |             0 |      4579
+[WARNING RSZ-0104] Net _06203_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _06202_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _06251_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _00635_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _06252_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _06250_ only has one pin. Check if it is intended to be dangling.
+     4000 |     +0.0% |       0 |       0 |             0 |      3579
+[WARNING RSZ-0104] Net _06296_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _06295_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _06262_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _06261_ only has one pin. Check if it is intended to be dangling.
+     5000 |     +0.0% |       0 |       0 |             0 |      2579
+     6000 |     +0.0% |       0 |       0 |             0 |      1579
+     7000 |     +0.0% |       0 |       0 |             0 |       579
+    final |     +0.0% |       0 |       0 |             0 |         0
+---------------------------------------------------------------------
+[INFO RSZ-0504] Runtime: 0.43s
+global_route -start_incremental
+detailed_placement
+[INFO DPL-0006] Core area: 493898.69 um^2
+[INFO DPL-0007] Movable instances area: 58870.21 um^2
+[INFO DPL-0008] Fixed instances area within core: 8132.80 um^2
+[INFO DPL-0009] Utilization: 13.6%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 13215 cells
+[INFO DPL-0500] Runtime: 0.04s
+Placement Analysis
+---------------------------------
+total displacement          0.0 u
+average displacement        0.0 u
+max displacement            0.0 u
+original HPWL          184192.9 u
+legalized HPWL         184192.9 u
+delta HPWL                    0 %
+
+global_route -end_incremental -congestion_report_file ./reports/sky130hd/d_dsp02_fp32_fma_ii1/base/congestion_post_repair_design.rpt
+Repair setup and hold violations...
+estimate_parasitics -global_routing
+repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -verbose
+[INFO RSZ-0100] Repair move sequence: UnbufferMove SizeUpMove SwapPinsMove BufferMove CloneMove SplitLoadMove 
+[INFO RSZ-0094] Found 83 endpoints with setup violations.
+[INFO RSZ-0099] Repairing 83 out of 83 (100.00%) violating endpoints...
+   Iter   | Removed | Resized | Inserted | Cloned |  Pin  |   Area   |    WNS   |   StTNS    |   EnTNS    |  Viol  |  Worst  
+          | Buffers |  Gates  | Buffers  |  Gates | Swaps |          |          |            |            | Endpts | St/EnPt 
+------------------------------------------------------------------------------------------------------------------------------
+       0* |       0 |       0 |        0 |      0 |     0 |    +0.0% |   -0.912 |      -54.5 |      -42.7 |     83 | u_fma.sum_q\[74\]$_DFFE_PN0P_/D
+      10* |       0 |       5 |        0 |      0 |     4 |    +0.0% |   -0.822 |      -48.9 |      -37.1 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+      20* |       0 |      10 |        0 |      0 |     9 |    +0.1% |   -0.779 |      -46.7 |      -35.1 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+      30* |       0 |      13 |        5 |      0 |    15 |    +0.1% |   -0.618 |      -27.9 |      -24.1 |     83 | u_fma.sum_q\[75\]$_DFFE_PN0P_/D
+      40* |       0 |      17 |        7 |      0 |    19 |    +0.2% |   -0.580 |      -26.3 |      -22.0 |     83 | u_fma.sum_q\[73\]$_DFFE_PN0P_/D
+      50* |       0 |      22 |       13 |      0 |    21 |    +0.3% |   -0.562 |      -25.5 |      -21.1 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+      60* |       0 |      27 |       14 |      0 |    25 |    +0.4% |   -0.467 |      -20.5 |      -17.5 |     83 | u_fma.sum_q\[75\]$_DFFE_PN0P_/D
+      70* |       0 |      31 |       18 |      0 |    29 |    +0.4% |   -0.423 |      -16.7 |      -14.7 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+      80* |       0 |      34 |       22 |      0 |    33 |    +0.5% |   -0.396 |      -15.0 |      -12.3 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+      90* |       0 |      39 |       24 |      0 |    36 |    +0.5% |   -0.407 |      -15.3 |      -12.9 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     100* |       0 |      45 |       24 |      0 |    40 |    +0.6% |   -0.363 |      -14.1 |      -10.7 |     83 | u_fma.status_o\[2\]$_DFFE_PN0P_/D
+     110* |       0 |      50 |       24 |      0 |    45 |    +0.6% |   -0.348 |      -12.6 |       -9.5 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     120* |       1 |      56 |       24 |      0 |    48 |    +0.6% |   -0.337 |      -11.1 |       -8.1 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     130* |       1 |      60 |       26 |      0 |    52 |    +0.6% |   -0.309 |      -10.5 |       -6.7 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     140* |       1 |      68 |       26 |      0 |    54 |    +0.7% |   -0.314 |       -8.4 |       -5.8 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     150* |       1 |      75 |       26 |      0 |    57 |    +0.8% |   -0.247 |       -6.8 |       -4.3 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     160* |       1 |      82 |       26 |      0 |    60 |    +0.8% |   -0.239 |       -6.0 |       -4.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     170* |       1 |      91 |       27 |      0 |    60 |    +0.9% |   -0.224 |       -5.7 |       -3.8 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     180* |       1 |      96 |       28 |      0 |    64 |    +1.0% |   -0.236 |       -5.9 |       -3.9 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     190* |       1 |     102 |       30 |      0 |    66 |    +1.0% |   -0.173 |       -3.5 |       -2.7 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     200* |       1 |     106 |       32 |      0 |    70 |    +1.1% |   -0.137 |       -1.4 |       -1.2 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     210* |       1 |     112 |       33 |      0 |    73 |    +1.2% |   -0.059 |       -0.4 |       -0.3 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     220* |       2 |     116 |       36 |      1 |    74 |    +1.2% |   -0.074 |       -0.5 |       -0.4 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     230* |       2 |     121 |       38 |      1 |    77 |    +1.3% |   -0.038 |       -0.2 |       -0.1 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     238* |       2 |     129 |       38 |      1 |    77 |    +1.4% |   -0.022 |       -0.1 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     239* |       2 |     129 |       38 |      1 |    77 |    +1.4% |   -0.022 |       -0.1 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     240* |       2 |     129 |       38 |      1 |    77 |    +1.4% |   -0.022 |       -0.1 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     250* |       3 |     135 |       39 |      1 |    79 |    +1.4% |   -0.013 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     260* |       6 |     138 |       43 |      1 |    79 |    +1.4% |   -0.061 |       -0.3 |       -0.2 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     270* |      11 |     138 |       48 |      1 |    79 |    +1.4% |   -0.061 |       -0.3 |       -0.2 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     280* |      16 |     138 |       53 |      1 |    79 |    +1.4% |   -0.061 |       -0.3 |       -0.2 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     290* |      21 |     138 |       58 |      1 |    79 |    +1.4% |   -0.061 |       -0.3 |       -0.2 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     300* |      26 |     138 |       63 |      1 |    79 |    +1.4% |   -0.061 |       -0.3 |       -0.2 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     307* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     308* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     309* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     310* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     310* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     311* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     312* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     313* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     314* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     315* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     316* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     317* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     318* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     319* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     320* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     320* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     321* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     322* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     323* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     324* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     325* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     326* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     327* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     328* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     329* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     330* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     330* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     331* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     332* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     333* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     334* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     335* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     336* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     337* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     338* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     339* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     340* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     340* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     341* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     342* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     343* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     344* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     345* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     346* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     347* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     348* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     349* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     350* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     350* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     351* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     352* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     353* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     354* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     355* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     356* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     357* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     358* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     359* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     360* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     360* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     361* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     362* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     363* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     364* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     365* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     366* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     367* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     368* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     369* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     370* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     370* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     371* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     372* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     373* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     374* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     375* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     376* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     377* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     378* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     379* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     380* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     380* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     381* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     382* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     383* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     384* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     385* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     386* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     387* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     387* |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |     83 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+     388+ |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |      1 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+    final |       4 |     138 |       42 |      1 |    79 |    +1.5% |   -0.005 |       -0.0 |       -0.0 |      1 | u_fma.sum_q\[72\]$_DFFE_PN0P_/D
+------------------------------------------------------------------------------------------------------------------------------
+[INFO RSZ-0059] Removed 4 buffers.
+[INFO RSZ-0040] Inserted 42 buffers.
+[INFO RSZ-0051] Resized 138 instances: 138 up, 0 up match, 0 down, 0 VT
+[INFO RSZ-0043] Swapped pins on 79 instances.
+[INFO RSZ-0049] Cloned 1 instances.
+[WARNING RSZ-0062] Unable to repair all setup violations.
+[INFO RSZ-0505] Runtime: 15.66s
+[INFO RSZ-0033] No hold violations found.
+[INFO RSZ-0506] Runtime: 0.03s
+Took 16 seconds: repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -verbose
+global_route -start_incremental
+detailed_placement
+[INFO DPL-0006] Core area: 493898.69 um^2
+[INFO DPL-0007] Movable instances area: 59851.15 um^2
+[INFO DPL-0008] Fixed instances area within core: 8132.80 um^2
+[INFO DPL-0009] Utilization: 13.8%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 13254 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |         10 |         2 |         8
+        1 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 1.
+[INFO DPL-0500] Runtime: 0.05s
+Placement Analysis
+---------------------------------
+total displacement        453.3 u
+average displacement        0.0 u
+max displacement           16.3 u
+original HPWL          184669.3 u
+legalized HPWL         185285.9 u
+delta HPWL                    0 %
+
+check_placement -verbose
+global_route -end_incremental -congestion_report_file ./reports/sky130hd/d_dsp02_fp32_fma_ii1/base/congestion_post_repair_timing.rpt
+estimate_parasitics -global_routing
+global_route -start_incremental
+global_route -end_incremental -congestion_report_file ./reports/sky130hd/d_dsp02_fp32_fma_ii1/base/congestion_post_recover_power.rpt
+Repair antennas...
+[INFO GRT-0012] Found 14 antenna violations.
+[INFO GRT-0302] Inserted 13 jumpers for 13 nets.
+[INFO GRT-0012] Found 1 antenna violations.
+[INFO DPL-0006] Core area: 493898.69 um^2
+[INFO DPL-0007] Movable instances area: 59826.13 um^2
+[INFO DPL-0008] Fixed instances area within core: 8160.33 um^2
+[INFO DPL-0009] Utilization: 13.8%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 13255 cells
+[INFO DPL-0500] Runtime: 0.04s
+[INFO GRT-0015] Inserted 1 diodes.
+[INFO GRT-0012] Found 0 antenna violations.
+[INFO ANT-0002] Found 0 net violations.
+[INFO ANT-0001] Found 0 pin violations.
+Estimate parasitics...
+estimate_parasitics -global_routing
+Report metrics stage 5, global route...
+
+==========================================================================
+global route report_design_area
+--------------------------------------------------------------------------
+Design area 67986 um^2 14% utilization.
+[INFO FLW-0007] clock core_clock period 13.125000
+[INFO FLW-0008] Clock core_clock period 12.509
+[INFO FLW-0009] Clock core_clock slack -0.042
+write_sdc -no_timestamp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/updated_clks.sdc
+[INFO FLW-0011] Path endpoint path count 603
+write_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_1_grt.odb
+write_sdc -no_timestamp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_1_grt.sdc
+Elapsed time: 0:49.78[h:]min:sec. CPU time: user 256.40 sys 5.20 (525%). Peak memory: 498800KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+5_1_grt                   .odb           49            487 4b1897a355789f223330
+5_1_grt                   .sdc                             67c2ced29c37bc1c2035
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 5_2_route detail_route
+Running detail_route.tcl, stage 5_2_route
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_1_grt.odb
+read_sdc ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_1_grt.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+detailed_route -output_drc ./reports/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route_drc.rpt -output_maze ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/maze.log -droute_end_iter 64 -verbose 1 -drc_report_iter_step 5
+[INFO DRT-0149] Reading tech and libs.
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer mcon
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer mcon
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via2
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via2
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via3
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via3
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via4
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via4
+
+Units:                1000
+Number of layers:     13
+Number of macros:     441
+Number of vias:       29
+Number of viarulegen: 25
+
+[INFO DRT-0150] Reading design.
+[WARNING DRT-0120] Large net net1941 has 119 pins which may impact routing performance. Consider optimization.
+[WARNING DRT-0120] Large net net2058 has 120 pins which may impact routing performance. Consider optimization.
+
+Design:                   fp32_fma_ii1
+Die area:                 ( 0 0 ) ( 706360 706360 )
+Number of track patterns: 12
+Number of DEF vias:       0
+Number of components:     13255
+Number of terminals:      143
+Number of snets:          2
+Number of nets:           7590
+
+[INFO DRT-0167] List of default vias:
+  Layer via
+    default via: M1M2_PR
+  Layer via2
+    default via: M2M3_PR
+  Layer via3
+    default via: M3M4_PR
+  Layer via4
+    default via: M4M5_PR
+[INFO DRT-0162] Library cell analysis.
+[INFO DRT-0163] Instance analysis.
+[INFO DRT-0164] Number of unique instances = 275.
+[INFO DRT-0168] Init region query.
+[INFO DRT-0024]   Complete FR_MASTERSLICE.
+[INFO DRT-0024]   Complete Fr_VIA.
+[INFO DRT-0024]   Complete li1.
+[INFO DRT-0024]   Complete mcon.
+[INFO DRT-0024]   Complete met1.
+[INFO DRT-0024]   Complete via.
+[INFO DRT-0024]   Complete met2.
+[INFO DRT-0024]   Complete via2.
+[INFO DRT-0024]   Complete met3.
+[INFO DRT-0024]   Complete via3.
+[INFO DRT-0024]   Complete met4.
+[INFO DRT-0024]   Complete via4.
+[INFO DRT-0024]   Complete met5.
+[INFO DRT-0033] FR_MASTERSLICE shape region query size = 0.
+[INFO DRT-0033] FR_VIA shape region query size = 0.
+[INFO DRT-0033] li1 shape region query size = 210916.
+[INFO DRT-0033] mcon shape region query size = 115597.
+[INFO DRT-0033] met1 shape region query size = 46608.
+[INFO DRT-0033] via shape region query size = 33025.
+[INFO DRT-0033] met2 shape region query size = 19930.
+[INFO DRT-0033] via2 shape region query size = 26420.
+[INFO DRT-0033] met3 shape region query size = 19841.
+[INFO DRT-0033] via3 shape region query size = 26420.
+[INFO DRT-0033] met4 shape region query size = 7957.
+[INFO DRT-0033] via4 shape region query size = 1301.
+[INFO DRT-0033] met5 shape region query size = 1403.
+[INFO DRT-0165] Start pin access.
+[INFO DRT-0076]   Complete 1000 pins.
+[INFO DRT-0076]   Complete 2000 pins.
+[INFO DRT-0078]   Complete 2292 pins.
+[INFO DRT-0079]   Complete 100 unique inst patterns.
+[INFO DRT-0079]   Complete 200 unique inst patterns.
+[INFO DRT-0081]   Complete 275 unique inst patterns.
+[INFO DRT-0084]   Complete 4802 groups.
+#scanned instances     = 13255
+#unique  instances     = 275
+#stdCellGenAp          = 9874
+#stdCellValidPlanarAp  = 110
+#stdCellValidViaAp     = 6938
+#stdCellPinNoAp        = 8
+#stdCellPinCnt         = 23908
+#instTermValidViaApCnt = 0
+#macroGenAp            = 0
+#macroValidPlanarAp    = 0
+#macroValidViaAp       = 0
+#macroNoAp             = 0
+[INFO DRT-0166] Complete pin access.
+[INFO DRT-0267] cpu time = 00:03:25, elapsed time = 00:00:25, memory = 346.30 (MB), peak = 345.08 (MB)
+
+[INFO DRT-0157] Number of guides:     53716
+
+[INFO DRT-0169] Post process guides.
+[INFO DRT-0176] GCELLGRID X 0 DO 102 STEP 6900 ;
+[INFO DRT-0177] GCELLGRID Y 0 DO 102 STEP 6900 ;
+[INFO DRT-0028]   Complete FR_MASTERSLICE.
+[INFO DRT-0028]   Complete Fr_VIA.
+[INFO DRT-0028]   Complete li1.
+[INFO DRT-0028]   Complete mcon.
+[INFO DRT-0028]   Complete met1.
+[INFO DRT-0028]   Complete via.
+[INFO DRT-0028]   Complete met2.
+[INFO DRT-0028]   Complete via2.
+[INFO DRT-0028]   Complete met3.
+[INFO DRT-0028]   Complete via3.
+[INFO DRT-0028]   Complete met4.
+[INFO DRT-0028]   Complete via4.
+[INFO DRT-0028]   Complete met5.
+[INFO DRT-0178] Init guide query.
+[INFO DRT-0035]   Complete FR_MASTERSLICE (guide).
+[INFO DRT-0035]   Complete Fr_VIA (guide).
+[INFO DRT-0035]   Complete li1 (guide).
+[INFO DRT-0035]   Complete mcon (guide).
+[INFO DRT-0035]   Complete met1 (guide).
+[INFO DRT-0035]   Complete via (guide).
+[INFO DRT-0035]   Complete met2 (guide).
+[INFO DRT-0035]   Complete via2 (guide).
+[INFO DRT-0035]   Complete met3 (guide).
+[INFO DRT-0035]   Complete via3 (guide).
+[INFO DRT-0035]   Complete met4 (guide).
+[INFO DRT-0035]   Complete via4 (guide).
+[INFO DRT-0035]   Complete met5 (guide).
+[INFO DRT-0036] FR_MASTERSLICE guide region query size = 0.
+[INFO DRT-0036] FR_VIA guide region query size = 0.
+[INFO DRT-0036] li1 guide region query size = 18810.
+[INFO DRT-0036] mcon guide region query size = 0.
+[INFO DRT-0036] met1 guide region query size = 16455.
+[INFO DRT-0036] via guide region query size = 0.
+[INFO DRT-0036] met2 guide region query size = 7921.
+[INFO DRT-0036] via2 guide region query size = 0.
+[INFO DRT-0036] met3 guide region query size = 517.
+[INFO DRT-0036] via3 guide region query size = 0.
+[INFO DRT-0036] met4 guide region query size = 191.
+[INFO DRT-0036] via4 guide region query size = 0.
+[INFO DRT-0036] met5 guide region query size = 1.
+[INFO DRT-0179] Init gr pin query.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 365.84 (MB), peak = 364.84 (MB)
+[INFO DRT-0245] skipped writing guide updates to database.
+[INFO DRT-0181] Start track assignment.
+[INFO DRT-0184] Done with 26922 vertical wires in 3 frboxes and 16973 horizontal wires in 3 frboxes.
+[INFO DRT-0186] Done with 3112 vertical wires in 3 frboxes and 5022 horizontal wires in 3 frboxes.
+[INFO DRT-0182] Complete track assignment.
+[INFO DRT-0267] cpu time = 00:00:02, elapsed time = 00:00:01, memory = 498.77 (MB), peak = 530.48 (MB)
+[INFO DRT-0187] Start routing data preparation.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 498.77 (MB), peak = 530.48 (MB)
+[INFO DRT-0194] Start detail routing.
+[INFO DRT-0195] Start 0th optimization iteration.
+    Completing 10% with 0 violations.
+    elapsed time = 00:00:00, memory = 721.28 (MB).
+    Completing 20% with 0 violations.
+    elapsed time = 00:00:02, memory = 912.35 (MB).
+    Completing 30% with 813 violations.
+    elapsed time = 00:00:09, memory = 753.16 (MB).
+    Completing 40% with 813 violations.
+    elapsed time = 00:00:10, memory = 952.72 (MB).
+    Completing 50% with 813 violations.
+    elapsed time = 00:00:12, memory = 1069.75 (MB).
+    Completing 60% with 1500 violations.
+    elapsed time = 00:00:16, memory = 958.27 (MB).
+    Completing 70% with 1500 violations.
+    elapsed time = 00:00:19, memory = 1020.10 (MB).
+    Completing 80% with 2255 violations.
+    elapsed time = 00:00:25, memory = 991.47 (MB).
+    Completing 90% with 2255 violations.
+    elapsed time = 00:00:27, memory = 1191.48 (MB).
+    Completing 100% with 3160 violations.
+    elapsed time = 00:00:36, memory = 1065.76 (MB).
+[INFO DRT-0199]   Number of violations = 3667.
+Viol/Layer         li1   mcon   met1    via   met2   met3   met4
+Cut Spacing          0     11      0      0      0      0      0
+Metal Spacing        0      0    563      0    167      2      0
+Min Hole             0      0      3      0      1      0      0
+Recheck              7      0    372      0    124      2      2
+Short                0      2   2185      4    222      0      0
+[INFO DRT-0267] cpu time = 00:03:07, elapsed time = 00:00:36, memory = 1299.96 (MB), peak = 1299.24 (MB)
+Total wire length = 220116 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 98957 um.
+Total wire length on LAYER met2 = 105627 um.
+Total wire length on LAYER met3 = 7986 um.
+Total wire length on LAYER met4 = 7531 um.
+Total wire length on LAYER met5 = 13 um.
+Total number of vias = 48764.
+Up-via summary (total 48764):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22913
+           met1    24685
+           met2      842
+           met3      322
+           met4        2
+------------------------
+               48764
+
+
+[INFO DRT-0195] Start 1st optimization iteration.
+    Completing 10% with 3667 violations.
+    elapsed time = 00:00:00, memory = 1363.81 (MB).
+    Completing 20% with 3667 violations.
+    elapsed time = 00:00:02, memory = 1517.50 (MB).
+    Completing 30% with 3208 violations.
+    elapsed time = 00:00:11, memory = 1307.89 (MB).
+    Completing 40% with 3208 violations.
+    elapsed time = 00:00:12, memory = 1347.75 (MB).
+    Completing 50% with 3208 violations.
+    elapsed time = 00:00:14, memory = 1427.17 (MB).
+    Completing 60% with 2863 violations.
+    elapsed time = 00:00:23, memory = 1317.46 (MB).
+    Completing 70% with 2863 violations.
+    elapsed time = 00:00:25, memory = 1392.96 (MB).
+    Completing 80% with 2567 violations.
+    elapsed time = 00:00:28, memory = 1317.46 (MB).
+    Completing 90% with 2567 violations.
+    elapsed time = 00:00:30, memory = 1470.28 (MB).
+    Completing 100% with 2225 violations.
+    elapsed time = 00:00:39, memory = 1318.01 (MB).
+[INFO DRT-0199]   Number of violations = 2225.
+Viol/Layer        mcon   met1   met2   met3
+Cut Spacing          6      0      0      0
+Metal Spacing        0    353     64      2
+Short                0   1712     88      0
+[INFO DRT-0267] cpu time = 00:02:48, elapsed time = 00:00:39, memory = 1321.13 (MB), peak = 1520.31 (MB)
+Total wire length = 217948 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 97881 um.
+Total wire length on LAYER met2 = 104704 um.
+Total wire length on LAYER met3 = 7898 um.
+Total wire length on LAYER met4 = 7464 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48188.
+Up-via summary (total 48188):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22899
+           met1    24168
+           met2      813
+           met3      308
+           met4        0
+------------------------
+               48188
+
+
+[INFO DRT-0195] Start 2nd optimization iteration.
+    Completing 10% with 2225 violations.
+    elapsed time = 00:00:00, memory = 1321.13 (MB).
+    Completing 20% with 2225 violations.
+    elapsed time = 00:00:01, memory = 1472.82 (MB).
+    Completing 30% with 2106 violations.
+    elapsed time = 00:00:12, memory = 1323.72 (MB).
+    Completing 40% with 2106 violations.
+    elapsed time = 00:00:13, memory = 1404.43 (MB).
+    Completing 50% with 2106 violations.
+    elapsed time = 00:00:21, memory = 1324.32 (MB).
+    Completing 60% with 2022 violations.
+    elapsed time = 00:00:22, memory = 1390.50 (MB).
+    Completing 70% with 2022 violations.
+    elapsed time = 00:00:24, memory = 1459.21 (MB).
+    Completing 80% with 1942 violations.
+    elapsed time = 00:00:30, memory = 1324.32 (MB).
+    Completing 90% with 1942 violations.
+    elapsed time = 00:00:32, memory = 1393.98 (MB).
+    Completing 100% with 1922 violations.
+    elapsed time = 00:00:37, memory = 1324.32 (MB).
+[INFO DRT-0199]   Number of violations = 1922.
+Viol/Layer        mcon   met1   met2
+Cut Spacing          8      0      0
+Metal Spacing        0    301     51
+Short                0   1502     60
+[INFO DRT-0267] cpu time = 00:02:44, elapsed time = 00:00:38, memory = 1327.13 (MB), peak = 1520.31 (MB)
+Total wire length = 217531 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 97651 um.
+Total wire length on LAYER met2 = 104612 um.
+Total wire length on LAYER met3 = 7853 um.
+Total wire length on LAYER met4 = 7414 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 47945.
+Up-via summary (total 47945):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22888
+           met1    23953
+           met2      797
+           met3      307
+           met4        0
+------------------------
+               47945
+
+
+[INFO DRT-0195] Start 3rd optimization iteration.
+    Completing 10% with 1922 violations.
+    elapsed time = 00:00:00, memory = 1327.13 (MB).
+    Completing 20% with 1922 violations.
+    elapsed time = 00:00:01, memory = 1476.54 (MB).
+    Completing 30% with 1513 violations.
+    elapsed time = 00:00:08, memory = 1327.13 (MB).
+    Completing 40% with 1513 violations.
+    elapsed time = 00:00:09, memory = 1393.98 (MB).
+    Completing 50% with 1513 violations.
+    elapsed time = 00:00:10, memory = 1434.95 (MB).
+    Completing 60% with 1091 violations.
+    elapsed time = 00:00:15, memory = 1327.13 (MB).
+    Completing 70% with 1091 violations.
+    elapsed time = 00:00:16, memory = 1403.98 (MB).
+    Completing 80% with 791 violations.
+    elapsed time = 00:00:25, memory = 1327.41 (MB).
+    Completing 90% with 791 violations.
+    elapsed time = 00:00:25, memory = 1447.82 (MB).
+    Completing 100% with 219 violations.
+    elapsed time = 00:00:32, memory = 1327.41 (MB).
+[INFO DRT-0199]   Number of violations = 219.
+Viol/Layer        met1   met2
+Metal Spacing       66      8
+Short              136      9
+[INFO DRT-0267] cpu time = 00:01:54, elapsed time = 00:00:32, memory = 1327.41 (MB), peak = 1520.31 (MB)
+Total wire length = 217361 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93258 um.
+Total wire length on LAYER met2 = 104888 um.
+Total wire length on LAYER met3 = 11692 um.
+Total wire length on LAYER met4 = 7522 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48939.
+Up-via summary (total 48939):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22888
+           met1    24285
+           met2     1447
+           met3      319
+           met4        0
+------------------------
+               48939
+
+
+[INFO DRT-0195] Start 4th optimization iteration.
+    Completing 10% with 219 violations.
+    elapsed time = 00:00:00, memory = 1327.41 (MB).
+    Completing 20% with 219 violations.
+    elapsed time = 00:00:00, memory = 1327.41 (MB).
+    Completing 30% with 119 violations.
+    elapsed time = 00:00:01, memory = 1327.41 (MB).
+    Completing 40% with 119 violations.
+    elapsed time = 00:00:01, memory = 1327.41 (MB).
+    Completing 50% with 119 violations.
+    elapsed time = 00:00:01, memory = 1327.41 (MB).
+    Completing 60% with 98 violations.
+    elapsed time = 00:00:04, memory = 1327.41 (MB).
+    Completing 70% with 98 violations.
+    elapsed time = 00:00:04, memory = 1327.41 (MB).
+    Completing 80% with 67 violations.
+    elapsed time = 00:00:04, memory = 1327.41 (MB).
+    Completing 90% with 67 violations.
+    elapsed time = 00:00:04, memory = 1327.41 (MB).
+    Completing 100% with 1 violations.
+    elapsed time = 00:00:05, memory = 1327.41 (MB).
+[INFO DRT-0199]   Number of violations = 1.
+Viol/Layer        met1
+Metal Spacing        1
+[INFO DRT-0267] cpu time = 00:00:11, elapsed time = 00:00:05, memory = 1327.41 (MB), peak = 1520.31 (MB)
+Total wire length = 217339 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93034 um.
+Total wire length on LAYER met2 = 104840 um.
+Total wire length on LAYER met3 = 11904 um.
+Total wire length on LAYER met4 = 7560 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48979.
+Up-via summary (total 48979):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22886
+           met1    24290
+           met2     1481
+           met3      322
+           met4        0
+------------------------
+               48979
+
+
+[INFO DRT-0195] Start 5th guides tiles iteration.
+    Completing 50% with 1 violations.
+    elapsed time = 00:00:00, memory = 1327.41 (MB).
+    Completing 100% with 0 violations.
+    elapsed time = 00:00:00, memory = 1327.41 (MB).
+[INFO DRT-0199]   Number of violations = 0.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 1327.54 (MB), peak = 1520.31 (MB)
+Total wire length = 217339 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93033 um.
+Total wire length on LAYER met2 = 104841 um.
+Total wire length on LAYER met3 = 11904 um.
+Total wire length on LAYER met4 = 7560 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48979.
+Up-via summary (total 48979):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22886
+           met1    24290
+           met2     1481
+           met3      322
+           met4        0
+------------------------
+               48979
+
+
+[INFO DRT-0198] Complete detail routing.
+Total wire length = 217339 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93033 um.
+Total wire length on LAYER met2 = 104841 um.
+Total wire length on LAYER met3 = 11904 um.
+Total wire length on LAYER met4 = 7560 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48979.
+Up-via summary (total 48979):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22886
+           met1    24290
+           met2     1481
+           met3      322
+           met4        0
+------------------------
+               48979
+
+
+[INFO DRT-0267] cpu time = 00:10:47, elapsed time = 00:02:32, memory = 1327.54 (MB), peak = 1520.31 (MB)
+
+[INFO DRT-0180] Post processing.
+[INFO DRT-0501] Runtime: 179.88s
+Took 180 seconds: detailed_route -output_drc ./reports/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route_drc.rpt -output_maze ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/maze.log -droute_end_iter 64 -verbose 1 -drc_report_iter_step 5
+[INFO GRT-0012] Found 1 antenna violations.
+[INFO DPL-0006] Core area: 493898.69 um^2
+[INFO DPL-0007] Movable instances area: 0.00 um^2
+[INFO DPL-0008] Fixed instances area within core: 67988.96 um^2
+[INFO DPL-0009] Utilization: 13.8%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 13256 cells
+[INFO DPL-0500] Runtime: 0.04s
+[INFO GRT-0015] Inserted 1 diodes.
+[WARNING DRT-0120] Large net net1941 has 119 pins which may impact routing performance. Consider optimization.
+[WARNING DRT-0120] Large net net2058 has 120 pins which may impact routing performance. Consider optimization.
+[INFO DRT-0024]   Complete FR_MASTERSLICE.
+[INFO DRT-0024]   Complete Fr_VIA.
+[INFO DRT-0024]   Complete li1.
+[INFO DRT-0024]   Complete mcon.
+[INFO DRT-0024]   Complete met1.
+[INFO DRT-0024]   Complete via.
+[INFO DRT-0024]   Complete met2.
+[INFO DRT-0024]   Complete via2.
+[INFO DRT-0024]   Complete met3.
+[INFO DRT-0024]   Complete via3.
+[INFO DRT-0024]   Complete met4.
+[INFO DRT-0024]   Complete via4.
+[INFO DRT-0024]   Complete met5.
+[INFO DRT-0165] Start pin access.
+[INFO DRT-0076]   Complete 1000 pins.
+[INFO DRT-0076]   Complete 2000 pins.
+[INFO DRT-0078]   Complete 2292 pins.
+[INFO DRT-0079]   Complete 100 unique inst patterns.
+[INFO DRT-0079]   Complete 200 unique inst patterns.
+[INFO DRT-0081]   Complete 275 unique inst patterns.
+[INFO DRT-0084]   Complete 4801 groups.
+#scanned instances     = 13256
+#unique  instances     = 275
+#stdCellGenAp          = 9874
+#stdCellValidPlanarAp  = 110
+#stdCellValidViaAp     = 6938
+#stdCellPinNoAp        = 8
+#stdCellPinCnt         = 23908
+#instTermValidViaApCnt = 0
+#macroGenAp            = 0
+#macroValidPlanarAp    = 0
+#macroValidViaAp       = 0
+#macroNoAp             = 0
+[INFO DRT-0166] Complete pin access.
+[INFO DRT-0267] cpu time = 00:03:30, elapsed time = 00:00:26, memory = 1229.33 (MB), peak = 1520.31 (MB)
+
+[INFO DRT-0157] Number of guides:     53716
+
+[INFO DRT-0169] Post process guides.
+[INFO DRT-0176] GCELLGRID X 0 DO 102 STEP 6900 ;
+[INFO DRT-0177] GCELLGRID Y 0 DO 102 STEP 6900 ;
+[INFO DRT-0028]   Complete FR_MASTERSLICE.
+[INFO DRT-0028]   Complete Fr_VIA.
+[INFO DRT-0028]   Complete li1.
+[INFO DRT-0028]   Complete mcon.
+[INFO DRT-0028]   Complete met1.
+[INFO DRT-0028]   Complete via.
+[INFO DRT-0028]   Complete met2.
+[INFO DRT-0028]   Complete via2.
+[INFO DRT-0028]   Complete met3.
+[INFO DRT-0028]   Complete via3.
+[INFO DRT-0028]   Complete met4.
+[INFO DRT-0028]   Complete via4.
+[INFO DRT-0028]   Complete met5.
+[INFO DRT-0178] Init guide query.
+[INFO DRT-0035]   Complete FR_MASTERSLICE (guide).
+[INFO DRT-0035]   Complete Fr_VIA (guide).
+[INFO DRT-0035]   Complete li1 (guide).
+[INFO DRT-0035]   Complete mcon (guide).
+[INFO DRT-0035]   Complete met1 (guide).
+[INFO DRT-0035]   Complete via (guide).
+[INFO DRT-0035]   Complete met2 (guide).
+[INFO DRT-0035]   Complete via2 (guide).
+[INFO DRT-0035]   Complete met3 (guide).
+[INFO DRT-0035]   Complete via3 (guide).
+[INFO DRT-0035]   Complete met4 (guide).
+[INFO DRT-0035]   Complete via4 (guide).
+[INFO DRT-0035]   Complete met5 (guide).
+[INFO DRT-0036] FR_MASTERSLICE guide region query size = 0.
+[INFO DRT-0036] FR_VIA guide region query size = 0.
+[INFO DRT-0036] li1 guide region query size = 18810.
+[INFO DRT-0036] mcon guide region query size = 0.
+[INFO DRT-0036] met1 guide region query size = 16454.
+[INFO DRT-0036] via guide region query size = 0.
+[INFO DRT-0036] met2 guide region query size = 7921.
+[INFO DRT-0036] via2 guide region query size = 0.
+[INFO DRT-0036] met3 guide region query size = 518.
+[INFO DRT-0036] via3 guide region query size = 0.
+[INFO DRT-0036] met4 guide region query size = 190.
+[INFO DRT-0036] via4 guide region query size = 0.
+[INFO DRT-0036] met5 guide region query size = 1.
+[INFO DRT-0179] Init gr pin query.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 1229.33 (MB), peak = 1520.31 (MB)
+[INFO DRT-0245] skipped writing guide updates to database.
+[INFO DRT-0181] Start track assignment.
+[INFO DRT-0184] Done with 26921 vertical wires in 3 frboxes and 16973 horizontal wires in 3 frboxes.
+[INFO DRT-0186] Done with 3068 vertical wires in 3 frboxes and 4997 horizontal wires in 3 frboxes.
+[INFO DRT-0182] Complete track assignment.
+[INFO DRT-0267] cpu time = 00:00:01, elapsed time = 00:00:01, memory = 1229.33 (MB), peak = 1520.31 (MB)
+[INFO DRT-0187] Start routing data preparation.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 1229.33 (MB), peak = 1520.31 (MB)
+[INFO DRT-0194] Start detail routing.
+[INFO DRT-0195] Start 0th optimization iteration.
+    Completing 10% with 0 violations.
+    elapsed time = 00:00:00, memory = 1264.23 (MB).
+    Completing 20% with 0 violations.
+    elapsed time = 00:00:00, memory = 1378.87 (MB).
+    Completing 30% with 7 violations.
+    elapsed time = 00:00:01, memory = 1229.40 (MB).
+    Completing 40% with 7 violations.
+    elapsed time = 00:00:01, memory = 1297.36 (MB).
+    Completing 50% with 7 violations.
+    elapsed time = 00:00:02, memory = 1407.97 (MB).
+    Completing 60% with 11 violations.
+    elapsed time = 00:00:02, memory = 1230.24 (MB).
+    Completing 70% with 11 violations.
+    elapsed time = 00:00:03, memory = 1306.65 (MB).
+    Completing 80% with 19 violations.
+    elapsed time = 00:00:03, memory = 1230.25 (MB).
+    Completing 90% with 19 violations.
+    elapsed time = 00:00:04, memory = 1350.56 (MB).
+    Completing 100% with 20 violations.
+    elapsed time = 00:00:05, memory = 1230.25 (MB).
+[INFO DRT-0199]   Number of violations = 21.
+Viol/Layer        met1   met2   met3
+Metal Spacing        6      0      2
+Recheck              0      0      1
+Short                9      1      2
+[INFO DRT-0267] cpu time = 00:00:37, elapsed time = 00:00:05, memory = 1352.87 (MB), peak = 1520.31 (MB)
+Total wire length = 217352 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93071 um.
+Total wire length on LAYER met2 = 104913 um.
+Total wire length on LAYER met3 = 11872 um.
+Total wire length on LAYER met4 = 7495 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48980.
+Up-via summary (total 48980):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22888
+           met1    24293
+           met2     1480
+           met3      319
+           met4        0
+------------------------
+               48980
+
+
+[INFO DRT-0195] Start 1st optimization iteration.
+    Completing 10% with 21 violations.
+    elapsed time = 00:00:00, memory = 1384.96 (MB).
+    Completing 20% with 21 violations.
+    elapsed time = 00:00:01, memory = 1504.89 (MB).
+    Completing 30% with 16 violations.
+    elapsed time = 00:00:01, memory = 1352.87 (MB).
+    Completing 40% with 16 violations.
+    elapsed time = 00:00:02, memory = 1388.19 (MB).
+    Completing 50% with 16 violations.
+    elapsed time = 00:00:02, memory = 1504.40 (MB).
+    Completing 60% with 15 violations.
+    elapsed time = 00:00:03, memory = 1352.88 (MB).
+    Completing 70% with 15 violations.
+    elapsed time = 00:00:03, memory = 1429.22 (MB).
+    Completing 80% with 15 violations.
+    elapsed time = 00:00:04, memory = 1352.88 (MB).
+    Completing 90% with 15 violations.
+    elapsed time = 00:00:04, memory = 1471.44 (MB).
+    Completing 100% with 21 violations.
+    elapsed time = 00:00:05, memory = 1352.88 (MB).
+[INFO DRT-0199]   Number of violations = 21.
+Viol/Layer        met1
+Metal Spacing        9
+Short               12
+[INFO DRT-0267] cpu time = 00:00:39, elapsed time = 00:00:05, memory = 1353.13 (MB), peak = 1520.31 (MB)
+Total wire length = 217351 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93068 um.
+Total wire length on LAYER met2 = 104914 um.
+Total wire length on LAYER met3 = 11872 um.
+Total wire length on LAYER met4 = 7495 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48981.
+Up-via summary (total 48981):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22888
+           met1    24291
+           met2     1483
+           met3      319
+           met4        0
+------------------------
+               48981
+
+
+[INFO DRT-0195] Start 2nd optimization iteration.
+    Completing 10% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 20% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 30% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 40% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 50% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 60% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 70% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 80% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 90% with 21 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 100% with 3 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+[INFO DRT-0199]   Number of violations = 3.
+Viol/Layer        met1
+Short                3
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 1353.13 (MB), peak = 1520.31 (MB)
+Total wire length = 217351 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93066 um.
+Total wire length on LAYER met2 = 104916 um.
+Total wire length on LAYER met3 = 11872 um.
+Total wire length on LAYER met4 = 7495 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48983.
+Up-via summary (total 48983):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22887
+           met1    24294
+           met2     1483
+           met3      319
+           met4        0
+------------------------
+               48983
+
+
+[INFO DRT-0195] Start 3rd guides tiles iteration.
+    Completing 50% with 3 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+    Completing 100% with 0 violations.
+    elapsed time = 00:00:00, memory = 1353.13 (MB).
+[INFO DRT-0199]   Number of violations = 0.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 1353.13 (MB), peak = 1520.31 (MB)
+Total wire length = 217357 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93056 um.
+Total wire length on LAYER met2 = 104912 um.
+Total wire length on LAYER met3 = 11884 um.
+Total wire length on LAYER met4 = 7503 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48999.
+Up-via summary (total 48999):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22887
+           met1    24302
+           met2     1489
+           met3      321
+           met4        0
+------------------------
+               48999
+
+
+[INFO DRT-0198] Complete detail routing.
+Total wire length = 217357 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 93056 um.
+Total wire length on LAYER met2 = 104912 um.
+Total wire length on LAYER met3 = 11884 um.
+Total wire length on LAYER met4 = 7503 um.
+Total wire length on LAYER met5 = 0 um.
+Total number of vias = 48999.
+Up-via summary (total 48999):
+
+------------------------
+ FR_MASTERSLICE        0
+            li1    22887
+           met1    24302
+           met2     1489
+           met3      321
+           met4        0
+------------------------
+               48999
+
+
+[INFO DRT-0267] cpu time = 00:01:18, elapsed time = 00:00:11, memory = 1353.13 (MB), peak = 1520.31 (MB)
+
+[INFO DRT-0180] Post processing.
+[INFO DRT-0501] Runtime: 39.06s
+[INFO ANT-0002] Found 0 net violations.
+[INFO ANT-0001] Found 0 pin violations.
+[INFO ANT-0002] Found 0 net violations.
+[INFO ANT-0001] Found 0 pin violations.
+Design area 67989 um^2 14% utilization.
+write_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_2_route.odb
+Elapsed time: 3:43.07[h:]min:sec. CPU time: user 1166.01 sys 1.03 (523%). Peak memory: 1556800KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+5_2_route                 .odb          223           1520 ff6d347b322b75b07a16
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 5_3_fillcell fillcell
+Running fillcell.tcl, stage 5_3_fillcell
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_2_route.odb
+read_sdc ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_1_grt.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+filler_placement "sky130_fd_sc_hd__fill_1 sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_4 sky130_fd_sc_hd__fill_8"
+[INFO DPL-0001] Placed 56448 filler instances.
+Design area 67989 um^2 14% utilization.
+write_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_3_fillcell.odb
+Elapsed time: 0:01.02[h:]min:sec. CPU time: user 0.84 sys 0.05 (87%). Peak memory: 243740KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+5_3_fillcell              .odb            1            238 fbb0443c985aab96e321
+cp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_3_fillcell.odb ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route.odb
+cp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_1_grt.sdc ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route.sdc
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 6_1_fill density_fill
+Running density_fill.tcl, stage 6_1_fill
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route.odb
+read_sdc ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+exec cp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route.odb ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_fill.odb
+Elapsed time: 0:00.72[h:]min:sec. CPU time: user 0.64 sys 0.05 (94%). Peak memory: 201272KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+6_1_fill                  .odb            0            196 fbb0443c985aab96e321
+cp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/5_route.sdc ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_fill.sdc
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 6_report final_report
+Running final_report.tcl, stage 6_report
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_fill.odb
+read_sdc ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_fill.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+write_db ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_final.odb
+write_sdc -no_timestamp ./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_final.sdc
+Deleted 0 routing obstructions
+Warning: master sky130_ef_sc_hd__decap_12 has signal pins but no liberty cell
+[INFO RCX-0431] Defined process_corner X with ext_model_index 0
+[INFO RCX-0029] Defined extraction corner X
+[WARNING RCX-0514] The ext_model_file option is deprecated. Use set_extraction_rules_file command instead.
+[INFO RCX-0435] Reading extraction model file /OpenROAD-flow-scripts/flow/platforms/sky130hd/rcx_patterns.rules ...
+[INFO RCX-0436] RC segment generation fp32_fma_ii1 (max_merge_res 50.0) ...
+[INFO RCX-0040] Final 26996 rc segments
+[INFO RCX-0439] Coupling Cap extraction fp32_fma_ii1 ...
+[INFO RCX-0440] Coupling threshhold is 0.1000 fF, coupling capacitance less than 0.1000 fF will be grounded.
+[INFO RCX-0442] 61% of 61623 wires extracted
+[INFO RCX-0442] 100% of 61623 wires extracted
+[INFO RCX-0045] Extract 7590 nets, 34576 rsegs, 34576 caps, 56335 ccs
+[INFO RCX-0443] 7590 nets finished
+[INFO PSM-0040] All shapes on net VDD are connected.
+########## IR report #################
+Net              : VDD
+Corner           : default
+Total power      : 1.40e-01 W
+Supply voltage   : 1.80e+00 V
+Worstcase voltage: 1.80e+00 V
+Average voltage  : 1.80e+00 V
+Average IR drop  : 6.64e-05 V
+Worstcase IR drop: 4.53e-03 V
+Percentage drop  : 0.25 %
+######################################
+[INFO PSM-0040] All shapes on net VSS are connected.
+########## IR report #################
+Net              : VSS
+Corner           : default
+Total power      : 1.40e-01 W
+Supply voltage   : 0.00e+00 V
+Worstcase voltage: 4.56e-03 V
+Average voltage  : 6.53e-05 V
+Average IR drop  : 6.53e-05 V
+Worstcase IR drop: 4.56e-03 V
+Percentage drop  : 0.25 %
+######################################
+Cell type report:                       Count       Area
+  Fill cell                             56448  425909.73
+  Tap cell                               6500    8132.80
+  Antenna cell                              2       5.00
+  Clock buffer                             44     969.68
+  Timing Repair Buffer                   1161    9412.78
+  Inverter                                107     401.64
+  Clock inverter                           19     341.58
+  Sequential cell                         263    6581.31
+  Multi-Input combinational cell         5160   42144.17
+  Total                                 69704  493898.69
+Report metrics stage 6, finish...
+
+==========================================================================
+finish report_design_area
+--------------------------------------------------------------------------
+Design area 67989 um^2 14% utilization.
+[WARNING GUI-0076] QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-'
+Elapsed time: 0:07.85[h:]min:sec. CPU time: user 8.65 sys 0.67 (118%). Peak memory: 522752KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+6_report                                  7            510                  N/A
+cp /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd.tlef ./objects/sky130hd/d_dsp02_fp32_fma_ii1/base/klayout_tech.lef
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/util/generate_klayout_tech.py \
+	--template /OpenROAD-flow-scripts/flow/platforms/sky130hd/sky130hd.lyt \
+	--output ./objects/sky130hd/d_dsp02_fp32_fma_ii1/base/klayout.lyt \
+	--lef-files ./objects/sky130hd/d_dsp02_fp32_fma_ii1/base/klayout_tech.lef /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd_merged.lef   \
+	--map-files 
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/scripts/run_command.py --log /OpenROAD-flow-scripts/flow/logs/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_merge.log --tee -- \
+        /OpenROAD-flow-scripts/flow/scripts/klayout.sh -zz -rd design_name=fp32_fma_ii1 \
+        -rd in_def=./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_final.def \
+        -rd in_files="/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds  " \
+        -rd seal_file="" \
+        -rd out_file=./results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_merged.gds \
+        -rd tech_file=./objects/sky130hd/d_dsp02_fp32_fma_ii1/base/klayout.lyt \
+        -rd layer_map= \
+        -r /OpenROAD-flow-scripts/flow/util/def2stream.py
+KLayout 0.30.7
+[INFO] Reporting cells prior to loading DEF ...
+	/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds
+[INFO] All LEF cells have matching GDS/OAS cells
+[INFO] No orphan cells in the final layout
+Elapsed time: 0:06.62[h:]min:sec. CPU time: user 6.42 sys 0.17 (99%). Peak memory: 937684KB.
+cp results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_merged.gds results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_final.gds
+./logs/sky130hd/d_dsp02_fp32_fma_ii1/base
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+1_1_yosys_canonicalize    .rtlil          0             86 4d780dcea837a7b85e82
+1_2_yosys                 .v             21            134 30d735ccc2cba7f7f0e3
+1_2_yosys                 .sdc                             cf7869e5ced85728f7e9
+1_synth                   .odb            0            156 3167167b6010871a163d
+1_synth                   .sdc                             a56686498f706e6f2003
+2_1_floorplan             .odb            1            201 542a0bc6a3fe0a7cf23f
+2_1_floorplan             .sdc                             a56686498f706e6f2003
+2_2_floorplan_macro       .odb            0            149 542a0bc6a3fe0a7cf23f
+2_3_floorplan_tapcell     .odb            0            149 2cb5ccc7f529c72f7fab
+2_4_floorplan_pdn         .odb            1            178 34d57439a7e334963416
+3_1_place_gp_skip_io      .odb            5            169 c5c04067f8eabada4426
+3_2_place_iop             .odb            1            158 3c74be731aecf264b218
+3_3_place_gp              .odb           24            369 07019ee0e43c33a50269
+3_4_place_resized         .odb            2            210 07019ee0e43c33a50269
+3_5_place_dp              .odb            3            214 95bc10915841377b88de
+4_1_cts                   .odb            8            249 dad1a2a36936feb340d1
+5_1_grt                   .odb           49            487 4b1897a355789f223330
+5_1_grt                   .sdc                             67c2ced29c37bc1c2035
+5_2_route                 .odb          223           1520 ff6d347b322b75b07a16
+5_3_fillcell              .odb            1            238 fbb0443c985aab96e321
+6_1_fill                  .odb            0            196 fbb0443c985aab96e321
+6_1_fill                  .sdc                             67c2ced29c37bc1c2035
+6_1_merge                                 6            915                  N/A
+6_report                                  7            510                  N/A
+Total                                   352           1520                     

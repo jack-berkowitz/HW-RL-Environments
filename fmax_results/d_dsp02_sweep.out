@@ -5,3 +5,16 @@ orfs output directory: d_dsp02_fp32_fma_ii1
 === phase 1: bracketing from 10.0 ns ===
 
 === phase 2: bisecting (fail 10.0000, pass 20.0000] ns ===
+
+=== phase 3: confirming 12.8125 ns from a clean build ===
+
+==============================================================
+FMAX for d_dsp02 (dsp, sky130hd)
+  converged period : 12.8125 ns
+  achieved Fmax    : 78.05 MHz
+  WNS at that period: 0.27 ns
+  confirming re-run: passed
+  P&R runs         : 8 (2 bracketing, 5 bisection, 1 confirming)
+  total wall time  : 117.4 min
+  written to       : fmax_results/d_dsp02_fmax.json
+==============================================================

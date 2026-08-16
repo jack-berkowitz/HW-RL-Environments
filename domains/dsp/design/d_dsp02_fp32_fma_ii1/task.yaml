@@ -39,8 +39,13 @@ scored_configuration:
   register_placement: free (S1a) -- pinned depth, unpinned distribution
 
 scored_metrics:
-  - {metric: latency_cycles,  label: "lat(cyc)"}
-  - {metric: init_interval,   label: "II"}
+  # `expect` is the value S1 requires. The metric is MEASURED from the design,
+  # so a submission that declares the parameter and does something else shows a
+  # mismatch here -- the MAX_TRANS shape, where the parameter existed and
+  # nothing bound it. The checker does NOT enforce this: S1 is a spec
+  # requirement, and correctness is checked separately (rule 18).
+  - {metric: latency_cycles,  label: "lat(cyc)", expect: 3}
+  - {metric: init_interval,   label: "II",       expect: 1}
 
 configs:
   # CORRECTNESS SWEEP -- UNCHANGED by rule 18. Rule 18 pins the SCORED
@@ -151,7 +156,19 @@ ppa:
   binding: NumPipeRegs=3, DISTRIBUTED -- THE SCORED CONFIGURATION (S1)
   config: orfs/config.mk
   sdc: orfs/constraint.sdc
-  status: IN PROGRESS -- no PPA number recorded yet
+  status: MEASURED at the scored configuration
+  fmax_mhz: 78.05
+  fmax_period_ns: 12.8125
+  fmax_converged: true
+  fmax_bracket_ns: [12.5, 12.8125]     # 0.312 wide, inside the 0.5 resolution
+  fmax_record: fmax_results/d_dsp02_fmax.json
+  area_um2_at_own_fmax: 68303          # RECORDED, wns +0.273, DRC 0
+  power_w_at_own_fmax: 0.144741        # RECORDED
+  measurement_note: >
+    Three registers take this from below 33 MHz to 78 MHz -- 2.4x, not the ~4x
+    an even four-way split would give. cvfpu's DISTRIBUTED placement leaves the
+    longest segment carrying about 12.8 ns. That is a fact about register
+    placement (free under S1a), not about the choice of depth.
 
   first_measurement:
     period_ns: 10.0

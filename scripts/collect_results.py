@@ -71,7 +71,9 @@ def scored_metrics(task_dir_name):
                 m = re.search(r"metric:\s*([A-Za-z0-9_]+).*?label:\s*\"?([^\",}]+)",
                               line)
                 if m:
-                    out.append((m.group(1), m.group(2).strip()))
+                    e = re.search(r"expect:\s*([A-Za-z0-9_.]+)", line)
+                    out.append((m.group(1), m.group(2).strip(),
+                                e.group(1) if e else None))
             elif line.strip() and not line.startswith((" ", "\t", "-")):
                 break
     return out
@@ -208,12 +210,18 @@ def main():
                 merged.setdefault(k, val)
         hdr = "  " + f"{task}/{os.path.basename(sub)}".ljust(38)
         line = "  " + " ".ljust(38)
-        for name, label in cols:
-            hdr += label.rjust(12)
-            if name in merged:
-                line += str(merged[name]).rjust(12)
+        for name, label, expect in cols:
+            hdr += label.rjust(14)
+            if name not in merged:
+                line += "ABSENT".rjust(14)
+            elif expect is not None and str(merged[name]) != str(expect):
+                # Measured value disagrees with what the scored configuration
+                # requires. Not a correctness failure -- the checker is silent
+                # on this by design -- but the submission does not implement
+                # the configuration the task scores at.
+                line += f"{merged[name]}!={expect}".rjust(14)
             else:
-                line += "ABSENT".rjust(12)
+                line += str(merged[name]).rjust(14)
         print(hdr)
         print(line)
     if not any_task:

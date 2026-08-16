@@ -143,8 +143,28 @@
 //       at depth 0 the design is one combinational cone that MISSES TIMING AT
 //       30 ns, so roughly 33 MHz or worse. No submission would ship that, and a
 //       baseline nobody would ship measures nothing. Three segments the cone
-//       into four, which is the shallowest split that clocks competitively
-//       against the other tasks here (d_nw01 190 MHz, d_ca04 380 MHz).
+//       into four.
+//
+//       MEASURED, AND ONE CLAIM HERE WAS WRONG. This previously read "the
+//       shallowest split that clocks competitively against the other tasks
+//       here (d_nw01 190 MHz, d_ca04 380 MHz)". The sweep returned
+//       78.05 MHz at 12.8125 ns, which is NOT competitive with those, so that
+//       clause was a prediction the measurement does not support and it is
+//       withdrawn.
+//
+//       What the measurement does establish: three registers take the design
+//       from below 33 MHz to 78 MHz, a 2.4x improvement rather than the ~4x an
+//       even four-way split would give. The boundaries land unevenly -- the
+//       longest segment still carries about 12.8 ns of logic -- which is a fact
+//       about where cvfpu places its DISTRIBUTED registers, not about the
+//       choice of depth.
+//
+//       The choice STANDS on criteria 1 and 2: it is representative (a
+//       pipelined FMA is what gets shipped) and it exercises the part of the
+//       design space this task is about. An FMA is a far larger combinational
+//       block than a FIFO or a crossbar datapath, so being slower than both is
+//       expected; "competitive with the other tasks" was the wrong yardstick to
+//       have reached for.
 //
 //       Deeper would also clock well and is deliberately not chosen: it costs
 //       registers for a rate C3 already guarantees, and the task is not about
