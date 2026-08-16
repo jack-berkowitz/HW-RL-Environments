@@ -193,7 +193,12 @@ propagation and before-rounding tininess are both permitted by the standard — 
 both are now failures because A4 and A4b/A6 pin the alternative. Had either
 passed, the pins would have been words with no check behind them, and a
 conformant design would have been failing an unwritten rule instead of a stated
-one. That is rule 12 doing its job.
+one. **That is rule 12 verified end to end, one turn after being written.** The rule
+was added because the vectors had silently encoded cvfpu's choices; the spec was
+then pinned; and `mA4` and `mA6` now demonstrate that the pins are enforced by a
+check that actually fires. **A rule demonstrated by a check that fires is worth
+more than a rule asserted** — until one of these mutants failed, "A4 is pinned"
+was a claim about a comment.
 
 ## Non-equivalence, and how it is witnessed here
 

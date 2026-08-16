@@ -253,6 +253,18 @@ Before any external distribution — to a lab, a model provider, or a public rep
       notice. Re-check if a future task adds a copyleft anchor.
 - [ ] Recognition probe run and its rate recorded.
 - [ ] Every task's `NOTES.md` states its oracle class and what it does not claim.
+- [ ] **Every spec term checked against its cited source of authority** (rule 15).
+      A term citing nothing, or citing the anchor's behaviour, is an inherited
+      implementation detail rather than a contract term.
+- [ ] **Every rule checked against its originating finding**, and every finding
+      against its rule — `python3 scripts/check_rule_linkage.py`.
+- [ ] **Every build prompt checked against `RULES.md`** — that it references and
+      does not restate.
+
+> F14, F15 and F16 all came from this kind of pass and **none of them would have
+> come from running the tests.** Contract defects leave the apparatus working
+> perfectly; the only way to find them is to audit the artefact against the
+> source of authority.
 
 ---
 

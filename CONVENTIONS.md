@@ -137,6 +137,33 @@ over-constrained. Establish which is wrong first:
 Taking the wrong branch loosens a check to accommodate a bug, and **a loosened
 check is invisible afterwards.**
 
+## Mutants perturb the anchor; they do not reimplement it
+
+**Build a mutant as a wrapper around the vendored anchor with one thing changed,
+not as an independent implementation of the defective behaviour.**
+
+Two reasons, and the second is the one that matters:
+
+1. A hand-written mutant can fail for **incidental** reasons — an unrelated bug
+   introduced while writing it — and then it is not isolated: it trips checks
+   other than the one it was built to trip, and by rule 3 it validates none of
+   them.
+2. Isolation is the whole point. A wrapper is correct everywhere except the
+   injected defect *by construction*, so when it fails exactly one check, that
+   is evidence about the check rather than about the author's care.
+
+`d_dsp02` is the worked example. All six mutants wrap `fpnew_fma`; every one
+fails on its own defect with zero coverage holes. The unfused mutant is the
+sharpest case: it is **two anchor instances**, a `MUL` feeding an `ADD`, so every
+arithmetic step is externally-authored correct and the only defect is the extra
+rounding between them. Hand-writing an unfused FMA would have risked a dozen
+unrelated corner-case bugs and isolated nothing.
+
+Where a defect cannot be expressed as a wrapper, mutating one line of a vendored
+file is the next best thing — but note that a mutant of a *shared* module cannot
+be placed beside the reference in a differential harness, and its non-equivalence
+witness has to come through the checker instead.
+
 ## Timing closure has ONE authoritative source
 
 **Closure comes from `find_fmax.py`'s own classification, which reads the ORFS

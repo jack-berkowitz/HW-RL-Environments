@@ -2876,3 +2876,888 @@ Number of nets:           24767
 [INFO DRT-0079]   Complete 200 unique inst patterns.
 [INFO DRT-0079]   Complete 300 unique inst patterns.
 [INFO DRT-0081]   Complete 332 unique inst patterns.
+[INFO DRT-0082]   Complete 10000 groups.
+[INFO DRT-0084]   Complete 17534 groups.
+#scanned instances     = 51318
+#unique  instances     = 332
+#stdCellGenAp          = 10484
+#stdCellValidPlanarAp  = 68
+#stdCellValidViaAp     = 8011
+#stdCellPinNoAp        = 0
+#stdCellPinCnt         = 82690
+#instTermValidViaApCnt = 0
+#macroGenAp            = 0
+#macroValidPlanarAp    = 0
+#macroValidViaAp       = 0
+#macroNoAp             = 0
+[INFO DRT-0166] Complete pin access.
+[INFO DRT-0267] cpu time = 00:08:42, elapsed time = 00:00:53, memory = 395.13 (MB), peak = 403.66 (MB)
+Took 54 seconds: pin_access
+global_route -congestion_report_file ./reports/sky130hd/d_nw01_ss/base/congestion.rpt -congestion_iterations 30 -congestion_report_iter_step 5 -verbose
+[INFO GRT-0020] Min routing layer: met1
+[INFO GRT-0021] Max routing layer: met5
+[INFO GRT-0022] Global adjustment: 0%
+[INFO GRT-0023] Grid origin: (0, 0)
+[INFO GRT-0088] Layer li1     Track-Pitch = 0.4600  line-2-Via Pitch: 0.3400
+[INFO GRT-0088] Layer met1    Track-Pitch = 0.3400  line-2-Via Pitch: 0.3400
+[INFO GRT-0088] Layer met2    Track-Pitch = 0.4600  line-2-Via Pitch: 0.3500
+[INFO GRT-0088] Layer met3    Track-Pitch = 0.6800  line-2-Via Pitch: 0.6150
+[INFO GRT-0088] Layer met4    Track-Pitch = 0.9200  line-2-Via Pitch: 1.0400
+[INFO GRT-0088] Layer met5    Track-Pitch = 3.4000  line-2-Via Pitch: 3.1100
+[INFO GRT-0003] Macros: 0
+[INFO GRT-0004] Blockages: 77219
+[INFO GRT-0019] Found 376 clock nets.
+[INFO GRT-0001] Minimum degree: 2
+[INFO GRT-0002] Maximum degree: 108
+
+[INFO GRT-0053] Routing resources analysis:
+          Routing      Original      Derated      Resource
+Layer     Direction    Resources     Resources    Reduction (%)
+---------------------------------------------------------------
+li1        Vertical            0             0          0.00%
+met1       Horizontal     631092        489390          22.45%
+met2       Vertical       566808        434929          23.27%
+met3       Horizontal     416014        324938          21.89%
+met4       Vertical       280060        201476          28.06%
+met5       Horizontal      61864         44517          28.04%
+---------------------------------------------------------------
+
+[INFO GRT-0101] Running extra iterations to remove congestion.
+[INFO GRT-0102] Start extra iteration 1/30
+[INFO GRT-0102] Start extra iteration 2/30
+[INFO GRT-0102] Start extra iteration 3/30
+[INFO GRT-0197] Via related to pin nodes: 144028
+[INFO GRT-0198] Via related Steiner nodes: 4106
+[INFO GRT-0199] Via filling finished.
+[INFO GRT-0111] Final number of vias: 186174
+[INFO GRT-0112] Final usage 3D: 763921
+
+[INFO GRT-0096] Final congestion report:
+Layer         Resource        Demand        Usage (%)    Max H / Max V / Total Congestion
+---------------------------------------------------------------------------------------
+li1                  0             0            0.00%             0 /  0 /  0
+met1            489390         76728           15.68%             0 /  0 /  0
+met2            434929         92509           21.27%             0 /  0 /  0
+met3            324938         20924            6.44%             0 /  0 /  0
+met4            201476         14909            7.40%             0 /  0 /  0
+met5             44517           329            0.74%             0 /  0 /  0
+---------------------------------------------------------------------------------------
+Total          1495250        205399           13.74%             0 /  0 /  0
+
+[INFO GRT-0018] Total wirelength: 1864442 um
+[INFO GRT-0014] Routed nets: 24728
+[INFO GRT-0303] Global routing runtime = 00:00:04
+[WARNING STA-0450] virtual clock vclk_core_clock can not be propagated.
+estimate_parasitics -global_routing
+Perform buffer insertion and gate resizing...
+repair_design -verbose
+Iteration |   Area    | Resized | Buffers | Nets repaired | Remaining
+---------------------------------------------------------------------
+        0 |     +0.0% |       0 |       0 |             0 |     25181
+     1000 |     +0.0% |       0 |       0 |             0 |     24181
+     2000 |     +0.0% |       0 |       0 |             0 |     23181
+     3000 |     +0.0% |       0 |       0 |             0 |     22181
+     4000 |     +0.0% |       0 |       0 |             0 |     21181
+     5000 |     +0.0% |       0 |       0 |             0 |     20181
+     6000 |     +0.0% |       0 |       0 |             0 |     19181
+[WARNING RSZ-0104] Net _16957_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16956_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16958_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16955_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16964_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16965_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16963_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16962_ only has one pin. Check if it is intended to be dangling.
+     7000 |     +0.0% |       0 |       0 |             0 |     18181
+     8000 |     +0.0% |       0 |       0 |             0 |     17181
+     9000 |     +0.0% |       0 |       0 |             0 |     16181
+    10000 |     +0.0% |       0 |       0 |             0 |     15181
+    11000 |     +0.0% |       1 |       0 |             1 |     14181
+    12000 |     +0.0% |       1 |       1 |             2 |     13181
+    13000 |     +0.0% |       1 |       1 |             2 |     12181
+    14000 |     +0.0% |       1 |       1 |             2 |     11181
+[WARNING RSZ-0104] Net _16968_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16960_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16953_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16945_ only has one pin. Check if it is intended to be dangling.
+    15000 |     +0.0% |       1 |       1 |             2 |     10181
+[WARNING RSZ-0104] Net _16961_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16954_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16951_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16949_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16948_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16946_ only has one pin. Check if it is intended to be dangling.
+    16000 |     +0.0% |       1 |       1 |             2 |      9181
+[WARNING RSZ-0104] Net _16952_ only has one pin. Check if it is intended to be dangling.
+    17000 |     +0.0% |       1 |       1 |             2 |      8181
+    18000 |     +0.0% |       1 |       1 |             2 |      7181
+    19000 |     +0.0% |       1 |       1 |             2 |      6181
+    20000 |     +0.0% |       1 |       1 |             2 |      5181
+[WARNING RSZ-0104] Net _16970_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16969_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16967_ only has one pin. Check if it is intended to be dangling.
+    21000 |     +0.0% |       1 |       1 |             2 |      4181
+[WARNING RSZ-0104] Net _16971_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16966_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16950_ only has one pin. Check if it is intended to be dangling.
+    22000 |     +0.0% |       1 |       1 |             2 |      3181
+[WARNING RSZ-0104] Net _16959_ only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net _16947_ only has one pin. Check if it is intended to be dangling.
+    23000 |     +0.0% |       1 |       1 |             2 |      2181
+    24000 |     +0.0% |       1 |       1 |             2 |      1181
+[WARNING RSZ-0104] Net mst_req[368] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[367] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[366] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[365] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[364] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[363] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[151] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[150] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[149] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[148] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[147] only has one pin. Check if it is intended to be dangling.
+[WARNING RSZ-0104] Net mst_req[146] only has one pin. Check if it is intended to be dangling.
+    25000 |     +0.0% |       1 |       1 |             2 |       181
+    final |     +0.0% |       1 |       1 |             2 |         0
+---------------------------------------------------------------------
+[INFO RSZ-0034] Found 1 slew violations.
+[INFO RSZ-0036] Found 1 capacitance violations.
+[INFO RSZ-0039] Resized 1 instances.
+[INFO RSZ-0038] Inserted 1 buffers in 2 nets.
+[INFO RSZ-0504] Runtime: 1.70s
+global_route -start_incremental
+detailed_placement
+[INFO DPL-0006] Core area: 2090826.52 um^2
+[INFO DPL-0007] Movable instances area: 264613.79 um^2
+[INFO DPL-0008] Fixed instances area within core: 34678.26 um^2
+[INFO DPL-0009] Utilization: 14.3%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 51319 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 0.
+[INFO DPL-0500] Runtime: 0.18s
+Placement Analysis
+---------------------------------
+total displacement          7.7 u
+average displacement        0.0 u
+max displacement            7.7 u
+original HPWL         1243991.0 u
+legalized HPWL        1243998.3 u
+delta HPWL                    0 %
+
+global_route -end_incremental -congestion_report_file ./reports/sky130hd/d_nw01_ss/base/congestion_post_repair_design.rpt
+Repair setup and hold violations...
+estimate_parasitics -global_routing
+repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -verbose
+[INFO RSZ-0100] Repair move sequence: UnbufferMove SizeUpMove SwapPinsMove BufferMove CloneMove SplitLoadMove 
+[INFO RSZ-0094] Found 3043 endpoints with setup violations.
+[INFO RSZ-0099] Repairing 3043 out of 3043 (100.00%) violating endpoints...
+   Iter   | Removed | Resized | Inserted | Cloned |  Pin  |   Area   |    WNS   |   StTNS    |   EnTNS    |  Viol  |  Worst  
+          | Buffers |  Gates  | Buffers  |  Gates | Swaps |          |          |            |            | Endpts | St/EnPt 
+------------------------------------------------------------------------------------------------------------------------------
+       0* |       0 |       0 |        0 |      0 |     0 |    +0.0% |   -1.417 |     -444.0 |    -1487.6 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+      10* |       0 |       5 |        2 |      0 |     2 |    +0.0% |   -1.290 |     -430.1 |    -1468.9 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+      20* |       0 |      11 |        3 |      0 |     5 |    +0.0% |   -1.273 |     -436.9 |    -1472.2 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+      30* |       0 |      17 |        4 |      0 |     8 |    +0.0% |   -1.212 |     -428.0 |    -1425.1 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+      40* |       0 |      18 |        6 |      0 |    15 |    +0.0% |   -1.297 |     -440.7 |    -1425.3 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+      50* |       0 |      24 |        7 |      0 |    18 |    +0.1% |   -1.230 |     -439.4 |    -1421.6 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+      60* |       0 |      31 |        8 |      0 |    20 |    +0.1% |   -1.191 |     -436.5 |    -1406.3 |   3043 | slv_req[34]
+      70* |       0 |      39 |        8 |      0 |    22 |    +0.1% |   -1.176 |     -431.1 |    -1428.1 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+      80* |       0 |      45 |        8 |      0 |    26 |    +0.1% |   -1.157 |     -423.9 |    -1395.8 |   3043 | slv_req[34]
+      90* |       0 |      52 |        8 |      0 |    29 |    +0.1% |   -1.136 |     -418.7 |    -1329.9 |   3043 | slv_req[433]
+     100* |       0 |      57 |       10 |      0 |    32 |    +0.1% |   -1.138 |     -418.0 |    -1301.7 |   3043 | slv_req[34]
+     110* |       0 |      62 |       10 |      0 |    37 |    +0.1% |   -1.100 |     -417.5 |    -1280.4 |   3043 | slv_req[433]
+     120* |       0 |      69 |       10 |      0 |    40 |    +0.1% |   -1.111 |     -415.2 |    -1285.2 |   3043 | slv_req[34]
+     130* |       0 |      74 |       11 |      0 |    44 |    +0.1% |   -1.085 |     -414.4 |    -1244.4 |   3043 | slv_req[433]
+     140* |       0 |      79 |       15 |      0 |    45 |    +0.2% |   -1.063 |     -405.1 |    -1267.7 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+     150* |       0 |      83 |       15 |      0 |    51 |    +0.2% |   -1.127 |     -408.1 |    -1269.3 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+     160* |       0 |      87 |       15 |      0 |    57 |    +0.2% |   -1.263 |     -453.1 |    -1268.1 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+     170* |       1 |      94 |       17 |      0 |    57 |    +0.2% |   -1.231 |     -449.9 |    -1266.5 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+     180* |       2 |     102 |       18 |      0 |    57 |    +0.2% |   -1.416 |     -456.6 |    -1338.2 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+     190* |       2 |     108 |       21 |      0 |    58 |    +0.2% |   -1.210 |     -450.7 |    -1497.8 |   3043 | r_out\[1\]\[31\]$_DFFE_PP_/D
+     190* |       0 |      79 |       15 |      0 |    45 |    +0.2% |   -1.062 |     -405.1 |    -1267.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     200* |       1 |      85 |       17 |      0 |    45 |    +0.2% |   -1.062 |     -402.7 |    -1267.1 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     210* |       2 |      93 |       17 |      0 |    46 |    +0.2% |   -1.075 |     -400.0 |    -1266.2 |   3043 | slv_req[24]
+     220* |       2 |     100 |       20 |      0 |    46 |    +0.2% |   -1.075 |     -397.4 |    -1265.6 |   3043 | slv_req[24]
+     230* |       2 |     109 |       20 |      0 |    47 |    +0.2% |   -1.080 |     -397.2 |    -1272.4 |   3043 | slv_req[24]
+     240* |       2 |     117 |       22 |      0 |    47 |    +0.2% |   -1.080 |     -396.2 |    -1272.9 |   3043 | slv_req[24]
+     250* |       3 |     123 |       22 |      0 |    50 |    +0.3% |   -1.080 |     -398.8 |    -1274.4 |   3043 | slv_req[24]
+     251* |       2 |      91 |       17 |      0 |    46 |    +0.2% |   -1.062 |     -398.6 |    -1265.5 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     260* |       2 |      97 |       18 |      0 |    47 |    +0.2% |   -1.075 |     -398.1 |    -1265.8 |   3043 | slv_req[24]
+     270* |       2 |     105 |       20 |      0 |    47 |    +0.2% |   -1.080 |     -397.2 |    -1265.5 |   3043 | slv_req[24]
+     280* |       2 |     114 |       21 |      0 |    47 |    +0.2% |   -1.080 |     -396.4 |    -1273.0 |   3043 | slv_req[24]
+     290* |       3 |     121 |       22 |      0 |    48 |    +0.3% |   -1.080 |     -395.3 |    -1272.6 |   3043 | slv_req[24]
+     291* |       2 |      91 |       17 |      0 |    46 |    +0.2% |   -1.062 |     -398.6 |    -1265.5 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     300* |       2 |      96 |       17 |      0 |    49 |    +0.2% |   -1.062 |     -397.8 |    -1263.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     310* |       2 |      99 |       18 |      0 |    55 |    +0.2% |   -1.113 |     -394.4 |    -1264.1 |   3043 | slv_req[405]
+     320* |       3 |     102 |       21 |      0 |    58 |    +0.2% |   -1.114 |     -388.7 |    -1308.0 |   3043 | slv_req[405]
+     330* |       3 |     102 |       25 |      0 |    64 |    +0.2% |   -1.134 |     -387.1 |    -1353.6 |   3043 | slv_req[405]
+     340* |       8 |     103 |       29 |      0 |    64 |    +0.2% |   -1.677 |     -597.3 |    -1389.6 |   3043 | slv_req[405]
+     350* |      13 |     103 |       34 |      0 |    64 |    +0.2% |   -1.677 |     -597.3 |    -1389.6 |   3043 | slv_req[405]
+     360* |      18 |     103 |       39 |      0 |    64 |    +0.2% |   -1.677 |     -597.3 |    -1389.6 |   3043 | slv_req[405]
+     362* |       2 |     100 |       18 |      0 |    56 |    +0.2% |   -1.062 |     -394.0 |    -1218.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     370* |       2 |     103 |       20 |      0 |    58 |    +0.2% |   -1.062 |     -393.9 |    -1184.8 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     380* |       2 |     109 |       22 |      0 |    60 |    +0.2% |   -1.062 |     -393.9 |    -1167.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     390* |       4 |     113 |       25 |      0 |    61 |    +0.2% |   -1.062 |     -392.0 |    -1142.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     400* |       9 |     113 |       30 |      0 |    61 |    +0.2% |   -1.062 |     -392.0 |    -1142.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     410* |      14 |     113 |       35 |      0 |    61 |    +0.2% |   -1.062 |     -392.0 |    -1142.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     420* |      19 |     113 |       40 |      0 |    61 |    +0.2% |   -1.062 |     -392.0 |    -1142.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     430* |      24 |     113 |       45 |      0 |    61 |    +0.2% |   -1.062 |     -392.0 |    -1142.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     436* |       2 |     113 |       23 |      0 |    61 |    +0.2% |   -1.062 |     -392.0 |    -1142.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     440* |       2 |     115 |       24 |      0 |    61 |    +0.2% |   -1.062 |     -386.5 |    -1142.8 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     450* |       4 |     120 |       26 |      1 |    61 |    +0.2% |   -1.506 |     -573.3 |    -1176.3 |   3043 | slv_req[434]
+     460* |       9 |     120 |       31 |      1 |    61 |    +0.2% |   -1.506 |     -573.3 |    -1176.3 |   3043 | slv_req[434]
+     470* |      14 |     120 |       36 |      1 |    61 |    +0.2% |   -1.506 |     -573.3 |    -1176.3 |   3043 | slv_req[434]
+     480* |      19 |     120 |       41 |      1 |    61 |    +0.2% |   -1.506 |     -573.3 |    -1176.3 |   3043 | slv_req[434]
+     490* |      24 |     120 |       46 |      1 |    61 |    +0.2% |   -1.506 |     -573.3 |    -1176.3 |   3043 | slv_req[434]
+     499* |       3 |     120 |       26 |      1 |    61 |    +0.2% |   -1.062 |     -380.9 |    -1139.0 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     500* |       3 |     120 |       26 |      1 |    61 |    +0.2% |   -1.062 |     -380.9 |    -1139.0 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     510* |       4 |     126 |       26 |      1 |    64 |    +0.3% |   -1.049 |     -379.5 |    -1120.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     520* |       4 |     129 |       29 |      1 |    68 |    +0.3% |   -1.099 |     -379.8 |    -1184.3 |   3043 | slv_req[24]
+     524* |       4 |     127 |       27 |      1 |    65 |    +0.3% |   -1.049 |     -379.6 |    -1120.1 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     530* |       5 |     129 |       30 |      1 |    65 |    +0.3% |   -1.503 |     -570.9 |    -1156.8 |   3043 | slv_req[407]
+     540* |      10 |     129 |       35 |      1 |    65 |    +0.3% |   -1.503 |     -571.1 |    -1156.8 |   3043 | slv_req[407]
+     550* |      15 |     129 |       40 |      1 |    65 |    +0.3% |   -1.503 |     -571.1 |    -1156.8 |   3043 | slv_req[407]
+     560* |      20 |     129 |       45 |      1 |    65 |    +0.3% |   -1.503 |     -571.1 |    -1156.8 |   3043 | slv_req[407]
+     570* |      25 |     129 |       50 |      1 |    65 |    +0.3% |   -1.503 |     -571.1 |    -1156.8 |   3043 | slv_req[407]
+     579* |       4 |     129 |       30 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     580* |       4 |     129 |       30 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.6 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     590* |       8 |     131 |       34 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     600* |      13 |     131 |       39 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     610* |      18 |     131 |       44 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     620* |      23 |     131 |       49 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     630* |      28 |     131 |       54 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     631* |       4 |     130 |       30 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     640* |       8 |     131 |       33 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1120.4 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     650* |      13 |     131 |       38 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1120.4 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     660* |      18 |     131 |       43 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1120.4 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     670* |      23 |     131 |       48 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1120.4 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     680* |      28 |     131 |       53 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1120.4 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     683* |       4 |     131 |       30 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.3 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     690* |       4 |     136 |       31 |      1 |    65 |    +0.3% |   -1.049 |     -378.9 |    -1119.0 |   3043 | rid_cnt\[0\]\[152\]$_DFFE_PP_/D
+     694* |       4 |     140 |       31 |      1 |    65 |    +0.3% |   -1.046 |     -379.3 |    -1108.2 |   3043 | slv_req[24]
+     700* |       6 |     141 |       34 |      1 |    65 |    +0.3% |   -1.490 |     -565.1 |    -1144.6 |   3043 | slv_req[407]
+     710* |      11 |     141 |       39 |      1 |    65 |    +0.3% |   -1.490 |     -565.1 |    -1144.6 |   3043 | slv_req[407]
+     720* |      16 |     141 |       44 |      1 |    65 |    +0.3% |   -1.490 |     -565.1 |    -1144.6 |   3043 | slv_req[407]
+     730* |      21 |     141 |       49 |      1 |    65 |    +0.3% |   -1.490 |     -565.1 |    -1144.6 |   3043 | slv_req[407]
+     740* |      26 |     141 |       54 |      1 |    65 |    +0.3% |   -1.490 |     -565.1 |    -1144.6 |   3043 | slv_req[407]
+     746* |       4 |     140 |       33 |      1 |    65 |    +0.3% |   -1.046 |     -378.5 |    -1107.6 |   3043 | slv_req[24]
+     750* |       4 |     142 |       33 |      1 |    66 |    +0.3% |   -1.046 |     -378.7 |    -1106.5 |   3043 | slv_req[24]
+     760* |       9 |     142 |       38 |      1 |    66 |    +0.3% |   -1.046 |     -378.8 |    -1106.5 |   3043 | slv_req[24]
+     770* |      14 |     142 |       43 |      1 |    66 |    +0.3% |   -1.046 |     -378.8 |    -1106.5 |   3043 | slv_req[24]
+     780* |      19 |     142 |       48 |      1 |    66 |    +0.3% |   -1.046 |     -378.8 |    -1106.5 |   3043 | slv_req[24]
+     790* |      24 |     142 |       53 |      1 |    66 |    +0.3% |   -1.046 |     -378.8 |    -1106.5 |   3043 | slv_req[24]
+     800* |      29 |     142 |       58 |      1 |    66 |    +0.3% |   -1.046 |     -378.8 |    -1106.5 |   3043 | slv_req[24]
+     800* |       4 |     142 |       33 |      1 |    66 |    +0.3% |   -1.046 |     -378.7 |    -1106.5 |   3043 | slv_req[24]
+     810* |       7 |     144 |       37 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     820* |      12 |     144 |       42 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     830* |      17 |     144 |       47 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     840* |      22 |     144 |       52 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     850* |      27 |     144 |       57 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     855* |       4 |     144 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1106.1 |   3043 | slv_req[24]
+     860* |       6 |     144 |       37 |      1 |    66 |    +0.3% |   -1.046 |     -379.3 |    -1106.2 |   3043 | slv_req[24]
+     870* |      11 |     144 |       42 |      1 |    66 |    +0.3% |   -1.046 |     -379.3 |    -1106.2 |   3043 | slv_req[24]
+     880* |      16 |     144 |       47 |      1 |    66 |    +0.3% |   -1.046 |     -379.3 |    -1106.2 |   3043 | slv_req[24]
+     890* |      21 |     144 |       52 |      1 |    66 |    +0.3% |   -1.046 |     -379.3 |    -1106.2 |   3043 | slv_req[24]
+     900* |      26 |     144 |       57 |      1 |    66 |    +0.3% |   -1.046 |     -379.3 |    -1106.2 |   3043 | slv_req[24]
+     906* |       4 |     144 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1106.1 |   3043 | slv_req[24]
+     910* |       6 |     144 |       36 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     920* |      11 |     144 |       41 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     930* |      16 |     144 |       46 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     940* |      21 |     144 |       51 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     950* |      26 |     144 |       56 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.9 |   3043 | slv_req[407]
+     957* |       4 |     144 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1106.1 |   3043 | slv_req[24]
+     960* |       5 |     145 |       35 |      1 |    66 |    +0.3% |   -1.481 |     -565.9 |    -1142.6 |   3043 | slv_req[407]
+     970* |      10 |     145 |       40 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.6 |   3043 | slv_req[407]
+     980* |      15 |     145 |       45 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.6 |   3043 | slv_req[407]
+     990* |      20 |     145 |       50 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.6 |   3043 | slv_req[407]
+    1000* |      25 |     145 |       55 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.6 |   3043 | slv_req[407]
+    1009* |       4 |     145 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1010* |       4 |     145 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1020* |       9 |     146 |       39 |      1 |    66 |    +0.3% |   -1.479 |     -564.8 |    -1142.6 |   3043 | slv_req[402]
+    1030* |      14 |     146 |       44 |      1 |    66 |    +0.3% |   -1.479 |     -564.8 |    -1142.6 |   3043 | slv_req[402]
+    1040* |      19 |     146 |       49 |      1 |    66 |    +0.3% |   -1.479 |     -564.8 |    -1142.6 |   3043 | slv_req[402]
+    1050* |      24 |     146 |       54 |      1 |    66 |    +0.3% |   -1.479 |     -564.8 |    -1142.6 |   3043 | slv_req[402]
+    1060* |      29 |     146 |       59 |      1 |    66 |    +0.3% |   -1.479 |     -564.8 |    -1142.6 |   3043 | slv_req[402]
+    1060* |       4 |     145 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1070* |       8 |     146 |       39 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1080* |      13 |     146 |       44 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1090* |      18 |     146 |       49 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1100* |      23 |     146 |       54 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1110* |      28 |     146 |       59 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1112* |       4 |     146 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.8 |   3043 | slv_req[24]
+    1120* |       7 |     147 |       38 |      1 |    66 |    +0.3% |   -1.476 |     -563.2 |    -1142.4 |   3043 | slv_req[407]
+    1130* |      12 |     147 |       43 |      1 |    66 |    +0.3% |   -1.476 |     -563.2 |    -1142.4 |   3043 | slv_req[407]
+    1140* |      17 |     147 |       48 |      1 |    66 |    +0.3% |   -1.476 |     -563.2 |    -1142.4 |   3043 | slv_req[407]
+    1150* |      22 |     147 |       53 |      1 |    66 |    +0.3% |   -1.476 |     -563.2 |    -1142.4 |   3043 | slv_req[407]
+    1160* |      27 |     147 |       58 |      1 |    66 |    +0.3% |   -1.476 |     -563.2 |    -1142.4 |   3043 | slv_req[407]
+    1164* |       4 |     147 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.5 |   3043 | slv_req[24]
+    1170* |       7 |     147 |       37 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.3 |   3043 | slv_req[407]
+    1180* |      12 |     147 |       42 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.3 |   3043 | slv_req[407]
+    1190* |      17 |     147 |       47 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.3 |   3043 | slv_req[407]
+    1200* |      22 |     147 |       52 |      1 |    66 |    +0.3% |   -1.481 |     -566.1 |    -1142.3 |   3043 | slv_req[407]
+    1200* |       4 |     147 |       35 |      1 |    66 |    +0.3% |   -1.046 |     -379.2 |    -1105.5 |   3043 | slv_req[24]
+    1210* |       7 |     149 |       39 |      1 |    66 |    +0.3% |   -1.046 |     -379.0 |    -1105.4 |   3043 | slv_req[24]
+    1220* |      12 |     149 |       44 |      1 |    66 |    +0.3% |   -1.046 |     -379.0 |    -1105.4 |   3043 | slv_req[24]
+    1230* |      17 |     149 |       49 |      1 |    66 |    +0.3% |   -1.046 |     -379.0 |    -1105.4 |   3043 | slv_req[24]
+    1240* |      22 |     149 |       54 |      1 |    66 |    +0.3% |   -1.046 |     -379.0 |    -1105.4 |   3043 | slv_req[24]
+    1250* |      27 |     149 |       59 |      1 |    66 |    +0.3% |   -1.046 |     -379.0 |    -1105.4 |   3043 | slv_req[24]
+    1253* |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.046 |     -378.7 |    -1105.4 |   3043 | slv_req[24]
+    1260* |       7 |     149 |       38 |      1 |    66 |    +0.3% |   -1.479 |     -564.9 |    -1142.1 |   3043 | slv_req[407]
+    1270* |      12 |     149 |       43 |      1 |    66 |    +0.3% |   -1.479 |     -564.9 |    -1142.1 |   3043 | slv_req[407]
+    1280* |      17 |     149 |       48 |      1 |    66 |    +0.3% |   -1.479 |     -564.9 |    -1142.1 |   3043 | slv_req[407]
+    1290* |      22 |     149 |       53 |      1 |    66 |    +0.3% |   -1.479 |     -564.9 |    -1142.1 |   3043 | slv_req[407]
+    1300* |      27 |     149 |       58 |      1 |    66 |    +0.3% |   -1.479 |     -564.9 |    -1142.1 |   3043 | slv_req[407]
+    1300* |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.046 |     -378.7 |    -1105.4 |   3043 | slv_req[24]
+    1300* |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.046 |     -378.7 |    -1105.4 |   3043 | slv_req[24]
+    1300+ |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.046 |     -378.7 |    -1105.4 |   2695 | slv_req[24]
+    1301+ |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.046 |     -378.7 |    -1105.4 |   2695 | slv_req[24]
+    1302+ |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.7 |    -1105.2 |   2695 | slv_req[24]
+    1303+ |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.7 |    -1105.2 |   2695 | slv_req[24]
+    1304+ |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.7 |    -1105.2 |   2695 | slv_req[24]
+    1305+ |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.7 |    -1105.2 |   2695 | slv_req[24]
+    1306+ |       4 |     148 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.7 |    -1105.2 |   2695 | slv_req[24]
+    1310+ |       4 |     151 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |    -1036.4 |   2695 | slv_req[24]
+    1311+ |       4 |     152 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |    -1004.6 |   2695 | slv_req[24]
+    1312+ |       4 |     152 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |    -1004.6 |   2695 | slv_req[24]
+    1313+ |       4 |     152 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |    -1004.6 |   2695 | slv_req[24]
+    1316+ |       4 |     154 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |     -991.8 |   2695 | slv_req[24]
+    1317+ |       4 |     154 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |     -991.8 |   2695 | slv_req[24]
+    1318+ |       4 |     154 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |     -991.8 |   2695 | slv_req[24]
+    1320+ |       4 |     155 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |     -985.1 |   2695 | slv_req[24]
+    1320+ |       4 |     155 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |     -985.1 |   2695 | slv_req[24]
+    1321+ |       4 |     155 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -378.3 |     -985.1 |   2695 | slv_req[24]
+    1329+ |       4 |     162 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -376.9 |     -983.8 |   2695 | slv_req[24]
+    1330+ |       4 |     162 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -376.9 |     -983.8 |   2695 | slv_req[24]
+    1330+ |       4 |     162 |       36 |      1 |    66 |    +0.3% |   -1.045 |     -376.9 |     -983.8 |   2695 | slv_req[24]
+    1333+ |       4 |     164 |       36 |      1 |    66 |    +0.3% |   -1.040 |     -376.5 |     -983.3 |   2695 | slv_req[24]
+    1337+ |       4 |     166 |       36 |      1 |    67 |    +0.3% |   -1.040 |     -376.5 |     -972.6 |   2695 | slv_req[24]
+    1338+ |       4 |     166 |       36 |      1 |    67 |    +0.3% |   -1.040 |     -376.5 |     -972.6 |   2695 | slv_req[24]
+    1339+ |       4 |     166 |       36 |      1 |    67 |    +0.3% |   -1.040 |     -376.5 |     -972.6 |   2695 | slv_req[24]
+    1340+ |       4 |     166 |       36 |      1 |    67 |    +0.3% |   -1.040 |     -376.5 |     -972.6 |   2695 | slv_req[24]
+    1340+ |       4 |     166 |       36 |      1 |    67 |    +0.3% |   -1.040 |     -376.5 |     -972.6 |   2695 | slv_req[24]
+    1344+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1345+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1346+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1347+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1348+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1349+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1350+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1350+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1351+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1352+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1353+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1354+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1355+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1356+ |       4 |     168 |       36 |      1 |    68 |    +0.3% |   -1.040 |     -376.5 |     -971.4 |   2695 | slv_req[24]
+    1360+ |       4 |     169 |       36 |      1 |    70 |    +0.3% |   -1.040 |     -376.4 |     -933.8 |   2695 | slv_req[24]
+    1363+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1364+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1365+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1366+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1367+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1368+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1369+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1370+ |       4 |     171 |       36 |      1 |    71 |    +0.3% |   -1.040 |     -376.4 |     -933.7 |   2695 | slv_req[24]
+    1374+ |       4 |     173 |       36 |      1 |    73 |    +0.3% |   -1.040 |     -376.4 |     -930.6 |   2695 | slv_req[24]
+    1375+ |       4 |     173 |       36 |      1 |    73 |    +0.3% |   -1.040 |     -376.4 |     -930.6 |   2695 | slv_req[24]
+    1380+ |       4 |     176 |       36 |      1 |    74 |    +0.3% |   -1.040 |     -376.4 |     -930.6 |   2695 | slv_req[24]
+    1384+ |       4 |     178 |       36 |      1 |    76 |    +0.3% |   -1.040 |     -376.4 |     -915.8 |   2695 | slv_req[24]
+    1387+ |       4 |     179 |       36 |      1 |    77 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1388+ |       4 |     179 |       36 |      1 |    77 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1389+ |       4 |     179 |       36 |      1 |    77 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1390+ |       4 |     179 |       36 |      1 |    77 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1390+ |       4 |     179 |       36 |      1 |    77 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1391+ |       4 |     179 |       36 |      1 |    77 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1394+ |       4 |     180 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1395+ |       4 |     180 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1396+ |       4 |     180 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.7 |   2695 | slv_req[24]
+    1399+ |       4 |     182 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1400+ |       4 |     182 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1401+ |       4 |     182 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1402+ |       4 |     182 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1404+ |       4 |     183 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1405+ |       4 |     183 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1406+ |       4 |     183 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1407+ |       4 |     183 |       36 |      1 |    78 |    +0.3% |   -1.040 |     -376.4 |     -915.4 |   2695 | slv_req[24]
+    1410+ |       4 |     184 |       36 |      1 |    79 |    +0.3% |   -1.040 |     -376.4 |     -915.0 |   2695 | slv_req[24]
+    1411+ |       4 |     185 |       36 |      1 |    79 |    +0.3% |   -1.040 |     -376.4 |     -915.0 |   2695 | slv_req[24]
+    1415+ |       4 |     187 |       36 |      1 |    80 |    +0.3% |   -1.040 |     -376.4 |     -914.6 |   2695 | slv_req[24]
+    1416+ |       4 |     187 |       36 |      1 |    80 |    +0.3% |   -1.040 |     -376.4 |     -914.6 |   2695 | slv_req[24]
+    1417+ |       4 |     187 |       36 |      1 |    80 |    +0.3% |   -1.040 |     -376.4 |     -914.6 |   2695 | slv_req[24]
+    1418+ |       4 |     187 |       36 |      1 |    80 |    +0.3% |   -1.040 |     -376.4 |     -914.6 |   2695 | slv_req[24]
+    1419+ |       4 |     187 |       36 |      1 |    80 |    +0.3% |   -1.040 |     -376.4 |     -914.6 |   2695 | slv_req[24]
+    1420+ |       4 |     187 |       36 |      1 |    80 |    +0.3% |   -1.040 |     -376.4 |     -914.6 |   2695 | slv_req[24]
+    1420+ |       4 |     187 |       36 |      1 |    80 |    +0.3% |   -1.040 |     -376.4 |     -914.6 |   2695 | slv_req[24]
+    1424+ |       4 |     189 |       36 |      1 |    81 |    +0.3% |   -1.040 |     -376.4 |     -914.2 |   2695 | slv_req[24]
+    1425+ |       4 |     189 |       36 |      1 |    81 |    +0.3% |   -1.040 |     -376.4 |     -914.2 |   2695 | slv_req[24]
+    1426+ |       4 |     189 |       36 |      1 |    81 |    +0.3% |   -1.040 |     -376.4 |     -914.2 |   2695 | slv_req[24]
+    1430+ |       4 |     192 |       36 |      1 |    81 |    +0.4% |   -1.040 |     -368.1 |     -861.8 |   2695 | slv_req[24]
+    1431+ |       4 |     192 |       36 |      1 |    82 |    +0.4% |   -1.040 |     -368.2 |     -854.4 |   2695 | slv_req[24]
+    1432+ |       4 |     192 |       36 |      1 |    82 |    +0.4% |   -1.040 |     -368.2 |     -854.4 |   2695 | slv_req[24]
+    1433+ |       4 |     192 |       36 |      1 |    82 |    +0.4% |   -1.040 |     -368.2 |     -854.4 |   2695 | slv_req[24]
+    1434+ |       4 |     192 |       36 |      1 |    82 |    +0.4% |   -1.040 |     -368.2 |     -854.4 |   2695 | slv_req[24]
+    1435+ |       4 |     192 |       36 |      1 |    82 |    +0.4% |   -1.040 |     -368.2 |     -854.4 |   2695 | slv_req[24]
+    1440+ |       4 |     195 |       36 |      1 |    83 |    +0.4% |   -1.040 |     -368.2 |     -854.0 |   2695 | slv_req[24]
+    1441+ |       4 |     195 |       36 |      1 |    84 |    +0.4% |   -1.040 |     -368.2 |     -854.1 |   2695 | slv_req[24]
+    1442+ |       4 |     195 |       36 |      1 |    84 |    +0.4% |   -1.040 |     -368.2 |     -854.1 |   2695 | slv_req[24]
+    1443+ |       4 |     195 |       36 |      1 |    84 |    +0.4% |   -1.040 |     -368.2 |     -854.1 |   2695 | slv_req[24]
+    1445+ |       4 |     195 |       36 |      1 |    85 |    +0.4% |   -1.040 |     -368.2 |     -854.0 |   2695 | slv_req[24]
+    1450+ |       4 |     198 |       36 |      1 |    86 |    +0.3% |   -1.040 |     -368.2 |     -853.7 |   2695 | slv_req[24]
+    1450+ |       4 |     198 |       36 |      1 |    86 |    +0.3% |   -1.040 |     -368.2 |     -853.7 |   2695 | slv_req[24]
+    1451+ |       4 |     198 |       36 |      1 |    86 |    +0.3% |   -1.040 |     -368.2 |     -853.7 |   2695 | slv_req[24]
+    1454+ |       4 |     199 |       36 |      1 |    87 |    +0.4% |   -1.040 |     -368.2 |     -853.3 |   2695 | slv_req[24]
+    1459+ |       4 |     202 |       36 |      1 |    88 |    +0.3% |   -1.040 |     -368.2 |     -852.9 |   2695 | slv_req[24]
+    1460+ |       4 |     202 |       36 |      1 |    88 |    +0.3% |   -1.040 |     -368.2 |     -852.9 |   2695 | slv_req[24]
+    1461+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1462+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1463+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1464+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1465+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1466+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1467+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1468+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1469+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1470+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1470+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1471+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1472+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1473+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1474+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1475+ |       4 |     203 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -368.2 |     -852.6 |   2695 | slv_req[24]
+    1477+ |       4 |     204 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -367.5 |     -852.2 |   2695 | slv_req[24]
+    1478+ |       4 |     204 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -367.5 |     -852.2 |   2695 | slv_req[24]
+    1479+ |       4 |     204 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -367.5 |     -852.2 |   2695 | slv_req[24]
+    1480+ |       4 |     204 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -367.5 |     -852.2 |   2695 | slv_req[24]
+    1480+ |       4 |     204 |       36 |      1 |    88 |    +0.4% |   -1.040 |     -367.5 |     -852.2 |   2695 | slv_req[24]
+    1484+ |       4 |     206 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -367.5 |     -851.8 |   2695 | slv_req[24]
+    1488+ |       4 |     209 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -365.7 |     -849.4 |   2695 | slv_req[24]
+    1490+ |       4 |     210 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1492+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1493+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1494+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1495+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1496+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1497+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1498+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1499+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    1500+ |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2695 | slv_req[24]
+    final |       4 |     212 |       36 |      1 |    89 |    +0.4% |   -1.040 |     -363.4 |     -849.2 |   2481 | slv_req[24]
+------------------------------------------------------------------------------------------------------------------------------
+[INFO RSZ-0059] Removed 4 buffers.
+[INFO RSZ-0040] Inserted 36 buffers.
+[INFO RSZ-0051] Resized 212 instances: 211 up, 1 up match, 0 down, 0 VT
+[INFO RSZ-0043] Swapped pins on 89 instances.
+[INFO RSZ-0049] Cloned 1 instances.
+[WARNING RSZ-0062] Unable to repair all setup violations.
+[INFO RSZ-0505] Runtime: 81.84s
+[INFO RSZ-0033] No hold violations found.
+[INFO RSZ-0506] Runtime: 0.15s
+Took 82 seconds: repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -verbose
+global_route -start_incremental
+detailed_placement
+[INFO DPL-0006] Core area: 2090826.52 um^2
+[INFO DPL-0007] Movable instances area: 265686.06 um^2
+[INFO DPL-0008] Fixed instances area within core: 34678.26 um^2
+[INFO DPL-0009] Utilization: 14.4%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 51352 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |         54 |        12 |        42
+        1 |          6 |         2 |         4
+        2 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 2.
+[INFO DPL-0500] Runtime: 0.21s
+Placement Analysis
+---------------------------------
+total displacement        476.0 u
+average displacement        0.0 u
+max displacement           17.2 u
+original HPWL         1244480.4 u
+legalized HPWL        1245030.6 u
+delta HPWL                    0 %
+
+check_placement -verbose
+global_route -end_incremental -congestion_report_file ./reports/sky130hd/d_nw01_ss/base/congestion_post_repair_timing.rpt
+estimate_parasitics -global_routing
+global_route -start_incremental
+global_route -end_incremental -congestion_report_file ./reports/sky130hd/d_nw01_ss/base/congestion_post_recover_power.rpt
+Repair antennas...
+[INFO GRT-0012] Found 450 antenna violations.
+[INFO GRT-0302] Inserted 572 jumpers for 422 nets.
+[INFO GRT-0012] Found 34 antenna violations.
+[INFO DPL-0006] Core area: 2090826.52 um^2
+[INFO DPL-0007] Movable instances area: 265285.68 um^2
+[INFO DPL-0008] Fixed instances area within core: 35436.49 um^2
+[INFO DPL-0009] Utilization: 14.4%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 51495 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 0.
+[INFO DPL-0500] Runtime: 0.20s
+[INFO GRT-0015] Inserted 143 diodes.
+[WARNING GRT-0297] Disabling NDR for 1 congested nets
+[WARNING GRT-0273] Disabled NDR (to reduce congestion) for net: clk
+[INFO GRT-0012] Found 7 antenna violations.
+[INFO GRT-0302] Inserted 4 jumpers for 4 nets.
+[INFO GRT-0012] Found 3 antenna violations.
+[INFO DPL-0006] Core area: 2090826.52 um^2
+[INFO DPL-0007] Movable instances area: 266013.88 um^2
+[INFO DPL-0008] Fixed instances area within core: 34768.35 um^2
+[INFO DPL-0009] Utilization: 14.4%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 51519 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 0.
+[INFO DPL-0500] Runtime: 0.21s
+[INFO GRT-0015] Inserted 24 diodes.
+[INFO GRT-0012] Found 3 antenna violations.
+[INFO GRT-0302] Inserted 0 jumpers for 0 nets.
+[INFO GRT-0012] Found 3 antenna violations.
+[INFO DPL-0006] Core area: 2090826.52 um^2
+[INFO DPL-0007] Movable instances area: 266073.94 um^2
+[INFO DPL-0008] Fixed instances area within core: 34790.87 um^2
+[INFO DPL-0009] Utilization: 14.4%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 51552 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 0.
+[INFO DPL-0500] Runtime: 0.18s
+[INFO GRT-0015] Inserted 33 diodes.
+[INFO GRT-0012] Found 3 antenna violations.
+[INFO GRT-0302] Inserted 0 jumpers for 0 nets.
+[INFO GRT-0012] Found 3 antenna violations.
+[INFO DPL-0006] Core area: 2090826.52 um^2
+[INFO DPL-0007] Movable instances area: 266156.52 um^2
+[INFO DPL-0008] Fixed instances area within core: 34773.35 um^2
+[INFO DPL-0009] Utilization: 14.4%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 51578 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 0.
+[INFO DPL-0500] Runtime: 0.19s
+[INFO GRT-0015] Inserted 26 diodes.
+[INFO GRT-0012] Found 2 antenna violations.
+[INFO GRT-0302] Inserted 0 jumpers for 0 nets.
+[INFO GRT-0012] Found 2 antenna violations.
+[INFO DPL-0006] Core area: 2090826.52 um^2
+[INFO DPL-0007] Movable instances area: 266231.59 um^2
+[INFO DPL-0008] Fixed instances area within core: 34703.28 um^2
+[INFO DPL-0009] Utilization: 14.4%
+[INFO DPL-0005] Diamond search max displacement: +/- 500 sites horizontally, +/- 100 rows vertically.
+[INFO DPL-1102] Legalizing using negotiation legalizer.
+[INFO DPL-1103] Negotiation base search window: +/-20 sites horizontally, +/-5 rows vertically 
+	Automatic search window extension enabled.
+	Search window extendable up to the max displacement cap of +/-500 sites, +/-100 rows near walls.
+[INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
+[INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
+[INFO DPL-0393]   height 1 row(s): 51580 cells
+          |      Total |  Illegal |  Illegal
+Iteration | Violations |    Cells |    Sites
+---------------------------------------------
+        0 |          0 |         0 |         0
+Negotiation phase 1 converged at iteration 0.
+[INFO DPL-0500] Runtime: 0.18s
+[INFO GRT-0015] Inserted 2 diodes.
+[INFO ANT-0002] Found 0 net violations.
+[INFO ANT-0001] Found 0 pin violations.
+Estimate parasitics...
+estimate_parasitics -global_routing
+Report metrics stage 5, global route...
+
+==========================================================================
+global route report_design_area
+--------------------------------------------------------------------------
+Design area 300935 um^2 14% utilization.
+[INFO FLW-0007] clock core_clock period 7.500000
+[WARNING FLW-0010] more than one clock found. Skipping sdc update.
+[INFO FLW-0011] Path endpoint path count 7018
+write_db ./results/sky130hd/d_nw01_ss/base/5_1_grt.odb
+write_sdc -no_timestamp ./results/sky130hd/d_nw01_ss/base/5_1_grt.sdc
+Elapsed time: 2:49.90[h:]min:sec. CPU time: user 853.39 sys 44.76 (528%). Peak memory: 1057836KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+5_1_grt                   .odb          169           1033 904bccf3f7d07f4a17b5
+5_1_grt                   .sdc                             3e4371435aea19a3f97c
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 5_2_route detail_route
+Running detail_route.tcl, stage 5_2_route
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_nw01_ss/base/5_1_grt.odb
+read_sdc ./results/sky130hd/d_nw01_ss/base/5_1_grt.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+[WARNING STA-0450] virtual clock vclk_core_clock can not be propagated.
+detailed_route -output_drc ./reports/sky130hd/d_nw01_ss/base/5_route_drc.rpt -output_maze ./results/sky130hd/d_nw01_ss/base/maze.log -droute_end_iter 64 -verbose 1 -drc_report_iter_step 5
+[INFO DRT-0149] Reading tech and libs.
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer mcon
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer mcon
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via2
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via2
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via3
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via3
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via4
+[WARNING DRT-0349] LEF58_ENCLOSURE with no CUTCLASS is not supported. Skipping for layer via4
+
+Units:                1000
+Number of layers:     13
+Number of macros:     441
+Number of vias:       29
+Number of viarulegen: 25
+
+[INFO DRT-0150] Reading design.
+[WARNING DRT-0120] Large net net8352 has 108 pins which may impact routing performance. Consider optimization.
+
+Design:                   axi4_xbar
+Die area:                 ( 0 0 ) ( 1450055 1450055 )
+Number of track patterns: 12
+Number of DEF vias:       0
+Number of components:     51580
+Number of terminals:      1358
+Number of snets:          2
+Number of nets:           24801
+
+[INFO DRT-0167] List of default vias:
+  Layer via
+    default via: M1M2_PR
+  Layer via2
+    default via: M2M3_PR
+  Layer via3
+    default via: M3M4_PR
+  Layer via4
+    default via: M4M5_PR
+[INFO DRT-0162] Library cell analysis.
+[INFO DRT-0163] Instance analysis.
+[INFO DRT-0164] Number of unique instances = 344.
+[INFO DRT-0168] Init region query.
+[INFO DRT-0024]   Complete FR_MASTERSLICE.
+[INFO DRT-0024]   Complete Fr_VIA.
+[INFO DRT-0024]   Complete li1.
+[INFO DRT-0024]   Complete mcon.
+[INFO DRT-0024]   Complete met1.
+[INFO DRT-0024]   Complete via.
+[INFO DRT-0024]   Complete met2.
+[INFO DRT-0024]   Complete via2.
+[INFO DRT-0024]   Complete met3.
+[INFO DRT-0024]   Complete via3.
+[INFO DRT-0024]   Complete met4.
+[INFO DRT-0024]   Complete via4.
+[INFO DRT-0024]   Complete met5.
+[INFO DRT-0033] FR_MASTERSLICE shape region query size = 0.
+[INFO DRT-0033] FR_VIA shape region query size = 0.
+[INFO DRT-0033] li1 shape region query size = 872219.
+[INFO DRT-0033] mcon shape region query size = 517776.
+[INFO DRT-0033] met1 shape region query size = 185877.
+[INFO DRT-0033] via shape region query size = 140980.
+[INFO DRT-0033] met2 shape region query size = 85470.
+[INFO DRT-0033] via2 shape region query size = 112784.
+[INFO DRT-0033] met3 shape region query size = 85062.
+[INFO DRT-0033] via3 shape region query size = 112784.
+[INFO DRT-0033] met4 shape region query size = 33920.
+[INFO DRT-0033] via4 shape region query size = 5618.
+[INFO DRT-0033] met5 shape region query size = 5830.
+[INFO DRT-0165] Start pin access.
+[INFO DRT-0076]   Complete 1000 pins.
+[INFO DRT-0076]   Complete 2000 pins.
+[INFO DRT-0078]   Complete 2793 pins.
+[INFO DRT-0079]   Complete 100 unique inst patterns.
+[INFO DRT-0079]   Complete 200 unique inst patterns.
+[INFO DRT-0079]   Complete 300 unique inst patterns.
+[INFO DRT-0081]   Complete 344 unique inst patterns.
+[INFO DRT-0082]   Complete 10000 groups.
+[INFO DRT-0084]   Complete 17697 groups.
+#scanned instances     = 51580
+#unique  instances     = 344
+#stdCellGenAp          = 10749
+#stdCellValidPlanarAp  = 65
+#stdCellValidViaAp     = 8204
+#stdCellPinNoAp        = 0
+#stdCellPinCnt         = 82758
+#instTermValidViaApCnt = 0
+#macroGenAp            = 0
+#macroValidPlanarAp    = 0
+#macroValidViaAp       = 0
+#macroNoAp             = 0
+[INFO DRT-0166] Complete pin access.
+[INFO DRT-0267] cpu time = 00:08:13, elapsed time = 00:00:50, memory = 626.01 (MB), peak = 634.47 (MB)
+[INFO DRT-0156] guideIn read 100000 guides.
+[INFO DRT-0156] guideIn read 200000 guides.
+
+[INFO DRT-0157] Number of guides:     208328
+
+[INFO DRT-0169] Post process guides.
+[INFO DRT-0176] GCELLGRID X 0 DO 210 STEP 6900 ;
+[INFO DRT-0177] GCELLGRID Y 0 DO 210 STEP 6900 ;
+[INFO DRT-0026]   Complete 100000 origin guides.
+[INFO DRT-0026]   Complete 200000 origin guides.
+[INFO DRT-0028]   Complete FR_MASTERSLICE.
+[INFO DRT-0028]   Complete Fr_VIA.
+[INFO DRT-0028]   Complete li1.
+[INFO DRT-0028]   Complete mcon.
+[INFO DRT-0028]   Complete met1.
+[INFO DRT-0028]   Complete via.
+[INFO DRT-0028]   Complete met2.
+[INFO DRT-0028]   Complete via2.
+[INFO DRT-0028]   Complete met3.
+[INFO DRT-0028]   Complete via3.
+[INFO DRT-0028]   Complete met4.
+[INFO DRT-0028]   Complete via4.
+[INFO DRT-0028]   Complete met5.
+[INFO DRT-0178] Init guide query.
+[INFO DRT-0035]   Complete FR_MASTERSLICE (guide).
+[INFO DRT-0035]   Complete Fr_VIA (guide).
+[INFO DRT-0035]   Complete li1 (guide).
+[INFO DRT-0035]   Complete mcon (guide).
+[INFO DRT-0035]   Complete met1 (guide).
+[INFO DRT-0035]   Complete via (guide).
+[INFO DRT-0035]   Complete met2 (guide).
+[INFO DRT-0035]   Complete via2 (guide).
+[INFO DRT-0035]   Complete met3 (guide).
+[INFO DRT-0035]   Complete via3 (guide).
+[INFO DRT-0035]   Complete met4 (guide).
+[INFO DRT-0035]   Complete via4 (guide).
+[INFO DRT-0035]   Complete met5 (guide).
+[INFO DRT-0036] FR_MASTERSLICE guide region query size = 0.
+[INFO DRT-0036] FR_VIA guide region query size = 0.
+[INFO DRT-0036] li1 guide region query size = 68687.
+[INFO DRT-0036] mcon guide region query size = 0.
+[INFO DRT-0036] met1 guide region query size = 61201.
+[INFO DRT-0036] via guide region query size = 0.
+[INFO DRT-0036] met2 guide region query size = 34027.
+[INFO DRT-0036] via2 guide region query size = 0.
+[INFO DRT-0036] met3 guide region query size = 4252.
+[INFO DRT-0036] via3 guide region query size = 0.
+[INFO DRT-0036] met4 guide region query size = 1451.
+[INFO DRT-0036] via4 guide region query size = 0.
+[INFO DRT-0036] met5 guide region query size = 173.
+[INFO DRT-0179] Init gr pin query.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 699.03 (MB), peak = 698.16 (MB)
+[INFO DRT-0245] skipped writing guide updates to database.
+[INFO DRT-0181] Start track assignment.
+[INFO DRT-0184] Done with 104165 vertical wires in 5 frboxes and 65626 horizontal wires in 5 frboxes.
+[INFO DRT-0186] Done with 12127 vertical wires in 5 frboxes and 18743 horizontal wires in 5 frboxes.
+[INFO DRT-0182] Complete track assignment.
+[INFO DRT-0267] cpu time = 00:00:09, elapsed time = 00:00:04, memory = 1207.33 (MB), peak = 1206.38 (MB)
+[INFO DRT-0187] Start routing data preparation.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 1213.55 (MB), peak = 1212.51 (MB)
+[INFO DRT-0194] Start detail routing.
+[INFO DRT-0195] Start 0th optimization iteration.
+    Completing 10% with 0 violations.
+    elapsed time = 00:00:08, memory = 1606.73 (MB).
+    Completing 20% with 0 violations.
+    elapsed time = 00:00:21, memory = 2099.76 (MB).
+    Completing 30% with 3324 violations.
+    elapsed time = 00:00:25, memory = 2152.56 (MB).
+    Completing 40% with 3324 violations.
+    elapsed time = 00:00:44, memory = 2322.58 (MB).
+    Completing 50% with 3324 violations.
+    elapsed time = 00:00:49, memory = 2355.58 (MB).
+    Completing 60% with 6440 violations.
+    elapsed time = 00:01:02, memory = 2415.86 (MB).
+    Completing 70% with 6440 violations.
+    elapsed time = 00:01:22, memory = 2496.89 (MB).
+    Completing 80% with 10109 violations.
+    elapsed time = 00:01:27, memory = 2463.21 (MB).
+    Completing 90% with 10109 violations.
+    elapsed time = 00:01:57, memory = 2565.63 (MB).
+    Completing 100% with 13289 violations.
+    elapsed time = 00:02:04, memory = 2534.39 (MB).
+[INFO DRT-0199]   Number of violations = 15259.
+Viol/Layer         li1   mcon   met1    via   met2   via2   met3   via3   met4   via4   met5
+Cut Spacing          0     13      0      1      0      2      0      0      0      2      0
+Metal Spacing        0      0   3213      0    684      0     41      0     14      0      2
+Min Hole             0      0     11      0      0      0      0      0      0      0      0
+NS Metal             0      0      1      0      0      0      0      0      0      0      0
+Recheck             22      0   1285      0    589      0     35      0     31      0      8
+Short                0      5   7833      5   1325      2     74      1     45      3     12
+[INFO DRT-0267] cpu time = 00:19:03, elapsed time = 00:02:05, memory = 2604.64 (MB), peak = 2626.88 (MB)
+Total wire length = 1463009 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 558989 um.
+Total wire length on LAYER met2 = 654068 um.
+Total wire length on LAYER met3 = 146737 um.
+Total wire length on LAYER met4 = 100722 um.
+Total wire length on LAYER met5 = 2491 um.
+Total number of vias = 186988.
+Up-via summary (total 186988):
+
+-------------------------
+ FR_MASTERSLICE         0
+            li1     82945
+           met1     95202
+           met2      6276
+           met3      2273
+           met4       292
+-------------------------
+               186988
+
+
+[INFO DRT-0195] Start 1st optimization iteration.
+    Completing 10% with 15259 violations.
+    elapsed time = 00:00:08, memory = 2668.07 (MB).
+    Completing 20% with 15259 violations.
+    elapsed time = 00:00:26, memory = 2742.92 (MB).
+    Completing 30% with 13707 violations.
+    elapsed time = 00:00:31, memory = 2661.17 (MB).
+    Completing 40% with 13707 violations.
+    elapsed time = 00:00:53, memory = 2824.81 (MB).
+    Completing 50% with 13707 violations.
+    elapsed time = 00:00:58, memory = 2757.45 (MB).
+    Completing 60% with 12350 violations.
+    elapsed time = 00:01:08, memory = 2794.09 (MB).
+    Completing 70% with 12350 violations.
+    elapsed time = 00:01:26, memory = 2806.52 (MB).
+    Completing 80% with 10508 violations.
+    elapsed time = 00:01:31, memory = 2693.96 (MB).

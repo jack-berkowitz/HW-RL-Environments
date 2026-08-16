@@ -36,7 +36,7 @@ Five independent instances, in five different parts of the system, none of
 which produced an error. This is the failure mode the project is organised
 against, and it deserves naming before the individual findings.
 
-### 1. The runner scored the wrong testbench for eight commits
+### P1. The runner scored the wrong testbench for eight commits
 
 `sim_candidate.sh` selected which testbench to score with:
 
@@ -57,7 +57,8 @@ Nothing errored. The output was indistinguishable from a full pass.
 **Rule**: the runner names its artifacts explicitly and refuses when they are
 absent; it never discovers them by pattern.
 
-### 2. A reference that had never run at all
+**Rules:** 10
+### P2. A reference that had never run at all
 
 `nw_d01`'s `ref/sim_flags_verilator.txt` was **empty**. The shim wraps a vendored
 Forencich module and needs that directory on the search path, so the reference
@@ -75,7 +76,8 @@ unrelated change.
 **Rule**: same as above — and every reference runs through the same gate as
 every candidate, every time.
 
-### 3. A measurement sweep that ran one iteration and died
+**Rules:** 10
+### P3. A measurement sweep that ran one iteration and died
 
 An Fmax sweep was launched as `nohup … &` *inside* an already-backgrounded
 call. The wrapper returned exit code 0 immediately, the real process was
@@ -89,7 +91,8 @@ the run had been given `3.0`.
 **Rule**: a result file must record the parameters it was produced with, so a
 stale read is detectable.
 
-### 4. A results table reporting a live directory — the worst of the four
+**Rules:** 7, 8
+### P4. A results table reporting a live directory — the worst of the four
 
 `collect_results.py` read the ORFS output directory directly. That directory is
 shared and mutable: any concurrent build rewrites it. During an Fmax sweep the
@@ -114,7 +117,8 @@ Collection reads only those records and **never the live directory**. A task
 with no record is reported ABSENT rather than filled in from disk.
 **Rule**: a missing row is honest; a stale row is not.
 
-### 5. A self-consistent wrong answer — the worst of the five
+**Rules:** 8
+### P5. A self-consistent wrong answer — the worst of the five
 
 An Fmax sweep aborted mid-bisection on a missing metrics file and wrote:
 
@@ -163,6 +167,8 @@ error anywhere. A test suite cannot catch these, because from the inside they
 are indistinguishable from success. The only defence is to check that the thing
 you think ran actually ran, against a known-failing input.
 
+**Rules:** 7
+
 ---
 
 # UNBOUND PARAMETERS
@@ -170,7 +176,7 @@ you think ran actually ran, against a known-failing input.
 A parameter the spec declares and no check enforces. The design is free to
 ignore it, and every test still passes.
 
-## 1. `MAX_TRANS` — declared once, never referenced
+## F1. `MAX_TRANS` — declared once, never referenced
 
 `d_nw01` (AXI4 crossbar) takes `MAX_TRANS`, the outstanding transactions each
 master port must support. A candidate came back **67 % smaller** than the
@@ -198,7 +204,8 @@ throughput.
 **Rule**: every capability the design must support is a named parameter with a
 binding check.
 
-## 2. `DATA_W` — unbound above bit 31
+**Rules:** 1
+## F2. `DATA_W` — unbound above bit 31
 
 `d_ca04` (async FIFO) takes `DATA_W ∈ {8, 32, 64}`. The payload generator was:
 
@@ -213,7 +220,8 @@ so a FIFO that carried only the low half passed every configuration.
 duplicates nothing, preserves order — and drops bits [63:32]. It **passed**.
 **Hid**: half the datapath at the widest configuration.
 
-## 3. `SYNC_STAGES` — unbound, and the first conclusion was wrong
+**Rules:** 1
+## F3. `SYNC_STAGES` — unbound, and the first conclusion was wrong
 
 Synchroniser depth for a clock-domain crossing. A probe hard-coding two flops
 **passed at `SYNC_STAGES = 3`**.
@@ -241,7 +249,8 @@ the spec's refusal to constrain latency, which is about upper bounds.
 
 **Rule**: "not observable" is a claim that needs a measurement, not an argument.
 
-## 4. `LOG_DEPTH` — bound only through a quantity known to be unmeasurable
+**Rules:** 1
+## F4. `LOG_DEPTH` — bound only through a quantity known to be unmeasurable
 
 FIFO depth. Violations *were* caught, but only by a coverage counter computed
 from `occ = wr_idx - rd_idx` — a cross-domain difference **the same testbench
@@ -261,7 +270,8 @@ wrong with it.
 reader, offer writes, count what is accepted. Below `2**LOG_DEPTH` fails with a
 message naming the design.
 
-## 5. Burst length — never a parameter at all
+**Rules:** 1, 4
+## F5. Burst length — never a parameter at all
 
 `d_nw01`'s spec permitted AXI4's full `ARLEN` range (up to 256 beats) and the
 checker drove `$urandom_range(0, 3)` — never more than 4.
@@ -281,6 +291,8 @@ The anchor was measured *first*, to check the requirement was satisfiable before
 it was written: the reference passes at `MAX_BURST_LEN = 255` under backpressure
 while buffering nothing.
 
+**Rules:** 1
+
 ---
 
 # STATED REQUIREMENTS WITH NO CONDITION TO TRIGGER THEM
@@ -288,7 +300,7 @@ while buffering nothing.
 A requirement written in the spec that no test ever creates the situation for.
 Strictly worse than an unbound parameter, because the document looks complete.
 
-## 6. `L3` — liveness under backpressure, never given the backpressure
+## F6. `L3` — liveness under backpressure, never given the backpressure
 
 `d_nw01`'s spec required deadlock and starvation freedom to hold *"with
 backpressure applied on any subset of response channels"*.
@@ -305,13 +317,16 @@ stall would. **A coverage floor fails the run if backpressure never actually
 stalled a response** — so the requirement cannot go back to passing by never
 being exercised.
 
-## 7. `H1` — never checked at all
+**Rules:** 2
+## F7. `H1` — never checked at all
 
 `d_ca04`'s spec: `wr_ready` must not depend combinationally on `wr_valid`. There
 was no check. Not a weak check — none.
 
 **Fixed**: toggle `wr_valid` between clock edges and require `wr_ready` not to
 move. See finding 12 for what happened next.
+
+**Rules:** 2
 
 ---
 
@@ -320,7 +335,7 @@ move. See finding 12 for what happened next.
 The reference is not neutral. It is a vendored module configured by a shim
 *this project wrote*, and those choices are not part of the contract.
 
-## 8. `CUT_ALL_AX` — 45 % of the reference's area, never requested
+## F8. `CUT_ALL_AX` — 45 % of the reference's area, never requested
 
 `d_nw01`'s shim bound `LatencyMode: axi_pkg::CUT_ALL_AX` — full channel cuts on
 both address channels. The spec never asked for pipelining.
@@ -352,6 +367,8 @@ implementation's buffering into the contract. The floor is now half of
 passes an independently written second source that provides *exactly*
 `MAX_TRANS`, and still fails a one-deep design by a wide margin.
 
+**Rules:** 9
+
 ---
 
 # CONTROLS THAT DID NOT CONTROL
@@ -359,7 +376,7 @@ passes an independently written second source that provides *exactly*
 A check whose failure mode is silence must be validated against a known-failing
 input. These are the cases where the validation itself was wrong.
 
-## 9. The wedging harness — a broken rig and a deadlocked DUT are identical
+## F9. The wedging harness — a broken rig and a deadlocked DUT are identical
 
 The first liveness rig for `d_nw01` reported `DEADLOCK` on the **correct**
 reference. The crossbar was fine; the harness had wedged. Its master and slave
@@ -377,7 +394,8 @@ design — every slave's latency inflated 14× — must fire **neither**. That l
 one is the inverse control, and without it the monitor would silently encode one
 arbitration policy into the contract.
 
-## 10. A control that failed two checks validated neither
+**Rules:** 3
+## F10. A control that failed two checks validated neither
 
 The textbook `H1` violation is `wr_ready = wr_valid && !full`. Used as a control
 for finding 7, it **failed `R4` instead** — the requirement that `wr_ready`
@@ -393,7 +411,8 @@ Replaced with a probe that arms the dependency only after the first beat, so
 **Rule**: a control validates a check only if it fails **that** check and
 nothing else.
 
-## 11. The C2 control took three attempts, each a hole in the check
+**Rules:** 3
+## F11. The C2 control took three attempts, each a hole in the check
 
 `d_nw01`'s concurrency requirement: disjoint master/slave pairs must proceed in
 parallel. A crossbar that serialises everything through one datapath is correct
@@ -414,7 +433,8 @@ on every individual transaction and is not a crossbar.
 
 Final control: passes the capacity check, fails concurrency alone at 100 %.
 
-## 12. A new check that was vacuous on arrival
+**Rules:** 3, 5
+## F12. A new check that was vacuous on arrival
 
 The H1 check from finding 7 **passed** its own control. Cause: a capacity phase
 added in the same change set `rd_weight = 0` to stop the reader, and the drain
@@ -427,7 +447,8 @@ a change written specifically to eliminate silent no-ops.
 It now fails explicitly if it finds itself in that state, rather than passing on
 a condition it never created.
 
-## 13. A coverage floor that was measuring the harness
+**Rules:** 3
+## F13. A coverage floor that was measuring the harness
 
 `d_nw01`'s cross-ID interleaving floor required ≥ 100 observed reorderings.
 After burst length became a swept parameter, transaction counts were scaled down
@@ -489,7 +510,7 @@ A known-good input tells you a check is not too tight. A known-bad input tells
 you it is not too loose. **Neither tells you the check is measuring the right
 quantity** — for that you need two correct designs that disagree.
 
-
+**Rules:** 4
 
 ---
 
@@ -778,7 +799,7 @@ directory, a self-consistent wrong Fmax. All of them exited zero and looked fine
 The two findings from `d_dsp02` are **not that class**, and the distinction
 matters because it means the list is not closed.
 
-## 14. A requirement inherited rather than chosen
+## F14. A requirement inherited rather than chosen
 
 Expected values for `d_dsp02` are captured from the vendored anchor, which makes
 them correct. It does not make them *uniquely* correct.
@@ -806,7 +827,8 @@ only by counting flag combinations across 4290 captured vectors.
 **Rule 12**: standards latitude must be named, and audit the artefact, not the
 prose.
 
-## 15. Guidance that decayed
+**Rules:** 12, 15
+## F15. Guidance that decayed
 
 Diff rate was retracted as a mutant-quality band and recorded as such in this
 document — **and left live in `BUILD_PROMPT_VERIFICATION.md`**, where it read as
@@ -824,6 +846,31 @@ artifacts explicitly", the one produced by the alphabetical-testbench defect,
 survived only in this file and in neither prompt. That is the same failure
 occurring during the fix for it, which is the strongest available argument that
 the structural fix was the right response rather than more careful editing.
+
+**Rules:** 13
+## F16. A rule dropped by the edit that was fixing rule duplication
+
+`RULES.md` was created because the rules had been duplicated across three
+documents and the copies drifted (F15). The consolidation edit that produced it
+**silently dropped one of the rules it was consolidating**: *"the runner names
+its artifacts explicitly and refuses when they are absent"* — the rule produced
+by P1 and P2 — survived only in this file, and in **neither build prompt**.
+
+**Found by diffing the unified list against the originals rather than trusting
+the edit.** No test would have caught it: every document was well-formed, the
+list was plausibly complete, and the missing rule is one whose absence shows up
+only when someone writes a runner months later.
+
+**The failure occurred during the remedy for it.** That is the strongest argument
+available that the structural fix — one file, referenced everywhere — was the
+right response, and that "edit more carefully" was not: careful editing is
+exactly what was being attempted.
+
+**Rules:** 13 (single source of truth), and the mechanical linkage check that
+now guards it.
+
+**Class:** contract defect, like F14 and F15. The apparatus was fine.
+
 
 ## Why the distinction is worth recording
 
