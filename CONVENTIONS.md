@@ -242,20 +242,67 @@ artefact and the reasoning conflict, the artefact has the better record here.
 Re-deriving is attractive because it is fast and needs no setup. It is also how a
 wrong model of the code gets confirmed twice. **Print the intermediate.**
 
-## Long background sweeps run unbuffered
+## Never change stimulus in the same timestep as the sampling edge
 
-`python3 -u`, or the driver's own progress output is invisible until it exits.
+`@(posedge clk); req = 0;` races the DUT's sampling of `req` on that very edge.
+**Leave the edge first** — `@(posedge clk); ... @(negedge clk); req = 0;` — or
+drive from a clocking block.
 
-A `find_fmax` sweep left running in the background had a **zero-byte stdout file
-two and a half hours in** while it was working normally — Python block-buffers
-stdout when it is a file rather than a TTY. Liveness was only confirmable from
-the ORFS iteration logs it happened to leave on disk, which is an accident of
-that tool rather than instrumentation.
+The symptom is not subtle and is very easy to misattribute: in the `v_ca05`
+pilot a one-cycle request pulse committed **nothing at all**, so the store looked
+completely inert — `empty_o` stuck high, `full_o` never asserting, every pop
+returning no data. That reads as a dead DUT or a badly wrong specification, and
+both were suspected before the driver was.
 
-The cost is not just visibility: with the driver's own classification unreadable,
-the available fallback is grepping the flow logs, which is the one thing rule 7
-forbids — and which lands directly on the `GPL-0106` trap above. **An
-unobservable long-running job pushes you toward the untrustworthy measurement.**
+**The tell is that a held request works and a pulsed one does not.** That
+comparison takes one probe and settles it immediately; re-reading the driver code
+does not, because the code looks correct — the defect is in when the assignment
+executes, not in what it assigns.
+
+Two consequences worth carrying:
+
+- a model writing a testbench against a hidden DUT will hit this, and the natural
+  conclusions available to it are *"the DUT is broken"* or *"the spec is wrong"* —
+  neither being true. Any spec-only verification task inherits this as a
+  false-failure mode independent of spec quality.
+- it is another instance of the artefact-over-reasoning convention above: the
+  driver was read three times and looked right every time.
+
+## Any long-running job must emit progress to a readable stream
+
+**This is the highest-leverage convention in this file, because it is the cause
+behind a whole class of violations rather than an instance of one.**
+
+An unobservable job does not go unobserved. Someone needs to know whether it is
+alive, and they will find some other way to tell — and **that other way is
+reliably the untrustworthy one**, because the trustworthy source is precisely the
+one that is unreadable.
+
+The worked example is exact. A `find_fmax` sweep ran two and a half hours with a
+**zero-byte stdout file**, working normally the whole time: Python block-buffers
+stdout when it is a file rather than a TTY. With the driver's own classification
+unreadable, the only remaining evidence was the flow logs — so the check on
+liveness became a log grep, which is the one thing rule 7 forbids, landing
+straight on the `GPL-0106` trap documented two sections above. **Documented, and
+walked into anyway.**
+
+That is the part worth internalising. The trap was already written down. Knowing
+about it did not help, because the pressure was structural: the only available
+measurement was the wrong one. **Discipline does not survive a missing
+instrument.**
+
+So the fix is not "be more careful about rule 7". It is to remove the pressure:
+
+- `python3 -u`, or `PYTHONUNBUFFERED=1`, on anything backgrounded
+- flush after each iteration in any loop that runs longer than a few minutes
+- emit a line per iteration carrying **the tool's own verdict**, so the readable
+  stream and the authoritative source are the same stream
+- if a job cannot emit progress, it must at least write a state file the
+  supervisor can read
+
+**Expect every future rule-7 violation to have this cause.** A grep of an
+intermediate log is nearly always a symptom of an unobservable job upstream, and
+fixing the grep leaves the cause in place.
 
 ## CRITICAL PROCESS FINDING — single-seed validation is not validation
 
