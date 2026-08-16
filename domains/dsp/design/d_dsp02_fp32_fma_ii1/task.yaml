@@ -130,6 +130,32 @@ ppa:
   config: orfs/config.mk
   sdc: orfs/constraint.sdc
   status: IN PROGRESS -- no PPA number recorded yet
+
+  first_measurement:
+    period_ns: 10.0
+    result: FAILED TIMING, wns -14.47 ns, DRC 0
+    area_um2: null        # DELIBERATELY NULL. The run missed its gate, so its
+                          # area (73290) is a real number and NOT a result --
+                          # rule 6. Recorded as a failing point, never in a ratio.
+    what_it_established: >
+      The combinational cone is about 24.5 ns, so the spec-minimal binding runs
+      near 40 MHz. For scale: d_ca04 reaches 380 MHz and d_nw01 190 MHz. That is
+      not a defect -- it is what a full FMA looks like as one combinational cone,
+      and it is the correct answer for THIS configuration.
+
+  envelope_shape_consequence: >
+    THIS TASK NEEDS A TWO-POINT ENVELOPE, for the same reason d_nw01 does.
+    The spec fixes II=1 and explicitly frees latency, so the achievable Fmax
+    spans a very wide range depending only on how deeply a candidate pipelines
+    -- a choice the contract deliberately does not constrain. Reporting a single
+    Fmax would therefore build an arbitrary preference into every comparison:
+    with NumPipeRegs=0 canonical, a pipelining candidate looks unfairly good on
+    Fmax and bad on area; with a pipelined binding canonical, the reverse.
+
+    So the baseline is the ENVELOPE {NumPipeRegs=0, cPIPE3}, and a candidate is
+    reported against it rather than against a point. Comparing across the two
+    requires naming the axis under rule 17 -- they are two configurations of one
+    contract, not two results for one configuration.
   note: >
     FIRST LOGIC-DOMINATED DESIGN MEASURED HERE. The others are storage-dominated,
     where area barely responds to timing constraint. There is no register
