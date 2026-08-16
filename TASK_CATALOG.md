@@ -371,7 +371,7 @@ Reference 16/16, second source 16/16, candidate 16/16 across
    capacity with mixed IDs, now enforced in C1. See `NOTES.md § TASK C`.
 2. ~~Decide the canonical reference configuration.~~ **DONE — reported as a
    Pareto envelope rather than a winner.** `CUT_ALL_AX` reaches ≥190.48 MHz at
-   154 245 µm²; `NO_LATENCY` reaches 126.98 MHz at 100 277 µm². At least 1.50×
+   154 245 µm² [AREA ABSENT -- see F20; unverifiable, the directory it came from was overwritten by a run that FAILED its gate]; `NO_LATENCY` reaches 126.98 MHz at 100 277 µm² [provisional, corroborated]. At least 1.50×
    faster for 54 % more area, neither dominating, and the spec does not
    constrain latency — so picking one would build an arbitrary preference into
    every candidate comparison. **Both are the baseline; candidates are reported
@@ -383,7 +383,7 @@ Reference 16/16, second source 16/16, candidate 16/16 across
    master, caught only by C1.
 4. ~~`find_fmax.py` on the reference and the second source.~~ **REFERENCE DONE
    AND CONVERGED**: `CUT_ALL_AX` 190.48 MHz at 5.25 ns, bracket [4.875, 5.25]
-   (0.375 ns, inside resolution), area 154 245 µm² at own Fmax. `NO_LATENCY`
+   (0.375 ns, inside resolution), area **ABSENT** at own Fmax -- 154 245 µm² is withdrawn pending rebuild (F20). `NO_LATENCY`
    126.98 MHz. **This task no longer ships an unconverged Fmax.** Second-source
    sweep running — it is the third envelope point.
 5. **Second-source synthesis.** It has never been through ORFS, so its area is

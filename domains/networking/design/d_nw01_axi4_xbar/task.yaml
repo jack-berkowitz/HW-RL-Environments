@@ -138,19 +138,26 @@ ppa_reference_envelope:
       fmax_period_ns: 5.25
       fmax_converged: true
       fmax_bracket_ns: [4.875, 5.25]     # 0.375 wide, within the 0.5 resolution
-      area_um2_at_own_fmax: 154245
-      area_um2_at_12ns: 146951
-      synth_area_um2: 107891
-      elasticity_closing_range_pct: 5.0
+      # AREA WITHDRAWN -- see FINDINGS.md F20. No PPA number in this repo is
+      # traceable to a run record, and this one is unverifiable: the flow
+      # directory it was read from has since been overwritten by a run that
+      # FAILED its own gate (wns -0.216). Rebuild at 5.25 ns through
+      # ppa_candidate.sh before any of these are quoted again.
+      area_um2_at_own_fmax: ABSENT      # was 154245
+      area_um2_at_12ns: ABSENT          # was 146951
+      synth_area_um2: ABSENT            # was 107891
+      elasticity_closing_range_pct: ABSENT   # was 5.0; derived from the above
     - config: NO_LATENCY
       fmax_mhz: 126.98
       fmax_period_ns: 7.875
       fmax_converged: true
       fmax_bracket_ns: [7.5, 7.875]
-      area_um2_at_own_fmax: 100277
-      area_um2_at_12ns: 86133
-      synth_area_um2: 59209
-      elasticity_closing_range_pct: 16.4
+      # PROVISIONAL -- no run record (F20). Corroborated: the surviving flow
+      # directory still shows 100277 from a run that passed at wns +0.052.
+      area_um2_at_own_fmax: 100277      # provisional, corroborated
+      area_um2_at_12ns: 86133           # provisional, unverified
+      synth_area_um2: 59209             # provisional, unverified
+      elasticity_closing_range_pct: 16.4  # provisional; derived from the above
   summary: >
     CUT_ALL_AX is 1.50x faster and 54% larger at own Fmax. Neither dominates.
     Anything quoted against one configuration must say which.
@@ -201,3 +208,29 @@ ppa_historical_20ns:
     slang requires the full dependency closure listed explicitly in
     VERILOG_FILES -- 25 files, packages first -- extracted from the Verilator
     dependency file rather than hand-assembled.
+
+# =============================================================================
+# CONTROLS -- NOT baseline, NOT envelope points.
+# =============================================================================
+# The second source exists to FAIL. It is internally authored, so folding it
+# into the baseline would judge candidates against our own engineering quality
+# rather than against the contract. It is recorded here and nowhere else.
+controls:
+  second_source:
+    file: tb/audit/axi4_xbar_second_source.sv
+    purpose: falsifier for the checker; never an oracle, never an envelope point
+    fmax_mhz: 111.11
+    fmax_period_ns: 9.0
+    fmax_converged: true
+    fmax_bracket_ns: [8.625, 9.0]      # 0.375 wide, within the 0.5 resolution
+    fmax_record: fmax_results/d_nw01_ss_fmax.json
+    area_um2_at_own_fmax: ABSENT       # provisional 294555 was never recorded (F20)
+    comparison:
+      # The apt comparison is against NO_LATENCY: both are spec-minimal.
+      vs_no_latency_pct: -12.5         # 111.11 vs 126.98 MHz
+      vs_cut_all_ax_pct: -41.7         # 111.11 vs 190.48 MHz -- NOT the apt one
+    note: >
+      Slower than both anchors, which is expected and irrelevant: a second
+      source is judged only on whether it disagrees with the checker, and it
+      passed 4290/4290 after three defects that all adjudicated to the second
+      source under rule 5.

@@ -809,7 +809,7 @@ Fmax, with only closing runs counted:
 |---|---|---|
 | Fmax | **≥ 190.48 MHz** (5.25 ns) | **126.98 MHz** (7.875 ns) |
 | converged? | **no** — bracket [4.5, 5.25] is 0.75 ns wide | yes — [7.5, 7.875], 0.375 ns |
-| area at own Fmax | 154 245 µm² | **100 277 µm²** |
+| area at own Fmax | **ABSENT** (was 154 245 µm²; F20) | *100 277 µm² (provisional, corroborated)* |
 | area at 12 ns | 146 951 µm² | 86 133 µm² |
 | synth area | 107 891 µm² | 59 209 µm² |
 | elasticity, closing range | +5.0 % | **+16.4 %** |
@@ -923,7 +923,7 @@ TNS −5.84, DRC 0.
 |---|---|
 | final bracket | **[4.875, 5.25] ns — 0.375 wide, inside the 0.5 resolution** |
 | **Fmax** | **190.48 MHz at 5.25 ns, CONVERGED** |
-| area at own Fmax | 154 245 µm² |
+| area at own Fmax | **ABSENT** (was 154 245 µm²; F20) |
 
 One build, ~15 minutes, rather than a 2.5-hour re-sweep — the bisection only
 needed its last point. **Nothing in this task now ships an unconverged Fmax.**
@@ -933,7 +933,7 @@ needed its last point. **Nothing in this task now ships an unconverged Fmax.**
 | | `CUT_ALL_AX` | `NO_LATENCY` |
 |---|---|---|
 | Fmax | **190.48 MHz** (converged) | **126.98 MHz** (converged) |
-| area at own Fmax | 154 245 µm² | 100 277 µm² |
+| area at own Fmax | **ABSENT** (was 154 245 µm²; F20) | 100 277 µm² |
 | elasticity, closing range | +5.0 % | +16.4 % |
 
 **1.50× faster for 54 % more area.** Neither dominates.

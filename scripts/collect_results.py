@@ -79,6 +79,31 @@ def main():
             if slot[kind] is None or r["timestamp_utc"] >= slot[kind]["timestamp_utc"]:
                 slot[kind] = r
 
+    # A `provisional_` field was read from the LIVE ORFS flow directory rather
+    # than from a completed, gated run. It is never reportable. Refusing loudly
+    # rather than skipping silently, for the same reason the runner refuses an
+    # absent artifact instead of picking a neighbour: an exclusion enforced by
+    # naming convention is enforced only on people who know the convention, and
+    # the next reader of this table will not.
+    for (task, sub), v in sorted(joined.items()):
+        for kind in ("sim", "ppa"):
+            rec = v[kind]
+            if not rec:
+                continue
+            bad = sorted(k for k in rec if k.startswith("provisional_"))
+            if bad:
+                sys.exit(
+                    f"REFUSING TO REPORT: run record for {task} / "
+                    f"{os.path.basename(sub)} ({kind}) carries provisional "
+                    f"field(s): {', '.join(bad)}.\n"
+                    f"  These come from the live flow directory, which holds "
+                    f"whatever ran last -- twice now that has been a different "
+                    f"experiment, once a run that failed its own gate.\n"
+                    f"  Re-run through ppa_candidate.sh so the number has a "
+                    f"record, or delete the field. Do not hand-edit it into a "
+                    f"reportable name."
+                )
+
     rows = []
     for (task, sub), v in sorted(joined.items()):
         sim, ppa = v["sim"], v["ppa"]

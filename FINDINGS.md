@@ -619,7 +619,7 @@ quoted from a run that failed its own gate.*
 | **`d_nw01` crossbar** | | | |
 | 12.00 ns | 146 951 µm² | — | closes |
 | 6.00 ns | 150 399 µm² | +2.3 % | closes |
-| 5.25 ns | 154 245 µm² | **+5.0 %** | closes, fastest measured |
+| 5.25 ns | *154 245 µm² (PROVISIONAL, unverifiable -- F20)* | *+5.0 % (provisional)* | closes, fastest measured |
 
 **+1.5 % against +5.0 %** — the crossbar is more elastic, but not by the margin a
 first pass suggested. The honest conclusion is weaker than the one originally
@@ -988,6 +988,79 @@ check, unlike detecting a *restatement*, which is a content question no cheap
 proxy answers honestly.
 
 **Rules:** 13
+
+## F20. Every PPA number we have quoted is provisional
+
+Prompted by a near-miss: `d_nw01`'s reference area was about to be set against
+the second source's to yield *"the second source is 85 % larger"*. The
+reference's surviving build has **`wns = −0.216 ns`** — it failed its own gate,
+and rule 6 forbids the number. It was caught only by checking the live directory
+rather than trusting it.
+
+That is the **second** time the live flow directory has held output from a
+different experiment than the one being reported (after P4). The first was a
+table cell. This would have been a headline.
+
+So every previously quoted PPA number was audited. **The result is worse than
+expected and simpler than expected.**
+
+### There is exactly one run record in the repository
+
+`runs/` holds a single `sim` record, carrying no PPA fields at all. The immutable
+record landed after the measurements. **Therefore no PPA number in this project
+is traceable to a run record — not one.** Every figure ever quoted was read from
+`~/tools/OpenROAD-flow-scripts/flow`, a directory that holds whatever ran last.
+
+`collect_results.py` is already honest about this: it prints `--` for every PPA
+column and lists `d_nw01_axi4_xbar` as ABSENT. **The stale numbers survive only
+in prose** — this file, the catalog, and the per-task notes.
+
+### The audit
+
+Corroboration = does the surviving flow directory still show that number, from a
+run that passed its own gate?
+
+| number | quoted in | record? | corroboration |
+|---|---|---|---|
+| d_ca04 cand **14 644** | `NOTES.md` | no | **matches**, wns +1.219 |
+| d_ca04 ref **19 887** @4.5 ns | `NOTES.md` | no | **matches**, wns +0.790 |
+| d_nw01_nolat **100 277** | `TASK_CATALOG.md`, `NOTES.md` | no | **matches**, wns +0.052 |
+| d_ca04 ref **19 942** | `NOTES.md` | no | **conflicts** — dir shows 19 887 |
+| d_ca04 cand **14 754** @4.5 ns | `NOTES.md`, `FINDINGS.md` | no | **conflicts** — dir shows 14 644 at 4.5 ns |
+| d_ca04 ref **20 101** @2.625 ns | `NOTES.md`, `FINDINGS.md` | no | unverifiable — overwritten |
+| d_nw01 ref **154 245** @5.25 ns | `FINDINGS.md`, `TASK_CATALOG.md`, `NOTES.md`, `task.yaml` | no | unverifiable — **overwritten by a FAILING run** |
+| d_nw01_ss **294 555** @9.0 ns | this session | no | was +0.0037; dir since wiped |
+
+Three corroborate exactly. Two **conflict** with the only surviving evidence.
+Three are unverifiable because the directory was overwritten.
+
+**The two conflicts are the ones that matter**, because both feed the d_ca04
+area-versus-Fmax conclusion, and `20 101 / 14 754 = 1.362` is the ratio that
+conclusion is stated as.
+
+### What is and is not affected
+
+**Fmax is unaffected.** Every Fmax comes from a `fmax_results/*.json` written by
+the sweep itself, with its own classification and validity check. Those are
+records, and they were checked: all six report `fmax_invalid_reason: null`.
+
+**Every area, power and elasticity figure is provisional** until rebuilt. That
+includes the elasticity comparison (+1.5 %, +5.0 %) in full, since both derive
+from areas in the conflicting or unverifiable rows.
+
+### Why the apparatus did not catch this
+
+Rule 8 was written and the tooling built, but **the tooling was never made the
+only path.** `collect_results.py` reads records correctly and reports ABSENT
+correctly — and it was simply bypassed, because reading the flow directory
+directly still worked and produced a number that looked identical.
+
+**A rule enforced by a tool nobody is obliged to use is a convention, not a
+control.** The fix is not another rule: it is that `ppa_candidate.sh` must be the
+only way a PPA number is obtained, and that anything else refuses. The
+`provisional_` refusal added to `collect_results.py` is the first half of that.
+
+**Rules:** 6, 8
 
 ---
 
