@@ -185,7 +185,8 @@ PER="$(awk '/^set clk_period/{print $3; exit}' "$TASK_DIR/orfs/constraint.sdc" 2
 if [ -n "$AREA" ]; then STATUS=completed; else STATUS=DID_NOT_COMPLETE; fi
 REC="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$CAND" ppa "$LABEL" \
         "status=$STATUS" "design_area_um2=${AREA:-}" "synth_area_um2=${SYNTH:-}" \
-        "wns_ns=${WNS:-}" "power_w=${PWR:-}" "clk_period_ns=${PER:-}" 2>/dev/null)"
+        "wns_ns=${WNS:-}" "power_w=${PWR:-}" "clk_period_ns=${PER:-}" \
+        "orfs_nickname=$NICK" "pdk=${PLATFORM:-sky130hd}" 2>/dev/null)"
 [ -n "$REC" ] && echo "record: $REC"
 
 echo

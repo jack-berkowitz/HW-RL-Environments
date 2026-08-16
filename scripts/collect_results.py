@@ -116,7 +116,11 @@ def main():
                         ("FAIL" if sim else None)),
             "clk": (ppa or {}).get("clk_period_ns"),
             "area": (ppa or {}).get("design_area_um2"),
-            "wns": (ppa or {}).get("wns_ns"),
+            # Rounded for DISPLAY ONLY -- the record keeps full precision.
+            # Unrounded it overran its column and printed flush against the
+            # area, so "294555" and "0.00365752" read as one 13-digit number.
+            "wns": (lambda v: (f"{float(v):.4f}" if v not in (None, "", "None")
+                               else None))((ppa or {}).get("wns_ns")),
             "power": (ppa or {}).get("power_w"),
             "ppa": (ppa or {}).get("status"),
             "when": (sim or ppa)["timestamp_utc"][:16].replace("T", " "),

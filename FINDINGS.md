@@ -1136,6 +1136,47 @@ leaves a task looking complete while being unscoreable.
 
 **Rules:** 10
 
+## F23. Area-delay elasticity retired — a mechanism that never changed an answer
+
+**The area-delay precondition is withdrawn as an objective.** Rule 9 already
+excluded area × delay as a scoring axis and required elasticity to be tested per
+design rather than assumed. The elasticity programme existed to answer one
+question behind that: *does area × delay carry information beyond area and Fmax?*
+
+**It does not, on the evidence available.** Two designs came back inelastic, and
+the axis they would have justified was already excluded. The measurements were
+sound and the conclusion they support is that the mechanism is inert.
+
+Retiring it costs nothing that was being used, and the three-way comparison it
+was heading toward is **cancelled rather than completed** — no rebuild will be
+done to finish it.
+
+**Why this is recorded as a finding rather than deleted.** A plausible mechanism
+that never changed an answer is a result, and an unusually easy one to lose:
+there is no failure to point at, so the natural outcome is that it quietly stops
+being mentioned and gets reinvented later. The same reasoning retired diff rate,
+and both belong in the same drawer — **ideas that survived on plausibility until
+someone measured whether they moved anything.**
+
+The distinction worth keeping: diff rate was retracted because it was
+*actively misleading* — it rated the most valuable mutant in the project as
+unremarkable. Elasticity is retired because it is **inert**, which is a weaker
+verdict and a different one. An inert metric is not wrong; it is overhead.
+
+**What survives as data.** `d_nw01_ss` measured **+8.1 %** across its closing
+range, both endpoints carrying run records and both passing their gate — the
+first elasticity figure in the project computed entirely from records. It stands
+as a properly recorded measurement of a real property. **It is simply not in
+service of anything now**, and it should not be cited as evidence for an
+area-delay axis that no longer exists.
+
+Provisional elasticity figures elsewhere (+1.5 %, +5.0 %, the retracted +17.6 %)
+stay marked as provisional. **They are not being rebuilt**, because the objective
+they served is retired — but the numbers that *feed* them are still being
+rebuilt, for provenance rather than for elasticity. See F20.
+
+**Rules:** 9
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET
