@@ -894,6 +894,101 @@ you.
 to find out whether they were sufficient. **They were not, and the two gaps were
 of a class the previous thirteen would not have predicted.**
 
+## F17. Rule 5's disambiguation, tested three times in the turn it was written
+
+The `d_dsp02` second source failed the checker three times. **Every one
+adjudicated to "the second source is wrong." No check was loosened at any point.**
+
+| # | symptom | actual cause | verdict |
+|---|---|---|---|
+| 1 | 3632/4290 fail; `1.0×2⁻¹⁴⁹ + 0` → `0` | addend placed at `P_POS`, product shifted from bit 0 — an 80-bit frame offset | second source |
+| 2 | `2⁻¹⁰⁰ × 2⁻⁴⁰` nonsense | `{2'b0, ep}` is unsigned, so `ep = −13` read as `4083` | second source |
+| 3 | wide-exponent cases fail | stated difference not implementable at sane width (F18) | second source |
+
+**The counterfactual is the finding.** The wording rule 5 replaced treated a
+second-source failure as evidence about the check. Under it, this task would have
+loosened the checker three times: once to tolerate a frame-offset bug, once to
+tolerate a signedness bug, and once to accommodate a design choice that cannot be
+built. The anchor would have kept passing, the second source would have kept
+passing, the coverage floors would have stayed green, and **all three loosenings
+would have been invisible afterwards** — a checker with three holes in it,
+reporting success, with nothing in the artefact recording that the holes were put
+there deliberately.
+
+That is the same shape as every apparatus defect in this document, arrived at
+from the opposite direction: not a check that never fired, but a check
+deliberately weakened until it stopped firing, one accommodation at a time.
+
+**The disambiguation is what makes the second source a falsifier rather than a
+negotiation.** Without it, "independent implementation disagrees" is an argument
+for whichever artefact its author is less willing to rewrite.
+
+**Rules:** 5
+
+## F18. A free choice that was not free — strict addend framing needs ~485 bits
+
+Difference 1 was first written as *frame the accumulator on the addend and shift
+the product*, the exact inverse of the anchor. **It is not implementable at a
+sane width**, and the reason is a real property of the design space rather than a
+fact about this attempt.
+
+With the frame pinned to the addend, a zero or subnormal addend sits at effective
+exponent −149 while the product ranges up to 2¹²⁸ — and a subnormal×subnormal
+product reaches 2⁻²⁹⁸. The accumulator must span that whole range *relative to a
+frame it does not control*: roughly 426 binades plus 48 bits of product mantissa
+plus round and sticky, so **on the order of 485 bits**. The anchor sizes its
+alignment shifter for `3·PRECISION_BITS + 5 = 77` positions
+(`fpnew_fma.sv:72`), which is about a sixth of that.
+
+**This explains why the anchor frames on the product, and nothing in the anchor's
+source says so.** `SHIFT_AMOUNT_WIDTH` is a bound with no rationale attached; the
+comments describe what the code does, not which alternatives were rejected or
+why. The constraint is recoverable only by trying the alternative and watching
+the width explode.
+
+**That is the second source doing something beyond being a control.** Its
+declared job is to fail differently from the anchor. Its side effect here was to
+*map which of the anchor's choices are actually free* — framing is not, and any
+spec language implying a designer may frame either way is wrong. Two of the three
+differences survived; this one turned out to be a constraint wearing the costume
+of a choice.
+
+The shipped difference is the smaller, true claim: **bidirectional** alignment
+onto `max(ep, ec)`, which needs no more width than the anchor and is still the
+opposite of a unidirectional addend shift.
+
+**Convention:** Name the differences before building — and record the ones that failed
+
+## F19. The single-source fix was applied to the prompts and not to everything else
+
+Rule 13 consolidated the rules into `RULES.md` after they had drifted across
+three documents (F15). **Two live duplications survived the consolidation**, both
+found while adding F17 and F18:
+
+1. **A seven-row rule table inside `FINDINGS.md` itself** — with its own
+   numbering, contradicting `RULES.md` on what rules 3 through 7 are. A reader
+   following a cross-reference to "rule 5" landed on the runner rule or on the
+   second-source rule depending on which file they were in.
+2. **Four rules restated in full in `CONVENTIONS.md`** — 5, 6, 7 and 11, as
+   normative section headings rather than as pointers.
+
+**The linkage checker passed throughout**, because it reads `**From:**` lines in
+`RULES.md` and `**Rules:**` lines in `FINDINGS.md`. A rule copied into a markdown
+table or a section heading is not in either grammar, so the one automated control
+for rule duplication was structurally incapable of seeing the duplication.
+
+The duplication in `FINDINGS.md` is the sharper instance: **the stale copy was
+sitting in the document that records F15 and F16**, the two findings about rules
+decaying when duplicated. Recording a failure mode in a document does not
+inoculate that document against it.
+
+Fixed by deleting both copies and leaving pointers, and by extending the checker
+to reject any rule-list table outside `RULES.md` — which is a genuine structural
+check, unlike detecting a *restatement*, which is a content question no cheap
+proxy answers honestly.
+
+**Rules:** 13
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET
@@ -971,17 +1066,17 @@ would be handed the answer. Shared repository is fine, shared module is not.
 
 ---
 
-# THE STANDING RULES, AND WHICH FINDING PRODUCED EACH
+# THE STANDING RULES
 
-| # | rule | from |
-|---|---|---|
-| 1 | Every capability the design must support is a named parameter with a binding check | `MAX_TRANS`, `DATA_W`, `SYNC_STAGES`, burst length |
-| 2 | Every stated requirement has a coverage floor proving it was exercised | `L3`, `H1` |
-| 3 | A checker whose failure mode is silence must be validated against a known-failing input | the wedging harness |
-| 4 | A control validates a check only if it fails **that** check and nothing else, and only if the harness can saturate what the check measures | the H1 control, the three C2 attempts |
-| 5 | The runner names its artifacts explicitly and refuses when they are absent; it never discovers them by pattern | alphabetical testbench selection, empty `sim_flags` |
-| 6 | Area comparisons are reported as a three-way split: off-spec configuration, capability gap, genuine optimisation | `CUT_ALL_AX` |
-| 7 | When blocked, the deliverable is the report | — |
+**They live in `RULES.md` and nowhere else, each citing the finding that produced
+it.** This document supplies the other direction: every finding names the rule or
+convention it produced, and `scripts/check_rule_linkage.py` asserts both.
+
+*A seven-row copy of the rules stood here until F19. It had drifted to a
+numbering of its own — it called "the runner names its artifacts" rule 5, where
+`RULES.md` has that as rule 10 and rule 5 as the second source — so a
+cross-reference to "rule 5" resolved to two different rules depending on which
+document you were holding.*
 
 ---
 

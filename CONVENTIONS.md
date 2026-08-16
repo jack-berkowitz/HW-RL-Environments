@@ -39,11 +39,10 @@ deadlock property and a starvation property measured **only while other
 requesters are making progress** — so a uniformly slow design is not penalised,
 only an unfair one.
 
-## No metric may be quoted from a run that failed its own gate
+## Failing runs sit in the same directory as passing ones
 
-A build that misses timing still produces an area number, a power number and a
-cell count. They are real numbers from a real run, and they are **not results**:
-they describe a configuration the design cannot be operated at.
+**Rule 6 governs.** The pothole is that nothing in a build directory distinguishes
+a run that closed from one that did not — same files, same metrics, same shape.
 
 This is easy to violate while assembling a sweep table, because the failing runs
 sit in the same directory as the passing ones and look identical. An elasticity
@@ -95,47 +94,58 @@ the original, and the slang gate runs on the normalised copy for the same reason
 one-off harnesses built during development, which is where the third instance
 appeared.
 
-## The oracle must be an artefact nobody on this project wrote
+## Under an inverted oracle, coverage floors carry the whole weight
 
-**Locally authored code generates INPUTS. It never generates expected values.**
+**Rule 11 governs** — local code generates inputs, the anchor produces expected
+values. The practical consequence is the part that gets forgotten.
 
-The tempting arrangement is a local model that computes expected results,
-cross-checked against the vendored anchor, with disagreements investigated. That
-leaves a hole: **a shared misconception survives the cross-check**, because both
-sides agree for the same wrong reason -- a corner of the standard misread the
-same way twice.
-
-Invert it:
-
-1. local code generates **inputs only**
-2. every input is run through the **anchor**
-3. the **anchor's output** is the expected value
-
-A local bug can then cost *coverage* -- a corner never generated -- and can never
-produce a wrong expected value.
-
-This is not hypothetical. Building `d_dsp02`, a hand-computed IEEE-754 case was
-wrong on the first attempt and was caught **only because the anchor disagreed**.
-Had that same misunderstanding been coded into a model producing expected values,
-the cross-check would have agreed with it.
+Inversion makes expected values safe by construction, which removes the failure
+mode people watch for and leaves the one they do not: **a corner never
+generated**. Nothing goes wrong loudly. The run passes, the vectors are correct,
+and the untested case is simply absent.
 
 **The consequence is that coverage floors carry the whole weight.** Expected
 values are safe by construction; input coverage is not. Every floor must be
 stimulus-side, and adding a stimulus category without adding its floor is how
 this gets quietly undermined.
 
-## When a check and an implementation disagree, disambiguate
+## Expect the second source to be the wrong one
 
-A second source failing a check does **not** by itself mean the check is
-over-constrained. Establish which is wrong first:
+**Rule 5 governs the procedure.** The convention is a prior to hold while
+following it: on the evidence so far, a second source failing a check means the
+second source is broken.
 
-1. run the failing input through the **anchor**
-2. second source disagrees with the anchor -> **the second source is wrong**
-3. second source agrees with the anchor and the check still fails -> **the check
-   is over-constrained**
+`d_dsp02` went three for three — a frame offset, a signedness bug, and a design
+choice that cannot be built (F17, F18). None was a check defect. The second
+source is newly written, unreviewed, and has had far less exercise than a checker
+that has already passed the anchor and six mutants, so this is what the base
+rates predict.
 
-Taking the wrong branch loosens a check to accommodate a bug, and **a loosened
-check is invisible afterwards.**
+**Budget for it.** Three debug iterations on a second source is normal cost, not
+a signal that the difference was too ambitious. The temptation at iteration three
+is to conclude the checker is fussy, and that is exactly the point at which rule
+5 is load-bearing.
+
+## Name the differences before building — and record the ones that failed
+
+Rule 5 requires three named differences from the anchor. **Name them before
+writing, and keep the list even when a difference does not survive.**
+
+The hazard is quiet: differences named *after* the fact become a description of
+whatever got built, which satisfies the requirement in form while removing all of
+its content. Nothing looks wrong afterwards — the file has three differences,
+they are genuinely different, and the requirement did no work at any point.
+
+`d_dsp02` shows both halves. Difference 1 was declared as strict addend framing,
+turned out to need a ~485-bit accumulator, and was restated to bidirectional
+alignment. The header records **the attempt, the reason it failed, and that the
+shipped claim is smaller than the one declared** — so a reader can see the
+requirement constrained the design rather than being back-fitted to it.
+
+That record is also where the design-space result lives: the failed difference is
+what proved the anchor's framing is a constraint rather than a preference (F18).
+**Discard the failures and you discard the only evidence the exercise generated
+about which choices are actually free.**
 
 ## Mutants perturb the anchor; they do not reimplement it
 
@@ -164,10 +174,10 @@ file is the next best thing — but note that a mutant of a *shared* module cann
 be placed beside the reference in a differential harness, and its non-equivalence
 witness has to come through the checker instead.
 
-## Timing closure has ONE authoritative source
+## The ORFS logs contain several numbers that look like closure
 
-**Closure comes from `find_fmax.py`'s own classification, which reads the ORFS
-metrics. Never from grepping an intermediate log.**
+**Rule 7 governs.** This section is the specific trap, because the tempting grep
+is always available and always returns something plausible.
 
 Logs contain several things that look like the answer and are not. The most
 misleading is `[INFO GPL-0106] Timing-driven: worst slack ...`, emitted during
@@ -185,6 +195,67 @@ from the tool that owns the decision, not from text that happens to contain a
 similar word.
 
 ---
+
+## Signed intermediates are declared at full working width — never widened by concatenation
+
+**Concatenation is unsigned in SystemVerilog.** `{2'b0, ep}` does not widen a
+signed `ep`; it produces an unsigned value from the raw bits, and wrapping
+`$signed()` around the result cannot recover the sign because the information is
+already gone.
+
+This is the **second** signedness defect on this project. The first demoted `>>>`
+to a logical shift inside a ternary whose other branch was unsigned. Both cost a
+debug cycle, both produced plausible-looking wrong numbers rather than errors,
+and both were invisible in the source at a glance — nothing about `{2'b0, ep}`
+reads as a bug.
+
+In the `d_dsp02` second source, `ep = −13` became `0xFF3 = 4083`, giving an
+alignment `shift_amt` of **4139 where the correct value was 43**.
+
+**The general fix, applied throughout:** declare exponents and other signed
+intermediates at the **full working width they will ever need**, so no widening
+step exists anywhere in the datapath.
+
+```systemverilog
+// full width at declaration, so nothing downstream needs to widen it
+wire signed [13:0] ea = (a[30:23] == 0) ? 14'sd1 : 14'sd0 + $signed({6'd0, a[30:23]});
+wire signed [13:0] ep = ea + eb - 14'sd127;
+```
+
+The remaining concatenation is safe precisely because it widens an
+**unsigned** field. Where a signed value must be widened, use `$signed`'s
+context-determined extension or an explicit cast — never a concatenation.
+
+## When your reasoning and the artefact disagree, the artefact is the evidence
+
+Hand-tracing the `d_dsp02` alignment logic said it was correct. The simulation
+said otherwise. **The right move at that point was to instrument rather than
+trace it again**, and it found the cause in one run — a shift amount of 4139
+against an expected 43, which no amount of re-reading was going to produce
+because the bug was in a language rule, not in the intended arithmetic.
+
+The reason this is a convention and not a preference: on this same task **a
+hand-computed IEEE-754 case had already been wrong once**, and the anchor was
+what caught it. Two data points on one task, both in the same direction. When the
+artefact and the reasoning conflict, the artefact has the better record here.
+
+Re-deriving is attractive because it is fast and needs no setup. It is also how a
+wrong model of the code gets confirmed twice. **Print the intermediate.**
+
+## Long background sweeps run unbuffered
+
+`python3 -u`, or the driver's own progress output is invisible until it exits.
+
+A `find_fmax` sweep left running in the background had a **zero-byte stdout file
+two and a half hours in** while it was working normally — Python block-buffers
+stdout when it is a file rather than a TTY. Liveness was only confirmable from
+the ORFS iteration logs it happened to leave on disk, which is an accident of
+that tool rather than instrumentation.
+
+The cost is not just visibility: with the driver's own classification unreadable,
+the available fallback is grepping the flow logs, which is the one thing rule 7
+forbids — and which lands directly on the `GPL-0106` trap above. **An
+unobservable long-running job pushes you toward the untrustworthy measurement.**
 
 ## CRITICAL PROCESS FINDING — single-seed validation is not validation
 

@@ -129,6 +129,10 @@ defects. It runs with the regression.
 
     **From:** F15, F16
 
+14. **When blocked, the deliverable is the report.** Stop and say so.
+
+    **From:** working principle, no originating defect
+
 15. **Every contract term cites its source of authority** — a standard clause,
     a stated task intent, or a design decision recorded as such. **"Because the
     anchor does it" is not an authority.**
@@ -145,10 +149,6 @@ defects. It runs with the regression.
     simply what cvfpu happened to do.
 
     **From:** F14
-
-14. **When blocked, the deliverable is the report.** Stop and say so.
-
-    **From:** working principle, no originating defect
 
 ---
 
