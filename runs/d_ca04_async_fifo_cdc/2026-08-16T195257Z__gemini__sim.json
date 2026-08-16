@@ -1,0 +1,486 @@
+{
+  "all_passed": true,
+  "configs_passed": 18,
+  "configs_total": 18,
+  "coverage": {
+    "DATA_W_32_LOG_DEPTH_2_SYNC_STAGES_2": {
+      "depth_reached": "7583",
+      "empty": "7649",
+      "full": "11240",
+      "phases": "7",
+      "rd_stall": "2354",
+      "stagger": "6",
+      "wr_stall": "11240"
+    },
+    "DATA_W_32_LOG_DEPTH_2_SYNC_STAGES_3": {
+      "depth_reached": "6340",
+      "empty": "8273",
+      "full": "11955",
+      "phases": "7",
+      "rd_stall": "2346",
+      "stagger": "6",
+      "wr_stall": "11955"
+    },
+    "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_2": {
+      "depth_reached": "7705",
+      "empty": "7140",
+      "full": "10912",
+      "phases": "7",
+      "rd_stall": "2439",
+      "stagger": "6",
+      "wr_stall": "10912"
+    },
+    "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_3": {
+      "depth_reached": "6310",
+      "empty": "7244",
+      "full": "10914",
+      "phases": "7",
+      "rd_stall": "2411",
+      "stagger": "6",
+      "wr_stall": "10914"
+    },
+    "DATA_W_32_LOG_DEPTH_4_SYNC_STAGES_2": {
+      "depth_reached": "7504",
+      "empty": "7100",
+      "full": "10651",
+      "phases": "7",
+      "rd_stall": "2449",
+      "stagger": "6",
+      "wr_stall": "10651"
+    },
+    "DATA_W_32_LOG_DEPTH_4_SYNC_STAGES_3": {
+      "depth_reached": "6282",
+      "empty": "7177",
+      "full": "10759",
+      "phases": "7",
+      "rd_stall": "2421",
+      "stagger": "6",
+      "wr_stall": "10759"
+    },
+    "DATA_W_64_LOG_DEPTH_2_SYNC_STAGES_2": {
+      "depth_reached": "7583",
+      "empty": "7649",
+      "full": "11240",
+      "phases": "7",
+      "rd_stall": "2354",
+      "stagger": "6",
+      "wr_stall": "11240"
+    },
+    "DATA_W_64_LOG_DEPTH_2_SYNC_STAGES_3": {
+      "depth_reached": "6340",
+      "empty": "8273",
+      "full": "11955",
+      "phases": "7",
+      "rd_stall": "2346",
+      "stagger": "6",
+      "wr_stall": "11955"
+    },
+    "DATA_W_64_LOG_DEPTH_3_SYNC_STAGES_2": {
+      "depth_reached": "7705",
+      "empty": "7140",
+      "full": "10912",
+      "phases": "7",
+      "rd_stall": "2439",
+      "stagger": "6",
+      "wr_stall": "10912"
+    },
+    "DATA_W_64_LOG_DEPTH_3_SYNC_STAGES_3": {
+      "depth_reached": "6310",
+      "empty": "7244",
+      "full": "10914",
+      "phases": "7",
+      "rd_stall": "2411",
+      "stagger": "6",
+      "wr_stall": "10914"
+    },
+    "DATA_W_64_LOG_DEPTH_4_SYNC_STAGES_2": {
+      "depth_reached": "7504",
+      "empty": "7100",
+      "full": "10651",
+      "phases": "7",
+      "rd_stall": "2449",
+      "stagger": "6",
+      "wr_stall": "10651"
+    },
+    "DATA_W_64_LOG_DEPTH_4_SYNC_STAGES_3": {
+      "depth_reached": "6282",
+      "empty": "7177",
+      "full": "10759",
+      "phases": "7",
+      "rd_stall": "2421",
+      "stagger": "6",
+      "wr_stall": "10759"
+    },
+    "DATA_W_8_LOG_DEPTH_2_SYNC_STAGES_2": {
+      "depth_reached": "7583",
+      "empty": "7649",
+      "full": "11240",
+      "phases": "7",
+      "rd_stall": "2354",
+      "stagger": "6",
+      "wr_stall": "11240"
+    },
+    "DATA_W_8_LOG_DEPTH_2_SYNC_STAGES_3": {
+      "depth_reached": "6340",
+      "empty": "8273",
+      "full": "11955",
+      "phases": "7",
+      "rd_stall": "2346",
+      "stagger": "6",
+      "wr_stall": "11955"
+    },
+    "DATA_W_8_LOG_DEPTH_3_SYNC_STAGES_2": {
+      "depth_reached": "7705",
+      "empty": "7140",
+      "full": "10912",
+      "phases": "7",
+      "rd_stall": "2439",
+      "stagger": "6",
+      "wr_stall": "10912"
+    },
+    "DATA_W_8_LOG_DEPTH_3_SYNC_STAGES_3": {
+      "depth_reached": "6310",
+      "empty": "7244",
+      "full": "10914",
+      "phases": "7",
+      "rd_stall": "2411",
+      "stagger": "6",
+      "wr_stall": "10914"
+    },
+    "DATA_W_8_LOG_DEPTH_4_SYNC_STAGES_2": {
+      "depth_reached": "7504",
+      "empty": "7100",
+      "full": "10651",
+      "phases": "7",
+      "rd_stall": "2449",
+      "stagger": "6",
+      "wr_stall": "10651"
+    },
+    "DATA_W_8_LOG_DEPTH_4_SYNC_STAGES_3": {
+      "depth_reached": "6282",
+      "empty": "7177",
+      "full": "10759",
+      "phases": "7",
+      "rd_stall": "2421",
+      "stagger": "6",
+      "wr_stall": "10759"
+    }
+  },
+  "git_sha": "976bd2616dd57f0c19565fadd20a1dadfa794d9f-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "metrics": {
+    "DATA_W_32_LOG_DEPTH_2_SYNC_STAGES_2": {
+      "DEPTH": "4",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4212",
+      "capacity_beats_accepted": "4",
+      "max": "68",
+      "min": "2",
+      "n": "4211",
+      "peak_occupancy_estimate": "4",
+      "phases": "7",
+      "rd_stall_cycles": "2354",
+      "wr_stall_cycles": "11240"
+    },
+    "DATA_W_32_LOG_DEPTH_2_SYNC_STAGES_3": {
+      "DEPTH": "4",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4212",
+      "capacity_beats_accepted": "4",
+      "max": "68",
+      "min": "3",
+      "n": "4211",
+      "peak_occupancy_estimate": "4",
+      "phases": "7",
+      "rd_stall_cycles": "2346",
+      "wr_stall_cycles": "11955"
+    },
+    "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_2": {
+      "DEPTH": "8",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4215",
+      "capacity_beats_accepted": "8",
+      "max": "72",
+      "min": "2",
+      "n": "4214",
+      "peak_occupancy_estimate": "8",
+      "phases": "7",
+      "rd_stall_cycles": "2439",
+      "wr_stall_cycles": "10912"
+    },
+    "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_3": {
+      "DEPTH": "8",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4216",
+      "capacity_beats_accepted": "8",
+      "max": "72",
+      "min": "3",
+      "n": "4215",
+      "peak_occupancy_estimate": "8",
+      "phases": "7",
+      "rd_stall_cycles": "2411",
+      "wr_stall_cycles": "10914"
+    },
+    "DATA_W_32_LOG_DEPTH_4_SYNC_STAGES_2": {
+      "DEPTH": "16",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4223",
+      "capacity_beats_accepted": "16",
+      "max": "99",
+      "min": "2",
+      "n": "4222",
+      "peak_occupancy_estimate": "16",
+      "phases": "7",
+      "rd_stall_cycles": "2449",
+      "wr_stall_cycles": "10651"
+    },
+    "DATA_W_32_LOG_DEPTH_4_SYNC_STAGES_3": {
+      "DEPTH": "16",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4224",
+      "capacity_beats_accepted": "16",
+      "max": "99",
+      "min": "3",
+      "n": "4223",
+      "peak_occupancy_estimate": "16",
+      "phases": "7",
+      "rd_stall_cycles": "2421",
+      "wr_stall_cycles": "10759"
+    },
+    "DATA_W_64_LOG_DEPTH_2_SYNC_STAGES_2": {
+      "DEPTH": "4",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4212",
+      "capacity_beats_accepted": "4",
+      "max": "68",
+      "min": "2",
+      "n": "4211",
+      "peak_occupancy_estimate": "4",
+      "phases": "7",
+      "rd_stall_cycles": "2354",
+      "wr_stall_cycles": "11240"
+    },
+    "DATA_W_64_LOG_DEPTH_2_SYNC_STAGES_3": {
+      "DEPTH": "4",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4212",
+      "capacity_beats_accepted": "4",
+      "max": "68",
+      "min": "3",
+      "n": "4211",
+      "peak_occupancy_estimate": "4",
+      "phases": "7",
+      "rd_stall_cycles": "2346",
+      "wr_stall_cycles": "11955"
+    },
+    "DATA_W_64_LOG_DEPTH_3_SYNC_STAGES_2": {
+      "DEPTH": "8",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4215",
+      "capacity_beats_accepted": "8",
+      "max": "72",
+      "min": "2",
+      "n": "4214",
+      "peak_occupancy_estimate": "8",
+      "phases": "7",
+      "rd_stall_cycles": "2439",
+      "wr_stall_cycles": "10912"
+    },
+    "DATA_W_64_LOG_DEPTH_3_SYNC_STAGES_3": {
+      "DEPTH": "8",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4216",
+      "capacity_beats_accepted": "8",
+      "max": "72",
+      "min": "3",
+      "n": "4215",
+      "peak_occupancy_estimate": "8",
+      "phases": "7",
+      "rd_stall_cycles": "2411",
+      "wr_stall_cycles": "10914"
+    },
+    "DATA_W_64_LOG_DEPTH_4_SYNC_STAGES_2": {
+      "DEPTH": "16",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4223",
+      "capacity_beats_accepted": "16",
+      "max": "99",
+      "min": "2",
+      "n": "4222",
+      "peak_occupancy_estimate": "16",
+      "phases": "7",
+      "rd_stall_cycles": "2449",
+      "wr_stall_cycles": "10651"
+    },
+    "DATA_W_64_LOG_DEPTH_4_SYNC_STAGES_3": {
+      "DEPTH": "16",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4224",
+      "capacity_beats_accepted": "16",
+      "max": "99",
+      "min": "3",
+      "n": "4223",
+      "peak_occupancy_estimate": "16",
+      "phases": "7",
+      "rd_stall_cycles": "2421",
+      "wr_stall_cycles": "10759"
+    },
+    "DATA_W_8_LOG_DEPTH_2_SYNC_STAGES_2": {
+      "DEPTH": "4",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4212",
+      "capacity_beats_accepted": "4",
+      "max": "68",
+      "min": "2",
+      "n": "4211",
+      "peak_occupancy_estimate": "4",
+      "phases": "7",
+      "rd_stall_cycles": "2354",
+      "wr_stall_cycles": "11240"
+    },
+    "DATA_W_8_LOG_DEPTH_2_SYNC_STAGES_3": {
+      "DEPTH": "4",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4212",
+      "capacity_beats_accepted": "4",
+      "max": "68",
+      "min": "3",
+      "n": "4211",
+      "peak_occupancy_estimate": "4",
+      "phases": "7",
+      "rd_stall_cycles": "2346",
+      "wr_stall_cycles": "11955"
+    },
+    "DATA_W_8_LOG_DEPTH_3_SYNC_STAGES_2": {
+      "DEPTH": "8",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4215",
+      "capacity_beats_accepted": "8",
+      "max": "72",
+      "min": "2",
+      "n": "4214",
+      "peak_occupancy_estimate": "8",
+      "phases": "7",
+      "rd_stall_cycles": "2439",
+      "wr_stall_cycles": "10912"
+    },
+    "DATA_W_8_LOG_DEPTH_3_SYNC_STAGES_3": {
+      "DEPTH": "8",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4216",
+      "capacity_beats_accepted": "8",
+      "max": "72",
+      "min": "3",
+      "n": "4215",
+      "peak_occupancy_estimate": "8",
+      "phases": "7",
+      "rd_stall_cycles": "2411",
+      "wr_stall_cycles": "10914"
+    },
+    "DATA_W_8_LOG_DEPTH_4_SYNC_STAGES_2": {
+      "DEPTH": "16",
+      "SYNC_STAGES": "2",
+      "beats_checked": "4223",
+      "capacity_beats_accepted": "16",
+      "max": "99",
+      "min": "2",
+      "n": "4222",
+      "peak_occupancy_estimate": "16",
+      "phases": "7",
+      "rd_stall_cycles": "2449",
+      "wr_stall_cycles": "10651"
+    },
+    "DATA_W_8_LOG_DEPTH_4_SYNC_STAGES_3": {
+      "DEPTH": "16",
+      "SYNC_STAGES": "3",
+      "beats_checked": "4224",
+      "capacity_beats_accepted": "16",
+      "max": "99",
+      "min": "3",
+      "n": "4223",
+      "peak_occupancy_estimate": "16",
+      "phases": "7",
+      "rd_stall_cycles": "2421",
+      "wr_stall_cycles": "10759"
+    }
+  },
+  "per_config": [
+    {
+      "config": "DATA_W_32_LOG_DEPTH_2_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_32_LOG_DEPTH_2_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_32_LOG_DEPTH_4_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_32_LOG_DEPTH_4_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_64_LOG_DEPTH_2_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_64_LOG_DEPTH_2_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_64_LOG_DEPTH_3_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_64_LOG_DEPTH_3_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_64_LOG_DEPTH_4_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_64_LOG_DEPTH_4_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_8_LOG_DEPTH_2_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_8_LOG_DEPTH_2_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_8_LOG_DEPTH_3_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_8_LOG_DEPTH_3_SYNC_STAGES_3",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_8_LOG_DEPTH_4_SYNC_STAGES_2",
+      "verdict": "PASS"
+    },
+    {
+      "config": "DATA_W_8_LOG_DEPTH_4_SYNC_STAGES_3",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "candidates/d_ca04/gemini.sv",
+  "submission_sha256_16": "c21e79ea6e452912",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-16T19:52:57Z"
+}

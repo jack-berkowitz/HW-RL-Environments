@@ -76,8 +76,22 @@ def parse_sim(raw_dir):
             line = line.strip()
             if line.startswith("METRIC:"):
                 body = line[len("METRIC:"):].strip()
+                # A METRIC line may be `name=value ...` OR `name k=v k=v ...`,
+                # where the leading bare identifier NAMES the metric and the
+                # pairs are its fields. The second form was dropping the name
+                # entirely and filing min/max/n under those generic keys, where
+                # any other metric using the same field names would overwrite
+                # them. d_ca04's crossing_latency_rdclk was measured, printed,
+                # and then lost in the reporting path for exactly that reason --
+                # it read ABSENT in the results table while being emitted on
+                # every one of 18 configs.
+                m0 = re.match(r"([A-Za-z_][A-Za-z0-9_]*)(?![\w]*=)\s+", body)
+                prefix = f"{m0.group(1)}_" if m0 else ""
                 for k, v in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)=(-?[\w.]+)", body):
-                    metrics.setdefault(cfg, {})[k] = v
+                    metrics.setdefault(cfg, {})[f"{prefix}{k}"] = v
+                if prefix:
+                    # keep the bare name addressable on its own
+                    metrics.setdefault(cfg, {}).setdefault(prefix[:-1], "see fields")
             elif line.startswith("// coverage:"):
                 body = line[len("// coverage:"):].strip()
                 for k, v in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(-?[\w. ]+?)(?=\s+[A-Za-z_]+\s*=|$)", body):

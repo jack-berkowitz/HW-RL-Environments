@@ -41,22 +41,26 @@ import sys
 
 # (name, compiled pattern, why it cannot be authored)
 CHECKS = [
-    ("U+00A0 non-breaking space",
+    # NOT FATAL: the runners already normalise a COPY before compiling, so
+    # this is a handled condition. Refusing on it blocked d_nw01/chat.sv, a
+    # submission the pipeline runs perfectly -- an over-correction on my
+    # part. Reported so it stays visible, never fatal.
+    ("U+00A0 non-breaking space (handled -- normalised on a copy)",
      re.compile(" "),
-     "chat interfaces substitute it for an ordinary space"),
+     "chat interfaces substitute it; the runners normalise it", False),
     ("injected fragment before a sized literal",
      # No trailing \b: the second real instance was `1 me1'b0`, where "me1"
      # has no word boundary after "me" and the original pattern missed it.
      # A digit followed by whitespace and a bare word is not valid in any
      # expression context here, so this does not need to be narrower.
      re.compile(r"[0-9]\s+me"),
-     "a bare word where a literal belongs; no model emits `1 me`"),
+     "a bare word where a literal belongs; no model emits `1 me`", True),
     ("doubled sized literal",
      re.compile(r"[0-9]+\s*'[bdh][0-9a-fA-FxzXZ_]+\s*'[bdh]"),
-     "two literals fused with no operator between them"),
+     "two literals fused with no operator between them", True),
     ("zero-width or bidi control character",
      re.compile("[​‌‍⁠‪-‮]"),
-     "invisible characters survive a paste and break tokenisation"),
+     "invisible characters survive a paste and break tokenisation", True),
 ]
 
 
@@ -64,10 +68,10 @@ def scan(path):
     raw = open(path, encoding="utf-8", errors="replace").read()
     lines = raw.splitlines()
     hits = []
-    for name, pat, why in CHECKS:
+    for name, pat, why, fatal in CHECKS:
         for i, line in enumerate(lines, 1):
             for m in pat.finditer(line):
-                hits.append((i, name, why, line.strip()[:90], m.group(0)))
+                hits.append((i, name, why, line.strip()[:90], m.group(0), fatal))
     return hits
 
 
@@ -77,14 +81,20 @@ def main():
         return 2
     path = sys.argv[1]
     hits = scan(path)
+    fatal_hits = [h for h in hits if h[5]]
     if not hits:
         print(f"  {path}: no known transport damage")
         return 0
+    if not fatal_hits:
+        print(f"  {path}: {len(hits)} handled transport artefact(s), not fatal:")
+        for line_no, name, _why, _text, _frag, _f in hits[:3]:
+            print(f"    line {line_no}: {name}")
+        return 0
 
-    print(f"  TRANSPORT DAMAGE in {path} -- {len(hits)} site(s).")
+    print(f"  TRANSPORT DAMAGE in {path} -- {len(fatal_hits)} site(s).")
     print("  This is a SETUP problem. Do not score this file; re-paste it.\n")
     seen = set()
-    for line_no, name, why, text, frag in hits:
+    for line_no, name, why, text, frag, _f in fatal_hits:
         key = (line_no, name)
         if key in seen:
             continue

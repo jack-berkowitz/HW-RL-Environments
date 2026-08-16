@@ -63,6 +63,60 @@ NICK="${TASK_ID}_cand_${LABEL}"
 # --- normalise chat-paste artifacts into the build copy ----------------------
 # Same reasoning as sim_candidate.sh: U+00A0 comes from the copy-paste path, not
 # the model. The original answer file is never modified.
+# --- CORRECTNESS GATE, enforced HERE and not only in the driver -------------
+# A PPA number for a design that fails its contract is not a result. That rule
+# existed and lived in run_submissions.sh, which meant it applied only to people
+# who used run_submissions.sh -- and calling this script directly bypassed it
+# silently. That is exactly F20's root cause: a rule enforced by a tool nobody is
+# obliged to use is a convention, not a control.
+#
+# d_ca04/gemini.sv reached the results table with area, power and WNS recorded
+# and NO correctness verdict, because of that hole.
+#
+# Matched on the submission's CONTENT HASH, not its path: a file edited after
+# passing must re-pass.
+GATE_OVERRIDE=0
+for a in "$@"; do [ "$a" = "--no-correctness-gate" ] && GATE_OVERRIDE=1; done
+
+CAND_SHA="$(python3 -c "
+import hashlib,sys
+print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest()[:16])" "$CAND_ARG" 2>/dev/null)"
+
+GATE_REC="$(python3 - "$REPO" "$TASK_NAME" "${CAND_SHA:-none}" <<'PYGATE'
+import glob, json, os, sys
+repo, task, sha = sys.argv[1], sys.argv[2], sys.argv[3]
+for f in sorted(glob.glob(os.path.join(repo, "runs", task, "*__sim.json"))):
+    try:
+        d = json.load(open(f))
+    except Exception:
+        continue
+    if d.get("submission_sha256_16") == sha and d.get("all_passed"):
+        print(os.path.basename(f)); break
+PYGATE
+)"
+
+if [ -z "$GATE_REC" ] && [ "$GATE_OVERRIDE" = "0" ]; then
+  echo "REFUSED: no passing correctness record for this submission." >&2
+  echo "  task   : $TASK_NAME" >&2
+  echo "  file   : $CAND_ARG" >&2
+  echo "  sha256 : ${CAND_SHA:-<unreadable>}" >&2
+  echo "" >&2
+  echo "  A PPA number for a design that fails or has never run its contract is" >&2
+  echo "  not a result. Run the correctness gate first:" >&2
+  echo "      ./scripts/sim_candidate.sh ${TASK_ARG} $CAND_ARG" >&2
+  echo "" >&2
+  echo "  For a deliberate exploratory build, pass --no-correctness-gate. The" >&2
+  echo "  record is then marked correctness_gate=BYPASSED and collection will" >&2
+  echo "  show it as such -- it does not become quotable by being labelled." >&2
+  exit 3
+fi
+if [ "$GATE_OVERRIDE" = "1" ] && [ -z "$GATE_REC" ]; then
+  echo "WARNING: correctness gate BYPASSED for $CAND_ARG -- record will say so." >&2
+  GATE_STATUS="BYPASSED"
+else
+  GATE_STATUS="passed:$GATE_REC"
+fi
+
 RUNDIR="$REPO/orfs_runs/$NICK"
 mkdir -p "$RUNDIR"
 LC_ALL=C sed $'s/\xc2\xa0/ /g' "$CAND" > "$RUNDIR/$DUT_MOD.sv"
@@ -212,7 +266,8 @@ REC="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$CAND" ppa "$LA
         "status=$STATUS" "design_area_um2=${AREA:-}" "synth_area_um2=${SYNTH:-}" \
         "wns_ns=${WNS:-}" "power_w=${PWR:-}" "clk_period_ns=${PER:-}" \
         "orfs_nickname=$NICK" "pdk=${PLATFORM:-sky130hd}" \
-        "build_config_hash=$BCH" "build_config_fields=$BCF" 2>/dev/null)"
+        "build_config_hash=$BCH" "build_config_fields=$BCF" \
+        "correctness_gate=$GATE_STATUS" 2>/dev/null)"
 [ -n "$REC" ] && echo "record: $REC"
 
 echo

@@ -152,13 +152,20 @@ def main():
             "wns": (lambda v: (f"{float(v):.4f}" if v not in (None, "", "None")
                                else None))((ppa or {}).get("wns_ns")),
             "power": (ppa or {}).get("power_w"),
-            "ppa": (ppa or {}).get("status"),
+            # A PPA record written before the correctness gate moved into
+            # ppa_candidate.sh carries no correctness_gate field. It is not
+            # necessarily wrong -- d_ca04/gemini.sv later passed 18/18 -- but
+            # nothing established that AT THE TIME, so it is shown as
+            # UNVERIFIED rather than silently as a clean result.
+            "ppa": ((ppa or {}).get("status") if not ppa else
+                    (ppa.get("status") if ppa.get("correctness_gate")
+                     else f"{ppa.get('status')}!ungated")),
             "when": (sim or ppa)["timestamp_utc"][:16].replace("T", " "),
         })
 
     cols = [("task", 24), ("submission", 18), ("sha", 9), ("configs", 8),
             ("correct", 8), ("clk", 7), ("area", 11), ("wns", 8),
-            ("power", 10), ("ppa", 16), ("when", 17)]
+            ("power", 10), ("ppa", 20), ("when", 18)]
     hdr = "".join(c.rjust(w) if c not in ("task", "submission") else c.ljust(w)
                   for c, w in cols)
     print(hdr)

@@ -50,7 +50,13 @@ scored_configuration:
 
 scored_metrics:
   - {metric: capacity_beats_accepted, label: "cap"}
-  - {metric: crossing_latency_rdclk,  label: "lat(rd)"}
+  # The MINIMUM crossing latency is the capability -- it is what the design can
+  # achieve, where the average is dragged around by stimulus. Named with the
+  # `_min` suffix because the checker emits this metric as a NAMED line with
+  # min/max/n fields, and the record writer now preserves that structure; it
+  # previously dropped the name and filed the fields under bare min/max/n.
+  - {metric: crossing_latency_rdclk_min, label: "lat.min"}
+  - {metric: crossing_latency_rdclk_max, label: "lat.max"}
   - {metric: wr_stall_cycles,         label: "wrstall"}
 
 scored_point_status: >
