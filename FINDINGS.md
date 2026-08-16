@@ -1104,6 +1104,38 @@ include validating it against a second reading of the same run — which is what
 
 **Rules:** 7, 8
 
+## F22. A task whose every result was produced outside the scored path
+
+`d_dsp02` has **no `ref/sim_flags_verilator.txt`** — the file absent entirely,
+not empty. It is the only design task without one, and it is not referenced by
+`sim_candidate.sh` or `ppa_candidate.sh`. **It cannot be scored.**
+
+Every result reported for it — 4290/4290 vectors, six mutants each failing on its
+own defect, the second source passing after three adjudications — was produced by
+**ad-hoc Verilator invocations assembled by hand for each run**. The simulations
+are real and the numbers are correct as far as they go. What is missing is that
+none of them came from the path that scores a submission.
+
+That path is not a wrapper. `sim_candidate.sh` applies the six-token leak check,
+the slang synthesis gate, NBSP normalisation on a copy, and refuses unregistered
+config lists. **None of it ran.** So the task's results carry the properties I
+verified and none of the properties the harness exists to enforce.
+
+Same family as P2, where `nw_d01`'s empty `sim_flags` meant its reference had
+never simulated at all — and different in the way that made it survive longer.
+P2 announced itself as a failure. This announces itself as nothing: the ad-hoc
+runs pass, the output looks like the harness's output, and the task reads as
+finished. It was found only when the absent file blocked the ORFS config, which
+needs the same dependency closure.
+
+**The task is not finished and should not be described as built.** The build
+prompt's step order puts the harness wiring before the measurement, and it was
+taken out of order — the interesting work (oracle inversion, mutants, second
+source) was done first and the plumbing deferred, which is exactly the order that
+leaves a task looking complete while being unscoreable.
+
+**Rules:** 10
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET
