@@ -52,10 +52,36 @@
 //       A FAILURE, and so is a slow path that stalls on them -- the latter
 //       fails C3 rather than A3.
 //
-//   A4. NaN. A signalling NaN operand raises `invalid` and the result is that
-//       NaN quieted. A quiet NaN operand propagates. When several operands are
-//       NaN the result is a NaN; the exact payload is checked against the
-//       reference, so propagate rather than synthesise one.
+//   A4. NaN -- PINNED, because IEEE-754 does NOT settle this.
+//
+//       *** EVERY NaN RESULT IS THE CANONICAL QUIET NaN, EXACTLY 32'h7FC00000. ***
+//
+//       This holds whatever produced it: a signalling NaN operand, a quiet NaN
+//       operand, Inf - Inf, or 0 * Inf. Operand payloads are NOT propagated and
+//       the sign bit of a NaN result is always 0.
+//
+//       IEEE-754 only *recommends* payload propagation; it does not mandate it,
+//       and an FMA that propagates an operand's payload is equally conformant.
+//       RISC-V mandates the canonical NaN, and this task follows RISC-V. IT IS
+//       STATED HERE SO THAT IT IS A CONTRACT TERM RATHER THAN SOMETHING A
+//       DESIGN HAS TO GUESS from the reference's behaviour.
+//
+//       A signalling NaN operand additionally raises `invalid`. A quiet NaN
+//       operand alone does not.
+//
+//   A4b. THE OTHER IMPLEMENTATION-DEFINED CHOICES, pinned for the same reason:
+//
+//        * UNDERFLOW is raised only when the result is tiny AFTER rounding AND
+//          inexact. A tiny but exact result does NOT raise it. (IEEE permits
+//          detecting tininess before rounding; this task requires after -- see
+//          A6.)
+//        * OVERFLOW always raises `inexact` as well.
+//        * `invalid` always yields the canonical quiet NaN as the result.
+//
+//        Each of these was verified against the reference across the vector set
+//        rather than assumed: 103 underflow cases all inexact and none exact,
+//        no overflow without inexact, no invalid without a NaN result, and one
+//        single NaN pattern across all 188 NaN results.
 //
 //   A5. SPECIAL VALUES. Inf - Inf and 0 * Inf raise `invalid` and return a
 //       quiet NaN. Signed zero follows IEEE: (-0) + (+0) is +0 in every mode

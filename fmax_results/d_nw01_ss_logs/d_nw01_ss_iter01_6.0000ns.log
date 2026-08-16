@@ -4541,3 +4541,336 @@ Up-via summary (total 194954):
     elapsed time = 00:00:22, memory = 3205.27 (MB).
     Completing 80% with 5 violations.
     elapsed time = 00:00:23, memory = 3233.12 (MB).
+    Completing 90% with 5 violations.
+    elapsed time = 00:00:29, memory = 3205.60 (MB).
+    Completing 100% with 6 violations.
+    elapsed time = 00:00:30, memory = 3170.15 (MB).
+[INFO DRT-0199]   Number of violations = 9.
+Viol/Layer        met1
+Recheck              3
+Short                6
+[INFO DRT-0267] cpu time = 00:04:44, elapsed time = 00:00:30, memory = 3170.15 (MB), peak = 3270.86 (MB)
+Total wire length = 1463742 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 563694 um.
+Total wire length on LAYER met2 = 652463 um.
+Total wire length on LAYER met3 = 154053 um.
+Total wire length on LAYER met4 = 91686 um.
+Total wire length on LAYER met5 = 1843 um.
+Total number of vias = 194952.
+Up-via summary (total 194952):
+
+-------------------------
+ FR_MASTERSLICE         0
+            li1     86737
+           met1     96549
+           met2      9065
+           met3      2351
+           met4       250
+-------------------------
+               194952
+
+
+[INFO DRT-0195] Start 1st optimization iteration.
+    Completing 10% with 9 violations.
+    elapsed time = 00:00:02, memory = 3170.16 (MB).
+    Completing 20% with 9 violations.
+    elapsed time = 00:00:06, memory = 3204.09 (MB).
+    Completing 30% with 6 violations.
+    elapsed time = 00:00:07, memory = 3170.16 (MB).
+    Completing 40% with 6 violations.
+    elapsed time = 00:00:12, memory = 3170.16 (MB).
+    Completing 50% with 6 violations.
+    elapsed time = 00:00:14, memory = 3204.53 (MB).
+    Completing 60% with 6 violations.
+    elapsed time = 00:00:16, memory = 3170.16 (MB).
+    Completing 70% with 6 violations.
+    elapsed time = 00:00:20, memory = 3204.09 (MB).
+    Completing 80% with 3 violations.
+    elapsed time = 00:00:22, memory = 3170.16 (MB).
+    Completing 90% with 3 violations.
+    elapsed time = 00:00:27, memory = 3170.16 (MB).
+    Completing 100% with 3 violations.
+    elapsed time = 00:00:29, memory = 3170.16 (MB).
+[INFO DRT-0199]   Number of violations = 3.
+Viol/Layer        met1
+Short                3
+[INFO DRT-0267] cpu time = 00:04:31, elapsed time = 00:00:29, memory = 3170.16 (MB), peak = 3274.47 (MB)
+Total wire length = 1463744 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 563695 um.
+Total wire length on LAYER met2 = 652464 um.
+Total wire length on LAYER met3 = 154053 um.
+Total wire length on LAYER met4 = 91686 um.
+Total wire length on LAYER met5 = 1843 um.
+Total number of vias = 194953.
+Up-via summary (total 194953):
+
+-------------------------
+ FR_MASTERSLICE         0
+            li1     86736
+           met1     96551
+           met2      9065
+           met3      2351
+           met4       250
+-------------------------
+               194953
+
+
+[INFO DRT-0195] Start 2nd optimization iteration.
+    Completing 10% with 3 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 20% with 3 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 30% with 3 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 40% with 3 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 50% with 3 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 60% with 3 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 70% with 3 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 80% with 4 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 90% with 4 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+    Completing 100% with 4 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+[INFO DRT-0199]   Number of violations = 4.
+Viol/Layer        met1
+Metal Spacing        1
+Short                3
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 3170.16 (MB), peak = 3274.47 (MB)
+Total wire length = 1463742 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 563693 um.
+Total wire length on LAYER met2 = 652464 um.
+Total wire length on LAYER met3 = 154053 um.
+Total wire length on LAYER met4 = 91686 um.
+Total wire length on LAYER met5 = 1843 um.
+Total number of vias = 194954.
+Up-via summary (total 194954):
+
+-------------------------
+ FR_MASTERSLICE         0
+            li1     86737
+           met1     96551
+           met2      9065
+           met3      2351
+           met4       250
+-------------------------
+               194954
+
+
+[INFO DRT-0195] Start 3rd guides tiles iteration.
+    Completing 100% with 0 violations.
+    elapsed time = 00:00:00, memory = 3170.16 (MB).
+[INFO DRT-0199]   Number of violations = 0.
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 3170.16 (MB), peak = 3274.47 (MB)
+Total wire length = 1463740 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 563682 um.
+Total wire length on LAYER met2 = 652464 um.
+Total wire length on LAYER met3 = 154062 um.
+Total wire length on LAYER met4 = 91686 um.
+Total wire length on LAYER met5 = 1843 um.
+Total number of vias = 194953.
+Up-via summary (total 194953):
+
+-------------------------
+ FR_MASTERSLICE         0
+            li1     86737
+           met1     96548
+           met2      9067
+           met3      2351
+           met4       250
+-------------------------
+               194953
+
+
+[INFO DRT-0198] Complete detail routing.
+Total wire length = 1463740 um.
+Total wire length on LAYER li1 = 0 um.
+Total wire length on LAYER met1 = 563682 um.
+Total wire length on LAYER met2 = 652464 um.
+Total wire length on LAYER met3 = 154062 um.
+Total wire length on LAYER met4 = 91686 um.
+Total wire length on LAYER met5 = 1843 um.
+Total number of vias = 194953.
+Up-via summary (total 194953):
+
+-------------------------
+ FR_MASTERSLICE         0
+            li1     86737
+           met1     96548
+           met2      9067
+           met3      2351
+           met4       250
+-------------------------
+               194953
+
+
+[INFO DRT-0267] cpu time = 00:09:17, elapsed time = 00:01:01, memory = 3170.16 (MB), peak = 3274.47 (MB)
+
+[INFO DRT-0180] Post processing.
+[INFO DRT-0501] Runtime: 151.64s
+[INFO ANT-0002] Found 0 net violations.
+[INFO ANT-0001] Found 0 pin violations.
+[INFO ANT-0002] Found 0 net violations.
+[INFO ANT-0001] Found 0 pin violations.
+Design area 318816 um^2 15% utilization.
+write_db ./results/sky130hd/d_nw01_ss/base/5_2_route.odb
+Elapsed time: 24:47.86[h:]min:sec. CPU time: user 13132.51 sys 11.13 (883%). Peak memory: 3353060KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+5_2_route                 .odb         1487           3274 b560fbbdd23acd695dc7
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 5_3_fillcell fillcell
+Running fillcell.tcl, stage 5_3_fillcell
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_nw01_ss/base/5_2_route.odb
+read_sdc ./results/sky130hd/d_nw01_ss/base/5_1_grt.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+[WARNING STA-0450] virtual clock vclk_core_clock can not be propagated.
+filler_placement "sky130_fd_sc_hd__fill_1 sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__fill_4 sky130_fd_sc_hd__fill_8"
+[INFO DPL-0001] Placed 233598 filler instances.
+Design area 318816 um^2 15% utilization.
+write_db ./results/sky130hd/d_nw01_ss/base/5_3_fillcell.odb
+Elapsed time: 0:03.10[h:]min:sec. CPU time: user 2.24 sys 0.27 (80%). Peak memory: 546380KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+5_3_fillcell              .odb            3            533 5338a9d2af1de7ec0c79
+cp ./results/sky130hd/d_nw01_ss/base/5_3_fillcell.odb ./results/sky130hd/d_nw01_ss/base/5_route.odb
+cp ./results/sky130hd/d_nw01_ss/base/5_1_grt.sdc ./results/sky130hd/d_nw01_ss/base/5_route.sdc
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 6_1_fill density_fill
+Running density_fill.tcl, stage 6_1_fill
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_nw01_ss/base/5_route.odb
+read_sdc ./results/sky130hd/d_nw01_ss/base/5_route.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+exec cp ./results/sky130hd/d_nw01_ss/base/5_route.odb ./results/sky130hd/d_nw01_ss/base/6_1_fill.odb
+Elapsed time: 0:01.36[h:]min:sec. CPU time: user 1.18 sys 0.11 (94%). Peak memory: 380724KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+6_1_fill                  .odb            1            371 5338a9d2af1de7ec0c79
+cp ./results/sky130hd/d_nw01_ss/base/5_route.sdc ./results/sky130hd/d_nw01_ss/base/6_1_fill.sdc
+/OpenROAD-flow-scripts/flow/scripts/flow.sh 6_report final_report
+Running final_report.tcl, stage 6_report
+read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+read_db ./results/sky130hd/d_nw01_ss/base/6_1_fill.odb
+read_sdc ./results/sky130hd/d_nw01_ss/base/6_1_fill.sdc
+source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
+[WARNING STA-0450] virtual clock vclk_core_clock can not be propagated.
+write_db ./results/sky130hd/d_nw01_ss/base/6_final.odb
+write_sdc -no_timestamp ./results/sky130hd/d_nw01_ss/base/6_final.sdc
+Deleted 0 routing obstructions
+Warning: master sky130_ef_sc_hd__decap_12 has signal pins but no liberty cell
+[INFO RCX-0431] Defined process_corner X with ext_model_index 0
+[INFO RCX-0029] Defined extraction corner X
+[WARNING RCX-0514] The ext_model_file option is deprecated. Use set_extraction_rules_file command instead.
+[INFO RCX-0435] Reading extraction model file /OpenROAD-flow-scripts/flow/platforms/sky130hd/rcx_patterns.rules ...
+[INFO RCX-0436] RC segment generation axi4_xbar (max_merge_res 50.0) ...
+[INFO RCX-0040] Final 109619 rc segments
+[INFO RCX-0439] Coupling Cap extraction axi4_xbar ...
+[INFO RCX-0440] Coupling threshhold is 0.1000 fF, coupling capacitance less than 0.1000 fF will be grounded.
+[INFO RCX-0442] 13% of 259126 wires extracted
+[INFO RCX-0442] 40% of 259126 wires extracted
+[INFO RCX-0442] 62% of 259126 wires extracted
+[INFO RCX-0442] 68% of 259126 wires extracted
+[INFO RCX-0442] 95% of 259126 wires extracted
+[INFO RCX-0442] 100% of 259126 wires extracted
+[INFO RCX-0045] Extract 26702 nets, 136281 rsegs, 136281 caps, 242711 ccs
+[INFO RCX-0443] 26702 nets finished
+[INFO PSM-0040] All shapes on net VDD are connected.
+########## IR report #################
+Net              : VDD
+Corner           : default
+Total power      : 6.66e-02 W
+Supply voltage   : 1.80e+00 V
+Worstcase voltage: 1.80e+00 V
+Average voltage  : 1.80e+00 V
+Average IR drop  : 6.75e-06 V
+Worstcase IR drop: 3.26e-04 V
+Percentage drop  : 0.02 %
+######################################
+[INFO PSM-0040] All shapes on net VSS are connected.
+########## IR report #################
+Net              : VSS
+Corner           : default
+Total power      : 6.66e-02 W
+Supply voltage   : 0.00e+00 V
+Worstcase voltage: 2.90e-04 V
+Average voltage  : 6.79e-06 V
+Average IR drop  : 6.79e-06 V
+Worstcase IR drop: 2.90e-04 V
+Percentage drop  : 0.02 %
+######################################
+Cell type report:                       Count       Area
+  Fill cell                            233598 1772010.75
+  Tap cell                              27716   34678.26
+  Antenna cell                            228     570.55
+  Clock buffer                            445    9698.05
+  Timing Repair Buffer                   6485   63945.08
+  Inverter                                490    1948.12
+  Clock inverter                          224    2335.99
+  Sequential cell                        3012   89876.20
+  Multi-Input combinational cell        14878  115763.53
+  Total                                287076 2090826.52
+Report metrics stage 6, finish...
+
+==========================================================================
+finish report_design_area
+--------------------------------------------------------------------------
+Design area 318816 um^2 15% utilization.
+[WARNING GUI-0076] QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-'
+Elapsed time: 0:37.28[h:]min:sec. CPU time: user 79.50 sys 5.28 (227%). Peak memory: 1345320KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+6_report                                 37           1313                  N/A
+cp /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd.tlef ./objects/sky130hd/d_nw01_ss/base/klayout_tech.lef
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/util/generate_klayout_tech.py \
+	--template /OpenROAD-flow-scripts/flow/platforms/sky130hd/sky130hd.lyt \
+	--output ./objects/sky130hd/d_nw01_ss/base/klayout.lyt \
+	--lef-files ./objects/sky130hd/d_nw01_ss/base/klayout_tech.lef /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd_merged.lef   \
+	--map-files 
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/scripts/run_command.py --log /OpenROAD-flow-scripts/flow/logs/sky130hd/d_nw01_ss/base/6_1_merge.log --tee -- \
+        /OpenROAD-flow-scripts/flow/scripts/klayout.sh -zz -rd design_name=axi4_xbar \
+        -rd in_def=./results/sky130hd/d_nw01_ss/base/6_final.def \
+        -rd in_files="/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds  " \
+        -rd seal_file="" \
+        -rd out_file=./results/sky130hd/d_nw01_ss/base/6_1_merged.gds \
+        -rd tech_file=./objects/sky130hd/d_nw01_ss/base/klayout.lyt \
+        -rd layer_map= \
+        -r /OpenROAD-flow-scripts/flow/util/def2stream.py
+KLayout 0.30.7
+[INFO] Reporting cells prior to loading DEF ...
+	/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds
+[INFO] All LEF cells have matching GDS/OAS cells
+[INFO] No orphan cells in the final layout
+Elapsed time: 0:10.08[h:]min:sec. CPU time: user 9.75 sys 0.24 (99%). Peak memory: 1154532KB.
+cp results/sky130hd/d_nw01_ss/base/6_1_merged.gds results/sky130hd/d_nw01_ss/base/6_final.gds
+./logs/sky130hd/d_nw01_ss/base
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+1_1_yosys_canonicalize    .rtlil          0            123 3aa0ec435d232855d655
+1_2_yosys                 .v             86            294 6933bc279b751968e4f8
+1_2_yosys                 .sdc                             b0f18e6cf9ff4d94523b
+1_synth                   .odb            1            195 e33e65dfb54157812bb0
+1_synth                   .sdc                             41fe9ce301a07016348e
+2_1_floorplan             .odb          121            265 4b3a0df2825948c3fcda
+2_1_floorplan             .sdc                             41fe9ce301a07016348e
+2_2_floorplan_macro       .odb            1            175 4b3a0df2825948c3fcda
+2_3_floorplan_tapcell     .odb            1            179 d4c06731e6714285751e
+2_4_floorplan_pdn         .odb            3            284 1ed7ec41f8ecaad5d0e6
+3_1_place_gp_skip_io      .odb           19            255 9d38ef8a9a539ff3ba24
+3_2_place_iop             .odb            1            216 bf3f2d0a14c05795ba89
+3_3_place_gp              .odb           97            616 1d4d0e861808f2f37c8d
+3_4_place_resized         .odb           15            313 fe562da2338305e84497
+3_5_place_dp              .odb           19            407 521ac31c167edda814f7
+4_1_cts                   .odb          113            446 3467d9724d446ee25aa1
+5_1_grt                   .odb          295           1055 a3ac73a9dc63fbca5928
+5_1_grt                   .sdc                             902745ea258b0d10eb6e
+5_2_route                 .odb         1487           3274 b560fbbdd23acd695dc7
+5_3_fillcell              .odb            3            533 5338a9d2af1de7ec0c79
+6_1_fill                  .odb            1            371 5338a9d2af1de7ec0c79
+6_1_fill                  .sdc                             902745ea258b0d10eb6e
+6_1_merge                                10           1127                  N/A
+6_report                                 37           1313                  N/A
+Total                                  2310           3274                     
+make: warning:  Clock skew detected.  Your build may be incomplete.

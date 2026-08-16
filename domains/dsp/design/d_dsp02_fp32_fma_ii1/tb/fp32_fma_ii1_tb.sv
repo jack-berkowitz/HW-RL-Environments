@@ -247,8 +247,8 @@ module fp32_fma_ii1_tb #(
             if (cov_subn_op       == 0) begin miss++; $display("// COVERAGE HOLE: no subnormal operand driven"); end
             if (cov_subn_res      == 0) begin miss++; $display("// COVERAGE HOLE: no subnormal RESULT in the vector set"); end
             if (cov_snan          == 0) begin miss++; $display("// COVERAGE HOLE: no signalling NaN driven"); end
-            if (cov_qnan_a        == 0) begin miss++; $display("// COVERAGE HOLE: no quiet NaN in operand a"); end
-            if (cov_qnan_b        == 0) begin miss++; $display("// COVERAGE HOLE: no quiet NaN in operand b (payload order untested)"); end
+            if (cov_qnan_a        == 0) begin miss++; $display("// COVERAGE HOLE: no quiet NaN in operand a (canonicalisation untested)"); end
+            if (cov_qnan_b        == 0) begin miss++; $display("// COVERAGE HOLE: no quiet NaN in operand b -- both operand orders must be driven, since a design that canonicalises only one is otherwise indistinguishable"); end
             if (cov_szero_res     == 0) begin miss++; $display("// COVERAGE HOLE: no zero result"); end
             if (cov_of            == 0) begin miss++; $display("// COVERAGE HOLE: overflow never reached"); end
             if (cov_uf            == 0) begin miss++; $display("// COVERAGE HOLE: underflow never reached"); end

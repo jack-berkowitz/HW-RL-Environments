@@ -18,25 +18,33 @@ In force for every task. Each exists because its absence produced a wrong result
 that survived review. `FINDINGS.md` records which defect produced each.
 
 1. **Every capability the design must support is a named parameter with a
-   binding check.** A parameter no check enforces will be ignored, and the
-   design that ignores it will pass.
-2. **Every stated requirement has a coverage floor proving it was exercised.** A
-   requirement written in prose that no test creates the condition for is
-   decorative.
-3. **A checker whose failure mode is silence must be validated against a
-   known-failing input before it is trusted.** A wedged harness and a deadlocked
-   design emit exactly the same thing.
-4. **A control validates a check only if it fails THAT check and nothing else,
-   and only if the harness can saturate what the check measures.** A control
-   that trips two checks validates neither; a throughput check whose bottleneck
-   is the harness is measuring the harness.
-5. **The runner names its artifacts explicitly and refuses when they are absent;
-   it never discovers them by pattern.** Globbing, sorting and silent defaults
-   turn a missing artifact into a different run rather than an error.
-6. **Area comparisons are reported as a three-way split:** off-spec
-   configuration, capability gap, genuine optimisation. A headline ratio without
-   that split is not a result.
-7. **When blocked, the deliverable is the report.** Stop and say so.
+   binding check.** Audit by probe, not by reading: write a correct
+   implementation that ignores exactly one parameter and confirm the checker
+   fails it.
+2. **Every stated requirement has a coverage floor proving it was exercised.**
+3. **Every check gets a negative control that fails THAT check and nothing
+   else**, and only counts if the harness can saturate what the check measures.
+4. **Coverage floors measure STIMULUS, not design behaviour.** If a correct
+   implementation could score zero on a floor, the floor is gating a design
+   choice and must become a METRIC.
+5. **Second source is mandatory** -- an independent implementation making
+   different free choices. Name three specific differences or it is a paraphrase.
+   **When it fails, disambiguate before changing anything** -- see below.
+6. **No metric may be quoted from a run that failed its own gate.**
+7. **Closure status comes from `find_fmax`'s classification**, never a log grep.
+8. **Every run writes an immutable record; collection reads only those records**,
+   never a live tool directory.
+9. **Area and power are reported at own Fmax and at a common binding period**,
+   and area comparisons split three ways: off-spec configuration, capability
+   gap, genuine optimisation.
+10. **When blocked, the deliverable is the report.** Stop and say so.
+11. **The oracle must be an artefact nobody on this project wrote. Locally
+    authored code generates INPUTS, never expected values.** A local model
+    producing expected values and merely cross-checked against the anchor leaves
+    a shared misconception surviving the cross-check -- both sides agreeing for
+    the same wrong reason. Invert it: generate inputs locally, run them through
+    the anchor, take the ANCHOR'S output as expected. A local bug then costs
+    coverage and can never produce a wrong expected value.
 
 **Nothing you write is trusted until it has been run.**
 
@@ -188,8 +196,23 @@ this project has found the hard way:
 ### 7. Second source
 
 An independently written implementation, structurally unlike the anchor. **A
-falsifier, not an oracle: its only job is to fail.** If it fails, the checker is
-over-constrained and the checker is wrong.
+falsifier, not an oracle: its only job is to fail.**
+
+**WHEN IT FAILS, DISAMBIGUATE BEFORE CHANGING ANYTHING.** It is tempting to read
+a second-source failure as proof the checker is over-constrained. That holds only
+when writing a correct second source is routine. For a FIFO or a crossbar it is;
+for an IEEE-754 FMA it is not, and the second source may simply be wrong.
+
+On a failing case:
+
+1. Run that same input through **the anchor**.
+2. **Second source disagrees with the anchor** -> the second source is wrong.
+   Fix it. The checker is fine.
+3. **Second source agrees with the anchor, checker still fails** -> now the
+   checker is over-constrained. Fix the checker.
+
+The ordering matters because the wrong branch **loosens a check to accommodate a
+bug**, and a loosened check is invisible afterwards.
 
 Make the free choices differently on purpose — different arbitration, different
 buffering depth, exactly the required capacity rather than the anchor's

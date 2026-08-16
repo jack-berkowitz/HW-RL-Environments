@@ -118,3 +118,38 @@ vector set that could not tell the difference.
 pipelining and the spec does not constrain latency, so zero adds nothing the
 contract does not ask for. Compare `d_nw01`, where a shim bound `CUT_ALL_AX` and
 handed the reference 45 % of its area in pipelining nobody required.
+
+---
+
+# IMPLEMENTATION-DEFINED BEHAVIOUR — audited and pinned before the mutants
+
+Capturing expected values from the anchor makes them *correct*. It does not make
+them *the only correct answer*. **Wherever IEEE-754 says "should" rather than
+"shall", the vector set silently adopted cvfpu's choice** — and a conformant
+alternative implementation would fail on it.
+
+That is a live over-constraint risk, and it would have surfaced at the worst
+possible moment: when the second source failed and there was no way to tell
+whether the design was wrong or the check was.
+
+Audited across all 4290 vectors, not assumed:
+
+| area | what IEEE says | what the anchor does | now |
+|---|---|---|---|
+| **NaN payload** | *recommends* propagation; does not mandate | **only ever `0x7FC00000`** across all 188 NaN results — canonical, never propagated | **pinned in A4** |
+| NaN result sign | unspecified | always `+` | pinned in A4 |
+| **underflow flag** | permits tininess before *or* after rounding | after rounding, and only when also inexact — 103 cases with `NX`, **0 without** | **pinned in A4b / A6** |
+| overflow → inexact | mandated | 0 overflow cases without `NX` | stated in A4b |
+| invalid → NaN result | mandated | 0 invalid cases with a non-NaN result | stated in A4b |
+
+**The NaN one is the live risk.** RISC-V mandates a canonical quiet NaN and cvfpu
+follows RISC-V, so our vectors encode that. An FMA propagating an operand payload
+is *equally IEEE-conformant* and would have failed. It is now a **contract term**,
+so such a design fails a stated requirement rather than failing to guess what the
+reference happened to do.
+
+The generator's `qnan_payload` category is really testing **canonicalisation**,
+not propagation, and the coverage-floor message says so. Both operand orders are
+still required: a design that canonicalises only one operand position would
+otherwise be indistinguishable.
+

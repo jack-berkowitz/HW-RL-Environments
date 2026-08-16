@@ -19,17 +19,33 @@ Identical to the design side, and they apply to the *grading apparatus* here
 rather than to a DUT.
 
 1. **Every capability the design must support is a named parameter with a
-   binding check.**
+   binding check.** Audit by probe, not by reading: write a correct
+   implementation that ignores exactly one parameter and confirm the checker
+   fails it.
 2. **Every stated requirement has a coverage floor proving it was exercised.**
-3. **A checker whose failure mode is silence must be validated against a
-   known-failing input before it is trusted.**
-4. **A control validates a check only if it fails THAT check and nothing else,
-   and only if the harness can saturate what the check measures.**
-5. **The runner names its artifacts explicitly and refuses when they are absent;
-   it never discovers them by pattern.**
-6. **Area comparisons are reported as a three-way split:** off-spec
-   configuration, capability gap, genuine optimisation.
-7. **When blocked, the deliverable is the report.**
+3. **Every check gets a negative control that fails THAT check and nothing
+   else**, and only counts if the harness can saturate what the check measures.
+4. **Coverage floors measure STIMULUS, not design behaviour.** If a correct
+   implementation could score zero on a floor, the floor is gating a design
+   choice and must become a METRIC.
+5. **Second source is mandatory** -- an independent implementation making
+   different free choices. Name three specific differences or it is a paraphrase.
+   **When it fails, disambiguate before changing anything** -- see below.
+6. **No metric may be quoted from a run that failed its own gate.**
+7. **Closure status comes from `find_fmax`'s classification**, never a log grep.
+8. **Every run writes an immutable record; collection reads only those records**,
+   never a live tool directory.
+9. **Area and power are reported at own Fmax and at a common binding period**,
+   and area comparisons split three ways: off-spec configuration, capability
+   gap, genuine optimisation.
+10. **When blocked, the deliverable is the report.** Stop and say so.
+11. **The oracle must be an artefact nobody on this project wrote. Locally
+    authored code generates INPUTS, never expected values.** A local model
+    producing expected values and merely cross-checked against the anchor leaves
+    a shared misconception surviving the cross-check -- both sides agreeing for
+    the same wrong reason. Invert it: generate inputs locally, run them through
+    the anchor, take the ANCHOR'S output as expected. A local bug then costs
+    coverage and can never produce a wrong expected value.
 
 **Nothing you write is trusted until it has been run.**
 
@@ -129,10 +145,21 @@ A submitted testbench is scored on:
 Report per-mutant results, not just a total. *Which* mutant survived is the
 informative part.
 
-**Diff rate** — the fraction of cycles on which golden and mutant differ under
-identical stimulus — is a report-only diagnostic and **never a gate**. A mutant
-with a very high diff rate is probably filler; one with a very low rate is
-probably the sharpest test in the set.
+**Diff rate is NOT a quality signal, in either direction.** It was proposed as a
+band -- high means filler, low means unkillable -- and that was **tested and
+retracted**: the most valuable mutant in the project scored 100 %, and a
+comfortably killable one scored 0 % because the harness stimulus could not reach
+it. See `FINDINGS.md`.
+
+What it is: **a witness that non-equivalence was demonstrated under a given
+stimulus.** A zero means *this stimulus did not distinguish them*, never that the
+designs are equivalent. Report it as `non_equivalence_demonstrated` with a
+witness case, not as a rate that reads like a score.
+
+**Mutant quality has no prior and no proxy should be built for it.** It is a
+posterior: a mutant every submission kills is filler, one nobody kills is too
+hard, and neither is knowable before submissions exist. Defer it to the
+cross-model run.
 
 ### 6. NOTES.md
 

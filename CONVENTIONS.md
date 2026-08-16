@@ -91,6 +91,48 @@ the original, and the slang gate runs on the normalised copy for the same reason
 one-off harnesses built during development, which is where the third instance
 appeared.
 
+## The oracle must be an artefact nobody on this project wrote
+
+**Locally authored code generates INPUTS. It never generates expected values.**
+
+The tempting arrangement is a local model that computes expected results,
+cross-checked against the vendored anchor, with disagreements investigated. That
+leaves a hole: **a shared misconception survives the cross-check**, because both
+sides agree for the same wrong reason -- a corner of the standard misread the
+same way twice.
+
+Invert it:
+
+1. local code generates **inputs only**
+2. every input is run through the **anchor**
+3. the **anchor's output** is the expected value
+
+A local bug can then cost *coverage* -- a corner never generated -- and can never
+produce a wrong expected value.
+
+This is not hypothetical. Building `d_dsp02`, a hand-computed IEEE-754 case was
+wrong on the first attempt and was caught **only because the anchor disagreed**.
+Had that same misunderstanding been coded into a model producing expected values,
+the cross-check would have agreed with it.
+
+**The consequence is that coverage floors carry the whole weight.** Expected
+values are safe by construction; input coverage is not. Every floor must be
+stimulus-side, and adding a stimulus category without adding its floor is how
+this gets quietly undermined.
+
+## When a check and an implementation disagree, disambiguate
+
+A second source failing a check does **not** by itself mean the check is
+over-constrained. Establish which is wrong first:
+
+1. run the failing input through the **anchor**
+2. second source disagrees with the anchor -> **the second source is wrong**
+3. second source agrees with the anchor and the check still fails -> **the check
+   is over-constrained**
+
+Taking the wrong branch loosens a check to accommodate a bug, and **a loosened
+check is invisible afterwards.**
+
 ## Timing closure has ONE authoritative source
 
 **Closure comes from `find_fmax.py`'s own classification, which reads the ORFS
