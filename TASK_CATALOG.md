@@ -138,7 +138,7 @@ These are selected on failure modes frontier models actually hit:
 | id | module | why it's hard | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
 | `d_dsp01` | `fp_divsqrt_srt` | Radix-4 SRT divide/sqrt with on-the-fly quotient conversion, all IEEE rounding modes, subnormals, fixed initiation interval. Bit-exactness across the corner space is brutal. | PULP `fpu_div_sqrt_mvp` + `cvfpu` | B | not started |
-| `d_dsp02` | `fp32_fma_ii1` | fp32 FMA at II=1: five rounding modes, subnormals handled in-pipeline rather than via a slow path, correct tininess-after-rounding. | PULP `cvfpu/fpnew_fma.sv` | B | not started |
+| `d_dsp02` | `fp32_fma_ii1` | fp32 FMA at II=1: five rounding modes, subnormals handled in-pipeline rather than via a slow path, correct tininess-after-rounding. | PULP `cvfpu/fpnew_fma.sv` | **A** | **SCOREABLE**: sim_flags, configs registered, 6 mutants killed through the scored path, second source 4290/4290; PPA in progress |
 | `d_dsp03` | `multifmt_slice` | Format-parametric datapath sharing hardware across fp32/fp16/bf16 with correct per-format rounding and exception flags. Resource sharing is the difficulty. | PULP `cvfpu/fpnew_opgroup_multifmt_slice.sv` | B | not started |
 
 ---

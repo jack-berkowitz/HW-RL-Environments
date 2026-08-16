@@ -1,0 +1,141 @@
+id: d_dsp02
+module: fp32_fma_ii1
+domain: dsp
+type: design
+catalog: TASK_CATALOG.md
+
+# CLASS A, not B. The catalog listed this as Class B, which was stale from when
+# the task was planned around a locally-written Python model. What it actually
+# does is rule 11's inversion: locally authored code generates INPUTS ONLY, and
+# the expected values are produced by running the vendored cvfpu anchor. That is
+# an external RTL oracle, so the strong claim -- "the testbench passed RTL nobody
+# here wrote" -- is available and is the one being made.
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/cvfpu
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/cvfpu/src/fpnew_fma.sv
+  shim: ref/fp32_fma_ii1_ref.sv
+  shim_note: >
+    Binds NumPipeRegs=0 -- the spec-minimal configuration, purely combinational
+    -- plus a 3-bit rnd_mode to fpnew_pkg::roundmode_e decode. No behaviour in
+    the shim.
+
+spec: [spec/fp32_fma_ii1_iface.sv]
+
+configs:
+  # EXACTLY ONE, and one BY CONSTRUCTION rather than by omission. fp32_fma_ii1
+  # declares no parameters: binary32 is fixed by the spec, and rounding mode is
+  # a runtime INPUT swept by the stimulus rather than by elaboration.
+  # If a parameter is ever added, the list in sim_candidate.sh must grow with it
+  # or the sweep silently narrows.
+  - {}
+
+# ---------------------------------------------------------------------------
+oracle:
+  method: rule-11 inversion
+  generator: gen/generate_inputs.py     # INPUTS ONLY, never expected values
+  seed: 0xD5F02
+  vectors: vectors/vectors.hex
+  vector_count: 4290
+  vector_width_bits: 136                # {a, b, c, rnd, result, flags}
+  capture: tb/audit/capture_vectors_tb.sv
+  note: >
+    A hand-computed IEEE-754 case was wrong on the first attempt here and was
+    caught ONLY because the anchor disagreed. Had that misunderstanding been
+    coded into a model producing expected values, a cross-check would have
+    agreed with it. The consequence is that COVERAGE FLOORS CARRY THE WHOLE
+    WEIGHT: expected values are safe by construction, input coverage is not.
+    Every floor is stimulus-side and tallied from the file before a cycle runs.
+
+# ---------------------------------------------------------------------------
+contract_terms_requiring_authority:
+  # Rule 15. "Because the anchor does it" is not an authority.
+  - id: A4
+    term: canonical NaN 0x7FC00000
+    authority: RISC-V; IEEE-754 only RECOMMENDS payload propagation
+    alternative_out_of_scope: payload-propagating NaN
+  - id: A4b
+    term: underflow/overflow flag semantics
+    authority: IEEE-754 §7.4, §7.5
+  - id: A6
+    term: tininess detected AFTER rounding
+    authority: IEEE-754 §7.5 permits before or after; this pins after
+    note: >
+      F14. The spec already SAID "tininess after rounding" and that still would
+      not have caught the inherited choice -- it was found by counting flag
+      combinations across the 4290 captured vectors. Audit the artefact, not the
+      prose.
+
+# ---------------------------------------------------------------------------
+simulators_verified: [verilator-5.046]
+sim_flags: ref/sim_flags_verilator.txt
+sim_flags_note: >
+  THIS FILE DID NOT EXIST UNTIL FINDINGS.md F22. Every result previously
+  reported for this task came from ad-hoc Verilator invocations rather than the
+  scored path, so none carried the leak check, the slang gate or NBSP
+  normalisation. The task read as finished while being unscoreable. All results
+  below have since been reproduced THROUGH the scored path.
+
+# ---------------------------------------------------------------------------
+mutants:
+  # Each wraps the vendored anchor with one thing changed, so a failure isolates
+  # the injected defect. mA1 is TWO anchor instances (MUL feeding ADD), so every
+  # arithmetic step is externally-authored correct and the only defect is the
+  # extra rounding between them.
+  # Witness = the vector index at which the scored checker fails it.
+  - {id: mCAP1, class: CAPABILITY,      defect: flush-to-zero on subnormals,      witness: "vector 0"}
+  - {id: mA1,   class: fused-vs-unfused, defect: rounds the product before adding, witness: "vector 140"}
+  - {id: mA4,   class: nan-payload,     defect: propagates NaN payload,           witness: "vector 55"}
+  - {id: mA5,   class: signed-zero,     defect: zero result always positive,      witness: "vector 87"}
+  - {id: mA6,   class: tininess,        defect: underflow detected before rounding, witness: "vector 0"}
+  - {id: mA7,   class: flags,           defect: inexact dropped on subnormal,     witness: "vector 118"}
+  all_killed_through_scored_path: true
+
+second_source:
+  file: tb/audit/fp32_fma_ii1_second_source.sv
+  result: 4290/4290, zero coverage holes, C3 zero dead cycles
+  differences:
+    - bidirectional alignment onto max(ep, ec), not a unidirectional addend shift
+    - speculate-and-select rounding, not decide-then-increment
+    - single barrel shift from one leading-one index, subnormal folded into the
+      index clamp, not lzc-then-correct staging
+  attempted_and_withdrawn:
+    - difference: frame strictly on the addend and shift the product
+      why_withdrawn: >
+        NOT IMPLEMENTABLE AT SANE WIDTH. With the frame pinned to the addend, a
+        zero or subnormal addend sits at effective exponent -149 while the
+        product ranges to 2^128 and down to 2^-298 -- about 426 binades plus 48
+        product mantissa bits plus round and sticky, so ~485 bits. The anchor
+        sizes its alignment shifter for 3*PRECISION_BITS+5 = 77 positions
+        (fpnew_fma.sv:72), about a sixth of that.
+      what_it_established: >
+        This is a REAL RESULT ABOUT THE DESIGN SPACE, not a failed attempt. It
+        explains why the anchor frames on the product, which nothing in the
+        anchor's source says -- SHIFT_AMOUNT_WIDTH is a bound with no rationale
+        attached. Framing is a CONSTRAINT wearing the costume of a choice, and
+        the second source is what proved it. See FINDINGS.md F18.
+  adjudication_note: >
+    Three failures, all adjudicated to "the second source is wrong" under rule
+    5's disambiguation. No check was loosened at any point. The sharpest was a
+    signedness bug: {2'b0, ep} is UNSIGNED, so ep = -13 read as 4083 and gave a
+    shift amount of 4139 where 43 was correct. Found by instrumenting, not by
+    reasoning -- hand-tracing said the logic was correct.
+
+# ---------------------------------------------------------------------------
+ppa:
+  platform: sky130hd
+  binding: NumPipeRegs=0 (spec-minimal, purely combinational)
+  config: orfs/config.mk
+  sdc: orfs/constraint.sdc
+  status: IN PROGRESS -- no PPA number recorded yet
+  note: >
+    FIRST LOGIC-DOMINATED DESIGN MEASURED HERE. The others are storage-dominated,
+    where area barely responds to timing constraint. There is no register
+    retiming available at NumPipeRegs=0, so this is the sharpest available test
+    of whether area responds to constraint at all in this flow.
+
+    Any comparison against another binding -- a pipelined one, for instance --
+    must name the axis under rule 17. A pipelined FMA is a different
+    configuration, not a better result for this one.
