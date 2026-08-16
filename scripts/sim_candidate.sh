@@ -268,6 +268,20 @@ printf '%-26s %-9s %s\n' "candidate" "configs" "first failure"
 echo "--------------------------------------------------------------------------------"
 for cand in "${CANDS[@]}"; do
   name="$(basename "$cand")"
+
+  # TRANSPORT DAMAGE -- a SETUP problem, checked before anything else. A damaged
+  # paste produces the same symptom as a design that does not build, and
+  # attributing that to the model is wrong. d_dsp02/gemini.sv arrived with one
+  # injected fragment ("sum_is_zero = 1 me;") and was reported as a slang
+  # failure, i.e. as a result about the submission.
+  if ! python3 "$REPO/scripts/check_transport.py" "$cand" >/tmp/tp_$$.log 2>&1; then
+    printf '%-26s %-9s %s\n' "$name" "DAMAGED" \
+      "$(sed -n '4p' /tmp/tp_$$.log | sed 's/^ *//')"
+    sed -n '5,6p' /tmp/tp_$$.log | sed 's/^/    /'
+    rm -f /tmp/tp_$$.log
+    NREJECT=$((NREJECT+1)); continue
+  fi
+  rm -f /tmp/tp_$$.log
   # cheap pre-checks: these are failed attempts, not harness breakage
   # LEAK TOKENS -- the full set, ported from runner/extract.py::_LEAKS. Until
   # now the domains path enforced ONE of the six (TEST_RESULT), so every
@@ -355,8 +369,12 @@ NRUN=$((ALLPASS + NFAIL))
 if [ "$NSLANG" -gt 0 ]; then
   echo "--------------------------------------------------------------------------------"
   echo "$NSLANG candidate(s) FAILED THE SYNTHESIS FRONTEND (slang) and were not simulated."
-  echo "This IS a result about the submission -- the design does not build, so it has no"
-  echo "correctness, capability or PPA numbers. It is not a harness or setup problem."
+  echo "USUALLY this is a result about the submission -- the design does not build, so"
+  echo "it has no correctness, capability or PPA numbers."
+  echo "BUT CHECK FIRST: a damaged paste produces the identical symptom, and"
+  echo "attributing that to the model is wrong. d_dsp02/gemini.sv failed here for"
+  echo "exactly that reason -- one injected fragment, 'sum_is_zero = 1 me;'."
+  echo "    python3 scripts/check_transport.py <candidate file>"
   echo "Verilator and slang disagree about what is legal; ORFS synthesis uses slang, so a"
   echo "design rejected here could never have produced a PPA number. Re-run with"
   echo "--no-slang to simulate anyway and see how far it gets."
