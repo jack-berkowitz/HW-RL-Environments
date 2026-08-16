@@ -120,13 +120,21 @@ import sys,io
 src=open(sys.argv[1],encoding='utf-8',errors='replace').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WORK/sub.sv"
 
+  # Transport damage is a SETUP problem, not a result. Refuse before compiling
+  # so a paste artifact is never attributed to the model.
+  if ! python3 "$REPO/scripts/check_transport.py" "$sub" >"$WORK/tp.log" 2>&1; then
+    sed 's/^/  /' "$WORK/tp.log"
+    echo
+    continue
+  fi
+
   if ! grep -qE "^\s*module\s+$TB_MOD\b" "$WORK/sub.sv"; then
     echo "  REJECTED: does not declare module $TB_MOD"
     echo
     continue
   fi
 
-  allok=1; results=""
+  allok=1; buildfail=0
   for v in "${DUTS[@]}"; do
     build_variant "$v"
     rm -rf "$WORK/obj"
@@ -134,9 +142,18 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
          -o run --Mdir "$WORK/obj" \
          "${SUPPORT[@]}" "$WORK/variant.sv" "$WORK/extra.sv" "$WORK/sub.sv" \
          >"$WORK/build.log" 2>&1; then
-      results="$results\n  %-26s BUILD FAILED"; allok=0
-      printf "  %-26s BUILD FAILED: %s\n" "$v" \
-        "$(grep -m1 '%Error' "$WORK/build.log" | cut -c1-60)"
+      # A BUILD failure is NOT a verdict about the DUT. Kept distinct from
+      # FAIL, and the error is printed in full: truncating it to 60 characters
+      # cut off before the message every time, leaving only a temp path.
+      allok=0
+      if [ "$buildfail" -eq 0 ]; then
+        # The submission is the same file on every row, so a compile error is
+        # identical five times over. Print it once.
+        buildfail=1
+        echo "  DID NOT COMPILE (same on every DUT -- the submission does not build):"
+        grep -E '%Error' "$WORK/build.log" | head -5 \
+          | sed "s|$WORK/sub.sv|<submission>|g; s|^|      |"
+      fi
       continue
     fi
     out="$("$WORK/obj/run" 2>&1)"
@@ -150,9 +167,18 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     echo "  => ACCEPTED: passes the golden DUT and every conformant perturbation."
     NPASS=$((NPASS+1))
   else
-    echo "  => REJECTED: see the FAIL rows above."
-    echo "     A failure on 'golden' means the testbench rejects correct hardware."
-    echo "     A failure on a 'tt_c*' row means it relies on unpromised behaviour."
+    if [ "$buildfail" -eq 1 ]; then
+      echo "  => DID NOT COMPILE. This is NOT a verdict about the testbench's"
+      echo "     checking: nothing ran, so nothing was measured. Line numbers above"
+      echo "     refer to the submission."
+      echo "     Common causes seen here: a SystemVerilog RESERVED WORD used as an"
+      echo "     identifier (context, do, ref, expect, this, final, table), and"
+      echo "     transport corruption from the paste (see the note below)."
+    else
+      echo "  => REJECTED: see the FAIL rows above."
+      echo "     A failure on 'golden' means the testbench rejects correct hardware."
+      echo "     A failure on a 'tt_c*' row means it relies on unpromised behaviour."
+    fi
   fi
   echo
 done
