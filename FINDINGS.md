@@ -1027,7 +1027,7 @@ run that passed its own gate?
 | d_nw01_nolat **100 277** | `TASK_CATALOG.md`, `NOTES.md` | no | **matches**, wns +0.052 |
 | d_ca04 ref **19 942** | `NOTES.md` | no | **conflicts** — dir shows 19 887 |
 | d_ca04 cand **14 754** @4.5 ns | `NOTES.md`, `FINDINGS.md` | no | **conflicts** — dir shows 14 644 at 4.5 ns |
-| d_ca04 ref **20 101** @2.625 ns | `NOTES.md`, `FINDINGS.md` | no | unverifiable — overwritten |
+| d_ca04 ref **20 101** @2.625 ns | `NOTES.md`, `FINDINGS.md` | **YES, rebuilt** | **REBUILT: 20 101 exactly**, wns +0.032, DRC 0 |
 | d_nw01 ref **154 245** @5.25 ns | `FINDINGS.md`, `TASK_CATALOG.md`, `NOTES.md`, `task.yaml` | **YES, rebuilt** | **REBUILT: 154 245 exactly**, wns +0.037, DRC 0 |
 | d_nw01_ss **294 555** @9.0 ns | this session | no | was +0.0037; dir since wiped |
 
@@ -1042,7 +1042,30 @@ once: the audit was not alarmism about fabricated numbers, and the
 withdrawal was still correct, because *"it later turned out to be right"* is
 not a property you can rely on before doing the work.
 
-**The two conflicts are the ones that matter**, because both feed the d_ca04
+**CORRECTION TO THIS AUDIT — the "conflict" verdicts were partly my error.**
+
+The d_ca04 reference was rebuilt at 2.625 ns and returned **20 101 µm² exactly**.
+The row above had it as unverifiable, and the two rows marked *conflicts* were
+reached by comparing a quoted number against whatever the flow directory held —
+**without establishing which clock period that directory's run was at.** For
+`d_ca04_async_fifo_cdc` the surviving run was at 4.5 ns, so "19 887 vs 20 101"
+was never a conflict: it is the same design at two different periods, exactly as
+the notes said.
+
+That is the same mistake the audit was written about, committed inside the audit:
+**two numbers compared without checking they are the same measurement.** The
+audit's conclusion survives — no PPA number was traceable to a run record, and
+that was worth fixing — but its per-row verdicts were sharper than the evidence
+supported, and "conflicts" should have read "not comparable as read".
+
+The lesson is narrower and more useful than the original framing: a flow
+directory does not tell you what it is a run *of*. It has no period, no
+configuration and no provenance in it. Reading a number out of it is not just
+unrepeatable, it is **unlabelled** — which is why a run record has to carry
+`clk_period_ns`, and why comparing across records without matching that field
+would reproduce this error with full provenance in place.
+
+**The remaining conflict to settle**, because both feed the d_ca04
 area-versus-Fmax conclusion, and `20 101 / 14 754 = 1.362` is the ratio that
 conclusion is stated as.
 
