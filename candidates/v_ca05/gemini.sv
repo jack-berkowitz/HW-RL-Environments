@@ -144,7 +144,7 @@ module tag_tracker_tb;
                     if (full_o !== 1'b1)  log_error(14, "full_o should be 1 when store is full");
                 end else begin
                     if (empty_o !== 1'b0) log_error(14, "empty_o should be 0 when partially filled");
-                    if (full_o !== 1 me1'b0) log_error(14, "full_o should be 0 when partially filled");
+                    if (full_o !== 1'b0)  log_error(14, "full_o should be 0 when partially filled");
                 end
 
                 // R5: push_gnt_o low when store holds SLOTS entries

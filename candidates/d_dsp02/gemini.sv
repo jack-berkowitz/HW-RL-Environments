@@ -202,7 +202,7 @@ module fp32_fma_ii1 (
             if (sum_wide[i]) begin
                 if (sum_is_zero) begin
                     msb_idx     = i[7:0];
-                    sum_is_zero = 1 me;
+                    sum_is_zero = 1'b0;
                 end
             end
         end

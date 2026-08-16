@@ -1,0 +1,5 @@
+design d_dsp02 (dsp, sky130hd)
+config domains/dsp/design/d_dsp02_fp32_fma_ii1/orfs/config.mk
+orfs output directory: d_dsp02_fp32_fma_ii1
+
+=== phase 1: bracketing from 30.0 ns ===

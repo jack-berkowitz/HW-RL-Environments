@@ -1,0 +1,47 @@
+{
+  "all_passed": true,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "RDN": "884",
+      "RMM": "837",
+      "RNE": "850",
+      "RTZ": "840",
+      "RUP": "879",
+      "disagree": "80",
+      "exact": "640",
+      "overflow": "486",
+      "qnan_a": "46",
+      "qnan_b": "42",
+      "snan": "31",
+      "subn_op": "1223",
+      "subn_res": "146",
+      "tiny_edge": "195",
+      "underflow": "103",
+      "zero_res": "40"
+    }
+  },
+  "git_sha": "81b1944d578c29b88505555a8f8a8db8e6ed4995-dirty",
+  "kind": "sim",
+  "label": "x",
+  "metrics": {
+    "": {
+      "c3_accepted": "4290",
+      "c3_dead_cycles": "0",
+      "c3_offered": "4290",
+      "checks": "4290",
+      "vectors": "4290"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "/tmp/x.sv",
+  "submission_sha256_16": "7e7e26aedc0bbd7c",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "timestamp_utc": "2026-08-16T06:46:58Z"
+}
