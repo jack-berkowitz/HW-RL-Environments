@@ -155,7 +155,7 @@ Anchors disjoint from every design task above.
 | `v_ca02` | `cache_ctrl` | Per-port cache controller: miss sequencing, AMO, replay, interaction with the shared miss handler. | CVA6 `cache_ctrl` | A | not started |
 | `v_ca03` | `axi_iw_converter` | ID-width conversion: table pressure, stall when no free ID, per-ID ordering preserved across the conversion. | PULP `axi/src/axi_iw_converter.sv` | A | not started |
 | `v_ca04` | `stream_xbar` | Stream crossbar: fairness, no data loss, deadlock freedom under all-to-all. | PULP `common_cells/stream_xbar.sv` | A | not started |
-| `v_ca05` | `id_queue` | Out-of-order occupancy by ID, per-ID FIFO ordering, exists-lookup, full/empty edges. | PULP `common_cells/id_queue.sv` | A | not started |
+| `v_ca05` | `id_queue` | Out-of-order occupancy by ID, per-ID FIFO ordering, exists-lookup, full/empty edges. | PULP `common_cells/id_queue.sv` | A | spec + reference TB + 4 conformant perturbations; parked pending the blind measurement |
 
 ## Networking (4)
 
@@ -233,6 +233,66 @@ Consequences, pending a decision:
 retention clauses, not a legal opinion. Fine for internal work; **a review is
 required before anything is distributed to a model provider or released
 publicly** — see the pre-release checklist below.
+
+---
+
+# OPEN DESIGN DECISION — ship no RTL, and does the task ship a BFM?
+
+**Recorded so this is decided rather than defaulted. Nothing is built for it.**
+
+## The candidate change
+
+Verification tasks currently ship a decontaminated DUT. The alternative is to
+ship **nothing but a port map and a fully pinned spec**, and have the model write
+a testbench blind. Scoring is unchanged: validity gate against the hidden golden,
+then mutant kill rate.
+
+That would remove decontamination, licence retention and recognition **in one
+move** — the three problems recorded in the section above, none of which have a
+good answer otherwise. It would also let a design and a verification task share a
+module and a spec, which anchor-disjointness currently forbids.
+
+**Precondition, now partly measured** (`v_ca05`, `spec/tag_tracker_spec.md`): can
+a testbench written from the spec alone pass the golden? A local pilot passed at
+1273 checks with zero spec revisions, but its author had already read the RTL, so
+the result is one-sided. Three clauses were shown to be load-bearing — R4, R10,
+R3 — each an answer to a question you only know to ask after seeing the
+implementation. The clean measurement is `probe/BLIND_TB_TASK.md`, which hands
+the spec to a model.
+
+## The sub-decision: does the task ship a protocol BFM?
+
+**Not decided. Do not default into it by writing tasks that assume one.**
+
+| | model writes its own driver | task ships a BFM |
+|---|---|---|
+| what is measured | driver plumbing **and** checking | checking only |
+| failure mode | a plumbing bug scores the same zero as bad checking | none — plumbing is given |
+| skill covered | broader; writing a correct driver is part of writing a testbench | narrower, sharper |
+| spec leakage | none | **a BFM encodes the handshake, so it gives away R4** |
+
+The plumbing risk is real and measured, not hypothetical. The local pilot's only
+failure was a driver race — stimulus changed in the same timestep as the sampling
+edge — which made a correct DUT look **completely inert**: `empty_o` stuck high,
+`full_o` never asserting, every pop returning nothing. A model hitting that has
+two natural conclusions available, *"the DUT is broken"* and *"the spec is
+wrong"*, and neither is true. See `CONVENTIONS.md`.
+
+Arguments both ways, neither yet decisive:
+
+- **For the model writing it:** it is genuinely part of the task, and a
+  benchmark that hands over the driver measures a narrower skill than the one we
+  claim to measure.
+- **For shipping a BFM:** a plumbing bug and a missing check produce the same
+  score, so the measurement stops distinguishing them — and for `id_queue`
+  specifically, `push_gnt_o` is a *space-available flag rather than an
+  acknowledgement*, which is exactly the trap a BFM would remove and exactly what
+  R4 exists to state.
+
+**For `id_queue` a BFM is awkward and is not being built**, because encoding the
+handshake hands over the single most load-bearing clause in the spec. Revisit
+when the blind measurement comes back, and use its three-way failure split —
+driver bug / unpromised reliance / genuine spec gap — as the evidence.
 
 ---
 

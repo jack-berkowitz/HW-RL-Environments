@@ -9,6 +9,13 @@
 // =============================================================================
 `timescale 1ns/1ps
 
+// The DUT module name is overridable so the SAME testbench can be run against
+// the golden and against each conformant perturbation. Ordinary mutants must be
+// killed; these must SURVIVE.
+`ifndef DUT_MODULE
+  `define DUT_MODULE tag_tracker
+`endif
+
 module tag_tracker_spec_tb;
 
   localparam int TAG_W = 3;
@@ -36,7 +43,7 @@ module tag_tracker_spec_tb;
 
   logic              full, empty;
 
-  tag_tracker #(
+  `DUT_MODULE #(
       .TAG_W(TAG_W), .SLOTS(SLOTS), .N_MATCH(NM), .payload_t(payload_t)
   ) dut (
       .clk_i(clk), .rst_ni(rst_n),
