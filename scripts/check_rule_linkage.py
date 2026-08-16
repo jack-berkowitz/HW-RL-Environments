@@ -21,6 +21,19 @@ defects are caught by negative controls and known-failing inputs; a contract
 defect leaves the apparatus working perfectly, so nothing fires. A broken link
 here is the one machine-detectable symptom.
 
+WHAT THIS DOES NOT CHECK -- do not over-read a green run
+--------------------------------------------------------
+It asserts STRUCTURAL completeness, not correctness of content. A rule citing the
+WRONG finding passes. A rule whose text no longer matches the finding it cites
+passes. A rule that should exist and does not passes, because nothing references
+it.
+
+And more broadly: a complete graph says the rules are internally consistent. It
+says nothing about whether they COVER the space of ways this project can be
+wrong -- see FINDINGS.md, "A stated limitation of the rule set". d_dsp02 produced
+an entire defect class the existing rules had not anticipated, and this checker
+was green throughout.
+
 Exit 0 if the graph is complete, 1 otherwise. Runs with the regression.
 """
 import os

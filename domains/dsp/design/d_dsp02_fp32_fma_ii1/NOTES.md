@@ -215,3 +215,71 @@ file, so both designs see byte-identical stimulus by construction.
 **No diff rate is reported.** It was retracted as a quality signal
 (`FINDINGS.md`), and mutant quality is a posterior deferred to the cross-model
 run.
+
+---
+
+# SECOND SOURCE — passes 4290/4290, and rule 5 adjudicated every failure
+
+`tb/audit/fp32_fma_ii1_second_source.sv`. An independent FMA sharing no
+arithmetic with the anchor. **4290/4290, zero coverage holes, C3 with 0 dead
+cycles.**
+
+## The three structural differences
+
+| | anchor (`fpnew_fma`) | second source |
+|---|---|---|
+| **1. alignment** | frames on the **product**, shifts the **addend** — one shifter, one direction | frames on **max(product, addend)** and shifts whichever is smaller — **both** operands have a shift path and sticky collection |
+| **2. rounding** | **decide then increment**: `fpnew_rounding` computes `round_up` from a case table over {round, sticky}, then adds | **speculate and select**: truncated and incremented significands are computed unconditionally and one is selected |
+| **3. normalisation** | `lzc` over the sum **after** the add, then a separate correction stage for subnormal results | a **single** barrel shift from one leading-one index, with the subnormal case folded in by clamping that index — no second stage |
+
+Each changes what hardware exists, not how it is written. None is a paraphrase.
+
+**A dual-path (far/close) FMA would have been a more dramatic difference and was
+deliberately not chosen.** Its failure mode is subtle cancellation behaviour, and
+a buggy second source inverts the entire purpose of having one.
+
+## Rule 5 in practice: three failures, all adjudicated to the second source
+
+Every failing vector went through the anchor before anything was changed. **No
+check was loosened at any point.**
+
+**1 — frame misalignment (3632 of 4290 failing).** First vector:
+`1.0 × 2⁻¹⁴⁹ + 0` gave `0`, anchor gave `0x00000001`. The anchor is right — that
+is the exact product. The addend was placed at `P_POS` while the product was
+shifted from bit 0, an 80-bit misalignment.
+
+**2 — sign destroyed by concatenation.** `2⁻¹⁰⁰ × 2⁻⁴⁰` gave `0x1c800000`,
+anchor gave `0x00000200` (= 512 × 2⁻¹⁴⁹, correct). Hand-tracing said the logic
+was right, so it was instrumented instead — and `shift_amt` was **4139 instead of
+43**.
+
+> **Concatenation is unsigned in SystemVerilog.** `{2'b0, ep}` takes `ep`'s raw
+> bit pattern, so `ep = −13` became `0xFF3 = 4083`, and the `$signed()` wrapped
+> around the *already-widened* value could never recover it.
+
+Same family as the `sra` defect found earlier in this project, where `>>>` was
+demoted to a logical shift inside a ternary with an unsigned branch. **Fixed
+generally rather than locally**: the exponents are now declared at full working
+width so no widening concatenation appears anywhere.
+
+**3 — a stated difference that was not implementable.** Overflow vectors failed
+because framing strictly on the addend means a zero addend gives an effective
+exponent of 1, and the product then needs a **~485-bit accumulator** to shift
+into. Difference 1 was restated to what the file actually does — bidirectional
+alignment onto `max(ep, ec)` — which is still a real structural difference
+against a unidirectional aligner, but **a smaller claim than the one that did not
+work.** The header says so rather than quietly describing the working version as
+though it had been the plan.
+
+## What this run demonstrates
+
+**Rule 5's disambiguation was the correct default every single time.** Three
+failures, three times the second source was wrong, zero times the checker was.
+Had the old wording been followed — *"if the second source fails, fix the
+check"* — the checker would have been loosened three times to accommodate a
+frame-offset bug, a signedness bug, and an unimplementable design choice. Each
+loosening would have been invisible afterwards.
+
+**And the checker earned its keep in the other direction**: it localised all
+three bugs to specific input vectors, which is why the second source is now
+correct rather than merely plausible.

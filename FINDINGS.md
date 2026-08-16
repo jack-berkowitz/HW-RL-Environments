@@ -896,6 +896,41 @@ of a class the previous thirteen would not have predicted.**
 
 ---
 
+# A STATED LIMITATION OF THE RULE SET
+
+**Every one of the fifteen rules exists because something broke.** That is the
+set's strength — none is speculative, each cites the finding that produced it,
+and the citation graph is checked mechanically.
+
+**It is also a hard limitation, and it should be stated rather than left for a
+reader to infer: the rules have no coverage guarantee.** They cover the failure
+modes we have hit. They say nothing about the ones we have not.
+
+`d_dsp02` demonstrated this directly. It was sequenced as the first task built
+under the rules from the start, precisely to test whether they were sufficient.
+They were not: it produced **contract defects** (F14, F15, F16) — requirements
+inherited rather than chosen, and guidance that decayed — a class the first
+thirteen findings would not have predicted, because all thirteen were apparatus
+defects and the remedies for apparatus defects do not generalise to contracts.
+
+Two consequences worth being explicit about:
+
+**The linkage checker proves the graph is complete, not that the rules are.** It
+asserts every rule cites a finding and every finding cites a rule. It cannot
+assert that the rules span the space of ways this benchmark can be wrong, and a
+green run must not be read as saying they do.
+
+**Expect further classes.** The right posture is that the set is provisional and
+grows on contact with new task types. The rate of discovery is the signal to
+watch: the first two tasks produced thirteen findings, the third produced three
+more of a genuinely new kind, and a task type that produces none is the first
+real evidence of saturation. **We are not there.**
+
+**Rules:** 13, 15
+
+
+---
+
 # CHOOSING ANCHORS: contamination, and why the order matters
 
 Every Class A task is anchored on vendored open-source RTL, which raises an
