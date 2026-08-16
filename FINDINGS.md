@@ -1268,6 +1268,56 @@ a number came from, not whether two numbers may be subtracted.**
 
 **Rules:** 9
 
+## F25. `\b` in sed is a silent no-op on macOS, and it hid a dead harness
+
+The verification scoring path substitutes a conformant perturbation in place of
+the golden DUT by renaming modules. The renames were written with `sed
+"s/\btag_tracker\b/..."`.
+
+**BSD sed does not support `\b`.** It matched nothing, substituted nothing, and
+exited 0. So `variant.sv` was the unmodified golden, the perturbation modules
+kept their own names, and the submitted testbench — which instantiates
+`tag_tracker` by name — bound to the golden **on every row**.
+
+Four of the five DUT rows were running the same design, and the table looked
+like this:
+
+```
+  golden                     PASS
+  tt_c1_match_gnt_freerun    PASS
+  tt_c2_pop_data_garbage     PASS      <- actually the golden
+  tt_c3_push_gnt_throttled   PASS      <- actually the golden
+  tt_c4_pop_gnt_delayed      PASS      <- actually the golden
+```
+
+**Two negative controls were run, and only one had any power.** A crude control
+— a testbench that reports FAIL unconditionally — was correctly rejected, and
+made the harness look validated. The real control was a testbench relying on
+*unpromised behaviour*: it asserts `pop_data_o == 0` when invalid, which the
+golden satisfies and `c2` deliberately breaks. It was **accepted**, and that is
+what exposed the dead substitution.
+
+**A control that fails everything validates almost nothing.** It cannot
+distinguish "the harness discriminates" from "the harness reports whatever the
+submission says", because a submission that always fails produces the same table
+either way. This is rule 3's *"a control that trips two checks validates
+neither"* in a new shape: **a control that trips every check validates none of
+them.** The useful control is the one that must pass some rows and fail exactly
+one.
+
+There is a second, independent instance of the same hazard in the same function.
+The rewrite must retarget the inner instantiation **before** renaming the module
+declaration; done in the other order, the declaration is renamed to `tag_tracker`
+and then caught by the instantiation rewrite, producing a module called
+`tag_tracker_golden` that collides with the real golden — a different mechanism
+producing the identical symptom.
+
+Renaming now happens in `scripts/_verif_variant.py`, where `\b` means what it
+says, and the ordering constraint is stated in a comment next to the code that
+depends on it.
+
+**Rules:** 3
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET

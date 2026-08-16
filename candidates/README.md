@@ -52,40 +52,54 @@ Two things are rejected before simulation, and both count as a failed attempt
 rather than a broken harness: a candidate that prints its own `TEST_RESULT`
 line (forged verdict), and one that declares the wrong module name.
 
-## WARNING — two directories here are holding pens, and sweeping them lies
+## Running the two newest tasks
 
-`candidates/d_dsp02/` and `candidates/v_ca05/` exist so submissions have a home.
-**Neither task is scoreable today**, and the fan-out driver does not know that.
+Both now have a working path, but **neither goes through
+`run_submissions.sh`** — name them explicitly with the right script.
+
+### `d_dsp02` — RTL submissions
+
+```bash
+./scripts/sim_candidate.sh d_dsp02 candidates/d_dsp02/chat.sv
+```
+
+Works as of the F22 fix: the task now has `ref/sim_flags_verilator.txt` and a
+registered config list (exactly one config — the interface declares no
+parameters, and rounding mode is a runtime input swept by the 4290-vector set).
+
+**A submission must be self-contained.** The reference shim is not — it imports
+the vendored `fpnew_pkg` — so it fails the slang gate as a candidate and cannot
+be used as a smoke test. That is correct behaviour, not a defect.
+
+### `v_ca05` — TESTBENCH submissions
+
+```bash
+./scripts/sim_verification.sh v_ca05 candidates/v_ca05/chat.sv
+```
+
+A separate script, because the submission **is the checker** rather than the
+thing being checked, and `sim_candidate.sh` resolves only `domains/*/design/`.
+
+It scores two things and refuses to imply a third: the **validity gate** (does it
+pass the golden DUT) and **unpromised reliance** (does it also pass all four
+conformant perturbations). **Mutant kill rate is not measured — v_ca05 has no
+mutant set.** A pass therefore means "does not reject correct hardware and relies
+on nothing unpromised", and says nothing about whether the testbench finds bugs.
+
+The submission must declare `module tag_tracker_tb` and print one final
+`RESULT: PASS` or `RESULT: FAIL` line, as the blind task specifies.
+
+## Do not let the fan-out driver discover these
 
 `run_submissions.sh` auto-discovers any `candidates/<task>/` containing `.sv`
-files, and treats **any** non-zero exit from `sim_candidate.sh` as
-`correctness gate failed`. But `sim_candidate.sh` also exits non-zero when it
-**cannot address the task at all**:
+files and treats **any** non-zero exit from `sim_candidate.sh` as
+`correctness gate failed`. `v_ca05` does not resolve there at all, so every
+testbench submission would be counted as a failed RTL candidate and the closing
+`N of M passed` line would understate the rate using a number unrelated to the
+submissions.
 
-- **`v_ca05` does not resolve.** Task ids are looked up under
-  `domains/*/design/` only, never `verification/`, so a `v_ca05` submission
-  exits 2 with `cannot resolve task`.
-- **`d_dsp02` resolves but has no `sim_flags_verilator.txt`** and is not
-  registered, so it refuses too.
-
-In both cases the driver prints `correctness gate failed; place-and-route
-skipped` and counts the submission as not passing. **A structural inability to
-run the task is reported as a property of the candidate**, and the closing
-`N of M submission(s) passed` line understates the rate using a number that has
-nothing to do with the submissions.
-
-Same shape as the defects in `FINDINGS.md`: the run completes, the output looks
-like a result, and nothing errors.
-
-**Until the scoring paths exist, name tasks explicitly** —
-`./scripts/run_submissions.sh d_ca04 d_nw01` — rather than letting it discover.
-
-### And v_ca05 submissions are TESTBENCHES, not RTL
-
-The whole intake assumes `candidates/<task>/<label>.sv` is a **DUT replacing the
-reference**. A `v_ca05` submission is a testbench replacing the *checker*, which
-inverts what the harness does with the file. This is recorded, not worked
-around: the verification scoring path is not built yet.
+**Name tasks explicitly** — `./scripts/run_submissions.sh d_ca04 d_nw01` — until
+the driver learns about verification tasks.
 
 ## Are these committed?
 

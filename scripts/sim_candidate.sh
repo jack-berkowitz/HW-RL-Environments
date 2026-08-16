@@ -99,6 +99,18 @@ case "$TASK_NAME" in
   d_ca04_async_fifo_cdc)
       CFGS=(); for w in 8 32 64; do for l in 2 3 4; do for y in 2 3; do
         CFGS+=("DATA_W=$w LOG_DEPTH=$l SYNC_STAGES=$y"); done; done; done ;;
+  d_dsp02_fp32_fma_ii1)
+      # EXACTLY ONE config, and one BY CONSTRUCTION rather than by omission --
+      # the distinction the refusal below exists to enforce. fp32_fma_ii1
+      # declares no parameters at all: the format is fixed at binary32 by the
+      # spec, and rounding mode is a runtime INPUT (rnd_mode) rather than a
+      # parameter, so it is swept by the stimulus and not by elaboration.
+      #
+      # The coverage that would be configs elsewhere lives in the 4290-vector
+      # set instead, with stimulus-side floors per rule 4. If a parameter is
+      # ever added here, this list must grow with it or the sweep silently
+      # narrows -- which is the defect the *) branch refuses.
+      CFGS=("") ;;
   *)  # REFUSE. This used to print a note and run the TB's own defaults, which
       # reported "1 config" for a task with eight legal ones -- a partial sweep
       # presented as a full one. That is the same defect as picking a testbench

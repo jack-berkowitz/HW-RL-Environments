@@ -1,0 +1,32 @@
+# Extra Verilator arguments needed to build the REFERENCE for this task.
+# One token per line; %REPO% expands to the repository root. Blank lines and
+# lines starting with # are ignored.
+#
+# This file was MISSING entirely until FINDINGS.md F22. Every result reported
+# for d_dsp02 -- 4290 vectors, six mutants, the second source -- was produced by
+# ad-hoc Verilator invocations rather than by the scored path, so none of them
+# carried the leak check, the slang gate or NBSP normalisation. The task read as
+# finished while being unscoreable.
+#
+# The shim instantiates cvfpu `fpnew_fma`, which imports fpnew_pkg and pulls in
+# lzc and its closure from common_cells, and includes common_cells/registers.svh.
+#
+# NOTE ON THE INCLUDE PATH: refs/cvfpu/src/common_cells is an EMPTY directory --
+# an uninitialised submodule -- so the include path must point at the top-level
+# refs/common_cells/include, not at cvfpu's own. Pointing it at cvfpu's produces
+# a "cannot find registers.svh" that reads like a missing file rather than a
+# missing checkout.
+#
+# Packages are listed before the -y search paths because SystemVerilog requires
+# a package to be elaborated before anything importing it, and cf_math_pkg comes
+# first because fpnew_pkg uses it.
+#
+# A self-contained candidate needs none of this; the flags are harmless there,
+# since -y is consulted only for modules that are otherwise unresolved.
++incdir+%REPO%/refs/common_cells/include
+-y
+%REPO%/refs/cvfpu/src
+-y
+%REPO%/refs/common_cells/src
+%REPO%/refs/common_cells/src/cf_math_pkg.sv
+%REPO%/refs/cvfpu/src/fpnew_pkg.sv
