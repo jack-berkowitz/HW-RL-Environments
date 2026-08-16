@@ -1,37 +1,60 @@
-# d_dsp02 conformant perturbations — must PASS, not be killed
+# d_dsp02 conformant perturbations — RETIRED, and the reason is the finding
 
-The design-side counterpart to `v_ca05/conformant/`. Opposite sign to
-`mutants/`: these satisfy the contract, so a correct **checker** must accept
-them, and a failure here is a defect in the checker rather than in the design.
+**There is no conformant perturbation set for this task, and that is a
+consequence of rule 18 rather than an omission.**
 
-| id | perturbation | licensed by | latency | checker |
-|---|---|---|---|---|
-| `cPIPE3` | `NumPipeRegs=3`, `PipeConfig=DISTRIBUTED` | spec: *"LATENCY IS NOT CONSTRAINED AND NOT CHECKED"* | **3 cycles** vs 0 | **1/1 PASS** |
+## What happened to `cPIPE3`
 
-## It is observably different, and that took two attempts to show
+`cPIPE3` was a three-stage pipelined binding, licensed by the spec clause
+*"LATENCY IS NOT CONSTRAINED AND NOT CHECKED."* Spec clause **S1 now pins
+latency at 3 cycles**, so:
 
-Total simulation time is **43 µs for both** bindings — three extra cycles against
-4290 vectors at II=1 is invisible at that resolution, and stopping there would
-have been an F25-style no-op control reported as a pass.
+- **its licence clause no longer exists**, and
+- **it is no longer a perturbation at all** — three stages is now the scored
+  configuration, so `cPIPE3` and the reference are the same design.
 
-Measured directly instead: **input-to-output latency is 0 cycles at
-`NumPipeRegs=0` and 3 cycles at `NumPipeRegs=3`.** That is the property the
-perturbation exists to vary, and it is the one the checker had to tolerate.
+It is deleted rather than kept, because a "perturbation" identical to the
+reference is the purest form of the no-op control this project keeps finding
+(F25): it would pass every run and prove nothing, while looking like a control.
 
-## What its passing establishes
+## Why nothing replaced it
 
-**The checker does not assume zero latency.** C3 constrains the *initiation
-interval* — one result per cycle once full — which a pipelined unit still meets.
-A checker that had quietly conflated II with latency would fail this, and the
-spec would have been licensing something the apparatus could not accept.
+Rule 18 requires re-deriving the set against the new spec — every perturbation's
+licence clause must still exist. Working through what the spec still leaves
+open:
 
-That distinction is not hypothetical here: the spec pins C3 at II=1 and
-explicitly frees latency, so the two must be independently enforceable.
+| candidate perturbation | licence | why it is not usable |
+|---|---|---|
+| register placement within the 3 stages | **S1a**, genuinely open | **not simulation-observable.** Same latency, same results, same II. Only PPA distinguishes them. |
+| deeper or shallower pipeline | none — S1 pins it | now a spec violation, i.e. a mutant |
+| `in_ready` timing | H1 pins it | closed |
+| output stability under backpressure | H3 pins it | closed |
+| result ordering | H4 pins it | closed |
 
-## As a PPA point
+**S1a's freedom is real but lives in the wrong dimension.** A placement-only
+perturbation would be simulation-identical to the reference, so running it
+through the checker measures nothing — the F25 failure mode exactly, where four
+of five rows silently ran the same design and reported PASS.
 
-`cPIPE3` is a **second configuration of one contract**, not a better result for
-the same one. Any comparison against the `NumPipeRegs=0` binding must name the
-axis under rule 17 — the registers change area and Fmax by construction, and
-subtracting the two numbers without naming why they differ is exactly what F24
-was about.
+The one candidate that *would* be simulation-observable — varying how much the
+design keeps accepting while the output is backpressured — was rejected because
+**I could not establish that it is conformant rather than a C3 violation.**
+Shipping a violation labelled "conformant" is worse than shipping no control:
+the conformant set's whole purpose is that a failure indicts the spec, and a
+mislabelled member would indict the spec for a real defect.
+
+## What this costs, stated plainly
+
+The conformant set is the control for *spec completeness* — it catches a checker
+relying on something the contract never promised. **This task no longer has that
+control**, and the honest reason is that its contract is now tight enough to
+leave nothing simulation-observable open.
+
+That is a real trade rule 18 makes: pinning an axis buys a tractable baseline
+and gives up the perturbation that axis licensed. Worth knowing rather than
+discovering later.
+
+**If a control is wanted here, it belongs in the PPA comparison**, not the
+checker: two register placements at the same pinned depth are the same contract
+built two ways, and a large PPA gap between them would be informative about the
+flow rather than about the spec.

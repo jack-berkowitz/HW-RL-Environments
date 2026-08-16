@@ -14,7 +14,8 @@
 //      correct on normal operands and flushes subnormals, or that honours only
 //      round-to-nearest-even, fails.
 //
-//   2. THROUGHPUT AS A CAPABILITY, NOT A SPEED. See C3. Latency is free;
+//   2. THROUGHPUT AS A CAPABILITY, NOT A SPEED. See C3. Latency is PINNED
+//      at 3 cycles by S1 for scoring;
 //      accepting a new operation every cycle is required.
 //
 // -----------------------------------------------------------------------------
@@ -107,10 +108,51 @@
 //       array, and a unit that stalls is unusable in that role. It is not
 //       derived from measuring any implementation.
 //
-//       *** LATENCY IS NOT CONSTRAINED AND NOT CHECKED. *** Pipeline as deeply
-//       as you like. C3 constrains only how often a new operation can START.
-//       The distinction between DELAY (free) and RATE (required) is the whole
-//       of this requirement.
+//       C3 constrains only how often a new operation can START. The
+//       distinction between DELAY and RATE is the whole of this requirement.
+//
+// -----------------------------------------------------------------------------
+// S1 -- THE SCORED CONFIGURATION, normative (rule 18)
+// -----------------------------------------------------------------------------
+//
+//   S1. LATENCY IS PINNED AT 3 CYCLES. A submission shall produce its result
+//       exactly 3 clocks after the operands are accepted, sustaining C3's
+//       initiation interval of one.
+//
+//       PPA, latency and throughput are measured ONLY at this configuration.
+//       Correctness is unaffected -- the checker verifies the contract, not the
+//       depth, and continues to accept any implementation that meets it. This
+//       is a SPEC requirement, so building at another depth fails something you
+//       were told rather than a hidden assumption.
+//
+//       *** THIS SUPERSEDES THE EARLIER "LATENCY IS NOT CONSTRAINED" CLAUSE. ***
+//       That wording freed an axis whose value is not what this task measures.
+//       What is being measured is the ALIGNMENT, NORMALISATION AND ROUNDING
+//       STRUCTURE, and pinning depth leaves all of it intact -- a submission
+//       still chooses how to align, how to normalise, how to round, and how to
+//       distribute its logic across the three stages.
+//
+//       AUTHORITY FOR THE VALUE (rule 15): the dataflow of an FMA has four
+//       natural segments -- classify-and-multiply, align-and-add,
+//       normalise (leading-zero count then shift), and round. Three register
+//       boundaries is the shallowest depth that places one boundary between
+//       each pair, so no segment spans two of them.
+//
+//       It is NOT chosen because the anchor defaults to it. The anchor's shim
+//       bound 0; three is derived from the structure above and from measurement:
+//       at depth 0 the design is one combinational cone that MISSES TIMING AT
+//       30 ns, so roughly 33 MHz or worse. No submission would ship that, and a
+//       baseline nobody would ship measures nothing. Three segments the cone
+//       into four, which is the shallowest split that clocks competitively
+//       against the other tasks here (d_nw01 190 MHz, d_ca04 380 MHz).
+//
+//       Deeper would also clock well and is deliberately not chosen: it costs
+//       registers for a rate C3 already guarantees, and the task is not about
+//       finding the fastest FMA.
+//
+//   S1a. REGISTER PLACEMENT WITHIN THE THREE STAGES IS NOT CONSTRAINED.
+//       Depth is pinned; where the logic sits between the boundaries is a
+//       design choice and is neither checked nor scored.
 //
 //       Raw throughput in results per cycle is REPORTED as a METRIC and never
 //       gates: it is the product of rate, latency and stalling, and gating it

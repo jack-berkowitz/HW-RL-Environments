@@ -123,59 +123,65 @@ capability_mutant_note: >
   aggregate throughput. MAX_TRANS appears exactly once in its 732 lines: the
   parameter declaration. It is why the CAPABILITY class exists.
 
-ppa_reference_envelope:
-  # BOTH configurations are the baseline. The spec does not constrain latency,
-  # so picking one would build an arbitrary preference into every candidate
-  # comparison: with NO_LATENCY canonical a pipelining candidate looks bad on
-  # area; with CUT_ALL_AX canonical a non-pipelining one looks good on it.
-  # Candidates are reported against the envelope, not against a point.
+# RULE 18 -- ONE SCORED CONFIGURATION. The two-point envelope is withdrawn.
+scored_configuration:
   platform: sky130hd
   geometry: {NUM_MST: 2, NUM_SLV: 2}
-  build_default: CUT_ALL_AX      # only because the harness and history use it
-  points:
-    - config: CUT_ALL_AX
-      fmax_mhz: 190.48
-      fmax_period_ns: 5.25
-      fmax_converged: true
-      fmax_bracket_ns: [4.875, 5.25]     # 0.375 wide, within the 0.5 resolution
-      # REBUILT AND RECORDED 2026-08-16, after F20 withdrew it as unverifiable.
-      # The withdrawn value was CORRECT: the rebuild returned 154245 exactly.
-      # It was never wrong, only undefendable -- which is why the withdrawal was
-      # still the right call and why the rebuild was worth the 30 minutes.
-      # Backed by runs/d_nw01_axi4_xbar/*__reference_own_fmax__ppa.json.
-      # Gate: wns +0.037, DRC 0. Confirmed by two independent readings of the
-      # same run (6_report.json and the report parsers), per F21.
-      area_um2_at_own_fmax: 154245      # RECORDED
-      power_w_at_own_fmax: 8.75e-02     # RECORDED
-      wns_ns_at_own_fmax: 0.04          # RECORDED
-      # Still withdrawn -- these were never rebuilt and have no record.
-      area_um2_at_12ns: ABSENT          # was 146951
-      synth_area_um2: ABSENT            # was 107891
-      elasticity_closing_range_pct: ABSENT   # was 5.0; needs the 12 ns rebuild
-    - config: NO_LATENCY
-      fmax_mhz: 126.98
-      fmax_period_ns: 7.875
-      fmax_converged: true
-      fmax_bracket_ns: [7.5, 7.875]
-      # PROVISIONAL -- no run record (F20). Corroborated: the surviving flow
-      # directory still shows 100277 from a run that passed at wns +0.052.
-      area_um2_at_own_fmax: 100277      # provisional, corroborated
-      area_um2_at_12ns: 86133           # provisional, unverified
-      synth_area_um2: 59209             # provisional, unverified
-      elasticity_closing_range_pct: 16.4  # provisional; derived from the above
-  summary: >
-    CUT_ALL_AX is 1.50x faster and 54% larger at own Fmax. Neither dominates.
-    Anything quoted against one configuration must say which.
-  membership_rule: >
-    THE ENVELOPE CONTAINS ONLY EXTERNALLY-AUTHORED ANCHOR CONFIGURATIONS. That
-    is the entire reason a comparison against it means anything: the RTL was
-    written by someone with no stake in this benchmark. Nothing internally
-    authored is ever added to this list -- see ppa_internal_control below for
-    why, and do not merge the two.
+  LATENCY_MODE: CUT_ALL_AX
+  rationale: >
+    A deployed AXI crossbar registers its address channels. The AW/AR paths run
+    through address decode and arbitration into every slave port, and leaving
+    them uncut is what makes a crossbar the critical path of an SoC -- cutting
+    them is standard practice, not an optimisation. NO_LATENCY is a
+    minimum-area corner used for studies, not a configuration anyone ships.
 
-# =============================================================================
-# NOT A BASELINE. Kept in a separate key ON PURPOSE.
-# =============================================================================
+    It is also the faster of the two by a wide margin (190.48 vs 126.98 MHz),
+    so it closes with margin at periods a plausible alternative can also hit,
+    and it is the configuration that exercises the buffering the task is
+    partly about.
+
+    NOT chosen because the harness defaulted to it. That default was recorded
+    in this file as "only because the harness and history use it", which is
+    convenience and was not a rationale; this is.
+  authority: >
+    AMBA AXI does not mandate channel registers, so this is a DESIGN DECISION
+    recorded as such (rule 15), on the reasoning above.
+
+scored_metrics:
+  - {metric: outstanding_master,            label: "outstd"}
+  - {metric: disjoint_one_pair,             label: "1pair"}
+  - {metric: aggregate_bursts_per_1000cyc,  label: "agg/1k"}
+  - {metric: scored_beats_per_1000cyc,      label: "beat/1k"}
+
+scored_point:
+  config: CUT_ALL_AX
+  fmax_mhz: 190.48
+  fmax_period_ns: 5.25
+  fmax_converged: true
+  fmax_bracket_ns: [4.875, 5.25]
+  area_um2_at_own_fmax: 154245      # RECORDED + validated, rebuild of 2026-08-16
+  power_w_at_own_fmax: 8.75e-02     # RECORDED
+  wns_ns_at_own_fmax: 0.04          # RECORDED
+  note: >
+    THESE NUMBERS SURVIVE THE CHANGE UNALTERED. They were measured at
+    CUT_ALL_AX, which is now the scored configuration, so nothing needs
+    rebuilding or relabelling.
+
+historical_not_a_baseline:
+  # NO LONGER A BASELINE POINT. Retained as record only. MUST NOT appear in any
+  # comparison -- it is a different configuration from the scored one, and
+  # subtracting across configurations without naming the axis is F24.
+  - config: NO_LATENCY
+    fmax_mhz: 126.98
+    fmax_period_ns: 7.875
+    area_um2_at_own_fmax: 100277    # provisional, corroborated
+    status: HISTORICAL
+    why_retained: >
+      It is the measurement that showed the spec left latency mode free, and
+      the capability audit reasoned from it -- C1's floor of ceil(MAX_TRANS/2)
+      exists because the NO_LATENCY anchor delivers MAX_TRANS-1. Deleting it
+      would remove the evidence for a normative check.
+
 ppa_internal_control:
   what: second source, tb/audit/axi4_xbar_second_source.sv
   authored_by: this project

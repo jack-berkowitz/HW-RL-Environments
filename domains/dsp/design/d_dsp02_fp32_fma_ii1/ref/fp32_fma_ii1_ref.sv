@@ -9,14 +9,20 @@
 // the contract and a candidate never had to compete with them:
 //
 //   FpFormat    = FP32          fixed by the task
-//   NumPipeRegs = 0             the anchor is parameterised for pipelining and
+//   NumPipeRegs = 3             PINNED BY SPEC S1 (rule 18). Was 0; a
+//                               combinational FMA misses timing at 30 ns and
+//                               no submission would ship it, so a baseline
+//                               there measured nothing.
 //                               the spec does not constrain latency. Zero is
 //                               the SPEC-MINIMAL choice: it adds nothing the
 //                               contract does not ask for. Compare d_nw01,
 //                               where a shim bound CUT_ALL_AX and handed the
 //                               reference 45% of its area in pipelining the
 //                               spec never required.
-//   PipeConfig  = BEFORE        irrelevant at NumPipeRegs = 0
+//   PipeConfig  = DISTRIBUTED   spreads the three boundaries across the four
+//                               dataflow segments. S1a leaves placement free,
+//                               so this is the reference's choice, not a
+//                               requirement.
 //
 // The rounding-mode mapping is the one non-trivial part: the spec defines FIVE
 // modes with a fixed encoding, the anchor's enum defines eight. Modes 5-7 are
@@ -62,8 +68,8 @@ module fp32_fma_ii1 (
 
     fpnew_fma #(
         .FpFormat    ( fpnew_pkg::FP32 ),
-        .NumPipeRegs ( 0               ),
-        .PipeConfig  ( fpnew_pkg::BEFORE )
+        .NumPipeRegs ( 3               ),   // S1: the SCORED configuration
+        .PipeConfig  ( fpnew_pkg::DISTRIBUTED )
     ) u_fma (
         .clk_i           ( clk       ),
         .rst_ni          ( rst_n     ),

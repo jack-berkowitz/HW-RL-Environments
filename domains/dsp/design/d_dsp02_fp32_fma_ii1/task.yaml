@@ -24,7 +24,29 @@ reference:
 
 spec: [spec/fp32_fma_ii1_iface.sv]
 
+# RULE 18 -- PPA, latency and throughput are measured ONLY here.
+scored_configuration:
+  LATENCY: 3            # NumPipeRegs=3; spec clause S1
+  rationale: >
+    The FMA dataflow has four natural segments -- classify-and-multiply,
+    align-and-add, normalise (lzc then shift), round. Three register boundaries
+    is the SHALLOWEST depth placing one boundary between each pair, so no
+    segment spans two.
+    Not the anchor's default: the shim bound 0, and at depth 0 the design is one
+    combinational cone that MISSES TIMING AT 30 ns -- roughly 33 MHz or worse.
+    A baseline nobody would ship measures nothing. Deeper also clocks well and is
+    deliberately not chosen: it buys registers for a rate C3 already guarantees.
+  register_placement: free (S1a) -- pinned depth, unpinned distribution
+
+scored_metrics:
+  - {metric: latency_cycles,  label: "lat(cyc)"}
+  - {metric: init_interval,   label: "II"}
+
 configs:
+  # CORRECTNESS SWEEP -- UNCHANGED by rule 18. Rule 18 pins the SCORED
+  # configuration for PPA/latency/throughput; it does not narrow correctness
+  # coverage. This list was already one entry and remains one entry.
+  #
   # EXACTLY ONE, and one BY CONSTRUCTION rather than by omission. fp32_fma_ii1
   # declares no parameters: binary32 is fixed by the spec, and rounding mode is
   # a runtime INPUT swept by the stimulus rather than by elaboration.
@@ -126,13 +148,14 @@ second_source:
 # ---------------------------------------------------------------------------
 ppa:
   platform: sky130hd
-  binding: NumPipeRegs=0 (spec-minimal, purely combinational)
+  binding: NumPipeRegs=3, DISTRIBUTED -- THE SCORED CONFIGURATION (S1)
   config: orfs/config.mk
   sdc: orfs/constraint.sdc
   status: IN PROGRESS -- no PPA number recorded yet
 
   first_measurement:
     period_ns: 10.0
+    binding: NumPipeRegs=0 -- NO LONGER THE SCORED CONFIGURATION
     result: FAILED TIMING, wns -14.47 ns, DRC 0
     area_um2: null        # DELIBERATELY NULL. The run missed its gate, so its
                           # area (73290) is a real number and NOT a result --
@@ -143,7 +166,15 @@ ppa:
       not a defect -- it is what a full FMA looks like as one combinational cone,
       and it is the correct answer for THIS configuration.
 
-  envelope_shape_consequence: >
+  envelope_retired: >
+    THE TWO-POINT ENVELOPE IS WITHDRAWN under rule 18. It was proposed because
+    latency was free, which forced a baseline curve rather than a baseline
+    point. With latency pinned at 3 there is one configuration, one Fmax sweep
+    and one PPA point. The reasoning that motivated the envelope is preserved
+    below because it is correct FOR A FREED AXIS -- it is simply no longer the
+    situation here.
+
+  superseded_envelope_reasoning: >
     THIS TASK NEEDS A TWO-POINT ENVELOPE, for the same reason d_nw01 does.
     The spec fixes II=1 and explicitly frees latency, so the achievable Fmax
     spans a very wide range depending only on how deeply a candidate pipelines

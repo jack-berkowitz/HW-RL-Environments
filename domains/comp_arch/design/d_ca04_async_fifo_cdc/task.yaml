@@ -21,7 +21,49 @@ reference:
 spec: spec/async_fifo_cdc_iface.sv
 two_clock: true
 
-configs:   # all 18 verified against the reference AND the second source
+# RULE 18 -- PPA, latency and throughput are measured ONLY here.
+scored_configuration:
+  DATA_W: 32
+  LOG_DEPTH: 3          # depth 8
+  SYNC_STAGES: 2
+  rationale: >
+    SYNC_STAGES=2 is the two-flop synchroniser, which is the standard answer:
+    two stages give adequate MTBF at ordinary clock ratios and technologies, and
+    three is reserved for extreme ratios or high-reliability parts. Choosing 3
+    for scoring would make every submission pay for margin most designs do not
+    buy.
+
+    LOG_DEPTH=3 (depth 8) is the smallest power of two that comfortably absorbs
+    the synchroniser round trip. A gray-pointer CDC FIFO cannot report occupancy
+    faster than two stages each way, so roughly four cycles of staleness exist
+    in each direction; depth 4 leaves almost no burst slack on top of that,
+    while depth 8 does. This is where the interesting behaviour lives -- full
+    and empty edges are reachable under burst traffic at depth 8 and mostly
+    academic at large depths.
+
+    DATA_W=32 is a word-width crossing, the common case, and wide enough that
+    the storage array rather than the control logic dominates area.
+
+    THESE COINCIDE WITH THE SHIM'S DEFAULTS, and that is not the reason. The
+    reasoning above stands on its own; the coincidence is convenient because it
+    means the existing measurements were already taken here.
+
+scored_metrics:
+  - {metric: capacity_beats_accepted, label: "cap"}
+  - {metric: crossing_latency_rdclk,  label: "lat(rd)"}
+  - {metric: wr_stall_cycles,         label: "wrstall"}
+
+scored_point_status: >
+  THE EXISTING HEADLINE SURVIVES UNCHANGED. Reference 20101 um2 at 2.625 ns and
+  candidate 14685 um2 at 4.5 ns were both built at DATA_W=32, LOG_DEPTH=3,
+  SYNC_STAGES=2 -- the shim defaults, which the ORFS config does not override
+  and which are now the pinned scored configuration. Ratio 1.369 and "candidate
+  26.9 % smaller" stand as measured; nothing needs rebuilding or relabelling.
+
+configs:
+  # CORRECTNESS SWEEP -- UNCHANGED by rule 18. All 18 combinations remain. Rule
+  # 18 pins the SCORED configuration for PPA/latency/throughput only; a design
+  # must still work across the whole legal parameter space.   # all 18 verified against the reference AND the second source
   - {DATA_W: 8,  LOG_DEPTH: 2, SYNC_STAGES: 2}
   - {DATA_W: 8,  LOG_DEPTH: 2, SYNC_STAGES: 3}
   - {DATA_W: 8,  LOG_DEPTH: 3, SYNC_STAGES: 2}

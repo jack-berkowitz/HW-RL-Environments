@@ -178,6 +178,42 @@ defects. It runs with the regression.
 
     **From:** F20, F24
 
+18. **Every task has exactly one SCORED CONFIGURATION, named in the spec.** PPA,
+    latency and throughput are measured only there. **Free an axis only when the
+    choice on that axis is itself the measurement; otherwise pin it.**
+
+    **This is a change to the spec and to what is measured, not to what the
+    checker checks.** The two must not be collapsed:
+
+    - **Correctness sweeps stay multi-configuration.** `MAX_TRANS` at 2 and 8,
+      `DATA_W` at 8/32/64, and the rest remain exactly as they are. A design
+      must work across the legal parameter space.
+    - **PPA, latency and throughput are measured at one configuration only.**
+    - **The checker still checks only what correctness requires.** The scored
+      configuration is a stated *spec* requirement, so a submission built
+      elsewhere fails something it was told rather than a hidden assumption.
+
+    **Why the previous guidance had to change.** "Pin only what the checker
+    checks, leave the rest free" was the right correction to over-constraint,
+    and it was optimised for correctness scoring. It made PPA scoring
+    intractable: a freed axis buys design-space freedom and pays for it with a
+    baseline *curve*, a sampling decision, and an axis-naming step on every
+    comparison — forever, on every task. Rule 18 resolves the tension by
+    separating the two concerns rather than trading one off against the other.
+
+    **Choosing it, in order:** representative of real use; exercises the
+    interesting part of the design space; closes timing with margin at a period
+    both the anchor and a plausible alternative can hit; **not the anchor's
+    default merely because it is the default.** Record the rationale in the spec
+    beside the pinned value, with its authority (rule 15).
+
+    A consequence worth stating: **pinning an axis retires any conformant
+    perturbation whose licence was that axis being free.** Re-derive the
+    conformant set against the new spec — every perturbation's licence clause
+    must still exist.
+
+    **From:** F24, F18
+
 ---
 
 **Nothing you write is trusted until it has been run.**
