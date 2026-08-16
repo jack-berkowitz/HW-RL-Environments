@@ -268,6 +268,63 @@ Two consequences worth carrying:
 - it is another instance of the artefact-over-reasoning convention above: the
   driver was read three times and looked right every time.
 
+## Neutralise a wrapper before believing what it tells you about the DUT
+
+**Every wrapper you build — conformant perturbation, mutant, shim — gets one
+extra run with its perturbation removed, before its result is interpreted.**
+
+The failure this prevents: a miswired wrapper fails the checker, and the natural
+reading is *"the checker has a defect."* You then go looking in exactly the right
+place for entirely the wrong reason, and if you find anything at all you will
+attribute it wrongly.
+
+Worked example. `d_dsp02`'s `cRESBUS` perturbation failed the checker on its
+first run. The obvious inference was that the checker samples `result` while
+`out_valid` is low — a genuine defect of the kind the conformant set exists to
+find. The neutralised copy, identical but with the perturbation removed, **failed
+identically**. The wrapper was broken: `inner_result` had been left implicitly
+declared and became a **1-bit wire**, silently truncating a 32-bit result. The
+design elaborated, ran, and returned garbage.
+
+**The control costs one run and answers a question nothing else answers:** is the
+artifact broken, or the thing under test? No amount of reading the wrapper
+settles it — the file looked correct, and the defect was a language rule about
+implicit declaration rather than anything visible in the logic.
+
+It is the same shape as the liveness check on the conformant set, one level up:
+that one asks *"does this perturbation do anything?"*, this one asks *"does this
+perturbation do only what it claims?"* Both are needed, and neither substitutes
+for the other.
+
+## A metric with a known-answer case must be calibrated against it
+
+**Before a metric is reported, run it against a design whose value you already
+know.** Most metrics have such a case available, and it is usually cheap:
+
+| metric | known-answer case |
+|---|---|
+| latency | a purely combinational design — must read 0 |
+| initiation interval | a design that stalls every other cycle — must read 2 |
+| throughput | a driver offering a known fixed rate |
+| capacity | a design bounded at a parameter you set |
+
+This is rule 3 applied to a *metric* rather than to a checker, and the reason it
+matters is the failure signature.
+
+`d_dsp02`'s latency metric first read **2 for a three-stage design and 1 for a
+purely combinational one.** That is monotonic, correctly ordered, plausible for
+both, and **off by one everywhere.** Every sanity check you would think to apply
+passes: the pipelined design reads higher than the combinational one, both are
+small positive integers, and the ratio looks about right. It fell out only
+because two designs with known answers were run through it, and it took *both* —
+the first correction fixed the depth-3 case and left the combinational case
+wrong, because a combinational design has its result valid on the acceptance
+edge and the counter never looked there.
+
+**A metric that is wrong by a constant is the worst case**, because it preserves
+ordering and therefore survives every comparison-based check. Ranking two
+submissions by it still works. Only an absolute known answer catches it.
+
 ## Any long-running job must emit progress to a readable stream
 
 **This is the highest-leverage convention in this file, because it is the cause
