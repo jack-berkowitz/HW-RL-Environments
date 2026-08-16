@@ -1062,6 +1062,40 @@ only way a PPA number is obtained, and that anything else refuses. The
 
 **Rules:** 6, 8
 
+## F21. The fix for F20 was itself recording the wrong numbers
+
+F20 concluded that `ppa_candidate.sh` must become the only way a PPA number is
+obtained. **Its record writer had two parsing defects**, found on the first
+record ever written through it:
+
+| field | parsed | actual | cause |
+|---|---|---|---|
+| `wns_ns` | `0.00` | `0.46` | matched `wns max`, the negative-slack summary, which reads `0.00` for **every passing run** |
+| `power_w` | `9.35e-08` | `3.04e-02` | took column `$4` of the power table — **Leakage**, not Total. Understated by five orders of magnitude |
+
+The WNS defect is the worse of the two, and not because of the lost margin.
+`find_fmax.py` reads `worst slack max`; the record writer read `wns max`. **The
+two authoritative paths disagreed about what WNS means**, so a sweep and a run
+record could report different slack for the same build and both be "the tool's
+own classification" under rule 7.
+
+Neither is detectable from the record. `wns_ns: 0.00` is exactly what a design
+closing with no margin looks like, and a power figure is only obviously wrong if
+you already know the right order of magnitude.
+
+**Found by** cross-checking the record against `6_report.json` immediately after
+writing it — not by any check, and only because F20 had just made provenance the
+active concern.
+
+**The general shape is the one to carry:** the remedy for an untrustworthy number
+was a tool that produced an *authoritative* wrong number, which is strictly
+worse. A provisional number invites checking; a record does not. **Promoting a
+path to authoritative raises the cost of its bugs**, so the promotion has to
+include validating it against a second reading of the same run — which is what
+`6_report.json` provided here, and which nothing required.
+
+**Rules:** 7, 8
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET
