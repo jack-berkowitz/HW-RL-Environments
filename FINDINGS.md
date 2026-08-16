@@ -768,6 +768,87 @@ to notice it ranked that mutant as unremarkable.
 
 ---
 
+# A SECOND DEFECT CLASS: CONTRACT DEFECTS
+
+The first thirteen findings are one class: **measurement apparatus reporting
+success while measuring nothing.** A testbench selected by sort order, a
+reference that never ran, an orphaned sweep, a results table reading a live
+directory, a self-consistent wrong Fmax. All of them exited zero and looked fine.
+
+The two findings from `d_dsp02` are **not that class**, and the distinction
+matters because it means the list is not closed.
+
+## 14. A requirement inherited rather than chosen
+
+Expected values for `d_dsp02` are captured from the vendored anchor, which makes
+them correct. It does not make them *uniquely* correct.
+
+IEEE-754 only **recommends** NaN payload propagation. RISC-V mandates a canonical
+quiet NaN, cvfpu follows RISC-V, and so the captured vectors silently required
+it. **An FMA propagating an operand payload is equally conformant and would have
+failed** — against a requirement nobody had written down.
+
+Auditing the vectors rather than the prose found **four** such inherited choices,
+not one:
+
+| | IEEE | anchor |
+|---|---|---|
+| NaN payload | recommends propagation | canonical `0x7FC00000`, all 188 results |
+| NaN result sign | unspecified | always positive |
+| **underflow tininess** | **before *or* after rounding permitted** | after, and only when inexact |
+| overflow → inexact | mandated | consistent |
+
+**The underflow case is the instructive one.** The spec *already said* "tininess
+after rounding". Reading it would not have caught anything — the defect was that
+the standard permits the other reading and the spec never said so. It surfaced
+only by counting flag combinations across 4290 captured vectors.
+
+**Rule 12**: standards latitude must be named, and audit the artefact, not the
+prose.
+
+## 15. Guidance that decayed
+
+Diff rate was retracted as a mutant-quality band and recorded as such in this
+document — **and left live in `BUILD_PROMPT_VERIFICATION.md`**, where it read as
+current instruction. The next verification task would have inherited a withdrawn
+heuristic. In the same edit the rule count was found at 7 in one prompt against
+10 in the working set.
+
+The cause is duplication: the rules lived in three documents at once.
+
+**Rule 13**: the rules live in `RULES.md` and nowhere else; every other document
+references it.
+
+And the consolidation edit itself **dropped a rule** — "the runner names its
+artifacts explicitly", the one produced by the alphabetical-testbench defect,
+survived only in this file and in neither prompt. That is the same failure
+occurring during the fix for it, which is the strongest available argument that
+the structural fix was the right response rather than more careful editing.
+
+## Why the distinction is worth recording
+
+The first thirteen are **apparatus defects**: something measured nothing and
+said it was fine. They are caught by controls, by known-failing inputs, and by
+checking that the thing you think ran actually ran.
+
+These two are **contract defects**: the apparatus worked perfectly. The vectors
+were captured correctly, the prompts rendered correctly, every number was real.
+What was wrong was *what we had agreed to require* — a requirement absorbed from
+an implementation, and guidance that aged out of correctness while still being
+served.
+
+**No control catches those.** A negative control confirms a check fires on a
+known-bad input; it cannot tell you the check encodes a choice the standard left
+open. What catches them is auditing the artefact against the source of authority
+— the standard, not the reference; the single rule file, not the copy in front of
+you.
+
+`d_dsp02` was sequenced as the first task built under the rules from the start,
+to find out whether they were sufficient. **They were not, and the two gaps were
+of a class the previous thirteen would not have predicted.**
+
+---
+
 # CHOOSING ANCHORS: contamination, and why the order matters
 
 Every Class A task is anchored on vendored open-source RTL, which raises an

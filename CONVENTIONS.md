@@ -1,5 +1,9 @@
 # Conventions
 
+> **The standing rules are in `RULES.md`, which is their only home.** This file
+> covers house style, toolchain decisions and shared models. Where a convention
+> here follows from a rule, it cites the number rather than restating it.
+
 How testbenches are written in this project, and the toolchain decisions behind
 it. Extracted from the Tier-2 build notes when the tier layout was removed; the
 per-module sections that described deleted RTL were moved to

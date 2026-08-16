@@ -15,37 +15,15 @@ first.
 
 ## THE STANDING RULES
 
-Identical to the design side, and they apply to the *grading apparatus* here
-rather than to a DUT.
+**The rules live in `RULES.md` and nowhere else. Read it before starting, and
+re-read it before deciding a check is good enough.**
 
-1. **Every capability the design must support is a named parameter with a
-   binding check.** Audit by probe, not by reading: write a correct
-   implementation that ignores exactly one parameter and confirm the checker
-   fails it.
-2. **Every stated requirement has a coverage floor proving it was exercised.**
-3. **Every check gets a negative control that fails THAT check and nothing
-   else**, and only counts if the harness can saturate what the check measures.
-4. **Coverage floors measure STIMULUS, not design behaviour.** If a correct
-   implementation could score zero on a floor, the floor is gating a design
-   choice and must become a METRIC.
-5. **Second source is mandatory** -- an independent implementation making
-   different free choices. Name three specific differences or it is a paraphrase.
-   **When it fails, disambiguate before changing anything** -- see below.
-6. **No metric may be quoted from a run that failed its own gate.**
-7. **Closure status comes from `find_fmax`'s classification**, never a log grep.
-8. **Every run writes an immutable record; collection reads only those records**,
-   never a live tool directory.
-9. **Area and power are reported at own Fmax and at a common binding period**,
-   and area comparisons split three ways: off-spec configuration, capability
-   gap, genuine optimisation.
-10. **When blocked, the deliverable is the report.** Stop and say so.
-11. **The oracle must be an artefact nobody on this project wrote. Locally
-    authored code generates INPUTS, never expected values.** A local model
-    producing expected values and merely cross-checked against the anchor leaves
-    a shared misconception surviving the cross-check -- both sides agreeing for
-    the same wrong reason. Invert it: generate inputs locally, run them through
-    the anchor, take the ANCHOR'S output as expected. A local bug then costs
-    coverage and can never produce a wrong expected value.
+They are not restated here on purpose. They were previously duplicated across
+this file, the verification prompt and `CONVENTIONS.md`, and the copies drifted:
+a retraction recorded in `FINDINGS.md` stayed live here as current guidance, and
+the count reached 7 in one document against 10 in another. Rule 13 exists because
+of that, and restating them here would reintroduce exactly the defect it was
+written to prevent.
 
 **Nothing you write is trusted until it has been run.**
 
