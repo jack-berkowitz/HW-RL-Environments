@@ -229,7 +229,19 @@ controls:
     fmax_converged: true
     fmax_bracket_ns: [8.625, 9.0]      # 0.375 wide, within the 0.5 resolution
     fmax_record: fmax_results/d_nw01_ss_fmax.json
-    area_um2_at_own_fmax: ABSENT       # provisional 294555 was never recorded (F20)
+    # RECORDED at both periods; elasticity computed from records only.
+    area_um2_at_own_fmax: 294555      # RECORDED, wns +0.00366, DRC 0
+    power_w_at_own_fmax: 4.27e-02     # RECORDED
+    area_um2_at_12ns: 272415          # RECORDED, wns +0.46, DRC 0
+    power_w_at_12ns: 3.04e-02         # RECORDED
+    elasticity_closing_range_pct: 8.1
+    elasticity_note: >
+      THE FIRST ELASTICITY FIGURE IN THIS PROJECT COMPUTED FROM TWO RECORDED,
+      GATED RUNS. Both endpoints carry run records and both passed their own
+      gate. It has nothing sound to be compared against yet: d_nw01's +5.0 % is
+      withdrawn pending a 12 ns rebuild, and d_ca04's +1.5 % rests on 20101 and
+      14754, both of which CONFLICT with the surviving evidence (F20). Do not
+      quote the three-way comparison until those are rebuilt.
     comparison:
       # The apt comparison is against NO_LATENCY: both are spec-minimal.
       vs_no_latency_pct: -12.5         # 111.11 vs 126.98 MHz

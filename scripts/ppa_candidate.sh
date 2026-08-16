@@ -162,7 +162,21 @@ SYNTH="$(grep -E 'Chip area' "$RPT/synth_stat.txt" 2>/dev/null | grep -oE '[0-9]
 # run, which silently discards the margin and disagrees with find_fmax.py.
 # 'worst slack max' is the actual worst slack and is what find_fmax uses --
 # the record and the sweep must not mean different things by WNS.
-WNS="$(grep -E '^worst slack max' "$RPT/6_finish.rpt" 2>/dev/null | head -1 | grep -oE '[-0-9.]+' | head -1)"
+#
+# Prefer 6_report.json: the .rpt rounds to two decimals, so a design closing at
+# its own Fmax -- where slack is near zero by construction, which is the case
+# that decides the gate -- records as "0.00" whichever side of zero it is on.
+# d_nw01_ss at 9.0 ns has slack +0.00366 and the report prints 0.00.
+WNS="$(python3 -c "
+import json,sys
+try:
+    d=json.load(open(sys.argv[1]))
+    v=d.get('finish__timing__setup__ws')
+    print(v if v is not None else '')
+except Exception:
+    print('')
+" "$LOG/6_report.json" 2>/dev/null)"
+[ -z "$WNS" ] && WNS="$(grep -E '^worst slack max' "$RPT/6_finish.rpt" 2>/dev/null | head -1 | grep -oE '[-0-9.]+' | head -1)"
 # Columns are Internal, Switching, Leakage, Total -- $4 is LEAKAGE. Recording
 # leakage as total power understated it by five orders of magnitude.
 PWR="$(grep -A11 'finish report_power' "$RPT/6_finish.rpt" 2>/dev/null | grep -E '^Total' | awk '{print $5}')"
