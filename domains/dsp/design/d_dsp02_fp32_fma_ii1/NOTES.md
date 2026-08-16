@@ -153,3 +153,60 @@ not propagation, and the coverage-floor message says so. Both operand orders are
 still required: a design that canonicalises only one operand position would
 otherwise be indistinguishable.
 
+
+---
+
+# MUTANT SET — six classes, all killed, each on its own defect
+
+Every mutant is a **wrapper around the vendored anchor** with one thing
+perturbed, so the arithmetic is externally-authored correct everywhere except the
+injected defect. A hand-written FMA mutant would risk failing for incidental
+reasons and would not isolate the property.
+
+| mutant | class | fails | witness |
+|---|---|---|---|
+| `mCAP1_flush_to_zero` | **CAPABILITY** | 907 | `1.0 × 2⁻¹⁴⁹ + 0` → `0`, reference `0x00000001` |
+| `mA1_unfused_multiply_add` | fused-vs-unfused (A1) | 1182 | `(1+2⁻¹²)² − (1+2⁻¹¹)` → `0`, reference `2⁻²⁴` |
+| `mA4_nan_payload_propagate` | contract-NaN (A4) | 62 | sNaN operand → `0x7FC00001`, reference `0x7FC00000` |
+| `mA5_signed_zero_always_positive` | special values (A5) | 14 | `(−0)+(+0)` under RDN → `+0`, reference `−0` |
+| `mA6_underflow_before_rounding` | contract-tininess (A6) | 57 | exact subnormal → `UF` set, reference clear |
+| `mA7_inexact_dropped_on_subnormal` | flags (A7) | 89 | subnormal result → `NX` clear, reference set |
+
+**Reference passes with 0 failures. Every mutant shows 0 coverage holes and 0
+dead cycles**, so each is killed by its own defect and not by something
+incidental — the isolation rule 3 requires.
+
+## The two that mattered most
+
+**`mCAP1` is the CAPABILITY mutant, and deliberately not the RNE-only probe.**
+Reusing that probe would have made the validation set and the mutant set the same
+artefact. Flush-to-zero is the better axis: it is a **completely correct FMA on
+every normal operand** — right results, right flags, all five rounding modes, at
+full rate — and FTZ is the most common real shortcut in FP hardware and
+*area-favourable*, exactly the trade a model would make silently while scoring
+better on PPA. It is caught only by the subnormal vectors. **Its first witness is
+vector 0**, and it fails 907 of 4290.
+
+**`mA4` and `mA6` confirm the newly-pinned contract terms are enforced rather than
+decorative.** Both encode behaviour that is **IEEE-conformant** — payload
+propagation and before-rounding tininess are both permitted by the standard — and
+both are now failures because A4 and A4b/A6 pin the alternative. Had either
+passed, the pins would have been words with no check behind them, and a
+conformant design would have been failing an unwritten rule instead of a stated
+one. That is rule 12 doing its job.
+
+## Non-equivalence, and how it is witnessed here
+
+The witness is the **failing input vector**, not a cycle number: this is a
+combinational unit at `NumPipeRegs=0`, so the input tuple fully determines the
+divergence and is more useful than a timestamp.
+
+Witnessing **through the checker** — it passes the reference and fails the mutant
+under identical stimulus — is the same proof as a direct differential comparison,
+observed through the checker. No separate differential harness was built for this
+task because it would add nothing: the checker already replays a fixed vector
+file, so both designs see byte-identical stimulus by construction.
+
+**No diff rate is reported.** It was retracted as a quality signal
+(`FINDINGS.md`), and mutant quality is a posterior deferred to the cross-model
+run.
