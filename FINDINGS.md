@@ -1203,8 +1203,19 @@ rebuilt, for provenance rather than for elasticity. See F20.
 ## F24. Candidates and references were not synthesised against the same target
 
 **Every `d_ca04` candidate was built with ABC unconstrained while the reference
-was built at 5000 ps.** The area comparison that task's headline rests on — 27 %
-smaller — was never like-for-like.
+was built at 5000 ps.** The comparison was not like-for-like.
+
+**Measured impact on this task: none.** The candidate was rebuilt with the ABC
+target corrected to the reference's 5000 ps and returned **byte-identical**
+results — area 14 685, wns 0.706029, power 7.30e-03, matching the broken build in
+every digit. The design closes at 4.5 ns with +0.71 ns of slack, so ABC's mapping
+target never binds, and downstream resizing dominates whatever ABC chose.
+
+That is the honest headline and it is two claims, not one: **the defect is real
+and would bite a timing-constrained design; on this design it changed nothing.**
+I initially reported it as invalidating d_ca04's result. It does not. What it
+invalidated was the *guarantee* — the comparison was sound by luck rather than by
+construction, and nothing in the apparatus could have told the difference.
 
 `ppa_candidate.sh` generates the candidate's config rather than copying one,
 which is correct and was itself a fix for a real defect. But one generated line
@@ -1237,7 +1248,15 @@ was not.**
 **Fix:** the ABC line is now **copied verbatim from the task's own `config.mk`**
 rather than re-derived, and the script **refuses to build** if that line is
 absent. Re-deriving a value the task already states is the defect; there was
-never a reason to compute it twice.
+never a reason to compute it twice. Verified: the regenerated config carries
+`wr_period` and resolves to 5000 ps.
+
+**The 0.47 % that started this remains unexplained.** The rebuilt candidate is
+14 685 against a quoted 14 754, with a byte-identical RTL hash and now a
+byte-identical build target. Whatever produced 14 754 is not reproducible from
+the current tree, and 14 685 is the recorded, validated, twice-reproduced value.
+It is recorded as unexplained rather than attributed to the ABC defect, which the
+rebuild rules out.
 
 **The general form, and it is the sharpest instance in this document.** A
 generated config is only equivalent to the one it stands in for if *every*

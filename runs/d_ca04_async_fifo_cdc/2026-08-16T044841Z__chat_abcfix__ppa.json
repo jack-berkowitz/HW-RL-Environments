@@ -1,0 +1,17 @@
+{
+  "clk_period_ns": "4.5000",
+  "design_area_um2": "14685",
+  "git_sha": "ac0a161b18bc5dfa1226304d42b91ff66a744c32-dirty",
+  "kind": "ppa",
+  "label": "chat_abcfix",
+  "orfs_nickname": "d_ca04_cand_chat_abcfix",
+  "pdk": "sky130hd",
+  "power_w": "7.30e-03",
+  "status": "completed",
+  "submission": "candidates/d_ca04/chat.sv",
+  "submission_sha256_16": "0d4143c084edf591",
+  "synth_area_um2": "11030.579200",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-16T04:48:41Z",
+  "wns_ns": "0.706029"
+}
