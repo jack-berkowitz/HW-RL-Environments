@@ -1,0 +1,17 @@
+{
+  "clk_period_ns": "4.5000",
+  "design_area_um2": "14685",
+  "git_sha": "8b429293768ab4a7e0b8b1c241f8f268b2c23c5e-dirty",
+  "kind": "ppa",
+  "label": "chat_own_fmax",
+  "orfs_nickname": "d_ca04_cand_chat_own_fmax",
+  "pdk": "sky130hd",
+  "power_w": "7.30e-03",
+  "status": "completed",
+  "submission": "candidates/d_ca04/chat.sv",
+  "submission_sha256_16": "0d4143c084edf591",
+  "synth_area_um2": "11030.579200",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-16T04:44:50Z",
+  "wns_ns": "0.706029"
+}

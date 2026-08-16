@@ -1200,6 +1200,55 @@ rebuilt, for provenance rather than for elasticity. See F20.
 
 **Rules:** 9
 
+## F24. Candidates and references were not synthesised against the same target
+
+**Every `d_ca04` candidate was built with ABC unconstrained while the reference
+was built at 5000 ps.** The area comparison that task's headline rests on — 27 %
+smaller — was never like-for-like.
+
+`ppa_candidate.sh` generates the candidate's config rather than copying one,
+which is correct and was itself a fix for a real defect. But one generated line
+was hardcoded:
+
+```make
+export ABC_CLOCK_PERIOD_IN_PS := $(shell awk '/^set clk_period/{...}' $(SDC_FILE))
+```
+
+`d_ca04` is a **two-clock** design. Its SDC declares `wr_period` and
+`rd_period`; there is no `clk_period`. The awk matched nothing, the variable
+came out **empty**, and ABC mapped the candidate with no timing target while the
+reference's own config — which reads `wr_period` — mapped at 5000 ps.
+
+**The script printed a claim of comparability in the same run:**
+
+> *"A candidate is only comparable to that baseline if the clock period and
+> parameters match — both come from the task's own SDC, so they do."*
+
+That sentence is false for any task whose SDC does not use the literal name
+`clk_period`, which is every multi-clock task. `d_nw01` is single-clock and
+unaffected, which is why nothing looked wrong for two tasks running.
+
+**Found by** chasing a 0.47 % discrepancy that turned out not to be the cause of
+anything — the rebuilt candidate differed from the quoted figure, the RTL hash
+was byte-identical, so the remaining variable was the build, and diffing the two
+configs field by field exposed it. **The discrepancy was noise; looking into it
+was not.**
+
+**Fix:** the ABC line is now **copied verbatim from the task's own `config.mk`**
+rather than re-derived, and the script **refuses to build** if that line is
+absent. Re-deriving a value the task already states is the defect; there was
+never a reason to compute it twice.
+
+**The general form, and it is the sharpest instance in this document.** A
+generated config is only equivalent to the one it stands in for if *every*
+field is. This one differed in a single line, produced no error, and the
+resulting number was plausible, gated, DRC-clean and comparable-looking. The
+provenance audit (F20) would never have caught it: the numbers had records, the
+records were accurate, the runs passed their gates. **Provenance tells you where
+a number came from, not whether two numbers may be subtracted.**
+
+**Rules:** 9
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET
