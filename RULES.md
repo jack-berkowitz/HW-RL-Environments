@@ -133,6 +133,13 @@ defects. It runs with the regression.
 
     **From:** working principle, no originating defect
 
+16. **A control that fails everything validates nothing.** A negative control
+    must pass some checks and fail exactly the one it targets. One that trips
+    every check cannot distinguish a working apparatus from one that reports
+    whatever the input says.
+
+    **From:** F25
+
 15. **Every contract term cites its source of authority** — a standard clause,
     a stated task intent, or a design decision recorded as such. **"Because the
     anchor does it" is not an authority.**
@@ -149,6 +156,27 @@ defects. It runs with the regression.
     simply what cvfpu happened to do.
 
     **From:** F14
+
+17. **Any two PPA numbers compared must have matching build configuration,
+    asserted mechanically rather than assumed.** Records carry a hash of the
+    **resolved** build configuration — ABC target, SDC, PDK, utilisation,
+    placement density, parameters, every variable that reaches the flow. A
+    comparison refuses when the hashes differ **except on the axis being
+    varied, and that axis is named explicitly.**
+
+    **Provenance tells you where a number came from, not whether two numbers may
+    be subtracted.** This is the class neither provenance nor gate-passing can
+    catch: in F24 every number had a record, every record was accurate, every run
+    passed its gate and was DRC clean, and the two builds still were not
+    comparable — one mapped with ABC unconstrained because a hardcoded `awk`
+    found no `clk_period` in a two-clock SDC.
+
+    It closes two defects at once. F24's silently empty ABC target, and the
+    provenance audit's own error of comparing a 2.625 ns run against a 4.5 ns
+    run as though they were the same measurement — **the audit committing the
+    mistake it was written about.**
+
+    **From:** F20, F24
 
 ---
 

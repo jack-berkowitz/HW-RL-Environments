@@ -1251,12 +1251,31 @@ absent. Re-deriving a value the task already states is the defect; there was
 never a reason to compute it twice. Verified: the regenerated config carries
 `wr_period` and resolves to 5000 ps.
 
-**The 0.47 % that started this remains unexplained.** The rebuilt candidate is
-14 685 against a quoted 14 754, with a byte-identical RTL hash and now a
-byte-identical build target. Whatever produced 14 754 is not reproducible from
-the current tree, and 14 685 is the recorded, validated, twice-reproduced value.
-It is recorded as unexplained rather than attributed to the ABC defect, which the
-rebuild rules out.
+**The 0.47 % that started this is unexplained, and the obvious alternative was
+tested and falsified.** The rebuilt candidate is 14 685 against a quoted 14 754,
+with a byte-identical RTL hash and a byte-identical build target.
+
+The natural hypothesis was that 14 754 belonged to **the other d_ca04
+candidate** — read from the unlabelled flow directory at a moment when
+`gemini.sv` had last built there. That fits the evidence shape exactly, and it
+would have made this the cleanest instance of F20 available: a number that was
+accurate, recorded nowhere, and belonged to a different design entirely.
+
+**It was built and it does not fit.** `gemini.sv` at 4.5 ns through the
+validated path is **14 515 µm²** (wns +0.713) — 1.62 % from 14 754, further away
+than `chat.sv` is. So 14 754 is neither candidate's area at this period.
+
+Recorded as unexplained, with the alternative **tested rather than merely
+unavailable**. What is established: 14 685 is reproduced twice, recorded and
+validated; 14 515 is recorded and validated; 14 754 corresponds to no build
+reproducible from this tree. The three candidate explanations that remain are a
+different tool version, a different config predating the current one, or a
+transcription error, and none is distinguishable now that the directory it came
+from is gone.
+
+**That is the residue F20 predicts.** An unlabelled number is not merely
+unverifiable — once the directory turns over, it becomes *permanently*
+undecidable. No amount of later rigour recovers it.
 
 **The general form, and it is the sharpest instance in this document.** A
 generated config is only equivalent to the one it stands in for if *every*
@@ -1317,6 +1336,46 @@ says, and the ordering constraint is stated in a comment next to the code that
 depends on it.
 
 **Rules:** 3
+
+## F26. Three documents asserting a control that did not exist
+
+`check_rule_linkage.py` and `check_ppa_record.py` both stated, in their own
+headers, *"Runs with the regression."* **There was no regression.** No runner, no
+target, no CI — the phrase was referenced in `RULES.md` and `TASK_CATALOG.md` as
+though it named something, and both checks were in fact run by hand when someone
+remembered.
+
+This is the third instance of one pattern, and it is worth naming as a pattern
+rather than filing each as an oversight:
+
+| | the document said | reality |
+|---|---|---|
+| **F19** | `RULES.md` is the single source of truth | a stale seven-row rule table sat in `FINDINGS.md` with its own numbering |
+| **F22** | `d_dsp02` is built and its results stand | no `sim_flags`, never once run through the scored path |
+| **F26** | these checks run with the regression | there was no regression |
+
+**The common shape: prose asserting a control, and the prose being the only
+place the control existed.** Every one of them reads as true. Nothing fails.
+The claim is load-bearing for a reader's trust and carries no weight at all.
+
+**Why this class is hard to see from inside.** A missing artefact announces
+itself the moment something tries to use it — but nothing *tries to use* a
+sentence. The assertion is consumed by humans, who take it at face value
+precisely because it is written down in a document that has been accurate about
+everything else. The three instances were found by three unrelated accidents:
+diffing an edit, an absent file blocking a build, and going to wire a check into
+the regression and finding none.
+
+**The remedy is not more careful writing.** It is that a document may not assert
+a control exists without naming the artefact that implements it, and the
+artefact must be executable. `scripts/regression.sh` now exists and runs all
+three checks; the headers that referenced it are now true.
+
+**What this does not fix:** nothing prevents the next such sentence. The honest
+statement is that this class is currently caught by accident, and three
+accidents is not a detection mechanism.
+
+**Rules:** 13
 
 ---
 

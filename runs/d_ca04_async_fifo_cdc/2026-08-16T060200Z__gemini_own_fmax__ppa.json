@@ -1,0 +1,19 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=async_fifo_cdc; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=5000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.rd_period=8; sdc.wr_period=5; override.CLK_PERIOD_NS=4.5000;",
+  "build_config_hash": "6a90d59ec8e5d692",
+  "clk_period_ns": "4.5000",
+  "design_area_um2": "14515",
+  "git_sha": "f70e790913ba4af47387b9a4726c46f1d74cd320-dirty",
+  "kind": "ppa",
+  "label": "gemini_own_fmax",
+  "orfs_nickname": "d_ca04_cand_gemini_own_fmax",
+  "pdk": "sky130hd",
+  "power_w": "7.12e-03",
+  "status": "completed",
+  "submission": "candidates/d_ca04/gemini.sv",
+  "submission_sha256_16": "c21e79ea6e452912",
+  "synth_area_um2": "10971.772800",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-16T06:02:00Z",
+  "wns_ns": "0.713018"
+}

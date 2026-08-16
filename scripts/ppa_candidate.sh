@@ -200,10 +200,19 @@ PWR="$(grep -A11 'finish report_power' "$RPT/6_finish.rpt" 2>/dev/null | grep -E
 PER="$(awk '/^set clk_period/{print $3; exit}' "$TASK_DIR/orfs/constraint.sdc" 2>/dev/null)"
 [ -n "${CLK_PERIOD_NS:-}" ] && PER="$CLK_PERIOD_NS"
 if [ -n "$AREA" ]; then STATUS=completed; else STATUS=DID_NOT_COMPLETE; fi
+# RULE 17: hash the RESOLVED build configuration so a later comparison can
+# refuse mechanically instead of assuming. Text-identical configs can resolve
+# differently -- F24's ABC target is the worked example.
+BCH_OUT="$(python3 "$REPO/scripts/build_config_hash.py" "$RUNDIR/config.mk" "$TASK_DIR/orfs/constraint.sdc" \
+           ${CLK_PERIOD_NS:+CLK_PERIOD_NS=$CLK_PERIOD_NS} 2>/dev/null)"
+BCH="$(echo "$BCH_OUT" | head -1)"
+BCF="$(echo "$BCH_OUT" | tail -n +2 | tr -s ' ' | tr '\n' ';' | sed 's/^;//')"
+
 REC="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$CAND" ppa "$LABEL" \
         "status=$STATUS" "design_area_um2=${AREA:-}" "synth_area_um2=${SYNTH:-}" \
         "wns_ns=${WNS:-}" "power_w=${PWR:-}" "clk_period_ns=${PER:-}" \
-        "orfs_nickname=$NICK" "pdk=${PLATFORM:-sky130hd}" 2>/dev/null)"
+        "orfs_nickname=$NICK" "pdk=${PLATFORM:-sky130hd}" \
+        "build_config_hash=$BCH" "build_config_fields=$BCF" 2>/dev/null)"
 [ -n "$REC" ] && echo "record: $REC"
 
 echo
