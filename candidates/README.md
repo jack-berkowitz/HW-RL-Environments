@@ -52,6 +52,41 @@ Two things are rejected before simulation, and both count as a failed attempt
 rather than a broken harness: a candidate that prints its own `TEST_RESULT`
 line (forged verdict), and one that declares the wrong module name.
 
+## WARNING — two directories here are holding pens, and sweeping them lies
+
+`candidates/d_dsp02/` and `candidates/v_ca05/` exist so submissions have a home.
+**Neither task is scoreable today**, and the fan-out driver does not know that.
+
+`run_submissions.sh` auto-discovers any `candidates/<task>/` containing `.sv`
+files, and treats **any** non-zero exit from `sim_candidate.sh` as
+`correctness gate failed`. But `sim_candidate.sh` also exits non-zero when it
+**cannot address the task at all**:
+
+- **`v_ca05` does not resolve.** Task ids are looked up under
+  `domains/*/design/` only, never `verification/`, so a `v_ca05` submission
+  exits 2 with `cannot resolve task`.
+- **`d_dsp02` resolves but has no `sim_flags_verilator.txt`** and is not
+  registered, so it refuses too.
+
+In both cases the driver prints `correctness gate failed; place-and-route
+skipped` and counts the submission as not passing. **A structural inability to
+run the task is reported as a property of the candidate**, and the closing
+`N of M submission(s) passed` line understates the rate using a number that has
+nothing to do with the submissions.
+
+Same shape as the defects in `FINDINGS.md`: the run completes, the output looks
+like a result, and nothing errors.
+
+**Until the scoring paths exist, name tasks explicitly** —
+`./scripts/run_submissions.sh d_ca04 d_nw01` — rather than letting it discover.
+
+### And v_ca05 submissions are TESTBENCHES, not RTL
+
+The whole intake assumes `candidates/<task>/<label>.sv` is a **DUT replacing the
+reference**. A `v_ca05` submission is a testbench replacing the *checker*, which
+inverts what the harness does with the file. This is recorded, not worked
+around: the verification scoring path is not built yet.
+
 ## Are these committed?
 
 The tier-based ones are, so the new ones follow suit — a candidate that
