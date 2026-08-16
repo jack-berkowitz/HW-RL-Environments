@@ -1,0 +1,16 @@
+{
+  "clk_period_ns": "5.25",
+  "config": "CUT_ALL_AX",
+  "design_area_um2": "154245",
+  "drc": "0",
+  "git_sha": "76ece4a7cd740f40d6dcaad4397372baebe10a21-dirty",
+  "kind": "ppa",
+  "label": "reference_own_fmax",
+  "power_w": "8.75e-02",
+  "status": "completed",
+  "submission": "domains/networking/design/d_nw01_axi4_xbar/ref/axi4_xbar_ref.sv",
+  "submission_sha256_16": "a36958895aab26e0",
+  "task": "d_nw01_axi4_xbar",
+  "timestamp_utc": "2026-08-16T03:20:36Z",
+  "wns_ns": "0.04"
+}

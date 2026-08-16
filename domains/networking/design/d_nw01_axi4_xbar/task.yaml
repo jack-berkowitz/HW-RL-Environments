@@ -138,15 +138,20 @@ ppa_reference_envelope:
       fmax_period_ns: 5.25
       fmax_converged: true
       fmax_bracket_ns: [4.875, 5.25]     # 0.375 wide, within the 0.5 resolution
-      # AREA WITHDRAWN -- see FINDINGS.md F20. No PPA number in this repo is
-      # traceable to a run record, and this one is unverifiable: the flow
-      # directory it was read from has since been overwritten by a run that
-      # FAILED its own gate (wns -0.216). Rebuild at 5.25 ns through
-      # ppa_candidate.sh before any of these are quoted again.
-      area_um2_at_own_fmax: ABSENT      # was 154245
+      # REBUILT AND RECORDED 2026-08-16, after F20 withdrew it as unverifiable.
+      # The withdrawn value was CORRECT: the rebuild returned 154245 exactly.
+      # It was never wrong, only undefendable -- which is why the withdrawal was
+      # still the right call and why the rebuild was worth the 30 minutes.
+      # Backed by runs/d_nw01_axi4_xbar/*__reference_own_fmax__ppa.json.
+      # Gate: wns +0.037, DRC 0. Confirmed by two independent readings of the
+      # same run (6_report.json and the report parsers), per F21.
+      area_um2_at_own_fmax: 154245      # RECORDED
+      power_w_at_own_fmax: 8.75e-02     # RECORDED
+      wns_ns_at_own_fmax: 0.04          # RECORDED
+      # Still withdrawn -- these were never rebuilt and have no record.
       area_um2_at_12ns: ABSENT          # was 146951
       synth_area_um2: ABSENT            # was 107891
-      elasticity_closing_range_pct: ABSENT   # was 5.0; derived from the above
+      elasticity_closing_range_pct: ABSENT   # was 5.0; needs the 12 ns rebuild
     - config: NO_LATENCY
       fmax_mhz: 126.98
       fmax_period_ns: 7.875

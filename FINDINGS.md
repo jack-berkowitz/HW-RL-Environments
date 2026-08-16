@@ -1028,11 +1028,19 @@ run that passed its own gate?
 | d_ca04 ref **19 942** | `NOTES.md` | no | **conflicts** — dir shows 19 887 |
 | d_ca04 cand **14 754** @4.5 ns | `NOTES.md`, `FINDINGS.md` | no | **conflicts** — dir shows 14 644 at 4.5 ns |
 | d_ca04 ref **20 101** @2.625 ns | `NOTES.md`, `FINDINGS.md` | no | unverifiable — overwritten |
-| d_nw01 ref **154 245** @5.25 ns | `FINDINGS.md`, `TASK_CATALOG.md`, `NOTES.md`, `task.yaml` | no | unverifiable — **overwritten by a FAILING run** |
+| d_nw01 ref **154 245** @5.25 ns | `FINDINGS.md`, `TASK_CATALOG.md`, `NOTES.md`, `task.yaml` | **YES, rebuilt** | **REBUILT: 154 245 exactly**, wns +0.037, DRC 0 |
 | d_nw01_ss **294 555** @9.0 ns | this session | no | was +0.0037; dir since wiped |
 
 Three corroborate exactly. Two **conflict** with the only surviving evidence.
 Three are unverifiable because the directory was overwritten.
+
+**Update — the first rebuild vindicates the number and not the process.**
+`d_nw01`'s reference was rebuilt at 5.25 ns and returned **154 245 µm²
+exactly**, wns +0.037, DRC 0, now carrying a run record. The withdrawn
+figure was never wrong; it was undefendable. Both things are worth saying at
+once: the audit was not alarmism about fabricated numbers, and the
+withdrawal was still correct, because *"it later turned out to be right"* is
+not a property you can rely on before doing the work.
 
 **The two conflicts are the ones that matter**, because both feed the d_ca04
 area-versus-Fmax conclusion, and `20 101 / 14 754 = 1.362` is the ratio that
