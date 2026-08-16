@@ -69,6 +69,11 @@ CONF="$TASK_DIR/conformant/conformant_perturbations.sv"
 # explicitly, never discovered by pattern -- rule 10.
 GOLDEN_TOP="tag_tracker"
 TB_MOD="tag_tracker_tb"
+# 25 s against a measured 0.02-0.30 s for the reference testbench and 0.26 s for
+# a real submission -- roughly 80x to 1000x margin. Deliberately generous: a
+# watchdog tuned near real runtime stops being a liveness check and becomes a
+# performance check on the submission, which nothing in the spec licenses.
+# Override with SIM_TIMEOUT_S if a task's stimulus is genuinely longer.
 SIM_TIMEOUT_S="${SIM_TIMEOUT_S:-25}"
 
 # --- collect submissions -----------------------------------------------------

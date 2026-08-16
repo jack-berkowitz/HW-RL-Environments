@@ -242,6 +242,42 @@ module tag_tracker_spec_tb;
     end
     if (empty !== 1'b1) fail("R14", "not empty after draining every entry"); else ok();
 
+    // ---- R1: EVERY tag must be accepted, not just the ones we happened to
+    // use. Added after the mutant set showed this testbench could not see a
+    // design that starves exactly one tag: the capacity fill used tag 5 and the
+    // random phase never *required* a grant, so a permanently-refused tag was
+    // invisible.
+    //
+    // Note what is and is not checked. R6 licenses push_gnt_o being low for
+    // reasons other than fullness, so requiring an IMMEDIATE grant would be
+    // checking something unpromised. What R1 does promise is that the entry is
+    // eventually accepted while space exists -- so this waits, and fails only
+    // on a timeout.
+    for (int t = 0; t < NTAG; t++) begin
+      d = payload_t'(32'hB000_0000 + t);
+      do_push(TAG_W'(t), d, 50, granted);
+      if (!granted)
+        fail("R1", $sformatf("tag %0d never granted with %0d/%0d slots free -- starved",
+                             t, SLOTS - ref_count, SLOTS));
+      else ok();
+    end
+    for (int t = 0; t < NTAG; t++)
+      while (ref_q[t].size() != 0) do_pop(TAG_W'(t), 1'b1, 50);
+    check_status("after per-tag acceptance sweep");
+
+    // ---- R12: a mask covering the TOP BYTE against a value that differs from
+    // every stored entry ONLY there. The earlier searches used 0xFFFFFFFF,
+    // 0x000000FF and 0x0, none of which can see a compare that silently drops
+    // the high byte from the mask.
+    //
+    // R12 states the compare as (payload & mask) == (data & mask) for any mask,
+    // so this is squarely within the contract rather than an inference from it.
+    do_push(3'd2, 32'hA1B2_C3D4, 50, granted);
+    do_match(32'h71B2_C3D4, 32'hFF00_0000, 50);   // differs only in [31:24]
+    do_match(32'hA100_0000, 32'hFF00_0000, 50);   // matches in [31:24]
+    do_pop(3'd2, 1'b1, 50);
+    check_status("after high-byte mask search");
+
     // ---- R1/R2/R3: mixed tags, random traffic ----------------------------
     for (int n = 0; n < 400; n++) begin
       int op;

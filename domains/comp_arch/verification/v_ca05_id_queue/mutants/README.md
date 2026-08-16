@@ -45,27 +45,36 @@ justifies withdrawing a mutant.
 | `m5` | `match_hit 1 vs 0` @ t=146000 |
 | `m6` | `empty 1 vs 0` @ t=46000 |
 
-## Results so far — the set discriminates, including against us
+## Results — the set discriminates, and it caught us first
 
 | testbench | golden | conformant | m1 | m2 | m3 | m4 | m5 | m6 |
 |---|---|---|---|---|---|---|---|---|
-| our reference TB | PASS | 4/4 | kill | kill | kill | **miss** | **miss** | kill |
+| reference TB, **as first written** | PASS | 4/4 | kill | kill | kill | **miss** | **miss** | kill |
+| reference TB, **corrected** | PASS | 4/4 | kill | kill | kill | kill | kill | kill |
 | `chat` submission | PASS | 4/4 | **hung** | kill | **hung** | **hung** | **miss** | kill |
 
-**The set found two holes in our own reference testbench** on first use — it
-never pushes to tag 0 in a way that would expose starvation, and never searches
-with a mask covering the top byte against a value differing only there.
+**The set found two holes in our own reference testbench on first use.** It
+never pushed to tag 0 in a way that could expose starvation — the capacity fill
+used tag 5 and the random phase never *required* a grant — and it never searched
+with a mask covering the top byte. Both are now fixed and it kills 6/6.
 
-**A HANG IS NOT A KILL, and is reported separately.** `chat` has no watchdog: on
-the capacity and starvation mutants it waits for a grant that never arrives and
-runs forever. It is tempting to score that as detection — the design does refuse
-pushes it should accept — but a correct-and-slow design produces the identical
-hang, so it distinguishes nothing. The harness now applies a 25 s watchdog and
-reports `HUNG` as its own verdict.
+**The corrected reference re-passes all four conformant perturbations.** That
+check is not a formality: adding checks is exactly when a testbench starts
+depending on things the spec never promised, and the perturbations are the
+control for it. Specifically, the tag-0 check waits for a grant with a timeout
+rather than requiring an immediate one, because **R6 licenses `push_gnt_o` being
+low for reasons other than fullness** — requiring promptness would have been
+checking something unpromised, and `c3` would have caught it.
 
-That also makes a real recommendation for the task statement: **a submitted
-testbench must terminate on its own.** Without it, one starvation mutant blocks
-an entire grading run.
+`m5` is retained on that evidence. It was missed by both testbenches tried, which
+raised the question of whether anything could kill it; the corrected reference
+does, using a mask of `0xFF000000` that R12 licenses exactly as written. **A
+mutant nobody kills compresses the score range and proves nothing** — the same
+defect as one everybody kills, in the other direction.
+
+**A submission is only interpretable against a 6/6 reference.** `chat`'s 2 kills
+were scored before the reference was corrected; the number is unchanged but its
+meaning is not, because the ceiling is now known to be 6.
 
 ## What is still missing
 

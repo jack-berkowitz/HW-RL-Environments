@@ -236,63 +236,83 @@ publicly** — see the pre-release checklist below.
 
 ---
 
-# OPEN DESIGN DECISION — ship no RTL, and does the task ship a BFM?
+# DECISION — VERIFICATION TASKS SHIP NO RTL
 
-**Recorded so this is decided rather than defaulted. Nothing is built for it.**
+**Decided. Verification tasks ship a port map and a fully pinned specification.
+The DUT is not shipped.**
 
-## The candidate change
+## What settled it
 
-Verification tasks currently ship a decontaminated DUT. The alternative is to
-ship **nothing but a port map and a fully pinned spec**, and have the model write
-a testbench blind. Scoring is unchanged: validity gate against the hidden golden,
-then mutant kill rate.
+A model wrote a testbench for `v_ca05` from the port map and prose alone, having
+never seen the RTL. It **passed the golden DUT and all four conformant
+perturbations.** The two failure modes that would have sunk the approach both
+came back empty:
 
-That would remove decontamination, licence retention and recognition **in one
-move** — the three problems recorded in the section above, none of which have a
-good answer otherwise. It would also let a design and a verification task share a
-module and a spec, which anchor-disjointness currently forbids.
+| bucket | result |
+|---|---|
+| driver bug — the false-failure mode | **none** in the passing submission |
+| reliance on unpromised behaviour | **none** — 4/4 conformant accepted |
+| genuine spec gap | **none found** |
 
-**Precondition, now partly measured** (`v_ca05`, `spec/tag_tracker_spec.md`): can
-a testbench written from the spec alone pass the golden? A local pilot passed at
-1273 checks with zero spec revisions, but its author had already read the RTL, so
-the result is one-sided. Three clauses were shown to be load-bearing — R4, R10,
-R3 — each an answer to a question you only know to ask after seeing the
-implementation. The clean measurement is `probe/BLIND_TB_TASK.md`, which hands
-the spec to a model.
+The local pilot could not establish this: its author had decontaminated the RTL
+and so pre-empted exactly the gaps being counted. **Only a model could be the
+untainted author**, which is why this question stayed open from the recognition
+probe until now.
 
-## The sub-decision: does the task ship a protocol BFM?
+The second submission failed, and its failure is *also* evidence for the
+decision rather than against it: it checked the DUT before resetting it, which
+is a driver defect and not a spec ambiguity.
 
-**Not decided. Do not default into it by writing tasks that assume one.**
+## What it buys
 
-| | model writes its own driver | task ships a BFM |
-|---|---|---|
-| what is measured | driver plumbing **and** checking | checking only |
-| failure mode | a plumbing bug scores the same zero as bad checking | none — plumbing is given |
-| skill covered | broader; writing a correct driver is part of writing a testbench | narrower, sharper |
-| spec leakage | none | **a BFM encodes the handshake, so it gives away R4** |
+**Decontamination, licence retention and recognition exposure all disappear
+together.** Not mitigated — removed. There is no decontaminated derivative to
+ship, so there is nothing to recognise and no notice to retain. The measured
+result that decontamination *bought nothing* for `id_queue` stops mattering.
 
-The plumbing risk is real and measured, not hypothetical. The local pilot's only
-failure was a driver race — stimulus changed in the same timestep as the sampling
-edge — which made a correct DUT look **completely inert**: `empty_o` stuck high,
-`full_o` never asserting, every pop returning nothing. A model hitting that has
-two natural conclusions available, *"the DUT is broken"* and *"the spec is
-wrong"*, and neither is true. See `CONVENTIONS.md`.
+## The consequence that changes the catalog's shape
 
-Arguments both ways, neither yet decisive:
+**Anchor-disjointness dissolves.** The constraint existed because a verification
+task shipped a decontaminated copy of its golden RTL, so a module that was also
+a design task's hidden reference handed the answer to anyone working both. **With
+no RTL shipped there is nothing to hand over.**
 
-- **For the model writing it:** it is genuinely part of the task, and a
-  benchmark that hands over the driver measures a narrower skill than the one we
-  claim to measure.
-- **For shipping a BFM:** a plumbing bug and a missing check produce the same
-  score, so the measurement stops distinguishing them — and for `id_queue`
-  specifically, `push_gnt_o` is a *space-available flag rather than an
-  acknowledgement*, which is exactly the trap a BFM would remove and exactly what
-  R4 exists to state.
+So a module may now be **both** a design task and a verification task, and **one
+pinned spec can serve both**:
 
-**For `id_queue` a BFM is awkward and is not being built**, because encoding the
-handshake hands over the single most load-bearing clause in the spec. Revisit
-when the blind measurement comes back, and use its three-way failure split —
-driver bug / unpromised reliance / genuine spec gap — as the evidence.
+- the **design** task ships the spec and asks for RTL, graded by our checker;
+- the **verification** task ships the same spec and asks for a testbench, graded
+  by our golden and mutants.
+
+Three consequences worth stating before anyone rebuilds the catalog on this:
+
+1. **Spec cost is now amortised across two tasks**, and the spec is the
+   expensive artefact — `d_dsp02`'s pinning work exceeded its RTL work.
+2. **The pair is more informative than either half.** The same contract, probed
+   from both directions, separates "the model cannot build this" from "the model
+   cannot say what correct means."
+3. **A shared spec is a shared single point of failure.** A contract defect now
+   corrupts two tasks rather than one, which raises the value of rule 15 and of
+   the conformant-perturbation control.
+
+## Still required, and NOT settled by this
+
+**The spec must be pinned to the standard of `spec/tag_tracker_spec.md`.** Three
+clauses in it are load-bearing — R4 (grant is not an acknowledgement), R10 (a pop
+of an absent tag is granted), R3 (no cross-tag ordering) — and each is an answer
+to a question you only know to ask **after** seeing an implementation. That is a
+real cost and it does not go away; it moves entirely into spec authoring.
+
+**Termination is now a stated task requirement**, after a submission with no
+watchdog ran forever against the starvation mutant.
+
+## The BFM sub-decision — still open, and now better informed
+
+Whether the task ships a protocol BFM is **not** settled. The evidence moved:
+the passing submission wrote a correct driver unaided, so the plumbing risk is
+real but not prohibitive. Against a BFM: it encodes the handshake and so hands
+over R4, the most load-bearing clause in the spec. Leave it open; revisit with
+more submissions.
 
 ---
 

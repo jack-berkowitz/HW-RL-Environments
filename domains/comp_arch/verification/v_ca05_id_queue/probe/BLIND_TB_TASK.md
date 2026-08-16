@@ -181,6 +181,13 @@ instantiates `tag_tracker` and self-checks.
 
 - Configure it with `TAG_W = 3`, `SLOTS = 8`, `N_MATCH = 1`,
   `payload_t = logic[31:0]`. Leave `FULL_RATE` and `CUT_POP_PATH` at 0.
+- **It must terminate on its own, unconditionally.** Include a watchdog: an
+  independent `initial` block that reports failure and `$finish`es after a
+  generous time limit, no matter what the DUT does. Your testbench will be run
+  against deliberately faulty implementations, and **one of them never grants a
+  request it should grant**. A testbench that waits for that grant with no
+  timeout runs forever — it does not detect the fault, it just stops, and it
+  blocks the run for everything behind it.
 - It must run to completion and `$finish` on its own.
 - Print exactly one final line: `RESULT: PASS` or `RESULT: FAIL`.
 - Print a diagnostic line per failure naming the requirement (`R1`…`R15`).
