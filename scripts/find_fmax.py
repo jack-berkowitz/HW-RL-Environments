@@ -226,8 +226,25 @@ def _fallback_from_reports(nickname, pdk="sky130hd"):
         nviol = 0
         if os.path.isfile(drc):
             nviol = sum(1 for ln in open(drc, errors="replace") if "violation" in ln.lower())
-        return {"wns_ns": wns, "tns_ns": tns, "drc": nviol,
-                "pass": wns >= 0 and nviol == 0}
+        rec = {"wns_ns": wns, "tns_ns": tns, "drc": nviol,
+               "pass": wns >= 0 and nviol == 0}
+
+        # Area and power are sitting in the same completed run and cost nothing
+        # to capture here. The d_nw01_ss sweep recorded WNS at seven periods and
+        # threw away the area at every one of them, so the elasticity curve it
+        # had already paid four hours to compute had to be rebuilt from scratch.
+        # Captured as PROVISIONAL: these come from the live flow directory, so
+        # they are a convenience for reading a sweep back, NOT a reportable
+        # result -- rule 8 still requires a run record from ppa_candidate.sh.
+        rpt_json = os.path.join(flow, "logs", pdk, nickname, "base", "6_report.json")
+        if os.path.isfile(rpt_json):
+            try:
+                m = json.load(open(rpt_json, errors="replace"))
+                rec["provisional_area_um2"] = m.get("finish__design__instance__area")
+                rec["provisional_power_mw"] = m.get("finish__power__total")
+            except (OSError, ValueError):
+                pass
+        return rec
     except (OSError, ValueError):
         return None
 

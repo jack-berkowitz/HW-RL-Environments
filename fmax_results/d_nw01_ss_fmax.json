@@ -1,0 +1,117 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_nw01_ss",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": 9.0,
+  "achieved_fmax_mhz": 111.11,
+  "wns_at_converged_ns": 0.0,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 6.0,
+    "period_pass": 12.0,
+    "period_fail": 6.0,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 9.0,
+    "period_fail": 8.625
+  },
+  "search_iterations": 4,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 6.0,
+      "wns_ns": -2.01,
+      "tns_ns": -4498.75,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 3798.6,
+      "log": "fmax_results/d_nw01_ss_logs/d_nw01_ss_iter01_6.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed"
+    },
+    {
+      "iteration": 2,
+      "period_ns": 12.0,
+      "wns_ns": 0.46,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 1777.5,
+      "log": "fmax_results/d_nw01_ss_logs/d_nw01_ss_iter02_12.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed"
+    },
+    {
+      "iteration": 3,
+      "period_ns": 9.0,
+      "wns_ns": 0.0,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 1740.5,
+      "log": "fmax_results/d_nw01_ss_logs/d_nw01_ss_iter03_9.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed"
+    },
+    {
+      "iteration": 4,
+      "period_ns": 7.5,
+      "wns_ns": -0.92,
+      "tns_ns": -442.66,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 1783.5,
+      "log": "fmax_results/d_nw01_ss_logs/d_nw01_ss_iter04_7.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed"
+    },
+    {
+      "iteration": 5,
+      "period_ns": 8.25,
+      "wns_ns": -0.66,
+      "tns_ns": -207.77,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 1925.9,
+      "log": "fmax_results/d_nw01_ss_logs/d_nw01_ss_iter05_8.2500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed"
+    },
+    {
+      "iteration": 6,
+      "period_ns": 8.625,
+      "wns_ns": -0.1,
+      "tns_ns": -0.43,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 1572.9,
+      "log": "fmax_results/d_nw01_ss_logs/d_nw01_ss_iter06_8.6250ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed"
+    },
+    {
+      "iteration": 7,
+      "period_ns": 9.0,
+      "wns_ns": 0.0,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 1648.3,
+      "log": "fmax_results/d_nw01_ss_logs/d_nw01_ss_iter07_9.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed"
+    }
+  ],
+  "total_wall_time_s": 14247.4,
+  "total_pnr_runs": 7,
+  "rtl_git_commit": "d6e0701cf2b4733f01834ee248e8dd66a20f64c0-dirty",
+  "timestamp": "2026-08-16T02:36:32.479538+00:00",
+  "aborted_reason": null
+}
