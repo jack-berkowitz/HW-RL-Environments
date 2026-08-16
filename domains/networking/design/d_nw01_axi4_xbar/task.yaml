@@ -148,10 +148,23 @@ scored_configuration:
     recorded as such (rule 15), on the reasoning above.
 
 scored_metrics:
-  - {metric: outstanding_master,            label: "outstd"}
+  # Names are the EMITTED keys, verified against a run record. The first draft
+  # named `outstanding_master`, which the checker never emits -- it emits one
+  # key PER MASTER. A metric named here that no run produces reports ABSENT,
+  # which is how that draft was caught.
+  - {metric: outstanding_master0,           label: "outstd0"}
   - {metric: disjoint_one_pair,             label: "1pair"}
+  - {metric: disjoint_two_pairs,            label: "2pair"}
   - {metric: aggregate_bursts_per_1000cyc,  label: "agg/1k"}
   - {metric: scored_beats_per_1000cyc,      label: "beat/1k"}
+
+scored_metrics_gap: >
+  THE CONCURRENCY RATIO IS NOT EMITTED. Both of its terms are --
+  disjoint_two_pairs and disjoint_one_pair -- and C2 computes the ratio
+  internally to gate on it, but the ratio itself never reaches a METRIC line.
+  Reported here as a gap rather than derived in the collector: deriving it would
+  put a second, independent implementation of C2's arithmetic in the reporting
+  path, and the two could disagree without anything noticing.
 
 scored_point:
   config: CUT_ALL_AX

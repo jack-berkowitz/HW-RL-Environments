@@ -23,6 +23,7 @@ whatever is on disk. A missing row is honest; a stale row is not.
 """
 import glob
 import json
+import re
 import os
 import sys
 
@@ -45,6 +46,35 @@ def load_records():
         except (OSError, json.JSONDecodeError) as e:
             print(f"warning: unreadable record {f}: {e}", file=sys.stderr)
     return recs
+
+
+def scored_metrics(task_dir_name):
+    """Read `scored_metrics:` from a task.yaml. Generic by design -- the metric
+    names live with the task, not in a per-task branch here, so adding a task
+    does not mean editing this file.
+
+    Parsed without a YAML library: pyyaml is not installed in this environment
+    and the block is a fixed shape.
+    """
+    import glob as _g
+    hits = _g.glob(os.path.join(REPO, "domains", "*", "design", task_dir_name,
+                                "task.yaml"))
+    if not hits:
+        return []
+    out, inblock = [], False
+    for line in open(hits[0], encoding="utf-8", errors="replace"):
+        if line.startswith("scored_metrics:"):
+            inblock = True
+            continue
+        if inblock:
+            if line.strip().startswith("- {"):
+                m = re.search(r"metric:\s*([A-Za-z0-9_]+).*?label:\s*\"?([^\",}]+)",
+                              line)
+                if m:
+                    out.append((m.group(1), m.group(2).strip()))
+            elif line.strip() and not line.startswith((" ", "\t", "-")):
+                break
+    return out
 
 
 def known_tasks():
@@ -149,6 +179,38 @@ def main():
         print("ABSENT (no run record; nothing inferred from disk):")
         for t in missing:
             print(f"  {t}")
+
+    # ---- scored performance metrics, per rule 18 ---------------------------
+    # One section per task, columns named by that task's task.yaml. A metric a
+    # task NAMES but no run PRODUCED reports ABSENT rather than blank -- rule 8's
+    # reasoning: a missing value must be visibly missing, because a blank cell
+    # reads as zero or as "not interesting" and neither is true.
+    print()
+    print("SCORED PERFORMANCE METRICS (rule 18 -- measured at the scored configuration)")
+    any_task = False
+    for (task, sub), v in sorted(joined.items()):
+        cols = scored_metrics(task)
+        if not cols:
+            continue
+        any_task = True
+        sim = v["sim"]
+        percfg = (sim or {}).get("metrics") or {}
+        merged = {}
+        for _cfg, vals in percfg.items():
+            for k, val in vals.items():
+                merged.setdefault(k, val)
+        hdr = "  " + f"{task}/{os.path.basename(sub)}".ljust(38)
+        line = "  " + " ".ljust(38)
+        for name, label in cols:
+            hdr += label.rjust(12)
+            if name in merged:
+                line += str(merged[name]).rjust(12)
+            else:
+                line += "ABSENT".rjust(12)
+        print(hdr)
+        print(line)
+    if not any_task:
+        print("  (no task names scored_metrics, or no sim records exist)")
 
     if SHOW_METRICS:
         print()

@@ -1,60 +1,80 @@
-# d_dsp02 conformant perturbations — RETIRED, and the reason is the finding
+# d_dsp02 conformant perturbations — must PASS, not be killed
 
-**There is no conformant perturbation set for this task, and that is a
-consequence of rule 18 rather than an omission.**
+**I previously concluded this set was empty. That was wrong** — I had not
+enumerated the spec, I had listed the candidates that came to mind. The
+enumeration below is the correction, and it found a viable perturbation.
 
-## What happened to `cPIPE3`
+## The set
 
-`cPIPE3` was a three-stage pipelined binding, licensed by the spec clause
-*"LATENCY IS NOT CONSTRAINED AND NOT CHECKED."* Spec clause **S1 now pins
-latency at 3 cycles**, so:
+| id | perturbation | licence | witness | checker |
+|---|---|---|---|---|
+| `cRESBUS` | result and flag buses carry LFSR garbage whenever `out_valid` is low | **H3 scope** — H3 pins stability only when `out_valid` is HIGH; the spec says nothing about the buses when it is low | `result c03448d2 vs 00000000` @ t=46000, `out_valid=0` | **1/1 PASS** |
 
-- **its licence clause no longer exists**, and
-- **it is no longer a perturbation at all** — three stages is now the scored
-  configuration, so `cPIPE3` and the reference are the same design.
+Direct analogue of `v_ca05`'s `c2`. It survives the pinning of latency because
+its licence is H3's *scope*, not the latency clause.
 
-It is deleted rather than kept, because a "perturbation" identical to the
-reference is the purest form of the no-op control this project keeps finding
-(F25): it would pass every run and prove nothing, while looking like a control.
+**Confirmed conformant, not merely different:** whenever `out_valid` is high the
+two designs produce identical results, and `out_valid` itself never differs. It
+diverges only where the contract is silent.
 
-## Why nothing replaced it
+## Full enumeration — every behaviour the spec touches
 
-Rule 18 requires re-deriving the set against the new spec — every perturbation's
-licence clause must still exist. Working through what the spec still leaves
-open:
+An empty conformant set is only evidence of a complete spec if you can show
+every behaviour is either pinned or perturbed. Here it is not empty, but the
+enumeration is what establishes that.
 
-| candidate perturbation | licence | why it is not usable |
+| behaviour | clause | status |
 |---|---|---|
-| register placement within the 3 stages | **S1a**, genuinely open | **not simulation-observable.** Same latency, same results, same II. Only PPA distinguishes them. |
-| deeper or shallower pipeline | none — S1 pins it | now a spec violation, i.e. a mutant |
-| `in_ready` timing | H1 pins it | closed |
-| output stability under backpressure | H3 pins it | closed |
-| result ordering | H4 pins it | closed |
+| single rounding, no double-round | A1 | pinned |
+| five rounding modes | A2 | pinned |
+| subnormals in-pipeline | A3 | pinned |
+| canonical NaN payload | A4 | pinned |
+| underflow/overflow semantics | A4b | pinned |
+| signed zero | A5 | pinned |
+| tininess after rounding | A6 | pinned |
+| inexact on subnormal | A7 | pinned |
+| initiation interval | C3 | pinned |
+| **pipeline depth** | **S1** | **pinned (rule 18)** — was open, was `cPIPE3`'s licence |
+| register placement within the 3 stages | S1a | **open, PPA-observable only** — not usable as a simulation control |
+| `in_ready` combinational dependence | H1 | pinned |
+| producer holds valid/operands | H2 | pinned |
+| output stability while `out_valid` high | H3 | pinned |
+| result ordering | H4 | pinned |
+| reset polarity and synchronicity | R1 | pinned |
+| `out_valid` during reset | R2 | pinned |
+| in-flight work at reset (flush vs drain) | R3 | **pinned** — "reset discards work in flight" |
+| **result/flag buses while `out_valid` low** | **none** | **OPEN → `cRESBUS`** |
+| acceptance under sustained backpressure | C3, partially | **not perturbed** — see below |
 
-**S1a's freedom is real but lives in the wrong dimension.** A placement-only
-perturbation would be simulation-identical to the reference, so running it
-through the checker measures nothing — the F25 failure mode exactly, where four
-of five rows silently ran the same design and reported PASS.
+Two rows deserve the detail:
 
-The one candidate that *would* be simulation-observable — varying how much the
-design keeps accepting while the output is backpressured — was rejected because
-**I could not establish that it is conformant rather than a C3 violation.**
-Shipping a violation labelled "conformant" is worse than shipping no control:
-the conformant set's whole purpose is that a failure indicts the spec, and a
-mislabelled member would indict the spec for a real defect.
+**Reset mid-flight is pinned, and a depth-3 pipeline makes that a live question.**
+R3 settles it explicitly: work in flight is discarded. Had R3 been silent,
+flush-versus-drain would have been a strong conformant candidate.
 
-## What this costs, stated plainly
+**Backpressure acceptance is deliberately not perturbed.** Varying how long the
+design keeps accepting while the output is stalled is simulation-observable, but
+I could not establish it is conformant rather than a C3 violation. **Shipping a
+violation labelled conformant would break the set's premise**, since a failure
+here is supposed to indict the spec — a mislabelled member would indict it for a
+real defect. Left as a known gap rather than a guess.
 
-The conformant set is the control for *spec completeness* — it catches a checker
-relying on something the contract never promised. **This task no longer has that
-control**, and the honest reason is that its contract is now tight enough to
-leave nothing simulation-observable open.
+## What `cPIPE3` became
 
-That is a real trade rule 18 makes: pinning an axis buys a tractable baseline
-and gives up the perturbation that axis licensed. Worth knowing rather than
-discovering later.
+Retired and deleted. Its licence clause — *"latency is not constrained"* — no
+longer exists, and at depth 3 it **is** the reference, so keeping it would have
+shipped a perturbation identical to the design it perturbs: the purest form of
+the no-op control this project keeps finding (F25).
 
-**If a control is wanted here, it belongs in the PPA comparison**, not the
-checker: two register placements at the same pinned depth are the same contract
-built two ways, and a large PPA gap between them would be informative about the
-flow rather than about the spec.
+## A bug this set caught in itself
+
+The first `cRESBUS` **failed the checker**, which would have read as a checker
+defect — the checker sampling `result` while `out_valid` is low. It was my
+wiring: `inner_result` was left implicitly declared and became a **1-bit wire**,
+silently truncating the 32-bit result. The design elaborated and ran; it just
+returned garbage.
+
+Caught by neutralising the perturbation and finding the file failed anyway. That
+control costs one run and is the difference between reporting a checker defect
+and finding your own. The first version also used an asynchronous reset, which
+would have made it a violation of R1 rather than a conformant variant.

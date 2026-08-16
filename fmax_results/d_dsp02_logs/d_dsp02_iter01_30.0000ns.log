@@ -3605,3 +3605,30 @@ KLayout 0.30.7
 [INFO] No orphan cells in the final layout
 Elapsed time: 0:07.87[h:]min:sec. CPU time: user 7.17 sys 0.65 (99%). Peak memory: 934044KB.
 cp results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_1_merged.gds results/sky130hd/d_dsp02_fp32_fma_ii1/base/6_final.gds
+./logs/sky130hd/d_dsp02_fp32_fma_ii1/base
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+1_1_yosys_canonicalize    .rtlil          0             86 83c842f063f8ae36dc15
+1_2_yosys                 .v             17            133 c10c72923d8b9997bce9
+1_2_yosys                 .sdc                             cf7869e5ced85728f7e9
+1_synth                   .odb            0            155 fdf72cbee30487f6ee97
+1_synth                   .sdc                             d3a9c3abf2240d75a85e
+2_1_floorplan             .odb           24            201 139931d65c8870e347a2
+2_1_floorplan             .sdc                             d3a9c3abf2240d75a85e
+2_2_floorplan_macro       .odb            0            148 139931d65c8870e347a2
+2_3_floorplan_tapcell     .odb            0            148 9e12aa28dc29a3c4094c
+2_4_floorplan_pdn         .odb            0            174 3ec95bc87f21e597ed99
+3_1_place_gp_skip_io      .odb            2            166 3167416f83ec4a64c9ff
+3_2_place_iop             .odb            0            157 da183371a32873d47fe1
+3_3_place_gp              .odb           16            363 8d10b8813936ea1a6ce4
+3_4_place_resized         .odb            1            207 8d10b8813936ea1a6ce4
+3_5_place_dp              .odb            2            210 b1cacae43c90ddc28cfb
+4_1_cts                   .odb           57            240 48dd3f46493caf69b9de
+5_1_grt                   .odb           94            480 fcbf56d40f66932053fd
+5_1_grt                   .sdc                             3e039ce7b6406cc874dd
+5_2_route                 .odb          171           1433 091fb885c4c131533965
+5_3_fillcell              .odb            1            229 918cf80dc10aae78098c
+6_1_fill                  .odb            0            192 918cf80dc10aae78098c
+6_1_fill                  .sdc                             3e039ce7b6406cc874dd
+6_1_merge                                 7            912                  N/A
+6_report                                  8            508                  N/A
+Total                                   400           1433                     

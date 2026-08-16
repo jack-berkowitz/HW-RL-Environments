@@ -93,6 +93,20 @@ module fp32_fma_ii1_tb #(
     int cov_mode_disagree = 0;
     int cov_c3_offered = 0, cov_c3_accepted = 0, cov_c3_dead = 0;
 
+    // ---- S1: MEASURED latency and initiation interval ----------------------
+    // Both are MEASURED FROM THE DESIGN, never inferred from the spec's pinned
+    // value. The point is to catch a submission that declares LATENCY=3 and
+    // does something else -- same shape as MAX_TRANS, where the parameter
+    // existed and nothing bound it.
+    //
+    // latency: clocks from an accepted operation to the result appearing.
+    // init_interval: clocks between consecutive ACCEPTANCES at steady state.
+    int  meas_latency      = -1;   // -1 = never observed
+    int  meas_ii_min       = -1;
+    int  lat_counter       = -1;
+    int  since_last_accept = 0;
+    bit  lat_armed         = 1'b0;
+
     // ---- vector replay -----------------------------------------------------
     int issue_idx = 0, retire_idx = 0;
 
@@ -144,6 +158,54 @@ module fp32_fma_ii1_tb #(
             cov_c3_offered <= cov_c3_offered + 1;
             if (in_ready) cov_c3_accepted <= cov_c3_accepted + 1;
             else          cov_c3_dead     <= cov_c3_dead + 1;
+        end
+    end
+
+    // Latency: clocks from an accepted operation to its result appearing.
+    //
+    // CALIBRATED AGAINST TWO DESIGNS WITH KNOWN ANSWERS, and it took both to get
+    // right. The reference at NumPipeRegs=3 must read 3; the second source,
+    // which is purely combinational (`assign out_valid = in_valid`, zero
+    // always_ff), must read 0. The first version read 2 and 1 -- plausible,
+    // monotonic, and wrong at both ends.
+    //
+    // The same-cycle case is the one that is easy to miss: a combinational
+    // design already has out_valid high ON the acceptance edge, so it must be
+    // tested there rather than only on subsequent edges.
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            meas_latency <= -1; lat_counter <= -1; lat_armed <= 1'b0;
+        end else if (in_valid && in_ready && !lat_armed && meas_latency < 0) begin
+            if (out_valid) begin
+                meas_latency <= 0;            // combinational: result same cycle
+            end else begin
+                lat_armed   <= 1'b1;
+                lat_counter <= 1;
+            end
+        end else if (lat_armed) begin
+            if (out_valid) begin
+                meas_latency <= lat_counter;
+                lat_armed    <= 1'b0;
+            end else begin
+                lat_counter <= lat_counter + 1;
+            end
+        end
+    end
+
+    // Initiation interval: smallest gap between consecutive acceptances.
+    // The MINIMUM is the capability -- C3 asks what the design CAN sustain, and
+    // an average would be dragged around by stimulus gaps rather than by the
+    // design.
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            since_last_accept <= 0; meas_ii_min <= -1;
+        end else if (in_valid && in_ready) begin
+            since_last_accept <= 1;
+            if (since_last_accept > 0 &&
+                (meas_ii_min < 0 || since_last_accept < meas_ii_min))
+                meas_ii_min <= since_last_accept;
+        end else if (since_last_accept > 0) begin
+            since_last_accept <= since_last_accept + 1;
         end
     end
 
@@ -226,6 +288,8 @@ module fp32_fma_ii1_tb #(
         $display("METRIC: vectors=%0d checks=%0d", n_vec, checks);
         $display("METRIC: c3_offered=%0d c3_accepted=%0d c3_dead_cycles=%0d",
                  cov_c3_offered, cov_c3_accepted, cov_c3_dead);
+        $display("METRIC: latency_cycles=%0d init_interval=%0d",
+                 meas_latency, meas_ii_min);
 
         // C3 gate: no dead cycle while load was offered and results accepted.
         if (cov_c3_offered > 0 && cov_c3_dead > 0)

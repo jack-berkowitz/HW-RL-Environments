@@ -3,3 +3,5 @@ config domains/dsp/design/d_dsp02_fp32_fma_ii1/orfs/config.mk
 orfs output directory: d_dsp02_fp32_fma_ii1
 
 === phase 1: bracketing from 30.0 ns ===
+
+=== phase 2: bisecting (fail 30.0000, pass 60.0000] ns ===
