@@ -24,38 +24,40 @@ if pgrep -f "ppa_candidate|find_fmax" >/dev/null; then
   say "in-flight build finished"
 fi
 
-say "=== QUEUE START — 5 jobs ==="
-say "NOT queued: d_dsp02 PPA. No submission has seen the S1 latency"
-say "  requirement (F30), so the task needs re-soliciting before a PPA"
-say "  number means anything. Building it now would measure a spec change."
+say "=== QUEUE START — 3 jobs ==="
+say "NOT queued, and why:"
+say "  d_dsp02 PPA -- no submission has seen the S1 latency requirement (F30),"
+say "    so a build now would measure a spec change, not a model."
+say "  d_nw01/chat PPA and Fmax -- routing OOM-killed at the 5.8 GB Docker"
+say "    ceiling (peak 5.702 GB). An apparatus limit, not a result. A sweep"
+say "    would hit it at every period."
 
 # ---------------------------------------------------------------------------
-# 1. d_nw01/chat Fmax  -- fills an empty cell
-# ---------------------------------------------------------------------------
-say "[1/5] d_nw01/chat Fmax sweep (seed 6.0 ns)"
-PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 -u scripts/find_fmax.py \
-  --design d_nw01_cand_chat_scored --seed-period-ns 6.0 \
-  --max-bracket-iterations 4 --resolution-ns 0.5 --max-iterations 9 \
-  --skip-sim-check >> "$LOG" 2>&1
-say "[1/5] exit=$?"
+# WITHDRAWN: d_nw01/chat PPA and Fmax.
+#
+# Detailed routing was OOM-KILLED at the container ceiling: Docker MemTotal is
+# 5.8 GB and the run peaked at 5.702 GB, dying mid-iteration with no OpenROAD
+# error and exit 247. That is an APPARATUS LIMIT, not a result about the
+# candidate -- it was at 75 DRC violations and still improving when it died.
+#
+# An Fmax sweep runs the same place-and-route at every period, so it would hit
+# the same ceiling nine times over: roughly 15 hours to produce nothing.
+#
+# NOT scored zero under rule 19. Rule 19 is for build failures confirmed
+# genuine, as d_nw01/gemini was on two independent frontends. A design killed by
+# a memory limit has not been shown to fail anything.
+#
+# Unblocking it needs Docker's memory raised (Docker Desktop > Resources), which
+# is a host setting this queue cannot change. The host has 16 GB.
 
 # ---------------------------------------------------------------------------
-# 2. d_ca04/gemini Fmax -- fills an empty cell
-# ---------------------------------------------------------------------------
-say "[2/5] d_ca04/gemini Fmax sweep (seed 4.5 ns)"
-PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 -u scripts/find_fmax.py \
-  --design d_ca04_cand_gemini_own_fmax --seed-period-ns 4.5 \
-  --max-bracket-iterations 4 --resolution-ns 0.5 --max-iterations 9 \
-  --skip-sim-check >> "$LOG" 2>&1
-say "[2/5] exit=$?"
-
 # ---------------------------------------------------------------------------
 # 3-5. d_ca04 PPA re-runs THROUGH THE CORRECTNESS GATE.
 # These produce the same numbers as the existing records -- same RTL, same
 # config, same tool. What they buy is the gate stamp, so the headline task
 # stops carrying "PPA predates the correctness interlock" on every row.
 # ---------------------------------------------------------------------------
-say "[3/5] d_ca04 reference PPA at 2.625 ns (gated)"
+say "[1/3] d_ca04 reference PPA at 2.625 ns (gated)"
 CLK_PERIOD_NS=2.6250 WIPE_DESIGN=d_ca04_async_fifo_cdc PLATFORM=sky130hd \
   stdbuf -oL -eL ./scripts/run_orfs_build.sh \
   /work/domains/comp_arch/design/d_ca04_async_fifo_cdc/orfs/config.mk >> "$LOG" 2>&1
@@ -74,17 +76,17 @@ if [ "$RC" -eq 0 ]; then
     "clk_period_ns=2.625" "drc=0" "orfs_nickname=d_ca04_async_fifo_cdc" \
     "pdk=sky130hd" "correctness_gate=passed:reference-18/18" >> "$LOG" 2>&1
 fi
-say "[3/5] exit=$RC"
+say "[1/3] exit=$RC"
 
-say "[4/5] d_ca04/chat PPA at 4.5 ns (gated)"
+say "[2/3] d_ca04/chat PPA at 4.5 ns (gated)"
 CLK_PERIOD_NS=4.5000 stdbuf -oL -eL ./scripts/ppa_candidate.sh \
   d_ca04 candidates/d_ca04/chat.sv chat_gated >> "$LOG" 2>&1
-say "[4/5] exit=$?"
+say "[2/3] exit=$?"
 
-say "[5/5] d_ca04/gemini PPA at 4.5 ns (gated)"
+say "[3/3] d_ca04/gemini PPA at 4.5 ns (gated)"
 CLK_PERIOD_NS=4.5000 stdbuf -oL -eL ./scripts/ppa_candidate.sh \
   d_ca04 candidates/d_ca04/gemini.sv gemini_gated >> "$LOG" 2>&1
-say "[5/5] exit=$?"
+say "[3/3] exit=$?"
 
 say "=== QUEUE COMPLETE ==="
 say "table: python3 scripts/report_table.py"

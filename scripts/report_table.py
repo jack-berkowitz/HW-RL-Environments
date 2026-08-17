@@ -67,6 +67,16 @@ PREDATES_REQUIREMENT = {
          "2026-08-16; the spec it was given said \"latency is not constrained\""),
 }
 
+# Absent for a reason that had to be ESTABLISHED, not assumed. Rule 20 says an
+# unmeasured value renders absent; F31 says the reason for absence can itself be
+# a finding.
+PPA_UNAVAILABLE = {
+    ("d_nw01_axi4_xbar", "chat.sv"):
+        "place-and-route exceeded the 5.8 GB container memory limit during "
+        "detailed routing (peak 5.70 GB) — a limit of this test setup, not a "
+        "property of the design, which was at 75 DRC violations and improving",
+}
+
 BUILD_FAILURES = {
     ("d_nw01_axi4_xbar", "gemini.sv"):
         "anonymous struct as parameter value; confirmed on both frontends "
@@ -223,6 +233,10 @@ def main():
                         else f"{sim.get('configs_passed')}/{sim.get('configs_total')} FAIL")
 
             area = power = fmx = "—"
+            unavail = PPA_UNAVAILABLE.get(key)
+            if unavail and not ppa:
+                area = power = fmx = "*not measurable here*"
+                notes.append(f"**area, power and Fmax unavailable** — {unavail}")
             if ppa:
                 a = ppa.get("design_area_um2")
                 area = f"{int(float(a)):,}" if a else "—"

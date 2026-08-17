@@ -1548,6 +1548,60 @@ value. This one is **a correct measurement compared against the wrong contract**
 
 **Class:** contract defect. The apparatus was correct throughout.
 
+## F31. A resource limit that looks exactly like a design failure
+
+`d_nw01/chat` place-and-route died in detailed routing after 1 h 40 m:
+
+```
+[INFO DRT-0195] Start 3rd guides tiles iteration.
+    Completing 10% with 75 violations.
+    elapsed time = 00:00:00, memory = 5476.98 (MB)
+Peak memory: 5702896
+make: *** [do-5_2_route] Error 247
+```
+
+No OpenROAD error, no assertion, no message. **Docker `MemTotal` is 5.8 GB and
+the run peaked at 5.702 GB.** It was killed at the container ceiling. The host
+has 16 GB; the limit is a Docker Desktop allocation.
+
+**Why this is dangerous rather than merely annoying.** Every available signal
+points at the design:
+
+- it died in *detailed routing*, which is where a genuinely unroutable design
+  dies;
+- it had **75 DRC violations** outstanding, so "failed routing with violations"
+  is a completely plausible reading;
+- `d_nw01`'s history contains a real instance of exactly that — the re-solicited
+  candidate failed detailed routing at 2003 violations;
+- exit 247 is not a signal code, so nothing announces a kill.
+
+The one thing that distinguishes them is the memory number against the container
+limit, and it appears in the log as an unremarkable stage summary. **Read that
+routing failure without checking it and you conclude the candidate cannot be
+routed.** It was at 75 violations and still improving.
+
+**What it is not:** it is not a build failure under rule 19, and it must not
+score zero. Rule 19 is for failures *confirmed genuine* — `d_nw01/gemini`
+qualifies because two independent frontends reject its syntax. A design killed by
+a memory limit has not been shown to fail anything, and scoring it zero would
+attribute an apparatus limit to a model.
+
+**What it renders as:** absent, with the reason named — per rule 20, a value not
+measured for that design renders absent, and here even the *reason* for absence
+had to be established rather than assumed.
+
+**The compounding cost, caught before it was paid.** An Fmax sweep runs the same
+place-and-route at every period. Queued unattended it would have hit the same
+ceiling nine times over — roughly fifteen hours to produce nothing, and a
+`fmax_invalid_reason` at the end that says the sweep did not converge rather than
+that the machine ran out of memory. It was withdrawn from the queue.
+
+**Unresolved and outside the apparatus:** raising Docker's allocation is a host
+setting. Until then `d_nw01`'s largest submission has no PPA, and that is a
+limit of this bench rather than a property of the design.
+
+**Rules:** 19, 20
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET
