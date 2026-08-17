@@ -23,346 +23,376 @@ module fp32_fma_ii1 (
 );
 
     // =========================================================================
-    // PIPELINE FLOW CONTROL (II=1, Handshake H1-H4, Reset R1-R3)
+    // PIPELINE & HANDSHAKE CONTROL
     // =========================================================================
-    logic stage1_valid;
-    logic stage2_ready;
-    logic stage1_ready;
+    logic stall;
+    assign stall = out_valid && !out_ready;
+    assign in_ready = !stall;
 
-    // H1: in_ready depends ONLY on internal pipeline register state
-    assign stage2_ready = out_ready || !out_valid;
-    assign stage1_ready = stage2_ready || !stage1_valid;
-    assign in_ready     = stage1_ready;
+    logic v1, v2, v3;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            v1 <= 1'b0;
+            v2 <= 1'b0;
+            v3 <= 1'b0;
+        end else if (!stall) begin
+            v1 <= in_valid;
+            v2 <= v1;
+            v3 <= v2;
+        end
+    end
+
+    assign out_valid = v3;
+
+    // Helper functions
+    function automatic [6:0] count_lz_128(input logic [127:0] val);
+        integer i;
+        logic [6:0] lz;
+        lz = 7'd128;
+        for (i = 127; i >= 0; i = i - 1) begin
+            if (val[i]) begin
+                lz = 7'd127 - i[6:0];
+                break;
+            end
+        end
+        return lz;
+    endfunction
 
     // =========================================================================
-    // STAGE 0 -> STAGE 1: OPERAND UNPACKING & MULTIPLY
+    // STAGE 1: UNPACK, CLASSIFY, MULTIPLY & PRE-ALIGN
     // =========================================================================
-    // Input Operands Breakdown
-    wire        sign_a = a[31];
-    wire [7:0]  exp_a  = a[30:23];
-    wire [22:0] frac_a = a[22:0];
+    // Operand Unpack
+    logic sa, sb, sc;
+    logic [7:0] ea, eb, ec;
+    logic [22:0] ma, mb, mc;
 
-    wire        sign_b = b[31];
-    wire [7:0]  exp_b  = b[30:23];
-    wire [22:0] frac_b = b[22:0];
-
-    wire        sign_c = c[31];
-    wire [7:0]  exp_c  = c[30:23];
-    wire [22:0] frac_c = c[22:0];
+    assign {sa, ea, ma} = a;
+    assign {sb, eb, mb} = b;
+    assign {sc, ec, mc} = c;
 
     // Classification
-    wire is_zero_a = (exp_a == 8'd0) && (frac_a == 23'd0);
-    wire is_sub_a  = (exp_a == 8'd0) && (frac_a != 23'd0);
-    wire is_inf_a  = (exp_a == 8'd255) && (frac_a == 23'd0);
-    wire is_nan_a  = (exp_a == 8'd255) && (frac_a != 23'd0);
-    wire is_snan_a = is_nan_a && (frac_a[22] == 1'b0);
+    logic is_zero_a, is_zero_b, is_zero_c;
+    logic is_inf_a,  is_inf_b,  is_inf_c;
+    logic is_nan_a,  is_nan_b,  is_nan_c;
+    logic is_snan_a, is_snan_b, is_snan_c;
 
-    wire is_zero_b = (exp_b == 8'd0) && (frac_b == 23'd0);
-    wire is_sub_b  = (exp_b == 8'd0) && (frac_b != 23'd0);
-    wire is_inf_b  = (exp_b == 8'd255) && (frac_b == 23'd0);
-    wire is_nan_b  = (exp_b == 8'd255) && (frac_b != 23'd0);
-    wire is_snan_b = is_nan_b && (frac_b[22] == 1'b0);
+    assign is_zero_a = (ea == 8'd0)   && (ma == 23'd0);
+    assign is_zero_b = (eb == 8'd0)   && (mb == 23'd0);
+    assign is_zero_c = (ec == 8'd0)   && (mc == 23'd0);
 
-    wire is_zero_c = (exp_c == 8'd0) && (frac_c == 23'd0);
-    wire is_sub_c  = (exp_c == 8'd0) && (frac_c != 23'd0);
-    wire is_inf_c  = (exp_c == 8'd255) && (frac_c == 23'd0);
-    wire is_nan_c  = (exp_c == 8'd255) && (frac_c != 23'd0);
-    wire is_snan_c = is_nan_c && (frac_c[22] == 1'b0);
+    assign is_inf_a  = (ea == 8'd255) && (ma == 23'd0);
+    assign is_inf_b  = (eb == 8'd255) && (mb == 23'd0);
+    assign is_inf_c  = (ec == 8'd255) && (mc == 23'd0);
 
-    // Explicit Mantissas (Implicit Bit 1 for Normals, 0 for Subnormals)
-    wire [23:0] man_a = {(!is_sub_a && (exp_a != 8'd0)), frac_a};
-    wire [23:0] man_b = {(!is_sub_b && (exp_b != 8'd0)), frac_b};
-    wire [23:0] man_c = {(!is_sub_c && (exp_c != 8'd0)), frac_c};
+    assign is_nan_a  = (ea == 8'd255) && (ma != 23'd0);
+    assign is_nan_b  = (eb == 8'd255) && (mb != 23'd0);
+    assign is_nan_c  = (ec == 8'd255) && (mc != 23'd0);
 
-    // Effective Biased Exponents (Subnormal exponent = 1)
-    wire signed [12:0] exp_a_eff = is_sub_a ? 13'sd1 : $signed({5'b0, exp_a});
-    wire signed [12:0] exp_b_eff = is_sub_b ? 13'sd1 : $signed({5'b0, exp_b});
-    wire signed [12:0] exp_c_eff = is_sub_c ? 13'sd1 : $signed({5'b0, exp_c});
+    assign is_snan_a = is_nan_a && !ma[22];
+    assign is_snan_b = is_nan_b && !mb[22];
+    assign is_snan_c = is_nan_c && !mc[22];
 
-    // Exact Product Computation
-    wire is_prod_zero = is_zero_a || is_zero_b;
-    wire signed [12:0] exp_p = is_prod_zero ? 13'sd0 : (exp_a_eff + exp_b_eff - 13'sd127);
-    wire [47:0] prod_mant   = is_prod_zero ? 48'd0 : (man_a * man_b);
-    wire sign_p             = sign_a ^ sign_b;
+    // Mantissas with hidden bit
+    logic [23:0] MA, MB, MC;
+    assign MA = (ea == 8'd0) ? {1'b0, ma} : {1'b1, ma};
+    assign MB = (eb == 8'd0) ? {1'b0, mb} : {1'b1, mb};
+    assign MC = (ec == 8'd0) ? {1'b0, mc} : {1'b1, mc};
 
-    // Special Case Flags (Stage 1)
-    wire invalid_snan    = is_snan_a || is_snan_b || is_snan_c;
-    wire invalid_0xinf   = (is_zero_a && is_inf_b) || (is_inf_a && is_zero_b);
-    wire is_inf_p        = (is_inf_a || is_inf_b) && !invalid_0xinf;
-    wire eff_sub_s0      = sign_p ^ sign_c;
-    wire invalid_inf_sub = is_inf_p && is_inf_c && eff_sub_s0;
+    // Unbiased Exponents (13-bit signed integer)
+    logic signed [12:0] Exp_a, Exp_b, Exp_c, Exp_prod, Exp_base;
+    assign Exp_a = (ea == 8'd0) ? 13'sd1 - 13'sd127 : $signed({5'b0, ea}) - 13'sd127;
+    assign Exp_b = (eb == 8'd0) ? 13'sd1 - 13'sd127 : $signed({5'b0, eb}) - 13'sd127;
+    assign Exp_c = (ec == 8'd0) ? 13'sd1 - 13'sd127 : $signed({5'b0, ec}) - 13'sd127;
 
-    wire invalid_flag_s0 = invalid_snan || invalid_0xinf || invalid_inf_sub;
-    wire is_nan_res_s0   = invalid_flag_s0 || is_nan_a || is_nan_b || is_nan_c;
-    wire is_inf_res_s0   = (is_inf_p || is_inf_c) && !is_nan_res_s0;
+    // Multiplication
+    logic sp;
+    logic [47:0] P;
+    assign sp = sa ^ sb;
+    assign P  = MA * MB;
+    assign Exp_prod = Exp_a + Exp_b;
 
-    // -------------------------------------------------------------------------
-    // STAGE 1 PIPELINE REGISTERS
-    // -------------------------------------------------------------------------
-    logic [47:0]        s1_prod_mant;
-    logic signed [12:0] s1_exp_p;
-    logic               s1_sign_p;
-    logic [23:0]        s1_man_c;
-    logic signed [12:0] s1_exp_c;
-    logic               s1_sign_c;
-    logic [2:0]         s1_rnd_mode;
-    logic               s1_is_nan_res;
-    logic               s1_invalid_flag;
-    logic               s1_is_inf_res;
-    logic               s1_is_inf_p;
-    logic               s1_is_zero_p;
-    logic               s1_is_zero_c;
+    // Invalid & NaN Checks
+    logic is_invalid_s1;
+    logic is_nan_res_s1;
+    logic is_inf_res_s1;
+    logic is_zero_prod, is_inf_prod;
 
-    always_ff @(posedge clk) begin
+    assign is_zero_prod = is_zero_a || is_zero_b;
+    assign is_inf_prod  = is_inf_a  || is_inf_b;
+
+    assign is_invalid_s1 = is_snan_a || is_snan_b || is_snan_c ||
+                           (is_inf_prod && is_zero_prod) ||
+                           (is_inf_prod && is_inf_c && (sp != sc));
+
+    assign is_nan_res_s1 = is_nan_a || is_nan_b || is_nan_c || is_invalid_s1;
+    assign is_inf_res_s1 = (is_inf_prod || is_inf_c) && !is_nan_res_s1;
+
+    // Alignment logic
+    assign Exp_base = (Exp_prod > Exp_c) ? Exp_prod : Exp_c;
+
+    logic signed [12:0] shift_p_raw, shift_c_raw;
+    logic [7:0] shift_p, shift_c;
+
+    assign shift_p_raw = Exp_base - Exp_prod;
+    assign shift_c_raw = Exp_base - Exp_c;
+
+    assign shift_p = (shift_p_raw > 13'sd128) ? 8'd128 : shift_p_raw[7:0];
+    assign shift_c = (shift_c_raw > 13'sd128) ? 8'd128 : shift_c_raw[7:0];
+
+    // Wide alignment canvas (128 bits)
+    logic [127:0] P_wide, C_wide;
+    logic stk_p, stk_c;
+
+    always_comb begin
+        logic [255:0] P_ext, C_ext;
+        P_ext = {P, 208'b0} >> shift_p;
+        C_ext = {MC, 232'b0} >> shift_c;
+
+        P_wide = P_ext[255:128];
+        stk_p  = |P_ext[127:0];
+
+        C_wide = C_ext[255:128];
+        stk_c  = |C_ext[127:0];
+    end
+
+    // Pipeline Register 1 (S1 -> S2)
+    logic signed [12:0] s2_exp_base;
+    logic [127:0] s2_p_wide, s2_c_wide;
+    logic s2_sp, s2_sc, s2_stk_p, s2_stk_c;
+    logic s2_is_nan, s2_is_inf, s2_invalid;
+    logic s2_is_zero_prod, s2_is_zero_c;
+    logic [2:0] s2_rnd_mode;
+
+    always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            stage1_valid <= 1'b0;
-        end else if (stage1_ready) begin
-            stage1_valid <= in_valid;
-        end
-    end
-
-    always_ff @(posedge clk) begin
-        if (stage1_ready && in_valid) begin
-            s1_prod_mant    <= prod_mant;
-            s1_exp_p        <= exp_p;
-            s1_sign_p       <= sign_p;
-            s1_man_c        <= man_c;
-            s1_exp_c        <= exp_c_eff;
-            s1_sign_c       <= sign_c;
-            s1_rnd_mode     <= rnd_mode;
-            s1_is_nan_res   <= is_nan_res_s0;
-            s1_invalid_flag <= invalid_flag_s0;
-            s1_is_inf_res   <= is_inf_res_s0;
-            s1_is_inf_p     <= is_inf_p;
-            s1_is_zero_p    <= is_prod_zero;
-            s1_is_zero_c    <= is_zero_c;
+            s2_exp_base     <= '0;
+            s2_p_wide       <= '0;
+            s2_c_wide       <= '0;
+            s2_sp           <= '0;
+            s2_sc           <= '0;
+            s2_stk_p        <= '0;
+            s2_stk_c        <= '0;
+            s2_is_nan       <= '0;
+            s2_is_inf       <= '0;
+            s2_invalid      <= '0;
+            s2_is_zero_prod <= '0;
+            s2_is_zero_c    <= '0;
+            s2_rnd_mode     <= '0;
+        end else if (!stall) begin
+            s2_exp_base     <= Exp_base;
+            s2_p_wide       <= P_wide;
+            s2_c_wide       <= C_wide;
+            s2_sp           <= sp;
+            s2_sc           <= sc;
+            s2_stk_p        <= stk_p;
+            s2_stk_c        <= stk_c;
+            s2_is_nan       <= is_nan_res_s1;
+            s2_is_inf       <= is_inf_res_s1;
+            s2_invalid      <= is_invalid_s1;
+            s2_is_zero_prod <= is_zero_prod;
+            s2_is_zero_c    <= is_zero_c;
+            s2_rnd_mode     <= rnd_mode;
         end
     end
 
     // =========================================================================
-    // STAGE 1 DATAPATH: ALIGNMENT, WIDE ADD, NORMALIZATION, ROUNDING
+    // STAGE 2: ADDITION / SUBTRACTION & LEADING ZERO DETECT
     // =========================================================================
-    wire eff_sub_s1 = s1_sign_p ^ s1_sign_c;
+    logic eff_sub;
+    assign eff_sub = s2_sp ^ s2_sc;
 
-    // Determine Base Exponent and Shift Differences
-    wire signed [12:0] exp_base = (s1_exp_p > s1_exp_c) ? s1_exp_p : s1_exp_c;
-    wire signed [12:0] diff_p   = exp_base - s1_exp_p;
-    wire signed [12:0] diff_c   = exp_base - s1_exp_c;
-
-    // Clamped Shift Amounts (Width window of 160 bits)
-    wire [6:0] shift_p = (diff_p > 13'sd80) ? 7'd80 : diff_p[6:0];
-    wire [6:0] shift_c = (diff_c > 13'sd80) ? 7'd80 : diff_c[6:0];
-
-    // Wide Grid Alignment (Index 120 maps to weight 2^0 at exp_base)
-    wire [159:0] P_full = {38'b0, s1_prod_mant, 74'b0};
-    wire [159:0] C_full = {39'b0, s1_man_c, 97'b0};
-
-    wire [159:0] P_shifted = P_full >> shift_p;
-    wire [159:0] C_shifted = C_full >> shift_c;
-
-    // Exact Sticky Bit Computation from Shift-Outs
-    wire sticky_p = (diff_p > 13'sd80 && s1_prod_mant != 0) ||
-                    (|(P_full & ((160'b1 << shift_p) - 160'b1)));
-    wire sticky_c = (diff_c > 13'sd80 && s1_man_c != 0) ||
-                    (|(C_full & ((160'b1 << shift_c) - 160'b1)));
-
-    // Wide Addition / Subtraction
-    wire [160:0] P_with_sticky = {P_shifted, sticky_p};
-    wire [160:0] C_with_sticky = {C_shifted, sticky_c};
-
-    logic [160:0] sum_raw;
-    logic         sign_res_pre;
+    logic [127:0] sum_raw;
+    logic res_sign;
+    logic stk_eff;
 
     always_comb begin
-        if (!eff_sub_s1) begin
-            sum_raw      = P_with_sticky + C_with_sticky;
-            sign_res_pre = s1_sign_p;
+        stk_eff = s2_stk_p | s2_stk_c;
+        if (!eff_sub) begin
+            sum_raw  = s2_p_wide + s2_c_wide;
+            res_sign = s2_sp;
         end else begin
-            if (P_with_sticky >= C_with_sticky) begin
-                sum_raw      = P_with_sticky - C_with_sticky;
-                sign_res_pre = s1_sign_p;
+            if (s2_p_wide >= s2_c_wide) begin
+                sum_raw  = s2_p_wide - s2_c_wide - (s2_stk_c && !s2_stk_p ? 128'd1 : 128'd0);
+                res_sign = s2_sp;
             end else begin
-                sum_raw      = C_with_sticky - P_with_sticky;
-                sign_res_pre = s1_sign_c;
+                sum_raw  = s2_c_wide - s2_p_wide - (s2_stk_p && !s2_stk_c ? 128'd1 : 128'd0);
+                res_sign = s2_sc;
             end
         end
-    end
 
-    wire [159:0] sum_wide   = sum_raw[160:1];
-    wire         sticky_sum = sum_raw[0];
-
-    // Leading Zero Count / MSB Detection
-    logic [7:0] msb_idx;
-    logic       sum_is_zero;
-
-    always_comb begin
-        msb_idx     = 8'd0;
-        sum_is_zero = 1'b1;
-        for (integer i = 159; i >= 0; i--) begin
-            if (sum_wide[i]) begin
-                if (sum_is_zero) begin
-                    msb_idx     = i[7:0];
-                    sum_is_zero = 1'b0;
-                end
-            end
+        // Exact zero sign handling
+        if ((sum_raw == '0) && !stk_eff && (s2_is_zero_prod || s2_is_zero_c || eff_sub)) begin
+            res_sign = (s2_rnd_mode == 3'd2) ? 1'b1 : 1'b0; // RDN yields -0
         end
     end
 
-    // Exponent and Normalization Shift Calculation
-    wire signed [12:0] exp_sum_raw = exp_base + $signed({5'b0, msb_idx}) - 13'sd120;
+    logic [6:0] lz;
+    assign lz = count_lz_128(sum_raw);
 
-    logic signed [12:0] norm_shift;
-    logic signed [12:0] target_exp;
+    // Pipeline Register 2 (S2 -> S3)
+    logic signed [12:0] s3_exp_base;
+    logic [127:0] s3_sum_raw;
+    logic [6:0] s3_lz;
+    logic s3_res_sign, s3_stk_eff;
+    logic s3_is_nan, s3_is_inf, s3_invalid;
+    logic [2:0] s3_rnd_mode;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            s3_exp_base  <= '0;
+            s3_sum_raw   <= '0;
+            s3_lz        <= '0;
+            s3_res_sign  <= '0;
+            s3_stk_eff   <= '0;
+            s3_is_nan    <= '0;
+            s3_is_inf    <= '0;
+            s3_invalid   <= '0;
+            s3_rnd_mode  <= '0;
+        end else if (!stall) begin
+            s3_exp_base  <= s2_exp_base;
+            s3_sum_raw   <= sum_raw;
+            s3_lz        <= lz;
+            s3_res_sign  <= res_sign;
+            s3_stk_eff   <= stk_eff;
+            s3_is_nan    <= s2_is_nan;
+            s3_is_inf    <= s2_is_inf;
+            s3_invalid   <= s2_invalid;
+            s3_rnd_mode  <= s2_rnd_mode;
+        end
+    end
+
+    // =========================================================================
+    // STAGE 3: NORMALIZE, ROUND, TININESS DETECT & FINAL RESULT
+    // =========================================================================
+    logic [127:0] norm_sum;
+    logic signed [12:0] exp_norm;
+
+    assign norm_sum = s3_sum_raw << s3_lz;
+    assign exp_norm = s3_exp_base + 13'sd1 - $signed({6'b0, s3_lz});
+
+    // Subnormal shift calculation
+    logic signed [12:0] exp_biased;
+    assign exp_biased = exp_norm + 13'sd127;
+
+    logic [7:0] sub_shift;
+    logic [127:0] sub_norm_sum;
+    logic sub_stk;
 
     always_comb begin
-        if (exp_sum_raw >= 13'sd1) begin
-            target_exp = exp_sum_raw;
-            norm_shift = 13'sd120 - $signed({5'b0, msb_idx});
+        if (exp_biased <= 0) begin
+            logic signed [12:0] shift_amt;
+            logic [255:0] ext_norm;
+            shift_amt = 13'sd1 - exp_biased;
+            sub_shift = (shift_amt > 13'sd128) ? 8'd128 : shift_amt[7:0];
+
+            ext_norm     = {norm_sum, 128'b0} >> sub_shift;
+            sub_norm_sum = ext_norm[255:128];
+            sub_stk      = |ext_norm[127:0];
         end else begin
-            target_exp = 13'sd0;
-            norm_shift = exp_base - 13'sd1;
+            sub_shift    = 8'd0;
+            sub_norm_sum = norm_sum;
+            sub_stk      = 1'b0;
         end
     end
 
-    // Apply Normalization Shift
-    logic [159:0] aligned_mant;
-    logic         sticky_norm;
+    // Rounding Extraction
+    logic [22:0] mant_pre;
+    logic g_bit, r_bit, s_bit, l_bit;
 
+    assign mant_pre = sub_norm_sum[126:104];
+    assign l_bit    = mant_pre[0];
+    assign g_bit    = sub_norm_sum[103];
+    assign r_bit    = sub_norm_sum[102];
+    assign s_bit    = (|sub_norm_sum[101:0]) | s3_stk_eff | sub_stk;
+
+    logic rnd_inc;
     always_comb begin
-        if (norm_shift >= 0) begin
-            aligned_mant = sum_wide << norm_shift;
-            sticky_norm  = 1'b0;
-        end else begin
-            wire [7:0] rshift = (-norm_shift > 13'sd159) ? 8'd159 : (-norm_shift[7:0]);
-            aligned_mant = sum_wide >> rshift;
-            sticky_norm  = |(sum_wide & ((160'b1 << rshift) - 160'b1));
-        end
-    end
-
-    wire sticky_total = sticky_sum | sticky_norm;
-
-    // Rounding Bit Extraction
-    wire lsb      = aligned_mant[97];
-    wire g        = aligned_mant[96];
-    wire r        = aligned_mant[95];
-    wire s        = (|aligned_mant[94:0]) | sticky_total;
-    wire r_or_s   = r | s;
-    wire inexact_raw = g | r_or_s;
-
-    // Rounding Increments Across 5 Modes
-    logic round_up;
-    always_comb begin
-        case (s1_rnd_mode)
-            3'd0: round_up = g & (lsb | r_or_s);            // RNE
-            3'd1: round_up = 1'b0;                          // RTZ
-            3'd2: round_up = sign_res_pre & (g | r_or_s);   // RDN
-            3'd3: round_up = !sign_res_pre & (g | r_or_s);  // RUP
-            3'd4: round_up = g;                             // RMM
-            default: round_up = 1'b0;
+        case (s3_rnd_mode)
+            3'd0: rnd_inc = g_bit && (r_bit || s_bit || l_bit);           // RNE
+            3'd1: rnd_inc = 1'b0;                                          // RTZ
+            3'd2: rnd_inc = s3_res_sign  && (g_bit || r_bit || s_bit);     // RDN
+            3'd3: rnd_inc = !s3_res_sign && (g_bit || r_bit || s_bit);     // RUP
+            3'd4: rnd_inc = g_bit;                                         // RMM
+            default: rnd_inc = 1'b0;
         endcase
     end
 
-    wire [23:0] mant_pre  = aligned_mant[120:97];
-    wire [24:0] mant_post = mant_pre + round_up;
+    logic [24:0] mant_rounded;
+    assign mant_rounded = {1'b0, sub_norm_sum[127], mant_pre} + rnd_inc;
 
-    // Post-Rounding Exponent & Fraction Adjustment
+    // Exponent and Mantissa Post-Rounding Adjustment
     logic signed [12:0] final_exp;
-    logic [22:0]        final_frac;
+    logic [22:0] final_mant;
 
     always_comb begin
-        if (mant_post[24]) begin
-            final_exp  = target_exp + 13'sd1;
-            final_frac = mant_post[23:1];
-        end else if (target_exp == 13'sd0 && mant_post[23]) begin
-            final_exp  = 13'sd1;
-            final_frac = mant_post[22:0];
-        end else begin
-            final_exp  = target_exp;
-            final_frac = mant_post[22:0];
-        end
-    end
-
-    // Signed Zero Rules (A5)
-    logic sign_res;
-    always_comb begin
-        if (sum_is_zero || (s1_is_zero_p && s1_is_zero_c)) begin
-            if (eff_sub_s1) begin
-                sign_res = (s1_rnd_mode == 3'd2) ? 1'b1 : 1'b0; // RDN = -0, others +0
+        if (exp_biased <= 0) begin
+            if (mant_rounded[24]) begin // Normalization overflow from subnormal rounding
+                final_exp  = 13'sd1;
+                final_mant = 23'd0;
             end else begin
-                sign_res = s1_sign_p;
+                final_exp  = 13'sd0;
+                final_mant = mant_rounded[22:0];
             end
         end else begin
-            sign_res = sign_res_pre;
+            if (mant_rounded[24]) begin
+                final_exp  = exp_biased + 13'sd1;
+                final_mant = mant_rounded[23:1];
+            end else begin
+                final_exp  = exp_biased;
+                final_mant = mant_rounded[22:0];
+            end
         end
     end
 
-    // Exception Flags (A4b, A6)
-    wire is_overflow  = (final_exp >= 13'sd255) && !sum_is_zero;
-    wire is_underflow = (final_exp == 13'sd0) && inexact_raw && !sum_is_zero;
+    // Exception Flags & Special Output Formatting
+    logic is_inexact, is_overflow, is_underflow;
 
-    // Normal / Overflow Formatter
-    logic [31:0] normal_result;
-    always_comb begin
-        if (sum_is_zero) begin
-            normal_result = {sign_res, 31'b0};
-        end else if (is_overflow) begin
-            case (s1_rnd_mode)
-                3'd0, 3'd4: normal_result = {sign_res, 8'hFF, 23'b0};          // Inf
-                3'd1:       normal_result = {sign_res, 8'hFE, 23'h7F_FFFF};  // MaxNorm
-                3'd2:       normal_result = sign_res ? {1'b1, 8'hFF, 23'b0} : {1'b0, 8'hFE, 23'h7F_FFFF};
-                3'd3:       normal_result = sign_res ? {1'b1, 8'hFE, 23'h7F_FFFF} : {1'b0, 8'hFF, 23'b0};
-                default:    normal_result = {sign_res, 8'hFF, 23'b0};
-            endcase
-        end else begin
-            normal_result = {sign_res, final_exp[7:0], final_frac};
-        end
-    end
+    assign is_inexact = g_bit || r_bit || s_bit;
 
-    // Output Assembly
-    logic [31:0] final_result;
-    logic        res_invalid, res_overflow, res_underflow, res_inexact;
+    // Overflow check
+    assign is_overflow = (final_exp >= 13'sd255) && !s3_is_nan && !s3_is_inf;
+
+    // Tininess AFTER rounding check (Requirement A6)
+    assign is_underflow = (exp_biased <= 0) && (final_exp == 13'sd0) && is_inexact && !s3_is_nan;
 
     always_comb begin
-        if (s1_is_nan_res) begin
-            final_result  = 32'h7FC00000; // Requirement A4: Canonical QNaN
-            res_invalid   = s1_invalid_flag;
-            res_overflow  = 1'b0;
-            res_underflow = 1'b0;
-            res_inexact   = 1'b0;
-        end else if (s1_is_inf_res) begin
-            wire inf_sign = s1_is_inf_p ? s1_sign_p : s1_sign_c;
-            final_result  = {inf_sign, 8'hFF, 23'b0};
-            res_invalid   = 1'b0;
-            res_overflow  = 1'b0;
-            res_underflow = 1'b0;
-            res_inexact   = 1'b0;
+        if (s3_is_nan || s3_invalid) begin
+            result        = 32'h7FC00000; // Canonical Quiet NaN
+            flag_invalid   = s3_invalid || s3_is_nan;
+            flag_overflow  = 1'b0;
+            flag_underflow = 1'b0;
+            flag_inexact   = 1'b0;
+        end else if (s3_is_inf || is_overflow) begin
+            flag_invalid   = 1'b0;
+            flag_overflow  = is_overflow;
+            flag_underflow = 1'b0;
+            flag_inexact   = is_inexact || is_overflow;
+
+            if (s3_is_inf) begin
+                result = {s3_res_sign, 8'hFF, 23'd0};
+            end else begin
+                // Overflow rounding selection
+                case (s3_rnd_mode)
+                    3'd1: result = {s3_res_sign, 8'hFE, 23'h7FFFFF}; // RTZ
+                    3'd2: result = s3_res_sign  ? {s3_res_sign, 8'hFF, 23'd0} : {s3_res_sign, 8'hFE, 23'h7FFFFF}; // RDN
+                    3'd3: result = !s3_res_sign ? {s3_res_sign, 8'hFF, 23'd0} : {s3_res_sign, 8'hFE, 23'h7FFFFF}; // RUP
+                    default: result = {s3_res_sign, 8'hFF, 23'd0};  // RNE, RMM
+                endcase
+            end
+        end else if (s3_sum_raw == '0 && !s3_stk_eff) begin
+            result        = {s3_res_sign, 31'd0};
+            flag_invalid   = 1'b0;
+            flag_overflow  = 1'b0;
+            flag_underflow = 1'b0;
+            flag_inexact   = 1'b0; // False
+            flag_inexact   = 1'b0;
         end else begin
-            final_result  = normal_result;
-            res_invalid   = 1'b0;
-            res_overflow  = is_overflow;
-            res_underflow = is_underflow;
-            res_inexact   = inexact_raw | is_overflow;
-        end
-    end
-
-    // -------------------------------------------------------------------------
-    // STAGE 2 PIPELINE REGISTERS (OUTPUT REGISTER STAGE)
-    // -------------------------------------------------------------------------
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            out_valid <= 1'b0;
-        end else if (stage2_ready) begin
-            out_valid <= stage1_valid;
-        end
-    end
-
-    always_ff @(posedge clk) begin
-        if (stage2_ready && stage1_valid) begin
-            result         <= final_result;
-            flag_invalid   <= res_invalid;
-            flag_overflow  <= res_overflow;
-            flag_underflow <= res_underflow;
-            flag_inexact   <= res_inexact;
+            result        = {s3_res_sign, final_exp[7:0], final_mant};
+            flag_invalid   = 1'b0;
+            flag_overflow  = 1'b0;
+            flag_underflow = is_underflow;
+            flag_inexact   = is_inexact;
         end
     end
 

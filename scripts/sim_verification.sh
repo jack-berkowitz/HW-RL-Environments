@@ -29,10 +29,12 @@
 #      must accept them. A failure here means the submission checked something
 #      the specification never promised. See conformant/README.md.
 #
-#   3. MUTANT KILL RATE -- NOT AVAILABLE. v_ca05 has no mutant set; step 3 of
-#      the verification build prompt was never done. This script reports that
-#      explicitly rather than printing a score over an empty set, because
-#      "killed 0 of 0" reads like a result and is not one.
+#   3. FAULT DETECTION -- per mutant, never as a rate. If a task has no mutant
+#      set the script says so rather than printing a score over an empty set,
+#      because "caught 0 of 0" reads like a result and is not one.
+#      (This comment previously claimed v_ca05 HAS no mutant set while the code
+#      below read six of them -- the doc and the code disagreeing about the same
+#      file.)
 #
 # So a PASS here means "does not reject correct hardware and relies on nothing
 # unpromised". It does NOT mean the testbench is any good at finding bugs --
@@ -65,10 +67,38 @@ DUT_DIR="$TASK_DIR/dut"
 CONF="$TASK_DIR/conformant/conformant_perturbations.sv"
 [ -d "$DUT_DIR" ] || { echo "REFUSED: no dut/ under $TASK_DIR" >&2; exit 2; }
 
-# The golden top and the TB module the submission must declare. Named
-# explicitly, never discovered by pattern -- rule 10.
-GOLDEN_TOP="tag_tracker"
-TB_MOD="tag_tracker_tb"
+# ---- harness parameters FROM task.yaml, never hardcoded --------------------
+# These were literals, so the script silently produced nonsense for any task
+# whose modules are not called tag_tracker -- and there is no second
+# verification task yet, so nothing exposed it. Read from the task, and REFUSE
+# when absent: a missing parameter must stop the run, not default to v_ca05's.
+yget() {  # $1 = key under `harness:`
+  python3 - "$TASK_DIR/task.yaml" "$1" <<'PYY'
+import re, sys
+try:
+    t = open(sys.argv[1], encoding="utf-8").read()
+except OSError:
+    sys.exit(0)
+m = re.search(r"^harness:\s*$(.*?)(?=^\S)", t, re.M | re.S)
+if not m:
+    sys.exit(0)
+v = re.search(r"^\s+%s:\s*(.+?)\s*$" % re.escape(sys.argv[2]), m.group(1), re.M)
+print(v.group(1).split("#")[0].strip() if v else "")
+PYY
+}
+
+GOLDEN_TOP="$(yget golden_top)"
+TB_MOD="$(yget tb_module)"
+CONF_PREFIX="$(yget conformant_prefix)"
+MUT_PREFIX="$(yget mutant_prefix)"
+for _v in GOLDEN_TOP TB_MOD CONF_PREFIX MUT_PREFIX; do
+  if [ -z "${!_v}" ]; then
+    echo "REFUSED: $TASK_DIR/task.yaml has no harness.$(echo "$_v" | tr 'A-Z' 'a-z')" >&2
+    echo "  The harness will not guess module names. Add a harness: block with" >&2
+    echo "  golden_top, tb_module, conformant_prefix and mutant_prefix." >&2
+    exit 2
+  fi
+done
 # 25 s against a measured 0.02-0.30 s for the reference testbench and 0.26 s for
 # a real submission -- roughly 80x to 1000x margin. Deliberately generous: a
 # watchdog tuned near real runtime stops being a liveness check and becomes a
@@ -104,19 +134,23 @@ done
 # `tag_tracker` and delegating to `tag_tracker_golden`.
 DUTS=("golden")
 if [ -f "$CONF" ]; then
-  while read -r m; do DUTS+=("$m"); done < <(grep -oE "^module (tt_c[A-Za-z0-9_]+)" "$CONF" | awk '{print $2}')
+  while read -r m; do DUTS+=("$m"); done < <(grep -oE "^module (${CONF_PREFIX}[A-Za-z0-9_]+)" "$CONF" | awk '{print $2}')
 fi
 # Mutants VIOLATE the spec and must be KILLED -- opposite sign to conformant.
 MUT="$TASK_DIR/mutants/mutants.sv"
 MUTS=()
 if [ -f "$MUT" ]; then
   while read -r m; do MUTS+=("$m"); DUTS+=("$m"); done \
-    < <(grep -oE "^module (tt_m[A-Za-z0-9_]+)" "$MUT" | awk '{print $2}')
+    < <(grep -oE "^module (${MUT_PREFIX}[A-Za-z0-9_]+)" "$MUT" | awk '{print $2}')
 fi
 
 build_variant() {   # $1 = golden | tt_cN_...  -> writes variant.sv + extra.sv
-  case "$1" in tt_m*) SRC="$MUT" ;; *) SRC="$CONF" ;; esac
-  python3 "$REPO/scripts/_verif_variant.py" "$WORK" "$1" "$SRC" "$GOLDEN_TOP" || exit 2
+  case "$1" in ${MUT_PREFIX}*) SRC="$MUT" ;; *) SRC="$CONF" ;; esac
+  if ! python3 "$REPO/scripts/_verif_variant.py" "$WORK" "$1" "$SRC" "$GOLDEN_TOP"; then
+    echo "HARNESS ERROR building variant '$1' -- this is a SETUP problem, not a" >&2
+    echo "  verdict about the submission. Nothing is scored." >&2
+    exit 2
+  fi
 }
 
 echo "task=$TASK_NAME  golden=$GOLDEN_TOP  tb=$TB_MOD  duts=${#DUTS[@]}  submissions=${#SUBS[@]}"
@@ -148,7 +182,8 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     continue
   fi
 
-  allok=1; buildfail=0; NKILL=0; NMUT=0
+  allok=1; buildfail=0; NKILL=0; NMUT=0; NHUNG=0; NCONF=0; NCONF_OK=0
+  GOLDEN_VERDICT=unknown
   for v in "${DUTS[@]}"; do
     build_variant "$v"
     rm -rf "$WORK/obj"
@@ -189,18 +224,39 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
       if echo "$out" | grep -qE "^RESULT: *PASS"; then verdict=PASS; else verdict=FAIL; fi
     fi
     case "$v" in
-      tt_m*)   # a mutant must be KILLED: PASS here means the defect was missed
+      ${MUT_PREFIX}*)   # a mutant must be CAUGHT: PASS here means the defect was missed
         case "$verdict" in
           FAIL)    printf "  %-26s killed\n" "$v"; NKILL=$((NKILL+1)) ;;
-          TIMEOUT) printf "  %-26s HUNG  <- no watchdog; not a kill\n" "$v"; allok=0 ;;
+          TIMEOUT) printf "  %-26s HUNG  <- no watchdog; not a kill\n" "$v"
+                   NHUNG=$((NHUNG+1)); allok=0 ;;
           *)       printf "  %-26s SURVIVED  <- defect not caught\n" "$v"; allok=0 ;;
         esac
         NMUT=$((NMUT+1)) ;;
       *)       # golden and conformant must be ACCEPTED
         [ "$verdict" = "PASS" ] || allok=0
+        if [ "$v" = "golden" ]; then
+          GOLDEN_VERDICT="$verdict"
+        else
+          NCONF=$((NCONF+1)); [ "$verdict" = "PASS" ] && NCONF_OK=$((NCONF_OK+1))
+        fi
         printf "  %-26s %s\n" "$v" "$verdict" ;;
     esac
   done
+
+  # ---- RUN RECORD. Rule 8 applies to the verification half too, and did not
+  # hold there: every v_ca05 number was a literal print() and nothing outside
+  # the terminal ever saw it. That is F20 reproduced on this side of the
+  # harness -- a control built for the design path and never carried across.
+  python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$sub" sim "$label" \
+    "status=$([ "$allok" -eq 1 ] && echo completed || echo rejected)" \
+    "all_passed=$([ "$allok" -eq 1 ] && echo true || echo false)" \
+    "golden_accepted=$GOLDEN_VERDICT" \
+    "conformant_accepted=$NCONF_OK/$NCONF" \
+    "faults_caught=$NKILL/$NMUT" \
+    "faults_hung=$NHUNG" \
+    "did_not_compile=$buildfail" \
+    "kind_note=verification: per-mutant results are in the log; a rate is not reported" \
+    >/dev/null 2>&1 || true
 
   if [ "$allok" -eq 1 ]; then
     echo "  => ACCEPTED: passes the golden DUT and every conformant perturbation."
@@ -216,7 +272,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     else
       echo "  => REJECTED: see the FAIL rows above."
       echo "     A failure on 'golden' means the testbench rejects correct hardware."
-      echo "     A failure on a 'tt_c*' row means it relies on unpromised behaviour."
+      echo "     A failure on a '${CONF_PREFIX}*' row means it relies on unpromised behaviour."
     fi
   fi
   echo

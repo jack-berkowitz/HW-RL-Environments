@@ -1,0 +1,17 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "4/4",
+  "did_not_compile": "0",
+  "faults_caught": "6/6",
+  "faults_hung": "0",
+  "git_sha": "37be793879b0eaf5d36634696a1103cdebd4ae95-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "ref_tb_as_sub",
+  "status": "completed",
+  "submission": "/tmp/ref_tb_as_sub.sv",
+  "submission_sha256_16": "b76339e9b116c24c",
+  "task": "v_ca05_id_queue",
+  "timestamp_utc": "2026-08-17T17:42:52Z"
+}

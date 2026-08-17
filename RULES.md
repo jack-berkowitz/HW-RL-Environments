@@ -148,12 +148,6 @@ defects. It runs with the regression.
 
     **From:** working principle, no originating defect
 
-16. **A control that fails everything validates nothing.** A negative control
-    must pass some checks and fail exactly the one it targets. One that trips
-    every check cannot distinguish a working apparatus from one that reports
-    whatever the input says.
-
-    **From:** F25
 
 15. **Every contract term cites its source of authority** — a standard clause,
     a stated task intent, or a design decision recorded as such. **"Because the
@@ -171,6 +165,13 @@ defects. It runs with the regression.
     simply what cvfpu happened to do.
 
     **From:** F14
+
+16. **A control that fails everything validates nothing.** A negative control
+    must pass some checks and fail exactly the one it targets. One that trips
+    every check cannot distinguish a working apparatus from one that reports
+    whatever the input says.
+
+    **From:** F25
 
 17. **Any two PPA numbers compared must have matching build configuration,
     asserted mechanically rather than assumed.** Records carry a hash of the

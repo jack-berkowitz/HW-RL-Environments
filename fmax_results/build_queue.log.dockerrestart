@@ -1,0 +1,32 @@
+09:56:27  docker daemon reports 5.8 GB available
+09:56:27  === QUEUE START ===
+09:56:27  NOT queued, and why:
+09:56:27    d_dsp02 -- both submissions are BYTE-IDENTICAL (same sha256), so at most
+09:56:27      one model's answer is present, and both carry transport damage at line
+09:56:27      388 ('1 me0' where a literal belongs). Needs re-pasting before scoring.
+09:56:27    d_nw01/chat PPA+Fmax -- daemon still at 5.8 GB; needs >= 8 GB (F31).
+09:56:27  [1] d_ca04/gemini Fmax sweep (seed 4.5 ns) -- fills an empty cell
+design d_ca04_cand_gemini_own_fmax (candidate, sky130hd)
+config orfs_runs/d_ca04_cand_gemini_own_fmax/config.mk
+TWO-CLOCK design: second clock scaled with the first at ratio 1.6000 so the domain relationship is held fixed
+
+=== phase 1: bracketing from 4.5 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_ca04_cand_gemini_own_fmax
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 125; see fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter01_4.5000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 1.9 min
+  written to       : fmax_results/d_ca04_cand_gemini_own_fmax_fmax.json
+==============================================================
+09:58:24  [1] exit=1
+09:58:24  [2] d_nw01 reference PPA at 5.25 ns (gated) -- removes the last pre-gate marker
+clean build: wiped sky130hd/d_nw01_axi4_xbar (results, logs, objects, reports)
+constraining to CLK_PERIOD_NS=5.2500 (SDC + synthesis)
+failed to connect to the docker API at unix:///Users/jackberkowitz/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/jackberkowitz/.docker/run/docker.sock: connect: no such file or directory
+09:58:24  [2] exit=1
+09:58:24  [3,4] SKIPPED -- d_nw01/chat needs >= 8 GB, daemon reports 5.8 GB.
+09:58:24      Docker Desktop's saved setting can be raised without the running
+09:58:24      daemon picking it up. Restart Docker Desktop, then re-run this queue.
+09:58:24  === QUEUE COMPLETE ===
+09:58:24  table: python3 scripts/report_text.py

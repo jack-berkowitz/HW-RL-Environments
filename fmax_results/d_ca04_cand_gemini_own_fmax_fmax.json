@@ -1,0 +1,45 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_ca04_cand_gemini_own_fmax",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": null,
+  "achieved_fmax_mhz": null,
+  "wns_at_converged_ns": null,
+  "confirming_rerun": {
+    "ran": false,
+    "passed": false,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 4.5,
+    "period_pass": null,
+    "period_fail": null,
+    "bracket_iterations": 1
+  },
+  "final_interval": {
+    "period_pass": null,
+    "period_fail": null
+  },
+  "search_iterations": 0,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 4.5,
+      "wns_ns": null,
+      "tns_ns": null,
+      "drc": null,
+      "pass": false,
+      "status": "tool_error",
+      "wall_time_s": 116.5,
+      "log": "fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter01_4.5000ns.log",
+      "note": "run_orfs_build.sh exited 125; see fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter01_4.5000ns.log"
+    }
+  ],
+  "total_wall_time_s": 116.5,
+  "total_pnr_runs": 1,
+  "rtl_git_commit": "f44bc36f27f1187001aae1cd0e4fcbd0b1e1f174-dirty",
+  "timestamp": "2026-08-17T16:58:24.066385+00:00",
+  "aborted_reason": "seed run failed as a tool error: run_orfs_build.sh exited 125; see fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter01_4.5000ns.log"
+}

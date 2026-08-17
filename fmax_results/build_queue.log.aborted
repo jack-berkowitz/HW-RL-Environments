@@ -1,0 +1,11 @@
+00:09:50  waiting for the in-flight build to finish
+01:39:01  in-flight build finished
+01:39:01  === QUEUE START — 5 jobs ===
+01:39:01  NOT queued: d_dsp02 PPA. No submission has seen the S1 latency
+01:39:01    requirement (F30), so the task needs re-soliciting before a PPA
+01:39:01    number means anything. Building it now would measure a spec change.
+01:39:01  [1/5] d_nw01/chat Fmax sweep (seed 6.0 ns)
+design d_nw01_cand_chat_scored (candidate, sky130hd)
+config orfs_runs/d_nw01_cand_chat_scored/config.mk
+
+=== phase 1: bracketing from 6.0 ns ===

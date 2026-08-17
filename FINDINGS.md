@@ -54,8 +54,7 @@ Nothing errored. The output was indistinguishable from a full pass.
 
 **Found by**: adding a third testbench and noticing it would sort first.
 **Hid**: roughly the entire data contract — ordering, beat counts, decode errors.
-**Rule**: the runner names its artifacts explicitly and refuses when they are
-absent; it never discovers them by pattern.
+**Rule produced**: rule 10.
 
 **Rules:** 10
 ### P2. A reference that had never run at all
@@ -73,8 +72,8 @@ simulated.
 **Found by**: re-running every task's reference through the shared path after an
 unrelated change.
 **Hid**: the entire comparison that triggered a catalog rebuild.
-**Rule**: same as above — and every reference runs through the same gate as
-every candidate, every time.
+**Rule produced**: rule 10, and the corollary that every reference runs
+through the same gate as every candidate, every time.
 
 **Rules:** 10
 ### P3. A measurement sweep that ran one iteration and died
@@ -1606,7 +1605,7 @@ limit of this bench rather than a property of the design.
 
 # A STATED LIMITATION OF THE RULE SET
 
-**Every one of the fifteen rules exists because something broke.** That is the
+**Every one of the 20 rules exists because something broke.** That is the
 set's strength — none is speculative, each cites the finding that produced it,
 and the citation graph is checked mechanically.
 

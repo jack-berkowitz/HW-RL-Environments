@@ -55,6 +55,7 @@ was green throughout.
 
 Exit 0 if the graph is complete, 1 otherwise. Runs with the regression.
 """
+import glob
 import os
 import re
 import sys
@@ -123,11 +124,46 @@ for fid in sorted(finding_ids):
         errors.append(f"finding {fid} cites convention {conv!r}, "
                       f"which is not a heading in CONVENTIONS.md")
 
-# ---- rule 13: no rule list may exist outside RULES.md (F19) ----------------
-for fname, txt in (("FINDINGS.md", find_txt), ("CONVENTIONS.md", conv_txt)):
+# ---- rule 13: no rule RESTATEMENT may exist outside RULES.md ---------------
+# The first version rejected only a rule-list TABLE, which is the form F19
+# happened to find. TASK_CATALOG.md then carried the same defect as a NUMBERED
+# LIST with its own numbering, and passed -- the check was shaped like the
+# instance rather than like the rule.
+#
+# Detection is phrase reuse, not semantics: take a distinctive span of each
+# rule's opening sentence and look for it elsewhere. A legitimate reference
+# cites "rule N" and does not reproduce the sentence, so this does not fire on
+# citations. It cannot catch a careful paraphrase -- stated, not papered over.
+def rule_fingerprints(txt):
+    out = {}
+    for m in re.finditer(r"^(\d+)\. \*\*(.+?)\*\*", txt, re.M | re.S):
+        n, head = int(m.group(1)), " ".join(m.group(2).split())
+        words = re.sub(r"[^a-z0-9 ]", "", head.lower()).split()
+        if len(words) >= 6:
+            out[n] = " ".join(words[:8])
+    return out
+
+
+FINGERPRINTS = rule_fingerprints(rules_txt)
+
+for fname in sorted(glob.glob(os.path.join(REPO, "*.md")) +
+                    glob.glob(os.path.join(REPO, "domains", "*", "*", "*", "*.md"))):
+    base = os.path.relpath(fname, REPO)
+    if base == "RULES.md":
+        continue
+    try:
+        txt = open(fname, encoding="utf-8", errors="replace").read()
+    except OSError:
+        continue
+    flat = " ".join(re.sub(r"[^a-z0-9 ]", "", txt.lower()).split())
+    hits = sorted(n for n, fp in FINGERPRINTS.items() if fp in flat)
     if re.search(r"^\|\s*#\s*\|\s*rule\s*\|", txt, re.M | re.I):
-        errors.append(f"{fname} contains a rule-list table; the rules live only "
+        errors.append(f"{base} contains a rule-list table; the rules live only "
                       f"in RULES.md (rule 13, F19)")
+    if len(hits) >= 2:
+        errors.append(f"{base} RESTATES rules {hits} verbatim -- the rules live "
+                      f"only in RULES.md (rule 13, F19/F32). Cite 'rule N' "
+                      f"instead of reproducing the text.")
 
 # ---- report ---------------------------------------------------------------
 print(f"rules: {len(rule_ids)}   findings: {len(finding_ids)}   "

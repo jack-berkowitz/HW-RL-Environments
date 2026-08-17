@@ -1,0 +1,80 @@
+id: v_ca05
+module: tag_tracker
+domain: comp_arch
+type: verification
+catalog: TASK_CATALOG.md
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/common_cells
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/common_cells/src/id_queue.sv
+  golden: dut/tag_tracker.sv
+  note: >
+    SHIPS NO RTL. Under the decision recorded in TASK_CATALOG.md, a verification
+    task ships a port map and a pinned specification only. The golden DUT below
+    is used for scoring and is never given to a submission, so decontamination,
+    licence retention in a shipped derivative, and recognition exposure do not
+    arise. dut/ retains a decontaminated copy because it predates that decision
+    and is what the scoring harness runs.
+
+# ---- harness parameters. sim_verification.sh REFUSES if any is missing, and
+# ---- reads them from here rather than hardcoding v_ca05's names.
+harness:
+  golden_top: tag_tracker          # module the submission instantiates
+  tb_module: tag_tracker_tb        # module the submission must declare
+  conformant_prefix: tt_c          # perturbations that must be ACCEPTED
+  mutant_prefix: tt_m              # faults that must be CAUGHT
+  golden_file: dut/tag_tracker.sv
+  support_files: [dut/math_utils_pkg.sv, dut/lead_zero_ctr.sv, dut/onehot_encoder.sv]
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 25                # measured: reference TB 0.02-0.30 s, a real
+                                   # submission 0.26 s -- 80x to 1000x margin, so
+                                   # this stays a liveness check and never
+                                   # becomes a performance check
+
+spec: [spec/tag_tracker_spec.md]
+task_statement: probe/BLIND_TB_TASK.md
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpromised_reliance: must PASS all 4 conformant perturbations
+  fault_detection: reported PER MUTANT, never as a rate
+  note: >
+    A kill from a submission that FAILED the golden carries no information -- a
+    testbench that rejects everything appears to catch everything (rule 16). And
+    a HANG is not a catch: the submission did not detect the fault, it stopped,
+    and a correct-but-slow design hangs it identically.
+
+conformant_perturbations:
+  - {id: c1, licence: R11, change: match_gnt_o free-runs}
+  - {id: c2, licence: R10, change: pop_data_o garbage when pop_data_valid_o low}
+  - {id: c3, licence: R6,  change: push_gnt_o withheld on alternate cycles}
+  - {id: c4, licence: "latitude 6", change: pop_gnt_o delayed one cycle}
+
+mutants:
+  - {id: m1, class: boundary,   defect: accepts SLOTS-1, full_o one entry early, violates: R1}
+  - {id: m2, class: ordering,   defect: returns newest entry for a tag, violates: R2}
+  - {id: m3, class: capability, defect: half capacity, every transaction correct, violates: R1}
+  - {id: m4, class: liveness,   defect: tag 0 never granted (starvation, not deadlock), violates: R1}
+  - {id: m5, class: data,       defect: masked compare ignores bits 31:24, violates: R12}
+  - {id: m6, class: boundary,   defect: empty_o high at exactly one entry, violates: R14}
+  all_have_nonequivalence_witnesses: true
+  witness_harness: mutants/nonequiv_tb.sv
+
+second_dut:
+  status: ABSENT
+  required: true
+  why: >
+    A verification task's second DUT is the analogue of a design task's second
+    source: an independent correct implementation the submission must ALSO
+    accept. Without it, "passes the golden" cannot distinguish a testbench that
+    checks the contract from one that has been fitted to this particular
+    implementation's incidental behaviour. The conformant perturbations cover
+    part of that ground -- they vary what the spec leaves open -- but they are
+    perturbations OF the golden, not an independent design, so a shared
+    misconception between the golden and the checks is invisible to them.
+    NOTHING IN THE HARNESS CURRENTLY GATES ON THIS, which is why it is recorded
+    here rather than assumed.
