@@ -157,17 +157,28 @@ module fp_noncomp_tb;
       end else begin
         automatic exp_t e = exp_q.pop_front();
         n_checked = n_checked + 1;
-        if (e.chk_res && result !== e.res)
-          fail(e.op == OP_CMP ? "S7" : "S1",
-               $sformatf("op=%0d mode=%0d a=%h b=%h : result expected %h got %h",
-                         e.op, e.mode, e.a, e.b, e.res, result));
+        if (e.chk_res && result !== e.res) begin
+          automatic string cl;
+          unique case (e.op)
+            OP_SGNJ:   cl = "S1";
+            OP_MINMAX: cl = (is_nan(e.a) && is_nan(e.b)) ? "S5" :
+                            ((is_nan(e.a) || is_nan(e.b)) ? "S4" : "S3");
+            OP_CMP:    cl = "S7";
+            default:   cl = "S12";
+          endcase
+          fail(cl, $sformatf("op=%0d mode=%0d a=%h b=%h : result expected %h got %h",
+                             e.op, e.mode, e.a, e.b, e.res, result));
+        end
         if (e.chk_cls && class_mask !== e.cls)
           fail("S12", $sformatf("classify a=%h : mask expected %b got %b", e.a, e.cls, class_mask));
         if (status[3:0] !== 4'b0)
           fail("S14", $sformatf("op=%0d a=%h b=%h : DZ/OF/UF/NX must be zero, status=%b",
                                 e.op, e.a, e.b, status));
         if (status[4] !== e.st[4])
-          fail(e.op == OP_MINMAX ? "S6" : (e.op == OP_CMP ? "S8" : "S2"),
+          // S8 and S9 differ only in whether the comparison is signalling, so
+          // the NV clause depends on the MODE, not just the operation.
+          fail(e.op == OP_MINMAX ? "S6" :
+               (e.op == OP_CMP ? (e.mode == 3'd2 ? "S9" : "S8") : "S2"),
                $sformatf("op=%0d mode=%0d a=%h b=%h : NV expected %b got %b",
                          e.op, e.mode, e.a, e.b, e.st[4], status[4]));
       end
@@ -286,8 +297,19 @@ module fp_noncomp_tb;
 
     // -- D: random pairs ------------------------------------------------------
     phase = "D:random";
-    for (int k = 0; k < 400; k++)
-      issue(2'($urandom_range(0,3)), 3'($urandom_range(0,2)), $urandom, $urandom);
+    for (int k = 0; k < 400; k++) begin
+      automatic logic [1:0] ro = 2'($urandom_range(0,3));
+      automatic logic [2:0] rm;
+      // Legal modes per operation, section 0. MINMAX has only two; driving a
+      // third is out of scope under 10.6, and the design is entitled to return
+      // anything at all for it.
+      unique case (ro)
+        OP_MINMAX: rm = 3'($urandom_range(0,1));
+        OP_CLASS:  rm = 3'($urandom_range(0,7));   // ignored, so anything is legal
+        default:   rm = 3'($urandom_range(0,2));
+      endcase
+      issue(ro, rm, $urandom, $urandom);
+    end
     drain();
 
     // -- E: reset with an operation in flight (S15) ---------------------------

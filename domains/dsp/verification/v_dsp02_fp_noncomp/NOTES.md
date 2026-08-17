@@ -1,8 +1,8 @@
 # v_dsp02 `fp_noncomp` — evidence trail
 
-**STATUS: PARTIAL.** Plumbing and specification are done and verified. The
-reference testbench, second DUT, conformant set and mutant set are **not built**.
-Nothing here is scoreable as a task yet, and the ceiling is unknown.
+**STATUS: BUILT AND SCOREABLE.** Reference ceiling **6 of 6**; golden passes,
+5/5 conformant perturbations survive, 6/6 mutants are caught, each on exactly
+one clause. Second DUT built and **unwired** — see §4.
 
 **Oracle class A.** Anchor `refs/cvfpu/src/fpnew_noncomp.sv`, PULP `cvfpu`,
 SHL-0.51, sha `6e5267e2fe75198f91ef9304ddd56c0028eea526`.
@@ -135,17 +135,73 @@ placeholder testbench end to end. F22's order, not `d_dsp02`'s.
 
 ---
 
-## 7. What is NOT built
+## 7. Second DUT, and a declared difference that did not survive
 
-Reference testbench, second DUT, conformant perturbations, mutant set,
-`probe/BLIND_TB_TASK.md`. **No kill ceiling exists**, and the task must not be
-described as scoreable.
+`dut2/fp_noncomp_alt.sv`, **built and unwired** — the harness gates on the
+declaration and never compiles or runs it. It passes the reference testbench;
+zero rule-5 adjudications, the second task running.
 
-**The failure mode to design against when the mutant set is built** is the
-opposite of `v_nw03`'s. There the risk was an unfalsifiable liveness claim, and
-the answer was a bounded window. Here there is no liveness property at all and
-an enormous corner space, so the risk is **a mutant nobody kills because the
-corner is unreachable from a spec-only reading**. Every clause above was written
-to enumerate its corners explicitly — all ten classify classes, both NaN kinds
-for every operation, both zeros in both orderings — so that a competent reader
-knows which cases exist. A mutant must target a corner the specification names.
+Two of the three declared differences are internal mechanism (a monotone key map
+and one unsigned compare against the anchor's compare-then-correct; a direct
+one-hot classify decode against the anchor's separate classifier module).
+
+**The third was declared, measured, and did not survive.** It claimed that
+registering the outputs instead of the inputs would give a different handshake
+timing. Over 3178 cycles with random backpressure, `in_ready_o` and
+`out_valid_o` differ on **zero** cycles: cvfpu's ready path is combinational
+through every stage, so moving the register changes nothing an external observer
+can see. The record is kept rather than back-fitted, per `CONVENTIONS.md` —
+differences named after the fact describe whatever got built.
+
+**What survived was found by measuring, not by declaring.** The two disagree on
+1450 cycles and *every* disagreement is inside the latitude:
+
+| output | cycles differing | all of which |
+|---|---|---|
+| `result_o` | 333 | had op = CLASSIFY (§10.4) |
+| `class_mask_o` | 1117 | had op ≠ CLASSIFY (§10.5) |
+| `status_o` | 0 | — |
+
+The second DUT drives zero on the unconstrained outputs where the anchor drives
+datapath residue, so it probes §10.4 and §10.5 from the opposite side to `fn_c4`
+and `fn_c5`. That is a stronger property than the difference originally claimed.
+
+## 8. Reachability — the constraint this mutant set was built under
+
+`v_nw03`'s risk was an unfalsifiable liveness claim. Here there is no liveness
+property and an enormous corner space, so the opposite risk applies: **a mutant
+nobody kills because the corner is unreachable from a spec-only reading.** Every
+mutant targets a corner a clause NAMES; the mapping is in `mutants/README.md`.
+None had to be retired, but the check is the point, not the outcome.
+
+## 9. What the apparatus got wrong, and what found it
+
+Four defects, **none found by reading**:
+
+1. **The reference testbench drove a combination its own spec forbids.** Phase D
+   issued MINMAX with `op_mode_i = 2`, which §0 never lists and §10.6 puts out of
+   scope; the golden returned a don't-care value and the run failed. That is the
+   testbench violating the contract, and it confirms §10.6 is load-bearing.
+2. **The witness harness hung on the ready perturbation.** It polled
+   `out_valid_o` from the driver instead of capturing on the transfer edge, so a
+   perturbation that *delays acceptance* made it miss the one-cycle pulse. Now
+   monitor-based.
+3. **The witness harness could not see the idle-line perturbation, twice.**
+   First because it compared only outputs while valid was high; then, after an
+   idle-line counter was added, because the sink was permanently ready so the
+   pipeline was never idle and there were no idle cycles to observe. Fixed by
+   adding periodic idle windows.
+4. **The paste-ready file carried a doubled `);`** — a syntax error every
+   submission would have inherited, making each look like a model failure. Caught
+   only by byte-comparing the port map against the golden and linting it.
+
+`fn_m4` also needed a checker change to attribute correctly: S8 and S9 differ
+only in whether the comparison is signalling, so attributing an NV mismatch by
+operation alone named the wrong clause. It is now mode-dependent.
+
+## 10. Ceiling
+
+**6 of 6**, and the caveat from `v_nw03` is repeated here and **not
+discharged**: one author wrote the spec, the checker and the mutants, so the set
+has only been challenged by what that author anticipated. The first submission
+is the real test.

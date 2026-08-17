@@ -55,12 +55,73 @@ scored_configuration:
   pinned_inside_the_shim: [FpFormat=FP32, NumPipeRegs=1, PipeConfig=BEFORE, op_mod_i=0, is_boxed_i=3]
 
 second_dut:
-  status: PLANNED
-  why: >
-    Not yet built. Recorded rather than omitted so the harness refuses if this
-    is claimed without dut2/ being populated.
+  status: BUILT_UNWIRED
+  file: dut2/fp_noncomp_alt.sv
+  differences:
+    - "ordering: a monotone key map and ONE unsigned compare, against the anchor's
+       compare-then-correct with (a<b) ^ (sign_a||sign_b)"
+    - "classification: one-hot straight off the exponent/significand fields, against
+       the anchor's separate classifier module producing an info struct"
+    - "DECLARED pipeline placement (outputs vs inputs) -- MEASURED AND DID NOT
+       SURVIVE: in_ready_o and out_valid_o differ on ZERO of 3178 cycles, because
+       cvfpu's ready path is combinational through every stage. Record kept rather
+       than back-fitted."
+  surviving_difference_measured: >
+    The two disagree on 1450 cycles and every disagreement is inside the latitude:
+    result_o differs on 333 cycles, ALL with op=CLASSIFY (10.4); class_mask_o on
+    1117, ALL with op!=CLASSIFY (10.5); status_o on 0. The second DUT drives zero
+    where the anchor drives datapath residue, so it probes 10.4 and 10.5 from the
+    opposite side to fn_c4 and fn_c5.
+  result: passes the reference testbench, zero rule-5 adjudications
+  UNWIRED: >
+    sim_verification.sh gates on this DECLARATION only -- it refuses when a
+    non-ABSENT status has no dut2/ -- and never compiles or runs the file. Every
+    result above came from running the reference testbench by hand. Do not assume
+    it working as a gate.
 
 scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation
   fault_detection: reported PER MUTANT, never as a rate
+  reference_ceiling: 6 of 6
+  ceiling_caveat: >
+    Same caveat as v_nw03 and not discharged: one author wrote the spec, the
+    checker and the mutants, so the set has only been challenged by what that
+    author anticipated. The first submission is the real test.
+
+watchdog:
+  tb_sim_time_limit: 200000000    # time units
+  tb_sim_time_measured: 75us
+  harness_sim_timeout_s: 25
+  harness_wall_measured_s: 0.44   # cold; <0.01 warm
+
+conformant_perturbations:
+  - {id: fn_c1, licence: "10.1 latency",        witness: "all 1008 results one cycle later; values identical"}
+  - {id: fn_c2, licence: "10.2 idle outputs",   witness: "values and timing identical; idle-line changes 92 vs 461"}
+  - {id: fn_c3, licence: "10.3 ready",          witness: "1005 of 1008 results shift in time"}
+  - {id: fn_c4, licence: "10.4 result on CLASSIFY",     witness: "144 CLASSIFY results differ on result_o only"}
+  - {id: fn_c5, licence: "10.5 class on non-CLASSIFY",  witness: "864 results differ on class_mask_o only"}
+  enumeration: conformant/README.md
+  all_survive: true
+
+mutants:
+  - {id: fn_m1, class: capability, defect: "subnormals classified as zero",
+     violates: S12, killed_by: S12, witness: "classify 00000001: +subnormal vs +zero"}
+  - {id: fn_m2, class: standards,  defect: "IEEE 754-2019 minimum/maximum propagates NaN",
+     violates: S4,  killed_by: S4,  witness: "min(qNaN,+0): 00000000 vs 7fc00000"}
+  - {id: fn_m3, class: signed_zero, defect: "MINMAX treats -0.0 and +0.0 as interchangeable",
+     violates: S3,  killed_by: S3,  witness: "min(-0,+0): 80000000 vs 00000000"}
+  - {id: fn_m4, class: flags,      defect: "equality made a signalling comparison",
+     violates: S9,  killed_by: S9,  witness: "feq(qNaN,+0): result same, status 00000 vs 10000"}
+  - {id: fn_m5, class: variant,    defect: "SGNJX implemented as SGNJ",
+     violates: S1,  killed_by: S1,  witness: "sgnjx(-0,+0): 80000000 vs 00000000"}
+  - {id: fn_m6, class: payload,    defect: "SGNJ canonicalises a NaN instead of preserving payload",
+     violates: S1,  killed_by: S1,  witness: "sgnj(ffd5a5a5,+0): 7fd5a5a5 vs 7fc00000"}
+  all_have_nonequivalence_witnesses: true
+  witness_harness: mutants/nonequiv_tb.sv
+  isolation: "all six trip EXACTLY ONE clause, and it is the clause each targets"
+  reachability: >
+    Every mutant targets a corner the specification NAMES -- see mutants/README.md.
+    fp_noncomp has no liveness property and an enormous corner space, so the
+    failure mode is a mutant nobody kills because the corner is unreachable from a
+    spec-only reading. None had to be retired, but the check is the point.
