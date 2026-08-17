@@ -12,6 +12,30 @@ testbench and `FINDINGS.md` before deciding a check is good enough.
 
 ---
 
+## WHAT EVERY DESIGN TASK PROMPT MUST STATE
+
+**A submission must elaborate under BOTH slang and Verilator.** This belongs in
+the task text given to the model, not only in the harness, and the reason is
+F14's shape.
+
+`d_ca04/kimi.sv` was rejected by slang for using an identifier before its
+declaration and accepted by Verilator with zero errors. Verilator is the more
+permissive frontend; the construct is not legal SystemVerilog either way. But
+until this is written down, the submission fails **a requirement the task never
+stated** — an inherited tool behaviour acting as a contract term, which is
+exactly what F14 was about with the NaN payload.
+
+The task text must say, in the prompt itself:
+
+> Your design must elaborate under **both** Verilator 5.x and slang. These
+> disagree: Verilator accepts some constructs slang rejects, and synthesis uses
+> slang, so a design Verilator accepts may still be unbuildable. Declare every
+> identifier before use, and do not rely on one tool's tolerance.
+
+With that stated, a `kimi`-shaped failure is the submission failing something it
+was told, which is the standard rule 18 draws between a spec requirement and a
+hidden assumption.
+
 ## THE STANDING RULES
 
 **The rules live in `RULES.md` and nowhere else. Read it before starting, and

@@ -6116,3 +6116,5 @@ design d_dsp02_cand_chat_scored (candidate, sky130hd)
 config orfs_runs/d_dsp02_cand_chat_scored/config.mk
 
 === phase 1: bracketing from 12.0 ns ===
+
+=== phase 2: bisecting (fail 12.0000, pass 24.0000] ns ===

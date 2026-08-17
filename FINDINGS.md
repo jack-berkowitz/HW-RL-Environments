@@ -1645,6 +1645,90 @@ sits in rather than the check itself.
 
 **Rules:** 8
 
+## F33. The 6.4x area gap is not the multiplier, and is not yet quotable
+
+`d_dsp02/chat` placed at **440,336 um2** against the reference's **68,303** --
+6.4x. Every large ratio in this project has so far decomposed into off-spec
+configuration, capability gap and genuine difference, with the last share near
+zero twice. This one was put through the same three checks before being
+reported, and the third stops it.
+
+**1. Off-spec configuration: NO.** `chat` measures `latency_cycles=3`,
+`init_interval=1`. It implements S1. This is the first submission that does, and
+it is why the comparison was worth attempting at all.
+
+**2. Rule 17 comparability: FAILS -- and this is the blocker.** The reference's
+PPA record predates the build-config hash, so `compare_ppa.py` returns
+**UNCOMPARABLE** rather than a ratio. **The 6.4x is therefore not currently
+quotable**, and the reference is being rebuilt to produce one. Rule 17 was
+written after F24, where two builds differed in ABC target and every other
+signal said they were comparable; this is its first live use on a headline
+number and it refused it.
+
+**3. Structural decomposition: the interesting part, and it is not what it
+looks like.**
+
+| | reference | `chat` | ratio |
+|---|---|---|---|
+| full adders | 485 | **486** | **1.0x** |
+| half adders | 276 | 2,209 | 8.0x |
+| muxes | 330 | 2,597 | 7.9x |
+| flops | 263 | 724 | 2.8x |
+| total cells | 5,928 | 41,093 | 6.9x |
+| sequential share of area | 13.3 % | 5.5 % | — |
+
+**The multiplier is not the difference.** 485 against 486 full adders is the
+same 24x24 partial-product tree, almost cell for cell -- the obvious hypothesis
+(a naive non-Booth multiplier) is wrong, and would have been an appealing thing
+to write down.
+
+The excess is in **shifting and small-adder logic**: eight times the half
+adders, eight times the muxes. That is the signature of **unshared barrel
+shifters** -- alignment and normalisation each built their own mux tree instead
+of sharing one -- plus replicated increment logic, which is what a
+speculate-and-select rounding scheme costs if both candidates are computed with
+independent adders rather than one adder and a select.
+
+Note the sequential share *falls*, 13.3 % to 5.5 %: `chat` has 2.8x the flops
+but 6.9x the cells, so the design is not register-heavy. It is combinationally
+wasteful, which is a different and more fixable problem.
+
+**Why this is worth stating precisely.** "6.4x larger" invites the reading that
+the model cannot build an FMA. It built the hard part -- the compressor tree --
+at parity with a production implementation, and lost the area in structure
+sharing around it. Those are very different statements about capability.
+
+**Rules:** 9, 17
+
+## F34. Four outcome types, and Block 4 must not collapse them
+
+Submissions have produced four distinct outcomes. They mean different things
+about the model and a single pass/fail column destroys the distinction.
+
+| outcome | what happened | what it says about the model | PPA |
+|---|---|---|---|
+| **PASS** | compiles, meets the contract on every config | it solved the task | measured |
+| **build failure, both frontends** | slang *and* Verilator reject it | it did not produce valid SystemVerilog | zero (rule 19) |
+| **build failure, one frontend** | slang rejects, Verilator accepts | it produced something one tool tolerates and the other does not; **synthesis uses slang, so it cannot be built** | zero (rule 19) |
+| **correctness failure** | compiles cleanly, wrong answer at a named vector | it produced valid hardware that does the wrong thing | none — a number for a design that fails its contract is not a result |
+
+Instances: `d_ca04/deepseek` PASS; `d_dsp02/deepseek` and `d_nw01/gemini` reject
+on both; `d_ca04/kimi` rejects on slang only; `d_dsp02/gemini` fails at vector 4.
+
+**The two build-failure rows are worth separating** even though both score zero.
+Rejection by both frontends is unambiguous. Rejection by one is a claim that
+needs the reason attached — and until the two-frontend requirement was written
+into the task text, it was a submission failing something it had never been
+told, which is F14's shape.
+
+**The correctness failure is the most informative of the three failures** and
+the easiest to under-report. `d_dsp02/gemini` compiles, elaborates, and produces
+a wrong result at a specific input. That is a design defect with a witness,
+which is a far more interesting outcome than a syntax error, and collapsing it
+into "failed" alongside a design that would not parse loses that entirely.
+
+**Rules:** 19
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET
