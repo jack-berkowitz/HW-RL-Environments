@@ -30,6 +30,10 @@ harness:
   support_files: [dut/math_utils_pkg.sv, dut/lead_zero_ctr.sv, dut/onehot_encoder.sv]
   conformant_file: conformant/conformant_perturbations.sv
   mutant_file: mutants/mutants.sv
+  # Include dirs for the compile. v_ca05's DUT needs none, but the harness must
+  # support them: the next verification anchor (fpnew_noncomp) includes
+  # common_cells/registers.svh, and without this the compile simply fails.
+  include_dirs: refs/common_cells/include
   sim_timeout_s: 25                # measured: reference TB 0.02-0.30 s, a real
                                    # submission 0.26 s -- 80x to 1000x margin, so
                                    # this stays a liveness check and never

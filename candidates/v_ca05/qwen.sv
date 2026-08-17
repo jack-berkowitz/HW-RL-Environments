@@ -1,327 +1,272 @@
-`timescale 1ns/1ps
-
-// Define the payload type as specified in the parameter list
-typedef logic [31:0] payload_t;
-
 module tag_tracker_tb;
 
-    // -------------------------------------------------------------------------
-    // Parameters
-    // -------------------------------------------------------------------------
-    localparam int TAG_W      = 4;
-    localparam int SLOTS      = 16;
-    localparam int N_MATCH    = 2;
-    localparam bit FULL_RATE  = 1;
-    localparam bit CUT_POP_PATH = 1;
-    localparam int PAYLOAD_W  = $bits(payload_t);
+    localparam int TAG_W      = 3;
+    localparam int SLOTS      = 8;
+    localparam int N_MATCH    = 1;
+    localparam int PAYLOAD_W  = 32;
 
-    // -------------------------------------------------------------------------
-    // Signals
-    // -------------------------------------------------------------------------
-    logic clk, rst_n;
-    
-    // Push
-    logic                   push_req;
-    logic [TAG_W-1:0]       push_tag;
-    payload_t               push_data;
-    logic                   push_gnt;
-    
-    // Pop
-    logic                   pop_req;
-    logic [TAG_W-1:0]       pop_tag;
-    logic                   pop_en;
-    logic                   pop_gnt;
-    logic                   pop_data_valid;
-    payload_t               pop_data;
-    
-    // Search
-    logic [N_MATCH-1:0]             match_req;
-    payload_t [N_MATCH-1:0]         match_data;
-    payload_t [N_MATCH-1:0]         match_mask;
-    logic [N_MATCH-1:0]             match_gnt;
-    logic [N_MATCH-1:0]             match_hit;
-    
-    // Status
-    logic empty, full;
+    typedef logic [TAG_W-1:0]     tag_t;
+    typedef logic [PAYLOAD_W-1:0] payload_t;
 
-    // -------------------------------------------------------------------------
-    // Scoreboard / Reference Model
-    // -------------------------------------------------------------------------
-    // Per-tag queues to verify R2 (FIFO order) and R8 (oldest entry)
-    payload_t tag_queues [2**TAG_W-1:0][$]; 
-    
-    // Global list of all payloads to verify R12 (Content-addressed search)
-    payload_t all_payloads[$];
-    
-    int total_entries = 0;
-    int checks_passed = 0;
+    logic clk_i;
+    logic rst_ni;
 
-    // -------------------------------------------------------------------------
-    // DUT Instantiation
-    // -------------------------------------------------------------------------
-    // Note: The actual RTL is not shipped. This instantiation assumes the 
-    // standard port map derived from the specification.
-    tag_tracker #(
-        .TAG_W        (TAG_W),
-        .SLOTS        (SLOTS),
-        .N_MATCH      (N_MATCH),
-        .FULL_RATE    (FULL_RATE),
-        .CUT_POP_PATH (CUT_POP_PATH)
-    ) u_dut (
-        .clk_i            (clk),
-        .rst_ni           (rst_n),
-        .push_req_i       (push_req),
-        .push_tag_i       (push_tag),
-        .push_data_i      (push_data),
-        .push_gnt_o       (push_gnt),
-        .pop_req_i        (pop_req),
-        .pop_tag_i        (pop_tag),
-        .pop_en_i         (pop_en),
-        .pop_gnt_o        (pop_gnt),
-        .pop_data_valid_o (pop_data_valid),
-        .pop_data_o       (pop_data),
-        .match_req_i      (match_req),
-        .match_data_i     (match_data),
-        .match_mask_i     (match_mask),
-        .match_gnt_o      (match_gnt),
-        .match_hit_o      (match_hit),
-        .empty_o          (empty),
-        .full_o           (full)
-    );
+    tag_t     push_tag_i;
+    payload_t push_data_i;
+    logic     push_req_i;
+    logic     push_gnt_o;
 
-    // -------------------------------------------------------------------------
-    // Clock and Reset
-    // -------------------------------------------------------------------------
+    payload_t [N_MATCH-1:0] match_data_i;
+    payload_t [N_MATCH-1:0] match_mask_i;
+    logic     [N_MATCH-1:0] match_req_i;
+    logic     [N_MATCH-1:0] match_hit_o;
+    logic     [N_MATCH-1:0] match_gnt_o;
+
+    tag_t     pop_tag_i;
+    logic     pop_en_i;
+    logic     pop_req_i;
+    payload_t pop_data_o;
+    logic     pop_data_valid_o;
+    logic     pop_gnt_o;
+
+    logic full_o;
+    logic empty_o;
+
+    int fail_count = 0;
+
     initial begin
-        clk = 0;
-        forever #5 clk = ~clk;
+        clk_i = 0;
+        forever #5 clk_i = ~clk_i;
     end
 
     initial begin
-        rst_n = 0;
-        push_req = 0; pop_req = 0; match_req = 0;
-        pop_en = 0;
-        repeat(5) @(posedge clk);
-        rst_n = 1;
-        @(posedge clk);
-    end
-
-    // -------------------------------------------------------------------------
-    // Test Sequences
-    // -------------------------------------------------------------------------
-    initial begin
-        // Wait for reset to deassert
-        wait(rst_n === 1);
-        @(posedge clk);
-
-        $display("[%0t] Starting Testbench...", $time);
-        
-        test_reset_and_status();
-        test_push_pop_basic();
-        test_pop_absent_tag();      // Probes R10 (Load-bearing clause)
-        test_search_and_masks();    // Probes R12, R13
-        test_full_capacity();       // Probes R1, R5, R14
-        test_peek_vs_pop();         // Probes R9
-        
-        $display("==================================================");
-        $display("TEST PASSED: %0d checks completed successfully.", checks_passed);
-        $display("==================================================");
+        #1000000;
+        $display("WATCHDOG TIMEOUT - testbench hung");
+        $display("RESULT: FAIL");
         $finish;
     end
 
-    // -------------------------------------------------------------------------
-    // Tasks
-    // -------------------------------------------------------------------------
+    tag_tracker #(
+        .TAG_W        (TAG_W),
+        .SLOTS        (SLOTS),
+        .FULL_RATE    (0),
+        .CUT_POP_PATH (0),
+        .N_MATCH      (N_MATCH),
+        .payload_t    (payload_t)
+    ) dut (
+        .clk_i             (clk_i),
+        .rst_ni            (rst_ni),
+        .push_tag_i        (push_tag_i),
+        .push_data_i       (push_data_i),
+        .push_req_i        (push_req_i),
+        .push_gnt_o        (push_gnt_o),
+        .match_data_i      (match_data_i),
+        .match_mask_i      (match_mask_i),
+        .match_req_i       (match_req_i),
+        .match_hit_o       (match_hit_o),
+        .match_gnt_o       (match_gnt_o),
+        .pop_tag_i         (pop_tag_i),
+        .pop_en_i          (pop_en_i),
+        .pop_req_i         (pop_req_i),
+        .pop_data_o        (pop_data_o),
+        .pop_data_valid_o  (pop_data_valid_o),
+        .pop_gnt_o         (pop_gnt_o),
+        .full_o            (full_o),
+        .empty_o           (empty_o)
+    );
 
-    task automatic test_reset_and_status();
-        $display("[%0t] Testing Reset and Status (R14, R15)...", $time);
-        assert(empty === 1) else $fatal(1, "Empty not high after reset");
-        assert(full === 0) else $fatal(1, "Full high after reset");
-        checks_passed++;
-    endtask
-
-    task automatic test_push_pop_basic();
-        $display("[%0t] Testing Basic Push/Pop and Per-Tag FIFO (R2, R4)...", $time);
-        
-        // Push 3 items to Tag 1
-        do_push(1, 32'hAAAA);
-        do_push(1, 32'hBBBB);
-        do_push(1, 32'hCCCC);
-        
-        // Push 2 items to Tag 2
-        do_push(2, 32'h1111);
-        do_push(2, 32'h2222);
-
-        // Pop Tag 1 and verify FIFO order (R2)
-        // R3: We do NOT check cross-tag ordering here.
-        do_pop(1, 1, 32'hAAAA);
-        do_pop(1, 1, 32'hBBBB);
-        do_pop(1, 1, 32'hCCCC);
-        
-        // Pop Tag 2
-        do_pop(2, 1, 32'h1111);
-        do_pop(2, 1, 32'h2222);
-    endtask
-
-    // -------------------------------------------------------------------------
-    // CRITICAL TRAP: R10 (Pop of absent tag)
-    // A naive TB would fail here by expecting pop_gnt_o to be low, or by 
-    // treating pop_data_valid_o == 0 as a protocol violation.
-    // The spec explicitly states this must complete with valid low.
-    // -------------------------------------------------------------------------
-    task automatic test_pop_absent_tag();
-        $display("[%0t] Testing Pop of Absent Tag (R10)...", $time);
-        
-        // Tag 5 is empty. We request a pop.
-        pop_req <= 1;
-        pop_tag <= 5;
-        pop_en  <= 1;
-        
-        @(posedge clk);
-        while (!pop_gnt) @(posedge clk); // Wait for grant
-        
-        // The DUT WILL grant this. A naive TB would assert(pop_gnt && pop_data_valid) and fail.
-        assert(pop_data_valid === 0) else $fatal(1, "Pop of absent tag should have valid low");
-        
-        @(posedge clk);
-        pop_req <= 0;
-        checks_passed++;
-        $display("[%0t] R10 verified: Absent tag pop completed with valid low.", $time);
-    endtask
-
-    task automatic test_search_and_masks();
-        $display("[%0t] Testing Search and Masks (R12, R13)...", $time);
-        
-        // Push some data
-        do_push(0, 32'h12345678);
-        do_push(1, 32'h87654321);
-        
-        // Search for exact match
-        do_search(0, 32'h12345678, 32'hFFFFFFFF, 1);
-        
-        // Search for partial match (R12)
-        do_search(0, 32'h00005600, 32'h0000FF00, 1);
-        
-        // Search for miss
-        do_search(0, 32'hDEADBEEF, 32'hFFFFFFFF, 0);
-        
-        // Search with mask of all zeros (R13 - matches everything if non-empty)
-        do_search(1, 32'h00000000, 32'h00000000, 1);
-    endtask
-
-    task automatic test_full_capacity();
-        $display("[%0t] Testing Full Capacity (R1, R5, R14)...", $time);
-        
-        // Current entries: 2 (from search test)
-        // Push until full
-        while (!full) begin
-            do_push(3, 32'hF0F0);
+    task automatic check(input string req, input logic condition);
+        if (!condition) begin
+            $display("FAIL: %s", req);
+            fail_count++;
         end
-        
-        assert(total_entries == SLOTS) else $fatal(1, "Total entries mismatch when full");
-        assert(push_gnt === 0) else $fatal(1, "Push grant should be low when full (R5)");
-        
-        // Pop one to make space
-        do_pop(0, 1, 32'h12345678); // Popping the first item we pushed in search test
-        
-        assert(full === 0) else $fatal(1, "Full should deassert after pop");
-        checks_passed++;
     endtask
 
-    task automatic test_peek_vs_pop();
-        $display("[%0t] Testing Peek vs Pop (R9)...", $time);
-        
-        do_push(4, 32'hCAFE);
-        
-        // Peek (pop_en = 0)
-        pop_req <= 1;
-        pop_tag <= 4;
-        pop_en  <= 0;
-        @(posedge clk);
-        while(!pop_gnt) @(posedge clk);
-        assert(pop_data_valid === 1 && pop_data === 32'hCAFE) else $fatal(1, "Peek failed");
-        @(posedge clk);
-        pop_req <= 0;
-        
-        // Verify it wasn't removed by popping it again
-        do_pop(4, 1, 32'hCAFE);
-    endtask
-
-    // -------------------------------------------------------------------------
-    // Low-Level Handshake Tasks
-    // -------------------------------------------------------------------------
-
-    // -------------------------------------------------------------------------
-    // CRITICAL TRAP: R4 (Push Handshake Timing)
-    // The pilot noted: "The testbench deasserted push_req_i in the same 
-    // timestep as the @(posedge clk) it had just waited on". 
-    // This task ensures the request is HELD across the clock edge that samples 
-    // the grant, preventing the "phantom push" bug.
-    // -------------------------------------------------------------------------
-    task automatic do_push(input logic [TAG_W-1:0] tag, input payload_t data);
-        push_req  <= 1;
-        push_tag  <= tag;
-        push_data <= data;
-        
-        @(posedge clk);
-        
-        // Wait for grant
-        while (!push_gnt) @(posedge clk);
-        
-        // CRITICAL: Wait one MORE cycle before deasserting. 
-        // If we deassert in the same timestep we see the grant, the DUT might 
-        // sample push_req as 0 on the next clock edge, committing nothing.
-        @(posedge clk); 
-        push_req <= 0;
-        
-        // Update Scoreboard
-        tag_queues[tag].push_back(data);
-        all_payloads.push_back(data);
-        total_entries++;
-        
-        assert(!full || (total_entries == SLOTS)) else $fatal(1, "Scoreboard full mismatch");
-    endtask
-
-    task automatic do_pop(input logic [TAG_W-1:0] tag, input logic en, input payload_t expected_data);
-        pop_req <= 1;
-        pop_tag <= tag;
-        pop_en  <= en;
-        
-        @(posedge clk);
-        while (!pop_gnt) @(posedge clk);
-        
-        // Check outputs
-        assert(pop_data_valid === 1) else $fatal(1, "Pop expected valid high");
-        assert(pop_data === expected_data) else $fatal(1, "Pop data mismatch. Expected %h, got %h", expected_data, pop_data);
-        
-        @(posedge clk);
-        pop_req <= 0;
-        
-        // Update Scoreboard
-        if (en) begin
-            payload_t popped = tag_queues[tag].pop_front();
-            all_payloads.pop_front(); // Simplified; real SB would track exact payload
-            total_entries--;
-            assert(popped === expected_data) else $fatal(1, "Scoreboard FIFO mismatch");
+    task automatic push_entry(input tag_t tag, input payload_t data);
+        push_tag_i  = tag;
+        push_data_i = data;
+        push_req_i  = 1;
+        forever begin
+            @(posedge clk_i);
+            if (push_gnt_o) break;
         end
-        
-        checks_passed++;
+        @(posedge clk_i);
+        push_req_i = 0;
     endtask
 
-    task automatic do_search(input int port, input payload_t data, input payload_t mask, input logic expected_hit);
-        match_req[port]  <= 1;
-        match_data[port] <= data;
-        match_mask[port] <= mask;
-        
-        @(posedge clk);
-        while (!match_gnt[port]) @(posedge clk);
-        
-        assert(match_hit[port] === expected_hit) else 
-            $fatal(1, "Search port %0d hit mismatch. Expected %b, got %b", port, expected_hit, match_hit[port]);
-            
-        @(posedge clk);
-        match_req[port] <= 0;
-        checks_passed++;
+    task automatic pop_entry(input tag_t tag, input logic en,
+                             output payload_t data, output logic valid);
+        pop_tag_i = tag;
+        pop_en_i  = en;
+        pop_req_i = 1;
+        forever begin
+            @(posedge clk_i);
+            if (pop_gnt_o) begin
+                data  = pop_data_o;
+                valid = pop_data_valid_o;
+                break;
+            end
+        end
+        @(posedge clk_i);
+        pop_req_i = 0;
     endtask
+
+    task automatic search_entry(input payload_t data, input payload_t mask,
+                                output logic hit);
+        match_data_i[0] = data;
+        match_mask_i[0] = mask;
+        match_req_i[0]  = 1;
+        forever begin
+            @(posedge clk_i);
+            if (match_gnt_o[0]) begin
+                hit = match_hit_o[0];
+                break;
+            end
+        end
+        @(posedge clk_i);
+        match_req_i[0] = 0;
+    endtask
+
+    initial begin
+        rst_ni        = 0;
+        push_tag_i    = 0;
+        push_data_i   = 0;
+        push_req_i    = 0;
+        match_data_i  = 0;
+        match_mask_i  = 0;
+        match_req_i   = 0;
+        pop_tag_i     = 0;
+        pop_en_i      = 0;
+        pop_req_i     = 0;
+
+        repeat (5) @(posedge clk_i);
+
+        // ---------------------------------------------------------------
+        // R15: Reset behavior
+        // ---------------------------------------------------------------
+        check("R15", empty_o == 1'b1);
+        check("R15", full_o  == 1'b0);
+
+        rst_ni = 1;
+        repeat (2) @(posedge clk_i);
+
+        check("R15", empty_o == 1'b1);
+        check("R15", full_o  == 1'b0);
+
+        // ---------------------------------------------------------------
+        // R14: Status after reset
+        // ---------------------------------------------------------------
+        check("R14", empty_o == 1'b1);
+        check("R14", full_o  == 1'b0);
+
+        // ---------------------------------------------------------------
+        // R1, R2, R4, R8, R14: Push SLOTS entries (same tag), verify FIFO
+        // ---------------------------------------------------------------
+        for (int i = 0; i < SLOTS - 1; i++) begin
+            push_entry(tag_t'(0), payload_t'(i * 100));
+        end
+        check("R14", full_o  == 1'b0);
+        check("R14", empty_o == 1'b0);
+
+        push_entry(tag_t'(0), payload_t'((SLOTS - 1) * 100));
+        check("R1",  full_o  == 1'b1);
+        check("R14", empty_o == 1'b0);
+        check("R14", full_o  == 1'b1);
+
+        for (int i = 0; i < SLOTS; i++) begin
+            payload_t data;
+            logic     valid;
+            pop_entry(tag_t'(0), 1'b1, data, valid);
+            check("R8", valid == 1'b1);
+            check("R2", data == payload_t'(i * 100));
+        end
+
+        check("R14", empty_o == 1'b1);
+        check("R14", full_o  == 1'b0);
+
+        // ---------------------------------------------------------------
+        // R9: pop_en_i = 0 inspects but does not remove
+        // ---------------------------------------------------------------
+        push_entry(tag_t'(1), payload_t'(200));
+
+        payload_t data;
+        logic     valid;
+
+        pop_entry(tag_t'(1), 1'b0, data, valid);
+        check("R8", valid == 1'b1);
+        check("R2", data == payload_t'(200));
+
+        pop_entry(tag_t'(1), 1'b1, data, valid);
+        check("R8", valid == 1'b1);
+        check("R2", data == payload_t'(200));
+
+        pop_entry(tag_t'(1), 1'b1, data, valid);
+        check("R10", valid == 1'b0);
+
+        // ---------------------------------------------------------------
+        // R10: Pop of empty tag completes with valid low
+        // ---------------------------------------------------------------
+        pop_entry(tag_t'(7), 1'b1, data, valid);
+        check("R10", valid == 1'b0);
+
+        // ---------------------------------------------------------------
+        // R1, R5, R14: Fill store, verify push_gnt_o low when full
+        // ---------------------------------------------------------------
+        for (int i = 0; i < SLOTS; i++) begin
+            push_entry(tag_t'(i % 8), payload_t'(i * 10));
+        end
+
+        check("R1",  full_o  == 1'b1);
+        check("R14", empty_o == 1'b0);
+
+        push_tag_i  = tag_t'(0);
+        push_data_i = payload_t'(999);
+        push_req_i  = 1;
+        repeat (5) begin
+            @(posedge clk_i);
+            check("R5", push_gnt_o == 1'b0);
+        end
+        push_req_i = 0;
+        @(posedge clk_i);
+
+        pop_entry(tag_t'(0), 1'b1, data, valid);
+
+        push_entry(tag_t'(0), payload_t'(888));
+        check("R14", full_o == 1'b1);
+
+        // ---------------------------------------------------------------
+        // R11, R12, R13: Search
+        // Store contents: tag 0 -> 888, tags 1..7 -> 10,20,...,70
+        // ---------------------------------------------------------------
+        logic hit;
+
+        search_entry(payload_t'(32'h888), payload_t'(32'hFFFFFFFF), hit);
+        check("R12", hit == 1'b1);
+
+        search_entry(payload_t'(32'h12345678), payload_t'(32'hFFFFFFFF), hit);
+        check("R12", hit == 1'b0);
+
+        search_entry(payload_t'(32'h00000000), payload_t'(32'h00000000), hit);
+        check("R13", hit == 1'b1);
+
+        search_entry(payload_t'(32'h0000000A), payload_t'(32'hFFFFFFFF), hit);
+        check("R12", hit == 1'b1);
+
+        search_entry(payload_t'(32'h00000000), payload_t'(32'hFFFFFFF0), hit);
+        check("R12", hit == 1'b1);
+
+        search_entry(payload_t'(32'hFFFF0000), payload_t'(32'hFFFF0000), hit);
+        check("R12", hit == 1'b0);
+
+        // ---------------------------------------------------------------
+        // Final result
+        // ---------------------------------------------------------------
+        if (fail_count == 0) begin
+            $display("RESULT: PASS");
+        end else begin
+            $display("RESULT: FAIL");
+        end
+        $finish;
+    end
 
 endmodule

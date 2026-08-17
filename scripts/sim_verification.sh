@@ -87,6 +87,14 @@ print(v.group(1).split("#")[0].strip() if v else "")
 PYY
 }
 
+# Include directories, so a verification anchor with an `include compiles. The
+# design half has ref/sim_flags_verilator.txt for this; the verification half had
+# nothing, so any anchor with an include failed -- fpnew_noncomp.sv includes
+# common_cells/registers.svh, which is the next verification task in line.
+INCDIRS="$(yget include_dirs)"
+VINC=()
+for d in $INCDIRS; do VINC+=("+incdir+$REPO/$d"); done
+
 GOLDEN_TOP="$(yget golden_top)"
 TB_MOD="$(yget tb_module)"
 CONF_PREFIX="$(yget conformant_prefix)"
@@ -161,6 +169,15 @@ if [ -d "$SUB_ARG" ]; then
   for f in "$SUB_ARG"/*.sv; do [ -f "$f" ] && SUBS+=("$f"); done
   [ "${#SUBS[@]}" -gt 0 ] || { echo "no .sv submissions in $SUB_ARG"; exit 2; }
 else
+  # REFUSE a path that does not exist. Previously this fell through and printed
+  # two tracebacks from the normalisation and variant helpers, then continued to
+  # a scoreline -- the same shape as the task-resolution refusal, one argument
+  # along.
+  if [ ! -f "$SUB_ARG" ]; then
+    echo "REFUSED: no such submission file: $SUB_ARG" >&2
+    echo "  Pass a .sv file or a directory of them. Nothing was scored." >&2
+    exit 2
+  fi
   SUBS=("$SUB_ARG")
 fi
 
@@ -243,7 +260,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     build_variant "$v"
     rm -rf "$WORK/obj"
     if ! verilator --binary -j 4 --timing -Wno-fatal --top-module "$TB_MOD" \
-         -o run --Mdir "$WORK/obj" \
+         -o run --Mdir "$WORK/obj" ${VINC[@]+"${VINC[@]}"} \
          "${SUPPORT[@]}" "$WORK/variant.sv" "$WORK/extra.sv" "$WORK/sub.sv" \
          >"$WORK/build.log" 2>&1; then
       # A BUILD failure is NOT a verdict about the DUT. Kept distinct from
@@ -307,11 +324,23 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     "all_passed=$([ "$allok" -eq 1 ] && echo true || echo false)" \
     "golden_accepted=$GOLDEN_VERDICT" \
     "conformant_accepted=$NCONF_OK/$NCONF" \
-    "faults_caught=$NKILL/$NMUT" \
+    "faults_caught=$([ "$GOLDEN_VERDICT" = "PASS" ] && echo "$NKILL/$NMUT" || echo "SUPPRESSED-gate-failed")" \
     "faults_hung=$NHUNG" \
     "did_not_compile=$buildfail" \
     "kind_note=verification: per-mutant results are in the log; a rate is not reported" \
     >/dev/null 2>&1 || true
+
+  # A kill count from a submission that failed the VALIDITY GATE carries no
+  # information: a testbench that rejects everything appears to catch
+  # everything (rule 16). Printing "4/6 caught" beside a real 4/6 is the
+  # reporting-layer form of F20 -- a number that looks like a measurement and
+  # is not. Suppressed, with the reason, rather than shown.
+  if [ "$GOLDEN_VERDICT" != "PASS" ] && [ "${NMUT:-0}" -gt 0 ]; then
+    echo "  -- fault-detection result SUPPRESSED: this testbench REJECTS THE"
+    echo "     GOLDEN DUT, so it rejects correct and faulty hardware alike and"
+    echo "     its $NKILL/$NMUT tells you nothing (rule 16). Hangs likewise: a"
+    echo "     hang is not detection, and $NHUNG of these hung."
+  fi
 
   if [ "$allok" -eq 1 ]; then
     echo "  => ACCEPTED: passes the golden DUT and every conformant perturbation."

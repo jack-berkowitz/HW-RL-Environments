@@ -1729,6 +1729,93 @@ into "failed" alongside a design that would not parse loses that entirely.
 
 **Rules:** 19
 
+## F35. d_nw01 is not defective, and two models share one misconception
+
+Three of four `d_nw01` submissions fail to elaborate on both frontends, one with
+20 slang errors. Four independent models failing against one interface is more
+likely one interface problem than four model problems, so the interface was
+checked before the result was reported.
+
+**The interface is clean.** `axi4_xbar_pkg.sv` plus `axi4_xbar_iface.sv`
+elaborate with **zero errors on both Verilator and slang**, standalone. Not a
+task defect, and Block 4 will not report one as a capability result.
+
+**But the errors partly cluster, and that is the finding.** Two of three hit the
+same construct:
+
+| submission | first errors |
+|---|---|
+| `gemini` | `missing '(' in parameter list` — unrelated syntax |
+| `deepseek` | **`no member named 'b_ready' in 'slv_resp_t'`** + a redefinition with a different type |
+| `qwen` | `cannot refer to automatic variable 'i' from static initializer` + **`no member named 'b_ready' in 'slv_resp_t'`** |
+
+**`b_ready` is in `slv_req_t`, and that is correct AXI4** — `BREADY` is driven by
+the master, so it belongs in the request struct; `slv_resp_t` holds only
+slave-to-master signals. The shipped package defines it that way at line 116, and
+both models had that definition in front of them.
+
+So it is a model error, not a spec ambiguity — **and two independent models made
+the identical one.** That is worth reporting as a shared failure mode rather than
+as two separate defects: the request/response split in an AXI struct package puts
+the handshake signals of one channel on opposite sides, and reaching for
+`resp.b_ready` is the natural mistake if you think of B as "the response
+channel" rather than tracking signal direction.
+
+**What this does NOT license.** It is not evidence the packaging is wrong, and it
+is not grounds for moving `b_ready`: the package matches the standard, and
+changing it to match a common misreading would encode the misconception into the
+contract. The task stays as it is, and the shared error is a result about the
+models.
+
+**Rules:** 19
+
+## F36. A kill count from a testbench that fails the validity gate is not a number
+
+`v_ca05/gemini` **rejects the golden DUT and all four conformant perturbations**,
+then reported catching **6 of 6** mutants. Printed beside a genuine 5/6 that
+reads as the better testbench.
+
+It is not a measurement. A testbench that rejects everything rejects correct and
+faulty hardware alike, so it appears to catch every fault by construction — rule
+16 in the reporting layer rather than the control layer.
+
+**This is F20's shape one level along.** F20 was a number read from the wrong
+place; this is a number computed correctly from a run that cannot support it.
+Both look exactly like results.
+
+Now suppressed at the source, with the reason printed in place of the count, and
+recorded as `faults_caught=SUPPRESSED-gate-failed` rather than as a ratio. Hangs
+get the same treatment: a hang is not detection, and saying so in the row is
+cheaper than hoping a reader remembers.
+
+**Rules:** 16, 20
+
+## F37. Verification outcome taxonomy — five types, non-collapsible
+
+Distinct from the design taxonomy in F34, and for the same reason: a single
+column destroys what the results mean.
+
+| outcome | what happened | instance |
+|---|---|---|
+| **PASS** | accepts the golden and all conformant, catches faults | `chat`: 4/4 conformant, **5/6 caught**, 1 missed |
+| **format failure** | does not declare the module the task names | earlier `deepseek`: declared `tb_tag_tracker` |
+| **did not compile** | the testbench itself does not build | `deepseek`, `qwen` — both `expecting '{`, an array-literal syntax error |
+| **validity-gate failure** | rejects correct hardware; kill count suppressed | `gemini`: golden FAIL, 0/4 conformant |
+| **HUNG** | no watchdog; ran forever against the starvation mutant | earlier `chat` and `qwen` |
+
+A format failure is a failed attempt, not a harness problem — the task text names
+`tag_tracker_tb` explicitly, so declaring something else fails a stated
+requirement. Same treatment a wrong module name gets on the design side.
+
+**The most informative row is `chat`'s single miss.** It caught five of six and
+missed `m5`, the masked compare that ignores bits [31:24] — the same mutant our
+own reference testbench missed on first use, and the one that needed a mask
+covering the top byte to catch. Two independent testbenches missing the same
+fault says something about which corner is easy to overlook, and a rate would
+have hidden it.
+
+**Rules:** 16
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET

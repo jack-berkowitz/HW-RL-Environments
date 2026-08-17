@@ -23,10 +23,13 @@ source of authority; §10 names the alternatives this contract forecloses.
 | `2'd2` | CMP — comparison |
 | `2'd3` | CLASSIFY |
 
-*Authority: **a design decision recorded by this task**, and deliberately not an
-inherited one. RISC-V distinguishes these four operations by opcode and `funct7`,
-not by any operation field, so no external encoding exists to cite. The encoding
-above is dense and ordered as this document presents the operations.*
+*Authority: **a design decision recorded by this task. THIS ENCODING IS NOT A
+STANDARD AND MUST NOT BE CITED AS ONE.*** RISC-V distinguishes these four
+operations by opcode and `funct7`, not by any operation field, so no external
+encoding exists to cite and none is inherited here. The values above are dense
+and ordered as this document presents the operations; any other assignment would
+have been equally correct, and a later reader looking for the authority behind
+them will find only this paragraph.*
 
 | `op_i` | `op_mode_i` | variant |
 |---|---|---|
