@@ -1,0 +1,66 @@
+id: v_dsp02
+module: fp_noncomp
+domain: dsp
+type: verification
+catalog: TASK_CATALOG.md
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/cvfpu
+  refs_lock_sha: 6e5267e2fe75198f91ef9304ddd56c0028eea526
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/cvfpu/src/fpnew_noncomp.sv
+  closure: [refs/cvfpu/src/fpnew_pkg.sv, refs/cvfpu/src/fpnew_classifier.sv]
+  golden: dut/fp_noncomp.sv
+  note: >
+    SHIPS NO RTL. Task contents are spec/fp_noncomp_iface.sv and
+    spec/fp_noncomp_spec.md only.
+  anchor_modification: >
+    dut/fpnew_noncomp.sv is the anchor with its ONE `include
+    "common_cells/registers.svh" line replaced verbatim by that file's contents.
+    sim_verification.sh passes no -I include path and the verification half has
+    no sim_flags equivalent, so dut/ has to be self-contained. Verified
+    mechanically: outside the inlined block the file is line-for-line identical
+    to the anchor with the include removed (526 lines both sides).
+  provenance_caveat: >
+    Files present at the paths refs.manifest.yaml names, in a repo refs.lock
+    pins. Contents NOT verified against upstream at that SHA -- needs network,
+    egress closed. Attests local state only.
+
+harness:
+  golden_top: fp_noncomp
+  tb_module: fp_noncomp_tb
+  conformant_prefix: fn_c
+  mutant_prefix: fn_m
+  golden_file: dut/fp_noncomp.sv
+  support_files: [dut/fpnew_pkg.sv, dut/fpnew_classifier.sv, dut/fpnew_noncomp.sv]
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 25
+
+spec: [spec/fp_noncomp_spec.md, spec/fp_noncomp_iface.sv]
+task_statement: probe/BLIND_TB_TASK.md
+
+scored_configuration:
+  format: binary32
+  NumPipeRegs: 1
+  PipeConfig: BEFORE
+  rationale: >
+    No free parameters are exposed; the port map is fixed-width. NumPipeRegs=1
+    is NOT the anchor's default of 0: at 0 the unit is combinational and the
+    handshake degenerates to passthrough, so H1-H3 would have no state to be
+    wrong about. One stage makes the handshake real while leaving latency
+    unconstrained (latitude 1).
+  pinned_inside_the_shim: [FpFormat=FP32, NumPipeRegs=1, PipeConfig=BEFORE, op_mod_i=0, is_boxed_i=3]
+
+second_dut:
+  status: PLANNED
+  why: >
+    Not yet built. Recorded rather than omitted so the harness refuses if this
+    is claimed without dut2/ being populated.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpromised_reliance: must PASS every conformant perturbation
+  fault_detection: reported PER MUTANT, never as a rate
