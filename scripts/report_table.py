@@ -222,7 +222,7 @@ def main():
                 # nothing was measured, and "0" would read as "it built and
                 # measured nothing". The zero is a SCORE; the metrics are absent.
                 print("| " + " | ".join([name, "**did not build**", "**0**", "**0**", "**0**"]
-                                        + ["n/a — did not build"] * len(mets)
+                                        + ["n/a"] * len(mets)
                                         + [f"**build failure** — {bf}"]) + " |")
                 continue
 
@@ -235,7 +235,7 @@ def main():
             area = power = fmx = "—"
             unavail = PPA_UNAVAILABLE.get(key)
             if unavail and not ppa:
-                area = power = fmx = "*not measurable here*"
+                area = power = fmx = "n/a"
                 notes.append(f"**area, power and Fmax unavailable** — {unavail}")
             if ppa:
                 a = ppa.get("design_area_um2")
@@ -249,7 +249,10 @@ def main():
             if f_mhz:
                 fmx = f"{f_mhz:.1f}"
             elif ppa:
-                fmx = f"not swept (built at {ppa.get('clk_period_ns')} ns)"
+                # Short: this stretched the Fmax column past the terminal width
+                # in the fixed-width render. The build period is in the PPA
+                # record and is not an Fmax, so it does not belong in this cell.
+                fmx = "not swept"
 
             cells = [name, corr, area, power, fmx]
             # Metrics AT THE SCORED CONFIGURATION only. The first version

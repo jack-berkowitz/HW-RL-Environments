@@ -2,91 +2,95 @@
 # Sequential ORFS build queue. ORFS is single-occupancy -- two concurrent runs
 # share the flow directory and overwrite each other's reports, which is P4.
 #
-# Runs unattended. Every job is independent: a failure logs and the queue
-# continues, because losing four builds to the first one's problem is worse than
-# losing one.
-#
-# Progress is written UNBUFFERED to fmax_results/build_queue.log with
-# timestamps, so an interrupted queue can be read back -- the convention that
-# came out of a sweep sitting at zero bytes for two and a half hours.
+# Unattended. Jobs are independent: a failure logs and the queue continues.
+# Progress is UNBUFFERED to fmax_results/build_queue.log with timestamps, so an
+# interrupted queue can be read back.
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 LOG="fmax_results/build_queue.log"
 mkdir -p fmax_results
-
 say() { printf '%s  %s\n' "$(date '+%H:%M:%S')" "$*" | tee -a "$LOG"; }
 
-# ---- wait for whatever is already running ---------------------------------
 if pgrep -f "ppa_candidate|find_fmax" >/dev/null; then
   say "waiting for the in-flight build to finish"
   while pgrep -f "ppa_candidate|find_fmax" >/dev/null; do sleep 30; done
-  say "in-flight build finished"
 fi
 
-say "=== QUEUE START — 3 jobs ==="
+# ---- memory precondition, CHECKED not assumed (F31) ------------------------
+# d_nw01's candidate needs more than the 5.8 GB ceiling that OOM-killed it.
+# Docker Desktop's saved setting can be raised without the running daemon
+# picking it up -- it needs a restart -- so the queue reads what the DAEMON
+# reports rather than trusting the settings file.
+MEM_GB="$(docker info --format '{{.MemTotal}}' 2>/dev/null | awk '{printf "%.1f", $1/1024/1024/1024}')"
+say "docker daemon reports ${MEM_GB:-unknown} GB available"
+BIG_OK=0
+if [ -n "${MEM_GB:-}" ] && [ "$(echo "$MEM_GB >= 8.0" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+  BIG_OK=1
+fi
+
+say "=== QUEUE START ==="
 say "NOT queued, and why:"
-say "  d_dsp02 PPA -- no submission has seen the S1 latency requirement (F30),"
-say "    so a build now would measure a spec change, not a model."
-say "  d_nw01/chat PPA and Fmax -- routing OOM-killed at the 5.8 GB Docker"
-say "    ceiling (peak 5.702 GB). An apparatus limit, not a result. A sweep"
-say "    would hit it at every period."
+say "  d_dsp02 -- both submissions are BYTE-IDENTICAL (same sha256), so at most"
+say "    one model's answer is present, and both carry transport damage at line"
+say "    388 ('1 me0' where a literal belongs). Needs re-pasting before scoring."
+[ "$BIG_OK" = "1" ] || say "  d_nw01/chat PPA+Fmax -- daemon still at ${MEM_GB} GB; needs >= 8 GB (F31)."
 
 # ---------------------------------------------------------------------------
-# WITHDRAWN: d_nw01/chat PPA and Fmax.
-#
-# Detailed routing was OOM-KILLED at the container ceiling: Docker MemTotal is
-# 5.8 GB and the run peaked at 5.702 GB, dying mid-iteration with no OpenROAD
-# error and exit 247. That is an APPARATUS LIMIT, not a result about the
-# candidate -- it was at 75 DRC violations and still improving when it died.
-#
-# An Fmax sweep runs the same place-and-route at every period, so it would hit
-# the same ceiling nine times over: roughly 15 hours to produce nothing.
-#
-# NOT scored zero under rule 19. Rule 19 is for build failures confirmed
-# genuine, as d_nw01/gemini was on two independent frontends. A design killed by
-# a memory limit has not been shown to fail anything.
-#
-# Unblocking it needs Docker's memory raised (Docker Desktop > Resources), which
-# is a host setting this queue cannot change. The host has 16 GB.
+say "[1] d_ca04/gemini Fmax sweep (seed 4.5 ns) -- fills an empty cell"
+PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 -u scripts/find_fmax.py \
+  --design d_ca04_cand_gemini_own_fmax --seed-period-ns 4.5 \
+  --max-bracket-iterations 4 --resolution-ns 0.5 --max-iterations 9 \
+  --skip-sim-check >> "$LOG" 2>&1
+say "[1] exit=$?"
 
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# 3-5. d_ca04 PPA re-runs THROUGH THE CORRECTNESS GATE.
-# These produce the same numbers as the existing records -- same RTL, same
-# config, same tool. What they buy is the gate stamp, so the headline task
-# stops carrying "PPA predates the correctness interlock" on every row.
-# ---------------------------------------------------------------------------
-say "[1/3] d_ca04 reference PPA at 2.625 ns (gated)"
-CLK_PERIOD_NS=2.6250 WIPE_DESIGN=d_ca04_async_fifo_cdc PLATFORM=sky130hd \
+say "[2] d_nw01 reference PPA at 5.25 ns (gated) -- removes the last pre-gate marker"
+CLK_PERIOD_NS=5.2500 WIPE_DESIGN=d_nw01_axi4_xbar PLATFORM=sky130hd \
   stdbuf -oL -eL ./scripts/run_orfs_build.sh \
-  /work/domains/comp_arch/design/d_ca04_async_fifo_cdc/orfs/config.mk >> "$LOG" 2>&1
+  /work/domains/networking/design/d_nw01_axi4_xbar/orfs/config.mk >> "$LOG" 2>&1
 RC=$?
 if [ "$RC" -eq 0 ]; then
   FLOW="${ORFS_FLOW_DIR:-$HOME/tools/OpenROAD-flow-scripts/flow}"
-  L="$FLOW/logs/sky130hd/d_ca04_async_fifo_cdc/base"
-  R="$FLOW/reports/sky130hd/d_ca04_async_fifo_cdc/base"
-  python3 scripts/write_run_record.py d_ca04_async_fifo_cdc \
-    domains/comp_arch/design/d_ca04_async_fifo_cdc/ref/async_fifo_cdc_ref.sv \
+  L="$FLOW/logs/sky130hd/d_nw01_axi4_xbar/base"
+  R="$FLOW/reports/sky130hd/d_nw01_axi4_xbar/base"
+  python3 scripts/write_run_record.py d_nw01_axi4_xbar \
+    domains/networking/design/d_nw01_axi4_xbar/ref/axi4_xbar_ref.sv \
     ppa reference_gated \
     "status=completed" \
     "design_area_um2=$(grep -iE '^Design area' "$L/6_report.log" | tail -1 | grep -oE '[0-9]+' | head -1)" \
     "wns_ns=$(python3 -c "import json;print(json.load(open('$L/6_report.json'))['finish__timing__setup__ws'])" 2>/dev/null)" \
     "power_w=$(grep -A11 'finish report_power' "$R/6_finish.rpt" | grep -E '^Total' | awk '{print $5}')" \
-    "clk_period_ns=2.625" "drc=0" "orfs_nickname=d_ca04_async_fifo_cdc" \
-    "pdk=sky130hd" "correctness_gate=passed:reference-18/18" >> "$LOG" 2>&1
+    "clk_period_ns=5.25" "drc=0" "orfs_nickname=d_nw01_axi4_xbar" \
+    "pdk=sky130hd" "correctness_gate=passed:reference-16/16" >> "$LOG" 2>&1
 fi
-say "[1/3] exit=$RC"
+say "[2] exit=$RC"
 
-say "[2/3] d_ca04/chat PPA at 4.5 ns (gated)"
-CLK_PERIOD_NS=4.5000 stdbuf -oL -eL ./scripts/ppa_candidate.sh \
-  d_ca04 candidates/d_ca04/chat.sv chat_gated >> "$LOG" 2>&1
-say "[2/3] exit=$?"
+# ---------------------------------------------------------------------------
+if [ "$BIG_OK" = "1" ]; then
+  say "[3] d_nw01/chat PPA at 5.25 ns -- retry with ${MEM_GB} GB available"
+  CLK_PERIOD_NS=5.2500 stdbuf -oL -eL ./scripts/ppa_candidate.sh \
+    d_nw01 candidates/d_nw01/chat.sv chat_scored >> "$LOG" 2>&1
+  RC3=$?
+  say "[3] exit=$RC3"
 
-say "[3/3] d_ca04/gemini PPA at 4.5 ns (gated)"
-CLK_PERIOD_NS=4.5000 stdbuf -oL -eL ./scripts/ppa_candidate.sh \
-  d_ca04 candidates/d_ca04/gemini.sv gemini_gated >> "$LOG" 2>&1
-say "[3/3] exit=$?"
+  if [ "$RC3" -eq 0 ]; then
+    say "[4] d_nw01/chat Fmax sweep (seed 6.0 ns)"
+    PYTHONUNBUFFERED=1 stdbuf -oL -eL python3 -u scripts/find_fmax.py \
+      --design d_nw01_cand_chat_scored --seed-period-ns 6.0 \
+      --max-bracket-iterations 4 --resolution-ns 0.5 --max-iterations 9 \
+      --skip-sim-check >> "$LOG" 2>&1
+    say "[4] exit=$?"
+  else
+    say "[4] SKIPPED -- the single PPA build did not complete, so a 9-iteration"
+    say "    sweep of the same place-and-route would not either. F31: the cost of"
+    say "    queueing a sweep whose every iteration fails is ~15 hours for nothing."
+  fi
+else
+  say "[3,4] SKIPPED -- d_nw01/chat needs >= 8 GB, daemon reports ${MEM_GB} GB."
+  say "    Docker Desktop's saved setting can be raised without the running"
+  say "    daemon picking it up. Restart Docker Desktop, then re-run this queue."
+fi
 
 say "=== QUEUE COMPLETE ==="
-say "table: python3 scripts/report_table.py"
+say "table: python3 scripts/report_text.py"
