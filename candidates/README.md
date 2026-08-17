@@ -71,6 +71,17 @@ parameters, and rounding mode is a runtime input swept by the 4290-vector set).
 the vendored `fpnew_pkg` — so it fails the slang gate as a candidate and cannot
 be used as a smoke test. That is correct behaviour, not a defect.
 
+### `v_nw03` — TESTBENCH submissions
+
+```bash
+./scripts/sim_verification.sh v_nw03 candidates/v_nw03/chat.sv
+```
+
+Same script as `v_ca05`. Twelve DUT rows, and unlike `v_ca05` the mutant set
+exists, so fault detection is measured: golden + 5 conformant perturbations that
+must be accepted, 6 mutants that must be caught. Submissions declare
+`module frame_arb_mux_tb`. Report kills against the 6/6 reference ceiling.
+
 ### `v_ca05` — TESTBENCH submissions
 
 ```bash

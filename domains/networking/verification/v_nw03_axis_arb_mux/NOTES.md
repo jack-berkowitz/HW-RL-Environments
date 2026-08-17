@@ -245,9 +245,37 @@ testbench end to end **before** the spec was written — the order `d_dsp02`
 `golden_accepted: PASS` for a testbench that checks nothing, which reads like a
 result and is not one.
 
-## 10. Reported separately, not fixed here
+## 10. The scoring path was validated before any submission arrived
+
+Two negative controls, run through `sim_verification.sh` itself rather than
+against the checker in isolation. F25 is the reason there are two: a crude
+control made a dead harness look validated, and only the specific one had power.
+
+| control | golden | conformant | mutants |
+|---|---|---|---|
+| `nc1_vacuous_pass_tb` — checks nothing, prints PASS | PASS | 5/5 | **0/6, all SURVIVED** |
+| `nc2_unpromised_reliance_tb` — requires `s_tready_o` all-high while idle | PASS | **4/5, fails `fm_c1`** | 0/6 |
+
+`nc1` establishes that the mutant rows have power: a testbench that checks
+nothing catches nothing, so a kill means something.
+
+**`nc2` is the one that matters.** It passes the golden, passes four
+perturbations, and fails **exactly** `fm_c1` — the perturbation whose licence
+(S6, latitude 3) is precisely what it violates. Fails the row it targets and no
+other, which is what rule 3 asks of a control and what a fail-everything control
+can never demonstrate.
+
+Both live in `tb/audit/` and are never scored.
+
+**Cost note for whoever runs submissions:** twelve DUT rows means twelve full
+Verilator builds per submission, roughly 2–4 minutes each. Budget for it.
+
+## 11. Reported separately, not fixed here
 
 - `TASK_CATALOG.md:166`'s fairness claim is wrong for the module as it stands
   (§1 above). Agent 1 is correcting the catalog.
 - The second-DUT gate checks the declaration, not the measurement. Nothing runs
   `dut2/`.
+- `sim_verification.sh` given a submission path that does not exist prints two
+  Python tracebacks and continues rather than refusing. Same family as the
+  task-resolution refusal Agent 1 already fixed, one argument along.
