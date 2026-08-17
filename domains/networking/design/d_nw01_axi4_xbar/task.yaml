@@ -128,6 +128,22 @@ scored_configuration:
   platform: sky130hd
   geometry: {NUM_MST: 2, NUM_SLV: 2}
   LATENCY_MODE: CUT_ALL_AX
+  # MAX_TRANS and MAX_BURST_LEN were NOT pinned here, and rule 18 requires the
+  # scored configuration to identify ONE measurement. Without them, four of the
+  # sixteen correctness configs match, and the capability metrics differ by a
+  # factor of four across them -- so "the scored configuration" did not name a
+  # metric row at all. Found while building the reader-facing table.
+  MAX_TRANS: 8
+  MAX_BURST_LEN: 255
+  metric_config_rationale: >
+    MAX_TRANS=8 because this task's own capability_blind_spot note records that
+    NO capability check discriminates at MAX_TRANS=2 -- C1's floor is
+    ceil(2/2)=1 there, which a correct NO_LATENCY crossbar also delivers, and
+    the capability mutant mX1 survives every MAX_TRANS=2 config. Scoring
+    capability at the depth where capability is invisible would measure nothing.
+    MAX_BURST_LEN=255 because aggregate throughput is what long bursts exercise;
+    at 3 the per-burst overhead dominates and the measurement is about the
+    handshake rather than the datapath.
   rationale: >
     A deployed AXI crossbar registers its address channels. The AW/AR paths run
     through address decode and arbitration into every slave port, and leaving
