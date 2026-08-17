@@ -69,16 +69,24 @@ mutants:
   witness_harness: mutants/nonequiv_tb.sv
 
 second_dut:
-  status: ABSENT
-  required: true
-  why: >
-    A verification task's second DUT is the analogue of a design task's second
-    source: an independent correct implementation the submission must ALSO
-    accept. Without it, "passes the golden" cannot distinguish a testbench that
-    checks the contract from one that has been fitted to this particular
-    implementation's incidental behaviour. The conformant perturbations cover
-    part of that ground -- they vary what the spec leaves open -- but they are
-    perturbations OF the golden, not an independent design, so a shared
-    misconception between the golden and the checks is invisible to them.
-    NOTHING IN THE HARNESS CURRENTLY GATES ON THIS, which is why it is recorded
-    here rather than assumed.
+  status: BUILT_UNWIRED
+  file: dut2/tag_tracker_alt.sv
+  differences:
+    - "storage and ordering: a flat array of SLOTS entries with a monotonic sequence
+       number, oldest-for-tag found by scan, against the anchor's per-tag linked
+       lists with head/tail pointers and a free list"
+    - "push_gnt_o is REQUEST-GATED -- asserted only when push_req_i is high. THE
+       ANCHOR DOES THE OPPOSITE: its grant is a space-available flag high with no
+       request pending, which is the single fact R4 exists to state and the clause
+       the pilot identified as load-bearing. R6 licenses both."
+    - "same-cycle push and pop of one tag: at FULL_RATE=0 this design denies the
+       push and lets the pop proceed. Arbitration policy, unconstrained by latitude 1."
+  nonequivalence_witness: >
+    Measured, not declared. Over 82 cycles with a long idle stretch, push_gnt_o is
+    high with NO request pending on 79 cycles for the anchor and 0 for the alt.
+    Difference 2 is real and externally observable, and it is exactly the R4 axis.
+  result: passes the reference testbench -- 1305 checks, 0 failures, zero rule-5 adjudications
+  UNWIRED: >
+    sim_verification.sh gates on this DECLARATION only and never compiles or runs
+    dut2/. The result above came from running tb/tag_tracker_spec_tb.sv against it
+    by hand. Do not assume it working as a gate.
