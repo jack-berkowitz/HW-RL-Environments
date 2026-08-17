@@ -159,12 +159,36 @@
 //       about where cvfpu places its DISTRIBUTED registers, not about the
 //       choice of depth.
 //
-//       The choice STANDS on criteria 1 and 2: it is representative (a
-//       pipelined FMA is what gets shipped) and it exercises the part of the
-//       design space this task is about. An FMA is a far larger combinational
-//       block than a FIFO or a crossbar datapath, so being slower than both is
-//       expected; "competitive with the other tasks" was the wrong yardstick to
-//       have reached for.
+//       THE CHOICE STANDS, AND HERE IS WHAT IS CARRYING IT. 78 MHz next to
+//       d_nw01's 190 and d_ca04's 380 is the first thing a reader will notice,
+//       so the justification is stated rather than left implied.
+//
+//       CRITERION 1, REPRESENTATIVE OF REAL USE. A pipelined FMA is what ships;
+//       a combinational one is not built. Depth 3 is a normal depth for a
+//       single-precision FMA in a MAC array, which is the role C3's II=1
+//       requirement comes from. The alternative bindings are not more
+//       representative -- they are faster or smaller, which is a different
+//       property.
+//
+//       CRITERION 2, EXERCISES THE INTERESTING PART OF THE DESIGN SPACE. This
+//       is the one doing the most work here. What this task measures is the
+//       ALIGNMENT, NORMALISATION AND ROUNDING STRUCTURE -- the second source
+//       needed three attempts to get alignment right, and the mutant set is
+//       almost entirely about rounding, tininess, NaN payloads and signed zero.
+//       Depth 3 leaves every one of those choices open to a submission: it
+//       constrains WHERE the registers fall, not how any of the arithmetic is
+//       built. Pinning depth costs the task nothing it was measuring.
+//
+//       WHY THE FREQUENCY IS NOT THE POINT. An FMA is a far larger
+//       combinational block than a FIFO or a crossbar datapath -- 68303 um2
+//       against d_ca04's 20101 -- so a lower Fmax at comparable depth is
+//       arithmetic, not a defect, and comparing frequencies across tasks was
+//       never meaningful. Fmax is compared BETWEEN SUBMISSIONS TO ONE TASK,
+//       which is what rule 18 pins the configuration to make possible.
+//
+//       Criterion 3 -- closes with margin at a period a plausible alternative
+//       can also hit -- is met: 12.8125 ns with +0.27 ns slack and DRC clean.
+//       Criterion 4 is met by construction, as above.
 //
 //       Deeper would also clock well and is deliberately not chosen: it costs
 //       registers for a rate C3 already guarantees, and the task is not about

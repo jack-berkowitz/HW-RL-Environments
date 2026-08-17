@@ -1377,6 +1377,83 @@ accidents is not a detection mechanism.
 
 **Rules:** 13
 
+## F27. F20's lesson did not generalise, and the same defect recurred
+
+F20 concluded, in this document, that **"a rule enforced by a tool nobody is
+obliged to use is a convention, not a control."** The next control built after
+that sentence was written repeated the defect exactly.
+
+`ppa_candidate.sh` had **no check that a passing correctness record existed**.
+The rule *"PPA only for a submission that passed correctness"* lived in
+`run_submissions.sh`, the driver. Calling the tool directly bypassed it in
+silence — and I did exactly that while testing the 0.47 % hypothesis, producing
+`d_ca04/gemini.sv` with area, power and WNS recorded and **no correctness
+verdict at all**, sitting in the results table looking like a result.
+
+**Why the lesson failed to transfer.** F20 recorded the conclusion *about rule 8
+and `collect_results.py`* — a specific tool that had been bypassed. It did not
+state the general form: **a control must be enforced at the tool boundary, not
+in a wrapper that calls the tool.** So the next control was placed in a wrapper,
+and nothing in the written record objected.
+
+That is a finding about how findings fail. A lesson recorded at the level of its
+instance does not fire on the next instance, because the next instance does not
+look like the first — different tool, different rule, different failure mode,
+identical structure.
+
+**The test that would have caught it, now in rule 8:** *can this control be
+skipped by calling something one level down?* If yes it is a convention,
+whatever the document says.
+
+**Fixed:** the gate now lives in `ppa_candidate.sh`, matched on the submission's
+**content hash** so an edited file must re-pass. `--no-correctness-gate` exists
+for deliberate exploration and stamps `correctness_gate=BYPASSED` into the
+record; collection shows every record predating the gate as `!ungated` rather
+than silently clean.
+
+`d_ca04/gemini.sv` subsequently passed 18/18, so its numbers were legitimate.
+**Nothing established that at the time**, which is the defect — the number was
+right by luck, and luck is not a control.
+
+**Rules:** 8, 19
+
+## F28. The record writer dropped metric names, colliding every structured metric
+
+`crossing_latency_rdclk` read **ABSENT** in the results table for `d_ca04`. It
+was not a stale record: it read ABSENT on a **fresh run, 0 of 18 configurations**,
+while the checker emitted it on every one.
+
+The checker prints:
+
+```
+METRIC: crossing_latency_rdclk min=3 max=71 n=1184 (SYNC_STAGES=2)
+```
+
+a bare **name** followed by `key=value` fields. The record writer captured only
+`key=value` pairs, so it **discarded the name** and filed the values under the
+bare keys `min`, `max`, `n`.
+
+**This is a collision, not a loss.** Those keys are generic. Any other metric in
+any other task emitting `min=` or `n=` would overwrite them, and the surviving
+value would be from whichever metric printed last — with no indication that a
+substitution had happened. `crossing_latency_rdclk` is where it was noticed; the
+defect is in the shared writer and applied to **every structured metric in every
+task**.
+
+**The class is the one this document keeps recording:** the quantity was
+measured correctly, printed correctly, and destroyed in the reporting path. The
+simulation was right the whole time. Nothing errored.
+
+**Found by** asking which of two explanations applied — stale records or an
+untaken path — and running one fresh scoring to distinguish them. Neither was
+the answer, and that is what pointed at the writer.
+
+**Fixed:** a leading bare identifier now prefixes its fields, so the metric
+appears as `crossing_latency_rdclk_min` and cannot collide. The bare name is
+also kept addressable. `d_ca04` reports `lat.min` and `lat.max`.
+
+**Rules:** 8
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET

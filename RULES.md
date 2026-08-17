@@ -80,7 +80,22 @@ defects. It runs with the regression.
 8. **Every run writes an immutable record; collection reads only those records**,
    never a live tool directory. A missing row is honest; a stale row is not.
 
-    **From:** P4
+   **And every control is enforced at the TOOL boundary, not in a driver that
+   calls it.** A control living in a wrapper applies only to people who use that
+   wrapper; anyone invoking the underlying tool directly bypasses it silently,
+   and nothing reports that it was bypassed.
+
+   This is the generalisation F20 should have made and did not. F20 concluded
+   that *"a rule enforced by a tool nobody is obliged to use is a convention,
+   not a control"* — and then the very next control was built in
+   `run_submissions.sh` rather than in `ppa_candidate.sh`, and was bypassed
+   within the week by calling the tool directly. **The lesson did not generalise
+   because it was recorded about one tool instead of about tool boundaries.**
+
+   Test to apply: *can this control be skipped by calling something one level
+   down?* If yes it is a convention, whatever the document says.
+
+    **From:** P4, F20, F27
 
 9. **Area and power are reported at own Fmax and at a common binding period**,
    and every area comparison splits three ways: off-spec configuration,
@@ -213,6 +228,27 @@ defects. It runs with the regression.
     must still exist.
 
     **From:** F24, F18
+
+19. **A build failure scores ZERO on every PPA axis, and is labelled as a build
+    failure.** Not "no data", not omitted, not deferred, not blank.
+
+    Zero is the honest score: a design that does not build cannot be operated,
+    so its area, power and frequency are not unknown — they are unavailable to
+    any user of the design. Omitting the row instead lets a non-building
+    submission quietly disappear from a comparison it should be losing.
+
+    **But it must be visibly distinct from a design that built and scored
+    badly**, in the record and in every table. Those are different results about
+    the model and collapsing them destroys the distinction: one produced RTL
+    that synthesises and is merely worse, the other produced RTL that is not
+    RTL. The annotation carries the frontend and the actual error.
+
+    Worked example: `d_nw01/gemini.sv` scores zero, annotated *build fail
+    (slang/Verilator, anonymous struct as parameter value — confirmed genuine,
+    7 errors)*. The confirmation matters — a frontend disagreement is not a
+    build failure, and the way to tell is to check the second frontend.
+
+    **From:** F27
 
 ---
 
