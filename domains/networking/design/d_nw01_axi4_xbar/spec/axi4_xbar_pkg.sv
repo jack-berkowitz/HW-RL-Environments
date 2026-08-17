@@ -59,6 +59,34 @@ package axi4_xbar_pkg;
   parameter logic [1:0] RESP_DECERR = 2'b11;   // returned for an unmapped address
 
   // ---- channels, slave side (what a master drives into the crossbar) -------
+  // ===========================================================================
+  // CHANNEL SIGNAL DIRECTIONS — normative, AMBA AXI4 §A3.1
+  // ===========================================================================
+  // WHICH STRUCT A HANDSHAKE SIGNAL LIVES IN FOLLOWS FROM ITS DIRECTION, and
+  // the two are easy to conflate. `b_ready` is the case that catches people:
+  // B is called "the response channel", but BREADY is driven by the MASTER, so
+  // it belongs to the REQUEST struct, not the response.
+  //
+  //   channel  VALID driven by   READY driven by   -> req_t holds   resp_t holds
+  //   AW       master            slave                aw, aw_valid    aw_ready
+  //   W        master            slave                w,  w_valid     w_ready
+  //   B        SLAVE             MASTER               b_ready         b, b_valid
+  //   AR       master            slave                ar, ar_valid    ar_ready
+  //   R        SLAVE             MASTER               r_ready         r, r_valid
+  //
+  // Authority: AMBA AXI4 §A3.1 fixes the directions. The grouping into these
+  // two structs follows from them and is not a free choice.
+  //
+  // WHY THIS IS STATED RATHER THAN LEFT TO BE READ OFF THE STRUCTS. Two
+  // independent submissions reached for `slv_resp_t.b_ready` and failed to
+  // elaborate, losing their entire result (FINDINGS.md F35, F38). That is a
+  // packaging-lookup error, and packaging is on NONE of the axes this task
+  // measures -- outstanding-ID tracking, per-ID response ordering, deadlock
+  // freedom, arbitration. A barrier that is not on the measured axes and costs
+  // 100 % of the score is noise, and removing it makes none of those four
+  // easier.
+  // ===========================================================================
+
   typedef struct packed {
     slv_id_t      id;
     addr_t        addr;

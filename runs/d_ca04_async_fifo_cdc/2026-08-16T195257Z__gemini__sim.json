@@ -482,5 +482,7 @@
   "submission": "candidates/d_ca04/gemini.sv",
   "submission_sha256_16": "c21e79ea6e452912",
   "task": "d_ca04_async_fifo_cdc",
-  "timestamp_utc": "2026-08-16T19:52:57Z"
+  "timestamp_utc": "2026-08-16T19:52:57Z",
+  "task_text_hash": "8a5e5e0a9b2c93d3",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

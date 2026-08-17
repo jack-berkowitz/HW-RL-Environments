@@ -500,5 +500,7 @@
   "submission": "domains/comp_arch/design/d_ca04_async_fifo_cdc/ref/async_fifo_cdc_ref.sv",
   "submission_sha256_16": "a510dd8462d06100",
   "task": "d_ca04_async_fifo_cdc",
-  "timestamp_utc": "2026-08-16T19:58:44Z"
+  "timestamp_utc": "2026-08-16T19:58:44Z",
+  "task_text_hash": "8a5e5e0a9b2c93d3",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

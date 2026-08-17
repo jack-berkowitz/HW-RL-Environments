@@ -482,5 +482,7 @@
   "submission": "candidates/d_ca04/chat.sv",
   "submission_sha256_16": "0d4143c084edf591",
   "task": "d_ca04_async_fifo_cdc",
-  "timestamp_utc": "2026-08-15T20:36:00Z"
+  "timestamp_utc": "2026-08-15T20:36:00Z",
+  "task_text_hash": "8a5e5e0a9b2c93d3",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

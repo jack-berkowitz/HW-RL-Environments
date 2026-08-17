@@ -63,6 +63,20 @@ def main():
     a, b = (json.load(open(p)) for p in args)
     na, nb = args[0].split("/")[-1], args[1].split("/")[-1]
 
+    # TASK-TEXT check first: two answers to different questions are not
+    # comparable however well their builds match.
+    ta, tb = a.get("task_text_hash"), b.get("task_text_hash")
+    if ta and tb and (ta == "unknown" or tb == "unknown"):
+        print("UNCOMPARABLE: task-text version unknown for at least one submission")
+        print("  A record written before task-text hashing cannot be shown to have")
+        print("  answered the same question. Unknown is honest; assuming is not.")
+        return 1
+    if ta and tb and ta != tb:
+        print(f"UNCOMPARABLE: different task text ({ta} vs {tb})")
+        print("  These answer DIFFERENT QUESTIONS. Comparing them measures the")
+        print("  edit to the task, not the difference between the submissions.")
+        return 1
+
     ha, hb = a.get("build_config_hash"), b.get("build_config_hash")
     if not ha or not hb:
         which = [n for n, h in ((na, ha), (nb, hb)) if not h]

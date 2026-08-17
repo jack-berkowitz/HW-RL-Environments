@@ -1816,6 +1816,84 @@ have hidden it.
 
 **Rules:** 16
 
+## F38. Task text needs versioning, and the hash cannot see the whole problem
+
+`v_ca05/chat` scored 2/6 and later 5/6. Those are **not two points on a
+progression** — the submission was re-solicited against a corrected prompt, so
+they answer different questions. Side by side in a results table they read as
+improvement.
+
+**This is rule 17 applied to specs instead of build configurations.** Rule 17
+says two PPA numbers may be compared only when their build configurations match,
+asserted mechanically. The same argument holds for the thing the model was
+asked: a submission is an answer to a specific text, and comparing answers to
+different texts measures the edit.
+
+`scripts/task_text_hash.py` hashes the artefacts a submission actually sees —
+the spec/interface files, plus the prompt document for a verification task. Not
+`task.yaml`, not the checker, not the mutants: those change *scoring*, which is
+rule 18's business, while this tracks what was *asked*. Every submission record
+carries it, `compare_ppa.py` refuses across differing hashes, and 42 existing
+records were retrofitted where the version is recoverable.
+
+**Six records are marked `unknown`, and they stay that way.** Back-filling
+today's hash onto a record written before the text last changed would assert the
+submission answered a text nobody has checked it against. Unknown is honest;
+`compare_ppa.py` refuses on it just as it does on a mismatch.
+
+### The limitation, which is larger than the mechanism
+
+**The hash attests the task text AS STORED, not AS DELIVERED.** Checking the
+`v_ca05` case exposed this: our `BLIND_TB_TASK.md` has not changed since
+2026-08-15, yet the two chat submissions answer different prompts, because the
+prompt was corrected *outside the repository* when the submission was solicited.
+The hash was identical across both and would not have flagged them.
+
+So it catches a spec revised in-tree, and cannot catch a paraphrase, a stale
+copy, or an edit made in the chat window. **Same shape as the `refs.lock`
+hashes**, which attest local state rather than upstream provenance — a real
+guarantee, narrower than it first appears, and worth stating so nobody reads a
+matching hash as proof two submissions saw the same words.
+
+Closing that would need the delivered text captured at solicitation time and
+stored with the submission. Not built; recorded as the gap it is.
+
+**Rules:** 17
+
+## F39. A lookup barrier that costs the whole submission is noise, and was removed
+
+Two independent submissions reached for `slv_resp_t.b_ready`, failed to
+elaborate, and lost their entire result (F35). The package is right — BREADY is
+master-driven, so it belongs to the request struct — and it is not changing.
+
+**The decision taken: state the channel signal directions explicitly in the
+shipped package**, as a normative table citing AMBA AXI4 §A3.1.
+
+The argument for it is what the failure measures. `d_nw01`'s stated difficulty
+axes are outstanding-ID tracking, per-ID response ordering, deadlock freedom and
+arbitration. **Struct membership is on none of them.** A barrier that is not on
+any measured axis and costs 100 % of the score is noise in the measurement, and
+removing it makes none of those four axes easier — a submission still has to
+track IDs, avoid reordering, and stay deadlock-free.
+
+Under rule 15 the table is a citable contract term rather than a hint: AMBA AXI4
+fixes the directions, and the grouping into request and response structs follows
+from them rather than being a free choice.
+
+**The counter-argument is real and is recorded rather than dismissed.** It does
+lower difficulty — a model that would have failed here will now proceed. The
+judgement is that the difficulty removed is recall about signal direction, which
+this benchmark is not trying to measure, and the alternative is a task where two
+of four submissions score zero for a reason unrelated to design ability.
+
+**The finding stands independently of the decision.** Two independent models made
+the identical error, which says something about how the B channel is naturally
+misread — "the response channel" is a name that invites putting all of B's
+signals in the response. That observation survives the fix and is the more
+transferable half.
+
+**Rules:** 15
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET

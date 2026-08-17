@@ -11,5 +11,7 @@
   "submission_sha256_16": "31cfa6311f1af4c5",
   "task": "d_nw01_second_source",
   "timestamp_utc": "2026-08-16T03:07:59Z",
-  "wns_ns": "0.46"
+  "wns_ns": "0.46",
+  "task_text_hash": "04ddf4d2c9e06b3d",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

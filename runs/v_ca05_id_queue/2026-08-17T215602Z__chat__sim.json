@@ -13,5 +13,7 @@
   "submission": "candidates/v_ca05/chat.sv",
   "submission_sha256_16": "2414f3ec6345bef8",
   "task": "v_ca05_id_queue",
-  "timestamp_utc": "2026-08-17T21:56:02Z"
+  "timestamp_utc": "2026-08-17T21:56:02Z",
+  "task_text_hash": "0c6398d3ad51a1a0",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

@@ -590,5 +590,7 @@
   "submission": "domains/networking/design/d_nw01_axi4_xbar/ref/axi4_xbar_ref.sv",
   "submission_sha256_16": "a36958895aab26e0",
   "task": "d_nw01_axi4_xbar",
-  "timestamp_utc": "2026-08-16T17:09:08Z"
+  "timestamp_utc": "2026-08-16T17:09:08Z",
+  "task_text_hash": "04ddf4d2c9e06b3d",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

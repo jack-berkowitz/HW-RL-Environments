@@ -14,5 +14,7 @@
   "submission_sha256_16": "47a8351a62e5afe3",
   "task": "d_dsp02_fp32_fma_ii1",
   "timestamp_utc": "2026-08-16T21:18:06Z",
-  "wns_ns": "0.273035"
+  "wns_ns": "0.273035",
+  "task_text_hash": "unknown",
+  "task_text_hash_source": "retrofit: record predates the last task-text change; the text it answered is not recoverable"
 }

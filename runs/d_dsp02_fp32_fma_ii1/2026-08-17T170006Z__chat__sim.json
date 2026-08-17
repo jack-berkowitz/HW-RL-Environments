@@ -45,5 +45,7 @@
   "submission": "candidates/d_dsp02/chat.sv",
   "submission_sha256_16": "f2c7320062120baa",
   "task": "d_dsp02_fp32_fma_ii1",
-  "timestamp_utc": "2026-08-17T17:00:06Z"
+  "timestamp_utc": "2026-08-17T17:00:06Z",
+  "task_text_hash": "5ad30593403b4ae2",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

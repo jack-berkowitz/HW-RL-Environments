@@ -16,5 +16,7 @@
   "synth_area_um2": "265188.086400",
   "task": "d_dsp02_fp32_fma_ii1",
   "timestamp_utc": "2026-08-17T17:58:54Z",
-  "wns_ns": "-0.697486"
+  "wns_ns": "-0.697486",
+  "task_text_hash": "5ad30593403b4ae2",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

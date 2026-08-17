@@ -16,5 +16,7 @@
   "synth_area_um2": "11030.579200",
   "task": "d_ca04_async_fifo_cdc",
   "timestamp_utc": "2026-08-17T08:46:33Z",
-  "wns_ns": "0.706029"
+  "wns_ns": "0.706029",
+  "task_text_hash": "8a5e5e0a9b2c93d3",
+  "task_text_hash_source": "retrofit: record postdates the last task-text change"
 }

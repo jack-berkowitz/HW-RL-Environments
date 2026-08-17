@@ -358,6 +358,7 @@ for cand in "${CANDS[@]}"; do
   # Immutable run record. Collection reads ONLY these, never the live ORFS
   # directory -- see scripts/write_run_record.py for why.
   rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+        "task_text_hash=$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
           "$(basename "$cand" .sv)" "$RAW_DIR" 2>/dev/null)"
   [ -n "$rec" ] && echo "  record: $rec"
   rm -rf "$RAW_DIR"

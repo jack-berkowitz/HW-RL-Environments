@@ -328,6 +328,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     "faults_hung=$NHUNG" \
     "did_not_compile=$buildfail" \
     "kind_note=verification: per-mutant results are in the log; a rate is not reported" \
+    "task_text_hash=$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)" \
     >/dev/null 2>&1 || true
 
   # A kill count from a submission that failed the VALIDITY GATE carries no

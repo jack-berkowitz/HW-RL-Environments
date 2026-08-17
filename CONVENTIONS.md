@@ -325,6 +325,28 @@ edge and the counter never looked there.
 ordering and therefore survives every comparison-based check. Ranking two
 submissions by it still works. Only an absolute known answer catches it.
 
+## A spec assertion beyond what step 1 confirmed gets checked against the golden
+
+Step 1 of a task build confirms the anchor exists, elaborates, and carries the
+licence claimed. **Everything the spec asserts BEYOND that is a claim about
+behaviour, and it gets run against the golden before anything is built on it.**
+
+The failure this prevents is delayed and misattributed. A spec that has drifted
+from its anchor — a requirement that was true of an earlier revision, or was
+inferred rather than measured — does not announce itself. It surfaces much later
+as **the reference testbench failing the validity gate**, and the natural reading
+at that point is a checker defect. You then debug the checker, which is correct,
+against a spec that is wrong.
+
+Cheap because the golden is already there: for each asserted behaviour, write
+the stimulus that would exhibit it and confirm the golden does. Anything the
+golden does not do is either a spec error or a genuine anchor limitation, and
+both need finding before mutants and coverage floors are built on top.
+
+It caught nothing on `v_dsp02`, which is the expected outcome and not a reason to
+skip it — the check is cheap and the failure it prevents is expensive and
+misdirected.
+
 ## Any long-running job must emit progress to a readable stream
 
 **This is the highest-leverage convention in this file, because it is the cause
