@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=async_fifo_cdc; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=5000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.rd_period=8; sdc.wr_period=5; override.CLK_PERIOD_NS=4.5000;",
+  "build_config_hash": "6a90d59ec8e5d692",
+  "clk_period_ns": "4.5000",
+  "correctness_gate": "passed:2026-08-15T203600Z__chat__sim.json",
+  "design_area_um2": "14685",
+  "git_sha": "22df31672e28a2ddebf5790c31f412aafdec19ea-dirty",
+  "kind": "ppa",
+  "label": "chat_gated",
+  "orfs_nickname": "d_ca04_cand_chat_gated",
+  "pdk": "sky130hd",
+  "power_w": "7.30e-03",
+  "status": "completed",
+  "submission": "candidates/d_ca04/chat.sv",
+  "submission_sha256_16": "0d4143c084edf591",
+  "synth_area_um2": "11030.579200",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-17T08:46:33Z",
+  "wns_ns": "0.706029"
+}

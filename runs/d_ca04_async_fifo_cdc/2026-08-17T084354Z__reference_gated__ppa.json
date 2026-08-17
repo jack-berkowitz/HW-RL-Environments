@@ -1,0 +1,18 @@
+{
+  "clk_period_ns": "2.625",
+  "correctness_gate": "passed:reference-18/18",
+  "design_area_um2": "20101",
+  "drc": "0",
+  "git_sha": "22df31672e28a2ddebf5790c31f412aafdec19ea-dirty",
+  "kind": "ppa",
+  "label": "reference_gated",
+  "orfs_nickname": "d_ca04_async_fifo_cdc",
+  "pdk": "sky130hd",
+  "power_w": "2.00e-02",
+  "status": "completed",
+  "submission": "domains/comp_arch/design/d_ca04_async_fifo_cdc/ref/async_fifo_cdc_ref.sv",
+  "submission_sha256_16": "a510dd8462d06100",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-17T08:43:54Z",
+  "wns_ns": "0.0318037"
+}
