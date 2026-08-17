@@ -1,0 +1,17 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "faults_caught": "6/6",
+  "faults_hung": "0",
+  "git_sha": "f7aa79628112f5b36121d50db64a238eb2efd828-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "reference",
+  "status": "completed",
+  "submission": "domains/networking/verification/v_nw03_axis_arb_mux/tb/frame_arb_mux_spec_tb.sv",
+  "submission_sha256_16": "2188925b5de85da8",
+  "task": "v_nw03_axis_arb_mux",
+  "timestamp_utc": "2026-08-17T19:43:55Z"
+}

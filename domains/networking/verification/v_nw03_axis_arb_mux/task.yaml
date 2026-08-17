@@ -63,12 +63,70 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: see NOTES.md -- report kill counts against it, never bare
+  reference_ceiling: 6 of 6
+  ceiling_caveat: >
+    Weaker evidence than the same number on v_ca05. There the mutants found two
+    genuine holes in the reference testbench on first use. Here the reference
+    killed all six on its first run, because one author wrote the spec, the
+    checker and the mutants in one sitting. The set has not been challenged by
+    anything its author did not anticipate. See NOTES.md section 7.
+
+watchdog:
+  tb_sim_time_limit: 20ms
+  tb_sim_time_measured: ~21us          # ~950x margin
+  harness_sim_timeout_s: 25
+  harness_wall_measured_s: 0.21        # cold; <0.01 warm. >=119x margin
+
+conformant_perturbations:
+  - {id: fm_c1, licence: "S6, latitude 3",  change: ready withheld on a rolling 1-in-4 schedule,
+     witness: "value differs at beat 0; transfer cycle differs at beat 1 (golden 4, variant 5)"}
+  - {id: fm_c2, licence: "S9, latitude 1",  change: inputs served in the opposite rotation,
+     witness: "value differs at beat 0 -- a different input served first"}
+  - {id: fm_c3, licence: "S11, latitude 2", change: one extra output register stage,
+     witness: "transfer cycle differs at beat 0 (golden 3, variant 4)"}
+  - {id: fm_c4, licence: "latitude 4",      change: LFSR noise on the data lines while m_tvalid_o low,
+     witness: "values and cycles identical over 400 beats; idle-line changes 0 vs 4 -- its whole effect is where the contract is silent"}
+  - {id: fm_c5, licence: "latitude 5",      change: one forced idle cycle after every frame,
+     witness: "transfer cycle differs at beat 5 (golden 8, variant 9)"}
+  enumeration: conformant/README.md    # every clause marked pinned or perturbed
+  all_survive: true
+
+mutants:
+  - {id: fm_m1, class: capability, defect: "tdata above bit 15 silently dropped -- behaves as DATA_WIDTH=16",
+     violates: S4,  witness: "beat 0: golden 1443000036, mutant 0000000036", killed_by: S4}
+  - {id: fm_m2, class: starvation, defect: "fixed priority instead of rotation",
+     violates: S10, witness: "beat 5: golden 1d9c80004e, mutant 3c46801418",  killed_by: S10}
+  - {id: fm_m3, class: atomicity,  defect: "two half-muxes with a beat-level mux between them; frames interleave",
+     violates: S3,  witness: "beat 0: golden 1443000036, mutant 07fc0000a6",  killed_by: "S3 first, S10 later"}
+  - {id: fm_m4, class: sideband,   defect: "tuser taken from the neighbouring input",
+     violates: S4,  witness: "beat 4: golden 3c33001031, mutant 3c33001033",  killed_by: S4}
+  - {id: fm_m5, class: boundary,   defect: "tlast also asserted on the first beat of every multi-beat frame",
+     violates: S4,  witness: "beat 0: golden 1443000036, mutant 1443000037",  killed_by: S4}
+  - {id: fm_m6, class: reset,      defect: "golden never sees rst_i; beats held at reset survive it",
+     violates: S12, witness: "beat 101, immediately after the mid-stream reset", killed_by: S12}
+  all_have_nonequivalence_witnesses: true
+  witness_harness: mutants/nonequiv_tb.sv
+  isolation: >
+    Five of six trip exactly one clause. fm_m3 trips S3 first and S10 later --
+    one defect with two symptoms, recorded rather than called clean isolation.
 
 second_dut:
-  status: BUILT_BUT_UNWIRED
-  file: tb/audit/frame_arb_mux_second_dut.sv
-  why: >
-    The second-DUT gate exists in neither sim_verification.sh nor v_ca05. This
-    file is a design artefact awaiting that gate. NOTHING HAS BEEN RUN THROUGH
-    IT AS A GATE and no claim about submissions rests on it.
+  status: BUILT_UNWIRED
+  file: dut2/frame_arb_mux_alt.sv
+  differences:
+    - "selection: a single rotating pointer, against the anchor's masked-priority tree"
+    - "no input registers: s_tready_o high ONLY for the selected input -- the OPPOSITE
+       choice from the anchor on S6/latitude 3, and the one that matters"
+    - "output depth: one register with combinational ready, against the anchor's
+       two-deep output datapath and registered ready"
+  nonequivalence_witness: >
+    Under identical stimulus over 200 cycles the golden asserts s_tready_o on more
+    than one input simultaneously on 2 cycles; the alt on 0. Difference 2 is real
+    and externally observable, so a pass against it is not a pass against a
+    paraphrase.
+  result: passes the reference testbench, zero rule-5 adjudications
+  UNWIRED: >
+    sim_verification.sh gates on this DECLARATION -- it refuses when a non-ABSENT
+    status has no dut2/ -- but it never compiles the file and never adds a row for
+    it. Every result above came from running the reference testbench by hand.
+    NOTHING RUNS THIS AS A GATE. Do not assume it working.
