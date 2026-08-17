@@ -1454,6 +1454,54 @@ also kept addressable. `d_ca04` reports `lat.min` and `lat.max`.
 
 **Rules:** 8
 
+## F29. The C1 capacity floor was derived from a model that is wrong
+
+`d_nw01`'s checker documents the anchor reaching **`MAX_TRANS + 1`** outstanding
+transactions, and sets the C1 floor at `ceil(MAX_TRANS/2)` to leave "margin on
+both sides at MAX_TRANS=8: anchor 9, no-cut anchor 7, floor 4".
+
+**The anchor delivers 27 at `MAX_TRANS=8`, not 9.** Swept on the reference:
+
+| `MAX_TRANS` | measured | `MAX_TRANS+1` |
+|---|---|---|
+| 2 | **3** | 3 |
+| 4 | **11** | 5 |
+| 8 | **27** | 9 |
+
+The measurement is **linear with slope 4** — `4·MAX_TRANS − 5` fits all three
+exactly — and is **independent of geometry**: 27 at `NUM_SLV` 2 and 4, at
+`NUM_MST` 2 and 4. `MAX_TRANS + 1` is right at `MAX_TRANS=2` **by coincidence**,
+because `4·2 − 5 = 3 = 2 + 1`. One point of agreement, and the model was built
+on it.
+
+**What this costs.** The C1 floor at `MAX_TRANS=8` is 4, chosen to sit roughly
+half way to an expected 9. Against an actual 27 it leaves **6.75× margin**, not
+2×. A submission delivering a quarter of the reference's capacity passes C1
+comfortably — which is close to what happened: `chat` measures 8, passes the
+floor of 4, and sits 3.4× below the reference.
+
+**Why the number is still comparable and the label still was not.** Every design
+is measured by the same harness at the same configuration, so `27` against `8`
+is a real difference. What was wrong was calling it "outstanding transactions":
+under a slope-4 relation the figure is not a count of concurrent transactions,
+and a reader given that label would have read a 3.4× capability gap as
+3.4× fewer transactions in flight. It is a buffering difference — the reference
+carries `CUT_ALL_AX` channel registers and the submission does not, which
+`task.yaml` had already recorded for the second source as *"NO channel
+registers, so exactly MAX_TRANS observable outstanding"*. **The project knew the
+anchor exceeded `MAX_TRANS`; it was wrong about by how much, and the floor
+inherited the error.**
+
+**Found by** refusing to publish a label for a number whose own checker
+predicted something else, and sweeping to settle it. `MAX_TRANS=4` is rejected by
+the checker's parameter guard, so the sweep ran on a scratch copy with the guard
+relaxed — a diagnostic, not a change to the scored artefact.
+
+**Not yet fixed.** Raising the floor is a scoring change and needs deciding
+separately; the sweep establishes the shape, not the new floor.
+
+**Rules:** 1, 20
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET

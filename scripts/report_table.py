@@ -232,7 +232,15 @@ def main():
             allm = ((sim or {}).get("metrics") or {})
             want = SCORED_CFG.get(task)
             if want is None:
-                merged = next(iter(allm.values()), {}) if allm else {}
+                # Single-config task. If a run ever carries more than one, that
+                # is ambiguity, not a choice to make silently (rule 20).
+                if len(allm) == 1:
+                    merged = next(iter(allm.values()))
+                else:
+                    merged = {}
+                    if len(allm) > 1:
+                        notes.append("multiple configurations present; no single "
+                                     "scored configuration named")
             else:
                 merged = allm.get(want, {})
                 if allm and want not in allm:

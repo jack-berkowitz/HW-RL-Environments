@@ -639,6 +639,25 @@ backpressure and `MAX_BURST_LEN=255` do not encode the anchor's architecture.
 
 ## The re-solicited candidate: capacity fixed, area and throughput lost
 
+> **CORRECTION — two problems with the table below, both found later.**
+>
+> **1. The reference's "9 outstanding per master" is wrong.** It came from the
+> checker's `MAX_TRANS + 1` model. Swept on the reference, the actual figure at
+> `MAX_TRANS=8` is **27** — the relation is linear with slope 4 and `MAX_TRANS+1`
+> holds only at `MAX_TRANS=2`, by coincidence. See FINDINGS.md F29. So the gap
+> in that row is **27 vs 8**, not 9 vs 8, and it is a buffering difference
+> (the reference carries `CUT_ALL_AX` channel registers) rather than a count of
+> transactions in flight.
+>
+> **2. These figures predate rule 18's pinned scored configuration**, so they are
+> not the scored comparison and must not be quoted as it. At the pinned
+> configuration (`NUM_MST=2, NUM_SLV=2, MAX_TRANS=8, MAX_BURST_LEN=255`) the
+> reference measures single-pair 2997 and aggregate 1998; the numbers below were
+> taken across an unpinned config set and differ.
+>
+> The qualitative conclusion — capacity fixed, area and throughput lost — is
+> unaffected. The specific ratios are.
+
 | axis | reference | candidate |
 |---|---|---|
 | outstanding per master | 9 | **8** (was 1) |

@@ -250,6 +250,31 @@ defects. It runs with the regression.
 
     **From:** F27
 
+20. **No reported value may be produced by a fallback, a default, or a merge
+    across configurations.** A value that was not measured for *that specific
+    design* at *that specific pinned configuration* renders as **absent**, and
+    absent renders as absent.
+
+    Four instances, all in the reporting path and none in measurement:
+
+    | | what it invented |
+    |---|---|
+    | Fmax fallback | printed the **reference's** 380.9 MHz on candidate rows never swept |
+    | metric merge | `dict.update` across 18 configs, so each row showed whichever config was written last |
+    | F28 name drop | structured metrics filed under bare `min`/`max`/`n`, overwritable by any other metric |
+    | absent crossing latency | read ABSENT for a metric emitted on every one of 18 configs |
+
+    **The measurements were right every time.** What produced a wrong number was
+    a reporting path that preferred a plausible value to no value. A fallback is
+    the most dangerous form: it is written to be helpful, it fires exactly when
+    data is missing, and its output is indistinguishable from a real
+    measurement.
+
+    Absent is never the unhelpful answer. A blank cell prompts someone to go and
+    measure; a borrowed number does not.
+
+    **From:** F28, F29
+
 ---
 
 **Nothing you write is trusted until it has been run.**

@@ -30,6 +30,15 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNS = os.path.join(REPO, "runs")
 
+# The configuration each task's metrics are read at (rule 18/20). Named
+# explicitly. A task whose scored config is absent from a run reports ABSENT
+# for every metric rather than substituting another config's values.
+SCORED_CFG = {
+    "d_ca04_async_fifo_cdc": "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_2",
+    "d_nw01_axi4_xbar":      "NUM_MST_2_NUM_SLV_2_MAX_TRANS_8_MAX_BURST_LEN_255",
+    "d_dsp02_fp32_fma_ii1":  None,   # single config, no parameters
+}
+
 ARGS = sys.argv[1:]
 SHOW_ALL = "--all" in ARGS
 SHOW_METRICS = "--metrics" in ARGS
@@ -204,10 +213,18 @@ def main():
         any_task = True
         sim = v["sim"]
         percfg = (sim or {}).get("metrics") or {}
-        merged = {}
-        for _cfg, vals in percfg.items():
-            for k, val in vals.items():
-                merged.setdefault(k, val)
+        # RULE 20: metrics come from THE SCORED CONFIGURATION, never merged
+        # across configs. This previously did setdefault across every config,
+        # so a row showed whichever config happened to be encountered first --
+        # d_nw01's capacity differs by 9x between MAX_TRANS 2 and 8, so the
+        # merged value was a coin flip presented as a measurement.
+        want = SCORED_CFG.get(task)
+        if want is None:
+            merged = percfg[list(percfg)[0]] if len(percfg) == 1 else {}
+            if len(percfg) > 1:
+                merged = {}          # ambiguous: absent, never a pick
+        else:
+            merged = percfg.get(want, {})
         hdr = "  " + f"{task}/{os.path.basename(sub)}".ljust(38)
         line = "  " + " ".ljust(38)
         for name, label, expect in cols:
