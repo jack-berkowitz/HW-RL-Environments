@@ -1,0 +1,74 @@
+id: v_nw03
+module: frame_arb_mux
+domain: networking
+type: verification
+catalog: TASK_CATALOG.md
+
+oracle_class: A
+reference:
+  refs_lock_repo: alexforencich/verilog-axis
+  refs_lock_sha: 48ff7a7e2ef782cf778d47910cf85835c64b1bce
+  licence: MIT
+  mode: vendor
+  file: refs/verilog-axis/rtl/axis_arb_mux.v
+  closure: [refs/verilog-axis/rtl/arbiter.v, refs/verilog-axis/rtl/priority_encoder.v]
+  golden: dut/frame_arb_mux.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/frame_arb_mux_iface.sv (port map) and
+    spec/frame_arb_mux_spec.md only. dut/ holds the anchor VERBATIM plus a
+    port shim, used for scoring and never given to a submission -- so there is
+    no decontaminated derivative, nothing to recognise, and no notice to retain.
+    The anchor copies keep their upstream MIT headers unaltered.
+  provenance_caveat: >
+    The files are present at the paths refs.manifest.yaml names, in a repo
+    refs.lock pins. Their CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+
+harness:
+  golden_top: frame_arb_mux
+  tb_module: frame_arb_mux_tb
+  conformant_prefix: fm_c
+  mutant_prefix: fm_m
+  golden_file: dut/frame_arb_mux.sv
+  support_files: [dut/axis_arb_mux.sv, dut/arbiter.sv, dut/priority_encoder.sv]
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 25
+
+spec: [spec/frame_arb_mux_spec.md, spec/frame_arb_mux_iface.sv]
+task_statement: probe/BLIND_TB_TASK.md
+
+# ---- rule 18: ONE scored configuration, named, with its rationale ------------
+scored_configuration:
+  S_COUNT: 4
+  DATA_WIDTH: 32
+  USER_WIDTH: 1
+  rationale: >
+    S_COUNT=4 is the smallest count at which round-robin service order is
+    distinguishable from any fixed order and at which a single starved input is
+    a minority rather than half the machine; S_COUNT=2 makes a starvation mutant
+    and an alternating policy hard to tell apart. DATA_WIDTH=32 gives KEEP_WIDTH
+    4, so tkeep is a real four-bit sideband rather than the single bit it
+    degenerates to at DATA_WIDTH=8. USER_WIDTH=1 keeps the per-beat sideband
+    present as an integrity axis at minimum width.
+  pinned_inside_the_shim: [ARB_TYPE_ROUND_ROBIN=1, ARB_LSB_HIGH_PRIORITY=1, LAST_ENABLE=1]
+  pinned_rationale: >
+    Not exposed as parameters at all. See the header of dut/frame_arb_mux.sv:
+    S5 bounded fairness is a property of ARB_TYPE_ROUND_ROBIN=1 (measured: at 0,
+    406 of 406 frames went to input 0), and S3 frame atomicity is a property of
+    LAST_ENABLE=1. Exposing either would let a submission build the golden
+    off-spec and fail the validity gate for a configuration error.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpromised_reliance: must PASS every conformant perturbation
+  fault_detection: reported PER MUTANT, never as a rate
+  reference_ceiling: see NOTES.md -- report kill counts against it, never bare
+
+second_dut:
+  status: BUILT_BUT_UNWIRED
+  file: tb/audit/frame_arb_mux_second_dut.sv
+  why: >
+    The second-DUT gate exists in neither sim_verification.sh nor v_ca05. This
+    file is a design artefact awaiting that gate. NOTHING HAS BEEN RUN THROUGH
+    IT AS A GATE and no claim about submissions rests on it.

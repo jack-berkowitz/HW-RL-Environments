@@ -1601,6 +1601,50 @@ limit of this bench rather than a property of the design.
 
 **Rules:** 19, 20
 
+## F32. The regression was red and I committed anyway
+
+`scripts/regression.sh` exists, runs in about a second, and was invoked in the
+same command as the commit. It printed **REGRESSION FAILED**. The commit went in
+regardless, because the commit followed the check in one shell line and nobody
+read the output between them.
+
+The failure was real: `sim_verification.sh` had just started writing run records,
+and a verification record has no `configs_passed`, so `collect_results.py`
+crashed on every invocation. The whole results table was broken and the commit
+message said the work was done.
+
+**This is the same shape as three earlier findings and it deserves its own
+entry rather than a note on the commit:**
+
+| | the control | how it was bypassed |
+|---|---|---|
+| F20 | rule 8, collection reads records | reading the flow directory still worked |
+| F27 | PPA needs a passing correctness gate | the gate lived in the driver, not the tool |
+| F15 | diff rate was retracted | the retraction never reached the build prompt |
+| **F32** | **the regression** | **it ran, printed FAILED, and was not read** |
+
+The first three are a control that was absent, misplaced, or stale. **This one
+was present, correct, in the path, and produced the right answer** — and the
+answer was not consumed. That is a distinct failure mode and the hardest of the
+four to engineer against, because every component worked.
+
+**"We built the control", "the control is in the path", and "the control is
+read" are three different claims.** This project has been careful about the
+first two and had not distinguished the third.
+
+**What actually fixes it** is not resolve. Chaining a check and a commit in one
+command makes the check advisory: the shell runs both regardless of the first
+one's exit status unless something enforces the dependency. The fix is
+mechanical — `&&` rather than `;`, or a pre-commit hook — and it is the same
+lesson as rule 8's tool boundary, one level up: **a control whose result nothing
+consumes is decoration.**
+
+Recorded rather than quietly fixed because the near-identical structure across
+four findings is the signal. The failure keeps being about the *path* the check
+sits in rather than the check itself.
+
+**Rules:** 8
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET

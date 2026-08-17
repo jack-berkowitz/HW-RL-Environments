@@ -309,3 +309,94 @@ task_status:
 
 conversion_count: 3    # ca_d02, ca_d04, ca_d06 — AT your limit, not over it.
 conversion_rule: "3 or fewer -> convert and continue. 4 -> CVA6 was the wrong anchor, stop."
+
+# ==========================================================================
+# PER-FILE SHA-256 -- ADDED 2026-08-17
+# ==========================================================================
+# WHAT THESE ATTEST, AND WHAT THEY DO NOT.
+#
+# They attest LOCAL STATE: the bytes on this disk when they were computed.
+# THEY ARE NOT PROVENANCE. Nothing here has been checked against upstream at
+# the pinned SHAs, and with egress closed nothing here CAN be -- so a file
+# corrupted, patched or mis-vendored before today hashes cleanly and looks
+# correct. Until now the guarantee was only that a file EXISTS at the path the
+# manifest names, in a repo refs.lock pins; its contents were never checked.
+#
+# What they do buy: drift from today is detectable. A file edited, truncated
+# or replaced changes its hash and the check fires. That closes the window
+# going forward without pretending to close the one behind us.
+#
+# Verify:  python3 scripts/check_refs_hashes.py
+# 47 hashed, 22 named in the manifest and absent from disk.
+file_hashes:
+  refs/axi/src/axi_atop_filter.sv: {sha256: 65556ca9b151496e7e67f625d173e4a40b9de34a82bd877b6182099f539ab9b1, bytes: 16566}
+  refs/axi/src/axi_burst_splitter.sv: {sha256: 658a192648b7845af6526794d0e8d9c9031252ee09c5e20d7caf33f585387d4f, bytes: 3497}
+  refs/axi/src/axi_demux.sv: {sha256: 3c165a36d2efd88e0714d2e20dcea9375c0e211b0091252e6b082b884b9fd23b, bytes: 11100}
+  refs/axi/src/axi_id_remap.sv: {sha256: 299d6e889e54dd1d872e649608d66569f5c1bfc2d422903f985b75d4a4974a15, bytes: 32119}
+  refs/axi/src/axi_lite_xbar.sv: {sha256: 3ffa30755647a1a7aa3923e4ab03cd31d237934e3dc1a0a537c63e95aad8cb9e, bytes: 13778}
+  refs/axi/src/axi_pkg.sv: {sha256: 244bd5cb3c5bc58d786f2ed2f5eeefd910c4fe03a175f4a2888c6a2ea1c430dc, bytes: 26577}
+  refs/basejump_stl/bsg_misc/bsg_defines.sv: {sha256: fdda4920183dbfdd6ed11b80baae53cb33295239b9069ff5b0fea3d61abe4281, bytes: 9569}
+  refs/common_cells/src/cdc_fifo_gray.sv: {sha256: 1592390f962a957869ecb55e93e3ebfa2dfec61070ea2b7a60624cd42aa40835, bytes: 10760}
+  refs/common_cells/src/cf_math_pkg.sv: {sha256: bbf0614771ceb9526356bb8e5234787324ef215884bc11b4aa27e91fc3cc8910, bytes: 2993}
+  refs/common_cells/src/id_queue.sv: {sha256: 103c09c4ef9861f8274ceed40436ed89884eb993067b0bb587b9fcf19bdc69fb, bytes: 18061}
+  refs/common_cells/src/rr_arb_tree.sv: {sha256: f72bc188ea8253230a722bfb6436ab31b6e41c26020fa4ba4eebd93025984f7e, bytes: 14558}
+  refs/common_cells/src/spill_register.sv: {sha256: 97bf85128f538c54c749896b8eee5fcfe4b27c16845d2a17990979a63b09f2ec, bytes: 1381}
+  refs/cva6/core/ariane_regfile_ff.sv: {sha256: e8b86693adf85bcdbfb40b650698fc38f675d840213be55eff1468bff273e95f, bytes: 3129}
+  refs/cva6/core/frontend/bht.sv: {sha256: a80924695e868d5ae1d96874af8a3accd82d14b522d1fef1c39cc059744879e0, bytes: 13971}
+  refs/cva6/core/frontend/btb.sv: {sha256: 6848d908494a9686389aba7ac02b30ec36bb8a2b4bee90dfd0590772305d6e69, bytes: 8034}
+  refs/cva6/core/frontend/ras.sv: {sha256: 27d447b38c9ac3b8523c15c2e20545f0992b3361633f1897e23acff169bd8cf4, bytes: 2402}
+  refs/cva6/core/include/ariane_pkg.sv: {sha256: f492b1dda7044c4d202df1a1e4609a53fbecc94ad3f08b5d6d9a150b4569d2d7, bytes: 25022}
+  refs/cva6/core/include/instr_tracer_pkg.sv: {sha256: 3f34a7641475f7ee7cbbebe5a1aaae61917518328cb425551c43e0bec05b195a, bytes: 12276}
+  refs/cva6/core/load_store_unit.sv: {sha256: ce091f34f60e489a79d335548355e7d69e7dcd3982f8ece835ce9df2baf72a78, bytes: 34214}
+  refs/cva6/core/scoreboard.sv: {sha256: dd816cdefd64817737e11ed79dbf91ce0d9d7361c08806a5f7f4883468791022, bytes: 15379}
+  refs/cva6/core/serdiv.sv: {sha256: 7b4d4b0be7512ec025fd3f4cec4e140e2f4466115237dd244fabc6b2095425f6, bytes: 8836}
+  refs/cva6/core/store_buffer.sv: {sha256: 523de0930e91e54e7a69e1301eca34d8aeb6ef368b523054be66d7b80205b946, bytes: 15127}
+  refs/cvfpu/src/fpnew_cast_multi.sv: {sha256: 2298be638b66e8fb9072124938063925ce0b494a0f309ab709c188ea3aadbd91, bytes: 67022}
+  refs/cvfpu/src/fpnew_divsqrt_multi.sv: {sha256: ed20094356b40cf2af76e913cc7aa9535ebbbc59b0e70822bf54efe609c8895c, bytes: 17554}
+  refs/cvfpu/src/fpnew_fma.sv: {sha256: f46700037a6f9efe9b74855d3d21ebaeaf42f5dd522b9e812bbc56ad7193ec71, bytes: 35746}
+  refs/cvfpu/src/fpnew_pkg.sv: {sha256: a3e8b15beb8d4b841fad7499ed403fbebf93fe2518d529fe190033cdcb21ed3c, bytes: 29530}
+  refs/hwpe-stream/rtl/basic/hwpe_stream_merge.sv: {sha256: 9a35e6ca7915ee4833b42f9189d5a6d6ad7bca86a42c49e062e86cfa6f649c31, bytes: 3334}
+  refs/hwpe-stream/rtl/basic/hwpe_stream_split.sv: {sha256: e9de2c4287064447502fadcde7fb8d2f0a7a25f266db2abfad2df5366da5e65f, bytes: 3458}
+  refs/hwpe-stream/rtl/fifo/hwpe_stream_fifo_earlystall.sv: {sha256: a21f361d3c794b4c5864be7fa4cadf187e75b8ad020fedad28cba2598c267cfc, bytes: 9751}
+  refs/hwpe-stream/rtl/hwpe_stream_interfaces.sv: {sha256: b6b0516c3c0f4efd2c7ced09feb4e5bea1c98c74d0c52540b7a7ff238e35e7a2, bytes: 4571}
+  refs/hwpe-stream/rtl/hwpe_stream_package.sv: {sha256: c2f7b0efcb60cd4dbeeb31552578588b15a941bd886c0501e38f68d8680e91f4, bytes: 4738}
+  refs/idma/src/idma_pkg.sv: {sha256: 298b53b5c12edaa3f4ef5cb6b297bcb20c55fd2eace2c4143e11726f039d67d6, bytes: 3177}
+  refs/ne16/rtl/ne16_package.sv: {sha256: 9aa14987f8c9f515a597606d35e2345d4abcc34f1f0f5f9b206b3f06c3cca811, bytes: 21395}
+  refs/redmule/rtl/redmule_ctrl.sv: {sha256: 2cbc888c4c762e5609c6dd3b51a9e8e81b78d211e5f1520a7aa805872ad31296, bytes: 7495}
+  refs/redmule/rtl/redmule_pkg.sv: {sha256: 454f594b41b2429536c33cf1a87cb94cebe577a2544e9c1c679188af020be67a, bytes: 7485}
+  refs/redmule/rtl/redmule_scheduler.sv: {sha256: 45e0917f26b87b524340f3ea9cc304ed96a7727085585f1baad52c5542d134db, bytes: 34372}
+  refs/verilog-axis/rtl/arbiter.v: {sha256: d54d337db4812f927b2e9b5788dfa39f9bd578ad01b7846c5fa7f2610b0923fa, bytes: 4993}
+  refs/verilog-axis/rtl/axis_adapter.v: {sha256: 42e8a1289d4aa2dfd90785c983d3f5790c9c4a2cb957cfd42ea1d39435032c67, bytes: 12811}
+  refs/verilog-axis/rtl/axis_arb_mux.v: {sha256: bee8d11f32f7fb1c5afdd6cdad872cd7de9dc94bcb4787f9aa119f2ebbc489a6, bytes: 11633}
+  refs/verilog-ethernet/rtl/arp.v: {sha256: 41e2301695fdfc1cc93252041107574a0ed040ba92c99d57dce73317804f4698, bytes: 17937}
+  refs/verilog-ethernet/rtl/arp_cache.v: {sha256: d8b573a7582c08f67f90aba9316d98e5b0e0c5bbcbcd7a6935d6537e3f4aa2f8, bytes: 6952}
+  refs/verilog-ethernet/rtl/arp_eth_rx.v: {sha256: 4113e03df063b91d64be4da8e455ba45d8251cecc8e66ec75cec93c518443bee, bytes: 11674}
+  refs/verilog-ethernet/rtl/arp_eth_tx.v: {sha256: 88be298ea8f236900416ebd3295aa2fa86a8785acc2b8edca87278afc2338f86, bytes: 13497}
+  refs/verilog-ethernet/rtl/lfsr.v: {sha256: 5502c8203b0dfc7246c1a2de93e60c199ded3c1d7840b106350d714f72a9a079, bytes: 16327}
+  refs/verilog-ethernet/rtl/mac_ctrl_rx.v: {sha256: b5c0eda334c078518adb5fb7db324ae966ebddba0031bc91cedd32b831137fb1, bytes: 16385}
+  refs/verilog-ethernet/rtl/mac_ctrl_tx.v: {sha256: 48202a9a8f4b4e9688a4a0eac9dfe7492825be9f1f54a77590008db851b391c1, bytes: 14920}
+  refs/verilog-ethernet/rtl/mac_pause_ctrl_tx.v: {sha256: c5de52ceae4cf7c048262132191b1e4c366deca15d931e4703f6a05eff789c5a, bytes: 11667}
+
+# NAMED IN THE MANIFEST, ABSENT ON DISK -- recorded, not skipped:
+#   refs/axi/include/axi/typedef.sv
+#   refs/basejump_stl/bsg_cache/bsg_cache.v
+#   refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_mhu.v
+#   refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_miss_fifo.v
+#   refs/basejump_stl/bsg_mem/bsg_mem_multiport.v
+#   refs/basejump_stl/bsg_misc/bsg_lru_pseudo_tree_backup.v
+#   refs/basejump_stl/bsg_misc/bsg_lru_pseudo_tree_decode.v
+#   refs/basejump_stl/bsg_misc/bsg_lru_pseudo_tree_encode.v
+#   refs/basejump_stl/bsg_noc/bsg_wormhole_router.v
+#   refs/basejump_stl/bsg_noc/bsg_wormhole_router_input_control.v
+#   refs/basejump_stl/bsg_noc/bsg_wormhole_router_output_control.v
+#   refs/common_cells/include/common_cells/registers.sv
+#   refs/common_cells/src/graycode.sv
+#   refs/cordic/rtl/cordic.v
+#   refs/cva6/core/mmu_sv39/tlb.sv
+#   refs/darkriscv/rtl/darkriscv.v
+#   refs/dspfilters/rtl/subfildown.v
+#   refs/hwpe-stream/rtl/basic/hwpe_stream_fifo.sv
+#   refs/idma/src/backend/idma_backend.sv
+#   refs/ne16/rtl/array/ne16_compute_array.sv
+#   refs/verilog-ethernet/rtl/axis_fifo.v
+#   refs/verilog-ethernet/rtl/eth_mac_1g_rx.v

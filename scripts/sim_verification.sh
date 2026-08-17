@@ -106,6 +106,55 @@ done
 # Override with SIM_TIMEOUT_S if a task's stimulus is genuinely longer.
 SIM_TIMEOUT_S="${SIM_TIMEOUT_S:-25}"
 
+# ---- SECOND-DUT GATE -------------------------------------------------------
+# A verification task's second DUT is the analogue of a design task's second
+# source: an INDEPENDENT correct implementation the submission must also accept.
+# Without it, "passes the golden" cannot separate a testbench that checks the
+# CONTRACT from one fitted to this implementation's incidental choices.
+#
+# The conformant perturbations do not substitute: they vary what the spec leaves
+# open, but they are perturbations OF the golden, so a misconception shared
+# between the golden and the checks stays invisible to them.
+#
+# Declared in task.yaml so the requirement is visible in the task rather than
+# only here, and so a task records ABSENT deliberately instead of the harness
+# silently not looking.
+SECOND_DUT="$(python3 - "$TASK_DIR/task.yaml" <<'PYY'
+import re, sys
+try:
+    t = open(sys.argv[1], encoding="utf-8").read()
+except OSError:
+    print("MISSING"); sys.exit(0)
+m = re.search(r"^second_dut:\s*$(.*?)(?=^\S|\Z)", t, re.M | re.S)
+if not m:
+    print("MISSING")
+else:
+    s = re.search(r"^\s+status:\s*(\S+)", m.group(1), re.M)
+    print(s.group(1) if s else "MISSING")
+PYY
+)"
+SECOND_DUT_WARN=0
+case "$SECOND_DUT" in
+  MISSING)
+    echo "REFUSED: $TASK_DIR/task.yaml declares no second_dut: status." >&2
+    echo "  A verification task must state whether it has an independent second" >&2
+    echo "  implementation. 'Passes the golden' cannot on its own distinguish a" >&2
+    echo "  testbench that checks the CONTRACT from one fitted to this particular" >&2
+    echo "  implementation. Record 'status: ABSENT' with the reason, or provide" >&2
+    echo "  it. Silence is not an answer." >&2
+    exit 2 ;;
+  ABSENT)
+    SECOND_DUT_WARN=1 ;;
+  *)
+    if [ ! -d "$TASK_DIR/dut2" ]; then
+      echo "REFUSED: task.yaml says second_dut status '$SECOND_DUT' but" >&2
+      echo "  $TASK_DIR/dut2 does not exist. Declared-and-absent is worse than" >&2
+      echo "  absent-and-declared: nothing would have run against it." >&2
+      exit 2
+    fi ;;
+esac
+
+
 # --- collect submissions -----------------------------------------------------
 SUBS=()
 if [ -d "$SUB_ARG" ]; then
@@ -155,6 +204,12 @@ build_variant() {   # $1 = golden | tt_cN_...  -> writes variant.sv + extra.sv
 
 echo "task=$TASK_NAME  golden=$GOLDEN_TOP  tb=$TB_MOD  duts=${#DUTS[@]}  submissions=${#SUBS[@]}"
 echo "================================================================================"
+if [ "${SECOND_DUT_WARN:-0}" = "1" ]; then
+  echo "NOTE: no second DUT. A pass shows the testbench accepts THIS implementation"
+  echo "  and the variations the spec permits of it -- not that it checks the"
+  echo "  contract independently of how the golden happens to be built."
+  echo "================================================================================"
+fi
 
 NPASS=0
 for sub in "${SUBS[@]}"; do

@@ -163,7 +163,17 @@ Anchors disjoint from every design task above.
 |---|---|---|---|---|---|
 | `v_nw01` | `eth_stack` | ARP plus the surrounding RX/TX path shipped whole: request/reply, cache insert and evict, timeout and retry, gratuitous ARP, broadcast. | Forencich `arp*` + `axis_gmii_rx` | A | not started |
 | `v_nw02` | `axi_atop_filter` | Atomic-op filtering: synthesised B/R responses, no protocol violation on filtered ATOPs. | PULP `axi/src/axi_atop_filter.sv` | A | not started |
-| `v_nw03` | `axis_arb_mux` | Frame atomicity, arbitration fairness over long horizons, `tlast` under backpressure. | Forencich `verilog-axis/rtl/axis_arb_mux.v` | A | not started |
+| `v_nw03` | `axis_arb_mux` | Frame atomicity, arbitration behaviour under backlog — **see the correction below**, `tlast` under backpressure. | Forencich `verilog-axis/rtl/axis_arb_mux.v` | A | not started |
+
+> **CORRECTION — the fairness claim was measured false.** This row read
+> *"arbitration fairness over long horizons"*. At the anchor's DEFAULT
+> arbitration, **three of four backlogged inputs were served zero frames
+> across 406** — that is starvation, not unfairness, and a fairness metric
+> measured there reports on a design that never gets a turn at all.
+> The claim holds only at `ARB_TYPE_ROUND_ROBIN=1`, so the task must pin
+> that in its scored configuration (rule 18) or the property it exists to
+> test is absent from the configuration it is tested in.
+
 | `v_nw04` | `ptp_clock` | Time-base correctness: fractional-ns accumulation, drift, adjustment without discontinuity. | Forencich `verilog-ethernet/rtl/ptp_clock.v` | A | not started |
 
 ## AI Acceleration (4)

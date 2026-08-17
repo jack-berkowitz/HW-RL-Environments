@@ -81,6 +81,20 @@ BUILD_FAILURES = {
     ("d_nw01_axi4_xbar", "gemini.sv"):
         "anonymous struct as parameter value; confirmed on both frontends "
         "(slang 13 errors, Verilator 7)",
+    ("d_dsp02_fp32_fma_ii1", "deepseek.sv"):
+        "does not compile; confirmed on both frontends (slang 17 errors, "
+        "Verilator 3)",
+    ("d_ca04_async_fifo_cdc", "kimi.sv"):
+        "identifier used before its declaration (slang). Verilator accepts it, "
+        "which is Verilator being permissive rather than the code being legal — "
+        "synthesis uses slang, so it cannot be built",
+}
+
+# Correctness failures. Distinct from a build failure: the design compiles and
+# is wrong, which is a different result about the model.
+CORRECTNESS_FAILURES = {
+    ("d_dsp02_fp32_fma_ii1", "gemini.sv"):
+        "fails the contract at vector 4 (a=1.0, b=0)",
 }
 
 
@@ -214,6 +228,15 @@ def main():
 
             is_ref = "_ref" in sub or sub.startswith("async_fifo") or sub.startswith("axi4_xbar") or sub.startswith("fp32_fma")
             name = f"**reference**" if is_ref else f"`{sub[:-3]}`"
+
+            cf = CORRECTNESS_FAILURES.get(key)
+            if cf and not BUILD_FAILURES.get(key):
+                print("| " + " | ".join([name, "**FAILS**", "n/a", "n/a", "n/a"]
+                                        + ["n/a"] * len(mets)
+                                        + [f"**fails correctness** — {cf}; no PPA, "
+                                           f"a number for a design that fails its "
+                                           f"contract is not a result"]) + " |")
+                continue
 
             bf = BUILD_FAILURES.get(key)
             if bf:

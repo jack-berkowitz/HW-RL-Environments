@@ -14,11 +14,17 @@ capability, and nothing here establishes those weights.
 D_CA04 — ASYNCHRONOUS CDC FIFO
 ==============================
 
-design     correctness  area (µm²)  power (mW)  Fmax (MHz)  FIFO capacity  min crossing lat  max crossing lat  write stalls  status
------------------------------------------------------------------------------------------------------------------------------------
-reference   18/18 pass      20,101        20.0       380.9             10                 3                74         11046        
-chat        18/18 pass      14,685         7.3       222.2              8                 3                72         10914        
-gemini      18/18 pass      14,515         7.1   not swept              8                 2                72         10912        
+design       correctness  area (µm²)  power (mW)  Fmax (MHz)  FIFO capacity  min crossing lat  max crossing lat  write stalls               status
+--------------------------------------------------------------------------------------------------------------------------------------------------
+reference     18/18 pass      20,101        20.0       380.9             10                 3                74         11046                     
+chat          18/18 pass      14,685         7.3       222.2              8                 3                72         10914                     
+deepseek      18/18 pass           —           —           —              8                 2                72         10912                     
+gemini        18/18 pass      14,515         7.1   not swept              8                 2                72         10912                     
+kimi       did not build           0           0           0            n/a               n/a               n/a           n/a  ZERO: did not build
+
+  kimi: build failure — identifier used before its declaration (slang). Verilator accepts it,
+      which is Verilator being permissive rather than the code being legal — synthesis uses slang, so
+      it cannot be built
 
 - FIFO capacity — beats accepted before backpressure
 - min crossing lat — read-clock cycles, minimum
@@ -29,13 +35,17 @@ gemini      18/18 pass      14,515         7.1   not swept              8       
 D_DSP02 — FP32 FUSED MULTIPLY-ADD
 =================================
 
-design     correctness  area (µm²)  power (mW)  Fmax (MHz)               latency  init interval               status
---------------------------------------------------------------------------------------------------------------------
-chat          1/1 pass           —           —           —  1 (req. added later)              1  STALE: spec changed
-reference     1/1 pass      68,303       145.0        78.0                     3              1                     
+design       correctness  area (µm²)  power (mW)  Fmax (MHz)  latency  init interval                  status
+------------------------------------------------------------------------------------------------------------
+chat            1/1 pass     440,336       669.0   not swept        3              1                        
+reference       1/1 pass      68,303       145.0        78.0        3              1                        
+gemini             FAILS         n/a         n/a         n/a      n/a            n/a  fails correctness — fa
+deepseek   did not build           0           0           0      n/a            n/a     ZERO: did not build
 
-  chat: not scored against the current spec — submitted 2026-08-15, before the 3-cycle latency
-      requirement was added 2026-08-16; the spec it was given said "latency is not constrained"
+  gemini: fails correctness — fails the contract at vector 4 (a=1.0, b=0); no PPA, a number for a
+      design that fails its contract is not a result
+  deepseek: build failure — does not compile; confirmed on both frontends (slang 17 errors,
+      Verilator 3)
 
 - latency — clocks from accept to result
 - init interval — clocks between accepts

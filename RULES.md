@@ -246,8 +246,14 @@ defects. It runs with the regression.
 
     Worked example: `d_nw01/gemini.sv` scores zero, annotated *build fail
     (slang/Verilator, anonymous struct as parameter value — confirmed genuine,
-    7 errors)*. The confirmation matters — a frontend disagreement is not a
-    build failure, and the way to tell is to check the second frontend.
+    7 errors)*.
+
+    **Agreement between frontends is SUFFICIENT evidence, not necessary.**
+    `d_ca04/kimi.sv` is rejected by slang for using an identifier before its
+    declaration and accepted by Verilator with zero errors. That is Verilator
+    being permissive, not the code being legal — and ORFS synthesises with
+    slang, so the design cannot be built regardless. Reading "one frontend
+    accepts it" as "not a real failure" inverts the test.
 
     **From:** F27
 
