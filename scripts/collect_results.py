@@ -111,6 +111,12 @@ def main():
         return
 
     # join sim + ppa per (task, submission), newest of each kind
+    # Verification tasks are scored on different axes and reported separately
+    # (report_table.py keeps them on their own table). Including them here would
+    # put a kill count in a column headed "configs".
+    design_tasks = set(known_tasks())
+    recs = [r for r in recs if r.get("task") in design_tasks]
+
     joined = {}
     for r in recs:
         key = (r["task"], r.get("submission", "?"))
@@ -152,7 +158,12 @@ def main():
             "task": task,
             "submission": os.path.basename(sub),
             "sha": (sim or ppa or {}).get("submission_sha256_16", "")[:8],
-            "configs": (f"{sim['configs_passed']}/{sim['configs_total']}" if sim else None),
+            # .get, not [] -- a VERIFICATION record has no configs_passed, and
+            # indexing crashed the whole table when v_ca05 started writing
+            # records into the same tree. A missing field renders absent, which
+            # is rule 20's prescription; it is not a fallback inventing a value.
+            "configs": (f"{sim.get('configs_passed')}/{sim.get('configs_total')}"
+                        if sim and sim.get("configs_total") is not None else None),
             "correct": ("PASS" if sim and sim.get("all_passed") else
                         ("FAIL" if sim else None)),
             "clk": (ppa or {}).get("clk_period_ns"),
