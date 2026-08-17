@@ -1502,6 +1502,52 @@ separately; the sweep establishes the shape, not the new floor.
 
 **Rules:** 1, 20
 
+## F30. A spec change silently converts old submissions into failures
+
+`d_dsp02/chat.sv` measures **latency 1** where spec clause S1 requires 3, and
+the results table rendered that as *"does not implement the scored
+configuration"* — which reads as a defect in the submission.
+
+**It is not.** Git settles it:
+
+| | date |
+|---|---|
+| `chat.sv` submitted | **2026-08-15** |
+| S1 latency requirement added | **2026-08-16** |
+
+And the spec at the moment of submission said, in capitals:
+
+> *"LATENCY IS NOT CONSTRAINED AND NOT CHECKED. Pipeline as deeply as you like."*
+
+**The submission complied completely with the specification it was given.**
+Latency 1 was not merely permitted, it was explicitly invited. Scoring it
+against S1 measures the spec change, not the model.
+
+**The general form, and it applies to every task here:** a specification change
+retroactively converts prior submissions into apparent failures, and nothing in
+the apparatus notices — the checker is silent on S1 by design, the metric reads
+correctly, and the comparison against `expect` fires exactly as built. Every
+component behaves properly and the conclusion is still wrong about the model.
+
+This is the third variety of the pattern this document keeps recording. The
+first two were a measurement that measured nothing, and a report that invented a
+value. This one is **a correct measurement compared against the wrong contract**.
+
+**Consequences adopted:**
+
+1. **A submission is scored against the spec it was given.** Where the spec has
+   since changed, the row says so and names both dates; it does not render as
+   non-compliance.
+2. **A spec change requires re-soliciting**, not rescoring. `d_dsp02` needs
+   re-prompting before it carries a scored latency result, because no submission
+   in hand has ever seen S1.
+3. Rule 18's pinning made this visible rather than causing it — before pinning,
+   the mismatch had nothing to be measured against.
+
+**Rules:** 18
+
+**Class:** contract defect. The apparatus was correct throughout.
+
 ---
 
 # A STATED LIMITATION OF THE RULE SET

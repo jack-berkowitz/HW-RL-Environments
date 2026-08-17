@@ -58,6 +58,15 @@ TASK_TITLE = {
 
 # Submissions that failed to build. Rule 19: score zero on every PPA axis,
 # annotated, never omitted.
+# Submissions made BEFORE a requirement existed. Named explicitly with the
+# evidence, never inferred: scoring a submission against a spec it was never
+# given measures the spec change, not the model.
+PREDATES_REQUIREMENT = {
+    ("d_dsp02_fp32_fma_ii1", "chat.sv"):
+        ("submitted 2026-08-15, before the 3-cycle latency requirement was added "
+         "2026-08-16; the spec it was given said \"latency is not constrained\""),
+}
+
 BUILD_FAILURES = {
     ("d_nw01_axi4_xbar", "gemini.sv"):
         "anonymous struct as parameter value; confirmed on both frontends "
@@ -198,8 +207,12 @@ def main():
 
             bf = BUILD_FAILURES.get(key)
             if bf:
+                # Rule 19: zero on the PPA axes, because a design that does not
+                # build cannot be operated. But the METRIC cells are not zero --
+                # nothing was measured, and "0" would read as "it built and
+                # measured nothing". The zero is a SCORE; the metrics are absent.
                 print("| " + " | ".join([name, "**did not build**", "**0**", "**0**", "**0**"]
-                                        + ["0"] * len(mets)
+                                        + ["n/a — did not build"] * len(mets)
                                         + [f"**build failure** — {bf}"]) + " |")
                 continue
 
@@ -249,10 +262,17 @@ def main():
                 if k not in merged:
                     cells.append("—")
                 elif expect is not None and str(merged[k]) != str(expect):
-                    cells.append(f"**{merged[k]}** (spec requires {expect})")
-                    notes.append(f"does not implement the scored configuration: "
-                                 f"{READABLE.get(k,(k,''))[0]} is {merged[k]}, "
-                                 f"specification requires {expect}")
+                    pre = PREDATES_REQUIREMENT.get(key)
+                    if pre:
+                        # NOT a model failure. The submission answered the spec
+                        # it was given, and the requirement was added later.
+                        cells.append(f"{merged[k]} *(req. added later)*")
+                        notes.append(f"**not scored against the current spec** — {pre}")
+                    else:
+                        cells.append(f"**{merged[k]}** (spec requires {expect})")
+                        notes.append(f"does not implement the scored configuration: "
+                                     f"{READABLE.get(k,(k,''))[0]} is {merged[k]}, "
+                                     f"specification requires {expect}")
                 else:
                     cells.append(str(merged[k]))
             cells.append("; ".join(notes) if notes else "")
@@ -286,6 +306,43 @@ def main():
     print("sampling something different on that design and the three numbers are")
     print("not a like-for-like comparison. This also decides whether `gemini`'s")
     print("2-cycle crossing is a genuine result or an artefact. Unresolved.\n")
+
+    # ---- verification tasks, SEPARATE TABLE -------------------------------
+    print("\n---\n")
+    print("# Verification task\n")
+    print("**A different measurement, kept on its own table on purpose.** A")
+    print("verification submission is a *testbench*, not a design: it is judged by")
+    print("which implementations it accepts and rejects, and there is no area or")
+    print("frequency to report. Putting it in the grid above would invite averaging")
+    print("two things that do not share units.\n")
+    print("## v_ca05 — tag tracker (out-of-order queue)\n")
+    print("The model is given a port map and a written specification. **It never")
+    print("sees the RTL.** It writes a testbench, which is then run against the")
+    print("correct implementation and against deliberately faulty ones.\n")
+    print("| testbench | accepts correct design | accepts legal variants | catches faults | notes |")
+    print("|---|---|---|---|---|")
+    print("| **our reference testbench** | yes | 4/4 | **6/6** | the ceiling; corrected after the fault set exposed two gaps in it |")
+    print("| `chat` | yes | 4/4 | **2/6** | 3 faults hung it — no watchdog — and 1 went undetected |")
+    print("| `gemini` | **no** | — | — | rejects the correct design; checks status before applying reset |")
+    print()
+    print("- **accepts correct design** — does it pass a known-good implementation?")
+    print("  A testbench that rejects correct hardware is unusable whatever else it catches.")
+    print("- **accepts legal variants** — four implementations that differ from the")
+    print("  reference only where the specification is deliberately silent. A correct")
+    print("  testbench must accept all four; failing one means it checked something")
+    print("  the specification never promised.")
+    print("- **catches faults** — six implementations each carrying one deliberate")
+    print("  defect: capacity, ordering, starvation, boundary conditions, masked search.")
+    print("  Every one is proven catchable.\n")
+    print("**Reported per fault, never as a rate.** `chat`'s six outcomes are 2")
+    print("caught, 3 hangs and 1 miss — four different problems, and a single")
+    print("percentage hides all of them. A hang is not a catch: the testbench did")
+    print("not detect the fault, it stopped, and a correct-but-slow design would")
+    print("hang it identically.\n")
+    print("**The headline result is that this worked at all.** `chat` wrote a")
+    print("testbench from prose alone that accepts the correct design and all four")
+    print("legal variants — no reliance on unspecified behaviour. That is the")
+    print("finding; the fault-catching score is the weaker half.")
 
     if any_ungated:
         print("\n---\n")

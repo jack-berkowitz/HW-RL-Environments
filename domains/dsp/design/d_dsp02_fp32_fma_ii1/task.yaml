@@ -38,6 +38,17 @@ scored_configuration:
     deliberately not chosen: it buys registers for a rate C3 already guarantees.
   register_placement: free (S1a) -- pinned depth, unpinned distribution
 
+submissions_status: >
+  NO SUBMISSION IN HAND HAS SEEN S1. candidates/d_dsp02/chat.sv was submitted
+  2026-08-15, before the 3-cycle latency requirement was added 2026-08-16, under
+  a spec that said "LATENCY IS NOT CONSTRAINED AND NOT CHECKED. Pipeline as
+  deeply as you like." Its latency of 1 complied with the spec it was given.
+  THIS TASK MUST BE RE-SOLICITED before it carries a scored latency or PPA
+  result -- rescoring the existing answer would measure the spec change rather
+  than the model. See FINDINGS.md F30.
+  candidates/d_dsp02/gemini.sv does not build (wire declared inside always_comb,
+  rejected by both frontends) and scores zero under rule 19.
+
 scored_metrics:
   # `expect` is the value S1 requires. The metric is MEASURED from the design,
   # so a submission that declares the parameter and does something else shows a
