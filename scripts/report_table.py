@@ -88,6 +88,12 @@ BUILD_FAILURES = {
         "identifier used before its declaration (slang). Verilator accepts it, "
         "which is Verilator being permissive rather than the code being legal — "
         "synthesis uses slang, so it cannot be built",
+    ("d_dsp02_fp32_fma_ii1", "qwen.sv"):
+        "does not compile; confirmed on both frontends (slang 2, Verilator 3)",
+    ("d_nw01_axi4_xbar", "deepseek.sv"):
+        "does not compile; confirmed on both frontends (slang 5, Verilator 2)",
+    ("d_nw01_axi4_xbar", "qwen.sv"):
+        "does not compile; confirmed on both frontends (slang 20, Verilator 11)",
 }
 
 # Correctness failures. Distinct from a build failure: the design compiles and

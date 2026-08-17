@@ -1,0 +1,17 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "4/5",
+  "did_not_compile": "0",
+  "faults_caught": "0/6",
+  "faults_hung": "0",
+  "git_sha": "616b10d0483e89afebaae7441df468b5e82ebc6e-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "nc2",
+  "status": "rejected",
+  "submission": "domains/networking/verification/v_nw03_axis_arb_mux/tb/audit/nc2_unpromised_reliance_tb.sv",
+  "submission_sha256_16": "ba35d48adb61eda4",
+  "task": "v_nw03_axis_arb_mux",
+  "timestamp_utc": "2026-08-17T20:00:50Z"
+}

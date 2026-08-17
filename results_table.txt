@@ -20,6 +20,7 @@ reference     18/18 pass      20,101        20.0       380.9             10     
 chat          18/18 pass      14,685         7.3       222.2              8                 3                72         10914                     
 deepseek      18/18 pass           —           —           —              8                 2                72         10912                     
 gemini        18/18 pass      14,515         7.1   not swept              8                 2                72         10912                     
+qwen          18/18 pass           —           —           —              8                 2                72         10912                     
 kimi       did not build           0           0           0            n/a               n/a               n/a           n/a  ZERO: did not build
 
   kimi: build failure — identifier used before its declaration (slang). Verilator accepts it,
@@ -41,11 +42,13 @@ chat            1/1 pass     440,336       669.0   not swept        3           
 reference       1/1 pass      68,303       145.0        78.0        3              1                        
 gemini             FAILS         n/a         n/a         n/a      n/a            n/a  fails correctness — fa
 deepseek   did not build           0           0           0      n/a            n/a     ZERO: did not build
+qwen       did not build           0           0           0      n/a            n/a     ZERO: did not build
 
   gemini: fails correctness — fails the contract at vector 4 (a=1.0, b=0); no PPA, a number for a
       design that fails its contract is not a result
   deepseek: build failure — does not compile; confirmed on both frontends (slang 17 errors,
       Verilator 3)
+  qwen: build failure — does not compile; confirmed on both frontends (slang 2, Verilator 3)
 
 - latency — clocks from accept to result
 - init interval — clocks between accepts
@@ -59,6 +62,8 @@ design       correctness  area (µm²)  power (mW)  Fmax (MHz)  capacity (C1)  1
 reference     16/16 pass     154,245        87.5       190.5             27            2997            5994               1998        332              pre-gate
 chat          16/16 pass         n/a         n/a         n/a              8             599            1198                399        359  n/a: exceeded memory
 gemini     did not build           0           0           0            n/a             n/a             n/a                n/a        n/a   ZERO: did not build
+deepseek   did not build           0           0           0            n/a             n/a             n/a                n/a        n/a   ZERO: did not build
+qwen       did not build           0           0           0            n/a             n/a             n/a                n/a        n/a   ZERO: did not build
 
   reference: PPA predates the correctness interlock
   chat: area, power and Fmax unavailable — place-and-route exceeded the 5.8 GB container memory
@@ -66,6 +71,8 @@ gemini     did not build           0           0           0            n/a     
       the design, which was at 75 DRC violations and improving
   gemini: build failure — anonymous struct as parameter value; confirmed on both frontends (slang
       13 errors, Verilator 7)
+  deepseek: build failure — does not compile; confirmed on both frontends (slang 5, Verilator 2)
+  qwen: build failure — does not compile; confirmed on both frontends (slang 20, Verilator 11)
 
 - capacity (C1) — checker's C1 capacity measure, master 0 — units unresolved, see note
 - 1-pair thruput — bursts/1k cyc, one master-slave pair alone
