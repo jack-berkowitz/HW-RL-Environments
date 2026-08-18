@@ -306,3 +306,22 @@ against.** Changing what ships — splitting a file, inlining a transactor,
 promoting a comment into the deliverable — invalidates every earlier pass, even
 though nothing in the validated region changed. Re-run the checks against the
 new boundary rather than inheriting the old green.
+
+---
+
+## Constraints revision 2 — what the first blind run under constraints taught
+
+Stating the constraints removed the failure it named: **mid-block declarations
+went from four of eight submissions to zero of twelve.** It also exposed three
+gaps in the text itself, all of them dialect rather than verification ability:
+
+| gap | who hit it | fix |
+|---|---|---|
+| reserved words not listed | one submission used `int sequence;` | a list of the reserved words that read like ordinary variable names |
+| packed vs unpacked port connection undocumented | two submissions wrote `payload_t x [N]` against a port declared `payload_t [N-1:0] x` | a rule plus a correct/wrong example per task, and the example itself is lint-checked |
+| the edge-race example showed only a posedge | one submission genuinely complied — its check waits for "a rising edge that sampled rst high" — and still raced its own **negedge** checker | the rule now names the falling edge explicitly and shows the checker-races-itself case |
+
+The third is the instructive one. The submission read the constraint, acted on
+it, and failed anyway because the example anchored the reader on the wrong edge.
+**A constraint is only as good as the case its example shows**, and one line
+moved off the edge made that submission pass.

@@ -154,25 +154,62 @@ shall be high whenever the store is non-empty.
 ## SystemVerilog constraints — read these first
 
 Your file is compiled with **Verilator 5.x** (`--binary --timing`). These are
-tool-enforced, not style advice. Each one has already caused a submitted
-testbench to be rejected with none of its checking ever running:
+tool-enforced, not style advice. Every one of them has already caused a
+submitted testbench to be rejected with none of its checking ever running:
 
 - **Declarations come before statements.** Every variable declared in a
   `begin`/`end` block must appear before the first statement in that block.
   `int found = -1;` written after an assignment is a syntax error, not a warning.
+
 - **Use `automatic` for anything declared inside a procedural block that you
   assign on each execution.** A declaration with an initialiser inside an
   `always` or `initial` block is **static**: `rec_t e = q.pop_front();` runs its
   initialiser once, at time zero, and never again — so `e` silently holds an
   all-zero value for the entire run and every comparison against it is
   meaningless. Write `automatic rec_t e = q.pop_front();`.
-- **Never change a signal in the same timestep as the edge you sample it on.**
-  `@(posedge clk); x = 1;` races the design's own sampling of `x` at that edge,
-  and the usual symptom is that correct hardware looks inert. Drive from the
-  opposite edge, or advance state with nonblocking assignment from the edge that
-  consumed it.
+
+- **Do not use a reserved word as an identifier.** SystemVerilog reserves many
+  words Verilog does not, and the ones that read like ordinary variable names
+  are the dangerous ones. All of these are errors as identifiers:
+  `sequence`, `property`, `context`, `do`, `ref`, `expect`, `this`, `final`,
+  `table`, `bind`, `cover`, `assert`, `event`, `local`, `type`, `class`,
+  `virtual`, `program`, `interface`, `modport`, `extern`, `randomize`, `matches`,
+  `join`, `wait_order`, `forkjoin`, `constraint`, `solve`, `before`, `alias`.
+  If a name reads like a verification concept, rename it: `seq_no`, `ctx_id`,
+  `is_final`.
+
+- **Match a port's array form exactly when you connect to it.** Dimensions
+  written BEFORE the name are *packed*; dimensions written AFTER the name are
+  *unpacked*; the two are different types and will not connect. Verilator
+  rejects the mismatch with "port which is not an array, and expression which is
+  an array", which does not obviously point at the real problem.
+
+```systemverilog
+  // port:        input payload_t [N_MATCH-1:0] match_data_i
+  payload_t [N_MATCH-1:0] match_data;    // correct -- packed, matches the port
+  payload_t match_data [N_MATCH];        // WRONG   -- unpacked, will not connect
+```
+
+- **Never change a signal in the same timestep as the edge that samples it —
+  including the falling edge.** Both of these race:
+
+```systemverilog
+  @(posedge clk); x = 1;   // races a design sampling x on the rising edge
+  @(negedge clk); x = 1;   // races YOUR OWN checker if it runs on negedge
+```
+
+  The second is the one that gets missed. A checker written
+  `always @(negedge clk) if (rst && ...)` fires in the same timestep as a
+  `rst = 1'b1;` that follows a `@(negedge clk)`, so it sees the new reset value
+  against outputs that have not been clocked yet, and reports a failure the
+  design never committed. Drive from the edge OPPOSITE to the one that samples,
+  or advance state with nonblocking assignment from the edge that consumed it.
+  The provided plumbing already does this; if you drive anything yourself, do it
+  the same way.
+
 - **Identify a result by bookkeeping, not by matching on its value.** Values
   repeat, so content matching is ambiguous and will mis-attribute.
+
 - Do not use `#` delays for anything except the clock generator and the watchdog.
 - No UVM, no `randsequence`, no DPI. Queues and associative arrays are fine.
 
