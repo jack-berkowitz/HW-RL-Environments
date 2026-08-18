@@ -641,3 +641,35 @@ Open item for module 4: the stub is currently scalar/sized. The cache needs
 add a thin line wrapper) during that session rather than guessing now.
 
 
+
+## Controls: existence is not participation
+
+A gate that proves a control EXISTS proves nothing about whether it RAN. The
+second-DUT gate checked `[ -d "$TASK_DIR/dut2" ]` and passed; the second DUT
+was never compiled against, for three tasks, while the status field said
+`BUILT_UNWIRED` in plain text (F40).
+
+Rule 8's test — *can this control be skipped by calling something one level
+down?* — does not catch this shape. The control was not skipped. It was never
+invoked, so there was nothing to skip.
+
+**The test that does catch it: does anything READ the control's output?** Trace
+from the control to a number that appears in a report. If no path exists, the
+control is decoration however carefully it was built.
+
+Two cheap habits that make the failure visible:
+
+- **Print the count of things the harness will run, before it runs them.**
+  `duts=12` becoming `duts=13` is how the fix was confirmed to be live. A
+  harness that does not say how much work it is about to do cannot be observed
+  to be doing less than you think.
+- **Validate a control before trusting a failure it produces.** The second DUT
+  is an oracle, so a wrong one manufactures submission failures out of nothing.
+  Every reference testbench was run against its own dut2 first; all three
+  accepted, which is what makes the submission rows interpretable.
+
+Related: the `sorry:` prefix in Icarus means *valid input, unimplemented
+feature* — not a defect in the file. Never quote a `sorry:` as a submission
+error, and check which frontend the harness actually invokes before attributing
+anything to the submission: the verification harness runs **Verilator**, so an
+Icarus limitation observed at a terminal has no bearing on a score.

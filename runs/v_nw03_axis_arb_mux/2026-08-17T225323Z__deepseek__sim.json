@@ -1,0 +1,18 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/0",
+  "did_not_compile": "1",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "git_sha": "607d97ff8abfdd18794930ff3e2fa22d5435d233-dirty",
+  "golden_accepted": "unknown",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "deepseek",
+  "status": "rejected",
+  "submission": "candidates/v_nw03/deepseek.sv",
+  "submission_sha256_16": "c3f6aee61ba5bf30",
+  "task": "v_nw03_axis_arb_mux",
+  "task_text_hash": "bfadf285b5846ec4",
+  "timestamp_utc": "2026-08-17T22:53:23Z"
+}

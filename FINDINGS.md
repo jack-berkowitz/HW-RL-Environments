@@ -2006,3 +2006,79 @@ tradeoff rather than a ranking: a candidate 27 % smaller and 44 % lower power at
 a clock where neither design was constrained, and 33 % slower at the frequency
 where they were. Two points on one Pareto frontier, with no way to rank them
 without a frequency target the specification never stated.
+
+## F40
+
+**The second DUT was declared, gated, and never run.** Three verification
+tasks carried `second_dut: status: BUILT_UNWIRED` with a real, independent
+implementation on disk. The gate in `sim_verification.sh` checked that
+`dut2/` EXISTED and passed. Nothing ever compiled against it: the `DUTS`
+array held golden + conformant + mutants, and no fourth kind.
+
+So the harness refused tasks that had no second DUT, and quietly gave full
+credit to tasks that had one it never used. The status literally said
+`BUILT_UNWIRED` and the gate read it as satisfied.
+
+**This is F32's shape a second time.** "We built the control" and "the
+control is in the path and is read" are different claims, and the gate
+asserted the first while appearing to assert the second. Rule 8's test --
+*can this control be skipped by calling something one level down?* -- does
+not catch it, because the control was not skipped, it was never invoked.
+The stronger test is: **does anything READ the control's output?** A gate
+that proves a file exists proves nothing about whether it was used.
+
+Fixed: `dut2` is a member of `DUTS`, its verdict is recorded separately from
+the conformant tally (a conformant failure means the testbench relies on
+unpromised behaviour; a dut2 failure means it is fitted to the golden's
+incidental choices -- different defects, so not one number), and the gate now
+resolves the declared `file:` rather than the directory.
+
+Validated before use, as the second DUT is itself an oracle: all three
+reference testbenches ACCEPT their dut2 (v_ca05, v_nw03, v_dsp02). Had a
+reference rejected one, every submission failure on that row would have been
+an artefact of a wrong dut2 rather than a property of the submission.
+
+**From:** scoring v_nw03 and v_dsp02
+
+## F41
+
+**Half the verification submissions failed to compile, and every one of the
+nine errors is the same language rule.** Across v_ca05, v_nw03 and v_dsp02,
+six submissions from two models did not build. Verilator -- the frontend the
+harness actually uses -- reported nine errors in total, and all nine are a
+**variable declaration placed after a statement** inside a procedural block,
+which SystemVerilog forbids.
+
+Confirmed as a mechanism rather than inferred from the message, whose text
+(`syntax error, unexpected IDENTIFIER, expecting "'{"`) names neither
+declarations nor placement:
+
+    task automatic t();      task automatic t();
+      if (1) begin end         int unsigned x = 0;   // moved up
+      int unsigned x = 0;      if (1) begin end
+    REJECTED, both frontends  ACCEPTED, both frontends
+
+**The diagnostic is the finding.** Moving that ONE declaration in
+`v_nw03/deepseek` -- a single line, no other edit -- produced a testbench
+that passes the golden, passes all five conformant perturbations, passes the
+independent second DUT, and kills 5 of 6 mutants. That is the joint best
+score any submission has achieved on this benchmark. It was recorded as
+DID NOT COMPILE.
+
+**The score stands and the interpretation does not.** The submission does not
+build, so `did not compile` is the honest verdict and it is not being revised;
+the diagnostic ran on a copy and is labelled as one. But a headline of "0 of 8
+passed" implies these models cannot write a testbench, and at least one of
+them wrote a near-ceiling testbench with a misplaced `int`. Those are
+different failures and the column was reporting them as one.
+
+A first-token error also destroys all information after it: a file that dies
+at parse yields no golden verdict, no conformant tally, no kill count. **The
+one outcome type that admits no partial credit is the one a trivial defect
+produces**, so triviality and severity are inversely related here, which is
+the opposite of what a reader assumes.
+
+Not yet established: whether the other five decompose the same way. Only
+`v_nw03/deepseek` was run as a diagnostic.
+
+**From:** scoring v_nw03 and v_dsp02

@@ -46,6 +46,11 @@ TOKENS = [
     ("does not implement the scored",        "OFF-SPEC"),
     ("PPA predates the correctness",         "pre-gate"),
     ("scored configuration",                 "cfg absent"),
+    # verification half
+    ("establishes the ceiling",              "ceiling"),
+    ("testbench itself does not build",      "ZERO: did not build"),
+    ("rejects the correct design",           "INVALID: rejects golden"),
+    ("behaviour the specification leaves open", "over-constrained"),
 ]
 
 
@@ -56,7 +61,12 @@ def shorten(note):
     for needle, tok in TOKENS:
         if needle.lower() in note.lower() and tok not in out:
             out.append(tok)
-    return ", ".join(out) if out else note[:22]
+    if out:
+        return ", ".join(out)
+    if len(note) <= 22:
+        return note
+    cut = note[:22].rsplit(" ", 1)[0]
+    return (cut + " ...") if len(cut) >= 8 else "see below"
 
 
 def render(md):

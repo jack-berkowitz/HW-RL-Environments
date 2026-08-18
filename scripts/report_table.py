@@ -353,44 +353,108 @@ def main():
     print("not a like-for-like comparison. This also decides whether `gemini`'s")
     print("2-cycle crossing is a genuine result or an artefact. Unresolved.\n")
 
-    # ---- verification tasks, SEPARATE TABLE -------------------------------
+    # ---- verification tasks, SEPARATE TABLE, data-driven ------------------
+    VTASKS = {
+        "v_ca05_id_queue":       ("v_ca05 — tag tracker (out-of-order queue)",
+                                  "tag_tracker_tb"),
+        "v_nw03_axis_arb_mux":   ("v_nw03 — frame-arbitrating stream mux",
+                                  "frame_arb_mux_tb"),
+        "v_dsp02_fp_noncomp":    ("v_dsp02 — FP non-computational ops",
+                                  "fp_noncomp_tb"),
+    }
+    # The task's own reference testbench, which establishes the ceiling. Named
+    # explicitly (rule 10) so a stray record cannot become "the reference".
+    VREF = {
+        "v_ca05_id_queue":     "tag_tracker_ref.sv",
+        "v_nw03_axis_arb_mux": "frame_arb_mux_ref.sv",
+        "v_dsp02_fp_noncomp":  "fp_noncomp_ref.sv",
+    }
+    SUBMISSIONS = ("chat.sv", "deepseek.sv", "gemini.sv", "qwen.sv", "kimi.sv")
+
     print("\n---\n")
-    print("# Verification task\n")
-    print("**A different measurement, kept on its own table on purpose.** A")
-    print("verification submission is a *testbench*, not a design: it is judged by")
-    print("which implementations it accepts and rejects, and there is no area or")
-    print("frequency to report. Putting it in the grid above would invite averaging")
-    print("two things that do not share units.\n")
-    print("## v_ca05 — tag tracker (out-of-order queue)\n")
+    print("# Verification tasks\n")
+    print("**A different measurement, on its own table on purpose.** A verification")
+    print("submission is a *testbench*: it is judged by which implementations it")
+    print("accepts and rejects, and there is no area or frequency to report.")
+    print("Averaging it with the design results would combine things that do not")
+    print("share units.\n")
     print("The model is given a port map and a written specification. **It never")
-    print("sees the RTL.** It writes a testbench, which is then run against the")
-    print("correct implementation and against deliberately faulty ones.\n")
-    print("| testbench | accepts correct design | accepts legal variants | catches faults | notes |")
-    print("|---|---|---|---|---|")
-    print("| **our reference testbench** | yes | 4/4 | **6/6** | the ceiling; corrected after the fault set exposed two gaps in it |")
-    print("| `chat` | yes | 4/4 | **2/6** | 3 faults hung it — no watchdog — and 1 went undetected |")
-    print("| `gemini` | **no** | — | — | rejects the correct design; checks status before applying reset |")
+    print("sees the RTL.**\n")
+
+    vrecs = {}
+    for r in recs:
+        tk = r.get("task")
+        if tk in VTASKS and r.get("kind") == "sim":
+            sub = os.path.basename(r.get("submission", "?"))
+            prev = vrecs.get((tk, sub))
+            if not prev or r["timestamp_utc"] >= prev["timestamp_utc"]:
+                vrecs[(tk, sub)] = r
+
+    for tk, (title, tbmod) in VTASKS.items():
+        rows = [VREF[tk]] + [s for s in SUBMISSIONS if (tk, s) in vrecs]
+        rows = [s for s in rows if (tk, s) in vrecs]
+        if not rows:
+            continue
+        print(f"\n## {title}\n")
+        print("| testbench | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |")
+        print("|---|---|---|---|---|---|")
+        for sub in rows:
+            r = vrecs[(tk, sub)]
+            g = r.get("golden_accepted", "?")
+            conf = r.get("conformant_accepted", "?")
+            caught = r.get("faults_caught", "?")
+            # Rule 20: a record written before the second DUT was wired in has
+            # not been measured against it. That renders absent, not "yes".
+            d2raw = r.get("second_dut_accepted")
+            d2 = {"PASS": "yes", "FAIL": "**no**", None: "—",
+                  "not-run": "—", "unknown": "—"}.get(d2raw, "—")
+            isref = (sub == VREF[tk])
+            name = "**reference testbench**" if isref else f"`{sub[:-3]}`"
+            note = ""
+            # A submission that did not compile never set a golden verdict.
+            if g in ("unknown", "?") and conf in ("0/0", "?"):
+                g_s, conf_s, caught_s, d2 = "**did not compile**", "n/a", "n/a", "n/a"
+                note = "the testbench itself does not build"
+            elif g == "PASS":
+                g_s = "yes"
+                conf_s = conf
+                caught_s = f"**{caught}**"
+                if isref:
+                    note = "establishes the ceiling"
+                elif conf.split("/")[0] != conf.split("/")[-1]:
+                    note = "relies on behaviour the specification leaves open"
+            else:
+                g_s = "**no**"
+                conf_s = conf
+                caught_s = "*withheld*"
+                d2 = d2 if d2raw == "FAIL" else d2
+                note = ("rejects the correct design, so it rejects correct and "
+                        "faulty hardware alike — a fault count from it carries "
+                        "no information")
+            print(f"| {name} | {g_s} | {d2} | {conf_s} | {caught_s} | {note} |")
+
     print()
     print("- **accepts correct design** — does it pass a known-good implementation?")
-    print("  A testbench that rejects correct hardware is unusable whatever else it catches.")
-    print("- **accepts legal variants** — four implementations that differ from the")
-    print("  reference only where the specification is deliberately silent. A correct")
-    print("  testbench must accept all four; failing one means it checked something")
-    print("  the specification never promised.")
-    print("- **catches faults** — six implementations each carrying one deliberate")
-    print("  defect: capacity, ordering, starvation, boundary conditions, masked search.")
-    print("  Every one is proven catchable.\n")
-    print("**Reported per fault, never as a rate.** `chat`'s six outcomes are 2")
-    print("caught, 3 hangs and 1 miss — four different problems, and a single")
-    print("percentage hides all of them. A hang is not a catch: the testbench did")
-    print("not detect the fault, it stopped, and a correct-but-slow design would")
-    print("hang it identically.\n")
-    print("**The headline result is that this worked at all.** `chat` wrote a")
-    print("testbench from prose alone that accepts the correct design and all four")
-    print("legal variants — no reliance on unspecified behaviour. That is the")
-    print("finding; the fault-catching score is the weaker half.")
+    print("  A testbench that rejects correct hardware is unusable whatever else it")
+    print("  catches, so this gates everything after it.")
+    print("- **accepts 2nd implementation** — an INDEPENDENT correct design, not a")
+    print("  variation of the reference: different internal structure, same contract.")
+    print("  Passing the reference design alone cannot distinguish a testbench that")
+    print("  checks the specification from one fitted to how this particular")
+    print("  implementation happens to work. A dash means the run predates this")
+    print("  column and was never measured against it.")
+    print("- **accepts legal variants** — implementations differing from the reference")
+    print("  only where the specification is deliberately silent. A correct testbench")
+    print("  must accept all of them; failing one means it checked something the")
+    print("  specification never promised.")
+    print("- **catches faults** — implementations each carrying one deliberate defect.")
+    print("  Every one is proven catchable by the reference testbench.\n")
+    print("**Reported per fault, never as a rate**, and *withheld* where the")
+    print("testbench failed the first column. A hang is likewise not a catch: the")
+    print("testbench did not detect the fault, it stopped.\n")
 
     if any_ungated:
+
         print("\n---\n")
         print("**\"PPA predates the correctness interlock\"** — these place-and-route")
         print("numbers were produced before the pipeline required a passing")

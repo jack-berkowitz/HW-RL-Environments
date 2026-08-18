@@ -36,13 +36,13 @@ kimi       did not build           0           0           0            n/a     
 D_DSP02 — FP32 FUSED MULTIPLY-ADD
 =================================
 
-design       correctness  area (µm²)  power (mW)  Fmax (MHz)  latency  init interval                  status
-------------------------------------------------------------------------------------------------------------
-chat            1/1 pass     440,336       669.0   not swept        3              1                        
-reference       1/1 pass      68,303       145.0        78.0        3              1                        
-gemini             FAILS         n/a         n/a         n/a      n/a            n/a  fails correctness — fa
-deepseek   did not build           0           0           0      n/a            n/a     ZERO: did not build
-qwen       did not build           0           0           0      n/a            n/a     ZERO: did not build
+design       correctness  area (µm²)  power (mW)  Fmax (MHz)  latency  init interval                   status
+-------------------------------------------------------------------------------------------------------------
+chat            1/1 pass     440,336       669.0   not swept        3              1                         
+reference       1/1 pass      68,303       145.0        78.0        3              1                         
+gemini             FAILS         n/a         n/a         n/a      n/a            n/a  fails correctness — ...
+deepseek   did not build           0           0           0      n/a            n/a      ZERO: did not build
+qwen       did not build           0           0           0      n/a            n/a      ZERO: did not build
 
   gemini: fails correctness — fails the contract at vector 4 (a=1.0, b=0); no PPA, a number for a
       design that fails its contract is not a result
@@ -112,53 +112,97 @@ not a like-for-like comparison. This also decides whether gemini's
 ---
 
 
-VERIFICATION TASK
-=================
+VERIFICATION TASKS
+==================
 
-A different measurement, kept on its own table on purpose. A
-verification submission is a testbench, not a design: it is judged by
-which implementations it accepts and rejects, and there is no area or
-frequency to report. Putting it in the grid above would invite averaging
-two things that do not share units.
+A different measurement, on its own table on purpose. A verification
+submission is a testbench: it is judged by which implementations it
+accepts and rejects, and there is no area or frequency to report.
+Averaging it with the design results would combine things that do not
+share units.
+
+The model is given a port map and a written specification. **It never
+sees the RTL.**
+
 
 
 V_CA05 — TAG TRACKER (OUT-OF-ORDER QUEUE)
 =========================================
 
-The model is given a port map and a written specification. **It never
-sees the RTL.** It writes a testbench, which is then run against the
-correct implementation and against deliberately faulty ones.
+testbench            accepts correct design  accepts 2nd implementation  accepts legal variants  catches faults                   status
+----------------------------------------------------------------------------------------------------------------------------------------
+reference testbench                     yes                         yes                     4/4             6/6                  ceiling
+chat                                    yes                         yes                     4/4             5/6                         
+deepseek                    did not compile                         n/a                     n/a             n/a      ZERO: did not build
+gemini                                   no                          no                     0/4        withheld  INVALID: rejects golden
+qwen                        did not compile                         n/a                     n/a             n/a      ZERO: did not build
 
-testbench                accepts correct design  accepts legal variants  catches faults                  status
----------------------------------------------------------------------------------------------------------------
-our reference testbench                     yes                     4/4             6/6  the ceiling; corrected
-chat                                        yes                     4/4             2/6  3 faults hung it — no 
-gemini                                       no                       —               —  rejects the correct de
+  reference testbench: establishes the ceiling
+  deepseek: the testbench itself does not build
+  gemini: rejects the correct design, so it rejects correct and faulty hardware alike — a fault
+      count from it carries no information
+  qwen: the testbench itself does not build
 
-  our reference testbench: the ceiling; corrected after the fault set exposed two gaps in it
-  chat: 3 faults hung it — no watchdog — and 1 went undetected
-  gemini: rejects the correct design; checks status before applying reset
+
+V_NW03 — FRAME-ARBITRATING STREAM MUX
+=====================================
+
+testbench            accepts correct design  accepts 2nd implementation  accepts legal variants  catches faults                   status
+----------------------------------------------------------------------------------------------------------------------------------------
+reference testbench                     yes                         yes                     5/5             6/6                  ceiling
+chat                                     no                          no                     0/5        withheld  INVALID: rejects golden
+deepseek                    did not compile                         n/a                     n/a             n/a      ZERO: did not build
+gemini                                   no                          no                     0/5        withheld  INVALID: rejects golden
+qwen                        did not compile                         n/a                     n/a             n/a      ZERO: did not build
+
+  reference testbench: establishes the ceiling
+  chat: rejects the correct design, so it rejects correct and faulty hardware alike — a fault
+      count from it carries no information
+  deepseek: the testbench itself does not build
+  gemini: rejects the correct design, so it rejects correct and faulty hardware alike — a fault
+      count from it carries no information
+  qwen: the testbench itself does not build
+
+
+V_DSP02 — FP NON-COMPUTATIONAL OPS
+==================================
+
+testbench            accepts correct design  accepts 2nd implementation  accepts legal variants  catches faults                   status
+----------------------------------------------------------------------------------------------------------------------------------------
+reference testbench                     yes                         yes                     5/5             6/6                  ceiling
+chat                                     no                          no                     0/5        withheld  INVALID: rejects golden
+deepseek                    did not compile                         n/a                     n/a             n/a      ZERO: did not build
+gemini                                   no                          no                     0/5        withheld  INVALID: rejects golden
+qwen                        did not compile                         n/a                     n/a             n/a      ZERO: did not build
+
+  reference testbench: establishes the ceiling
+  chat: rejects the correct design, so it rejects correct and faulty hardware alike — a fault
+      count from it carries no information
+  deepseek: the testbench itself does not build
+  gemini: rejects the correct design, so it rejects correct and faulty hardware alike — a fault
+      count from it carries no information
+  qwen: the testbench itself does not build
 
 - accepts correct design — does it pass a known-good implementation?
-  A testbench that rejects correct hardware is unusable whatever else it catches.
-- accepts legal variants — four implementations that differ from the
-  reference only where the specification is deliberately silent. A correct
-  testbench must accept all four; failing one means it checked something
-  the specification never promised.
-- catches faults — six implementations each carrying one deliberate
-  defect: capacity, ordering, starvation, boundary conditions, masked search.
-  Every one is proven catchable.
+  A testbench that rejects correct hardware is unusable whatever else it
+  catches, so this gates everything after it.
+- accepts 2nd implementation — an INDEPENDENT correct design, not a
+  variation of the reference: different internal structure, same contract.
+  Passing the reference design alone cannot distinguish a testbench that
+  checks the specification from one fitted to how this particular
+  implementation happens to work. A dash means the run predates this
+  column and was never measured against it.
+- accepts legal variants — implementations differing from the reference
+  only where the specification is deliberately silent. A correct testbench
+  must accept all of them; failing one means it checked something the
+  specification never promised.
+- catches faults — implementations each carrying one deliberate defect.
+  Every one is proven catchable by the reference testbench.
 
-Reported per fault, never as a rate. chat's six outcomes are 2
-caught, 3 hangs and 1 miss — four different problems, and a single
-percentage hides all of them. A hang is not a catch: the testbench did
-not detect the fault, it stopped, and a correct-but-slow design would
-hang it identically.
+Reported per fault, never as a rate, and withheld where the
+testbench failed the first column. A hang is likewise not a catch: the
+testbench did not detect the fault, it stopped.
 
-The headline result is that this worked at all. chat wrote a
-testbench from prose alone that accepts the correct design and all four
-legal variants — no reliance on unspecified behaviour. That is the
-finding; the fault-catching score is the weaker half.
 
 ---
 
@@ -167,3 +211,5 @@ numbers were produced before the pipeline required a passing
 correctness run first. All the designs so marked have since passed
 correctness, so the numbers stand; the note records that nothing
 enforced the ordering at the time they were taken.
+
+[written to results_table.txt]

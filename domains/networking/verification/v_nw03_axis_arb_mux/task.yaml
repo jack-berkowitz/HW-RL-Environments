@@ -111,7 +111,7 @@ mutants:
     one defect with two symptoms, recorded rather than called clean isolation.
 
 second_dut:
-  status: BUILT_UNWIRED
+  status: WIRED
   file: dut2/frame_arb_mux_alt.sv
   differences:
     - "selection: a single rotating pointer, against the anchor's masked-priority tree"

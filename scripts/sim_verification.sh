@@ -138,9 +138,13 @@ if not m:
     print("MISSING")
 else:
     s = re.search(r"^\s+status:\s*(\S+)", m.group(1), re.M)
+    f = re.search(r"^\s+file:\s*(\S+)", m.group(1), re.M)
     print(s.group(1) if s else "MISSING")
+    print(f.group(1) if f else "")
 PYY
 )"
+SECOND_DUT_FILE="$(printf '%s\n' "$SECOND_DUT" | sed -n 2p)"
+SECOND_DUT="$(printf '%s\n' "$SECOND_DUT" | sed -n 1p)"
 SECOND_DUT_WARN=0
 case "$SECOND_DUT" in
   MISSING)
@@ -153,11 +157,22 @@ case "$SECOND_DUT" in
     exit 2 ;;
   ABSENT)
     SECOND_DUT_WARN=1 ;;
+  BUILT_UNWIRED)
+    # This state used to be reachable and was the bug: three tasks declared it,
+    # the gate accepted it because dut2/ existed, and nothing ever compiled
+    # against the second DUT (F40). The harness now always runs a declared
+    # second DUT, so "built but not wired" can no longer be true of anything.
+    echo "REFUSED: second_dut status BUILT_UNWIRED is no longer a reachable" >&2
+    echo "  state. A declared second DUT is compiled and run; if it is present" >&2
+    echo "  say WIRED, and if there is none say ABSENT with the reason." >&2
+    echo "  This status described the F40 defect, not a property of the task." >&2
+    exit 2 ;;
   *)
-    if [ ! -d "$TASK_DIR/dut2" ]; then
-      echo "REFUSED: task.yaml says second_dut status '$SECOND_DUT' but" >&2
-      echo "  $TASK_DIR/dut2 does not exist. Declared-and-absent is worse than" >&2
-      echo "  absent-and-declared: nothing would have run against it." >&2
+    if [ -z "$SECOND_DUT_FILE" ] || [ ! -f "$TASK_DIR/$SECOND_DUT_FILE" ]; then
+      echo "REFUSED: task.yaml says second_dut status '$SECOND_DUT' but its" >&2
+      echo "  file: is missing or does not resolve under $TASK_DIR." >&2
+      echo "  Declared-and-absent is worse than absent-and-declared: nothing" >&2
+      echo "  would have run against it." >&2
       exit 2
     fi ;;
 esac
@@ -202,6 +217,12 @@ DUTS=("golden")
 if [ -f "$CONF" ]; then
   while read -r m; do DUTS+=("$m"); done < <(grep -oE "^module (${CONF_PREFIX}[A-Za-z0-9_]+)" "$CONF" | awk '{print $2}')
 fi
+# The second DUT is an ADDITIONAL must-accept implementation. Until this line
+# existed the gate above proved only that dut2/ was on disk -- "we built the
+# control" and "the control is in the path and is read" are different claims.
+if [ -n "$SECOND_DUT_FILE" ] && [ -f "$TASK_DIR/$SECOND_DUT_FILE" ]; then
+  DUTS+=("dut2")
+fi
 # Mutants VIOLATE the spec and must be KILLED -- opposite sign to conformant.
 MUT="$TASK_DIR/mutants/mutants.sv"
 MUTS=()
@@ -211,7 +232,11 @@ if [ -f "$MUT" ]; then
 fi
 
 build_variant() {   # $1 = golden | tt_cN_...  -> writes variant.sv + extra.sv
-  case "$1" in ${MUT_PREFIX}*) SRC="$MUT" ;; *) SRC="$CONF" ;; esac
+  case "$1" in
+    ${MUT_PREFIX}*) SRC="$MUT" ;;
+    dut2)           SRC="$TASK_DIR/$SECOND_DUT_FILE" ;;
+    *)              SRC="$CONF" ;;
+  esac
   if ! python3 "$REPO/scripts/_verif_variant.py" "$WORK" "$1" "$SRC" "$GOLDEN_TOP"; then
     echo "HARNESS ERROR building variant '$1' -- this is a SETUP problem, not a" >&2
     echo "  verdict about the submission. Nothing is scored." >&2
@@ -255,6 +280,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
   fi
 
   allok=1; buildfail=0; NKILL=0; NMUT=0; NHUNG=0; NCONF=0; NCONF_OK=0
+  DUT2_VERDICT="not-run"
   GOLDEN_VERDICT=unknown
   for v in "${DUTS[@]}"; do
     build_variant "$v"
@@ -304,10 +330,16 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
           *)       printf "  %-26s SURVIVED  <- defect not caught\n" "$v"; allok=0 ;;
         esac
         NMUT=$((NMUT+1)) ;;
-      *)       # golden and conformant must be ACCEPTED
+      *)       # golden, second DUT and conformant must all be ACCEPTED
         [ "$verdict" = "PASS" ] || allok=0
         if [ "$v" = "golden" ]; then
           GOLDEN_VERDICT="$verdict"
+        elif [ "$v" = "dut2" ]; then
+          # Kept SEPARATE from the conformant tally on purpose: a conformant
+          # failure means the testbench relies on something the spec leaves
+          # open, while a dut2 failure means it is fitted to the golden's
+          # implementation. Different defects, so not one number.
+          DUT2_VERDICT="$verdict"
         else
           NCONF=$((NCONF+1)); [ "$verdict" = "PASS" ] && NCONF_OK=$((NCONF_OK+1))
         fi
@@ -323,6 +355,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     "status=$([ "$allok" -eq 1 ] && echo completed || echo rejected)" \
     "all_passed=$([ "$allok" -eq 1 ] && echo true || echo false)" \
     "golden_accepted=$GOLDEN_VERDICT" \
+    "second_dut_accepted=$DUT2_VERDICT" \
     "conformant_accepted=$NCONF_OK/$NCONF" \
     "faults_caught=$([ "$GOLDEN_VERDICT" = "PASS" ] && echo "$NKILL/$NMUT" || echo "SUPPRESSED-gate-failed")" \
     "faults_hung=$NHUNG" \

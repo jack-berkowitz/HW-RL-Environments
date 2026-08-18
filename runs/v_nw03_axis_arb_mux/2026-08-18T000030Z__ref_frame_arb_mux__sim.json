@@ -1,0 +1,18 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "faults_caught": "6/6",
+  "faults_hung": "0",
+  "git_sha": "c73ae062967324ed4b04735e1971d0de45ba1fec-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "ref_frame_arb_mux",
+  "status": "completed",
+  "submission": "/tmp/ref_frame_arb_mux.sv",
+  "submission_sha256_16": "2188925b5de85da8",
+  "task": "v_nw03_axis_arb_mux",
+  "task_text_hash": "bfadf285b5846ec4",
+  "timestamp_utc": "2026-08-18T00:00:30Z"
+}

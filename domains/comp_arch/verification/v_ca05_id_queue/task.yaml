@@ -69,7 +69,7 @@ mutants:
   witness_harness: mutants/nonequiv_tb.sv
 
 second_dut:
-  status: BUILT_UNWIRED
+  status: WIRED
   file: dut2/tag_tracker_alt.sv
   differences:
     - "storage and ordering: a flat array of SLOTS entries with a monotonic sequence

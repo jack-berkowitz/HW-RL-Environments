@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "faults_caught": "5/6",
+  "faults_hung": "0",
+  "git_sha": "c73ae062967324ed4b04735e1971d0de45ba1fec-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "deepseek_DIAGNOSTIC_hoisted",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/2381f2fe-5b48-47a1-8d06-7bf301d0b593/scratchpad/diag/deepseek_hoisted.sv",
+  "submission_sha256_16": "a82fd7fd913efa02",
+  "task": "v_nw03_axis_arb_mux",
+  "task_text_hash": "bfadf285b5846ec4",
+  "timestamp_utc": "2026-08-18T00:14:16Z"
+}
