@@ -1,19 +1,16 @@
-// =============================================================================
-// v_dsp02 PROVIDED PLUMBING -- shipped inside the task text.
-// =============================================================================
-// This issues operations and collects results. It checks nothing and scores
-// nothing.
+// ---------------------------------------------------------------------------
+// PROVIDED PLUMBING -- issues operations, checks nothing.
+// ---------------------------------------------------------------------------
+// This exists so you spend your effort on checking rather than on handshake
+// mechanics. It has been compiled and run against a correct implementation.
 //
-// WHAT IT DOES NOT HAND OVER
-// --------------------------
-// This task's difficulty is the corner space -- signed zeros, quiet versus
-// signalling NaNs, payload preservation, the minNum/maxNum question -- and none
-// of that is touched here. The handshake it encodes (H1, H2, H3, H4) is stated
-// verbatim in the specification, so nothing is given away that a reader does not
-// already have. Deciding WHICH operations to issue, and what each one should
-// return, is the entire task and is untouched.
-// =============================================================================
-
+// What it does: generates the clock, sequences reset, presents one operation
+// and holds every input stable until it is accepted, and lets you set the
+// result-side ready.
+//
+// What it does NOT do: it decides nothing about which operations to issue or
+// what any of them should return. That is the task.
+// ---------------------------------------------------------------------------
   // ---- clock -----------------------------------------------------------------
   logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end

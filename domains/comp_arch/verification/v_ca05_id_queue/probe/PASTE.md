@@ -1,28 +1,3 @@
-<!-- ===================================================================
-     DELETE THIS HEADER BEFORE PASTING.
-
-     Purpose: the clean version of the spec-completeness pilot. Every author
-     here has read the RTL, so no local author can write a testbench blind.
-     A model can. Paste everything BELOW the marker into a fresh chat.
-
-     Note before sending: this ships a port map derived from SHL-0.51
-     licensed code plus a prose specification. No RTL. Lighter exposure
-     than the recognition probe, same standing caveat -- fine internally,
-     needs a licence review before any external release.
-
-     Scoring, once the reply comes back, is a THREE-WAY split per failure:
-       (a) driver bug        -- e.g. stimulus changed in the same timestep
-                                as the sampling edge, which makes a correct
-                                DUT look completely inert
-       (b) unpromised reliance -- checks something the spec leaves open
-                                (compare against conformant/README.md)
-       (c) genuine spec gap  -- the spec really does not say
-     Only (c) is a specification defect. Do not collapse these into a
-     pass/fail number; the split is the entire result.
-     =================================================================== -->
-
-============================ PASTE BELOW THIS LINE ============================
-
 # Task: write a SystemVerilog testbench from a specification
 
 You are given the **port map** and a **complete specification** for a hardware
@@ -214,22 +189,17 @@ Paste this inside your module. It is correct as given and has been run against
 the design.
 
 ```systemverilog
-// =============================================================================
-// v_ca05 PROVIDED PLUMBING -- shipped inside the task text.
-// =============================================================================
-// Clock, reset and watchdog only.
+// ---------------------------------------------------------------------------
+// PROVIDED PLUMBING -- clock, reset and watchdog only.
+// ---------------------------------------------------------------------------
+// NO TRANSACTOR IS PROVIDED FOR THE REQUEST/GRANT PORTS. Driving them, and
+// deciding when a request has completed, is part of the task.
 //
-// *** NO TRANSACTOR IS PROVIDED FOR THE REQUEST/GRANT PORTS, AND THAT IS
-// DELIBERATE. *** Deciding when a request has actually completed is part of
-// what this task measures, and a driver that answered it would answer the
-// question instead of asking it. The specification states the rule; read it.
-//
-// What is provided is the timing discipline, because that is what breaks
-// testbenches without telling you anything: reset is asserted and released off
-// the sampling edge, and the helper below changes stimulus at the negative edge
-// so nothing you drive moves in the same timestep the design samples it.
-// =============================================================================
-
+// What is provided is the timing discipline, because getting it wrong is
+// silent: reset is asserted and released away from the sampling edge, and the
+// helper below moves you to the point in the cycle where it is safe to change
+// stimulus. It has been compiled and run against a correct implementation.
+// ---------------------------------------------------------------------------
   // ---- clock -----------------------------------------------------------------
   logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end
@@ -295,5 +265,3 @@ instantiates `tag_tracker` and self-checks.
 Ground every check in a numbered requirement. If a behaviour is not specified
 above, do not check it — the implementation is free to choose, and a check on an
 unspecified behaviour will reject correct hardware.
-
-============================ PASTE ABOVE THIS LINE ============================

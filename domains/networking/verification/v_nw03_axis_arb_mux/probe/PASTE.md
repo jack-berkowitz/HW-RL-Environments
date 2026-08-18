@@ -1,34 +1,3 @@
-<!-- ===================================================================
-     DELETE THIS HEADER BEFORE PASTING.
-
-     Self-contained task file for v_nw03. Everything below the marker is
-     paste-ready: port map, specification, output requirements. No RTL, no
-     repo paths, no reference to this project.
-
-     Note before sending: this ships a port map and prose only. The design
-     it is derived from is MIT-licensed and nothing derived from it is
-     included here, so the exposure is lighter than v_ca05's -- the same
-     standing caveat applies, fine internally, licence review before any
-     external release.
-
-     Scoring, once the reply comes back, is a THREE-WAY split per failure:
-       (a) driver bug         -- e.g. stimulus changed in the same timestep
-                                 as the sampling edge, which makes a correct
-                                 design look inert or deadlocked
-       (b) unpromised reliance -- checks something §7 leaves open; compare
-                                 against conformant/README.md
-       (c) genuine spec gap   -- the specification really does not say
-     Only (c) is a specification defect. Do not collapse these into a
-     pass/fail number; the split is the entire result.
-
-     Watch for one thing in particular. S6 ("ready is not a grant") is this
-     task's load-bearing clause, the analogue of v_ca05's R4. A submission
-     that treats a beat accepted at an input as a beat forwarded to the
-     output will fail the golden, and that failure is (a) or (b), never (c).
-     =================================================================== -->
-
-============================ PASTE BELOW THIS LINE ============================
-
 # Task: write a SystemVerilog testbench from a specification
 
 You are given the **port map** and a **complete specification** for a hardware
@@ -212,33 +181,20 @@ It moves beats and does nothing else. It has no notion of a frame, keeps no scor
 Paste this inside your module. It is correct as given and it has been run against the design; you may extend it, but you do not need to fix it.
 
 ```systemverilog
-// =============================================================================
-// v_nw03 PROVIDED PLUMBING -- shipped inside the task text.
-// =============================================================================
-// This moves beats. It checks nothing, scores nothing, and decides nothing.
+// ---------------------------------------------------------------------------
+// PROVIDED PLUMBING -- moves beats, checks nothing.
+// ---------------------------------------------------------------------------
+// This exists so you spend your effort on checking rather than on handshake
+// mechanics. It has been compiled and run against a correct implementation.
 //
-// WHAT IT DELIBERATELY DOES NOT DO, and why
-// -----------------------------------------
-// S6 -- "ready is not a grant" -- is this task's load-bearing clause, and the
-// whole point of the exercise is whether a submission reads it. So this file:
+// What it does: generates the clock, sequences reset, offers one beat at a
+// time on a chosen input and returns once that beat has transferred, and lets
+// you set the output-side ready.
 //
-//   * never inspects s_tready_o except to detect that the beat it is currently
-//     offering has transferred, which is S1 and is stated in the specification;
-//   * never reports, returns, counts or names a "grant", a "selection", or an
-//     "acceptance" of anything larger than one beat;
-//   * has no notion of a frame. bfm_send moves ONE beat. Framing, ordering,
-//     atomicity, fairness and the whole scoreboard are the submission's job.
-//
-// A submission can still get S6 wrong in exactly the way the clause warns
-// about, because nothing here tells it what a transferred input beat implies
-// about the output.
-//
-// The three defects this replaces were all plumbing and none was about
-// checking: a reset asserted in the same timestep as the edge it was sampled
-// on, operands driven and sampled in one timestep, and a testbench that never
-// gave the design a stable beat to take.
-// =============================================================================
-
+// What it does NOT do: it has no notion of a frame, keeps no model of the
+// design's contents, and draws no conclusion from any signal. Framing,
+// ordering, integrity, fairness and every check are yours to write.
+// ---------------------------------------------------------------------------
   // ---- clock -----------------------------------------------------------------
   logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end
@@ -332,5 +288,3 @@ instantiates `frame_arb_mux` and self-checks.
 Ground every check in a numbered requirement. If a behaviour is not specified
 above, do not check it — the implementation is free to choose, and a check on an
 unspecified behaviour will reject correct hardware.
-
-============================ PASTE ABOVE THIS LINE ============================

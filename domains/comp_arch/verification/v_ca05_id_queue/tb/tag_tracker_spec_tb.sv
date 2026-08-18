@@ -16,7 +16,7 @@
   `define DUT_MODULE tag_tracker
 `endif
 
-module tag_tracker_spec_tb;
+module tag_tracker_tb;   // name required by the scoring path
 
   localparam int TAG_W = 3;
   localparam int SLOTS = 8;
@@ -241,6 +241,21 @@ module tag_tracker_spec_tb;
       check_status($sformatf("after pop %0d", i+1));
     end
     if (empty !== 1'b1) fail("R14", "not empty after draining every entry"); else ok();
+
+    // ---- R9 AT THE BOUNDARY: peek a tag holding EXACTLY ONE entry ---------
+    // The peek check above runs on a tag holding SLOTS entries, so a design
+    // that destroys only the LAST entry of a tag passes it untouched. One
+    // entry is the case R9 actually has to be checked at, and a mutant that
+    // removes on peek only at that occupancy survived this testbench until
+    // this phase was added.
+    do_push(3'd2, 32'hFEED_0001, 50, granted);
+    if (!granted) fail("R5", "push refused into an empty store");
+    check_status("one entry on tag 2");
+    do_pop(3'd2, 1'b0, 50);            // peek -- must not remove
+    do_pop(3'd2, 1'b0, 50);            // peek again -- must still be there
+    check_status("after peeking the only entry twice");
+    do_pop(3'd2, 1'b1, 50);            // now remove it
+    check_status("after removing the only entry");
 
     // ---- R1: EVERY tag must be accepted, not just the ones we happened to
     // use. Added after the mutant set showed this testbench could not see a

@@ -1,34 +1,3 @@
-<!-- ===================================================================
-     DELETE THIS HEADER BEFORE PASTING.
-
-     Self-contained task file for v_dsp02. Everything below the marker is
-     paste-ready: port map, specification, output requirements. No RTL, no
-     repo paths, no reference to this project.
-
-     Scoring, once the reply comes back, is the SAME THREE-WAY split as
-     v_ca05 and v_nw03:
-       (a) driver bug          -- e.g. withdrawing in_valid_i before the
-                                  operation is accepted, or sampling the
-                                  outputs without qualifying on out_valid_o
-       (b) unpromised reliance -- checks something section 10 leaves open;
-                                  compare against conformant/README.md
-       (c) genuine spec gap    -- the specification really does not say
-     Only (c) is a specification defect.
-
-     THE CLAUSE TO WATCH is S4 with section 10. cvfpu, RISC-V and IEEE
-     754-2008 return the non-NaN operand from min(NaN, x); IEEE 754-2019
-     withdrew that and its replacement PROPAGATES the NaN. A model that
-     knows the 2019 standard and not the RISC-V lineage will write the
-     other answer. If it does so having read section 10, that is (b) and
-     the citation is decorative. If section 10 stops it, the citation is
-     load-bearing. That is the measurement this task exists for.
-
-     Note before sending: port map and prose only, no RTL. Same standing
-     caveat -- fine internally, licence review before external release.
-     =================================================================== -->
-
-============================ PASTE BELOW THIS LINE ============================
-
 # Task: write a SystemVerilog testbench from a specification
 
 You are given the **port map** and a **complete specification** for a hardware
@@ -367,22 +336,19 @@ It issues operations and lets you control the result-side ready. It decides noth
 Paste this inside your module. It is correct as given and it has been run against the design; you may extend it, but you do not need to fix it.
 
 ```systemverilog
-// =============================================================================
-// v_dsp02 PROVIDED PLUMBING -- shipped inside the task text.
-// =============================================================================
-// This issues operations and collects results. It checks nothing and scores
-// nothing.
+// ---------------------------------------------------------------------------
+// PROVIDED PLUMBING -- issues operations, checks nothing.
+// ---------------------------------------------------------------------------
+// This exists so you spend your effort on checking rather than on handshake
+// mechanics. It has been compiled and run against a correct implementation.
 //
-// WHAT IT DOES NOT HAND OVER
-// --------------------------
-// This task's difficulty is the corner space -- signed zeros, quiet versus
-// signalling NaNs, payload preservation, the minNum/maxNum question -- and none
-// of that is touched here. The handshake it encodes (H1, H2, H3, H4) is stated
-// verbatim in the specification, so nothing is given away that a reader does not
-// already have. Deciding WHICH operations to issue, and what each one should
-// return, is the entire task and is untouched.
-// =============================================================================
-
+// What it does: generates the clock, sequences reset, presents one operation
+// and holds every input stable until it is accepted, and lets you set the
+// result-side ready.
+//
+// What it does NOT do: it decides nothing about which operations to issue or
+// what any of them should return. That is the task.
+// ---------------------------------------------------------------------------
   // ---- clock -----------------------------------------------------------------
   logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end
@@ -465,5 +431,3 @@ instantiates `fp_noncomp` and self-checks.
 Ground every check in a numbered requirement. If a behaviour is not specified
 above, do not check it -- the implementation is free to choose, and a check on
 an unspecified behaviour will reject correct hardware.
-
-============================ PASTE ABOVE THIS LINE ============================

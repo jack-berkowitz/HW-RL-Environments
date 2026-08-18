@@ -1,19 +1,14 @@
-// =============================================================================
-// v_ca05 PROVIDED PLUMBING -- shipped inside the task text.
-// =============================================================================
-// Clock, reset and watchdog only.
+// ---------------------------------------------------------------------------
+// PROVIDED PLUMBING -- clock, reset and watchdog only.
+// ---------------------------------------------------------------------------
+// NO TRANSACTOR IS PROVIDED FOR THE REQUEST/GRANT PORTS. Driving them, and
+// deciding when a request has completed, is part of the task.
 //
-// *** NO TRANSACTOR IS PROVIDED FOR THE REQUEST/GRANT PORTS, AND THAT IS
-// DELIBERATE. *** Deciding when a request has actually completed is part of
-// what this task measures, and a driver that answered it would answer the
-// question instead of asking it. The specification states the rule; read it.
-//
-// What is provided is the timing discipline, because that is what breaks
-// testbenches without telling you anything: reset is asserted and released off
-// the sampling edge, and the helper below changes stimulus at the negative edge
-// so nothing you drive moves in the same timestep the design samples it.
-// =============================================================================
-
+// What is provided is the timing discipline, because getting it wrong is
+// silent: reset is asserted and released away from the sampling edge, and the
+// helper below moves you to the point in the cycle where it is safe to change
+// stimulus. It has been compiled and run against a correct implementation.
+// ---------------------------------------------------------------------------
   // ---- clock -----------------------------------------------------------------
   logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end

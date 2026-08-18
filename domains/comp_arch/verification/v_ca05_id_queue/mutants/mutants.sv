@@ -250,3 +250,171 @@ module tt_m6_empty_wrong_at_one #(
 
     assign empty_o = (occ == 1) ? 1'b1 : inner_empty;   // INJECTED
 endmodule
+
+
+// =============================================================================
+// HARDER SET -- added after the first blind run on the sibling tasks.
+// =============================================================================
+// The six above gave no range: our reference and an independent author both
+// caught all of them. These four target corners a competent testbench plausibly
+// misses, and each targets a corner a CLAUSE NAMES.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// m7 -- PER-TAG CAP. Total capacity is the full SLOTS and every mixed
+// distribution is accepted; a SINGLE tag is capped at SLOTS/2. Violates R1,
+// which says any distribution summing to SLOTS shall be accepted "including
+// SLOTS entries all carrying the same tag".
+//
+// A testbench that spreads its pushes over several tags -- the natural way to
+// exercise a tagged store -- never reaches the clause R1 spells out.
+// -----------------------------------------------------------------------------
+module tt_m7_per_tag_cap #(
+    parameter int TAG_W=0, parameter int SLOTS=0, parameter bit FULL_RATE=0,
+    parameter bit CUT_POP_PATH=0, parameter int N_MATCH=1,
+    parameter type payload_t=logic[31:0], localparam type tag_t=logic[TAG_W-1:0]
+)(input logic clk_i, rst_ni, input tag_t push_tag_i, input payload_t push_data_i,
+  input logic push_req_i, output logic push_gnt_o,
+  input payload_t [N_MATCH-1:0] match_data_i, match_mask_i,
+  input logic [N_MATCH-1:0] match_req_i, output logic [N_MATCH-1:0] match_hit_o, match_gnt_o,
+  input tag_t pop_tag_i, input logic pop_en_i, pop_req_i,
+  output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
+  output logic full_o, empty_o);
+
+    int unsigned tcnt [(1<<TAG_W)];
+    logic inner_push_gnt, block;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) for (int i = 0; i < (1<<TAG_W); i++) tcnt[i] <= 0;
+        else begin
+            if (push_req_i && push_gnt_o)                                tcnt[push_tag_i] <= tcnt[push_tag_i] + 1;
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o)  tcnt[pop_tag_i]  <= tcnt[pop_tag_i]  - 1;
+        end
+    end
+    assign block = (tcnt[push_tag_i] >= (SLOTS / 2));   // INJECTED: per-tag cap
+
+    tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
+        .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
+        .clk_i, .rst_ni, .push_tag_i, .push_data_i,
+        .push_req_i(push_req_i & ~block), .push_gnt_o(inner_push_gnt),
+        .match_data_i, .match_mask_i, .match_req_i, .match_hit_o, .match_gnt_o,
+        .pop_tag_i, .pop_en_i, .pop_req_i, .pop_data_o, .pop_data_valid_o,
+        .pop_gnt_o, .full_o, .empty_o);
+    assign push_gnt_o = inner_push_gnt & ~block;
+endmodule
+
+
+// -----------------------------------------------------------------------------
+// m8 -- PEEK REMOVES, but only the last entry of a tag. Violates R9, which
+// says an inspect with pop_en_i low leaves the entry in place.
+//
+// Every peek of a tag holding two or more entries behaves perfectly. Only the
+// one-entry case is destructive, so a testbench that peeks a well-stocked tag
+// and moves on sees nothing wrong.
+// -----------------------------------------------------------------------------
+module tt_m8_peek_removes_last #(
+    parameter int TAG_W=0, parameter int SLOTS=0, parameter bit FULL_RATE=0,
+    parameter bit CUT_POP_PATH=0, parameter int N_MATCH=1,
+    parameter type payload_t=logic[31:0], localparam type tag_t=logic[TAG_W-1:0]
+)(input logic clk_i, rst_ni, input tag_t push_tag_i, input payload_t push_data_i,
+  input logic push_req_i, output logic push_gnt_o,
+  input payload_t [N_MATCH-1:0] match_data_i, match_mask_i,
+  input logic [N_MATCH-1:0] match_req_i, output logic [N_MATCH-1:0] match_hit_o, match_gnt_o,
+  input tag_t pop_tag_i, input logic pop_en_i, pop_req_i,
+  output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
+  output logic full_o, empty_o);
+
+    int unsigned tcnt [(1<<TAG_W)];
+    logic force_en, eff_en;
+
+    assign force_en = pop_req_i && !pop_en_i && (tcnt[pop_tag_i] == 1);  // INJECTED
+    assign eff_en   = pop_en_i | force_en;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) for (int i = 0; i < (1<<TAG_W); i++) tcnt[i] <= 0;
+        else begin
+            if (push_req_i && push_gnt_o)                                tcnt[push_tag_i] <= tcnt[push_tag_i] + 1;
+            if (pop_req_i && pop_gnt_o && eff_en && pop_data_valid_o)     tcnt[pop_tag_i]  <= tcnt[pop_tag_i]  - 1;
+        end
+    end
+
+    tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
+        .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
+        .clk_i, .rst_ni, .push_tag_i, .push_data_i, .push_req_i, .push_gnt_o,
+        .match_data_i, .match_mask_i, .match_req_i, .match_hit_o, .match_gnt_o,
+        .pop_tag_i, .pop_en_i(eff_en), .pop_req_i, .pop_data_o, .pop_data_valid_o,
+        .pop_gnt_o, .full_o, .empty_o);
+endmodule
+
+
+// -----------------------------------------------------------------------------
+// m9 -- A ZERO MASK MATCHES NOTHING. Violates R13, which states that a mask of
+// all zeros matches every stored entry, so the search hits whenever the store
+// is non-empty.
+//
+// R13 is a consequence of R12 rather than an independent rule, and it names the
+// degenerate case explicitly -- which is exactly the case a testbench skips as
+// uninteresting. Every non-zero mask behaves perfectly.
+// -----------------------------------------------------------------------------
+module tt_m9_zero_mask_no_hit #(
+    parameter int TAG_W=0, parameter int SLOTS=0, parameter bit FULL_RATE=0,
+    parameter bit CUT_POP_PATH=0, parameter int N_MATCH=1,
+    parameter type payload_t=logic[31:0], localparam type tag_t=logic[TAG_W-1:0]
+)(input logic clk_i, rst_ni, input tag_t push_tag_i, input payload_t push_data_i,
+  input logic push_req_i, output logic push_gnt_o,
+  input payload_t [N_MATCH-1:0] match_data_i, match_mask_i,
+  input logic [N_MATCH-1:0] match_req_i, output logic [N_MATCH-1:0] match_hit_o, match_gnt_o,
+  input tag_t pop_tag_i, input logic pop_en_i, pop_req_i,
+  output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
+  output logic full_o, empty_o);
+
+    logic [N_MATCH-1:0] inner_hit;
+    always_comb
+        for (int k = 0; k < N_MATCH; k++)
+            match_hit_o[k] = (match_mask_i[k] == '0) ? 1'b0 : inner_hit[k];  // INJECTED
+
+    tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
+        .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
+        .clk_i, .rst_ni, .push_tag_i, .push_data_i, .push_req_i, .push_gnt_o,
+        .match_data_i, .match_mask_i, .match_req_i,
+        .match_hit_o(inner_hit), .match_gnt_o,
+        .pop_tag_i, .pop_en_i, .pop_req_i, .pop_data_o, .pop_data_valid_o,
+        .pop_gnt_o, .full_o, .empty_o);
+endmodule
+
+
+// -----------------------------------------------------------------------------
+// m10 -- full_o ASSERTS ONE CYCLE LATE. Violates R14, which says full_o is high
+// exactly when the store holds SLOTS. It deasserts correctly and it is right in
+// the steady state; only the transition into full is a cycle behind.
+//
+// A testbench that fills the store and then samples the flag catches nothing --
+// by the time it looks, the flag is right. It needs to check the flag against
+// occupancy on the cycle the store becomes full.
+// -----------------------------------------------------------------------------
+module tt_m10_full_asserts_late #(
+    parameter int TAG_W=0, parameter int SLOTS=0, parameter bit FULL_RATE=0,
+    parameter bit CUT_POP_PATH=0, parameter int N_MATCH=1,
+    parameter type payload_t=logic[31:0], localparam type tag_t=logic[TAG_W-1:0]
+)(input logic clk_i, rst_ni, input tag_t push_tag_i, input payload_t push_data_i,
+  input logic push_req_i, output logic push_gnt_o,
+  input payload_t [N_MATCH-1:0] match_data_i, match_mask_i,
+  input logic [N_MATCH-1:0] match_req_i, output logic [N_MATCH-1:0] match_hit_o, match_gnt_o,
+  input tag_t pop_tag_i, input logic pop_en_i, pop_req_i,
+  output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
+  output logic full_o, empty_o);
+
+    logic inner_full, full_q;
+    always_ff @(posedge clk_i or negedge rst_ni)
+        if (!rst_ni) full_q <= 1'b0;
+        else         full_q <= inner_full;
+
+    assign full_o = inner_full & full_q;      // INJECTED: rises a cycle late
+
+    tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
+        .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
+        .clk_i, .rst_ni, .push_tag_i, .push_data_i, .push_req_i, .push_gnt_o,
+        .match_data_i, .match_mask_i, .match_req_i, .match_hit_o, .match_gnt_o,
+        .pop_tag_i, .pop_en_i, .pop_req_i, .pop_data_o, .pop_data_valid_o,
+        .pop_gnt_o, .full_o(inner_full), .empty_o);
+endmodule

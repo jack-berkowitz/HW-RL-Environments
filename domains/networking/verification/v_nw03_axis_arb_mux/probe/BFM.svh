@@ -1,30 +1,17 @@
-// =============================================================================
-// v_nw03 PROVIDED PLUMBING -- shipped inside the task text.
-// =============================================================================
-// This moves beats. It checks nothing, scores nothing, and decides nothing.
+// ---------------------------------------------------------------------------
+// PROVIDED PLUMBING -- moves beats, checks nothing.
+// ---------------------------------------------------------------------------
+// This exists so you spend your effort on checking rather than on handshake
+// mechanics. It has been compiled and run against a correct implementation.
 //
-// WHAT IT DELIBERATELY DOES NOT DO, and why
-// -----------------------------------------
-// S6 -- "ready is not a grant" -- is this task's load-bearing clause, and the
-// whole point of the exercise is whether a submission reads it. So this file:
+// What it does: generates the clock, sequences reset, offers one beat at a
+// time on a chosen input and returns once that beat has transferred, and lets
+// you set the output-side ready.
 //
-//   * never inspects s_tready_o except to detect that the beat it is currently
-//     offering has transferred, which is S1 and is stated in the specification;
-//   * never reports, returns, counts or names a "grant", a "selection", or an
-//     "acceptance" of anything larger than one beat;
-//   * has no notion of a frame. bfm_send moves ONE beat. Framing, ordering,
-//     atomicity, fairness and the whole scoreboard are the submission's job.
-//
-// A submission can still get S6 wrong in exactly the way the clause warns
-// about, because nothing here tells it what a transferred input beat implies
-// about the output.
-//
-// The three defects this replaces were all plumbing and none was about
-// checking: a reset asserted in the same timestep as the edge it was sampled
-// on, operands driven and sampled in one timestep, and a testbench that never
-// gave the design a stable beat to take.
-// =============================================================================
-
+// What it does NOT do: it has no notion of a frame, keeps no model of the
+// design's contents, and draws no conclusion from any signal. Framing,
+// ordering, integrity, fairness and every check are yours to write.
+// ---------------------------------------------------------------------------
   // ---- clock -----------------------------------------------------------------
   logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end
