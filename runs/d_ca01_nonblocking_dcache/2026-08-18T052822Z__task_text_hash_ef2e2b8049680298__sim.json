@@ -1,0 +1,9 @@
+{
+  "git_sha": "5cc10b9441a42f710ec097e85f71541a5ee79882-dirty",
+  "kind": "sim",
+  "label": "task_text_hash=ef2e2b8049680298",
+  "submission": "domains/comp_arch/design/d_ca01_nonblocking_dcache/ref/nonblocking_dcache_ref.sv",
+  "submission_sha256_16": "5d73b213c9dc2e06",
+  "task": "d_ca01_nonblocking_dcache",
+  "timestamp_utc": "2026-08-18T05:28:22Z"
+}

@@ -1,6 +1,10 @@
 # d_ca01 `nonblocking_dcache` — build notes
 
-**Status: STEPS 1 AND 2 COMPLETE.** Interface, `task.yaml`, the `CFGS` arm and
+**Status: STEPS 1-3 IN PROGRESS.** Shim and scoring testbench are landed and the
+testbench passes the anchor 16/16. Mutants, conformant set and second source are
+not started.
+
+**Superseded status line (steps 1 and 2):** Interface, `task.yaml`, the `CFGS` arm and
 the scored-path smoke proof are landed. The testbench is a **skeleton** and is
 labelled as one; mutants, conformant set and second source are step 3.
 
@@ -397,7 +401,122 @@ than the record's, it is (2).
 
 ---
 
-## Next — step 3, not started
+## Step 3 so far — shim and testbench
+
+### Shim: `ref/nonblocking_dcache_ref.sv`, and it is a rename
+
+Parameter binding, packed-struct pack/unpack, one reset-polarity inversion, one
+width-dependent opcode constant (`LW` at DATA_W=32, `LD` at 64; stores use `SM`
+at both because `data_mem` takes the mask straight from the packet when
+`mask_op` is set). No state, no arithmetic, no sequencing, and — the part that
+was in doubt — **no initialization sequencer**, because E3 established the
+anchor needs none from a zeroed tag array.
+
+Three valid/ready-to-valid/yumi adaptations, and the asymmetry is deliberate:
+
+| channel | form | why |
+|---|---|---|
+| response | ungated, `yumi_i = rsp_ready_i` | read only through `stall = v_o & ~yumi_i` |
+| memory request | ungated, `dma_pkt_yumi_i = mem_req_ready_i` | read only in FSM arms that also drive valid high |
+| writeback data | **gated**, `dma_data_v_lo & mem_wr_ready_i` | goes to a `bsg_two_fifo` that ASSERTS on dequeue-while-empty (`bsg_two_fifo.sv:113`) |
+
+Ungated wherever legal, because a gate is a combinational path from a DUT output
+back to a DUT input — the shape that made two step-1 builds disagree. The one
+place the anchor's own assertion forces a gate, it is used. The upstream
+assertion earned its keep a second time here: without it the ungated form would
+have silently corrupted a FIFO pointer.
+
+**Reference passes 16/16 through the scored path.**
+
+### Testbench: three defects, all mine, all found by running it against the anchor
+
+The testbench failed the anchor on its first run. **When the anchor fails a
+check, the check is what is wrong** — the anchor is the oracle, it is externally
+authored, and its behaviour was already confirmed by directed probe in step 1.
+All three turned out to be harness defects.
+
+1. **`force`/`release` on the memory FSM's own gap counter.** `release` leaves a
+   variable holding the forced value until the next procedural assignment, so
+   after releasing a forced 100 000 the FSM counted it down before accepting
+   anything and every later phase timed out. Replaced by a plain `mem_stall`
+   register the stimulus writes. **The symptom was "9 accepted, 8 answered" —
+   a design that stops responding.** Third time in this task that a harness
+   defect has presented as a dead DUT.
+
+2. **An over-constrained M2 check, and this one is a genuine contract mistake
+   rather than a slip.** The harness compared every writeback beat against
+   architectural state at the instant of eviction. A store may be ACCEPTED and
+   not yet applied to its line when an unrelated eviction carries that block
+   away; R5 orders requests by acceptance and says nothing about a store having
+   reached the block before some other eviction. The check encoded an ordering
+   the contract does not state, and the anchor failed it.
+
+   Replaced with a **readback sweep** (phase 8): every line the soak touched is
+   read back and checked against architectural state. That validates writeback
+   *data* through the mechanism that actually matters — a block written back
+   wrongly comes back wrongly on the next refill — without inventing an
+   ordering requirement.
+
+3. **The liveness monitor ticked during the harness's own deliberate memory
+   stall**, and duly reported `DEADLOCK: 4001 cycles ... nothing retired
+   anywhere`. C3's premise is *"with memory always eventually responding"*, and
+   during the C1 and C2 phases it deliberately is not. `LM_TICK` is now gated on
+   the stall register — the premise stated in the same place it is broken.
+
+### The harness discriminates
+
+| DUT | result |
+|---|---|
+| reference shim | **16/16 PASS** |
+| `stub_inert` | FAIL, phase 1, first request never accepted |
+| `stub_minimal` | FAIL, **phase 3, C2** — it passed the step-2 skeleton |
+
+The minimal stub is the useful row: it satisfied the skeleton and fails the real
+contract at exactly the clause its own header predicted it would (C2, no line is
+ever resident so there is no hit to answer under a miss). That is the difference
+between the skeleton and the checker, measured rather than asserted.
+
+### Determinism check — BUILT, RUNS, AND IS NOT VALIDATED
+
+`tb/audit/determinism_check.sh`. Two builds, same seed; build B enables an inert
+observer process that reads signals and drives nothing.
+
+**Positive case passes:** the two binaries genuinely differ and the two outputs
+are byte-identical, `TEST_RESULT: PASS` both times.
+
+**The first version of this check was worthless and it is worth saying why.**
+Building the identical source twice produces *byte-identical binaries*, so the
+comparison had nothing to detect and could only ever pass. The observer define
+exists to reproduce the condition that actually discriminated in step 1 — two
+builds differing by a debug process.
+
+**Both negative controls FAIL TO FIRE.** The defect was reintroduced twice, in
+the exact class the check exists for, and the check reported IDENTICAL each time:
+
+| reintroduced defect | check result |
+|---|---|
+| `assign rsp_ready = rsp_valid` — DUT output driving a DUT input | **IDENTICAL, not caught** |
+| `mem_req_ready = mreq_ready_r & mem_req_valid`, and the same on the writeback channel | **IDENTICAL, not caught** (and the run still reported PASS) |
+
+**So the check is not validated and must not be quoted as evidence that this
+harness is free of the hazard.** What it establishes is narrower and should be
+stated that way: *on this harness, at this configuration, two differing builds
+agree.*
+
+**A hypothesis for why it does not fire, offered as a hypothesis.** The step-1
+divergence involved a settle-order interaction inside the anchor's
+**management-op** path — `mgmt_data_yumi_li` gated by `stall`, reached only by
+TAGST. Management ops are out of this task's scope, so the scoring testbench may
+never drive the anchor into the state where the hazard manifests. If that is
+right, the harness is protected by the contract rather than by the check, which
+is luck rather than design. Testing it properly means reproducing the hazard in a
+path this testbench does reach, and I have not done that.
+
+What actually protects the harness is the three structural remedies, applied by
+construction. The determinism check was meant to be the detector, and it is not
+yet a working detector.
+
+## Next — mutants and the conformant set, not started
 
 Reference shim, then the real testbench (coverage floors, liveness monitor,
 C1/C2/C3), 5–7 mutants wrapping the anchor including a CAPABILITY-class one,
