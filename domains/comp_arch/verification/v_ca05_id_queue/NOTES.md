@@ -53,6 +53,19 @@ an unwired declaration.
 
 **The reference testbench declared `tag_tracker_spec_tb` while `task.yaml`
 required `tag_tracker_tb`, so it had never been runnable through the scored
-path.** Every previously reported figure for it — including the 6/6 ceiling —
-was produced by an ad-hoc invocation. Same shape as F22. The module is renamed
-and the 10/10 above was measured through `sim_verification.sh`.
+path.** The harness would have rejected it with *"does not declare module
+tag_tracker_tb"* — which is exactly what happened the first time it was tried.
+
+**This changes how the old v_ca05 results read, and the asymmetry is the
+point.** The submission scores were harness-measured: `chat` 2/6, `gemini`
+rejected, and so on all came through `sim_verification.sh`. **The 6/6 ceiling
+they were reported against did not.** It was produced by an ad-hoc Verilator
+invocation, so every previously published statement of the form "chat caught 2
+of a possible 6" compared a harness-measured numerator against a
+hand-measured denominator. Nothing suggests the 6 was wrong — but it was never
+established by the path that established the 2, and that is F22's shape on the
+oldest task in the project.
+
+The module is renamed, and the 10/10 recorded above was measured through
+`sim_verification.sh`. Any future statement of a v_ca05 score must be against
+that number, not the historical one.

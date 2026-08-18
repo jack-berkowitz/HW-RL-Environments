@@ -279,3 +279,30 @@ Verilator builds per submission, roughly 2–4 minutes each. Budget for it.
 - `sim_verification.sh` given a submission path that does not exist prints two
   Python tracebacks and continues rather than refusing. Same family as the
   task-resolution refusal Agent 1 already fixed, one argument along.
+
+---
+
+## When the boundary of what ships moves, every prior validation is stale
+
+The task file used to be one document with a deletable header: everything below
+a marker was shipped, everything above it was for us. Validation — the leak
+grep, the port-map byte comparison — ran on the region below the marker, and it
+passed every time.
+
+Splitting the file into a shipped half and a private half **moved that
+boundary**, and the first grep over the new shipped surface found two leaks that
+had been sitting in the header for as long as it existed:
+
+1. the task id, in the plumbing banner;
+2. **a plain statement that S6 is this task's load-bearing clause and that the
+   point of the exercise is whether a submission reads it.**
+
+The second would have handed the answer to every model solicited. It was never
+a defect while the header was private; it became one the moment the header
+became shipped surface.
+
+**The general form: a validation result is scoped to the boundary it was run
+against.** Changing what ships — splitting a file, inlining a transactor,
+promoting a comment into the deliverable — invalidates every earlier pass, even
+though nothing in the validated region changed. Re-run the checks against the
+new boundary rather than inheriting the old green.
