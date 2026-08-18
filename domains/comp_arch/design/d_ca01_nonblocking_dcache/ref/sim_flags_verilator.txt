@@ -1,0 +1,57 @@
+# Extra Verilator arguments for d_ca01. One token per line; %REPO% expands to
+# the repository root. Blank lines and lines starting with # are ignored.
+#
+# THREE DISTINCT NEEDS. They are not the same and the first one is not optional.
+#
+# 1. THE POWER-UP PRECONDITION (spec clause P1) IS ENFORCED HERE.
+#
+#    P1 states that every line is invalid at the first request after reset. The
+#    reference's tag memory is an SRAM with NO reset -- `bsg_mem_1rw_sync_*_synth`
+#    contains the line `wire unused = reset_i;` -- so its power-up contents come
+#    from the simulator, not from the RTL.
+#
+#    sim_candidate.sh compiles with `--x-initial unique`, under which the tag
+#    array powers up pseudo-random. That sets lock bits, and the reference's own
+#    assertion (bsg_cache_non_blocking_tl_stage.sv:468, "There needs to be at
+#    least 2 unlocked ways") then refuses the very first request -- measured, 9
+#    of 12 random seeds. The condition cannot be cleared through the request
+#    port, because that assertion fires on ANY operation in the TL stage,
+#    including the one that would clear it.
+#
+#    `--x-initial 0` appears AFTER the hardcoded flag on the command line and
+#    overrides it. VERIFIED, not assumed: built with both flags in that order,
+#    the probe runs CONFIRMED with no runtime argument, and stays CONFIRMED even
+#    when `+verilator+rand+reset+2` is forced at run time -- the zeroing is baked
+#    in at compile time and cannot be undone from the command line afterwards.
+#
+#    It applies to the candidate as well as the reference, which is correct:
+#    P1 is a property of the environment and both must see the same one.
+#
+#    The cost is stated rather than hidden: `--x-initial 0` makes uninitialised
+#    reads deterministic zero, so it hides bugs that depend on genuinely
+#    undefined state. That is the trade P1 makes, and it is why P1 is also
+#    CHECKED by the testbench every run rather than merely assumed here -- a
+#    build flag that nothing verifies is exactly the kind of control that stops
+#    being true without anything noticing.
+--x-initial
+0
+
+# 2. THE REFERENCE is a shim over vendored basejump RTL -- bsg_cache_non_blocking
+#    and its 50-file closure. Those need include paths and library search paths.
+#    A self-contained candidate needs none of it; -y is consulted only for
+#    modules that are otherwise unresolved, so the flags are harmless there.
++incdir+%REPO%/refs/basejump_stl/bsg_misc
++incdir+%REPO%/refs/basejump_stl/bsg_cache
+-y
+%REPO%/refs/basejump_stl/bsg_cache
+-y
+%REPO%/refs/basejump_stl/bsg_misc
+-y
+%REPO%/refs/basejump_stl/bsg_dataflow
+-y
+%REPO%/refs/basejump_stl/bsg_mem
+
+# 3. The opcode package the reference's closure imports. SystemVerilog requires
+#    a package to be elaborated before anything importing it, so it is named
+#    explicitly rather than left to -y.
+%REPO%/refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_pkg.sv

@@ -311,6 +311,26 @@ module anchor_semantic_probe
     v_i = 1'b0;
   endtask
 
+  // Measure whether ready_o moves when valid_i moves, WITHIN one half period,
+  // so the request is never sampled at a posedge and cache state is untouched.
+  // The packet is presented first and valid raised second, which is the only
+  // ordering that isolates the dependency on valid.
+  task automatic probe_ready_dependence
+    (input bsg_cache_non_blocking_opcode_e op, input [addr_width_p-1:0] addr,
+     output int moved);
+    logic r_lo, r_hi;
+    moved = 0;
+    @(negedge clk);
+    v_i         = 1'b0;
+    cache_pkt_i = mk_pkt(4'd0, op, addr, 32'h0, 4'hF);
+    #1; r_lo = ready_o;
+    v_i = 1'b1;
+    #1; r_hi = ready_o;
+    v_i = 1'b0;                    // dropped well before the posedge
+    if (r_lo !== r_hi) moved = 1;
+    @(negedge clk);
+  endtask
+
   task automatic idle (input int n);
     int k;
     for (k = 0; k < n; k++) @(negedge clk);
@@ -473,6 +493,147 @@ module anchor_semantic_probe
         errors++;
         $display("[FAIL] NC2: fill counter cannot distinguish one line from two -- S2 is not trustworthy");
       end
+    end
+
+    // =====================================================================
+    // S4 : does a STORE merge into a line whose fill is still outstanding?
+    // =====================================================================
+    // TASK_CATALOG.md claims "store merging" for this anchor. `grep -i merge`
+    // over all ten bsg_cache_non_blocking*.sv files returns nothing, so the
+    // term is unevidenced in the source. That is not the same as the behaviour
+    // being absent -- a secondary store replaying into a refilled block would
+    // be the same thing under another name. One directed probe settles which.
+    banner("S4: STORE to a line whose fill is still outstanding");
+    sb_reset();
+    begin
+      logic [addr_width_p-1:0] line_g;
+      logic [data_width_p-1:0] stored;
+      line_g = 32'h0000_2040;      // index 4, untouched so far
+      stored = 32'hC0FF_EE00;
+      dma_rd_before = dma_rd_pkts;
+      dma_hold = 1'b1;
+      send(4'd11, LW, line_g,     32'h0, 4'hF, 1'b1, mem_at(line_g));   // primary miss
+      idle(6);
+      send(4'd12, SW, line_g + 4, stored, 4'hF, 1'b0, 32'h0);           // STORE, same line
+      idle(20);
+      dma_hold = 1'b0;
+      drain(800);
+      // read the stored word back; if the store merged it must read `stored`,
+      // if the fill overwrote it it reads the memory pattern
+      send(4'd13, LW, line_g + 4, 32'h0, 4'hF, 1'b1, stored);
+      drain(400);
+      $display("     fills for the line = %0d (want 1)", dma_rd_pkts - dma_rd_before);
+      $display("     readback of stored word: %0d error(s) -- 0 means the store MERGED",
+               errors);
+      if (errors == 0)
+        $display("     S4 EVIDENCED: store into an outstanding line survives the fill");
+      else
+        $display("     S4 NOT EVIDENCED: the fill overwrote the store");
+    end
+
+    // ---- NC4: control for S4 -------------------------------------------
+    // If the store path itself were broken, S4 would fail for a reason that
+    // has nothing to do with merging. Store to a line that is already
+    // RESIDENT and read it back: that exercises the same store and readback
+    // with no fill involved.
+    banner("NC4 (control for S4): store to an already-resident line");
+    begin
+      logic [addr_width_p-1:0] line_g;
+      logic [data_width_p-1:0] stored2;
+      int before4;
+      line_g  = 32'h0000_2040;     // resident now
+      stored2 = 32'h1234_5678;
+      before4 = errors;
+      send(4'd14, SW, line_g + 8, stored2, 4'hF, 1'b0, 32'h0);
+      drain(400);
+      send(4'd15, LW, line_g + 8, 32'h0,   4'hF, 1'b1, stored2);
+      drain(400);
+      $display("     resident-line store/readback errors = %0d (want 0)", errors - before4);
+      if ((errors - before4) != 0)
+        $display("[FAIL] NC4: the store path itself is broken -- S4 says nothing about merging");
+    end
+
+    // =====================================================================
+    // S5 : is req-side `ready` independent of `valid` for LOAD/STORE?
+    // =====================================================================
+    // Checking a clause against the anchor BEFORE writing it into the spec.
+    // A clause the anchor does not satisfy surfaces later as the reference
+    // testbench failing its own gate, and gets read as a checker defect.
+    // The anchor's ready is `ld_st_ready & ~mgmt_op_v` with
+    // `mgmt_op_v = v_i & decode_i.mgmt_op` (tl_stage.sv:381) -- so it depends
+    // on v_i for MANAGEMENT ops and not for load/store. Management ops are out
+    // of this task's scope, which makes TAGST a ready-made positive control:
+    // the same measurement must fire on it and not on a load.
+    banner("S5: req ready independent of req valid (LOAD/STORE), with a control");
+    begin
+      int moved_ld, moved_st, moved_mgmt;
+      // The measurement must be taken with the MHU BUSY. Idle, the anchor's
+      // ready is 1'b1 for every op and the dependency -- which is real -- is
+      // unobservable, so the control reads 0 and proves nothing. A first
+      // version of this phase measured at idle, got LOAD=0 STORE=0 TAGST=0,
+      // and the TAGST zero is what said the apparatus was blind rather than
+      // the anchor clean.
+      sb_reset();
+      dma_hold = 1'b1;
+      send(4'd1, LW, 32'h0000_3050, 32'h0, 4'hF, 1'b1, mem_at(32'h0000_3050));
+      idle(4);
+      probe_ready_dependence(LW,    LINE_A,        moved_ld);
+      probe_ready_dependence(SW,    LINE_A,        moved_st);
+      probe_ready_dependence(TAGST, 32'h0000_0000, moved_mgmt);
+      dma_hold = 1'b0;
+      drain(800);
+      $display("     ready moved with valid:  LOAD=%0d STORE=%0d  (want 0, 0)", moved_ld, moved_st);
+      $display("     control, management op:  TAGST=%0d          (want 1)", moved_mgmt);
+      if (moved_ld != 0 || moved_st != 0) begin
+        errors++;
+        $display("[FAIL] S5: anchor's req ready DOES depend on valid for load/store");
+      end
+      if (moved_mgmt != 1) begin
+        errors++;
+        $display("[FAIL] S5 control: the measurement cannot detect a dependency that is known to exist");
+      end
+    end
+
+    // =====================================================================
+    // S6 : how many distinct line misses can be outstanding?
+    // =====================================================================
+    // The spec is about to require "at least MAX_MISSES outstanding", and
+    // F29 is the finding about a floor derived from an unmeasured model of the
+    // anchor -- there the documented MAX_TRANS+1 was actually 4*MAX_TRANS-5,
+    // and the floor inherited the error. Measure before writing.
+    //
+    // Method: hold the memory so nothing completes, then offer loads to
+    // DISTINCT lines and count how many the anchor accepts before it stops.
+    // Accepted-and-unanswered is the observable, which is what the checker
+    // will be able to see too.
+    banner("S6: outstanding distinct-line misses accepted with memory held");
+    begin
+      int accepted, k;
+      logic [addr_width_p-1:0] a;
+      sb_reset();
+      dma_hold = 1'b1;
+      accepted = 0;
+      for (k = 0; k < 24; k++) begin
+        int a0;
+        // distinct lines, distinct indices cycling through the sets
+        a = 32'h0001_0000 + (k << (block_off_w_lp + lg_sets_lp)) + ((k % sets_p) << block_off_w_lp);
+        @(negedge clk);
+        v_i         = 1'b1;
+        cache_pkt_i = mk_pkt(4'(k % 15) + 4'd1, LW, a, 32'h0, 4'hF);
+        a0 = req_accepts_r;
+        begin
+          int w; w = 0;
+          while ((req_accepts_r == a0) && (w < 40)) begin @(negedge clk); w++; end
+        end
+        v_i = 1'b0;
+        if (req_accepts_r != a0) accepted++;
+        else k = 24;                       // stopped accepting; done
+      end
+      $display("     miss_fifo_els_p=%0d -> accepted %0d distinct-line misses with memory held",
+               miss_fifo_els_p, accepted);
+      dma_hold = 1'b0;
+      idle(400);
+      sb_reset();
     end
 
     // =====================================================================

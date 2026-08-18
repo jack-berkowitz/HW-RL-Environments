@@ -1,0 +1,160 @@
+id: d_ca01
+module: nonblocking_dcache
+domain: comp_arch
+type: design
+catalog: TASK_CATALOG.md
+
+oracle_class: A
+reference:
+  refs_lock_repo: bespoke-silicon-group/basejump_stl
+  sha: b48037e28544425839dbd617d45b1a82631bc1a9
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/basejump_stl/bsg_cache/bsg_cache_non_blocking.sv
+  closure_files: 50
+  closure_lines: 6350
+  shim: ref/nonblocking_dcache_ref.sv     # STEP 3 -- not written yet
+  shim_note: >
+    Planned as pack/unpack of the anchor's two packed structs (cache_pkt and
+    dma_pkt) plus ready/yumi renaming. No behaviour, and in particular NO
+    initialization sequencer: measured (E3) that with a zeroed tag array the
+    anchor needs no initialization at all, which is what keeps the shim thin.
+  provenance_caveat: >
+    The anchor top is neither named in refs.manifest.yaml nor hashed in
+    refs.lock; 1 of its 50 closure files carries a hash. See NOTES.md, proposed
+    finding `anchor-outside-drift-detection`. refs.lock is frozen; reported.
+
+spec: [spec/nonblocking_dcache_iface.sv]
+
+# RULE 18 -- PPA, latency and throughput are measured ONLY here.
+scored_configuration:
+  DATA_W: 32
+  SETS: 16
+  WAYS: 4
+  MAX_MISSES: 8
+  rationale: >
+    Not the anchor's default -- the anchor has no defaults, every parameter is
+    mandatory. MAX_MISSES=8 is the load-bearing choice: d_nw01 recorded that no
+    capability check discriminates at MAX_TRANS=2 and that a pass there is not
+    capability evidence, so choosing 2 here would knowingly repeat it. WAYS=4 is
+    the ordinary L1 associativity and makes replacement non-degenerate, which it
+    nearly is at 2. DATA_W=32 rather than 64 because 64 doubles the data array
+    without exercising the allocation-and-scheduling axis this task measures,
+    and pushes place-and-route toward the container memory ceiling that already
+    killed one route here (F31). 16 sets x 4 ways x 4 words x 32 bits = 8 kbit
+    of data array: a real cache, small enough to close.
+  authority: stated task intent, recorded in spec clause S0
+
+scored_metrics:
+  # Reported, NOT gated. A slower correct design is not a failing design.
+  - {metric: hit_latency_cycles,  label: "hit(cyc)"}
+  - {metric: fill_latency_cycles, label: "fill(cyc)"}
+  - {metric: accept_rate_per_1k,  label: "acc/1k"}
+  - {metric: max_outstanding,     label: "outstd"}
+
+configs:
+  # CORRECTNESS SWEEP -- multi-configuration, unchanged by rule 18. Full cross of
+  # the four swept parameters = 16. MUST stay in step with the d_ca01 arm in
+  # scripts/sim_candidate.sh; if one changes the other must, or the sweep
+  # silently narrows.
+  #
+  # ADDR_W=32, ID_W=4 and BLOCK_WORDS=4 are localparams in the interface, not
+  # parameters. A quantity that is never swept is a constant, and declaring it
+  # as a parameter would claim a flexibility no check binds -- the MAX_TRANS
+  # shape from F1.
+  - {DATA_W: 32, SETS: 8,  WAYS: 2, MAX_MISSES: 2}
+  - {DATA_W: 32, SETS: 8,  WAYS: 2, MAX_MISSES: 8}
+  - {DATA_W: 32, SETS: 8,  WAYS: 4, MAX_MISSES: 2}
+  - {DATA_W: 32, SETS: 8,  WAYS: 4, MAX_MISSES: 8}
+  - {DATA_W: 32, SETS: 16, WAYS: 2, MAX_MISSES: 2}
+  - {DATA_W: 32, SETS: 16, WAYS: 2, MAX_MISSES: 8}
+  - {DATA_W: 32, SETS: 16, WAYS: 4, MAX_MISSES: 2}
+  - {DATA_W: 32, SETS: 16, WAYS: 4, MAX_MISSES: 8}   # <- scored configuration
+  - {DATA_W: 64, SETS: 8,  WAYS: 2, MAX_MISSES: 2}
+  - {DATA_W: 64, SETS: 8,  WAYS: 2, MAX_MISSES: 8}
+  - {DATA_W: 64, SETS: 8,  WAYS: 4, MAX_MISSES: 2}
+  - {DATA_W: 64, SETS: 8,  WAYS: 4, MAX_MISSES: 8}
+  - {DATA_W: 64, SETS: 16, WAYS: 2, MAX_MISSES: 2}
+  - {DATA_W: 64, SETS: 16, WAYS: 2, MAX_MISSES: 8}
+  - {DATA_W: 64, SETS: 16, WAYS: 4, MAX_MISSES: 2}
+  - {DATA_W: 64, SETS: 16, WAYS: 4, MAX_MISSES: 8}
+
+# ---------------------------------------------------------------------------
+# ENVIRONMENT PRECONDITION -- spec clause P1
+# ---------------------------------------------------------------------------
+preconditions:
+  power_up_state:
+    clause: P1
+    statement: every line is invalid at the first request after reset deasserts
+    established_by: "--x-initial 0, declared in ref/sim_flags_verilator.txt"
+    verified_by: "testbench phase 2 -- the first access to a line must issue a fill"
+    why_both: >
+      A stated precondition nothing checks lets a self-initializing design and an
+      assuming design pass for two different reasons. A build flag that nothing
+      verifies stops being true without anything noticing.
+    override_verified: >
+      --x-initial 0 appears after sim_candidate.sh's hardcoded --x-initial unique
+      and wins. Confirmed by running the built binary with no runtime argument
+      AND with +verilator+rand+reset+2 forced: CONFIRMED both times, so the
+      zeroing is compile-time and cannot be undone from the command line.
+    cost: >
+      --x-initial 0 makes uninitialised reads deterministic zero, hiding bugs
+      that depend on genuinely undefined state. Stated rather than hidden.
+
+# ---------------------------------------------------------------------------
+# ANCHOR MEASUREMENTS -- taken before the clauses that depend on them were written
+# ---------------------------------------------------------------------------
+anchor_measurements:
+  outstanding_capacity:
+    method: memory held, offer loads to distinct lines, count accepted
+    results: {2: 3, 4: 5, 8: 9, 16: 17}    # miss_fifo_els_p -> accepted
+    relation: "accepted = miss_fifo_els_p + 1, exact at four points"
+    consequence: >
+      C1's floor is MAX_MISSES, so the reference clears it by one. The floor is
+      NOT fitted to the reference's number -- F8 is the finding about a floor
+      that encoded one implementation's buffering into the contract, and F29 is
+      the one about a floor built on a model confirmed at a single coincidental
+      point.
+  store_into_outstanding_line:
+    result: EVIDENCED -- one fill, stored word survives the fill
+    control: store to an already-resident line, clean
+    consequence: TASK_CATALOG row correction, see NOTES.md
+  req_ready_vs_valid:
+    result: >
+      independent for LOAD/STORE; dependent for management ops, which are out of
+      scope. Measured with the miss handler BUSY -- measured idle it reads
+      independent for everything, including the case known to be dependent.
+    consequence: >
+      stated as LATITUDE (spec L5), not turned into a requirement. Requiring it
+      would constrain submissions on an axis this task does not measure.
+
+# ---------------------------------------------------------------------------
+verified_simulators:
+  verilator: "5.046 -- 16/16 configs on the skeleton with a minimal stub"
+  icarus: NOT_CHECKED
+frontend_gate:
+  slang: "interface elaborates 0 errors; anchor closure needs -DYOSYS (see NOTES.md)"
+
+watchdog:
+  skeleton_cycles: 20000
+  margin_note: >
+    The longest thing the skeleton does is one fill -- acceptance, memory
+    request, 4 beats, response -- under 40 cycles for any sane design, so the
+    margin is roughly 500x. Sized to convert a hang into a verdict, not to
+    measure speed. The step-3 testbench will need its own value and its own
+    recorded margin.
+
+# ---------------------------------------------------------------------------
+# NOT YET BUILT -- step 3. Listed so their absence is visible rather than implied.
+# ---------------------------------------------------------------------------
+second_source:   {status: NOT_STARTED, differences_named: false}
+mutants:         {status: NOT_STARTED, planned: "5-7, each wrapping the anchor, incl. one CAPABILITY-class"}
+conformant:      {status: NOT_STARTED, planned: "enumerated clause by clause against the interface"}
+testbench:       {status: SKELETON, note: "checks parameter legality, acceptance, P1, and one fill. Not the scoring checker."}
+
+# ---------------------------------------------------------------------------
+ppa: ABSENT
+ppa_note: >
+  Agent 1 owns PPA for this task and it has not been built. ABSENT is the
+  honest value; a placeholder number is not. When it is built, config.mk needs
+  -DYOSYS for the slang read of the basejump closure -- see NOTES.md.

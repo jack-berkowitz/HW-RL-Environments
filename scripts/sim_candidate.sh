@@ -111,6 +111,14 @@ case "$TASK_NAME" in
       # ever added here, this list must grow with it or the sweep silently
       # narrows -- which is the defect the *) branch refuses.
       CFGS=("") ;;
+  d_ca01_nonblocking_dcache)
+      # Full cross of the four swept parameters = 16 configs. Kept in step with
+      # `configs:` in the task's task.yaml; if one changes the other must.
+      # ADDR_W, ID_W and BLOCK_WORDS are localparams in the interface, not
+      # parameters -- a quantity that is never swept is a constant, and
+      # declaring it as a parameter would claim a flexibility nothing binds.
+      CFGS=(); for dw in 32 64; do for st in 8 16; do for wy in 2 4; do for mm in 2 8; do
+        CFGS+=("DATA_W=$dw SETS=$st WAYS=$wy MAX_MISSES=$mm"); done; done; done; done ;;
   *)  # REFUSE. This used to print a note and run the TB's own defaults, which
       # reported "1 config" for a task with eight legal ones -- a partial sweep
       # presented as a full one. That is the same defect as picking a testbench
