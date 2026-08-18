@@ -205,3 +205,44 @@ operation alone named the wrong clause. It is now mode-dependent.
 discharged**: one author wrote the spec, the checker and the mutants, so the set
 has only been challenged by what that author anticipated. The first submission
 is the real test.
+
+---
+
+## THE RECIPE: build the discriminating mutants in the first pass
+
+Across three tasks and twenty-four scored submissions, **seven of the twelve
+misses came from mutant sets added *after* a blind run**, and the two that
+nothing has ever caught — `fn_m8_max_subnormal_is_normal` here and
+`tt_m8_peek_removes_last` on the sibling task — are both the same shape.
+
+**The shape: a mutant sitting exactly on the boundary between two states a
+clause distinguishes.**
+
+| mutant | the boundary it sits on |
+|---|---|
+| `fn_m8` | the largest subnormal against the smallest normal — adjacent classes in a ten-class table |
+| `tt_m8` | a tag holding exactly one entry against a tag holding more |
+| `fm_m9` | served within the stated window against served eventually |
+| `tt_m10` | the cycle a store becomes full against the cycle after |
+
+A design that is wrong *everywhere* is caught by anyone. A design that is wrong
+*only on the boundary* is caught only by a testbench that went looking for the
+boundary, and that is the discrimination the whole exercise is for.
+
+**Consequences, and the second one is a constraint on spec writing:**
+
+1. **The initial mutant set includes boundary-of-a-named-clause mutants.** Do
+   not build six straightforward ones and retrofit the hard ones after a blind
+   run — that cost three tasks a full extra cycle each, and the retrofit is
+   where all the discrimination turned out to live.
+
+2. **Prefer clauses stated as checkable bounds and as explicit boundaries
+   between named states**, because those are the only clauses that can carry a
+   discriminating mutant. A qualitative promise cannot: it yields a mutant
+   everybody catches or one nobody can. `fm_m9` exists only because S10 was
+   written as a 16-frame window instead of "no input is starved"; the two
+   submissions that missed it had both implemented "eventually".
+
+**The check to apply while writing each clause:** *could a design satisfy this
+everywhere except at one boundary?* If yes, that boundary is a mutant. If no,
+the clause is probably qualitative and will not discriminate.

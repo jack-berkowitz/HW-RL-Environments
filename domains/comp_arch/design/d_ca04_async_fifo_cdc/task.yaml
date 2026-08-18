@@ -99,11 +99,14 @@ simulator_pinning:
     The vendored anchor uses a `type` parameter and (* async *) attributes on
     port connections; Icarus 13.0 rejects both. This is a property of the
     ANCHOR, not the harness.
-  checker_is_dual_simulator: true
+  # Verilator is the simulator of record; Icarus is a debugging aid only and
+  # no scored result depends on it. Kept as a note, not as a coverage claim.
+  checker_runs_under_icarus_for_debugging: true
   evidence: >
     The checker builds and reaches TEST_RESULT: PASS under Icarus 13.0 when
-    given a plain-SystemVerilog DUT (the second source). Submissions can
-    therefore be graded under either simulator.
+    given a plain-SystemVerilog DUT (the second source). That makes Icarus
+    usable for DEBUGGING a candidate whose Verilator failure is hard to read.
+    It is NOT a coverage claim: scoring is Verilator only.
 
 second_source: true
 second_source_file: tb/async_fifo_cdc_alt_ref.sv

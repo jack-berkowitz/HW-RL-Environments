@@ -32,6 +32,10 @@ module tag_tracker #(
     input  logic    push_req_i,
     output logic    push_gnt_o,
 
+    // NOTE: the [N_MATCH-1:0] on the next three ports is a PACKED dimension --
+    // it is written BEFORE the name. Declare your own signals the same way.
+    // `payload_t match_data [N_MATCH]` is an UNPACKED array, a different type,
+    // and will not connect.
     input  payload_t [N_MATCH-1:0] match_data_i,
     input  payload_t [N_MATCH-1:0] match_mask_i,
     input  logic  [N_MATCH-1:0] match_req_i,
@@ -51,6 +55,9 @@ module tag_tracker #(
 ```
 
 ---
+
+Every dimension in that port map written **before** a signal's name is packed.
+Match the form exactly when you declare the signals you connect to it.
 
 ## Specification
 
