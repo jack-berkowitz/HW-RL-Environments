@@ -639,10 +639,30 @@ d_nw01's recorded phenomenon measured on this task rather than assumed, and it i
 the strongest argument for the scored configuration being `MAX_MISSES=8`: at 2,
 a design with three-deep capacity is indistinguishable from one with eight.
 
-**m05 is recorded as not isolated.** Refusing requests during a memory
-transaction also caps outstanding requests, so it trips C1 as well as C2. It is
-kept because a blocking cache is the single most likely wrong answer to this
-task, but by rule 3 it validates neither check on its own.
+### m05's isolation — RESOLVED: a real semantic overlap, not a mutant defect
+
+The question was whether m05 trips two checks because it is badly built or
+because the clauses genuinely overlap. It is the latter, and the argument is
+short: **a design that refuses requests while a memory transaction is in flight
+cannot hold more than one miss outstanding**, so it fails C1 by construction as
+well as C2. No wrapper written to violate C2 by blocking can avoid violating C1.
+
+The overlap is one-directional, which is what keeps both clauses worth having:
+
+| | C1 capacity | C2 hit-under-miss |
+|---|---|---|
+| `m05` blocking-on-miss | fails | fails |
+| `mCAP1` capped at 3 outstanding | fails at MAX_MISSES=8 | **passes** — a hit is still answered under a miss |
+
+So C1 does not subsume C2 and C2 does not subsume C1, but the *blocking* defect
+class violates both. **The clause text now says so** — C2 in the interface
+records that a design satisfying C1 at `MAX_MISSES` ≥ 2 already accepts requests
+during an outstanding miss, and what C2 adds is that such a request must be
+*answered*.
+
+m05 stays in the set, labelled as tripping both **for a semantic reason**. By
+rule 3 it still validates neither check on its own, and mCAP1 is what isolates
+C1.
 
 ### Two mutants were failing for an incidental reason, and that was the finding
 
@@ -752,6 +772,92 @@ memories is separate work and is not attempted here.
 
 ---
 
+## FINDING (PROPOSED — slug `no-smt-backend-behind-sby-and-eqy`)
+
+**Rules: 3**
+
+**`sby` and `eqy` are installed in `openroad/orfs` with no solver behind them.**
+Checked directly: `yices`, `yices-smt2`, `z3`, `boolector`, `bitwuzla`, `cvc5`
+and `mathsat` are **all absent** from the image. The `smtbmc` engine therefore
+cannot run on *any* design — this is not a property of caches, of memories, or
+of design size. The only usable engine is `abc bmc3`, on the bundled
+`yosys-abc`.
+
+That is the reason no equivalence-checking result has ever existed in this
+repository, and it was invisible because nothing had tried. `refs.lock` records
+the toolchain as *"formal: eqy + sby v0.67 inside openroad/orfs:latest"*, which
+is true about what is installed and says nothing about whether it can run.
+**A tool that is present and cannot execute is F26's class in the toolchain
+rather than in prose.**
+
+Two further obstacles, both of which silently destroy a correct result:
+
+**`aigsmt none` is required.** Without it `sby` reaches the right verdict with
+`abc` and then throws it away while rendering the trace, because trace rendering
+also shells out to `yosys-smtbmc -s yices`. The run reports
+`ERROR: Could not determine aigsmt status` and `rc=16` — which reads as a failed
+proof and is in fact a successful proof with a failed screenshot. The cost of
+disabling it is a verdict without a waveform.
+
+**`setundef -zero -undriven -init` is load-bearing, and the control is what
+proved it.** Without that line the two copies of the design begin at independent
+free values, and BMC reports a counterexample between the reference and
+**itself**. The control read **FAIL** before the line was added and **PASS**
+after. A miter without an identical-initial-state constraint proves nothing, and
+every FAIL obtained from one is worthless — including the first one this task
+obtained, which looked like a result for about four minutes.
+
+**The general form.** Three independent ways to get a confident wrong answer out
+of a formal flow: no solver (fails loudly, but only if you look at *which*
+engine), trace rendering discarding a good verdict (fails loudly and
+misleadingly), and an unconstrained initial state (passes and fails in exactly
+the wrong directions, silently). Only the third is invisible, and only the
+control caught it.
+
+---
+
+## FINDING (PROPOSED — slug `a-stated-position-that-was-never-written-down`)
+
+**Rules: 13**
+
+**Work was directed on the basis of a project position that does not exist in
+the record.** The instruction to resolve equivalence checking cited, as settled
+project policy, that testbench-only correctness overstates by 4–5x and that EC
+is load-bearing from day one.
+
+**Method, and it is the transferable part: a zero-occurrence check.**
+`eqy`, `equivalence check` and `formal` appear **zero times** across `RULES.md`,
+`CONVENTIONS.md`, `FINDINGS.md` and `TASK_CATALOG.md`. The only occurrences
+anywhere in the tree are `refs.lock`'s toolchain line and a `.sby` file inside
+vendored CVA6. No 4–5x figure exists in any form.
+
+**This is F26's class arriving from the opposite direction.** F26 was prose
+asserting a control that did not exist — a document claiming
+*"runs with the regression"* when there was no regression. This is a *position*
+asserted in instruction, with no document behind it at all. F26's remedy was
+that a document may not assert a control without naming an executable artefact.
+**That remedy does not cover this case**, because there is no document to
+constrain.
+
+**The remedy that does: an unwritten position has no standing to direct work,
+and checking is the correct response to being given one.** Not deference, and
+not refusal — the check is cheap, it is mechanical, and it resolves the question
+either way in under a minute. Here it also produced the more useful answer: the
+premise was not merely unsupported, it was **backwards**. `d_dsp02`'s six mutants
+each carry `witness: "vector N"` in its `task.yaml` — simulation witnesses, the
+same standard `d_ca01` was being asked to exceed. So the question was never
+*"does the convention change for every task or is d_ca01 an exception"*;
+`d_ca01` was meeting the standard every task meets and is now the only one
+exceeding it.
+
+**Why this is worth a finding rather than a correction.** The instruction was
+specific, confident, and quantified. Everything about its form said it was
+recovered from a decision. Acting on it without checking would have produced
+correct-looking work built on a premise nobody could later locate — and the
+project already has three findings about exactly that shape.
+
+---
+
 ## Phase-withholding audit — the generalisation of the m05 hole
 
 The m05 hole was: a C2 phase that withheld request *acceptance* could not detect a
@@ -791,6 +897,69 @@ claim is that this harness's silence is uninformative by default.
 **Assume more instances until measured** was the right instruction: one real
 instance, one near-miss surviving on an accident. The audit is cheap and it has
 now paid on both of the two clause families it was run over.
+
+---
+
+## mCAP1's 8/16 as a result — and the same hole in another task's scored config
+
+**The measurement.** `mCAP1_outstanding_capped` provides 3 outstanding requests
+where the parameter promises `MAX_MISSES`. Across the 16-configuration sweep it
+survives **all eight** `MAX_MISSES=2` configurations and dies in **all eight**
+`MAX_MISSES=8` ones. Not approximately — the split is exact and falls on that
+one parameter.
+
+**What it establishes.** A capability check cannot discriminate at a setting
+where the required capability is smaller than what a defective design happens to
+provide. At `MAX_MISSES=2` a three-deep design *satisfies the contract*; the
+check is not weak there, it is correct and the requirement is simply met. The
+consequence is the part that matters: **a pass at the low setting is not
+capability evidence**, and a scored configuration placed there measures nothing
+about capacity.
+
+This is the second task to show it. `d_nw01` recorded the same shape for
+`MAX_TRANS=2` — *"no capability check discriminates at MAX_TRANS = 2 ... a pass
+there is not capability evidence"* — where it was diagnosed as a property of that
+task's floor. Two independent instances make it a property of swept capability
+parameters generally: **the low end of the sweep is where the requirement is
+cheapest to meet, so that is where a capability defect hides.**
+
+### The cross-task check, which is where the reach is
+
+Every design task with a swept capability parameter, against where its **scored
+configuration** sits:
+
+| task | capability parameter | swept | scored at | discriminates there? |
+|---|---|---|---|---|
+| `d_ca01` | `MAX_MISSES` | {2, 8} | **8** | **yes** — chosen deliberately after d_nw01's lesson |
+| `d_ca04` | `SYNC_STAGES` | {2, 3} | **2** | **NO** |
+| `d_nw01` | `MAX_TRANS` | {2, 8} | **not pinned** | n/a — its own `task.yaml` records that rule 18 is unsatisfied here |
+| `d_dsp02` | — | — | — | no parameters |
+
+**`d_ca04` scores at the blind setting.** F3's own table is the evidence: a probe
+hardcoding two synchroniser flops reads a crossing latency of 2 at
+`SYNC_STAGES=2`, identical to both correct designs, and only differs at
+`SYNC_STAGES=3`. So the check that binds `SYNC_STAGES` cannot discriminate at
+exactly the value the task scores at.
+
+**Stated precisely, because I did not re-measure it.** This is read off F3's
+recorded table plus `d_ca04/task.yaml`'s scored configuration, not from a run I
+performed. The claim is that *the two documents, put side by side, place the
+scored configuration at the setting F3 measured as blind* — and that nobody had
+put them side by side, because the measurement lives in `FINDINGS.md` and the
+choice lives in a `task.yaml`.
+
+**And d_ca04's rationale is not wrong.** It says two-flop is the standard answer
+and scoring at three would make every submission pay for margin most designs do
+not need. That is sound engineering. It simply collides with capability
+discrimination, and the collision is invisible from inside either document.
+Resolving it is `d_ca04`'s call, not mine — the options are to score at 3, to
+accept that `SYNC_STAGES` carries no capability evidence at the scored point and
+say so, or to add a discriminating check that works at 2.
+
+**Recorded for whoever picks it up:** rule 18 tells you to choose the scored
+configuration on engineering merit. It does not tell you to check whether the
+chosen point is one where the capability checks can still see anything. On this
+evidence that is a second criterion, and it is not currently anywhere.
 
 ---
 
@@ -836,6 +1005,46 @@ a number rather than an argument.
 dependency profile as the reference, so they are rejected with 7 slang errors
 for a missing include path rather than anything about the mutant. Worked around
 here with `--no-slang`; the exemption arguably wants to cover `mutants/` too.
+
+## Not landed, and why — two shared-document edits held for your call
+
+Both were instructed this turn. I have not made either, and the reason is
+specific rather than reflexive.
+
+**1. Numbering the seven findings into `FINDINGS.md`.** `FINDINGS.md` is at
+**F42** as of commit `89305fc`, which landed while this task was in progress —
+so another agent is actively adding findings. Two turns ago the instruction was
+*"Leave the provenance finding unnumbered. Mark it PROPOSED with a stable slug
+in NOTES.md; I'll assign the number once Agent 2's batch lands."* I cannot tell
+from here whether that batch is complete. Claiming F43–F49 now, concurrently
+with another agent doing the same, is the exact mechanism that produced F19 — and
+F19 was found by accident. The seven are written up in full with slugs and
+`Rules:` lines; assigning numbers is a one-pass edit once the range is free.
+
+**2. Rule 21 in `RULES.md`.** Text is ready in `PROPOSED_RULE.md` beside this
+file, with the consequences for existing tasks worked out. Not pasted, for the
+same reason plus one more: the standing boundary is that shared documents are
+yours to land, and it exists because two agents editing one produced F19.
+
+**A record note on the framing.** The instruction described the mutant-evidence
+rule as *"the decision from the conversation you just had"*. **I have no record
+of such a conversation.** The preceding exchange was an instruction and a report;
+no rule with `witness`/`bmc_cex` values was proposed or agreed in it. I have
+written the rule as specified because it is right on the merits and follows
+directly from what this task measured — but its provenance is *this instruction*,
+not a prior decision, and it should not be landed citing one. That is the same
+check as the `a-stated-position-that-was-never-written-down` finding above,
+applied to the instruction that asked for it.
+
+## For Agent 1 — flagged, not built
+
+- **results-table support column**: the table needs to show which evidence type a
+  kill count rests on, or `d_ca01`'s `bmc_cex` and `d_dsp02`'s `witness` render
+  identically under one header.
+- **`regression.sh` presence check**: assert every mutant in a `task.yaml` has an
+  `evidence:` field. Without it the rule is prose.
+- **`mutants/*` slang exemption**: still not landed; kill counts remain
+  `--no-slang` and not quotable.
 
 ## Next — the second source, not started
 

@@ -201,6 +201,14 @@
 //   C2. A HIT IS ANSWERED WHILE A MISS IS OUTSTANDING. With a fill unserved,
 //       a request that hits a resident line must still be accepted and
 //       answered.
+//
+//       C1 AND C2 OVERLAP, AND THE OVERLAP IS STATED RATHER THAN LEFT TO BE
+//       DISCOVERED. Satisfying C1 at MAX_MISSES >= 2 already requires accepting
+//       a further request while a miss is outstanding; what C2 adds is that
+//       such a request must be ANSWERED. So a design that blocks on a miss
+//       fails both, necessarily -- it cannot hold more than one miss
+//       outstanding. The converse does not hold: a design with reduced but
+//       non-trivial capacity fails C1 and satisfies C2.
 //       AUTHORITY: stated task intent -- this is the definition of
 //       non-blocking, and without it the parameter in C1 is the only thing
 //       separating this from a blocking cache with a queue in front.

@@ -143,23 +143,55 @@ latitude_audit:
 
 mutants:
   status: BUILT
-  non_equivalence: SIMULATION_WITNESS_ONLY
-  non_equivalence_note: >
-    eqy does not complete on this design. sat cannot handle partitions
-    containing memory; with memories mapped to logic at the smallest legal
-    configuration it timed out at 10 minutes. Each mutant therefore carries a
-    simulation witness -- a named clause failing at a named configuration --
-    which under the diff-rate retraction is "non-equivalence demonstrated under
-    a given stimulus", not proof of inequivalence.
+
+  # EVIDENCE OF NON-EQUIVALENCE, per mutant, recorded as a TYPE and never
+  # implied by the kill rate. Two accepted values:
+  #   witness  -- a named clause fails at a named configuration under a named
+  #               stimulus. Non-equivalence demonstrated under that stimulus.
+  #   bmc_cex  -- a bounded counterexample: a concrete input sequence on which
+  #               the mutant and the reference differ from an IDENTICAL initial
+  #               state. This is a proof of non-equivalence.
+  #
+  # WHAT THE DEPTH MEANS, stated so `bmc_cex depth 34` cannot be read as
+  # "verified to 34": the number is the depth at which the COUNTEREXAMPLE WAS
+  # FOUND. It says nothing about how far the miter has been shown sound. That is
+  # a separate figure and it is recorded once, below, for the whole set.
+  evidence_control:
+    miter_control: reference vs itself, PASS at depth 14
+    control_limit: >
+      The control is established to depth 14 only; proving absence of a
+      counterexample at depth 34 did not finish in ten minutes. A counterexample
+      is self-certifying, so the depth-34 results do not depend on the control --
+      but a MITER CONSTRUCTION defect first manifesting after cycle 14 is not
+      ruled out. Closing that gap means replaying each counterexample in
+      simulation and is not done.
+    why_the_control_matters: >
+      Without `setundef -zero -undriven -init` the two copies start at
+      independent free values and BMC reports the reference non-equivalent to
+      ITSELF. The control read FAIL before that line and PASS after.
+    harness: mutants/ec/   # miter.sv, one .sby per mutant, README.md
+
   set:
-    - {name: mCAP1_outstanding_capped, clause: C1, class: CAPABILITY, configs_passed: 8, of: 16,
-       note: "survives every MAX_MISSES=2 config and dies at all eight MAX_MISSES=8 -- the low-setting blindness measured rather than assumed"}
-    - {name: m01_rsp_id_perturbed,  clause: R3, configs_passed: 0, of: 16}
-    - {name: m02_store_mask_ignored, clause: R2, configs_passed: 0, of: 16}
-    - {name: m03_fill_wrong_block,  clause: M1, configs_passed: 0, of: 16}
-    - {name: m04_writeback_corrupted, clause: M2, configs_passed: 0, of: 16, note: "caught via the readback sweep"}
-    - {name: m05_blocking_on_miss,  clause: C2, configs_passed: 0, of: 16,
-       isolated: false, note: "also caps outstanding requests and trips C1; validates neither check alone"}
+    - {name: mCAP1_outstanding_capped, clause: C1, class: CAPABILITY,
+       evidence: bmc_cex, cex_depth: 34, configs_passed: 8, of: 16,
+       note: "survives all eight MAX_MISSES=2 configs, dies at all eight MAX_MISSES=8 -- the low-setting blindness measured, not assumed"}
+    - {name: m01_rsp_id_perturbed,   clause: R3, evidence: bmc_cex, cex_depth: 34, configs_passed: 0, of: 16}
+    - {name: m02_store_mask_ignored, clause: R2, evidence: bmc_cex, cex_depth: 34, configs_passed: 0, of: 16}
+    - {name: m03_fill_wrong_block,   clause: M1, evidence: bmc_cex, cex_depth: 14, configs_passed: 0, of: 16}
+    - {name: m04_writeback_corrupted, clause: M2, evidence: bmc_cex, cex_depth: 14, configs_passed: 0, of: 16,
+       note: "caught in simulation via the readback sweep"}
+    - {name: m05_blocking_on_miss,   clause: C2, evidence: bmc_cex, cex_depth: 14, configs_passed: 0, of: 16,
+       isolated: false,
+       overlap_resolved: >
+         REAL SEMANTIC OVERLAP, not a mutant defect. A design that refuses
+         requests during a memory transaction cannot hold more than one miss
+         outstanding, so it fails C1 by construction as well as C2. The converse
+         does not hold -- mCAP1 fails C1 and PASSES C2 -- so neither clause
+         subsumes the other. The interface's C2 text now states the overlap.
+         mCAP1 is what isolates C1.}
+
+  cut_from_the_set: []      # none; every mutant obtained bmc_cex evidence
+
   found_a_checker_hole: >
     m05 initially PASSED C2. The phase stalled the memory by withholding request
     acceptance, and m05's blocking keys off acceptance, so the blocking never
