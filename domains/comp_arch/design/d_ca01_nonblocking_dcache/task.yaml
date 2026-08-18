@@ -156,8 +156,18 @@ mutants:
   # "verified to 34": the number is the depth at which the COUNTEREXAMPLE WAS
   # FOUND. It says nothing about how far the miter has been shown sound. That is
   # a separate figure and it is recorded once, below, for the whole set.
+  bmc_timeout_s: 900        # rule 21; lives in each .sby, not in a wrapper
+  bmc_resource_profile:
+    measured: "m03 @ depth 14: 99% CPU (single-threaded), 223 MB peak RSS, 15.75 s wall"
+    consequence: >
+      Single-threaded and modest, so BMC does not need serialising against ORFS
+      builds; the cap is hygiene rather than a scheduling control.
   evidence_control:
     miter_control: reference vs itself, PASS at depth 14
+    miter_control_depth34: >
+      TIMEOUT at the attempted depth -- did not complete in 600 s. Recorded as a
+      measured bound per rule 21, not as a pass and not as a failure. It does not
+      invalidate the depth-34 counterexamples, which are self-certifying.
     control_limit: >
       The control is established to depth 14 only; proving absence of a
       counterexample at depth 34 did not finish in ten minutes. A counterexample

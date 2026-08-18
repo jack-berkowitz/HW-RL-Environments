@@ -1006,7 +1006,24 @@ dependency profile as the reference, so they are rejected with 7 slang errors
 for a missing include path rather than anything about the mutant. Worked around
 here with `--no-slang`; the exemption arguably wants to cover `mutants/` too.
 
-## Not landed, and why — two shared-document edits held for your call
+## LANDED this pass
+
+- **F43–F49** in `FINDINGS.md`; `check_rule_linkage.py` **passes** (21 rules,
+  51 findings, 29 conventions). Written as `## F43.` with the trailing period the
+  checker's grammar requires — **F40, F41 and F42 lack it and are invisible to
+  the checker**, which is why it reported complete while they carried no
+  `**Rules:**` line. Flagged, not fixed: they are not mine.
+- **Rule 21** in `RULES.md`, with the timeout clause, the per-mutant depth
+  requirement, `witness` as full standing, and its provenance recorded as written
+  on the merits rather than carried from a prior decision.
+- **Rule 18 amended** (F49): engineering merit does not establish discrimination.
+- **900 s cap in every `.sby`**, not in a wrapper. Measured profile:
+  **99% CPU — single-threaded — 223 MB peak, 15.75 s** for m03 at depth 14, so
+  BMC does not need serialising against ORFS builds.
+- **Kill counts re-confirmed through the GATED path.** `--no-slang` dropped; all
+  six identical, reference 16/16. **Now quotable.**
+
+## Superseded — the two edits previously held
 
 Both were instructed this turn. I have not made either, and the reason is
 specific rather than reflexive.

@@ -228,7 +228,19 @@ defects. It runs with the regression.
     conformant set against the new spec — every perturbation's licence clause
     must still exist.
 
-    **From:** F24, F18
+    **AMENDMENT (F49): engineering merit does not establish discrimination.**
+    The criteria above choose a point that is representative and buildable. They
+    say nothing about whether the capability checks can still tell anything apart
+    there, and a capability parameter's LOW setting is where a defective design
+    most easily satisfies the requirement — so a pass there is not capability
+    evidence. **Check the chosen point against the capability checks, and where
+    it is blind, either move it or record that those checks carry no evidence at
+    the scored configuration.** `d_ca04` scores at `SYNC_STAGES=2`, which F3
+    measured as the setting where its probe reads identically to a correct
+    design; the measurement lives in `FINDINGS.md`, the choice lives in a
+    `task.yaml`, and nothing joined them.
+
+    **From:** F24, F18, F49
 
 19. **A build failure scores ZERO on every PPA axis, and is labelled as a build
     failure.** Not "no data", not omitted, not deferred, not blank.
@@ -281,6 +293,67 @@ defects. It runs with the regression.
     measure; a borrowed number does not.
 
     **From:** F28, F29
+
+21. **Every mutant carries recorded evidence of non-equivalence, and the TYPE is
+    recorded per mutant.** Two accepted values:
+
+    - **`witness`** — a named clause fails at a named configuration under a
+      named stimulus. Non-equivalence demonstrated *under that stimulus*.
+    - **`bmc_cex`** — a bounded counterexample: a concrete input sequence on
+      which mutant and reference differ from an **identical initial state**. A
+      proof of non-equivalence.
+
+    **`witness` is a FULL-STANDING evidence type and no existing task requires
+    re-validation.** The requirement is that the type is *recorded*, not that it
+    is `bmc_cex`. `d_dsp02`'s six mutants carry `witness: "vector N"` and are
+    compliant as they stand. What the rule forbids is leaving the type
+    unrecorded, so a reader cannot tell which claim a kill count rests on.
+
+    **The kill rate is not evidence and never implies the type.** A mutant every
+    checker kills may still be equivalent on the axis the checker measures; a
+    mutant nothing kills may be profoundly non-equivalent and merely
+    unexercised. A table carrying one must not be read as carrying the other.
+
+    **A mutant that can obtain neither is CUT from the set, and the cut is
+    recorded** with its reason. A mutant of unknown status inflates the
+    denominator of every kill rate computed from the set.
+
+    **Depth is per mutant, and it is the depth at which the counterexample was
+    FOUND.** It is not a statement about how far the miter has been shown sound.
+    Where a control establishes soundness to a different depth, that figure is
+    recorded separately and the two are never combined into one number.
+    `d_ca01`'s bounds are depth 34 for `m01`, `m02`, `mCAP1` and the control, and
+    depth 14 for `m03`–`m05` — a per-mutant column, not one value per task.
+
+    **Every BMC invocation carries a wall-clock cap, and the cap lives in the
+    `.sby` file rather than in a wrapper.** A cap that exists only in the command
+    someone typed is a convention, not a control. Exceeding it is recorded as
+    **timeout at the attempted depth** — never as a passing result and never as a
+    failing one. **A timed-out control is a measured bound, not an absence of
+    evidence.**
+
+    **A timeout on the control does not invalidate the counterexamples.** A
+    counterexample is self-certifying: a concrete input sequence, checkable in
+    isolation. A control that cannot prove the absence of a counterexample to
+    some depth states a limit on what has been ruled out; it is not a red result
+    and must not be read as one.
+
+    Current cap **900 s**, justified by measurement rather than guessed: every
+    counterexample on `d_ca01` landed in under 25 s, so 900 s is 36× the slowest
+    real result and cannot clip a run that was going to succeed, while the
+    gold-vs-gold control that failed to finish in 600 s trips it immediately. A
+    future task whose counterexamples run genuinely long raises the cap **with
+    the measurement that justifies it recorded**, as with any threshold here.
+
+    **Provenance, stated because it differs from every other rule in this file.**
+    This one was not extracted from a defect that survived review. It was written
+    on the merits from what `d_ca01` measured — that a formal flow can be present
+    and unrunnable, that an unconstrained miter proves a design non-equivalent to
+    itself, and that "non-equivalent under this stimulus" is the exact claim the
+    diff-rate retraction refused. It is not carried over from a prior agreed
+    decision.
+
+    **From:** F47, F49
 
 ---
 

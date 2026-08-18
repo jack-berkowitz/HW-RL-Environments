@@ -2,6 +2,12 @@
 mode bmc
 depth 34
 aigsmt none
+# WALL-CLOCK CAP, in the artifact rather than in whoever's command line -- a cap
+# that only exists in a typed command is a convention, not a control.
+# 900 s is 36x the slowest real result on this task (every CEX landed under 25 s),
+# so it cannot clip a run that was going to succeed. The gold-vs-gold control at
+# depth 34 already failed to finish in 600 s and trips this immediately.
+timeout 900
 
 [engines]
 abc bmc3

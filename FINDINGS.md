@@ -2082,3 +2082,286 @@ Not yet established: whether the other five decompose the same way. Only
 `v_nw03/deepseek` was run as a diagnostic.
 
 **From:** scoring v_nw03 and v_dsp02
+
+## F42
+
+**v_ca05's reference testbench declared a module name the scored path could
+not run, so the ceiling every submission was compared against had never gone
+through the harness.** `task.yaml` requires `tb_module: tag_tracker_tb`; the
+reference testbench declared `tag_tracker_spec_tb`. The harness builds with
+`--top-module` from task.yaml, so the file could not be the top and was never
+run through the scored path. Every v_ca05 ceiling figure before this session --
+including the 6/6 that submissions were reported against -- came from an ad-hoc
+invocation outside the harness.
+
+**The asymmetry is the finding.** The submissions were harness-measured. The
+number they were scored against was not. Both were printed in the same table,
+in the same units, with nothing marking that one had a different provenance
+from the other. A ratio between them was never a like-for-like comparison, and
+nothing in the output said so.
+
+This is F22's shape -- a name that has to match in two places, with no check
+that it does -- on the OLDEST task in the project, found only when a later task
+exercised the same path. The renaming fixes v_ca05; it does not fix the class.
+Nothing today asserts that `tb_module` in task.yaml names a module the
+reference testbench actually declares, so the same defect can be reintroduced
+by a rename, exactly as the prompt document was dropped from the task-text hash
+by a rename.
+
+The current 10/10 is harness-measured. Ceiling figures from before this session
+should be treated as unattested rather than wrong: they may well have been
+right, and nothing available now demonstrates it.
+
+**From:** Agent 2's v_ca05 scoring run
+
+## F43
+
+**Rule 11's inversion buys unfalsifiable expected values, and the price is that
+a defective anchor is undetectable from inside the task.** Locally authored code
+generates inputs; the external anchor generates expected values. That removes
+the failure where a testbench author encodes their own misreading as the
+expected answer. It does not remove — and actively conceals — the failure where
+the ANCHOR is wrong.
+
+**The concealment is total, and self-consistent.** If the anchor rounds
+incorrectly, every generated vector inherits the defect. The reference passes,
+because it IS the anchor. Every mutant is killed exactly as designed, because
+each is a perturbation of the anchor measured against the anchor. The task
+publishes a contract that pins the defect, and nothing in the apparatus can
+notice: every internal check is a check of consistency with the anchor, and the
+anchor is consistent with itself.
+
+**This is not hypothetical.** `fpnew_divsqrt_multi` was rejected as an anchor for
+three measured defects — truncation where RNE requires round-to-nearest, RDN and
+RUP inverted because the divider's internal encoding differs from `fpnew_pkg`'s
+and `rnd_mode` is passed straight through, and RMM with no counterpart in its
+two-bit field. A sibling module in the same repository as d_dsp02's anchor.
+
+**Semantic confirmation does not reach it.** d_dsp02 already had fifteen directed
+known-answer cases chosen by someone reading the module. Those confirm the cases
+that person thought to test — a superset of their understanding, not of the
+specification. The defects above sit in tie-breaking and in mode encoding, which
+is precisely where a reader who believes the module is correct does not look.
+
+**The only check that reaches an anchor is an independent computation of the
+same quantity**, by a route that shares no implementation with it. For d_dsp02
+that is exact integer arithmetic with the IEEE-754 rules applied directly: no
+floating point anywhere in the reference computation, and no library that might
+share a bug with the DUT. 10,150 vectors, zero mismatches — the anchor is
+confirmed. See `domains/dsp/design/d_dsp02_fp32_fma_ii1/NOTES.md`.
+
+**The general requirement: every Class A task whose oracle computes a value
+should carry one.** Where the oracle's output is computable by an independent
+route, the absence of that check is a gap in the strongest claim the project
+makes — that the expected values came from something nobody here wrote.
+
+**And the check must be shown to have power before "clean" means anything.** A
+comparison that would pass whatever the anchor did is not evidence. Here: the
+DUT produced differing results across rounding modes on 25 of 30 directed cases,
+and each of the three divsqrt defects would have failed on 25, 16 and 5 cases
+respectively. A clean result from a check that could not have failed is the same
+non-measurement as a kill count from a testbench that rejects everything.
+
+**Not every Class A oracle admits this.** d_nw01's crossbar and d_ca04's CDC FIFO
+have no closed-form value to recompute — their contracts are protocol and
+ordering properties, not arithmetic. For those the equivalent is the second
+source, which is why that control exists. The requirement is: where an
+independent computation is POSSIBLE, its absence is a gap; where it is not, say
+so explicitly rather than leaving the difference unstated.
+
+**From:** Agent 2's rejection of fpnew_divsqrt_multi; the d_dsp02 anchor audit
+
+
+## F43. The anchor a task rests on can be present without ever being declared
+
+`d_ca01`'s reference is `bsg_cache_non_blocking` and its dependency closure is
+**50 files, 6 350 lines**. Of those, **one** carries a SHA-256 in `refs.lock`
+(`bsg_defines.sv`) and **five** are named in `refs.manifest.yaml` -- each with a
+`.v` extension for a file that is `.sv` on disk. **The anchor top is neither
+named nor hashed.** The manifest's basejump list names `bsg_cache/bsg_cache.v`,
+the *blocking* cache, a different module.
+
+The file arrived because `mode: vendor` copied whole directories. So the artefact
+the entire oracle rests on is present by directory-granular side effect, was
+never declared, and is not under drift detection -- while `check_refs_hashes.py`
+passes, because it checks the files it was given.
+
+Found by listing what the elaborator actually pulls in and diffing that against
+the two documents that claim to track it. The cheap remedy is to hash a
+**closure** computed from the elaborator's own file list rather than a
+hand-maintained set, so the covered set cannot drift from what is compiled.
+
+**Rules:** 10
+
+## F44. This harness's silence is uninformative by default
+
+Four testbench defects on one task, each from an unrelated cause, each producing
+**the identical observable: a working design that appears to stop responding.**
+
+| | cause |
+|---|---|
+| 1 | polled a `ready` that depends combinationally on the `valid` being driven in the same timestep -- read the pre-drive value |
+| 2 | waited on a **level flag** describing a completed transfer; it is stale for one cycle afterwards, so the waiter read the previous transaction's success and returned immediately, dropping the request |
+| 3 | drove a DUT input combinationally from a DUT output. Semantically a no-op; **two builds differing only by an added debug process disagreed** about whether the anchor had jammed. No `UNOPTFLAT`, no warning |
+| 4 | `force`/`release` on the memory model's gap counter -- `release` leaves the forced value in place, so the model counted 100 000 cycles down before accepting anything |
+
+**The claim is not that four mistakes were made. It is that a harness able to
+manufacture a dead-looking DUT four different ways cannot have its silence read
+as evidence about the design.** This is F9's shape -- a wedged harness and a
+deadlocked design emit the same thing -- generalised from the drivers to the
+harness's *observation* of the handshake.
+
+Two of the four fell out only from instrumenting; re-reading the driver looked
+correct every time.
+
+**Structural remedies, applied by construction rather than remembered:** drivers
+sample and drive on a clock edge and never assign a DUT input combinationally
+from a DUT output; level flags describing a completed transfer are replaced by
+monotonic counters. A determinism check intended as the *detector* behind these
+was built and **withdrawn** -- three perturbation axes against two reintroductions
+of the defect and it never fired, and a check whose control cannot fire validates
+nothing.
+
+**Rules:** 3
+
+## F45. A spec can advertise latitude its own interface cannot express
+
+Rule 12 is about alternatives silently **foreclosed**. This is the inverse:
+alternatives silently **offered** that the port map cannot carry.
+
+| clause | offered | why it could not be carried |
+|---|---|---|
+| `d_ca01` L4 | write-through / no-write-allocate | M1/M2 make every memory transaction block-granular; the port has no single-word and no byte-masked write, so a no-write-allocate design has no legal way to send one modified word |
+| `d_ca01` L6 | latency unconstrained, so a combinational hit response is legal | the scoreboard read `id_open` pre-edge, charging a same-cycle response as *"a response for an id with nothing outstanding"* |
+
+**The detector, and it is the transferable part: enumerate every latitude clause
+and try to REALISE each one against the port map and the harness.** Reading the
+clause reveals nothing -- the clause is well-formed and the thing it describes is
+simply absent. No control fires, because nothing is wrong with what was built,
+only with what was promised. L4 was found while choosing second-source
+differences; L6 was found by the audit L4 prompted, and its fix is controlled by
+a zero-latency DUT that now runs with `latency min=0` and no unknown-id error.
+
+**Rules:** 12
+
+## F46. An argument inserted at a label position silently stripped every design task's verdict
+
+`sim_candidate.sh` gained a `task_text_hash=` argument at the `label` position in
+`607d97f`. `write_run_record.py` gates its entire verdict block on
+`os.path.isdir(rest[0])`; `rest[0]` became the basename and the raw directory
+moved to `rest[1]`. The test failed silently, and `configs_total`,
+`configs_passed`, `all_passed`, `per_config`, `metrics` and `coverage` were **all
+dropped** from every design-task sim record written afterwards.
+
+Every design record before the change carries a verdict; every one after does
+not. **And it stacked with a second defect: `collect_results.py` renders the
+missing verdict as `FAIL`**, so a run that passed every configuration appeared in
+the table as a failure. That is the more dangerous half -- a blank cell sends
+someone to measure, `FAIL` reads as a result about the design.
+
+F28's class in the same writer, reached by a different route: the simulation was
+right, the verdict was printed, and the reporting path destroyed it. Found by
+asking why a stub that had just passed 16/16 showed FAIL.
+
+**Rules:** 8, 10
+
+## F47. `sby` and `eqy` are installed here with no solver behind them
+
+Checked directly in `openroad/orfs`: `yices`, `yices-smt2`, `z3`, `boolector`,
+`bitwuzla`, `cvc5` and `mathsat` are **all absent**. The `smtbmc` engine
+therefore cannot run **on any design** -- not a property of caches, memories or
+size. The only usable engine is `abc bmc3`, on the bundled `yosys-abc`.
+
+This is why no equivalence-checking result had ever existed in this repository,
+and it was invisible because nothing had tried. `refs.lock` records the toolchain
+as *"formal: eqy + sby v0.67 inside openroad/orfs:latest"* -- true about what is
+installed, silent about whether it can execute. **A tool that is present and
+cannot run is F26's class in the toolchain rather than in prose.**
+
+Two further obstacles, each of which destroys a correct result:
+
+**`aigsmt none` is required.** Otherwise `sby` reaches the right verdict with
+`abc` and throws it away rendering the trace, which also shells out to the
+missing solver. It reports `Could not determine aigsmt status`, `rc=16` -- a
+successful proof with a failed screenshot.
+
+**`setundef -zero -undriven -init` is load-bearing, and only the control proved
+it.** Without it the two copies start at independent free values and BMC reports
+the reference **non-equivalent to itself**. The control read FAIL before that
+line and PASS after. Every FAIL from an unconstrained miter is worthless,
+including the first one this task obtained.
+
+Three ways to get a confident wrong answer out of a formal flow: no solver, a
+good verdict discarded during rendering, and an unconstrained initial state. Only
+the third is silent, and only a control catches it.
+
+**Rules:** 3, 21
+
+## F48. A stated position that was never written down
+
+Work was directed on the basis of a project position asserted as settled policy
+-- that testbench-only correctness overstates by 4-5x and that equivalence
+checking is load-bearing from day one.
+
+**Method: a zero-occurrence check.** `eqy`, `equivalence check` and `formal`
+appear **zero times** across `RULES.md`, `CONVENTIONS.md`, `FINDINGS.md` and
+`TASK_CATALOG.md`. The only occurrences in the tree are `refs.lock`'s toolchain
+line and a `.sby` inside vendored CVA6. No 4-5x figure exists in any form.
+
+**F26's class from the opposite direction.** F26 was prose asserting a control
+that did not exist. This is a position asserted in *instruction*, with no
+document behind it at all -- so F26's remedy, that a document may not assert a
+control without naming an executable artefact, has nothing to constrain.
+
+**The remedy that does apply: an unwritten position has no standing to direct
+work, and checking is the correct response to being given one.** Not deference
+and not refusal -- the check is mechanical and resolves it in under a minute.
+Here it also produced the more useful answer: the premise was **backwards**.
+`d_dsp02`'s six mutants each carry `witness: "vector N"` -- simulation witnesses,
+the same standard the task in hand was being asked to exceed.
+
+Worth recording because the instruction was specific, confident and quantified.
+Everything about its form said it had been recovered from a decision.
+
+**Rules:** 13
+
+## F49. A scored configuration chosen on engineering merit can sit where the capability check is blind
+
+`d_ca01`'s capability mutant provides 3 outstanding requests where the parameter
+promises `MAX_MISSES`. Across the 16-configuration sweep it survives **all eight**
+`MAX_MISSES=2` configurations and dies in **all eight** `MAX_MISSES=8` ones. The
+split is exact and falls on that one parameter. At the low setting a three-deep
+design *satisfies the contract* -- the check is not weak, the requirement is
+simply cheap to meet. **So a pass at the low end is not capability evidence.**
+
+Second instance after `d_nw01`'s `MAX_TRANS=2`. Two independent instances make it
+a property of swept capability parameters generally: **the low end of a sweep is
+where a capability defect hides.**
+
+**The cross-task check is where the reach is:**
+
+| task | capability parameter | scored at | discriminates there? |
+|---|---|---|---|
+| `d_ca01` | `MAX_MISSES` {2,8} | **8** | yes -- chosen deliberately after d_nw01's lesson |
+| `d_ca04` | `SYNC_STAGES` {2,3} | **2** | **NO** |
+| `d_nw01` | `MAX_TRANS` {2,8} | not pinned | n/a; its own `task.yaml` records rule 18 as unsatisfied |
+| `d_dsp02` | -- | -- | no parameters |
+
+**`d_ca04` scores at the blind setting.** F3's own table is the evidence: a probe
+hardcoding two synchroniser flops reads a crossing latency of 2 at
+`SYNC_STAGES=2`, identical to both correct designs, and differs only at 3.
+
+**Read off two documents, not re-measured.** The claim is that F3's recorded
+table and `d_ca04/task.yaml`'s scored configuration, placed side by side, put the
+scored point where the capability check cannot discriminate. `d_ca04`'s owner
+re-measures and decides. Its rationale -- two-flop is the standard answer, and
+scoring at three makes every submission pay for margin most designs do not need
+-- is sound engineering; it simply collides with discrimination.
+
+**The structural point.** The measurement lives in `FINDINGS.md` and the choice
+lives in a `task.yaml`, with nothing joining them. The collision is invisible
+from inside either document, which is why it survived. Rule 18 tells you to
+choose on engineering merit and says nothing about checking whether the chosen
+point is one where the capability checks can still see anything -- amended.
+
+**Rules:** 18
