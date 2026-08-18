@@ -230,11 +230,21 @@
 //       is a normal cache optimisation. Named because a design that does it
 //       would fail M1 against a requirement it was never told.
 //
-//   L4. WHETHER A STORE MISS ALLOCATES IS FREE -- as far as the memory port is
-//       concerned. Write-allocate and write-through both satisfy R5, and the
-//       checker does not inspect memory traffic for stores. (The task title
-//       says write-allocate; that describes the intended design, and R5 is what
-//       is actually enforced.)
+//   L4. A STORE MISS ALLOCATES. This is NOT free, and the reason is worth
+//       stating because it is a consequence rather than an independent
+//       requirement: M1 and M2 make every memory transaction BLOCK-GRANULAR,
+//       BLOCK_WORDS beats, and this port carries no single-word and no
+//       byte-masked write. A no-write-allocate design therefore has no legal
+//       way to send one modified word to memory -- write-through is not
+//       forbidden here so much as INEXPRESSIBLE at this interface.
+//
+//       Named explicitly because an earlier revision of this clause advertised
+//       write-through as a free choice. It was not, and a submission that took
+//       the offer would have found the port could not carry it. What IS free is
+//       everything about how the allocation is performed: when the fill is
+//       requested, whether the store is merged into the arriving block or
+//       applied after it lands, and in what order the fill and any writeback of
+//       the victim are issued.
 //
 //   L5. `req_ready_o` MAY DEPEND COMBINATIONALLY ON `req_valid_i`. The harness
 //       never derives `req_valid_i` from `req_ready_o`, so a design that gates

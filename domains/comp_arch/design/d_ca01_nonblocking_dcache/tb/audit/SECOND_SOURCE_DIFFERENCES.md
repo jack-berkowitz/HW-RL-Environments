@@ -1,0 +1,156 @@
+# Second source — the three differences, named BEFORE anything is written
+
+**This file is the gate.** It is committed before the shim, before the
+testbench, and before a line of the second source exists, so that a reader can
+tell the difference between a requirement that constrained the design and a
+description back-fitted to whatever got built. Differences named after the fact
+satisfy the rule in form and remove all of its content: the file has three
+differences, they are genuinely different, and the requirement did no work at
+any point.
+
+**The list is kept even where a difference does not survive.** On `d_dsp02` one
+of three turned out to be unimplementable at sane width, and keeping the failed
+claim — rather than swapping in a new one that worked — is what produced the
+only real design-space result that exercise generated. Any of the three below
+may fail the same way. If one does, it stays here with the reason, and the
+shipped claim is stated as smaller than the declared one.
+
+**What the second source is for.** It is a falsifier, never an oracle. Its job
+is to fail the checker. When it does, rule 5's disambiguation runs *before*
+anything is changed: run the failing input through the anchor; if the second
+source disagrees with the anchor, the second source is wrong. On the evidence so
+far that is the way it goes — `d_dsp02` went three for three, and no check was
+loosened.
+
+---
+
+## D1 — miss tracking: merge against ALL outstanding lines, not just the one being serviced
+
+**The anchor's choice, established from its source rather than assumed.**
+`bsg_cache_non_blocking_mhu.sv:193`:
+
+```systemverilog
+assign is_secondary = (curr_miss_tag == miss_fifo_tag) & (curr_miss_index == miss_fifo_index);
+```
+
+`curr_miss_*` comes from `curr_dma_cmd_r` — the **single** miss currently being
+processed. The anchor holds a FIFO of *requests* and detects a secondary only
+against the one line it is servicing right now.
+
+**The second source's choice.** A small file of per-line miss records (call them
+what you like; the contract names no structure — spec L2). On allocation, a new
+miss is compared against **every** outstanding record. A request for any line
+already outstanding attaches to that record instead of allocating a new one.
+
+**Why this is free.** Spec L2 states that how outstanding misses are tracked is
+unconstrained, and C1 requires only that at least `MAX_MISSES` distinct line
+misses be outstanding. Neither names a structure or a merge scope.
+
+**Predicted witness, by measurement.** Stimulus: with memory held, issue misses
+to lines L1, L2, L3 in that order, then a fourth request to **L1** — which is
+outstanding but is not the line being serviced once L2/L3 are queued behind it.
+Count fills issued.
+
+| | fills for that stimulus |
+|---|---|
+| anchor | **2 or more** (the secondary to L1 is not recognised while L2/L3 are current) |
+| second source | **exactly 3** — one per distinct line, never more |
+
+Metric: memory fill count for a fixed stimulus, read off `mem_req_*`.
+
+**This is the highest-risk of the three.** If the anchor turns out to merge more
+broadly than its source suggests — for example if the FIFO is rescanned in a way
+that catches L1 later anyway — the fill counts converge and the difference is
+unobservable. A declared difference that turns out to be unobservable is not a
+difference, and it will be recorded as failed rather than restated.
+
+---
+
+## D2 — replacement: true LRU per set, not tree pseudo-LRU
+
+**The anchor's choice.** `bsg_lru_pseudo_tree_encode` and
+`bsg_lru_pseudo_tree_backup` are instantiated in the MHU
+(`mhu.sv:242`, `mhu.sv:259`) and are in the dependency closure.
+
+**The second source's choice.** True LRU: a per-set ordering updated on every
+access, evicting the genuinely least-recently-used way.
+
+**Why this is free.** Spec L1 states replacement policy is unconstrained and
+names LRU, tree-pseudo-LRU, round-robin and random as all conformant. Nothing in
+the checker inspects which way is evicted.
+
+**Predicted witness, by measurement.** Tree-PLRU and true LRU are identical at
+`WAYS = 2` and diverge at `WAYS = 4`, so the witness runs at the scored
+configuration. Stimulus: fill all four ways of one set, then touch them in an
+order that leaves tree-PLRU's bits pointing at a different way than true LRU's
+ordering does, then force a fifth miss to that set. Read the victim's address off
+`mem_req_addr_o` on the writeback.
+
+Metric: victim address for a fixed access sequence — the two policies name
+different lines, and that is directly observable on the memory port.
+
+**Risk.** Low on observability, moderate on construction: the divergent sequence
+has to be derived rather than guessed, and a sequence where both policies happen
+to agree would witness nothing. Deriving it is part of the work.
+
+---
+
+## D3 — dirty replacement: fetch the new line FIRST, write the victim back after
+
+**The anchor's choice.** Not yet measured. Recorded as unmeasured on purpose —
+the claim below is a concrete choice made on engineering grounds, not "whatever
+the anchor does not do", because the latter is back-fitting with an extra step.
+
+**The second source's choice.** On a replacement whose victim is dirty: buffer
+the victim block, issue the **fill** first, satisfy the waiting requests as soon
+as the line lands, and issue the **writeback** afterwards from the buffer.
+
+**Engineering rationale.** It takes the writeback off the miss's critical path —
+a standard victim-buffer arrangement — at the cost of one block of storage. That
+is a real trade, which is what makes it a design choice rather than a coin flip.
+
+**Why this is free.** Spec M3 requires at most one memory transaction
+outstanding and M1/M2 fix each transaction's shape, but nothing orders the fill
+and the writeback of a single replacement relative to each other.
+
+**Predicted witness, by measurement.** Force a dirty replacement and record the
+sequence of `mem_req_we_o` across the two transactions.
+
+| | first transaction | second |
+|---|---|---|
+| second source | `we = 0` (fill) | `we = 1` (writeback) |
+| anchor | to be measured | |
+
+**Risk.** If the anchor already fetches first, the difference is unobservable and
+the claim fails. That outcome is acceptable and will be recorded; it is not a
+reason to swap in a different difference afterwards.
+
+---
+
+## A candidate that was rejected before it was built — and it found a spec defect
+
+**Rejected: no-write-allocate (write a store miss straight through to memory,
+never allocating the line).**
+
+Spec L4 as originally written named write-through as free, and it is not:
+**the memory port cannot express it.** M1 and M2 make every memory transaction
+block-granular — `BLOCK_WORDS` beats — and there is no single-word or byte-masked
+write encoding anywhere on the port. A no-write-allocate design has no legal way
+to send one modified word to memory.
+
+So L4 named an alternative that does not exist at this interface. That is
+rule 12's failure mode arriving inverted: not an alternative silently foreclosed,
+but latitude advertised that the contract cannot honour. A submission reading L4
+and choosing write-through would have found itself unable to build against the
+port, having been told the choice was open.
+
+**L4 is corrected in the interface** to state that write-allocate is the only
+policy this port can express, that this follows from M1/M2 rather than being an
+independent requirement, and that write-through is out of scope for that reason.
+
+Recorded here rather than quietly fixed, because the defect was found by trying
+to *use* the latitude. Reading L4 did not reveal it, and neither would auditing
+the clause against a standard — the port and the clause have to be held against
+each other. It is the same lesson as auditing the artefact rather than the prose,
+one level along: **the latitude a spec advertises has to be checked against the
+interface that has to carry it.**
