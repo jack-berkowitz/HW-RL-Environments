@@ -83,7 +83,7 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 6 of 6
+  reference_ceiling: 10 of 10
   ceiling_caveat: >
     Same caveat as v_nw03 and not discharged: one author wrote the spec, the
     checker and the mutants, so the set has only been challenged by what that

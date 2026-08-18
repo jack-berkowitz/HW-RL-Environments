@@ -88,3 +88,21 @@ signalling, so attributing by operation alone named the wrong clause.
 spec, the checker and the mutants, so the set has only been challenged by what
 that author anticipated. What the controls *did* find were four defects in our
 own apparatus, three of them in the witness harness — see `NOTES.md`.
+
+---
+
+## The harder set
+
+Four added after the first blind run; the six originals kept.
+
+| id | violates | why a competent testbench misses it |
+|---|---|---|
+| `fn_m7_sgnj_quiets_snan` | S1 | needs an sNaN driven through SGNJ, which looks arithmetic-free and raises no flags |
+| `fn_m8_max_subnormal_is_normal` | S12 | only the LARGEST subnormal is misclassified — the boundary between adjacent classes |
+| `fn_m9_feq_distinguishes_zeros` | S10 | the one case where S3 and S10 disagree on purpose |
+| `fn_m10_minmax_snan_not_invalid` | S6 | result exactly right, only the invalid flag missing |
+
+Every one targets a corner a clause names — the reachability check that governs
+this set. The reference catches **10 of 10**. No independent submission has yet
+reached the mutants on this task, so unlike the sibling task the ceiling here is
+still an author's self-assessment.

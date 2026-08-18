@@ -24,7 +24,8 @@ found on the first challenge.
 | S2 frame = beats through tlast | no | **pinned** |
 | S3 frame atomicity | no | **pinned** — the property under test |
 | S4 payload integrity and order | no | **pinned** |
-| S5 no loss, no duplication | no | **pinned** |
+| S5 no loss, no duplication | no | **pinned** — now qualified to completed frames |
+| S5a abandoned frame not covered | no | **pinned** — added after two independent authors read a held partial frame as a loss |
 | S6 ready is not a grant | **yes** | **perturbed → `fm_c1`** |
 | S7 source stability | n/a | constrains the testbench, not the design |
 | S8 backpressure tolerated | no | **pinned** |

@@ -63,7 +63,8 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 6 of 6
+  reference_ceiling: 10 of 10
+  independent_submission_best: 9 of 10 (misses fm_m9_marginal_starvation)
   ceiling_caveat: >
     Weaker evidence than the same number on v_ca05. There the mutants found two
     genuine holes in the reference testbench on first use. Here the reference

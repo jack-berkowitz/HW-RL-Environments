@@ -174,6 +174,102 @@ shall be high whenever the store is non-empty.
 
 ---
 
+---
+
+## SystemVerilog constraints — read these first
+
+Your file is compiled with **Verilator 5.x** (`--binary --timing`). These are
+tool-enforced, not style advice. Each one has already caused a submitted
+testbench to be rejected with none of its checking ever running:
+
+- **Declarations come before statements.** Every variable declared in a
+  `begin`/`end` block must appear before the first statement in that block.
+  `int found = -1;` written after an assignment is a syntax error, not a warning.
+- **Use `automatic` for anything declared inside a procedural block that you
+  assign on each execution.** A declaration with an initialiser inside an
+  `always` or `initial` block is **static**: `rec_t e = q.pop_front();` runs its
+  initialiser once, at time zero, and never again — so `e` silently holds an
+  all-zero value for the entire run and every comparison against it is
+  meaningless. Write `automatic rec_t e = q.pop_front();`.
+- **Never change a signal in the same timestep as the edge you sample it on.**
+  `@(posedge clk); x = 1;` races the design's own sampling of `x` at that edge,
+  and the usual symptom is that correct hardware looks inert. Drive from the
+  opposite edge, or advance state with nonblocking assignment from the edge that
+  consumed it.
+- **Identify a result by bookkeeping, not by matching on its value.** Values
+  repeat, so content matching is ambiguous and will mis-attribute.
+- Do not use `#` delays for anything except the clock generator and the watchdog.
+- No UVM, no `randsequence`, no DPI. Queues and associative arrays are fine.
+
+---
+
+## Provided plumbing
+
+Clock, reset and watchdog, plus the timing discipline that keeps your stimulus
+off the sampling edge. **No transactor is provided for the request/grant ports:
+deciding when a request has actually completed is part of this task, and a
+driver that answered it would answer the question instead of asking it.**
+
+Paste this inside your module. It is correct as given and has been run against
+the design.
+
+```systemverilog
+// =============================================================================
+// v_ca05 PROVIDED PLUMBING -- shipped inside the task text.
+// =============================================================================
+// Clock, reset and watchdog only.
+//
+// *** NO TRANSACTOR IS PROVIDED FOR THE REQUEST/GRANT PORTS, AND THAT IS
+// DELIBERATE. *** Deciding when a request has actually completed is part of
+// what this task measures, and a driver that answered it would answer the
+// question instead of asking it. The specification states the rule; read it.
+//
+// What is provided is the timing discipline, because that is what breaks
+// testbenches without telling you anything: reset is asserted and released off
+// the sampling edge, and the helper below changes stimulus at the negative edge
+// so nothing you drive moves in the same timestep the design samples it.
+// =============================================================================
+
+  // ---- clock -----------------------------------------------------------------
+  logic clk;
+  initial begin clk = 1'b0; forever #5 clk = ~clk; end
+
+  // ---- reset (active low) ----------------------------------------------------
+  logic rst_n;
+  initial rst_n = 1'b0;
+
+  task automatic bfm_reset(input int cycles = 4);
+    @(negedge clk);
+    rst_n = 1'b0;
+    repeat (cycles) @(posedge clk);
+    @(negedge clk);
+    rst_n = 1'b1;
+  endtask
+
+  // ---- timing discipline -----------------------------------------------------
+  // Advance to the point in the cycle where it is safe to change stimulus.
+  // Drive your inputs immediately after calling this, never straight after a
+  // @(posedge clk): an assignment in the same timestep as the sampling edge
+  // races the design and makes correct hardware look inert.
+  task automatic bfm_drive_point();
+    @(negedge clk);
+  endtask
+
+  // Advance one full cycle and return after the design has sampled.
+  task automatic bfm_tick();
+    @(posedge clk);
+  endtask
+
+  // ---- watchdog --------------------------------------------------------------
+  initial begin
+    #20_000_000;
+    $display("RESULT: FAIL (watchdog: no forward progress)");
+    $finish;
+  end
+```
+
+---
+
 ## What to produce
 
 A single SystemVerilog file containing one module `tag_tracker_tb` that

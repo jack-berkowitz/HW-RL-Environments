@@ -265,3 +265,166 @@ module fm_m6_reset_ignored #(
     .m_tdata_o(m_tdata_o), .m_tkeep_o(m_tkeep_o), .m_tvalid_o(m_tvalid_o),
     .m_tready_i(m_tready_i), .m_tlast_o(m_tlast_o), .m_tuser_o(m_tuser_o));
 endmodule
+
+// =============================================================================
+// HARDER SET -- added after the first blind run.
+// =============================================================================
+// One independent author reached 6/6 on the six above, the same as our own
+// reference, so nothing had landed between 0 and 6 and the set had no
+// resolution among working testbenches. These four target corners a competent
+// testbench plausibly misses. The six above are kept: the goal is range.
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// fm_m7 -- tuser corrupted ONLY on the final beat of a frame. Violates S4.
+// A testbench that checks tuser on every beat catches it; one that checks the
+// sideband only on non-final beats, or that stops checking once it sees tlast,
+// does not.
+// -----------------------------------------------------------------------------
+module fm_m7_tuser_wrong_on_last #(
+    parameter int S_COUNT = 4, parameter int DATA_WIDTH = 32, parameter int USER_WIDTH = 1
+) (
+    input  logic clk_i, input logic rst_i,
+    input  logic [S_COUNT-1:0][DATA_WIDTH-1:0]     s_tdata_i,
+    input  logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0] s_tkeep_i,
+    input  logic [S_COUNT-1:0]                     s_tvalid_i,
+    output logic [S_COUNT-1:0]                     s_tready_o,
+    input  logic [S_COUNT-1:0]                     s_tlast_i,
+    input  logic [S_COUNT-1:0][USER_WIDTH-1:0]     s_tuser_i,
+    output logic [DATA_WIDTH-1:0]                  m_tdata_o,
+    output logic [(DATA_WIDTH/8)-1:0]              m_tkeep_o,
+    output logic                                   m_tvalid_o,
+    input  logic                                   m_tready_i,
+    output logic                                   m_tlast_o,
+    output logic [USER_WIDTH-1:0]                  m_tuser_o
+);
+  logic [USER_WIDTH-1:0] g_user;
+  assign m_tuser_o = m_tlast_o ? ~g_user : g_user;
+  frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
+    .clk_i(clk_i), .rst_i(rst_i), .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i),
+    .s_tvalid_i(s_tvalid_i), .s_tready_o(s_tready_o), .s_tlast_i(s_tlast_i),
+    .s_tuser_i(s_tuser_i), .m_tdata_o(m_tdata_o), .m_tkeep_o(m_tkeep_o),
+    .m_tvalid_o(m_tvalid_o), .m_tready_i(m_tready_i), .m_tlast_o(m_tlast_o),
+    .m_tuser_o(g_user));
+endmodule
+
+// -----------------------------------------------------------------------------
+// fm_m8 -- tkeep normalised to all-ones ONLY on the final beat. Violates S4.
+// The natural place for a partial tkeep is the last beat of a frame, so a
+// testbench that drives partial keeps anywhere EXCEPT the final beat misses it
+// entirely.
+// -----------------------------------------------------------------------------
+module fm_m8_tkeep_full_on_last #(
+    parameter int S_COUNT = 4, parameter int DATA_WIDTH = 32, parameter int USER_WIDTH = 1
+) (
+    input  logic clk_i, input logic rst_i,
+    input  logic [S_COUNT-1:0][DATA_WIDTH-1:0]     s_tdata_i,
+    input  logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0] s_tkeep_i,
+    input  logic [S_COUNT-1:0]                     s_tvalid_i,
+    output logic [S_COUNT-1:0]                     s_tready_o,
+    input  logic [S_COUNT-1:0]                     s_tlast_i,
+    input  logic [S_COUNT-1:0][USER_WIDTH-1:0]     s_tuser_i,
+    output logic [DATA_WIDTH-1:0]                  m_tdata_o,
+    output logic [(DATA_WIDTH/8)-1:0]              m_tkeep_o,
+    output logic                                   m_tvalid_o,
+    input  logic                                   m_tready_i,
+    output logic                                   m_tlast_o,
+    output logic [USER_WIDTH-1:0]                  m_tuser_o
+);
+  logic [(DATA_WIDTH/8)-1:0] g_keep;
+  assign m_tkeep_o = m_tlast_o ? {(DATA_WIDTH/8){1'b1}} : g_keep;
+  frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
+    .clk_i(clk_i), .rst_i(rst_i), .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i),
+    .s_tvalid_i(s_tvalid_i), .s_tready_o(s_tready_o), .s_tlast_i(s_tlast_i),
+    .s_tuser_i(s_tuser_i), .m_tdata_o(m_tdata_o), .m_tkeep_o(g_keep),
+    .m_tvalid_o(m_tvalid_o), .m_tready_i(m_tready_i), .m_tlast_o(m_tlast_o),
+    .m_tuser_o(m_tuser_o));
+endmodule
+
+// -----------------------------------------------------------------------------
+// fm_m9 -- MARGINAL STARVATION. Violates S10, and nothing else.
+// Input 3 IS eventually served, so every "does every input get a turn?" check
+// passes. It simply goes far more than 16 completed frames between turns. This
+// is the mutant that separates a testbench which implemented S10's WINDOW from
+// one that implemented "eventually", and the whole reason S10 is stated as a
+// bound rather than as a liveness claim.
+// -----------------------------------------------------------------------------
+module fm_m9_marginal_starvation #(
+    parameter int S_COUNT = 4, parameter int DATA_WIDTH = 32, parameter int USER_WIDTH = 1
+) (
+    input  logic clk_i, input logic rst_i,
+    input  logic [S_COUNT-1:0][DATA_WIDTH-1:0]     s_tdata_i,
+    input  logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0] s_tkeep_i,
+    input  logic [S_COUNT-1:0]                     s_tvalid_i,
+    output logic [S_COUNT-1:0]                     s_tready_o,
+    input  logic [S_COUNT-1:0]                     s_tlast_i,
+    input  logic [S_COUNT-1:0][USER_WIDTH-1:0]     s_tuser_i,
+    output logic [DATA_WIDTH-1:0]                  m_tdata_o,
+    output logic [(DATA_WIDTH/8)-1:0]              m_tkeep_o,
+    output logic                                   m_tvalid_o,
+    input  logic                                   m_tready_i,
+    output logic                                   m_tlast_o,
+    output logic [USER_WIDTH-1:0]                  m_tuser_o
+);
+  logic [8:0] cnt;
+  always_ff @(posedge clk_i) if (rst_i) cnt <= '0; else cnt <= cnt + 1;
+  // Input S_COUNT-1 is admitted only in a short window out of every 320 cycles.
+  wire block_last = (cnt < 9'd300);
+
+  logic [S_COUNT-1:0] g_valid, g_ready;
+  always_comb begin
+    g_valid    = s_tvalid_i;
+    s_tready_o = g_ready;
+    if (block_last) begin
+      g_valid[S_COUNT-1]    = 1'b0;
+      s_tready_o[S_COUNT-1] = 1'b0;
+    end
+  end
+
+  frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
+    .clk_i(clk_i), .rst_i(rst_i), .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i),
+    .s_tvalid_i(g_valid), .s_tready_o(g_ready), .s_tlast_i(s_tlast_i),
+    .s_tuser_i(s_tuser_i), .m_tdata_o(m_tdata_o), .m_tkeep_o(m_tkeep_o),
+    .m_tvalid_o(m_tvalid_o), .m_tready_i(m_tready_i), .m_tlast_o(m_tlast_o),
+    .m_tuser_o(m_tuser_o));
+endmodule
+
+// -----------------------------------------------------------------------------
+// fm_m10 -- payload corrupted only DEEP inside a frame. Violates S4.
+// tdata bit 0 is flipped from the fourth beat of a frame onward. Frames of
+// three beats or fewer are perfect, so a testbench using short frames -- which
+// is the natural choice -- never reaches it.
+// -----------------------------------------------------------------------------
+module fm_m10_deep_beat_corruption #(
+    parameter int S_COUNT = 4, parameter int DATA_WIDTH = 32, parameter int USER_WIDTH = 1
+) (
+    input  logic clk_i, input logic rst_i,
+    input  logic [S_COUNT-1:0][DATA_WIDTH-1:0]     s_tdata_i,
+    input  logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0] s_tkeep_i,
+    input  logic [S_COUNT-1:0]                     s_tvalid_i,
+    output logic [S_COUNT-1:0]                     s_tready_o,
+    input  logic [S_COUNT-1:0]                     s_tlast_i,
+    input  logic [S_COUNT-1:0][USER_WIDTH-1:0]     s_tuser_i,
+    output logic [DATA_WIDTH-1:0]                  m_tdata_o,
+    output logic [(DATA_WIDTH/8)-1:0]              m_tkeep_o,
+    output logic                                   m_tvalid_o,
+    input  logic                                   m_tready_i,
+    output logic                                   m_tlast_o,
+    output logic [USER_WIDTH-1:0]                  m_tuser_o
+);
+  logic [DATA_WIDTH-1:0] g_data;
+  logic [3:0] beat_idx;
+  always_ff @(posedge clk_i) begin
+    if (rst_i) beat_idx <= '0;
+    else if (m_tvalid_o && m_tready_i)
+      beat_idx <= m_tlast_o ? 4'd0 : (beat_idx == 4'hF ? 4'hF : beat_idx + 1);
+  end
+  assign m_tdata_o = (beat_idx >= 4'd3) ? {g_data[DATA_WIDTH-1:1], ~g_data[0]} : g_data;
+
+  frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
+    .clk_i(clk_i), .rst_i(rst_i), .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i),
+    .s_tvalid_i(s_tvalid_i), .s_tready_o(s_tready_o), .s_tlast_i(s_tlast_i),
+    .s_tuser_i(s_tuser_i), .m_tdata_o(g_data), .m_tkeep_o(m_tkeep_o),
+    .m_tvalid_o(m_tvalid_o), .m_tready_i(m_tready_i), .m_tlast_o(m_tlast_o),
+    .m_tuser_o(m_tuser_o));
+endmodule

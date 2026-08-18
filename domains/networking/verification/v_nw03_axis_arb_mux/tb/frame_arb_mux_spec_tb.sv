@@ -148,11 +148,14 @@ module frame_arb_mux_tb;
           if (cur_last[k]) begin
             cov_frames_in[k] = cov_frames_in[k] + 1;
             if (cur_len[k] == 1) cov_single_frames = cov_single_frames + 1;
-            // Quiesce on a FRAME BOUNDARY. Dropping valid mid-frame leaves the
-            // design holding an incomplete frame, and nothing in the contract
-            // obliges it to emit one -- the arbiter is entitled to keep waiting
-            // for a tlast the source abandoned. That is a testbench defect, and
-            // it read as an S5 loss on first run.
+            // Quiesce on a FRAME BOUNDARY -- now required by S5a. Dropping
+            // valid mid-frame leaves the design holding an incomplete frame,
+            // which it is entitled to keep waiting on.
+            //
+            // This comment used to call that "a testbench defect". THAT WAS
+            // WRONG: an independent submission hit the identical wall, so the
+            // omission was in the specification. S5 is now qualified and S5a
+            // states the case explicitly.
             if (drain_mode) done_f[k] <= 1'b1;
           end
 

@@ -59,9 +59,23 @@ that had `s_tlast_i[k]` high.
 *Authority: AMBA AXI4-Stream — TDATA, TKEEP and TUSER are per-transfer payload
 and sideband, and a multiplexer forwards a stream rather than transforming it.*
 
-**S5 — no loss, no duplication.** Every beat that transfers on an input shall
-transfer exactly once on the output.
+**S5 — no loss, no duplication.** For every frame whose final beat — the one
+carrying `s_tlast_i[k]` — has transferred on input `k`, every beat of that frame
+shall transfer exactly once on the output.
 *Authority: task intent.*
+
+**S5a — a frame abandoned at the source is NOT covered by S5.** If a source
+transfers one or more beats of a frame and then stops offering before the beat
+carrying `s_tlast_i[k]`, the design is **not required to emit any of that
+frame's beats** and may hold them indefinitely, including across an arbitrary
+number of idle cycles. A testbench shall complete every frame it starts before
+it stops driving, and shall not read a held partial frame as a loss.
+
+*Authority: task intent, recorded because S5 without it promises delivery of
+beats the design is entitled to keep waiting on. Found the hard way: this
+project's own reference testbench and an independent submission both quiesced
+mid-frame and both read the result as an S5 loss. Two authors, same wall, so the
+omission was in the specification and not in either testbench.*
 
 ---
 

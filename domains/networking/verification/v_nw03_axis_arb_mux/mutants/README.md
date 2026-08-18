@@ -95,3 +95,30 @@ harness and in the checker's clause attribution, both recorded above.
 The honest statement is: 6/6 is the ceiling, and the set has not yet been
 challenged by anything its author did not anticipate. The first submission is
 the real test of the set.
+
+---
+
+## The harder set, and the first gradation in the project
+
+Four mutants were added after the first blind run. The six originals were kept.
+
+| id | violates | why a competent testbench misses it |
+|---|---|---|
+| `fm_m7_tuser_wrong_on_last` | S4 | sideband corrupted only on the final beat of a frame |
+| `fm_m8_tkeep_full_on_last` | S4 | tkeep normalised only on the final beat — the very place a partial keep belongs |
+| `fm_m9_marginal_starvation` | S10 | input 3 **is** eventually served, just far more than 16 frames apart |
+| `fm_m10_deep_beat_corruption` | S4 | payload corrupted only from the 4th beat of a frame onward |
+
+**Measured, and the set now discriminates:**
+
+| testbench | catches |
+|---|---|
+| our reference | **10 of 10** |
+| an independent submission (chat, with its one-line reset race repaired) | **9 of 10** |
+
+**The one it misses is `fm_m9`** — and that is the point. It checked that every
+input is eventually served; it did not implement S10's *window*. That mutant
+exists because S10 is stated as a bound rather than as a liveness claim, and it
+is now the first thing in this project to separate a working testbench from the
+ceiling. Before it, reference and independent author both scored 6/6 and nothing
+had ever landed in between.

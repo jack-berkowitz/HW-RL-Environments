@@ -269,3 +269,196 @@ module fn_m6_sgnj_canonicalises_nan (
       .out_ready_i  (out_ready_i)
   );
 endmodule
+
+// =============================================================================
+// HARDER SET -- added after the first blind run.
+// =============================================================================
+// On the sibling task an independent author reached the same score as our own
+// reference on the original six, so nothing separated a competent testbench
+// from the ceiling. These four target corners a competent testbench plausibly
+// misses. The six above are kept: the goal is range, not replacement.
+//
+// Every one still targets a corner a CLAUSE NAMES -- the reachability check
+// that governs this whole set.
+// =============================================================================
+
+// ----------------------------------------------------------------------------
+// Violates S1. Reachable via S1's 'copied through and is not canonicalised'.
+// Sign injection on a SIGNALLING NaN sets the quiet bit in the result. The
+// payload survives, the sign is right, and every other operand is untouched -- so
+// it is invisible unless the testbench drives an sNaN through SGNJ specifically,
+// which is easy to skip because SGNJ raises no flags and looks arithmetic-free.
+module fn_m7_sgnj_quiets_snan (
+    input  logic        clk_i,
+    input  logic        rst_ni,
+    input  logic [31:0] operand_a_i,
+    input  logic [31:0] operand_b_i,
+    input  logic [1:0]  op_i,
+    input  logic [2:0]  op_mode_i,
+    input  logic        in_valid_i,
+    output logic        in_ready_o,
+    output logic [31:0] result_o,
+    output logic [9:0]  class_mask_o,
+    output logic [4:0]  status_o,
+    output logic        out_valid_o,
+    input  logic        out_ready_i
+);
+
+  wire is_snan_a = (operand_a_i[30:23] == 8'hFF) && (operand_a_i[22:0] != 0)
+                && !operand_a_i[22];
+  wire [31:0] a_mut = (op_i == 2'd0 && is_snan_a)
+                    ? {operand_a_i[31], operand_a_i[30:23], 1'b1, operand_a_i[21:0]}
+                    : operand_a_i;
+  fp_noncomp #(
+  ) i_g (
+      .clk_i        (clk_i),
+      .rst_ni       (rst_ni),
+      .operand_a_i  (a_mut),
+      .operand_b_i  (operand_b_i),
+      .op_i         (op_i),
+      .op_mode_i    (op_mode_i),
+      .in_valid_i   (in_valid_i),
+      .in_ready_o   (in_ready_o),
+      .result_o     (result_o),
+      .class_mask_o (class_mask_o),
+      .status_o     (status_o),
+      .out_valid_o  (out_valid_o),
+      .out_ready_i  (out_ready_i)
+  );
+endmodule
+
+// ----------------------------------------------------------------------------
+// Violates S12. Reachable via S12's ten-class table.
+// The LARGEST subnormal -- significand all ones, exponent zero -- is classified as
+// normal. Every other subnormal is correct, so a testbench that drives one
+// subnormal per sign and moves on never sees it. This is the boundary between two
+// adjacent classes, which is where a classifier actually goes wrong.
+module fn_m8_max_subnormal_is_normal (
+    input  logic        clk_i,
+    input  logic        rst_ni,
+    input  logic [31:0] operand_a_i,
+    input  logic [31:0] operand_b_i,
+    input  logic [1:0]  op_i,
+    input  logic [2:0]  op_mode_i,
+    input  logic        in_valid_i,
+    output logic        in_ready_o,
+    output logic [31:0] result_o,
+    output logic [9:0]  class_mask_o,
+    output logic [4:0]  status_o,
+    output logic        out_valid_o,
+    input  logic        out_ready_i
+);
+
+  wire is_maxsub = (operand_a_i[30:23] == 8'h00) && (operand_a_i[22:0] == 23'h7FFFFF);
+  wire [31:0] a_mut = (op_i == 2'd3 && is_maxsub)
+                    ? {operand_a_i[31], 8'h01, 23'h000000}   // smallest normal
+                    : operand_a_i;
+  fp_noncomp #(
+  ) i_g (
+      .clk_i        (clk_i),
+      .rst_ni       (rst_ni),
+      .operand_a_i  (a_mut),
+      .operand_b_i  (operand_b_i),
+      .op_i         (op_i),
+      .op_mode_i    (op_mode_i),
+      .in_valid_i   (in_valid_i),
+      .in_ready_o   (in_ready_o),
+      .result_o     (result_o),
+      .class_mask_o (class_mask_o),
+      .status_o     (status_o),
+      .out_valid_o  (out_valid_o),
+      .out_ready_i  (out_ready_i)
+  );
+endmodule
+
+// ----------------------------------------------------------------------------
+// Violates S10. Reachable via S10, which states it and contrasts it with S3.
+// Equality reports -0.0 and +0.0 as UNEQUAL. This is the single case where S3 and
+// S10 disagree on purpose, and a testbench that carries one notion of zero
+// ordering across both operations gets it wrong in exactly one direction.
+module fn_m9_feq_distinguishes_zeros (
+    input  logic        clk_i,
+    input  logic        rst_ni,
+    input  logic [31:0] operand_a_i,
+    input  logic [31:0] operand_b_i,
+    input  logic [1:0]  op_i,
+    input  logic [2:0]  op_mode_i,
+    input  logic        in_valid_i,
+    output logic        in_ready_o,
+    output logic [31:0] result_o,
+    output logic [9:0]  class_mask_o,
+    output logic [4:0]  status_o,
+    output logic        out_valid_o,
+    input  logic        out_ready_i
+);
+
+  wire a_zero = (operand_a_i[30:0] == 31'd0);
+  wire b_zero = (operand_b_i[30:0] == 31'd0);
+  wire hit    = (op_i == 2'd2) && (op_mode_i == 3'd2)
+             && a_zero && b_zero && (operand_a_i[31] != operand_b_i[31]);
+  wire [31:0] a_mut = hit ? 32'h3F80_0000 : operand_a_i;   // 1.0
+  wire [31:0] b_mut = hit ? 32'h4000_0000 : operand_b_i;   // 2.0  -> not equal
+  fp_noncomp #(
+  ) i_g (
+      .clk_i        (clk_i),
+      .rst_ni       (rst_ni),
+      .operand_a_i  (a_mut),
+      .operand_b_i  (b_mut),
+      .op_i         (op_i),
+      .op_mode_i    (op_mode_i),
+      .in_valid_i   (in_valid_i),
+      .in_ready_o   (in_ready_o),
+      .result_o     (result_o),
+      .class_mask_o (class_mask_o),
+      .status_o     (status_o),
+      .out_valid_o  (out_valid_o),
+      .out_ready_i  (out_ready_i)
+  );
+endmodule
+
+// ----------------------------------------------------------------------------
+// Violates S6. Reachable via S6, which states NV is raised iff an operand is a
+// SIGNALLING NaN.
+// MIN and MAX quietly accept a signalling NaN: the RESULT is exactly right, and
+// only the invalid flag is missing. A testbench that checks results and treats
+// status_o as secondary misses it entirely -- and this is the flag half of the
+// same clause fn_m4 attacks from the comparison side.
+module fn_m10_minmax_snan_not_invalid (
+    input  logic        clk_i,
+    input  logic        rst_ni,
+    input  logic [31:0] operand_a_i,
+    input  logic [31:0] operand_b_i,
+    input  logic [1:0]  op_i,
+    input  logic [2:0]  op_mode_i,
+    input  logic        in_valid_i,
+    output logic        in_ready_o,
+    output logic [31:0] result_o,
+    output logic [9:0]  class_mask_o,
+    output logic [4:0]  status_o,
+    output logic        out_valid_o,
+    input  logic        out_ready_i
+);
+
+  wire is_snan_a = (operand_a_i[30:23] == 8'hFF) && (operand_a_i[22:0] != 0) && !operand_a_i[22];
+  wire is_snan_b = (operand_b_i[30:23] == 8'hFF) && (operand_b_i[22:0] != 0) && !operand_b_i[22];
+  wire [31:0] a_mut = (op_i == 2'd1 && is_snan_a)
+                    ? {operand_a_i[31], operand_a_i[30:23], 1'b1, operand_a_i[21:0]} : operand_a_i;
+  wire [31:0] b_mut = (op_i == 2'd1 && is_snan_b)
+                    ? {operand_b_i[31], operand_b_i[30:23], 1'b1, operand_b_i[21:0]} : operand_b_i;
+  fp_noncomp #(
+  ) i_g (
+      .clk_i        (clk_i),
+      .rst_ni       (rst_ni),
+      .operand_a_i  (a_mut),
+      .operand_b_i  (b_mut),
+      .op_i         (op_i),
+      .op_mode_i    (op_mode_i),
+      .in_valid_i   (in_valid_i),
+      .in_ready_o   (in_ready_o),
+      .result_o     (result_o),
+      .class_mask_o (class_mask_o),
+      .status_o     (status_o),
+      .out_valid_o  (out_valid_o),
+      .out_ready_i  (out_ready_i)
+  );
+endmodule
