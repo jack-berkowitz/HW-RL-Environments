@@ -1,0 +1,67 @@
+id: v_ca03
+module: id_width_conv
+domain: networking
+type: verification
+catalog: TASK_CATALOG.md
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/axi
+  refs_lock_sha: 4da15979747f326bde2f9869c64e587ce599772c
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/axi/src/axi_iw_converter.sv
+  golden: dut/id_width_conv.sv
+  closure_note: >
+    18 vendored files: 10 from pulp-platform/axi and 8 from common_cells, all at
+    the SHAs refs.lock pins. axi_demux_id_counters is required and is not
+    obvious from reading -- it surfaced only from elaboration.
+  anchor_modification: >
+    Every `include in dut/ is replaced verbatim by the included file's contents
+    (26 directives across 18 files). sim_verification.sh passes no -I and the
+    verification half has no sim_flags equivalent, so dut/ must be
+    self-contained. A preprocessing step, not a semantic edit.
+  provenance_caveat: >
+    Files present at the paths refs.manifest.yaml names, in a repo refs.lock
+    pins. Contents NOT verified against upstream at that SHA -- needs network,
+    egress closed. Attests local state only.
+
+harness:
+  golden_top: id_width_conv
+  tb_module: id_width_conv_tb
+  conformant_prefix: iw_c
+  mutant_prefix: iw_m
+  golden_file: dut/id_width_conv.sv
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 25
+
+spec: [spec/id_width_conv_spec.md, spec/id_width_conv_iface.sv]
+task_statement: probe/PASTE.md
+
+scored_configuration:
+  SLV_ID_W: 4
+  MST_ID_W: 2
+  ADDR_W: 32
+  DATA_W: 32
+  MAX_UNIQ_IDS: 4
+  MAX_TXNS_PER_ID: 2
+  rationale: >
+    MAX_UNIQ_IDS (4) <= 2**MST_ID_W (4) selects the REMAP path inside the
+    anchor rather than the serialize path; the two are different designs and one
+    contract cannot describe both. SLV_ID_W=4 against MST_ID_W=2 makes the
+    conversion lossy -- 16 slave IDs onto 4 master IDs -- so the allocation table
+    is the whole difficulty. MAX_UNIQ_IDS=4 puts the table boundary within easy
+    reach of a testbench, which is where the discriminating mutants live.
+
+second_dut:
+  status: ABSENT
+  required: true
+  why: >
+    Not yet built. Recorded as ABSENT rather than claimed, so the harness warns
+    on every run instead of implying a gate that does not exist.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpromised_reliance: must PASS every conformant perturbation
+  fault_detection: reported PER MUTANT, never as a rate
