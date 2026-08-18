@@ -370,7 +370,7 @@ module nonblocking_dcache_tb #(
       // the C1 and C2 phases it deliberately is not, and ticking there reports
       // a deadlock the harness created. Gating on the stall register is the
       // premise, stated in the same place the premise is broken.
-      if (rst_n && !mem_stall) begin `LM_TICK(lm_off, lm_srv) end
+      if (rst_n && !mem_stall && !mem_data_stall) begin `LM_TICK(lm_off, lm_srv) end
     end
   end
 
@@ -501,7 +501,14 @@ module nonblocking_dcache_tb #(
 
     // ================= P4: C1 outstanding capacity ========================
     phase = 4;
-    mem_stall = 1'b1;
+    // Withhold the fill DATA, not request acceptance. C1 originally used
+    // mem_stall, and the phase-withholding audit found that a capacity defect
+    // keyed on a memory transaction being ACCEPTED would then never arm. It was
+    // still caught -- but only because phases 1-3 had already accepted a
+    // transaction and armed it. That is protection by phase ORDERING, which is
+    // incidental and would evaporate if the phases were reordered. Withholding
+    // data removes the dependency: the transaction is accepted here too.
+    mem_data_stall = 1'b1;
     cap_accepted = 0;
     for (i = 0; i < int'(MAX_MISSES) + 4; i++) begin
       cov_cap_offers++;
@@ -511,7 +518,7 @@ module nonblocking_dcache_tb #(
     chk(cap_accepted >= int'(MAX_MISSES),
         $sformatf("C1: only %0d distinct-line misses outstanding, need %0d",
                   cap_accepted, MAX_MISSES));
-    @(negedge clk); mem_stall = 1'b0;
+    @(negedge clk); mem_data_stall = 1'b0;
     drain(60000);
 
     // ================= P5: conflict, eviction, writeback ==================

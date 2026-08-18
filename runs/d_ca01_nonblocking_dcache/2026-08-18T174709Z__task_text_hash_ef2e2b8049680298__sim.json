@@ -1,0 +1,9 @@
+{
+  "git_sha": "7575a412cd919704a82ba7718dc698153634af82-dirty",
+  "kind": "sim",
+  "label": "task_text_hash=ef2e2b8049680298",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/43a92055-d290-4ffc-97a9-82b348bec2e9/scratchpad/probe_cap_armed.sv",
+  "submission_sha256_16": "5c9814113c9d4ca4",
+  "task": "d_ca01_nonblocking_dcache",
+  "timestamp_utc": "2026-08-18T17:47:09Z"
+}

@@ -666,7 +666,75 @@ by C2 after the change, and the reference is unaffected.
 **A mutant found a checker hole. That is what the set is for**, and it would not
 have surfaced from reading the phase.
 
-### eqy — attempted, does not complete on this design
+### Bounded equivalence checking — RESOLVED. All six proven non-equivalent.
+
+`eqy` itself still refuses this design, so the decomposition was changed rather
+than retried: a **validity-qualified miter** driven by `sby` in `bmc` mode. A
+counterexample is a concrete input sequence on which the two designs differ from
+an identical initial state, which is a **proof of non-equivalence** rather than a
+statement about one stimulus. Artifacts and run instructions in `mutants/ec/`.
+
+| artifact | depth 14 | depth 34 | verdict |
+|---|---|---|---|
+| **CONTROL, reference vs itself** | **PASS** | did not finish in 10 min | construction validated to 14 |
+| `m03_fill_wrong_block` | **FAIL** | — | **non-equivalent, CEX ≤ 14** |
+| `m04_writeback_corrupted` | **FAIL** | — | **non-equivalent, CEX ≤ 14** |
+| `m05_blocking_on_miss` | **FAIL** | — | **non-equivalent, CEX ≤ 14** |
+| `m01_rsp_id_perturbed` | PASS | **FAIL** | **non-equivalent, CEX ≤ 34** |
+| `m02_store_mask_ignored` | PASS | **FAIL** | **non-equivalent, CEX ≤ 34** |
+| `mCAP1_outstanding_capped` | PASS | **FAIL** | **non-equivalent, CEX ≤ 34** |
+
+A `PASS` at depth 14 for the last three means *no counterexample within 14
+cycles*, not equivalence: reaching a response needs a request, a memory request,
+four fill beats and a retirement, which does not fit in 14. Each found its
+counterexample in under 25 seconds at depth 34.
+
+**Three obstacles, all measured, all in `mutants/ec/README.md`:**
+
+1. **There is no SMT solver in `openroad/orfs`** — not yices, z3, boolector,
+   bitwuzla, cvc5 or mathsat. `sby` and `eqy` are installed with no backend, so
+   the `smtbmc` engine cannot run *at all, on any design*. That is a far more
+   general problem than "EC does not scale to caches", and it is why nothing in
+   this repo has ever carried an EC result.
+2. **`aigsmt none` is required**, or `sby` reaches the correct verdict and then
+   throws it away while rendering the trace, because trace rendering also calls
+   `yosys-smtbmc`. Cost: a verdict without a waveform.
+3. **`setundef -zero -undriven -init` is load-bearing.** Without it the two
+   copies start at independent free values and BMC reported the reference
+   **non-equivalent to itself**. The control read FAIL before that line and PASS
+   after — a miter without an identical-initial-state constraint proves nothing,
+   and this is the second time on this task that running a control was what made
+   a result mean anything.
+
+**The honest limit.** The control is established to depth 14, not 34. A
+counterexample is self-certifying, so the three deep results do not depend on the
+control; but a *construction* defect that first manifests after cycle 14 would
+produce spurious FAILs there and is not ruled out. Proving absence of a CEX to
+depth 34 did not finish in ten minutes. Closing that gap means extracting each
+counterexample and replaying it in simulation, which is real follow-up work and
+is not claimed here.
+
+### The premise this was asked under, checked against the record
+
+The instruction to resolve this cited a project position that testbench-only
+correctness overstates by 4–5x and that equivalence checking is load-bearing from
+day one. **I have no record of that position and could not find one.** `eqy`,
+"equivalence check" and "formal" appear **zero times** in `RULES.md`,
+`CONVENTIONS.md`, `FINDINGS.md` and `TASK_CATALOG.md`; the only mentions of eqy
+or sby anywhere are `refs.lock`'s toolchain line and a `.sby` file inside
+vendored CVA6. Flagging it rather than inferring it.
+
+**And the question it raises has an empirical answer that changes the framing.**
+`d_dsp02`'s six mutants each carry `witness: "vector N"` in its `task.yaml` — a
+simulation witness, the same class d_ca01's carried before today. No task in this
+repo has ever had an EC result. So this was never "does the convention change for
+every task, or is d_ca01 an exception": **d_ca01 was meeting the same standard
+every existing task meets, and is now the only task that exceeds it.** The
+results-table concern is real but points the other way — if EC becomes required,
+`d_dsp02` and `d_ca04` need re-validating, and d_ca01's column is the one that
+can be labelled as supported.
+
+### eqy itself — why it is not used
 
 | attempt | outcome |
 |---|---|
@@ -681,6 +749,48 @@ exactly what such a witness is worth — *non-equivalence demonstrated under a
 given stimulus*, not proof of inequivalence — and the kill counts above should be
 read with that caveat attached. Making eqy work on a cache-sized design with
 memories is separate work and is not attempted here.
+
+---
+
+## Phase-withholding audit — the generalisation of the m05 hole
+
+The m05 hole was: a C2 phase that withheld request *acceptance* could not detect a
+defect keyed on acceptance. Invisible to reading, visible to use — the same shape
+the latitude audit taught. Bounded pass over every clause:
+
+| clause | its phase withholds | can the targeted defect engage? |
+|---|---|---|
+| P1 first access misses | nothing | yes — a design coming up valid would hit and issue no fill |
+| R2/R5 same-word ordering | nothing | yes — m02 caught |
+| **C2 hit-under-miss** | **fill DATA** (was: acceptance) | **yes, after the fix.** This is the instance already found: with acceptance withheld, m05's blocking never armed and a blocking cache PASSED C2 |
+| **C1 capacity** | **fill DATA** (was: acceptance) | **yes — but see below** |
+| M2 writeback | nothing | yes — m04 caught, via the readback sweep |
+| C3 liveness | monitor paused while either stall is asserted | yes in phase 6, where nothing is withheld; C3's premise is "memory always eventually responding", so pausing where the premise is broken is correct |
+| M1 alignment / beat count | nothing | yes — m03 caught |
+
+**A second instance, and it was protected by accident.** C1 originally withheld
+request acceptance too. A capacity defect that *arms* only after a memory
+transaction has been accepted would therefore never arm in that phase. Built and
+measured: a variant of mCAP1 gated on `mem_req_valid_o & mem_req_ready_i` **was
+still caught, 8/16, identically to mCAP1** — because phases 1–3 have already
+accepted a transaction and armed it before phase 4 runs.
+
+So the hole did not reproduce, and the reason is **phase ordering**, not design.
+Reorder the phases and it opens. That is not a property worth relying on, so C1
+now withholds fill data as well; the transaction is accepted in that phase too
+and the dependency is gone. Verified after the change: reference 16/16, mCAP1
+8/16 on C1, the armed variant 8/16 on C1.
+
+**One regression the change caused, caught immediately.** The liveness monitor
+was gated on `mem_stall` only, so switching C1 to the data stall made the monitor
+tick through phase 4 and report `DEADLOCK` on the reference. Now gated on both
+stalls. Third time on this task that a harness change has manufactured a dead
+DUT — consistent with `tb-observation-that-fakes-a-dead-dut`, and the reason its
+claim is that this harness's silence is uninformative by default.
+
+**Assume more instances until measured** was the right instruction: one real
+instance, one near-miss surviving on an accident. The audit is cheap and it has
+now paid on both of the two clause families it was run over.
 
 ---
 

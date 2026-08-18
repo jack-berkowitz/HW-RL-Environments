@@ -1,0 +1,28 @@
+[options]
+mode bmc
+depth 34
+aigsmt none
+
+[engines]
+abc bmc3
+
+[script]
+read_slang --top nonblocking_dcache -DYOSYS -G DATA_W=32 -G SETS=8 -G WAYS=2 -G MAX_MISSES=2 -I/work/refs/basejump_stl/bsg_misc -I/work/refs/basejump_stl/bsg_cache -y /work/refs/basejump_stl/bsg_cache -y /work/refs/basejump_stl/bsg_misc -y /work/refs/basejump_stl/bsg_dataflow -y /work/refs/basejump_stl/bsg_mem /work/refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_pkg.sv /work/domains/comp_arch/design/d_ca01_nonblocking_dcache/ref/nonblocking_dcache_ref.sv
+flatten
+rename nonblocking_dcache gold
+design -stash goldd
+read_slang --top nonblocking_dcache -DYOSYS -G DATA_W=32 -G SETS=8 -G WAYS=2 -G MAX_MISSES=2 -I/work/refs/basejump_stl/bsg_misc -I/work/refs/basejump_stl/bsg_cache -y /work/refs/basejump_stl/bsg_cache -y /work/refs/basejump_stl/bsg_misc -y /work/refs/basejump_stl/bsg_dataflow -y /work/refs/basejump_stl/bsg_mem /work/refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_pkg.sv /work/domains/comp_arch/design/d_ca01_nonblocking_dcache/mutants/m01_rsp_id_perturbed.sv
+flatten
+rename nonblocking_dcache gate
+design -stash gated
+design -reset
+design -copy-from goldd -as gold gold
+design -copy-from gated -as gate gate
+read_verilog -sv miter.sv
+prep -top miter -flatten
+memory_map
+setundef -zero -undriven -init
+opt -full
+
+[files]
+/ec2/ec/miter.sv
