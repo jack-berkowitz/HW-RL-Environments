@@ -258,6 +258,15 @@ where it bites.
 | 1 | polled `req_ready_o`, which depends combinationally on the `req_valid_i` being driven in the same timestep (`tl_stage.sv:437`) | read the pre-drive value; request never presented |
 | 2 | waited on a **level flag** describing a *completed* transfer — high for one cycle *after* the transfer — so the waiter read the previous transaction's success and returned immediately | request dropped without ever being presented at a posedge |
 | 3 | drove a DUT input combinationally from a DUT output (`assign yumi_i = v_o`), semantically identical to a constant since the anchor reads it only in `stall = v_o & ~yumi_i` | **two builds differing only by an added debug process disagreed** about whether the anchor jammed after one operation |
+| 4 | `force`/`release` on the memory model's own gap counter. `release` leaves the variable holding the forced value until the next procedural assignment, so the model counted a forced 100 000 back down before accepting anything | every phase after the forced one timed out: *"9 accepted, 8 answered"* |
+
+**Four instances now, and that changes what this finding is about.** It is not a
+list of testbench slips. Every one of the four produced *the same observable* — a
+design that stops responding — from four unrelated causes: a combinational read
+ordering, a stale level flag, an evaluation-order dependency, and a simulator
+construct whose scope outlives the statement that used it. A harness that can
+manufacture a dead DUT four different ways needs its silence treated as
+uninformative by default, which is what the structural remedies below are for.
 
 **Defect 3 is the one to carry.** It produced no `UNOPTFLAT` and no warning of
 any kind, because it is not a loop — it is an evaluation-order dependency inside
@@ -516,7 +525,209 @@ What actually protects the harness is the three structural remedies, applied by
 construction. The determinism check was meant to be the detector, and it is not
 yet a working detector.
 
-## Next — mutants and the conformant set, not started
+## Determinism check — WITHDRAWN
+
+Retired, not carried. It could not be made to fail:
+
+| perturbation on build B | clean harness | harness with the defect reintroduced |
+|---|---|---|
+| inert observer process | IDENTICAL | IDENTICAL |
+| `--public-flat-rw` | IDENTICAL | IDENTICAL |
+| `-O0` | IDENTICAL | IDENTICAL |
+
+Two reintroductions were tried, both in the exact class the check exists for:
+`assign rsp_ready = rsp_valid`, and combinational gating on both memory ports.
+The second still reported `TEST_RESULT: PASS`.
+
+A check whose control never fires validates nothing, and one left in the harness
+is worse than none — the next reader sees a determinism check and assumes
+coverage. **What protects this harness is the three structural remedies applied
+by construction. There is no detector behind them, and that is now stated in the
+testbench header rather than implied.**
+
+Why it could not fire, still a hypothesis: the step-1 divergence was in the
+anchor's management-op path, which this contract puts out of scope, so the
+harness may be protected by the contract rather than by anything I built.
+
+---
+
+## FINDING (PROPOSED — slug `latitude-the-interface-cannot-express`)
+
+**Rules: 12**
+
+**A spec can advertise latitude its own port map cannot carry, and reading the
+clause will never reveal it.** Rule 12 is about alternatives silently
+*foreclosed*; this is the inverse — alternatives silently *offered*.
+
+Two instances in this task, both found the same way, by trying to **use** the
+clause rather than read it:
+
+| clause | what it offered | why the interface could not carry it |
+|---|---|---|
+| **L4** | write-through / no-write-allocate as a free choice | M1 and M2 make every memory transaction block-granular; there is no single-word or byte-masked write anywhere on the port. A no-write-allocate design has no legal way to send one modified word to memory. |
+| **L6** | latency unconstrained, so a combinational hit response is legal | the scoreboard read `id_open` pre-edge, so a design answering in the same cycle it accepts was charged with *"a response arrived for an id with nothing outstanding"*. The harness could not express the latitude the spec granted. |
+
+L4 was found while choosing the second source's differences — a candidate
+difference was rejected because the port could not express it. L6 was found by
+the audit L4 prompted.
+
+**The detector, and it is the transferable part.** Enumerate every latitude
+clause and try to realise each one against the port map and the harness. It is a
+bounded pass and it is the only known way to catch this class: the clause reads
+correctly, the artefact it describes is absent, and no control fires because
+nothing is wrong with what was built — only with what was promised.
+
+### The audit, run on every remaining clause
+
+| clause | offered | expressible? | evidence |
+|---|---|---|---|
+| L1 replacement policy free | LRU / tree-PLRU / RR / random | **yes** | victim choice is visible only on `mem_req_addr_o`; nothing constrains it |
+| L2 miss tracking free | any structure | **yes** | internal; no port-map consequence, and no check inspects it |
+| L3 critical-word-first out of scope | — | **n/a, foreclosure verified** | M1 pins ascending and the memory model serves ascending; the foreclosure is real and stated |
+| L5 `ready` may depend on `valid` | either | **yes**, but **unexercised** | harness drives `req_valid` from a negedge register, never derived from ready. No artifact in the task takes the dependent side — a conformant-set candidate |
+| L6 latency unconstrained | any, including 0 | **was NOT** → fixed | see above |
+| R4 response order free | in-order or reordered | **yes**, both exercised | anchor reorders (probe `reorderings=1`); a strictly in-order design is D3' below |
+
+**L6's fix is controlled.** A scratch zero-latency DUT (one line, combinational
+hit response) now runs with `METRIC: latency min=0` — previously min=2 — and
+raises no unknown-id error. It fails C1 and C2 by construction, which is what it
+should fail. The reference's numbers are unchanged by the fix.
+
+---
+
+## D3 is REFUTED — the anchor already does what it proposed
+
+Measured, phase 5, `SETS=8 WAYS=2`, transaction order across a dirty replacement:
+
+```
+we=0 a50   fill
+we=0 ad0   fill
+we=0 b50   fill       <- the replacement
+we=1 a50   writeback  <- the victim goes back AFTER
+```
+
+D3 proposed *fetch first, write the victim back after*. **That is the anchor's
+existing order**, so it is not a difference. Deliberately left unmeasured when it
+was named, on the grounds that "whatever the anchor does not do" is back-fitting
+with an extra step; measuring it is what refuted it.
+
+**Kept as a failed claim, per the convention, and replaced openly rather than
+quietly:**
+
+**D3′ — strictly in-order responses.** The second source retires responses in
+issue order; R4 explicitly leaves order free and the anchor demonstrably
+reorders (`reorderings=1` in the probe, and again in the soak). Witness: the
+reordering counter — anchor > 0, second source == 0. In-order retirement needs a
+completion buffer, which is the real trade that makes it a design choice.
+
+---
+
+## Mutants — six, each a wrapper around the unmodified anchor
+
+| mutant | target clause | configs passed | first failure | isolation |
+|---|---|---|---|---|
+| `mCAP1_outstanding_capped` | **C1** | **8/16** | `C1: only 3 distinct-line misses, need 8` | **clean**, and see below |
+| `m01_rsp_id_perturbed` | R3 | 0/16 | id never retired | clean, R3 |
+| `m02_store_mask_ignored` | R2 | 0/16 | LOAD returned the wrong value | clean, data |
+| `m03_fill_wrong_block` | M1 | 0/16 | LOAD returned the wrong value | clean, data; alignment check unaffected as intended |
+| `m04_writeback_corrupted` | M2 | 0/16 | LOAD returned the wrong value | clean, data, via the readback sweep |
+| `m05_blocking_on_miss` | **C2** | 0/16 | `C2: a hit request was not accepted` | **not clean** — see below |
+
+**mCAP1 quantifies the low-setting blindness.** It survives all eight
+`MAX_MISSES=2` configurations and dies in all eight at `MAX_MISSES=8`. That is
+d_nw01's recorded phenomenon measured on this task rather than assumed, and it is
+the strongest argument for the scored configuration being `MAX_MISSES=8`: at 2,
+a design with three-deep capacity is indistinguishable from one with eight.
+
+**m05 is recorded as not isolated.** Refusing requests during a memory
+transaction also caps outstanding requests, so it trips C1 as well as C2. It is
+kept because a blocking cache is the single most likely wrong answer to this
+task, but by rule 3 it validates neither check on its own.
+
+### Two mutants were failing for an incidental reason, and that was the finding
+
+`mCAP1` and `m05` first appeared to be killed — both by *"id never retired"* in
+the soak. Neither was failing on its own defect. Both gated `v_i` into the anchor
+without gating `req_ready_o`, so the harness saw an accept the anchor never
+received and the request was **lost**. That is precisely the hazard the
+wrap-the-anchor rule exists to avoid, reached by wrapping carelessly rather than
+by hand-writing. Fixed by gating the ready as well; both then fail on their own
+clause.
+
+### m05 also exposed a real weakness in the C2 phase
+
+Once the handshake was fixed, `m05` **passed** C2. The phase stalled the memory
+by withholding *request acceptance*, and m05's blocking condition keys off a
+transaction being accepted — so the blocking never engaged. The phase now
+withholds the fill **data** instead: the transaction is accepted and then
+starves, which is the condition a non-blocking design must survive. m05 is caught
+by C2 after the change, and the reference is unaffected.
+
+**A mutant found a checker hole. That is what the set is for**, and it would not
+have surfaced from reading the phase.
+
+### eqy — attempted, does not complete on this design
+
+| attempt | outcome |
+|---|---|
+| `sat`, memories left as memories | `ERROR: No configured strategy supports partition ... as it contains memory` |
+| `chparam` to shrink the design first | `Module is used with parameters but is not parametric` — `read_slang` had already elaborated |
+| parameters at read time, `memory_map`, `opt -full`, depth 4 | **timed out at 10 minutes** |
+
+So there is **no formal non-equivalence result** for these mutants. What exists
+is a simulation witness per mutant: each fails a named clause at a named
+configuration with a concrete stimulus. Under the diff-rate retraction that is
+exactly what such a witness is worth — *non-equivalence demonstrated under a
+given stimulus*, not proof of inequivalence — and the kill counts above should be
+read with that caveat attached. Making eqy work on a cache-sized design with
+memories is separate work and is not attempted here.
+
+---
+
+## Conformant set — the overlap, stated before it is built
+
+**D2 and D3′ are both second-source differences and conformant perturbations,
+and they will be the SAME artifacts serving two purposes.** Saying so now rather
+than leaving a reader to work it out:
+
+| artifact | as a second-source difference | as a conformant perturbation |
+|---|---|---|
+| true LRU (D2) | one of the three declared differences | L1 licences it; must survive the checker |
+| strict in-order responses (D3′) | replacement for the refuted D3 | R4 licences it; must survive the checker |
+
+They are not independent evidence. A single wrapper that changes replacement
+policy demonstrates both that the difference is real and that the licence in L1
+is honoured; it does not do so twice.
+
+Planned additions that are **not** shared with the second source:
+
+- **a self-initializing design** — P1 says explicitly that clearing tags on reset
+  is equally conformant, so the set must contain one or the clause is untested;
+- **a design whose `req_ready_o` depends combinationally on `req_valid_i`** — L5
+  licences it and the audit above found nothing in the task exercises it.
+
+---
+
+## What the step-2 gate was actually worth
+
+`stub_minimal` passed the step-2 skeleton on all 16 configurations and fails the
+real testbench at **phase 3, C2**. Both are working as intended and the pair is
+the measurement: the skeleton proved the *plumbing* — compile, sweep, verdict
+parsing, leak check, record writing — and proved nothing about the contract. That
+is the honest answer to "why did the plumbing come before the content", and it is
+a number rather than an argument.
+
+---
+
+## For Agent 1 — one more, small
+
+`sim_candidate.sh`'s slang gate exempts `"$TASK_DIR"/ref/*` but not
+`mutants/*`. Mutants wrap the vendored anchor and have exactly the same
+dependency profile as the reference, so they are rejected with 7 slang errors
+for a missing include path rather than anything about the mutant. Worked around
+here with `--no-slang`; the exemption arguably wants to cover `mutants/` too.
+
+## Next — the second source, not started
 
 Reference shim, then the real testbench (coverage floors, liveness monitor,
 C1/C2/C3), 5–7 mutants wrapping the anchor including a CAPABILITY-class one,

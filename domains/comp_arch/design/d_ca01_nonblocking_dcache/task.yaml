@@ -13,9 +13,9 @@ reference:
   file: refs/basejump_stl/bsg_cache/bsg_cache_non_blocking.sv
   closure_files: 50
   closure_lines: 6350
-  shim: ref/nonblocking_dcache_ref.sv     # STEP 3 -- not written yet
+  shim: ref/nonblocking_dcache_ref.sv
   shim_note: >
-    Planned as pack/unpack of the anchor's two packed structs (cache_pkt and
+    Pack/unpack of the anchor's two packed structs (cache_pkt and
     dma_pkt) plus ready/yumi renaming. No behaviour, and in particular NO
     initialization sequencer: measured (E3) that with a zeroed tag array the
     anchor needs no initialization at all, which is what keeps the shim thin.
@@ -129,6 +129,42 @@ anchor_measurements:
       would constrain submissions on an axis this task does not measure.
 
 # ---------------------------------------------------------------------------
+# LATITUDE AUDIT -- every clause tried against the port map and the harness,
+# not read. Two clauses offered alternatives the interface could not carry.
+# See NOTES.md, proposed finding `latitude-the-interface-cannot-express`.
+latitude_audit:
+  L1_replacement_free:      {expressible: true}
+  L2_miss_tracking_free:    {expressible: true}
+  L3_criticalword_excluded: {foreclosure_verified: true}
+  L4_store_miss_allocates:  {defect_found: "write-through was advertised as free and the block-granular port cannot express it", corrected: true}
+  L5_ready_may_gate_valid:  {expressible: true, exercised_by_nothing: true, action: "conformant-set candidate"}
+  L6_latency_free:          {defect_found: "a same-cycle response was charged as an unknown id; the harness could not express latency 0", fixed: true, control: "zero-latency DUT runs with latency min=0 and no unknown-id error"}
+  R4_response_order_free:   {expressible: true, both_sides_exercised: true}
+
+mutants:
+  status: BUILT
+  non_equivalence: SIMULATION_WITNESS_ONLY
+  non_equivalence_note: >
+    eqy does not complete on this design. sat cannot handle partitions
+    containing memory; with memories mapped to logic at the smallest legal
+    configuration it timed out at 10 minutes. Each mutant therefore carries a
+    simulation witness -- a named clause failing at a named configuration --
+    which under the diff-rate retraction is "non-equivalence demonstrated under
+    a given stimulus", not proof of inequivalence.
+  set:
+    - {name: mCAP1_outstanding_capped, clause: C1, class: CAPABILITY, configs_passed: 8, of: 16,
+       note: "survives every MAX_MISSES=2 config and dies at all eight MAX_MISSES=8 -- the low-setting blindness measured rather than assumed"}
+    - {name: m01_rsp_id_perturbed,  clause: R3, configs_passed: 0, of: 16}
+    - {name: m02_store_mask_ignored, clause: R2, configs_passed: 0, of: 16}
+    - {name: m03_fill_wrong_block,  clause: M1, configs_passed: 0, of: 16}
+    - {name: m04_writeback_corrupted, clause: M2, configs_passed: 0, of: 16, note: "caught via the readback sweep"}
+    - {name: m05_blocking_on_miss,  clause: C2, configs_passed: 0, of: 16,
+       isolated: false, note: "also caps outstanding requests and trips C1; validates neither check alone"}
+  found_a_checker_hole: >
+    m05 initially PASSED C2. The phase stalled the memory by withholding request
+    acceptance, and m05's blocking keys off acceptance, so the blocking never
+    engaged. The phase now withholds the fill DATA instead.
+
 verified_simulators:
   verilator: "5.046 -- 16/16 configs on the skeleton with a minimal stub"
   icarus: NOT_CHECKED
@@ -147,10 +183,29 @@ watchdog:
 # ---------------------------------------------------------------------------
 # NOT YET BUILT -- step 3. Listed so their absence is visible rather than implied.
 # ---------------------------------------------------------------------------
-second_source:   {status: NOT_STARTED, differences_named: false}
+second_source:
+  status: NOT_STARTED
+  differences_named: true          # tb/audit/SECOND_SOURCE_DIFFERENCES.md, committed before the shim
+  D1: {claim: "merge against all outstanding lines", risk: highest, status: unmeasured}
+  D2: {claim: "true LRU vs tree-PLRU", status: unmeasured, also_conformant: true}
+  D3: {claim: "fetch first, write victim back after", status: REFUTED,
+       reason: "measured -- the anchor already fetches first and writes back after"}
+  D3_prime: {claim: "strictly in-order responses", status: unmeasured, also_conformant: true,
+             note: "replacement for D3, named openly; the failed claim is kept"}
 mutants:         {status: NOT_STARTED, planned: "5-7, each wrapping the anchor, incl. one CAPABILITY-class"}
-conformant:      {status: NOT_STARTED, planned: "enumerated clause by clause against the interface"}
-testbench:       {status: SKELETON, note: "checks parameter legality, acceptance, P1, and one fill. Not the scoring checker."}
+conformant:
+  status: NOT_STARTED
+  overlap_declared: >
+    D2 (true LRU) and D3' (in-order responses) are the SAME artifacts as two of
+    the second source's differences, serving both purposes. They are not
+    independent evidence.
+  planned_distinct:
+    - self-initializing design      # P1 says this is conformant; untested otherwise
+    - req_ready_o gated on req_valid_i   # L5 licences it and nothing exercises it
+testbench:
+  status: BUILT
+  reference_result: 16/16
+  determinism_check: WITHDRAWN     # could not be made to fail; see NOTES.md
 
 # ---------------------------------------------------------------------------
 ppa: ABSENT

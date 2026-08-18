@@ -149,7 +149,13 @@ module nonblocking_dcache_tb #(
   // the forced value after release, so the FSM then counted 100 000 cycles down
   // before accepting anything and every later phase timed out. The symptom
   // read as a dead DUT; it was the harness.
-  logic               mem_stall;
+  logic               mem_stall;      // hold the memory REQUEST unaccepted
+  // Hold the fill DATA instead: the transaction is accepted, and then no beat
+  // is delivered. C2 needs this rather than mem_stall. A design that refuses
+  // new requests while a memory transaction is in flight -- a blocking cache --
+  // never becomes blocked if the request itself is never accepted, so a C2
+  // phase built on mem_stall passes a blocking cache. Found by a mutant.
+  logic               mem_data_stall;
   mstate_e            mstate;
   logic               mreq_ready_r, mrd_valid_r, mwr_ready_r;
   logic [DATA_W-1:0]  mrd_data_r;
@@ -158,7 +164,9 @@ module nonblocking_dcache_tb #(
   logic [ADDR_W-1:0]  mreq_addr_r;
 
   assign mem_req_ready = mreq_ready_r;
-  assign mem_rd_valid  = mrd_valid_r;
+  // mem_data_stall gates the OUTPUT and never the FSM's own state. Dropping
+  // mrd_valid_r inside M_FILL and re-raising it left the model wedged.
+  assign mem_rd_valid  = mrd_valid_r & ~mem_data_stall;
   assign mem_rd_data   = mrd_data_r;
   assign mem_wr_ready  = mwr_ready_r;
 
@@ -220,7 +228,7 @@ module nonblocking_dcache_tb #(
         M_FILL: begin
           // M3: a new request while a transaction is in flight is illegal
           if (mem_req_valid && mreq_ready_r) m3_overlap_err <= m3_overlap_err + 1;
-          if (mrd_valid_r && mem_rd_ready) begin
+          if (mem_rd_valid && mem_rd_ready) begin
             mem_beats_this_txn <= mem_beats_this_txn + 1;
             if (mbeat_r == int'(BLOCK_WORDS) - 1) begin
               mrd_valid_r <= 1'b0;
@@ -282,6 +290,24 @@ module nonblocking_dcache_tb #(
     if (rsp_valid && rsp_ready) lm_srv[rsp_id] = 1'b1;
   end
 
+  // A design may answer in the SAME cycle it accepts -- L6 leaves latency
+  // unconstrained and a combinational hit response is a legal design. The
+  // scoreboard reads `id_open` pre-edge, so without this bypass a zero-latency
+  // response is charged as "a response for an id with nothing outstanding".
+  // That is latitude the interface advertises and the harness could not
+  // express; found by trying to use L6 rather than by reading it.
+  logic              acc_now, acc_is_ld;
+  logic [ID_W-1:0]   acc_id;
+  logic [DATA_W-1:0] acc_exp;
+  logic              rsp_bypass;
+  always_comb begin
+    acc_now    = req_valid & req_ready;
+    acc_id     = req_id;
+    acc_is_ld  = ~req_op;
+    acc_exp    = shadow[word_of(req_addr)];
+    rsp_bypass = acc_now && (acc_id == rsp_id) && !id_open[rsp_id];
+  end
+
   int cycle_count;
 
   always_ff @(posedge clk or negedge rst_n) begin
@@ -299,7 +325,7 @@ module nonblocking_dcache_tb #(
       if (req_valid && req_ready) begin
         req_accepts_r <= req_accepts_r + 1;
         if (id_open[req_id]) sb_dup_err <= sb_dup_err + 1;   // R6 violated by us
-        id_open[req_id]    <= 1'b1;
+        id_open[req_id]    <= !(rsp_valid && rsp_ready && (rsp_id == req_id));
         open_since[req_id] <= cycle_count;
         exp_is_ld[req_id]  <= ~req_op;
         if (req_op) begin
@@ -319,18 +345,23 @@ module nonblocking_dcache_tb #(
       // ---- response ----
       if (rsp_valid && rsp_ready) begin
         rsp_count_r <= rsp_count_r + 1;
-        if (!id_open[rsp_id]) sb_unknown_err <= sb_unknown_err + 1;
+        if (!id_open[rsp_id] && !rsp_bypass) sb_unknown_err <= sb_unknown_err + 1;
         else begin
-          // R3: look the expectation up BY THE ID THE DUT REPORTED
-          if (exp_is_ld[rsp_id] && (rsp_data !== exp_val[rsp_id]))
+          // R3: look the expectation up BY THE ID THE DUT REPORTED. On a
+          // same-cycle response the expectation has not been registered yet, so
+          // it comes from the combinational accept view instead.
+          if (rsp_bypass) begin
+            if (acc_is_ld && (rsp_data !== acc_exp)) sb_data_err <= sb_data_err + 1;
+          end
+          else if (exp_is_ld[rsp_id] && (rsp_data !== exp_val[rsp_id]))
             sb_data_err <= sb_data_err + 1;
           id_open[rsp_id] <= 1'b0;
           lat_n   <= lat_n + 1;
-          lat_sum <= lat_sum + (cycle_count - open_since[rsp_id]);
-          if ((cycle_count - open_since[rsp_id]) < hit_lat_min)
-            hit_lat_min <= cycle_count - open_since[rsp_id];
-          if ((cycle_count - open_since[rsp_id]) > hit_lat_max)
-            hit_lat_max <= cycle_count - open_since[rsp_id];
+          lat_sum <= lat_sum + (rsp_bypass ? 0 : (cycle_count - open_since[rsp_id]));
+          if ((rsp_bypass ? 0 : (cycle_count - open_since[rsp_id])) < hit_lat_min)
+            hit_lat_min <= rsp_bypass ? 0 : (cycle_count - open_since[rsp_id]);
+          if ((rsp_bypass ? 0 : (cycle_count - open_since[rsp_id])) > hit_lat_max)
+            hit_lat_max <= rsp_bypass ? 0 : (cycle_count - open_since[rsp_id]);
         end
       end
 
@@ -411,7 +442,7 @@ module nonblocking_dcache_tb #(
     for (i = 0; i < 1024; i++) line_seen[i] = 1'b0;
     lfsr = (SEED == 0) ? 32'h1 : 32'(SEED);
     req_valid = 1'b0; req_id = '0; req_op = 1'b0; req_addr = '0; req_data = '0; req_mask = '1;
-    mem_stall = 1'b0;
+    mem_stall = 1'b0; mem_data_stall = 1'b0;
 
     if (!((DATA_W == 32 || DATA_W == 64) && (SETS == 8 || SETS == 16) &&
           (WAYS == 2 || WAYS == 4) && (MAX_MISSES == 2 || MAX_MISSES == 8))) begin
@@ -452,9 +483,9 @@ module nonblocking_dcache_tb #(
     phase = 3;
     b_addr = mk_addr(3, 2, 0);
     send(4'd7, 1'b0, b_addr, '0, '1, acc); drain(4000);   // resident
-    // stall memory: the FSM only accepts in M_IDLE with mgap_r == 0, so a long
-    // gap holds every fill unserved without touching a DUT signal.
-    mem_stall = 1'b1;
+    // Withhold the fill DATA, not the request. The transaction is accepted and
+    // then starves, which is the condition a non-blocking design must survive.
+    mem_data_stall = 1'b1;
     send(4'd8, 1'b0, mk_addr(4, 3, 0), '0, '1, acc);      // MISS, held
     chk(acc, "C2: a miss was not accepted while memory was stalled");
     idle(20);
@@ -465,7 +496,7 @@ module nonblocking_dcache_tb #(
     cov_hum_created++;
     chk(rsp_count_r > snap_fill,
         "C2: no response was returned while a fill was outstanding (not non-blocking)");
-    @(negedge clk); mem_stall = 1'b0;
+    @(negedge clk); mem_data_stall = 1'b0;
     drain(20000);
 
     // ================= P4: C1 outstanding capacity ========================
@@ -591,27 +622,17 @@ module nonblocking_dcache_tb #(
   end
 
   // ---------------------------------------------------------------- determinism
-  // An INERT observer, enabled only by +define+DETERMINISM_OBSERVER. It drives
-  // nothing and changes no state; it only READS, which forces Verilator to keep
-  // signals it would otherwise optimise away and perturbs scheduling within a
-  // settle pass.
+  // A determinism check stood here and was WITHDRAWN. It could not be made to
+  // fail: three perturbation axes (an inert observer process, --public-flat-rw,
+  // -O0 on one of the two builds) against two reintroductions of the exact
+  // defect it existed for, and every pair came back byte-identical. A check
+  // whose control never fires validates nothing, and one left in place is worse
+  // than none because the next reader sees it and assumes coverage.
   //
-  // WHY IT EXISTS. A determinism check that builds the same source twice
-  // produces two BYTE-IDENTICAL binaries and cannot fail -- it validates
-  // nothing, which is the shape of a control that passes because it can only
-  // pass. The defect this check exists for was found precisely when two builds
-  // differed by an added debug process, so the check has to reproduce that
-  // condition rather than merely repeat a build. See tb/audit/determinism_check.sh.
-`ifdef DETERMINISM_OBSERVER
-  int obs_acc, obs_rsp, obs_mem;
-  always_ff @(posedge clk) begin
-    obs_acc <= obs_acc + ((req_valid & req_ready) ? 1 : 0);
-    obs_rsp <= obs_rsp + ((rsp_valid & rsp_ready) ? 1 : 0);
-    obs_mem <= obs_mem + ((mem_req_valid & mem_req_ready) ? 1 : 0);
-  end
-  final $display("METRIC: observer acc=%0d rsp=%0d mem=%0d", obs_acc, obs_rsp, obs_mem);
-`endif
-
+  // What protects this harness is the three structural remedies at the top of
+  // this file, applied by construction. There is no detector behind them, and
+  // that is stated rather than implied. See NOTES.md, "determinism check --
+  // WITHDRAWN".
   initial begin
     repeat (WATCHDOG_CYCLES) @(posedge clk);
     $display("TEST_RESULT: FAIL: watchdog at %0d cycles, phase %0d", WATCHDOG_CYCLES, phase);
