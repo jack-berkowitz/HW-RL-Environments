@@ -37,17 +37,109 @@ stated limitation as the rule set. A clean run means "none of the known damage",
 never "this is what the model produced".
 """
 import re
+import os
 import sys
+import unicodedata
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# ---------------------------------------------------------------------------
+# INVISIBLE CODEPOINTS, in three groups. The distinction that matters is not
+# "is it invisible" but "does anything downstream handle it".
+#
+#   HANDLED -- the runners strip it into a build copy before compiling, so a
+#              file carrying it still scores correctly. Reported, never fatal.
+#              U+00A0 only, and ONLY while the strip is actually present.
+#   COVERED -- zero-width and bidi controls; already fatal here.
+#   GAP     -- non-ASCII SPACE characters, BOM, soft hyphen, and the line and
+#              paragraph separators. NOTHING strips these, they reach the
+#              lexer, and they were not detected at all before this.
+#
+# The asymmetry is deliberate. Making U+00A0 fatal refuses files the pipeline
+# runs correctly -- that was tried once and reverted as an over-correction.
+# Leaving the rest undetected lets a paste artifact be scored as a model error.
+HANDLED = {0x00A0}
+COVERED = {0x200B, 0x200C, 0x200D, 0x2060} | set(range(0x202A, 0x202F))
+GAP = ({0xFEFF, 0x00AD, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000}
+       | set(range(0x2000, 0x200B)))
+
+RUNNER_STRIPPERS = ("scripts/sim_candidate.sh", "scripts/ppa_candidate.sh")
+
+
+def runner_strip_set():
+    r"""Codepoints the runners actually strip, read out of their sed commands.
+
+    WHY THIS IS COMPUTED AND NOT ASSERTED. U+00A0 is non-fatal here purely
+    BECAUSE sim_candidate.sh and ppa_candidate.sh normalise it onto a copy.
+    That is a claim about OTHER FILES, and a comment making it would keep
+    reading true after someone deleted the sed -- the exact shape of defect
+    this project keeps finding. So the claim is re-derived on every run:
+    delete the strip and U+00A0 becomes fatal here automatically, rather than
+    being left silently unhandled behind a comment that says otherwise.
+
+    Matches the \xNN\xNN escapes inside a sed s/// command and decodes them as
+    UTF-8, which is how both runners spell it:
+
+        LC_ALL=C sed $'s/\xc2\xa0/ /g' "$cand" > "$runfile"
+    """
+    stripped = set()
+    pat = re.compile(r"""sed\s+\$'s/((?:\\x[0-9a-fA-F]{2})+)/""")
+    for rel in RUNNER_STRIPPERS:
+        try:
+            src = open(os.path.join(REPO, rel), encoding="utf-8",
+                       errors="replace").read()
+        except OSError:
+            continue
+        for m in pat.finditer(src):
+            hexes = re.findall(r"\\x([0-9a-fA-F]{2})", m.group(1))
+            raw = bytes(int(h, 16) for h in hexes)
+            try:
+                for ch in raw.decode("utf-8"):
+                    stripped.add(ord(ch))
+            except UnicodeDecodeError:
+                pass
+    return stripped
+
+
+def _name(cp):
+    try:
+        return unicodedata.name(chr(cp))
+    except ValueError:
+        return "<unnamed control>"
+
+
+def codepoint_checks():
+    """Per-codepoint checks, with anything in HANDLED demoted to FATAL wherever
+    the runners turn out not to strip it after all."""
+    unhandled = HANDLED - runner_strip_set()
+    out = []
+    for cp in sorted(HANDLED):
+        if cp in unhandled:
+            out.append((
+                "U+%04X -- MARKED HANDLED BUT NO RUNNER STRIPS IT" % cp,
+                re.compile(re.escape(chr(cp))),
+                "the normalisation in %s is gone, so this now reaches the "
+                "lexer; restore the strip or stop calling it handled"
+                % " / ".join(RUNNER_STRIPPERS),
+                True))
+        else:
+            out.append((
+                "U+%04X %s (handled -- normalised on a copy)" % (cp, _name(cp)),
+                re.compile(re.escape(chr(cp))),
+                "chat interfaces substitute it; the runners normalise it",
+                False))
+    for cp in sorted(GAP):
+        out.append((
+            "U+%04X %s" % (cp, _name(cp)),
+            re.compile(re.escape(chr(cp))),
+            "a non-ASCII space or invisible that NOTHING normalises; it "
+            "reaches the lexer and breaks tokenisation",
+            True))
+    return out
+
 
 # (name, compiled pattern, why it cannot be authored)
-CHECKS = [
-    # NOT FATAL: the runners already normalise a COPY before compiling, so
-    # this is a handled condition. Refusing on it blocked d_nw01/chat.sv, a
-    # submission the pipeline runs perfectly -- an over-correction on my
-    # part. Reported so it stays visible, never fatal.
-    ("U+00A0 non-breaking space (handled -- normalised on a copy)",
-     re.compile(" "),
-     "chat interfaces substitute it; the runners normalise it", False),
+CHECKS = codepoint_checks() + [
     ("injected fragment before a sized literal",
      # No trailing \b: the second real instance was `1 me1'b0`, where "me1"
      # has no word boundary after "me" and the original pattern missed it.
@@ -59,7 +151,7 @@ CHECKS = [
      re.compile(r"[0-9]+\s*'[bdh][0-9a-fA-FxzXZ_]+\s*'[bdh]"),
      "two literals fused with no operator between them", True),
     ("zero-width or bidi control character",
-     re.compile("[​‌‍⁠‪-‮]"),
+     re.compile("[" + "".join(chr(c) for c in sorted(COVERED)) + "]"),
      "invisible characters survive a paste and break tokenisation", True),
 ]
 
@@ -85,23 +177,29 @@ def main():
     if not hits:
         print(f"  {path}: no known transport damage")
         return 0
+    # Summarise per CLASS, not per occurrence: 13017 identical lines is not a
+    # report, it is a wall. Count and first line number are what a reader needs.
+    def summarise(rows):
+        agg = {}
+        for line_no, name, why, text, _frag, _f in rows:
+            e = agg.setdefault(name, {"n": 0, "first": line_no, "why": why, "text": text})
+            e["n"] += 1
+            e["first"] = min(e["first"], line_no)
+        return agg
+
     if not fatal_hits:
-        print(f"  {path}: {len(hits)} handled transport artefact(s), not fatal:")
-        for line_no, name, _why, _text, _frag, _f in hits[:3]:
-            print(f"    line {line_no}: {name}")
+        print(f"  {path}: handled transport artefact(s), not fatal:")
+        for name, e in sorted(summarise(hits).items()):
+            print(f"    {name}: {e['n']} occurrence(s), first at line {e['first']}")
         return 0
 
     print(f"  TRANSPORT DAMAGE in {path} -- {len(fatal_hits)} site(s).")
     print("  This is a SETUP problem. Do not score this file; re-paste it.\n")
-    seen = set()
-    for line_no, name, why, text, frag, _f in fatal_hits:
-        key = (line_no, name)
-        if key in seen:
-            continue
-        seen.add(key)
-        print(f"    line {line_no}: {name}")
-        print(f"      matched {frag!r} -- {why}")
-        print(f"      {text}")
+    for name, e in sorted(summarise(fatal_hits).items()):
+        print(f"    {name}: {e['n']} occurrence(s), first at line {e['first']}")
+        print(f"      {e['why']}")
+        if e["text"]:
+            print(f"      {e['text']}")
     return 1
 
 
