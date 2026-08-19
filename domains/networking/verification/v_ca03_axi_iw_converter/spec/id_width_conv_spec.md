@@ -60,12 +60,19 @@ clause.
 may stall" so that a testbench can check it: at `MAX_UNIQ_IDS - 1` distinct
 identifiers a new one must be accepted, at `MAX_UNIQ_IDS` it must not.*
 
-**A4 — retirement frees an entry.** An identifier ceases to occupy a table entry
-on the rising edge at which its last outstanding transaction completes, as A1
-defines completion. On that same edge a request carrying a new identifier may be
-accepted.
-*Authority: task intent, and stated because the cycle of retirement is exactly
-where a design can be wrong while being right everywhere else.*
+**A4 — retirement frees an entry, and frees it within a bounded time.** An
+identifier ceases to occupy a table entry on the rising edge at which its last
+outstanding transaction completes, as A1 defines completion. A request carrying
+a new identifier, offered continuously from that edge and blocked by no other
+clause, shall be accepted **within 2 cycles of it**.
+
+*Authority: task intent, with the 2-cycle window a recorded design decision of
+this task. Measured on a correct implementation: acceptance happens on the
+retiring edge itself — zero cycles — so the window leaves room for a design that
+needs a cycle of internal arbitration while remaining a bound a testbench can
+check. It is stated as a bound rather than as "promptly" because an unbounded
+promise cannot be falsified in a finite run, and because the cycle of retirement
+is exactly where a design can be wrong while being right everywhere else.*
 
 **A5 — depth per identifier.** At most **`MAX_TXNS_PER_ID`** transactions with
 the same slave identifier may be outstanding at once, per direction. A further
@@ -181,9 +188,10 @@ Not constrained by this contract, and not to be checked:
 2. **Latency** — the number of cycles between a slave request being accepted and
    the corresponding master request appearing, and between a master response and
    the slave response, is unconstrained and may vary.
-3. **Promptness of `s_awready` / `s_arready`** where A3 does not require a
-   stall. Ready may be low for reasons of internal arbitration; a testbench
-   shall not require it high merely because a table entry is free.
+3. **Promptness of `s_awready` / `s_arready`** where neither A3 nor A4 speaks.
+   Ready may be low for reasons of internal arbitration; a testbench shall not
+   require it high merely because a table entry is free. A4's 2-cycle window is
+   the one place this contract does bound it.
 4. **Relative order of responses carrying different identifiers** (B2).
 5. **The values on any output while its `valid` is low.** Unconstrained.
 6. **Whether reads and writes share table entries or hold separate tables**,

@@ -1,7 +1,7 @@
 # v_ca03 `id_width_conv` — evidence trail
 
-**STATUS: steps 1-2 complete. Reference testbench, second DUT, conformant set
-and mutants are NOT built.** No ceiling exists and the task is not scoreable.
+**STATUS: steps 1-3 complete. Reference ceiling 5 of 5.** Second DUT and
+conformant set are NOT built, so the task is not yet scoreable end to end.
 
 **Selected after `fpnew_divsqrt_multi` failed step 1** — see §0.
 
@@ -165,3 +165,70 @@ port map — `tb/audit/spec_conformance_probe.sv`:
 A clause the golden does not satisfy would otherwise surface later as the
 reference testbench failing its own validity gate, and be read as a checker
 defect.
+
+---
+
+## 6. Step 3 — mutants built FIRST, then the model
+
+The five boundary mutants were written **before** the reference testbench, so
+the model was developed against the cases it has to distinguish rather than
+against the golden alone. `tt_m8` survived v_ca05's reference precisely because
+its boundary was not in view when that checker was written.
+
+| mutant | violates | the boundary it sits on |
+|---|---|---|
+| `iw_m1_table_one_too_small` | A3 | stalls at `MAX_UNIQ-1` distinct ids instead of `MAX_UNIQ` |
+| `iw_m2_depth_one_too_small` | A5 | refuses the 2nd transaction on an id where 2 are allowed |
+| `iw_m3_entry_freed_late` | A4 | holds a retired entry three cycles past the freeing edge |
+| `iw_m4_same_id_blocked_when_full` | A3 | blocks an **already-outstanding** id at a full table, which A3's second sentence forbids |
+| `iw_m5_reads_and_writes_share` | A1 | counts reads and writes in one table where A1 counts them separately |
+
+Each gates the slave-side valid and ready **together**, so the injected defect
+is a stall that should not happen or the absence of one that should — never a
+protocol violation. Each wrapper's occupancy tracker watches the **slave-port
+handshakes only** and never reads inside the golden, so a mutant cannot inherit
+the golden's blind spots.
+
+### Ordering it this way changed the specification
+
+Writing `iw_m3` first exposed that **A4 as originally drafted could not catch
+it.** The clause said an entry is free "on that same edge" but latitude 3 lets
+ready be low for arbitration, so a design holding the entry three cycles and
+then accepting satisfied both. Measured on the golden: acceptance happens **0
+cycles** after the retiring edge. A4 now states a **2-cycle window**, with that
+measurement as its rationale — margin for a design that needs a cycle of
+arbitration, and still a bound a testbench can check.
+
+Had the mutant been written after the checker, the clause would have shipped
+unfalsifiable and the mutant would have been unkillable.
+
+### Result on first attempt: **5 of 5**
+
+| mutant | first failure | all clauses |
+|---|---|---|
+| `iw_m1` | A3 | A3 |
+| `iw_m2` | A3 | A3, then A5 |
+| `iw_m3` | A4 | A4 only |
+| `iw_m4` | A3 | A3 |
+| `iw_m5` | A1 | A1 only |
+
+`iw_m2` reports A3 before A5 because the A3 phase runs first and its
+same-id-at-a-full-table case is also a second transaction on one id — one defect
+with two symptoms, recorded rather than called clean isolation. Reordering the
+phases would sharpen the attribution.
+
+**Getting 5 of 5 first time is a weaker signal here than it looks**, and for the
+reason this ordering was chosen: the model was written with the five boundaries
+in hand. It says the model is right at the cases it was shown, not that it is
+right at cases nobody has thought of. The conformant set and a submission are
+what test that.
+
+## 7. A rule-4 defect in the reference testbench, found by the mutants
+
+Every mutant initially failed a **FLOOR** check as well as its own clause. The
+coverage counters incremented only when the design **accepted** the offered
+stimulus, so a design that wrongly refused work drove its own coverage to zero.
+
+That is rule 4 exactly: *could a correct implementation score zero here?* — and
+worse, a faulty one could. The floors now count what the testbench **offered**,
+which is the only thing it controls. The mutants found this, not review.
