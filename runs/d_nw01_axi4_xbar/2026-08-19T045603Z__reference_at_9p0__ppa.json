@@ -1,0 +1,18 @@
+{
+  "clk_period_ns": "9.0",
+  "correctness_gate": "passed:reference-16/16",
+  "design_area_um2": "146932",
+  "git_sha": "9249336d96bddb9f03a9add3d419b436861926fa-dirty",
+  "kind": "ppa",
+  "label": "reference_at_9p0",
+  "orfs_nickname": "d_nw01_ref_at_9p0",
+  "pdk": "sky130hd",
+  "power_w": "4.86e-02",
+  "status": "completed",
+  "submission": "domains/networking/design/d_nw01_axi4_xbar/ref/axi4_xbar_ref.sv",
+  "submission_sha256_16": "a36958895aab26e0",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "4e277da1edfe8af7",
+  "timestamp_utc": "2026-08-19T04:56:03Z",
+  "wns_ns": "1.45833"
+}

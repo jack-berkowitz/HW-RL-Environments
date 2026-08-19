@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "3/4",
+  "did_not_compile": "0",
+  "faults_caught": "6/10",
+  "faults_hung": "0",
+  "git_sha": "079c714f9d6eb1ecfb284668a5f1e8f00c72bfb2-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "gemini",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "candidates/v_ca05/gemini.sv",
+  "submission_sha256_16": "168bfc73c619d09a",
+  "task": "v_ca05_id_queue",
+  "task_text_hash": "14021cb8db4fe5e2",
+  "timestamp_utc": "2026-08-18T02:03:25Z"
+}

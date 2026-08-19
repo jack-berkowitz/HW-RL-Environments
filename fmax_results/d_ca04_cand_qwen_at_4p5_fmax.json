@@ -1,0 +1,117 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_ca04_cand_qwen_at_4p5",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": 3.6562,
+  "achieved_fmax_mhz": 273.5,
+  "wns_at_converged_ns": 0.08,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 4.5,
+    "period_pass": 4.5,
+    "period_fail": 2.25,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 3.6562,
+    "period_fail": 3.375
+  },
+  "search_iterations": 3,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 4.5,
+      "wns_ns": 0.72,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 124.3,
+      "log": "fmax_results/d_ca04_cand_qwen_at_4p5_logs/d_ca04_cand_qwen_at_4p5_iter01_4.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14176.1,
+      "provisional_power_mw": 0.00785265
+    },
+    {
+      "iteration": 2,
+      "period_ns": 2.25,
+      "wns_ns": -1.19,
+      "tns_ns": -47.74,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 136.1,
+      "log": "fmax_results/d_ca04_cand_qwen_at_4p5_logs/d_ca04_cand_qwen_at_4p5_iter02_2.2500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14973.1,
+      "provisional_power_mw": 0.0153934
+    },
+    {
+      "iteration": 3,
+      "period_ns": 3.375,
+      "wns_ns": -0.07,
+      "tns_ns": -1.17,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 125.4,
+      "log": "fmax_results/d_ca04_cand_qwen_at_4p5_logs/d_ca04_cand_qwen_at_4p5_iter03_3.3750ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14274.9,
+      "provisional_power_mw": 0.0100514
+    },
+    {
+      "iteration": 4,
+      "period_ns": 3.9375,
+      "wns_ns": 0.15,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 123.1,
+      "log": "fmax_results/d_ca04_cand_qwen_at_4p5_logs/d_ca04_cand_qwen_at_4p5_iter04_3.9375ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14333.7,
+      "provisional_power_mw": 0.00906688
+    },
+    {
+      "iteration": 5,
+      "period_ns": 3.6562,
+      "wns_ns": 0.08,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 122.7,
+      "log": "fmax_results/d_ca04_cand_qwen_at_4p5_logs/d_ca04_cand_qwen_at_4p5_iter05_3.6562ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14191.1,
+      "provisional_power_mw": 0.00911358
+    },
+    {
+      "iteration": 6,
+      "period_ns": 3.6562,
+      "wns_ns": 0.08,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 122.0,
+      "log": "fmax_results/d_ca04_cand_qwen_at_4p5_logs/d_ca04_cand_qwen_at_4p5_iter06_3.6562ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14191.1,
+      "provisional_power_mw": 0.00911358
+    }
+  ],
+  "total_wall_time_s": 754.1,
+  "total_pnr_runs": 6,
+  "rtl_git_commit": "9249336d96bddb9f03a9add3d419b436861926fa-dirty",
+  "timestamp": "2026-08-19T05:08:37.628666+00:00",
+  "aborted_reason": null
+}

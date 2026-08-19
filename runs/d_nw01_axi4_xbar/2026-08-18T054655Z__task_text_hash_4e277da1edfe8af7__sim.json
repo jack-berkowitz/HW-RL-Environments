@@ -1,0 +1,9 @@
+{
+  "git_sha": "9cb3360fa5cda55c13c9cd2f4c946355c5a93c45-dirty",
+  "kind": "sim",
+  "label": "task_text_hash=4e277da1edfe8af7",
+  "submission": "candidates/d_nw01/chat.sv",
+  "submission_sha256_16": "097265354bd11b2d",
+  "task": "d_nw01_axi4_xbar",
+  "timestamp_utc": "2026-08-18T05:46:55Z"
+}

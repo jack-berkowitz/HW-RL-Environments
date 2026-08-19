@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "1/5",
+  "did_not_compile": "0",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "git_sha": "ca2559175bf663afe75761a6631bcd63bb2ea2d1-dirty",
+  "golden_accepted": "FAIL",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "gemini",
+  "second_dut_accepted": "FAIL",
+  "status": "rejected",
+  "submission": "candidates/v_dsp02/gemini.sv",
+  "submission_sha256_16": "c6f59640652740d2",
+  "task": "v_dsp02_fp_noncomp",
+  "task_text_hash": "c2429e4f2fc3e2e1",
+  "timestamp_utc": "2026-08-18T18:52:22Z"
+}

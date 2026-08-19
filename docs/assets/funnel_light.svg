@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif">
+<rect width="900" height="300" fill="#fcfcfb"/>
+<text x="24" y="30" font-size="15" font-weight="600" fill="#0b0b0b">How far each submission got</text>
+<text x="24" y="50" font-size="11.5" fill="#52514e">12 design and 12 verification submissions, across 3 tasks each. Each column is scaled to its own total.</text>
+<text x="24" y="66" font-size="11.5" fill="#52514e">Stages are cumulative: each is a subset of the one above it. Reference implementations are not submissions and are not counted.</text>
+<text x="335.0" y="86" font-size="11" font-weight="600" text-anchor="middle" fill="#52514e">design</text>
+<text x="661.0" y="86" font-size="11" font-weight="600" text-anchor="middle" fill="#52514e">verification</text>
+<text x="196" y="118" font-size="11.5" text-anchor="end" fill="#52514e">Submitted</text>
+<rect x="210" y="100" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="210" y="100" width="250.0" height="26" rx="4" fill="#2a78d6"/>
+<text x="470" y="118" font-size="11.5" font-weight="600" fill="#0b0b0b">12</text>
+<rect x="536" y="100" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="536" y="100" width="250.0" height="26" rx="4" fill="#2a78d6"/>
+<text x="796" y="118" font-size="11.5" font-weight="600" fill="#0b0b0b">12</text>
+<text x="196" y="158" font-size="11.5" text-anchor="end" fill="#52514e">Compiled</text>
+<rect x="210" y="140" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="210" y="140" width="145.8" height="26" rx="4" fill="#2a78d6"/>
+<text x="470" y="158" font-size="11.5" font-weight="600" fill="#0b0b0b">7</text>
+<rect x="536" y="140" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="536" y="140" width="229.2" height="26" rx="4" fill="#2a78d6"/>
+<text x="796" y="158" font-size="11.5" font-weight="600" fill="#0b0b0b">11</text>
+<text x="196" y="198" font-size="11.5" text-anchor="end" fill="#52514e">Correct / accepts correct HW</text>
+<rect x="210" y="180" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="210" y="180" width="125.0" height="26" rx="4" fill="#2a78d6"/>
+<text x="470" y="198" font-size="11.5" font-weight="600" fill="#0b0b0b">6</text>
+<rect x="536" y="180" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="536" y="180" width="125.0" height="26" rx="4" fill="#2a78d6"/>
+<text x="796" y="198" font-size="11.5" font-weight="600" fill="#0b0b0b">6</text>
+<text x="196" y="238" font-size="11.5" text-anchor="end" fill="#52514e">Produced a PPA / fault number</text>
+<rect x="210" y="220" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="210" y="220" width="125.0" height="26" rx="4" fill="#2a78d6"/>
+<text x="470" y="238" font-size="11.5" font-weight="600" fill="#0b0b0b">6</text>
+<rect x="536" y="220" width="250" height="26" rx="4" fill="#e6e5e1"/>
+<rect x="536" y="220" width="125.0" height="26" rx="4" fill="#2a78d6"/>
+<text x="796" y="238" font-size="11.5" font-weight="600" fill="#0b0b0b">6</text>
+<text x="24" y="270" font-size="11" fill="#83817a">Verilator is the simulator of record. Synthesis uses slang, and a design slang rejects cannot produce a PPA number.</text>
+<text x="24" y="286" font-size="11" fill="#83817a">One design PPA figure comes from a build that missed timing and is not yet comparable.</text>
+</svg>

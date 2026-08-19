@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/5",
+  "did_not_compile": "0",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "git_sha": "079c714f9d6eb1ecfb284668a5f1e8f00c72bfb2-dirty",
+  "golden_accepted": "FAIL",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "qwen",
+  "second_dut_accepted": "FAIL",
+  "status": "rejected",
+  "submission": "candidates/v_nw03/qwen.sv",
+  "submission_sha256_16": "50a87ef0c709bcb5",
+  "task": "v_nw03_axis_arb_mux",
+  "task_text_hash": "ae860ec37c555899",
+  "timestamp_utc": "2026-08-18T01:54:56Z"
+}

@@ -440,11 +440,20 @@ above all for candidate submissions, where a seed-lucky pass is a scoring error.
 
 ---
 
-## Shared: toolchain — **migrated Icarus → Verilator**
+## Shared: toolchain — **Verilator is the simulator of record**
 
-Correctness simulation now runs on **Verilator 5.046** (`--binary --timing`).
-PPA/synthesis was never on Icarus and is untouched. Icarus 13 is still installed
-and the Tier-2 harnesses still run under it — see "portable subset" below.
+**One simulator decides every scored result: Verilator 5.046** (`--binary --timing`).
+Synthesis is a separate frontend — **slang**, inside the OpenROAD container — and
+a design slang rejects can never produce a PPA number, so that gate stays.
+
+**Do not report a result as confirmed on two simulators.** Dual-frontend
+agreement was useful while the harness was being built and is no longer part of
+how anything is scored; describing a result that way implies a check the
+pipeline does not perform. Icarus 13 remains installed as a **debugging aid for
+awkward candidate submissions** — a second opinion when a failure is hard to
+read — and nothing scored depends on it. The notes below on the portable subset
+and on Icarus behaviour are kept for that debugging use, not as a scoring
+requirement.
 
 ### What the migration changed for harness authoring
 
@@ -673,3 +682,50 @@ feature* — not a defect in the file. Never quote a `sorry:` as a submission
 error, and check which frontend the harness actually invokes before attributing
 anything to the submission: the verification harness runs **Verilator**, so an
 Icarus limitation observed at a terminal has no bearing on a score.
+
+## Correction against `refs.lock`'s toolchain line — no SMT backend exists
+
+`refs.lock:15` reads:
+
+```
+formal: "eqy + sby v0.67 inside openroad/orfs:latest (read_slang frontend); no host install"
+```
+
+**That line overstates what the container can do, and `refs.lock` is frozen, so
+this is the correction of record rather than an edit to the lock file.**
+
+`openroad/orfs` ships **no SMT solver at all**. Verified directly in the image:
+
+```
+yices  yices-smt2  z3  boolector  bitwuzla  cvc5  cvc4  mathsat  msat
+   -- every one NOT PRESENT
+sby /usr/local/bin/sby     eqy /usr/local/bin/eqy
+yosys-smtbmc /usr/local/bin/yosys-smtbmc     yosys-abc /usr/local/bin/yosys-abc
+```
+
+`sby`, `eqy` and `yosys-smtbmc` are all installed, which is why the line reads
+plausibly. **`yosys-smtbmc` is a driver, not a solver** — with no backend behind
+it the `smtbmc` engine cannot run on any design, and never could. It has never
+run in this project.
+
+**What actually works: `abc bmc3` on the bundled `yosys-abc`, and nothing else.**
+Two consequences that follow from that and not from any design's difficulty:
+
+- `aigsmt none` is required, or `sby` reaches the correct verdict and then fails
+  post-processing when it tries to build a waveform through `yosys-smtbmc`. The
+  cost is a verdict without a counterexample trace.
+- Any equivalence result in this project is a **bounded** result from `bmc3`.
+  Nothing here is an unbounded proof, and no statement should be written as
+  though it were.
+
+**Reading discipline.** "eqy + sby are installed" and "this container can run
+formal equivalence" are different claims, and the toolchain line collapses them.
+Presence of a tool is not presence of the capability it fronts -- the same
+distinction as a control that exists versus a control that runs.
+
+Where formal capability is described anywhere else, it must be described as
+bounded `abc bmc3` only. `refs.lock` itself stays as it is: it is frozen, and a
+frozen manifest with a correction recorded against it is more honest than a
+manifest quietly edited to match what was later discovered.
+
+**From:** Agent 3's toolchain audit; the d_ca01 EC work that hit it

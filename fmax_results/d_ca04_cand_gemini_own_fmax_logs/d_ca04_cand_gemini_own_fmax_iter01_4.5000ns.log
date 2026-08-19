@@ -3,6 +3,7 @@ constraining to CLK_PERIOD_NS=4.5000 (SDC + synthesis)
 OPENROAD: /OpenROAD-flow-scripts/tools/OpenROAD
 mkdir -p results/sky130hd/d_ca04_cand_gemini_own_fmax/base/
 echo 4500 > results/sky130hd/d_ca04_cand_gemini_own_fmax/base/clock_period.txt
+make[1]: Warning: File 'results/sky130hd/d_ca04_cand_gemini_own_fmax/base/clock_period.txt' has modification time 599 s in the future
 /OpenROAD-flow-scripts/flow/scripts/synth.sh /OpenROAD-flow-scripts/flow/scripts/synth_canonicalize.tcl ./logs/sky130hd/d_ca04_cand_gemini_own_fmax/base/1_1_yosys_canonicalize.log
 Using ABC speed script.
 Extracting clock period from SDC file: ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/clock_period.txt
@@ -24,12 +25,13 @@ Setting clock period to 4500
 4.2. Analyzing design hierarchy..
 5. Executing OPT_CLEAN pass (remove unused cells and wires).
 6. Executing RTLIL backend.
-End of script. Logfile hash: e50e66081b, time: 0.38s, user: 0.29s, system: 0.03s, MEM: 76.85 MB peak
+End of script. Logfile hash: e50e66081b, time: 0.40s, user: 0.31s, system: 0.02s, MEM: 76.89 MB peak
 Yosys 0.68+post (git sha1 UNKNOWN, Release, GNU /usr/local/bin/wrapped-cc/g++ 11.4.0)
-Time spent: 41% 2x read_slang (0 sec), 37% 4x read_liberty (0 sec), ...
-Elapsed time: 0:00.44[h:]min:sec. CPU time: user 0.38 sys 0.03 (94%). Peak memory: 83080KB.
+Time spent: 39% 2x read_slang (0 sec), 38% 4x read_liberty (0 sec), ...
+Elapsed time: 0:00.46[h:]min:sec. CPU time: user 0.40 sys 0.03 (94%). Peak memory: 83120KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 1_1_yosys_canonicalize    .rtlil          0             81 e3fcd8d610757288c11a
+make[1]: warning:  Clock skew detected.  Your build may be incomplete.
 /OpenROAD-flow-scripts/flow/scripts/synth.sh /OpenROAD-flow-scripts/flow/scripts/synth.tcl ./logs/sky130hd/d_ca04_cand_gemini_own_fmax/base/1_2_yosys.log
 Using ABC speed script.
 Extracting clock period from SDC file: ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/clock_period.txt
@@ -235,10 +237,10 @@ abc -script /OpenROAD-flow-scripts/flow/scripts/abc_speed.script -liberty /OpenR
 23. Executing Verilog backend.
 23.1. Executing BMUXMAP pass.
 23.2. Executing DEMUXMAP pass.
-End of script. Logfile hash: 0d29ea5bbd, time: 2.24s, user: 0.53s, system: 0.07s, MEM: 83.96 MB peak
+End of script. Logfile hash: 0d29ea5bbd, time: 2.28s, user: 0.52s, system: 0.08s, MEM: 83.96 MB peak
 Yosys 0.68+post (git sha1 UNKNOWN, Release, GNU /usr/local/bin/wrapped-cc/g++ 11.4.0)
 Time spent: 75% 1x abc (1 sec), 3% 21x opt_clean (0 sec), ...
-Elapsed time: 0:02.30[h:]min:sec. CPU time: user 2.17 sys 0.09 (98%). Peak memory: 87724KB.
+Elapsed time: 0:02.34[h:]min:sec. CPU time: user 2.18 sys 0.11 (97%). Peak memory: 87732KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 1_2_yosys                 .v              2             85 9dec0f56fdca56549709
 cp /work/domains/comp_arch/design/d_ca04_async_fifo_cdc/orfs/constraint.sdc ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/1_2_yosys.sdc
@@ -261,7 +263,7 @@ Removed 0 unused instances and 0 unused nets.
 Design area 10972 um^2 100% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/1_synth.odb
 write_sdc -no_timestamp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/1_synth.sdc
-Elapsed time: 0:00.63[h:]min:sec. CPU time: user 0.59 sys 0.02 (96%). Peak memory: 147456KB.
+Elapsed time: 0:00.64[h:]min:sec. CPU time: user 0.60 sys 0.03 (97%). Peak memory: 147872KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 1_synth                   .odb            0            144 20de1e452ef9808738fb
 1_synth                   .sdc                             fe6451089bd5960df93f
@@ -529,7 +531,7 @@ floorplan final report_design_area
 Design area 10978 um^2 10% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/2_1_floorplan.odb
 write_sdc -no_timestamp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/2_1_floorplan.sdc
-Elapsed time: 0:02.05[h:]min:sec. CPU time: user 2.39 sys 0.38 (135%). Peak memory: 184520KB.
+Elapsed time: 0:02.06[h:]min:sec. CPU time: user 2.39 sys 0.40 (136%). Peak memory: 184988KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 2_1_floorplan             .odb            2            180 7bd7809e27cb1faa7694
 2_1_floorplan             .sdc                             fe6451089bd5960df93f
@@ -542,7 +544,7 @@ source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
 No macros found: Skipping macro_placement
 Design area 10978 um^2 10% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/2_2_floorplan_macro.odb
-Elapsed time: 0:00.57[h:]min:sec. CPU time: user 0.53 sys 0.03 (97%). Peak memory: 142564KB.
+Elapsed time: 0:00.56[h:]min:sec. CPU time: user 0.52 sys 0.03 (97%). Peak memory: 143188KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 2_2_floorplan_macro       .odb            0            139 7bd7809e27cb1faa7694
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 2_3_floorplan_tapcell tapcell
@@ -554,9 +556,9 @@ source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
 [INFO TAP-0005] Inserted 1414 tapcells.
 Design area 12747 um^2 12% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/2_3_floorplan_tapcell.odb
-Elapsed time: 0:00.56[h:]min:sec. CPU time: user 0.52 sys 0.03 (97%). Peak memory: 143268KB.
+Elapsed time: 0:00.57[h:]min:sec. CPU time: user 0.52 sys 0.03 (98%). Peak memory: 143484KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-2_3_floorplan_tapcell     .odb            0            139 4c876d2b8fda015b9753
+2_3_floorplan_tapcell     .odb            0            140 4c876d2b8fda015b9753
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 2_4_floorplan_pdn pdn
 Running pdn.tcl, stage 2_4_floorplan_pdn
 read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
@@ -569,7 +571,7 @@ source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
 [INFO PDN-0500] Runtime: 0.05s
 Design area 12747 um^2 12% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/2_4_floorplan_pdn.odb
-Elapsed time: 0:00.65[h:]min:sec. CPU time: user 0.60 sys 0.03 (97%). Peak memory: 152964KB.
+Elapsed time: 0:00.64[h:]min:sec. CPU time: user 0.60 sys 0.03 (98%). Peak memory: 153232KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 2_4_floorplan_pdn         .odb            0            149 1eb50ab3b7283cd27362
 cp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/2_4_floorplan_pdn.odb ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/2_floorplan.odb
@@ -674,7 +676,7 @@ Iteration | Overflow |     HPWL (um) |  HPWL(%) |   Penalty | Group
 [INFO GPL-1014] Final placement area: 11211.76 (+0.00%)
 Design area 12747 um^2 12% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_1_place_gp_skip_io.odb
-Elapsed time: 0:01.64[h:]min:sec. CPU time: user 6.36 sys 0.22 (402%). Peak memory: 148940KB.
+Elapsed time: 0:01.82[h:]min:sec. CPU time: user 7.30 sys 0.25 (415%). Peak memory: 148988KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 3_1_place_gp_skip_io      .odb            1            145 475e405f51540bf32485
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 3_2_place_iop io_placement
@@ -695,7 +697,7 @@ Using 2 tracks default min distance between IO pins.
 [INFO PPL-0012] I/O nets HPWL: 9796.43 um.
 Design area 12747 um^2 12% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_2_place_iop.odb
-Elapsed time: 0:00.57[h:]min:sec. CPU time: user 0.53 sys 0.03 (97%). Peak memory: 145860KB.
+Elapsed time: 0:00.63[h:]min:sec. CPU time: user 0.57 sys 0.04 (96%). Peak memory: 146140KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 3_2_place_iop             .odb            0            142 1ef2e6e88de0efb137a9
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 3_3_place_gp global_place
@@ -889,9 +891,9 @@ global place report_design_area
 --------------------------------------------------------------------------
 Design area 13547 um^2 12% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_3_place_gp.odb
-Elapsed time: 0:02.00[h:]min:sec. CPU time: user 5.83 sys 0.26 (304%). Peak memory: 291496KB.
+Elapsed time: 0:01.76[h:]min:sec. CPU time: user 2.92 sys 0.15 (174%). Peak memory: 292300KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-3_3_place_gp              .odb            2            284 29254ebd2249f5d77bcb
+3_3_place_gp              .odb            1            285 29254ebd2249f5d77bcb
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 3_4_place_resized resize
 Running resize.tcl, stage 3_4_place_resized
 read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
@@ -962,7 +964,7 @@ Iteration |   Area    | Resized | Buffers | Nets repaired | Remaining
       560 |     +0.0% |       0 |       0 |             0 |         0
     final |     +0.0% |       0 |       0 |             0 |         0
 ---------------------------------------------------------------------
-[INFO RSZ-0504] Runtime: 0.08s
+[INFO RSZ-0504] Runtime: 0.09s
 Floating nets: 
 Report metrics stage 3, resizer...
 
@@ -973,9 +975,9 @@ Design area 13547 um^2 12% utilization.
 Instance count before 1932, after 1932
 Pin count before 2067, after 2067
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_4_place_resized.odb
-Elapsed time: 0:00.91[h:]min:sec. CPU time: user 0.91 sys 0.06 (106%). Peak memory: 185096KB.
+Elapsed time: 0:01.04[h:]min:sec. CPU time: user 1.00 sys 0.10 (106%). Peak memory: 185488KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-3_4_place_resized         .odb            0            180 29254ebd2249f5d77bcb
+3_4_place_resized         .odb            1            181 29254ebd2249f5d77bcb
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 3_5_place_dp detail_place
 Running detail_place.tcl, stage 3_5_place_dp
 read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
@@ -1001,7 +1003,7 @@ Iteration | Violations |    Cells |    Sites
         0 |          6 |         2 |         4
         1 |          0 |         0 |         0
 Negotiation phase 1 converged at iteration 1.
-[INFO DPL-0500] Runtime: 0.02s
+[INFO DPL-0500] Runtime: 0.03s
 Placement Analysis
 ---------------------------------
 total displacement       2384.4 u
@@ -1084,10 +1086,11 @@ detailed place report_design_area
 Design area 13547 um^2 12% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_5_place_dp.odb
 write_sdc -no_timestamp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_place.sdc
-Elapsed time: 0:00.98[h:]min:sec. CPU time: user 0.97 sys 0.06 (105%). Peak memory: 162280KB.
+Elapsed time: 0:01.14[h:]min:sec. CPU time: user 1.12 sys 0.09 (105%). Peak memory: 162568KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-3_5_place_dp              .odb            0            158 e7243d4c7fe8a690601c
+3_5_place_dp              .odb            1            158 e7243d4c7fe8a690601c
 cp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_5_place_dp.odb ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_place.odb
+make: Warning: File 'results/sky130hd/d_ca04_cand_gemini_own_fmax/base/3_place.sdc' has modification time 34 s in the future
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 4_1_cts cts
 Running cts.tcl, stage 4_1_cts
 read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
@@ -1165,7 +1168,7 @@ clock_tree_synthesis -sink_clustering_enable -repair_clock_nets
 [INFO CTS-0101]  Average sink wire length 103.06 um
 [INFO CTS-0102]  Path depth 2 - 2
 [INFO CTS-0207]  Dummy loads inserted 1
-[INFO CTS-0500] Runtime: 0.60s
+[INFO CTS-0500] Runtime: 0.73s
 estimate_parasitics -placement
 detailed_placement
 [INFO DPL-0006] Core area: 108853.15 um^2
@@ -1199,7 +1202,7 @@ estimate_parasitics -placement
 repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -match_cell_footprint -verbose
 [INFO RSZ-0100] Repair move sequence: UnbufferMove SizeUpMove SwapPinsMove BufferMove CloneMove SplitLoadMove 
 [INFO RSZ-0098] No setup violations found
-[INFO RSZ-0505] Runtime: 0.04s
+[INFO RSZ-0505] Runtime: 0.05s
 [INFO RSZ-0033] No hold violations found.
 [INFO RSZ-0506] Runtime: 0.01s
 detailed_placement
@@ -1233,9 +1236,9 @@ cts final report_design_area
 Design area 14515 um^2 13% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/4_1_cts.odb
 write_sdc -no_timestamp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/4_cts.sdc
-Elapsed time: 0:01.53[h:]min:sec. CPU time: user 1.56 sys 0.09 (107%). Peak memory: 199964KB.
+Elapsed time: 0:01.87[h:]min:sec. CPU time: user 1.88 sys 0.14 (108%). Peak memory: 198716KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-4_1_cts                   .odb            1            195 16cf1db40b9a0f018eeb
+4_1_cts                   .odb            1            194 16cf1db40b9a0f018eeb
 cp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/4_1_cts.odb ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/4_cts.odb
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 5_1_grt global_route
 Running global_route.tcl, stage 5_1_grt
@@ -1329,8 +1332,8 @@ Number of nets:           591
 #macroValidViaAp       = 0
 #macroNoAp             = 0
 [INFO DRT-0166] Complete pin access.
-[INFO DRT-0267] cpu time = 00:00:44, elapsed time = 00:00:05, memory = 164.52 (MB), peak = 163.24 (MB)
-Took 6 seconds: pin_access
+[INFO DRT-0267] cpu time = 00:01:23, elapsed time = 00:00:11, memory = 164.76 (MB), peak = 163.55 (MB)
+Took 11 seconds: pin_access
 global_route -congestion_report_file ./reports/sky130hd/d_ca04_cand_gemini_own_fmax/base/congestion.rpt -congestion_iterations 30 -congestion_report_iter_step 5 -verbose
 [INFO GRT-0020] Min routing layer: met1
 [INFO GRT-0021] Max routing layer: met5
@@ -1450,7 +1453,7 @@ Iteration |   Area    | Resized | Buffers | Nets repaired | Remaining
       610 |     +0.0% |       0 |       0 |             0 |         3
     final |     +0.0% |       0 |       0 |             0 |         0
 ---------------------------------------------------------------------
-[INFO RSZ-0504] Runtime: 0.10s
+[INFO RSZ-0504] Runtime: 0.16s
 global_route -start_incremental
 detailed_placement
 [INFO DPL-0006] Core area: 108853.15 um^2
@@ -1481,9 +1484,9 @@ estimate_parasitics -global_routing
 repair_timing -setup_margin 0 -hold_margin 0 -repair_tns 100 -verbose
 [INFO RSZ-0100] Repair move sequence: UnbufferMove SizeUpMove SwapPinsMove BufferMove CloneMove SplitLoadMove 
 [INFO RSZ-0098] No setup violations found
-[INFO RSZ-0505] Runtime: 0.04s
+[INFO RSZ-0505] Runtime: 0.05s
 [INFO RSZ-0033] No hold violations found.
-[INFO RSZ-0506] Runtime: 0.01s
+[INFO RSZ-0506] Runtime: 0.02s
 global_route -start_incremental
 detailed_placement
 [INFO DPL-0006] Core area: 108853.15 um^2
@@ -1498,7 +1501,7 @@ detailed_placement
 [INFO DPL-1104] NegotiationLegalizer DRC penalty: 5.
 [INFO DPL-0392] Negotiation cell height distribution (1 unique row-count(s)):
 [INFO DPL-0393]   height 1 row(s): 1985 cells
-[INFO DPL-0500] Runtime: 0.00s
+[INFO DPL-0500] Runtime: 0.01s
 Placement Analysis
 ---------------------------------
 total displacement          0.0 u
@@ -1532,9 +1535,9 @@ Design area 14515 um^2 13% utilization.
 [INFO FLW-0011] Path endpoint path count 628
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_1_grt.odb
 write_sdc -no_timestamp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_1_grt.sdc
-Elapsed time: 0:07.71[h:]min:sec. CPU time: user 48.75 sys 0.21 (635%). Peak memory: 338064KB.
+Elapsed time: 0:13.88[h:]min:sec. CPU time: user 89.37 sys 0.31 (646%). Peak memory: 338104KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-5_1_grt                   .odb            7            330 1ddd8518e61fbf49ea8d
+5_1_grt                   .odb           13            330 1ddd8518e61fbf49ea8d
 5_1_grt                   .sdc                             1a3ffefef167d9a6b881
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 5_2_route detail_route
 Running detail_route.tcl, stage 5_2_route
@@ -1628,7 +1631,7 @@ Number of nets:           591
 #macroValidViaAp       = 0
 #macroNoAp             = 0
 [INFO DRT-0166] Complete pin access.
-[INFO DRT-0267] cpu time = 00:00:42, elapsed time = 00:00:05, memory = 265.49 (MB), peak = 264.50 (MB)
+[INFO DRT-0267] cpu time = 00:01:23, elapsed time = 00:00:11, memory = 265.62 (MB), peak = 264.55 (MB)
 
 [INFO DRT-0157] Number of guides:     5890
 
@@ -1676,44 +1679,44 @@ Number of nets:           591
 [INFO DRT-0036] via4 guide region query size = 0.
 [INFO DRT-0036] met5 guide region query size = 2.
 [INFO DRT-0179] Init gr pin query.
-[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 269.33 (MB), peak = 268.44 (MB)
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 269.48 (MB), peak = 268.68 (MB)
 [INFO DRT-0245] skipped writing guide updates to database.
 [INFO DRT-0181] Start track assignment.
 [INFO DRT-0184] Done with 2908 vertical wires in 1 frboxes and 1925 horizontal wires in 1 frboxes.
 [INFO DRT-0186] Done with 185 vertical wires in 1 frboxes and 387 horizontal wires in 1 frboxes.
 [INFO DRT-0182] Complete track assignment.
-[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 302.23 (MB), peak = 301.19 (MB)
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 307.63 (MB), peak = 306.87 (MB)
 [INFO DRT-0187] Start routing data preparation.
-[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 302.80 (MB), peak = 301.82 (MB)
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 308.21 (MB), peak = 307.50 (MB)
 [INFO DRT-0194] Start detail routing.
 [INFO DRT-0195] Start 0th optimization iteration.
     Completing 10% with 0 violations.
-    elapsed time = 00:00:00, memory = 367.79 (MB).
+    elapsed time = 00:00:00, memory = 362.89 (MB).
     Completing 20% with 0 violations.
-    elapsed time = 00:00:00, memory = 375.33 (MB).
+    elapsed time = 00:00:00, memory = 372.76 (MB).
     Completing 30% with 0 violations.
-    elapsed time = 00:00:00, memory = 368.31 (MB).
+    elapsed time = 00:00:01, memory = 372.20 (MB).
     Completing 40% with 31 violations.
-    elapsed time = 00:00:00, memory = 421.22 (MB).
+    elapsed time = 00:00:01, memory = 428.15 (MB).
     Completing 50% with 31 violations.
-    elapsed time = 00:00:01, memory = 443.64 (MB).
+    elapsed time = 00:00:01, memory = 438.95 (MB).
     Completing 60% with 82 violations.
-    elapsed time = 00:00:01, memory = 427.45 (MB).
+    elapsed time = 00:00:03, memory = 412.68 (MB).
     Completing 70% with 82 violations.
-    elapsed time = 00:00:01, memory = 450.20 (MB).
+    elapsed time = 00:00:03, memory = 439.36 (MB).
     Completing 80% with 82 violations.
-    elapsed time = 00:00:02, memory = 453.39 (MB).
+    elapsed time = 00:00:04, memory = 448.39 (MB).
     Completing 90% with 102 violations.
-    elapsed time = 00:00:02, memory = 458.35 (MB).
+    elapsed time = 00:00:04, memory = 454.31 (MB).
     Completing 100% with 121 violations.
-    elapsed time = 00:00:03, memory = 461.32 (MB).
+    elapsed time = 00:00:05, memory = 455.13 (MB).
 [INFO DRT-0199]   Number of violations = 189.
 Viol/Layer        mcon   met1    via   met2   met3   met4
 Cut Spacing          2      0      0      0      0      0
 Metal Spacing        0     45      0      9      1      0
 Recheck              0     46      0     17      4      1
 Short                0     61      1      2      0      0
-[INFO DRT-0267] cpu time = 00:00:10, elapsed time = 00:00:03, memory = 807.58 (MB), peak = 806.62 (MB)
+[INFO DRT-0267] cpu time = 00:00:15, elapsed time = 00:00:05, memory = 809.49 (MB), peak = 808.64 (MB)
 Total wire length = 28451 um.
 Total wire length on LAYER li1 = 0 um.
 Total wire length on LAYER met1 = 11482 um.
@@ -1737,30 +1740,30 @@ Up-via summary (total 5022):
 
 [INFO DRT-0195] Start 1st optimization iteration.
     Completing 10% with 189 violations.
-    elapsed time = 00:00:00, memory = 824.06 (MB).
+    elapsed time = 00:00:00, memory = 837.31 (MB).
     Completing 20% with 189 violations.
-    elapsed time = 00:00:00, memory = 838.47 (MB).
+    elapsed time = 00:00:00, memory = 849.91 (MB).
     Completing 30% with 145 violations.
-    elapsed time = 00:00:01, memory = 821.79 (MB).
+    elapsed time = 00:00:02, memory = 842.65 (MB).
     Completing 40% with 145 violations.
-    elapsed time = 00:00:01, memory = 827.98 (MB).
+    elapsed time = 00:00:02, memory = 847.37 (MB).
     Completing 50% with 145 violations.
-    elapsed time = 00:00:02, memory = 831.68 (MB).
+    elapsed time = 00:00:03, memory = 851.83 (MB).
     Completing 60% with 100 violations.
-    elapsed time = 00:00:02, memory = 832.75 (MB).
+    elapsed time = 00:00:03, memory = 853.14 (MB).
     Completing 70% with 100 violations.
-    elapsed time = 00:00:02, memory = 832.75 (MB).
+    elapsed time = 00:00:04, memory = 853.14 (MB).
     Completing 80% with 51 violations.
-    elapsed time = 00:00:02, memory = 838.01 (MB).
+    elapsed time = 00:00:04, memory = 853.15 (MB).
     Completing 90% with 51 violations.
-    elapsed time = 00:00:02, memory = 838.02 (MB).
+    elapsed time = 00:00:04, memory = 853.15 (MB).
     Completing 100% with 24 violations.
-    elapsed time = 00:00:03, memory = 838.02 (MB).
+    elapsed time = 00:00:05, memory = 853.15 (MB).
 [INFO DRT-0199]   Number of violations = 24.
 Viol/Layer        met1
 Metal Spacing        8
 Short               16
-[INFO DRT-0267] cpu time = 00:00:10, elapsed time = 00:00:03, memory = 838.14 (MB), peak = 845.22 (MB)
+[INFO DRT-0267] cpu time = 00:00:17, elapsed time = 00:00:05, memory = 853.28 (MB), peak = 852.33 (MB)
 Total wire length = 28287 um.
 Total wire length on LAYER li1 = 0 um.
 Total wire length on LAYER met1 = 11554 um.
@@ -1784,30 +1787,30 @@ Up-via summary (total 4935):
 
 [INFO DRT-0195] Start 2nd optimization iteration.
     Completing 10% with 24 violations.
-    elapsed time = 00:00:00, memory = 838.14 (MB).
+    elapsed time = 00:00:00, memory = 853.28 (MB).
     Completing 20% with 24 violations.
-    elapsed time = 00:00:00, memory = 838.14 (MB).
+    elapsed time = 00:00:00, memory = 853.28 (MB).
     Completing 30% with 24 violations.
-    elapsed time = 00:00:00, memory = 848.10 (MB).
+    elapsed time = 00:00:00, memory = 862.19 (MB).
     Completing 40% with 24 violations.
-    elapsed time = 00:00:00, memory = 848.10 (MB).
+    elapsed time = 00:00:00, memory = 862.19 (MB).
     Completing 50% with 24 violations.
-    elapsed time = 00:00:01, memory = 858.26 (MB).
+    elapsed time = 00:00:01, memory = 862.19 (MB).
     Completing 60% with 18 violations.
-    elapsed time = 00:00:01, memory = 858.26 (MB).
+    elapsed time = 00:00:01, memory = 862.19 (MB).
     Completing 70% with 18 violations.
-    elapsed time = 00:00:01, memory = 858.26 (MB).
+    elapsed time = 00:00:01, memory = 862.19 (MB).
     Completing 80% with 16 violations.
-    elapsed time = 00:00:01, memory = 862.05 (MB).
+    elapsed time = 00:00:02, memory = 875.17 (MB).
     Completing 90% with 16 violations.
-    elapsed time = 00:00:01, memory = 862.06 (MB).
+    elapsed time = 00:00:02, memory = 875.18 (MB).
     Completing 100% with 7 violations.
-    elapsed time = 00:00:02, memory = 862.06 (MB).
+    elapsed time = 00:00:03, memory = 875.42 (MB).
 [INFO DRT-0199]   Number of violations = 7.
 Viol/Layer        met1
 Metal Spacing        2
 Short                5
-[INFO DRT-0267] cpu time = 00:00:03, elapsed time = 00:00:02, memory = 864.93 (MB), peak = 863.99 (MB)
+[INFO DRT-0267] cpu time = 00:00:04, elapsed time = 00:00:03, memory = 878.29 (MB), peak = 877.28 (MB)
 Total wire length = 28293 um.
 Total wire length on LAYER li1 = 0 um.
 Total wire length on LAYER met1 = 11505 um.
@@ -1831,17 +1834,17 @@ Up-via summary (total 4951):
 
 [INFO DRT-0195] Start 3rd guides tiles iteration.
     Completing 20% with 7 violations.
-    elapsed time = 00:00:00, memory = 864.94 (MB).
+    elapsed time = 00:00:00, memory = 878.30 (MB).
     Completing 40% with 7 violations.
-    elapsed time = 00:00:00, memory = 864.94 (MB).
+    elapsed time = 00:00:00, memory = 878.30 (MB).
     Completing 60% with 0 violations.
-    elapsed time = 00:00:00, memory = 864.94 (MB).
+    elapsed time = 00:00:00, memory = 878.30 (MB).
     Completing 80% with 0 violations.
-    elapsed time = 00:00:00, memory = 864.94 (MB).
+    elapsed time = 00:00:00, memory = 878.30 (MB).
     Completing 100% with 0 violations.
-    elapsed time = 00:00:00, memory = 864.94 (MB).
+    elapsed time = 00:00:00, memory = 878.30 (MB).
 [INFO DRT-0199]   Number of violations = 0.
-[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 864.94 (MB), peak = 863.99 (MB)
+[INFO DRT-0267] cpu time = 00:00:00, elapsed time = 00:00:00, memory = 878.30 (MB), peak = 877.28 (MB)
 Total wire length = 28291 um.
 Total wire length on LAYER li1 = 0 um.
 Total wire length on LAYER met1 = 11497 um.
@@ -1885,11 +1888,11 @@ Up-via summary (total 4956):
                4956
 
 
-[INFO DRT-0267] cpu time = 00:00:24, elapsed time = 00:00:09, memory = 865.07 (MB), peak = 864.11 (MB)
+[INFO DRT-0267] cpu time = 00:00:38, elapsed time = 00:00:14, memory = 878.43 (MB), peak = 877.41 (MB)
 
 [INFO DRT-0180] Post processing.
-[INFO DRT-0501] Runtime: 15.39s
-Took 15 seconds: detailed_route -output_drc ./reports/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_route_drc.rpt -output_maze ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/maze.log -droute_end_iter 64 -verbose 1 -drc_report_iter_step 5
+[INFO DRT-0501] Runtime: 26.53s
+Took 27 seconds: detailed_route -output_drc ./reports/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_route_drc.rpt -output_maze ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/maze.log -droute_end_iter 64 -verbose 1 -drc_report_iter_step 5
 [INFO GRT-0012] Found 0 antenna violations.
 [INFO ANT-0002] Found 0 net violations.
 [INFO ANT-0001] Found 0 pin violations.
@@ -1897,9 +1900,9 @@ Took 15 seconds: detailed_route -output_drc ./reports/sky130hd/d_ca04_cand_gemin
 [INFO ANT-0001] Found 0 pin violations.
 Design area 14515 um^2 13% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_2_route.odb
-Elapsed time: 0:16.49[h:]min:sec. CPU time: user 69.27 sys 0.37 (422%). Peak memory: 884852KB.
+Elapsed time: 0:27.95[h:]min:sec. CPU time: user 125.12 sys 0.50 (449%). Peak memory: 898596KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-5_2_route                 .odb           16            864 31f3eff7f7a4ef258bdd
+5_2_route                 .odb           27            877 31f3eff7f7a4ef258bdd
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 5_3_fillcell fillcell
 Running fillcell.tcl, stage 5_3_fillcell
 read_liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
@@ -1910,7 +1913,7 @@ filler_placement "sky130_fd_sc_hd__fill_1 sky130_fd_sc_hd__fill_2 sky130_fd_sc_h
 [INFO DPL-0001] Placed 12002 filler instances.
 Design area 14515 um^2 13% utilization.
 write_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_3_fillcell.odb
-Elapsed time: 0:00.85[h:]min:sec. CPU time: user 0.75 sys 0.06 (94%). Peak memory: 164664KB.
+Elapsed time: 0:00.69[h:]min:sec. CPU time: user 0.63 sys 0.03 (95%). Peak memory: 164792KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 5_3_fillcell              .odb            0            160 66a0dd59eed6197b4393
 cp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_3_fillcell.odb ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_route.odb
@@ -1922,9 +1925,9 @@ read_db ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_route.odb
 read_sdc ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_route.sdc
 source /OpenROAD-flow-scripts/flow/platforms/sky130hd/setRC.tcl
 exec cp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_route.odb ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/6_1_fill.odb
-Elapsed time: 0:00.60[h:]min:sec. CPU time: user 0.55 sys 0.05 (98%). Peak memory: 152216KB.
+Elapsed time: 0:00.66[h:]min:sec. CPU time: user 0.62 sys 0.03 (98%). Peak memory: 152848KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
-6_1_fill                  .odb            0            148 66a0dd59eed6197b4393
+6_1_fill                  .odb            0            149 66a0dd59eed6197b4393
 cp ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/5_route.sdc ./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/6_1_fill.sdc
 /OpenROAD-flow-scripts/flow/scripts/flow.sh 6_report final_report
 Running final_report.tcl, stage 6_report
@@ -1989,7 +1992,56 @@ finish report_design_area
 --------------------------------------------------------------------------
 Design area 14515 um^2 13% utilization.
 [WARNING GUI-0076] QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-'
-Elapsed time: 0:03.32[h:]min:sec. CPU time: user 3.19 sys 0.19 (101%). Peak memory: 300968KB.
+Elapsed time: 0:03.46[h:]min:sec. CPU time: user 3.32 sys 0.24 (103%). Peak memory: 301004KB.
 Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
 6_report                                  3            293                  N/A
-time="2026-08-17T09:58:23-07:00" level=error msg="error waiting for container: unexpected EOF"
+cp /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd.tlef ./objects/sky130hd/d_ca04_cand_gemini_own_fmax/base/klayout_tech.lef
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/util/generate_klayout_tech.py \
+	--template /OpenROAD-flow-scripts/flow/platforms/sky130hd/sky130hd.lyt \
+	--output ./objects/sky130hd/d_ca04_cand_gemini_own_fmax/base/klayout.lyt \
+	--lef-files ./objects/sky130hd/d_ca04_cand_gemini_own_fmax/base/klayout_tech.lef /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd_merged.lef   \
+	--map-files 
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/scripts/run_command.py --log /OpenROAD-flow-scripts/flow/logs/sky130hd/d_ca04_cand_gemini_own_fmax/base/6_1_merge.log --tee -- \
+        /OpenROAD-flow-scripts/flow/scripts/klayout.sh -zz -rd design_name=async_fifo_cdc \
+        -rd in_def=./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/6_final.def \
+        -rd in_files="/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds  " \
+        -rd seal_file="" \
+        -rd out_file=./results/sky130hd/d_ca04_cand_gemini_own_fmax/base/6_1_merged.gds \
+        -rd tech_file=./objects/sky130hd/d_ca04_cand_gemini_own_fmax/base/klayout.lyt \
+        -rd layer_map= \
+        -r /OpenROAD-flow-scripts/flow/util/def2stream.py
+KLayout 0.30.7
+[INFO] Reporting cells prior to loading DEF ...
+	/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds
+[INFO] All LEF cells have matching GDS/OAS cells
+[INFO] No orphan cells in the final layout
+Elapsed time: 0:06.26[h:]min:sec. CPU time: user 5.93 sys 0.32 (99%). Peak memory: 884888KB.
+cp results/sky130hd/d_ca04_cand_gemini_own_fmax/base/6_1_merged.gds results/sky130hd/d_ca04_cand_gemini_own_fmax/base/6_final.gds
+./logs/sky130hd/d_ca04_cand_gemini_own_fmax/base
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+1_1_yosys_canonicalize    .rtlil          0             81 e3fcd8d610757288c11a
+1_2_yosys                 .v              2             85 9dec0f56fdca56549709
+1_2_yosys                 .sdc                             d743368b4d77cebfbe3e
+1_synth                   .odb            0            144 20de1e452ef9808738fb
+1_synth                   .sdc                             fe6451089bd5960df93f
+2_1_floorplan             .odb            2            180 7bd7809e27cb1faa7694
+2_1_floorplan             .sdc                             fe6451089bd5960df93f
+2_2_floorplan_macro       .odb            0            139 7bd7809e27cb1faa7694
+2_3_floorplan_tapcell     .odb            0            140 4c876d2b8fda015b9753
+2_4_floorplan_pdn         .odb            0            149 1eb50ab3b7283cd27362
+3_1_place_gp_skip_io      .odb            1            145 475e405f51540bf32485
+3_2_place_iop             .odb            0            142 1ef2e6e88de0efb137a9
+3_3_place_gp              .odb            1            285 29254ebd2249f5d77bcb
+3_4_place_resized         .odb            1            181 29254ebd2249f5d77bcb
+3_5_place_dp              .odb            1            158 e7243d4c7fe8a690601c
+4_1_cts                   .odb            1            194 16cf1db40b9a0f018eeb
+5_1_grt                   .odb           13            330 1ddd8518e61fbf49ea8d
+5_1_grt                   .sdc                             1a3ffefef167d9a6b881
+5_2_route                 .odb           27            877 31f3eff7f7a4ef258bdd
+5_3_fillcell              .odb            0            160 66a0dd59eed6197b4393
+6_1_fill                  .odb            0            149 66a0dd59eed6197b4393
+6_1_fill                  .sdc                             1a3ffefef167d9a6b881
+6_1_merge                                 6            864                  N/A
+6_report                                  3            293                  N/A
+Total                                    58            877                     
+make: warning:  Clock skew detected.  Your build may be incomplete.

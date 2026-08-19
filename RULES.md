@@ -355,6 +355,39 @@ defects. It runs with the regression.
 
     **From:** F47, F49
 
+22. **No PPA figure is reported from a build that did not meet timing.** Area
+    and power from a design that fails its timing constraint describe a circuit
+    that cannot run at the clock it was built at. The number is real; the
+    operating point is imaginary.
+
+    **The record stays; the report withholds.** Records are immutable and a
+    failing build is a legitimate thing to have measured -- it is how a design's
+    Fmax gets bracketed at all. What is forbidden is a table quoting it as
+    though it were an achievable operating point. Slack is the gate, and it is
+    applied where the number is RENDERED, not where it is recorded.
+
+    **This is not a hypothetical.** Two published figures were exactly this:
+    `d_nw01/chat` at 2,141,894 um2 with -3.03 ns of slack, and
+    `d_dsp02/chat` at 440,336 um2 with -0.697 ns. Both were compared against a
+    reference that DID close, and both ratios were quoted. The second survived a
+    provenance audit that checked every number against its record and found no
+    discrepancy -- because there was none. **The record was accurate about a
+    build that was invalid**, which is precisely the failure a provenance check
+    cannot see.
+
+    **Absent slack is not a failure.** A record with no `wns_ns`, or an
+    unparseable one, renders normally. Treating missing data as a negative
+    verdict would invent a result, which is the opposite error and equally bad.
+
+    **Both renderers enforce it independently.** `report_table.py` and
+    `collect_results.py` each apply the gate. That duplication is deliberate: a
+    control applied by only one of two readers is bypassed by using the other,
+    and rule 8's test -- *can this be skipped by calling something one level
+    down?* -- is answered by putting it in both.
+
+    **From:** F51
+
+
 ---
 
 **Nothing you write is trusted until it has been run.**

@@ -146,23 +146,57 @@ CHECKS = codepoint_checks() + [
      # A digit followed by whitespace and a bare word is not valid in any
      # expression context here, so this does not need to be narrower.
      re.compile(r"[0-9]\s+me"),
-     "a bare word where a literal belongs; no model emits `1 me`", True),
+     "a bare word where a literal belongs; no model emits `1 me`", True, True),
     ("doubled sized literal",
      re.compile(r"[0-9]+\s*'[bdh][0-9a-fA-FxzXZ_]+\s*'[bdh]"),
-     "two literals fused with no operator between them", True),
+     "two literals fused with no operator between them", True, True),
     ("zero-width or bidi control character",
      re.compile("[" + "".join(chr(c) for c in sorted(COVERED)) + "]"),
      "invisible characters survive a paste and break tokenisation", True),
 ]
 
 
+def code_only(line):
+    r"""Blank out // comments and "string literals", preserving column offsets.
+
+    The prose-shaped rules below look for things no model would emit. They were
+    matching ordinary English instead: `[0-9]\s+me` fires on "AXI4 memory",
+    "0 means", "8 meaning", "mbe=1 meaning" -- six files, including VENDORED
+    ORACLE RTL and d_nw01's own checker, all reported as transport-damaged.
+
+    A paste injection lands in the CODE, which is why it breaks compilation.
+    Prose in a comment or a display string cannot. Offsets are preserved by
+    substituting spaces so reported column numbers stay true.
+    """
+    out, i, n = [], 0, len(line)
+    in_str = False
+    while i < n:
+        c = line[i]
+        if not in_str and c == "/" and i + 1 < n and line[i + 1] == "/":
+            out.append(" " * (n - i))          # rest of line is a comment
+            break
+        if c == '"' and (i == 0 or line[i - 1] != "\\"):
+            in_str = not in_str
+            out.append(" ")
+        elif in_str:
+            out.append(" ")
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def scan(path):
     raw = open(path, encoding="utf-8", errors="replace").read()
     lines = raw.splitlines()
     hits = []
-    for name, pat, why, fatal in CHECKS:
+    for entry in CHECKS:
+        # 5-tuples opt into code-only matching; 4-tuples match the raw line.
+        name, pat, why, fatal = entry[:4]
+        codeonly = entry[4] if len(entry) > 4 else False
         for i, line in enumerate(lines, 1):
-            for m in pat.finditer(line):
+            subject = code_only(line) if codeonly else line
+            for m in pat.finditer(subject):
                 hits.append((i, name, why, line.strip()[:90], m.group(0), fatal))
     return hits
 

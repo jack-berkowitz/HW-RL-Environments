@@ -74,6 +74,41 @@ def check(rec_path, verbose=True):
                   f"(no surviving flow dir for '{nick}')")
         return "skip"
 
+    # ---- IDENTITY, before any comparison ------------------------------------
+    # A SHARED NICKNAME IS NOT EVIDENCE THAT TWO ARTEFACTS ARE READINGS OF THE
+    # SAME RUN. The Fmax sweep reuses one nickname across every iteration, so
+    # the flow directory holds whichever period ran LAST, while the record
+    # describes the period it was written from. Comparing them and calling the
+    # difference a MISMATCH is two numbers subtracted without establishing they
+    # measure the same thing -- the F20 correction's own error, reproduced
+    # inside the check written for F21.
+    #
+    # d_dsp02/chat_scored: record 12.8125 ns (area 440336, wns -0.697) against a
+    # flow directory at 20.25 ns (area 360899, wns +0.119). Nothing was wrong
+    # with the record.
+    #
+    # ORFS writes results/<pdk>/<nick>/base/clock_period.txt in INTEGER
+    # picoseconds, which is the one identity fact both sides can supply today.
+    cp = os.path.join(FLOW, "results", pdk, nick, "base", "clock_period.txt")
+    rec_ns = rec.get("clk_period_ns")
+    if os.path.isfile(cp) and rec_ns not in (None, "", "None"):
+        try:
+            flow_ns = float(open(cp).read().strip()) / 1000.0
+            rec_ns_f = float(rec_ns)
+        except ValueError:
+            flow_ns = rec_ns_f = None
+        if flow_ns is not None:
+            # clock_period.txt is truncated to whole ps, so 12.8125 ns -> 12812.
+            if abs(flow_ns - rec_ns_f) > 0.0011:
+                if verbose:
+                    print(f"  SKIP  {os.path.basename(rec_path)}")
+                    print(f"          period mismatch: record {rec_ns_f} ns, "
+                          f"flow dir {flow_ns} ns -- DIFFERENT RUNS sharing the "
+                          f"nickname '{nick}'.")
+                    print(f"          Not a discrepancy in the record; there is "
+                          f"nothing here to compare it against.")
+                return "skip_period"
+
     truth = json.load(open(j))
     bad = []
     for field, key, rel in FIELDS:
@@ -113,12 +148,24 @@ def main():
     else:
         paths = args
 
-    tally = {"ok": 0, "skip": 0, "fail": 0}
+    tally = {"ok": 0, "skip": 0, "skip_period": 0, "fail": 0}
     for p in paths:
         tally[check(p)] += 1
 
-    print(f"\n  {tally['ok']} verified, {tally['skip']} unverifiable "
-          f"(flow dir gone), {tally['fail']} MISMATCHED")
+    # TWO SKIP CAUSES, REPORTED SEPARATELY. They were briefly collapsed under
+    # "(flow dir gone)", which was false for the period-mismatch case -- that
+    # flow directory is present, it just holds a different run. Reporting a
+    # present-but-different artefact as absent is the same defect as rendering
+    # a missing verdict as FAIL: two states, one label, and the reader cannot
+    # tell which happened.
+    print(f"\n  {tally['ok']} verified, "
+          f"{tally['skip']} unverifiable (flow dir gone), "
+          f"{tally['skip_period']} unverifiable (flow dir holds a DIFFERENT run), "
+          f"{tally['fail']} MISMATCHED")
+    if tally["skip_period"]:
+        print("  NOTE: a period-mismatched record is NOT confirmed. It is not "
+              "contradicted either -- there is simply no comparable artefact. "
+              "Numbers from it stay withdrawn until rebuilt.")
     if tally["fail"]:
         print("\n  A record disagrees with an independent reading of the same run.")
         print("  The parser in ppa_candidate.sh is wrong, or the record is stale.")

@@ -36,6 +36,13 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Newest name first. Both are real: the document was renamed in a25cea9.
+PROMPT_NAMES = ("PASTE.md", "BLIND_TB_TASK.md")
+
+
+class PromptMissing(Exception):
+    """A verification task ships a prompt; not finding one is an error."""
+
 
 def text_files(task_dir):
     """The artefacts a submission sees. Named explicitly per kind, not globbed
@@ -47,10 +54,29 @@ def text_files(task_dir):
         for f in sorted(os.listdir(spec)):
             if f.endswith((".sv", ".svh", ".md")):
                 out.append(os.path.join(spec, f))
-    # verification tasks additionally ship a prompt document
-    probe = os.path.join(task_dir, "probe", "BLIND_TB_TASK.md")
-    if os.path.isfile(probe):
-        out.append(probe)
+    # Verification tasks additionally ship a prompt document -- the thing the
+    # model is actually handed. It has been called two names; a rename must not
+    # quietly drop it from the hash, which is exactly what happened when
+    # BLIND_TB_TASK.md became PASTE.md and this function kept returning True on
+    # `os.path.isfile` for a file that no longer existed. The hash then went on
+    # asserting "same question" across a rewritten prompt.
+    probe_dir = os.path.join(task_dir, "probe")
+    if os.path.isdir(probe_dir):
+        for name in PROMPT_NAMES:
+            cand = os.path.join(probe_dir, name)
+            if os.path.isfile(cand):
+                out.append(cand)
+                break
+        else:
+            # LOUD, not silent. A task with a probe/ directory and no
+            # recognised prompt document is a versioning hole, and returning a
+            # spec-only hash would hide it behind a plausible-looking value.
+            raise PromptMissing(
+                "%s has a probe/ directory but no recognised prompt document "
+                "(looked for: %s). The prompt is part of the task text; hashing "
+                "without it would assert that two different questions are the "
+                "same. Add the file or add its name to PROMPT_NAMES."
+                % (probe_dir, ", ".join(PROMPT_NAMES)))
     return out
 
 
@@ -77,7 +103,11 @@ def main():
     if not os.path.isdir(d):
         print(f"no such task dir: {d}", file=sys.stderr)
         return 2
-    digest, detail = task_text_hash(d)
+    try:
+        digest, detail = task_text_hash(d)
+    except PromptMissing as e:
+        print("REFUSED: %s" % e, file=sys.stderr)
+        return 2
     if digest is None:
         print("NO-TASK-TEXT")
         print("  no spec/ files and no probe/BLIND_TB_TASK.md", file=sys.stderr)

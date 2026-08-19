@@ -1,474 +1,423 @@
-`timescale 1ns/1ps
-
 module frame_arb_mux_tb;
 
+  // ---------------------------------------------------------------------------
+  // PROVIDED PLUMBING -- moves beats, checks nothing.
+  // ---------------------------------------------------------------------------
+  logic clk;
+  initial begin clk = 1'b0; forever #5 clk = ~clk; end
+
+  logic rst;
+  initial rst = 1'b1;
+
+  task automatic bfm_reset(input int cycles = 4);
+    @(negedge clk);
+    rst = 1'b1;
+    repeat (cycles) @(posedge clk);
+    @(negedge clk);
+    rst = 1'b0;
+  endtask
+
+  task automatic bfm_send(input int                          k,
+                          input logic [DATA_WIDTH-1:0]       data,
+                          input logic [(DATA_WIDTH/8)-1:0]   keep,
+                          input logic                        last,
+                          input logic [USER_WIDTH-1:0]       user);
+    @(negedge clk);
+    s_tdata[k]  = data;
+    s_tkeep[k]  = keep;
+    s_tlast[k]  = last;
+    s_tuser[k]  = user;
+    s_tvalid[k] = 1'b1;
+    forever begin
+      @(posedge clk);
+      if (s_tready[k]) break;
+    end
+  endtask
+
+  task automatic bfm_idle(input int k);
+    @(negedge clk);
+    s_tvalid[k] = 1'b0;
+  endtask
+
+  task automatic bfm_ready(input logic value);
+    @(negedge clk);
+    m_tready = value;
+  endtask
+
+  initial begin
+    #20_000_000;
+    $display("RESULT: FAIL (watchdog: no forward progress)");
+    $finish;
+  end
+
+  // ---------------------------------------------------------------------------
+  // Parameters
+  // ---------------------------------------------------------------------------
   localparam int S_COUNT    = 4;
   localparam int DATA_WIDTH = 32;
   localparam int USER_WIDTH = 1;
-  localparam int KEEP_WIDTH = DATA_WIDTH / 8;
 
-  localparam int FUNC_FRAMES_PER_INPUT = 3;
-  localparam int FAIRNESS_WINDOW       = 16;
-  localparam int FAIRNESS_FRAMES_NEEDED = 80;
-  localparam int TIMEOUT_NS            = 10_000_000; // 10 ms
+  // ---------------------------------------------------------------------------
+  // DUT signals
+  // ---------------------------------------------------------------------------
+  logic [S_COUNT-1:0][DATA_WIDTH-1:0]       s_tdata;
+  logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0]   s_tkeep;
+  logic [S_COUNT-1:0]                       s_tvalid;
+  logic [S_COUNT-1:0]                       s_tready;
+  logic [S_COUNT-1:0]                       s_tlast;
+  logic [S_COUNT-1:0][USER_WIDTH-1:0]       s_tuser;
 
-  typedef struct {
-    int unsigned input_id;
-    int unsigned frame_id;
-    int unsigned beat_in_frame;
-    int unsigned tag;
-    logic [DATA_WIDTH-1:0] data;
-    logic [KEEP_WIDTH-1:0] keep;
-    logic                 last;
-    logic [USER_WIDTH-1:0] user;
-  } beat_t;
+  logic [DATA_WIDTH-1:0]                    m_tdata;
+  logic [(DATA_WIDTH/8)-1:0]                m_tkeep;
+  logic                                     m_tvalid;
+  logic                                     m_tready;
+  logic                                     m_tlast;
+  logic [USER_WIDTH-1:0]                    m_tuser;
 
-  logic clk_i = 1'b0;
-  logic rst_i;
-  initial begin
-    rst_i = 1'b1;
-    repeat (10) @(posedge clk_i);
-    rst_i = 1'b0;
-  end
-
-  logic [S_COUNT-1:0][DATA_WIDTH-1:0] s_tdata_i;
-  logic [S_COUNT-1:0][KEEP_WIDTH-1:0] s_tkeep_i;
-  logic [S_COUNT-1:0]                 s_tvalid_i;
-  logic [S_COUNT-1:0]                 s_tready_o;
-  logic [S_COUNT-1:0]                 s_tlast_i;
-  logic [S_COUNT-1:0][USER_WIDTH-1:0] s_tuser_i;
-
-  logic [DATA_WIDTH-1:0]             m_tdata_o;
-  logic [KEEP_WIDTH-1:0]             m_tkeep_o;
-  logic                              m_tvalid_o;
-  logic                              m_tready_i;
-  logic                              m_tlast_o;
-  logic [USER_WIDTH-1:0]             m_tuser_o;
-
+  // ---------------------------------------------------------------------------
+  // DUT
+  // ---------------------------------------------------------------------------
   frame_arb_mux #(
-    .S_COUNT   (S_COUNT),
-    .DATA_WIDTH(DATA_WIDTH),
-    .USER_WIDTH(USER_WIDTH)
+    .S_COUNT    (S_COUNT),
+    .DATA_WIDTH (DATA_WIDTH),
+    .USER_WIDTH (USER_WIDTH)
   ) dut (
-    .clk_i     (clk_i),
-    .rst_i     (rst_i),
-    .s_tdata_i (s_tdata_i),
-    .s_tkeep_i (s_tkeep_i),
-    .s_tvalid_i(s_tvalid_i),
-    .s_tready_o(s_tready_o),
-    .s_tlast_i (s_tlast_i),
-    .s_tuser_i (s_tuser_i),
-    .m_tdata_o (m_tdata_o),
-    .m_tkeep_o (m_tkeep_o),
-    .m_tvalid_o(m_tvalid_o),
-    .m_tready_i(m_tready_i),
-    .m_tlast_o (m_tlast_o),
-    .m_tuser_o (m_tuser_o)
+    .clk_i        (clk),
+    .rst_i        (rst),
+    .s_tdata_i    (s_tdata),
+    .s_tkeep_i    (s_tkeep),
+    .s_tvalid_i   (s_tvalid),
+    .s_tready_o   (s_tready),
+    .s_tlast_i    (s_tlast),
+    .s_tuser_i    (s_tuser),
+    .m_tdata_o    (m_tdata),
+    .m_tkeep_o    (m_tkeep),
+    .m_tvalid_o   (m_tvalid),
+    .m_tready_i   (m_tready),
+    .m_tlast_o    (m_tlast),
+    .m_tuser_o    (m_tuser)
   );
 
-  // Internal testbench state
-  logic [S_COUNT-1:0]                 valid_drive;
-  logic [S_COUNT-1:0][DATA_WIDTH-1:0] data_drive;
-  logic [S_COUNT-1:0][KEEP_WIDTH-1:0] keep_drive;
-  logic [S_COUNT-1:0]                 last_drive;
-  logic [S_COUNT-1:0][USER_WIDTH-1:0] user_drive;
+  // ---------------------------------------------------------------------------
+  // Scoreboard structures
+  // ---------------------------------------------------------------------------
+  typedef struct packed {
+    logic [DATA_WIDTH-1:0]       data;
+    logic [(DATA_WIDTH/8)-1:0]   keep;
+    logic                        last;
+    logic                        user;
+    logic [1:0]                  src;
+  } beat_t;
 
-  int unsigned local_tag  [S_COUNT];
-  int unsigned frame_id   [S_COUNT];
-  int unsigned beat_idx   [S_COUNT];
-  int unsigned frame_len  [S_COUNT];
-  int unsigned frames_sent[S_COUNT];
-  int unsigned out_ptr    [S_COUNT];
+  beat_t input_log[$];
+  beat_t output_log[$];
+  int    frame_start_seq[$];
 
-  beat_t in_q[S_COUNT][$];
-
-  typedef enum int {
-    PH_RESET,
-    PH_FUNC,
-    PH_FAIR,
-    PH_DONE
-  } phase_t;
-
-  phase_t phase = PH_RESET;
-
-  logic prev_rst = 1'b1;
-  int unsigned cycle_count = 0;
-  logic m_tready_drive = 1'b1;
-  logic stop_offer = 1'b0;
-  int unsigned fair_frames_seen = 0;
-  int fair_window[$];
-
-  logic current_frame_active = 1'b0;
-  int current_source = -1;
-  int current_frame  = -1;
-
-  int unsigned total_output_beats = 0;
-  logic done = 1'b0;
-  logic failed = 1'b0;
-
-  // Clock generator
-  always #5 clk_i = ~clk_i;
-
-  // Watchdog
-  initial begin
-    #TIMEOUT_NS;
-    if (!done) begin
-      $display("FAIL requirement Watchdog");
-      $display("RESULT: FAIL");
-      $finish;
+  // ---------------------------------------------------------------------------
+  // Input monitor
+  // ---------------------------------------------------------------------------
+  always @(posedge clk) begin
+    for (int k = 0; k < S_COUNT; k++) begin
+      if (!rst && s_tvalid[k] && s_tready[k]) begin
+        input_log.push_back(beat_t'{s_tdata[k], s_tkeep[k], s_tlast[k],
+                                      s_tuser[k], k[1:0]});
+      end
     end
   end
 
-  task automatic fail(input string req);
-    if (!done && !failed) begin
-      failed = 1'b1;
-      done   = 1'b1;
-      $display("FAIL requirement %s", req);
-      $display("RESULT: FAIL");
-      $finish;
+  // ---------------------------------------------------------------------------
+  // Output monitor
+  // ---------------------------------------------------------------------------
+  always @(posedge clk) begin
+    if (!rst && m_tvalid && m_tready) begin
+      output_log.push_back(beat_t'{m_tdata, m_tkeep, m_tlast, m_tuser, 2'b00});
     end
-  endtask
+  end
 
-  function automatic logic [DATA_WIDTH-1:0] make_data(input int k, input int unsigned tag);
-    logic [3:0]  kk;
-    logic [27:0] tt;
-    kk = k[3:0];
-    tt = tag[27:0];
-    return {kk, tt};
-  endfunction
-
-  function automatic logic [KEEP_WIDTH-1:0] make_keep(input int k, input int unsigned tag);
-    logic [KEEP_WIDTH-1:0] kk;
-    kk = (tag + 1) & 4'hF;
-    return kk;
-  endfunction
-
-  function automatic logic [USER_WIDTH-1:0] make_user(input int k, input int unsigned tag);
-    logic [USER_WIDTH-1:0] u;
-    u = (tag ^ k) & 1'b1;
-    return u;
-  endfunction
-
-  function automatic int unsigned func_len(input int k);
-    return 2 + (k % 3);
-  endfunction
-
-  function automatic logic all_inputs_deasserted();
-    for (int k = 0; k < S_COUNT; k++) begin
-      if (valid_drive[k] !== 1'b0) return 1'b0;
-    end
-    return 1'b1;
-  endfunction
-
-  function automatic logic all_out_ptr_done();
-    for (int k = 0; k < S_COUNT; k++) begin
-      if (out_ptr[k] != in_q[k].size()) return 1'b0;
-    end
-    return 1'b1;
-  endfunction
-
-  function automatic logic fair_window_has(input int id);
-    for (int i = 0; i < fair_window.size(); i++) begin
-      if (fair_window[i] == id) return 1'b1;
-    end
-    return 1'b0;
-  endfunction
-
-  task automatic init_func_phase();
-    phase = PH_FUNC;
-    stop_offer = 1'b0;
-    fair_frames_seen = 0;
-    fair_window.delete();
-    current_frame_active = 1'b0;
-    current_source = -1;
-    current_frame  = -1;
-    cycle_count = 0;
-    total_output_beats = 0;
-    m_tready_drive = 1'b1;
-
-    for (int k = 0; k < S_COUNT; k++) begin
-      local_tag[k]   = 0;
-      frame_id[k]    = 0;
-      beat_idx[k]    = 0;
-      frame_len[k]   = func_len(k);
-      frames_sent[k] = 0;
-      valid_drive[k] = 1'b1;
-      data_drive[k]  = make_data(k, local_tag[k]);
-      keep_drive[k]  = make_keep(k, local_tag[k]);
-      last_drive[k]  = (frame_len[k] == 1);
-      user_drive[k]  = make_user(k, local_tag[k]);
-      out_ptr[k]     = 0;
-      in_q[k].delete();
-    end
-  endtask
-
-  task automatic init_fair_phase();
-    phase = PH_FAIR;
-    stop_offer = 1'b0;
-    fair_frames_seen = 0;
-    fair_window.delete();
-    current_frame_active = 1'b0;
-    current_source = -1;
-    current_frame  = -1;
-    total_output_beats = 0;
-    m_tready_drive = 1'b1;
-
-    for (int k = 0; k < S_COUNT; k++) begin
-      local_tag[k]   = 0;
-      frame_id[k]    = 0;
-      beat_idx[k]    = 0;
-      frame_len[k]   = 1;
-      frames_sent[k] = 0;
-      valid_drive[k] = 1'b1;
-      data_drive[k]  = make_data(k, local_tag[k]);
-      keep_drive[k]  = make_keep(k, local_tag[k]);
-      last_drive[k]  = 1'b1;
-      user_drive[k]  = make_user(k, local_tag[k]);
-      out_ptr[k]     = 0;
-      in_q[k].delete();
-    end
-  endtask
-
-  task automatic record_input_beat(input int k);
-    beat_t rec;
-    rec.input_id      = k;
-    rec.frame_id      = frame_id[k];
-    rec.beat_in_frame = beat_idx[k];
-    rec.tag           = local_tag[k];
-    rec.data          = s_tdata_i[k];
-    rec.keep          = s_tkeep_i[k];
-    rec.last          = s_tlast_i[k];
-    rec.user          = s_tuser_i[k];
-    in_q[k].push_back(rec);
-  endtask
-
-  task automatic advance_input_state(input int k);
-    if (phase == PH_FUNC) begin
-      local_tag[k] = local_tag[k] + 1;
-
-      if (beat_idx[k] + 1 < frame_len[k]) begin
-        beat_idx[k] = beat_idx[k] + 1;
-        data_drive[k] = make_data(k, local_tag[k]);
-        keep_drive[k] = make_keep(k, local_tag[k]);
-        last_drive[k] = (beat_idx[k] == frame_len[k]-1);
-        user_drive[k] = make_user(k, local_tag[k]);
-      end else begin
-        frames_sent[k] = frames_sent[k] + 1;
-        if (frames_sent[k] >= FUNC_FRAMES_PER_INPUT) begin
-          valid_drive[k] = 1'b0;
-        end else begin
-          frame_id[k]  = frame_id[k] + 1;
-          beat_idx[k]  = 0;
-          frame_len[k] = func_len(k);
-          data_drive[k] = make_data(k, local_tag[k]);
-          keep_drive[k] = make_keep(k, local_tag[k]);
-          last_drive[k] = (frame_len[k] == 1);
-          user_drive[k] = make_user(k, local_tag[k]);
-        end
-      end
-    end else if (phase == PH_FAIR) begin
-      if (stop_offer) begin
-        valid_drive[k] = 1'b0;
-      end else begin
-        local_tag[k] = local_tag[k] + 1;
-        frame_id[k]  = frame_id[k] + 1;
-        beat_idx[k]  = 0;
-        frame_len[k] = 1;
-        data_drive[k] = make_data(k, local_tag[k]);
-        keep_drive[k] = make_keep(k, local_tag[k]);
-        last_drive[k] = 1'b1;
-        user_drive[k] = make_user(k, local_tag[k]);
-      end
-    end
-  endtask
-
-  task automatic process_output_beat();
-    logic [DATA_WIDTH-1:0] data;
-    logic [KEEP_WIDTH-1:0] keep;
-    logic [USER_WIDTH-1:0] user;
-    logic                 last;
-    int unsigned          k;
-    int unsigned          tag;
-    beat_t                exp;
-
-    data = m_tdata_o;
-    keep = m_tkeep_o;
-    user = m_tuser_o;
-    last = m_tlast_o;
-
-    k   = data[31:28];
-    tag = data[27:0];
-
-    if (k >= S_COUNT) begin
-      fail("S4");
-      return;
-    end
-
-    if (tag >= in_q[k].size()) begin
-      fail("S4");
-      return;
-    end
-
-    exp = in_q[k][tag];
-
-    if (data !== exp.data) begin fail("S4"); return; end
-    if (keep !== exp.keep) begin fail("S4"); return; end
-    if (user !== exp.user) begin fail("S4"); return; end
-    if (last !== exp.last) begin fail("S4"); return; end
-
-    if (tag != out_ptr[k]) begin
-      if (tag < out_ptr[k]) fail("S5");
-      else                  fail("S4");
-      return;
-    end
-
-    if (!current_frame_active) begin
-      current_frame_active = 1'b1;
-      current_source       = k;
-      current_frame        = exp.frame_id;
-    end else begin
-      if (k != current_source || exp.frame_id != current_frame) begin
-        fail("S3");
-        return;
-      end
-    end
-
-    if (last) begin
-      current_frame_active = 1'b0;
-    end
-
-    out_ptr[k] = tag + 1;
-    total_output_beats = total_output_beats + 1;
-
-    if (phase == PH_FAIR) begin
-      fair_frames_seen = fair_frames_seen + 1;
-      fair_window.push_back(k);
-      if (fair_window.size() > FAIRNESS_WINDOW) begin
-        void'(fair_window.pop_front());
-      end
-      if (fair_window.size() == FAIRNESS_WINDOW) begin
-        for (int id = 0; id < S_COUNT; id++) begin
-          if (!fair_window_has(id)) begin
-            fail("S10");
-            return;
-          end
-        end
-      end
-    end
-  endtask
-
-  task automatic final_pass();
-    if (done || failed) return;
-
-    for (int k = 0; k < S_COUNT; k++) begin
-      if (out_ptr[k] != in_q[k].size()) begin
-        fail("S5");
-        return;
-      end
-    end
-
-    int unsigned total_in = 0;
-    for (int k = 0; k < S_COUNT; k++) begin
-      total_in = total_in + in_q[k].size();
-    end
-
-    if (total_output_beats != total_in) begin
-      fail("S5");
-      return;
-    end
-
-    done = 1'b1;
-    $display("RESULT: PASS");
+  // ---------------------------------------------------------------------------
+  // Helper tasks
+  // ---------------------------------------------------------------------------
+  task automatic fail_test(input string req, msg);
+    $display("FAIL %s: %s", req, msg);
+    $display("RESULT: FAIL");
     $finish;
   endtask
 
-  always @(posedge clk_i) begin
-    if (rst_i) begin
-      phase = PH_RESET;
-      prev_rst <= 1'b1;
-      cycle_count = 0;
-      m_tready_drive = 1'b1;
-      stop_offer = 1'b0;
-      fair_frames_seen = 0;
-      fair_window.delete();
-      current_frame_active = 1'b0;
-      current_source = -1;
-      current_frame  = -1;
-      total_output_beats = 0;
-
-      for (int k = 0; k < S_COUNT; k++) begin
-        valid_drive[k] = 1'b0;
-        data_drive[k]  = '0;
-        keep_drive[k]  = '0;
-        last_drive[k]  = 1'b0;
-        user_drive[k]  = '0;
-        local_tag[k]   = 0;
-        frame_id[k]    = 0;
-        beat_idx[k]    = 0;
-        frame_len[k]   = 1;
-        frames_sent[k] = 0;
-        out_ptr[k]     = 0;
-        in_q[k].delete();
-      end
-    end else begin
-      if (prev_rst) begin
-        if (m_tvalid_o !== 1'b0) begin
-          fail("S12");
-        end
-        init_func_phase();
-        prev_rst <= 1'b0;
-        cycle_count = 0;
-      end else begin
-        cycle_count <= cycle_count + 1;
-
-        // Input transfers
-        for (int k = 0; k < S_COUNT; k++) begin
-          if (s_tvalid_i[k] && s_tready_o[k]) begin
-            record_input_beat(k);
-            advance_input_state(k);
-          end
-        end
-
-        // Output transfer
-        if (m_tvalid_o && m_tready_i) begin
-          process_output_beat();
-        end
-
-        // Phase control
-        if (phase == PH_FUNC) begin
-          if (all_inputs_deasserted()) begin
-            m_tready_drive = 1'b1;
-          end else begin
-            if ((cycle_count % 7) >= 5) m_tready_drive = 1'b0;
-            else                        m_tready_drive = 1'b1;
-          end
-
-          if (all_inputs_deasserted() && all_out_ptr_done()) begin
-            init_fair_phase();
-          end
-        end else if (phase == PH_FAIR) begin
-          m_tready_drive = 1'b1;
-
-          if (fair_frames_seen >= FAIRNESS_FRAMES_NEEDED) begin
-            stop_offer = 1'b1;
-          end
-
-          if (stop_offer && all_inputs_deasserted() && all_out_ptr_done()) begin
-            final_pass();
-          end
-        end
+  task automatic send_beat(input int                    k,
+                           input logic [31:0]           data,
+                           input logic [3:0]            keep,
+                           input logic                  last,
+                           input logic                  user);
+    int cnt;
+    @(negedge clk);
+    s_tdata[k]  = data;
+    s_tkeep[k]  = keep;
+    s_tlast[k]  = last;
+    s_tuser[k]  = user;
+    s_tvalid[k] = 1'b1;
+    cnt = 0;
+    forever begin
+      @(posedge clk);
+      cnt++;
+      if (s_tready[k]) break;
+      if (cnt >= 500_000) begin
+        $display("FAIL S10: input %0d not granted in %0d cycles", k, cnt);
+        $display("RESULT: FAIL");
+        $finish;
       end
     end
+  endtask
 
-    // Drive DUT inputs from internal state
+  task automatic idle_all();
+    @(negedge clk);
     for (int k = 0; k < S_COUNT; k++) begin
-      s_tvalid_i[k] <= valid_drive[k];
-      s_tdata_i[k]  <= data_drive[k];
-      s_tkeep_i[k]  <= keep_drive[k];
-      s_tlast_i[k]  <= last_drive[k];
-      s_tuser_i[k]  <= user_drive[k];
+      s_tvalid[k] = 1'b0;
     end
-    m_tready_i <= m_tready_drive;
+  endtask
+
+  task automatic wait_drain(input int expected_count);
+    int cnt;
+    cnt = 0;
+    while (output_log.size() < expected_count) begin
+      @(posedge clk);
+      cnt++;
+      if (cnt > 500_000) begin
+        fail_test("S5", "timeout waiting for output beats");
+      end
+    end
+    // Allow any late extras to surface.
+    repeat (5) @(posedge clk);
+    if (output_log.size() != expected_count) begin
+      fail_test("S5", $sformatf("output beat count %0d expected %0d",
+                                 output_log.size(), expected_count));
+    end
+  endtask
+
+  task automatic drive_input_frames(input int k, input int nframes);
+    int f, b;
+    logic [31:0] data;
+    logic [3:0]  keep;
+    logic        last;
+    logic        user;
+
+    for (f = 0; f < nframes; f++) begin
+      for (b = 0; b < 3; b++) begin
+        data = (k << 28) | (f << 16) | (b << 8) | 32'hA5;
+        keep = 4'b1111;
+        last = (b == 2);
+        user = k[0];
+        send_beat(k, data, keep, last, user);
+      end
+    end
+  endtask
+
+  task automatic check_output_order();
+    beat_t input_q[4][$];
+    int i;
+    int current_input;
+    int found;
+    int k;
+    beat_t b;
+    beat_t ob;
+    beat_t exp;
+    beat_t first;
+
+    frame_start_seq.delete();
+
+    while (input_log.size() > 0) begin
+      b = input_log.pop_front();
+      input_q[b.src].push_back(b);
+    end
+
+    current_input = -1;
+    for (i = 0; i < output_log.size(); i++) begin
+      ob = output_log[i];
+
+      if (current_input == -1) begin
+        found = -1;
+        for (k = 0; k < S_COUNT; k++) begin
+          if (input_q[k].size() > 0) begin
+            first = input_q[k][0];
+            if ((first.data == ob.data) && (first.keep == ob.keep) &&
+                (first.last == ob.last) && (first.user == ob.user)) begin
+              found = k;
+              break;
+            end
+          end
+        end
+
+        if (found == -1) begin
+          fail_test("S4", $sformatf("unmatched output beat data=%h keep=%h last=%b user=%b",
+                                     ob.data, ob.keep, ob.last, ob.user));
+        end
+
+        current_input = found;
+        frame_start_seq.push_back(found);
+      end
+
+      if (input_q[current_input].size() == 0) begin
+        fail_test("S3", "frame continues but selected input has no beats");
+      end
+
+      exp = input_q[current_input].pop_front();
+
+      if ((exp.data != ob.data) || (exp.keep != ob.keep) ||
+          (exp.last != ob.last) || (exp.user != ob.user)) begin
+        fail_test("S4", $sformatf("payload mismatch exp data=%h keep=%h last=%b user=%b got data=%h keep=%h last=%b user=%b",
+                                   exp.data, exp.keep, exp.last, exp.user,
+                                   ob.data, ob.keep, ob.last, ob.user));
+      end
+
+      if (ob.last) begin
+        current_input = -1;
+      end
+    end
+
+    if (current_input != -1) begin
+      fail_test("S3", "output ended mid-frame");
+    end
+
+    for (k = 0; k < S_COUNT; k++) begin
+      if (input_q[k].size() != 0) begin
+        fail_test("S5", $sformatf("input %0d has %0d untransmitted beats",
+                                   k, input_q[k].size()));
+      end
+    end
+  endtask
+
+  task automatic check_fairness();
+    int n;
+    int i, j;
+    bit seen[4];
+
+    n = frame_start_seq.size();
+    if (n < 16) begin
+      fail_test("S10", "fewer than 16 completed output frames");
+    end
+
+    for (i = 0; i <= n - 16; i++) begin
+      seen[0] = 0; seen[1] = 0; seen[2] = 0; seen[3] = 0;
+      for (j = 0; j < 16; j++) begin
+        seen[frame_start_seq[i+j]] = 1'b1;
+      end
+      if (!(seen[0] && seen[1] && seen[2] && seen[3])) begin
+        fail_test("S10", $sformatf("fairness window starting at frame %0d missing an input", i));
+      end
+    end
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // Main stimulus
+  // ---------------------------------------------------------------------------
+  initial begin
+    automatic int expected_beats;
+
+    // Initialize all driven signals.
+    s_tdata  = '0;
+    s_tkeep  = '0;
+    s_tvalid = '0;
+    s_tlast  = '0;
+    s_tuser  = '0;
+    m_tready = 1'b0;
+
+    // Reset and check initial idle state.
+    bfm_reset(4);
+    @(posedge clk);
+    if (m_tvalid !== 1'b0) begin
+      fail_test("S12", "m_tvalid_o not low after reset");
+    end
+
+    input_log.delete();
+    output_log.delete();
+    frame_start_seq.delete();
+
+    // ------------------------------------------------------------------
+    // Phase 1: basic multi/single-beat frames, backpressure
+    // ------------------------------------------------------------------
+    bfm_ready(1'b1);
+
+    // Input 0: 3-beat frame.
+    send_beat(0, 32'h00000001, 4'b1111, 0, 1'b0);
+    send_beat(0, 32'h00000002, 4'b1111, 0, 1'b0);
+    send_beat(0, 32'h00000003, 4'b1111, 1, 1'b0);
+
+    // Input 1: single-beat frame.
+    send_beat(1, 32'h00000010, 4'b1111, 1, 1'b1);
+
+    // Input 2: 2-beat frame.
+    send_beat(2, 32'h00000020, 4'b1111, 0, 1'b0);
+    send_beat(2, 32'h00000021, 4'b1111, 1, 1'b0);
+
+    // Input 3: 2-beat frame.
+    send_beat(3, 32'h00000030, 4'b1111, 0, 1'b1);
+    send_beat(3, 32'h00000031, 4'b1111, 1, 1'b1);
+
+    idle_all();
+
+    // Exercise output backpressure.
+    bfm_ready(1'b0);
+    repeat (10) @(posedge clk);
+    bfm_ready(1'b1);
+
+    expected_beats = input_log.size();
+    wait_drain(expected_beats);
+    check_output_order();
+
+    input_log.delete();
+    output_log.delete();
+    frame_start_seq.delete();
+
+    // ------------------------------------------------------------------
+    // Phase 2: continuous offered load / bounded fairness (S10)
+    // ------------------------------------------------------------------
+    bfm_ready(1'b1);
+
+    fork
+      drive_input_frames(0, 8);
+      drive_input_frames(1, 8);
+      drive_input_frames(2, 8);
+      drive_input_frames(3, 8);
+    join
+
+    idle_all();
+    expected_beats = input_log.size();
+    wait_drain(expected_beats);
+
+    check_output_order();
+    check_fairness();
+
+    input_log.delete();
+    output_log.delete();
+    frame_start_seq.delete();
+
+    // ------------------------------------------------------------------
+    // Phase 3: reset discards state (S12)
+    // ------------------------------------------------------------------
+    bfm_ready(1'b1);
+
+    send_beat(0, 32'h00000100, 4'b1111, 0, 1'b0);
+    send_beat(0, 32'h00000101, 4'b1111, 1, 1'b0);
+    idle_all();
+
+    repeat (5) @(posedge clk);
+
+    bfm_reset(4);
+    @(posedge clk);
+    if (m_tvalid !== 1'b0) begin
+      fail_test("S12", "m_tvalid_o not low after reset in reset test");
+    end
+
+    input_log.delete();
+    output_log.delete();
+    frame_start_seq.delete();
+
+    repeat (10) @(posedge clk);
+    if (output_log.size() != 0) begin
+      fail_test("S12", "output appeared after reset");
+    end
+
+    $display("RESULT: PASS");
+    $finish;
   end
 
 endmodule

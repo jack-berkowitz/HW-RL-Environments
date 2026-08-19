@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=async_fifo_cdc; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=5000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.rd_period=8; sdc.wr_period=5; override.CLK_PERIOD_NS=4.5;",
+  "build_config_hash": "ae52abdfe850a349",
+  "clk_period_ns": "4.5",
+  "correctness_gate": "passed:2026-08-17T201219Z__qwen__sim.json",
+  "design_area_um2": "14176",
+  "git_sha": "9249336d96bddb9f03a9add3d419b436861926fa-dirty",
+  "kind": "ppa",
+  "label": "qwen_at_4p5",
+  "orfs_nickname": "d_ca04_cand_qwen_at_4p5",
+  "pdk": "sky130hd",
+  "power_w": "7.85e-03",
+  "status": "completed",
+  "submission": "candidates/d_ca04/qwen.sv",
+  "submission_sha256_16": "87c12f460e99ab3f",
+  "synth_area_um2": "10603.920000",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-19T04:41:12Z",
+  "wns_ns": "0.722969"
+}

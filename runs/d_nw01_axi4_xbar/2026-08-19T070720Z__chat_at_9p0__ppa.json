@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=axi4_xbar; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=20000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=20.0; override.CLK_PERIOD_NS=9.0;",
+  "build_config_hash": "2a133c2a85f8933a",
+  "clk_period_ns": "9.0",
+  "correctness_gate": "passed:2026-08-16T195534Z__chat__sim.json",
+  "design_area_um2": "2086235",
+  "git_sha": "fceb425c34ca3d43b018441636884d9df1c17b67-dirty",
+  "kind": "ppa",
+  "label": "chat_at_9p0",
+  "orfs_nickname": "d_nw01_cand_chat_at_9p0",
+  "pdk": "sky130hd",
+  "power_w": "4.48e-01",
+  "status": "completed",
+  "submission": "candidates/d_nw01/chat.sv",
+  "submission_sha256_16": "097265354bd11b2d",
+  "synth_area_um2": "1540647.603199",
+  "task": "d_nw01_axi4_xbar",
+  "timestamp_utc": "2026-08-19T07:07:20Z",
+  "wns_ns": "0.109182"
+}

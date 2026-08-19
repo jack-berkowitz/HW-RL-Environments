@@ -50,6 +50,7 @@ TOKENS = [
     ("establishes the ceiling",              "ceiling"),
     ("testbench itself does not build",      "ZERO: did not build"),
     ("rejects the correct design",           "INVALID: rejects golden"),
+    ("corrupted on paste",                   "SETUP: re-paste"),
     ("behaviour the specification leaves open", "over-constrained"),
 ]
 

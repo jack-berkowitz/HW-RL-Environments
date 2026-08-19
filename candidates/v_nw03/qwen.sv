@@ -1,294 +1,311 @@
 module frame_arb_mux_tb;
-  localparam int S_COUNT = 4;
-  localparam int DATA_WIDTH = 32;
-  localparam int USER_WIDTH = 1;
-  localparam int KEEP_WIDTH = DATA_WIDTH / 8;
 
-  logic clk_i;
-  logic rst_i;
+    localparam int S_COUNT = 4;
+    localparam int DATA_WIDTH = 32;
+    localparam int USER_WIDTH = 1;
 
-  logic [S_COUNT-1:0][DATA_WIDTH-1:0] s_tdata_i;
-  logic [S_COUNT-1:0][KEEP_WIDTH-1:0] s_tkeep_i;
-  logic [S_COUNT-1:0] s_tvalid_i;
-  logic [S_COUNT-1:0] s_tready_o;
-  logic [S_COUNT-1:0] s_tlast_i;
-  logic [S_COUNT-1:0][USER_WIDTH-1:0] s_tuser_i;
+    logic                                     clk;
+    logic                                     rst;
+    logic [S_COUNT-1:0][DATA_WIDTH-1:0]       s_tdata;
+    logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0]   s_tkeep;
+    logic [S_COUNT-1:0]                       s_tvalid;
+    logic [S_COUNT-1:0]                       s_tready;
+    logic [S_COUNT-1:0]                       s_tlast;
+    logic [S_COUNT-1:0][USER_WIDTH-1:0]       s_tuser;
 
-  logic [DATA_WIDTH-1:0] m_tdata_o;
-  logic [KEEP_WIDTH-1:0] m_tkeep_o;
-  logic m_tvalid_o;
-  logic m_tready_i;
-  logic m_tlast_o;
-  logic [USER_WIDTH-1:0] m_tuser_o;
+    logic [DATA_WIDTH-1:0]                    m_tdata;
+    logic [(DATA_WIDTH/8)-1:0]                m_tkeep;
+    logic                                     m_tvalid;
+    logic                                     m_tready;
+    logic                                     m_tlast;
+    logic [USER_WIDTH-1:0]                    m_tuser;
 
-  frame_arb_mux #(
-    .S_COUNT(S_COUNT),
-    .DATA_WIDTH(DATA_WIDTH),
-    .USER_WIDTH(USER_WIDTH)
-  ) dut (
-    .clk_i(clk_i),
-    .rst_i(rst_i),
-    .s_tdata_i(s_tdata_i),
-    .s_tkeep_i(s_tkeep_i),
-    .s_tvalid_i(s_tvalid_i),
-    .s_tready_o(s_tready_o),
-    .s_tlast_i(s_tlast_i),
-    .s_tuser_i(s_tuser_i),
-    .m_tdata_o(m_tdata_o),
-    .m_tkeep_o(m_tkeep_o),
-    .m_tvalid_o(m_tvalid_o),
-    .m_tready_i(m_tready_i),
-    .m_tlast_o(m_tlast_o),
-    .m_tuser_o(m_tuser_o)
-  );
+    frame_arb_mux #(
+        .S_COUNT(S_COUNT),
+        .DATA_WIDTH(DATA_WIDTH),
+        .USER_WIDTH(USER_WIDTH)
+    ) dut (
+        .clk_i(clk),
+        .rst_i(rst),
+        .s_tdata_i(s_tdata),
+        .s_tkeep_i(s_tkeep),
+        .s_tvalid_i(s_tvalid),
+        .s_tready_o(s_tready),
+        .s_tlast_i(s_tlast),
+        .s_tuser_i(s_tuser),
+        .m_tdata_o(m_tdata),
+        .m_tkeep_o(m_tkeep),
+        .m_tvalid_o(m_tvalid),
+        .m_tready_i(m_tready),
+        .m_tlast_o(m_tlast),
+        .m_tuser_o(m_tuser)
+    );
 
-  initial begin
-    clk_i = 0;
-    forever #5 clk_i = ~clk_i;
-  end
+    // ---------------------------------------------------------------------------
+    // PROVIDED PLUMBING
+    // ---------------------------------------------------------------------------
+    initial begin clk = 1'b0; forever #5 clk = ~clk; end
 
-  initial begin
-    #200000;
-    $display("RESULT: FAIL");
-    $display("Watchdog timeout");
-    $finish;
-  end
+    initial rst = 1'b1;
 
-  typedef struct {
-    logic [DATA_WIDTH-1:0] tdata;
-    logic [KEEP_WIDTH-1:0] tkeep;
-    logic tlast;
-    logic [USER_WIDTH-1:0] tuser;
-  } beat_t;
+    task automatic bfm_reset(input int cycles = 4);
+        @(negedge clk);
+        rst = 1'b1;
+        repeat (cycles) @(posedge clk);
+        @(negedge clk);
+        rst = 1'b0;
+    endtask
 
-  beat_t pending_beats[S_COUNT][$];
-  int current_frame_source = -1;
-  int frame_source_history[$];
-  int fail_count = 0;
-  int pass_count = 0;
-  bit pre_reset_beats_driven = 0;
-  int pre_reset_beat_count = 0;
-  int post_reset_output_count = 0;
+    task automatic bfm_send(input int                          k,
+                            input logic [DATA_WIDTH-1:0]       data,
+                            input logic [(DATA_WIDTH/8)-1:0]   keep,
+                            input logic                        last,
+                            input logic [USER_WIDTH-1:0]       user);
+        @(negedge clk);
+        s_tdata[k]  = data;
+        s_tkeep[k]  = keep;
+        s_tlast[k]  = last;
+        s_tuser[k]  = user;
+        s_tvalid[k] = 1'b1;
+        forever begin
+            @(posedge clk);
+            if (s_tready[k]) break;
+        end
+    endtask
 
-  task automatic check(string req, bit pass, string msg = "");
-    if (pass) begin
-      pass_count++;
-    end else begin
-      fail_count++;
-      $display("FAIL: %s - %s", req, msg);
+    task automatic bfm_idle(input int k);
+        @(negedge clk);
+        s_tvalid[k] = 1'b0;
+    endtask
+
+    task automatic bfm_ready(input logic value);
+        @(negedge clk);
+        m_tready = value;
+    endtask
+
+    initial begin
+        #20_000_000;
+        $display("RESULT: FAIL (watchdog: no forward progress)");
+        $finish;
     end
-  endtask
+    // ---------------------------------------------------------------------------
 
-  generate
-    for (genvar k = 0; k < S_COUNT; k++) begin : gen_input_monitor
-      always @(posedge clk_i) begin
-        if (!rst_i && s_tvalid_i[k] && s_tready_o[k]) begin
-          beat_t beat;
-          beat.tdata = s_tdata_i[k];
-          beat.tkeep = s_tkeep_i[k];
-          beat.tlast = s_tlast_i[k];
-          beat.tuser = s_tuser_i[k];
-          pending_beats[k].push_back(beat);
-          
-          if (pre_reset_beats_driven) begin
-            pre_reset_beat_count++;
-          end
-        end
-      end
-    end
-  endgenerate
+    // Scoreboard
+    typedef struct {
+        int id;
+        int k;
+        logic [DATA_WIDTH-1:0] data;
+        logic [(DATA_WIDTH/8)-1:0] keep;
+        logic [USER_WIDTH-1:0] user;
+        logic last;
+    } beat_t;
 
-  always @(posedge clk_i) begin
-    if (!rst_i && m_tvalid_o && m_tready_i) begin
-      beat_t out_beat;
-      out_beat.tdata = m_tdata_o;
-      out_beat.tkeep = m_tkeep_o;
-      out_beat.tlast = m_tlast_o;
-      out_beat.tuser = m_tuser_o;
+    beat_t input_queue[S_COUNT][$];
+    int active_input = -1;
+    int completed_frames[$];
+    logic in_fairness_test = 1'b0;
+    logic test_failed = 1'b0;
 
-      int found = -1;
-      for (int k = 0; k < S_COUNT; k++) begin
-        if (pending_beats[k].size() > 0) begin
-          beat_t expected = pending_beats[k][0];
-          if (out_beat.tdata === expected.tdata &&
-              out_beat.tkeep === expected.tkeep &&
-              out_beat.tlast === expected.tlast &&
-              out_beat.tuser === expected.tuser) begin
-            found = k;
-            break;
-          end
-        end
-      end
+    always @(posedge clk) begin
+        int found_k;
+        bit seen[4];
 
-      if (found < 0) begin
-        check("S4", 0, "Output beat doesn't match any pending input beat");
-      end else begin
-        if (current_frame_source >= 0 && current_frame_source != found) begin
-          check("S3", 0, $sformatf("Frame atomicity violation: expected source %0d, got %0d",
-                                    current_frame_source, found));
-        end
+        if (rst) begin
+            for (int i = 0; i < S_COUNT; i++) input_queue[i].delete();
+            active_input = -1;
+            completed_frames.delete();
+        end else begin
+            if (m_tvalid && m_tready) begin
+                found_k = -1;
+                for (int i = 0; i < S_COUNT; i++) begin
+                    if (input_queue[i].size() > 0 && input_queue[i][0].id == m_tdata) begin
+                        found_k = i;
+                        break;
+                    end
+                end
+                
+                if (found_k == -1) begin
+                    $display("FAIL: S4/S5/S12 - Output beat ID %0d not found at head of any input queue", m_tdata);
+                    test_failed = 1'b1;
+                end else begin
+                    if (active_input != -1 && active_input != found_k) begin
+                        $display("FAIL: S3 - Frame atomicity violated. Expected input %0d, got %0d", active_input, found_k);
+                        test_failed = 1'b1;
+                    end
+                    
+                    if (active_input == -1) begin
+                        active_input = found_k;
+                    end
+                    
+                    if (input_queue[found_k][0].last !== m_tlast) begin
+                        $display("FAIL: S4 - m_tlast mismatch. Expected %0d, got %0d", input_queue[found_k][0].last, m_tlast);
+                        test_failed = 1'b1;
+                    end
+                    
+                    if (input_queue[found_k][0].keep !== m_tkeep) begin
+                        $display("FAIL: S4 - m_tkeep mismatch. Expected %h, got %h", input_queue[found_k][0].keep, m_tkeep);
+                        test_failed = 1'b1;
+                    end
 
-        pending_beats[found].delete(0);
-
-        if (current_frame_source < 0) begin
-          current_frame_source = found;
-          frame_source_history.push_back(found);
-          
-          if (frame_source_history.size() >= 16) begin
-            int seen[S_COUNT];
-            for (int i = 0; i < S_COUNT; i++) seen[i] = 0;
-            
-            for (int i = frame_source_history.size() - 16; i < frame_source_history.size(); i++) begin
-              seen[frame_source_history[i]] = 1;
+                    if (input_queue[found_k][0].user !== m_tuser) begin
+                        $display("FAIL: S4 - m_tuser mismatch. Expected %h, got %h", input_queue[found_k][0].user, m_tuser);
+                        test_failed = 1'b1;
+                    end
+                    
+                    input_queue[found_k].pop_front();
+                    
+                    if (m_tlast) begin
+                        active_input = -1;
+                        completed_frames.push_back(found_k);
+                        if (in_fairness_test && completed_frames.size() >= 16) begin
+                            seen = '{0,0,0,0};
+                            for (int i = completed_frames.size() - 16; i < completed_frames.size(); i++) begin
+                                seen[completed_frames[i]] = 1'b1;
+                            end
+                            if (!seen[0] || !seen[1] || !seen[2] || !seen[3]) begin
+                                $display("FAIL: S10 - Bounded fairness violated. Not all inputs seen in last 16 frames.");
+                                test_failed = 1'b1;
+                            end
+                        end
+                    end
+                end
             end
-            
-            for (int i = 0; i < S_COUNT; i++) begin
-              check("S10", seen[i], $sformatf("Input %0d not seen in last 16 frames", i));
+        end
+    end
+
+    initial begin
+        int id0, id1, id2, id3;
+
+        s_tdata = '0;
+        s_tkeep = '0;
+        s_tvalid = '0;
+        s_tlast = '0;
+        s_tuser = '0;
+        m_tready = '0;
+
+        bfm_reset(4);
+
+        $display("Testing S12: Reset behavior...");
+        bfm_ready(1);
+        bfm_send(0, 9000, 4'hF, 1'b0, 1'b0);
+        input_queue[0].push_back('{id: 9000, k: 0, data: 9000, keep: 4'hF, user: 1'b0, last: 1'b0});
+        
+        @(negedge clk);
+        rst = 1'b1;
+        repeat (4) @(posedge clk);
+        @(negedge clk);
+        rst = 1'b0;
+        repeat (10) @(posedge clk);
+
+        $display("Testing S5a: Abandoned frame...");
+        bfm_ready(1);
+        bfm_send(1, 60000, 4'hF, 1'b0, 1'b0);
+        input_queue[1].push_back('{id: 60000, k: 1, data: 60000, keep: 4'hF, user: 1'b0, last: 1'b0});
+        bfm_send(1, 60001, 4'hF, 1'b0, 1'b0);
+        input_queue[1].push_back('{id: 60001, k: 1, data: 60001, keep: 4'hF, user: 1'b0, last: 1'b0});
+        
+        bfm_idle(1);
+        bfm_send(2, 60002, 4'hF, 1'b1, 1'b0);
+        input_queue[2].push_back('{id: 60002, k: 2, data: 60002, keep: 4'hF, user: 1'b0, last: 1'b1});
+        
+        fork
+            wait (completed_frames.size() >= 1);
+            begin
+                repeat (100) @(posedge clk);
+                $display("FAIL: S5a - Timeout waiting for abandoned frame test to complete");
+                test_failed = 1'b1;
             end
-          end
-        end
+        join_any
+        disable fork;
 
-        if (m_tlast_o) begin
-          current_frame_source = -1;
-        end
-      end
+        $display("Testing S8: Backpressure...");
+        bfm_ready(1);
+        bfm_send(0, 50000, 4'hF, 1'b0, 1'b0);
+        input_queue[0].push_back('{id: 50000, k: 0, data: 50000, keep: 4'hF, user: 1'b0, last: 1'b0});
+        
+        bfm_ready(0);
+        fork
+            begin
+                bfm_send(0, 50001, 4'hF, 1'b1, 1'b0);
+                input_queue[0].push_back('{id: 50001, k: 0, data: 50001, keep: 4'hF, user: 1'b0, last: 1'b1});
+            end
+            begin
+                repeat (20) @(posedge clk);
+                bfm_ready(1);
+            end
+        join
 
-      if (post_reset_output_count > 0 || pre_reset_beat_count > 0) begin
-        post_reset_output_count++;
-      end
+        $display("Testing S3: Frame atomicity with multi-beat frames...");
+        bfm_ready(1);
+        fork
+            begin
+                bfm_send(0, 70000, 4'hF, 1'b0, 1'b0);
+                input_queue[0].push_back('{id: 70000, k: 0, data: 70000, keep: 4'hF, user: 1'b0, last: 1'b0});
+                bfm_send(0, 70001, 4'hF, 1'b1, 1'b0);
+                input_queue[0].push_back('{id: 70001, k: 0, data: 70001, keep: 4'hF, user: 1'b0, last: 1'b1});
+            end
+            begin
+                bfm_send(1, 70002, 4'hF, 1'b0, 1'b0);
+                input_queue[1].push_back('{id: 70002, k: 1, data: 70002, keep: 4'hF, user: 1'b0, last: 1'b0});
+                bfm_send(1, 70003, 4'hF, 1'b1, 1'b0);
+                input_queue[1].push_back('{id: 70003, k: 1, data: 70003, keep: 4'hF, user: 1'b0, last: 1'b1});
+            end
+        join
+
+        $display("Testing S10: Bounded fairness...");
+        in_fairness_test = 1'b1;
+        bfm_ready(1);
+        
+        id0 = 10000;
+        id1 = 20000;
+        id2 = 30000;
+        id3 = 40000;
+        
+        fork
+            begin
+                for (int i = 0; i < 64; i++) begin
+                    bfm_send(0, id0, 4'hF, 1'b1, id0[0]);
+                    input_queue[0].push_back('{id: id0, k: 0, data: id0, keep: 4'hF, user: id0[0], last: 1'b1});
+                    id0++;
+                end
+            end
+            begin
+                for (int i = 0; i < 64; i++) begin
+                    bfm_send(1, id1, 4'hF, 1'b1, id1[0]);
+                    input_queue[1].push_back('{id: id1, k: 1, data: id1, keep: 4'hF, user: id1[0], last: 1'b1});
+                    id1++;
+                end
+            end
+            begin
+                for (int i = 0; i < 64; i++) begin
+                    bfm_send(2, id2, 4'hF, 1'b1, id2[0]);
+                    input_queue[2].push_back('{id: id2, k: 2, data: id2, keep: 4'hF, user: id2[0], last: 1'b1});
+                    id2++;
+                end
+            end
+            begin
+                for (int i = 0; i < 64; i++) begin
+                    bfm_send(3, id3, 4'hF, 1'b1, id3[0]);
+                    input_queue[3].push_back('{id: id3, k: 3, data: id3, keep: 4'hF, user: id3[0], last: 1'b1});
+                    id3++;
+                end
+            end
+        join
+        
+        fork
+            wait (completed_frames.size() == 256);
+            begin
+                repeat (2000) @(posedge clk);
+                $display("FAIL: S10 - Timeout waiting for frames to complete.");
+                test_failed = 1'b1;
+            end
+        join_any
+        disable fork;
+        
+        in_fairness_test = 1'b0;
+
+        $display("RESULT: %s", test_failed ? "FAIL" : "PASS");
+        $finish;
     end
-  end
-
-  task automatic drive_beat(int src, beat_t beat);
-    s_tdata_i[src] = beat.tdata;
-    s_tkeep_i[src] = beat.tkeep;
-    s_tvalid_i[src] = 1;
-    s_tlast_i[src] = beat.tlast;
-    s_tuser_i[src] = beat.tuser;
-
-    while (!(s_tvalid_i[src] && s_tready_o[src])) begin
-      @(posedge clk_i);
-    end
-    @(posedge clk_i);
-    s_tvalid_i[src] = 0;
-  endtask
-
-  task automatic drive_frame(int src, int num_beats);
-    for (int i = 0; i < num_beats; i++) begin
-      beat_t beat;
-      beat.tdata = $urandom();
-      beat.tkeep = $urandom();
-      beat.tlast = (i == num_beats - 1);
-      beat.tuser = $urandom_range(0, (1 << USER_WIDTH) - 1);
-      drive_beat(src, beat);
-    end
-  endtask
-
-  task automatic wait_for_pending_empty();
-    while (pending_beats[0].size() > 0 || pending_beats[1].size() > 0 ||
-           pending_beats[2].size() > 0 || pending_beats[3].size() > 0) begin
-      @(posedge clk_i);
-    end
-    repeat (5) @(posedge clk_i);
-  endtask
-
-  initial begin
-    for (int i = 0; i < S_COUNT; i++) begin
-      s_tvalid_i[i] = 0;
-      s_tdata_i[i] = '0;
-      s_tkeep_i[i] = '0;
-      s_tlast_i[i] = 0;
-      s_tuser_i[i] = '0;
-    end
-
-    rst_i = 1;
-    m_tready_i = 0;
-
-    repeat (10) @(posedge clk_i);
-    rst_i = 0;
-    @(posedge clk_i);
-
-    m_tready_i = 1;
-
-    $display("Test 1: Single-beat frames");
-    fork
-      drive_frame(0, 1);
-      drive_frame(1, 1);
-      drive_frame(2, 1);
-      drive_frame(3, 1);
-    join
-    wait_for_pending_empty();
-
-    $display("Test 2: Multi-beat frames");
-    fork
-      drive_frame(0, 3);
-      drive_frame(1, 2);
-      drive_frame(2, 4);
-      drive_frame(3, 1);
-    join
-    wait_for_pending_empty();
-
-    $display("Test 3: Backpressure");
-    m_tready_i = 0;
-    fork
-      drive_frame(0, 2);
-      drive_frame(1, 2);
-      drive_frame(2, 2);
-      drive_frame(3, 2);
-    join
-    repeat (20) @(posedge clk_i);
-    m_tready_i = 1;
-    wait_for_pending_empty();
-
-    $display("Test 4: Reset behavior");
-    pre_reset_beats_driven = 1;
-    pre_reset_beat_count = 0;
-    fork
-      drive_frame(0, 3);
-      drive_frame(1, 3);
-    join_none
-    repeat (3) @(posedge clk_i);
-    
-    rst_i = 1;
-    repeat (5) @(posedge clk_i);
-    rst_i = 0;
-    
-    for (int i = 0; i < S_COUNT; i++) begin
-      pending_beats[i].delete();
-      s_tvalid_i[i] = 0;
-    end
-    pre_reset_beats_driven = 0;
-    
-    repeat (10) @(posedge clk_i);
-    check("S12", !m_tvalid_o, "Output valid after reset");
-    
-    fork
-      drive_frame(0, 2);
-      drive_frame(1, 2);
-    join
-    wait_for_pending_empty();
-
-    $display("Test 5: Fairness");
-    frame_source_history.delete();
-    fork
-      repeat (20) drive_frame(0, 1);
-      repeat (20) drive_frame(1, 1);
-      repeat (20) drive_frame(2, 1);
-      repeat (20) drive_frame(3, 1);
-    join
-    wait_for_pending_empty();
-
-    for (int i = 0; i < S_COUNT; i++) begin
-      check("S5", pending_beats[i].size() == 0,
-            $sformatf("Input %0d has pending beats", i));
-    end
-
-    if (fail_count == 0) begin
-      $display("RESULT: PASS");
-    end else begin
-      $display("RESULT: FAIL");
-    end
-    $finish;
-  end
 
 endmodule

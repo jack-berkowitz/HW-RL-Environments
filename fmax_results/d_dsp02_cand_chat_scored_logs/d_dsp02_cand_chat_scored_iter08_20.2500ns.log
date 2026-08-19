@@ -5403,3 +5403,96 @@ Warning: master sky130_ef_sc_hd__decap_12 has signal pins but no liberty cell
 [INFO RCX-0045] Extract 46885 nets, 293908 rsegs, 293908 caps, 532535 ccs
 [INFO RCX-0443] 46885 nets finished
 [INFO PSM-0040] All shapes on net VDD are connected.
+########## IR report #################
+Net              : VDD
+Corner           : default
+Total power      : 4.43e-01 W
+Supply voltage   : 1.80e+00 V
+Worstcase voltage: 1.80e+00 V
+Average voltage  : 1.80e+00 V
+Average IR drop  : 3.62e-05 V
+Worstcase IR drop: 3.05e-03 V
+Percentage drop  : 0.17 %
+######################################
+[INFO PSM-0040] All shapes on net VSS are connected.
+########## IR report #################
+Net              : VSS
+Corner           : default
+Total power      : 4.43e-01 W
+Supply voltage   : 0.00e+00 V
+Worstcase voltage: 1.74e-03 V
+Average voltage  : 3.35e-05 V
+Average IR drop  : 3.35e-05 V
+Worstcase IR drop: 1.74e-03 V
+Percentage drop  : 0.10 %
+######################################
+Cell type report:                       Count       Area
+  Fill cell                            309082 2287043.46
+  Tap cell                              35100   43917.12
+  Antenna cell                            936    2342.25
+  Clock buffer                            232    5018.56
+  Timing Repair Buffer                   6063   51453.10
+  Inverter                               2257    8510.66
+  Clock inverter                           81     903.37
+  Sequential cell                         724   14986.87
+  Multi-Input combinational cell        34867  233766.70
+  Total                                389342 2647942.09
+Report metrics stage 6, finish...
+
+==========================================================================
+finish report_design_area
+--------------------------------------------------------------------------
+Design area 360899 um^2 14% utilization.
+[WARNING GUI-0076] QStandardPaths: XDG_RUNTIME_DIR not set, defaulting to '/tmp/runtime-'
+Elapsed time: 0:50.48[h:]min:sec. CPU time: user 73.15 sys 6.48 (157%). Peak memory: 1752792KB.
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+6_report                                 50           1711                  N/A
+cp /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd.tlef ./objects/sky130hd/d_dsp02_cand_chat_scored/base/klayout_tech.lef
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/util/generate_klayout_tech.py \
+	--template /OpenROAD-flow-scripts/flow/platforms/sky130hd/sky130hd.lyt \
+	--output ./objects/sky130hd/d_dsp02_cand_chat_scored/base/klayout.lyt \
+	--lef-files ./objects/sky130hd/d_dsp02_cand_chat_scored/base/klayout_tech.lef /OpenROAD-flow-scripts/flow/platforms/sky130hd/lef/sky130_fd_sc_hd_merged.lef   \
+	--map-files 
+/usr/bin/python3 /OpenROAD-flow-scripts/flow/scripts/run_command.py --log /OpenROAD-flow-scripts/flow/logs/sky130hd/d_dsp02_cand_chat_scored/base/6_1_merge.log --tee -- \
+        /OpenROAD-flow-scripts/flow/scripts/klayout.sh -zz -rd design_name=fp32_fma_ii1 \
+        -rd in_def=./results/sky130hd/d_dsp02_cand_chat_scored/base/6_final.def \
+        -rd in_files="/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds  " \
+        -rd seal_file="" \
+        -rd out_file=./results/sky130hd/d_dsp02_cand_chat_scored/base/6_1_merged.gds \
+        -rd tech_file=./objects/sky130hd/d_dsp02_cand_chat_scored/base/klayout.lyt \
+        -rd layer_map= \
+        -r /OpenROAD-flow-scripts/flow/util/def2stream.py
+KLayout 0.30.7
+[INFO] Reporting cells prior to loading DEF ...
+	/OpenROAD-flow-scripts/flow/platforms/sky130hd/gds/sky130_fd_sc_hd.gds
+[INFO] All LEF cells have matching GDS/OAS cells
+[INFO] No orphan cells in the final layout
+Elapsed time: 0:11.87[h:]min:sec. CPU time: user 11.02 sys 0.70 (98%). Peak memory: 1294900KB.
+cp results/sky130hd/d_dsp02_cand_chat_scored/base/6_1_merged.gds results/sky130hd/d_dsp02_cand_chat_scored/base/6_final.gds
+./logs/sky130hd/d_dsp02_cand_chat_scored/base
+Log                       Ext     Elapsed/s Peak Memory/MB sha1sum result [0:20)
+1_1_yosys_canonicalize    .rtlil          0             93 c34e38bd42b7039a7ff4
+1_2_yosys                 .v            357            466 3428071f1c9ca46694c1
+1_2_yosys                 .sdc                             cf7869e5ced85728f7e9
+1_synth                   .odb            1            250 1c49033774571e9fe2e5
+1_synth                   .sdc                             120506875c4b376e6160
+2_1_floorplan             .odb            3            326 21c7629ffe0d7b7a1e3a
+2_1_floorplan             .sdc                             120506875c4b376e6160
+2_2_floorplan_macro       .odb            0            209 21c7629ffe0d7b7a1e3a
+2_3_floorplan_tapcell     .odb            0            204 ff2155d7e3ff64c7ce87
+2_4_floorplan_pdn         .odb            2            344 5dce93e81f7e3eef5179
+3_1_place_gp_skip_io      .odb           13            343 8872552d40de16aa9973
+3_2_place_iop             .odb            1            258 07895283c39e07b8c512
+3_3_place_gp              .odb           84            819 8f8d3498a64ed13f0746
+3_4_place_resized         .odb           12            387 0fc42ddaa38902faa324
+3_5_place_dp              .odb           18            610 8d7c8e6339536d6bd95a
+4_1_cts                   .odb           18            650 be3d30d111070f98753b
+5_1_grt                   .odb          194           1653 428a1f54a8a100148b96
+5_1_grt                   .sdc                             c2482a1ffb047c5fc816
+5_2_route                 .odb         1792           4719 67601cf7bc2dd0499f0e
+5_3_fillcell              .odb            3            689 597bf68e44f0268e28ef
+6_1_fill                  .odb            1            471 597bf68e44f0268e28ef
+6_1_fill                  .sdc                             c2482a1ffb047c5fc816
+6_1_merge                                11           1264                  N/A
+6_report                                 50           1711                  N/A
+Total                                  2560           4719                     

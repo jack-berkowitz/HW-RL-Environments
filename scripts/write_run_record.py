@@ -116,22 +116,58 @@ def main():
         "git_sha": git_sha(),
     }
 
-    if kind == "sim" and rest and os.path.isdir(rest[0]):
-        configs, metrics, coverage = parse_sim(rest[0])
-        passed = sum(1 for c in configs if c["verdict"] == "PASS")
-        rec.update({
-            "configs_total": len(configs),
-            "configs_passed": passed,
-            "all_passed": bool(configs) and passed == len(configs),
-            "per_config": configs,
-            "metrics": metrics,
-            "coverage": coverage,
-        })
-    else:
-        for kv in rest:
-            if "=" in kv:
-                k, v = kv.split("=", 1)
-                rec[k] = v
+    # POSITION-INDEPENDENT. This used to be `os.path.isdir(rest[0])`, which
+    # assumed the raw directory was the FIRST trailing argument. Inserting
+    # `task_text_hash=...` ahead of it moved the directory to rest[1], the
+    # isdir() test silently failed, and every design sim record written after
+    # that carried no verdict at all -- 45 of them. The record was well-formed
+    # and empty, which is worse than absent: it looks like a measurement.
+    #
+    # Two changes. Split on shape rather than position, and apply BOTH the
+    # parsed verdict and the key/values -- this was an if/else, so a caller
+    # could never pass a raw directory AND a task_text_hash, which is exactly
+    # what sim_candidate.sh was trying to do.
+    kvs = [a for a in rest if "=" in a]
+    positionals = [a for a in rest if "=" not in a]
+
+    for kv in kvs:
+        k, v = kv.split("=", 1)
+        rec[k] = v
+
+    if kind == "sim":
+        # REFUSE rather than skip. A writer that cannot find the raw directory
+        # it was handed must fail loudly; emitting a record it could not
+        # populate is the defect class, not just this instance of it.
+        if len(positionals) > 1:
+            sys.exit("write_run_record: %d positional arguments %r -- expected at "
+                     "most one raw directory. Refusing to guess which is the "
+                     "raw output; nothing written." % (len(positionals), positionals))
+        if positionals:
+            raw = positionals[0]
+            if not os.path.isdir(raw):
+                sys.exit("write_run_record: raw directory %r does not exist or is "
+                         "not a directory. A sim record without its raw output "
+                         "carries no verdict, and a well-formed empty record is "
+                         "worse than none; nothing written." % raw)
+            configs, metrics, coverage = parse_sim(raw)
+            if not configs:
+                sys.exit("write_run_record: raw directory %r contains no parseable "
+                         "config output. Refusing to write a record with an empty "
+                         "verdict; nothing written." % raw)
+            passed = sum(1 for c in configs if c["verdict"] == "PASS")
+            rec.update({
+                "configs_total": len(configs),
+                "configs_passed": passed,
+                "all_passed": bool(configs) and passed == len(configs),
+                "per_config": configs,
+                "metrics": metrics,
+                "coverage": coverage,
+            })
+        elif not kvs:
+            # No raw directory AND no key/values: there is nothing to record.
+            # (A verification-style call passes kvs and no raw dir -- legal.)
+            sys.exit("write_run_record: sim record with neither a raw directory "
+                     "nor any key=value fields. Nothing to write.")
 
     out_dir = os.path.join(REPO, "runs", task)
     os.makedirs(out_dir, exist_ok=True)

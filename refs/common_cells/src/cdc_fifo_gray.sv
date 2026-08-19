@@ -128,8 +128,9 @@ module cdc_fifo_gray #(
   logic [LOG_DEPTH:0]  async_rptr;
 
   cdc_fifo_gray_src #(
-    .T         ( T         ),
-    .LOG_DEPTH ( LOG_DEPTH )
+    .T           ( T           ),
+    .LOG_DEPTH   ( LOG_DEPTH   ),
+    .SYNC_STAGES ( SYNC_STAGES )
   ) i_src (
     .src_rst_ni,
     .src_clk_i,
@@ -143,8 +144,9 @@ module cdc_fifo_gray #(
   );
 
   cdc_fifo_gray_dst #(
-    .T         ( T         ),
-    .LOG_DEPTH ( LOG_DEPTH )
+    .T           ( T           ),
+    .LOG_DEPTH   ( LOG_DEPTH   ),
+    .SYNC_STAGES ( SYNC_STAGES )
   ) i_dst (
     .dst_rst_ni,
     .dst_clk_i,

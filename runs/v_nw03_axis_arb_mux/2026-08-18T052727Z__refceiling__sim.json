@@ -1,0 +1,19 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "faults_caught": "10/10",
+  "faults_hung": "0",
+  "git_sha": "5cc10b9441a42f710ec097e85f71541a5ee79882-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "refceiling",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/2381f2fe-5b48-47a1-8d06-7bf301d0b593/scratchpad/frame_arb_mux_ref.sv",
+  "submission_sha256_16": "2b96f67f2a30a634",
+  "task": "v_nw03_axis_arb_mux",
+  "task_text_hash": "fe8126ce163812aa",
+  "timestamp_utc": "2026-08-18T05:27:27Z"
+}

@@ -2007,7 +2007,7 @@ a clock where neither design was constrained, and 33 % slower at the frequency
 where they were. Two points on one Pareto frontier, with no way to rank them
 without a frequency target the specification never stated.
 
-## F40
+## F40. A second DUT declared, gated on, and never actually run
 
 **The second DUT was declared, gated, and never run.** Three verification
 tasks carried `second_dut: status: BUILT_UNWIRED` with a real, independent
@@ -2038,9 +2038,12 @@ reference testbenches ACCEPT their dut2 (v_ca05, v_nw03, v_dsp02). Had a
 reference rejected one, every submission failure on that row would have been
 an artefact of a wrong dut2 rather than a property of the submission.
 
+**Rules:** 8, 10
+**Convention:** Controls: existence is not participation
+
 **From:** scoring v_nw03 and v_dsp02
 
-## F41
+## F41. Half the verification compile failures are one language rule
 
 **Half the verification submissions failed to compile, and every one of the
 nine errors is the same language rule.** Across v_ca05, v_nw03 and v_dsp02,
@@ -2081,9 +2084,11 @@ the opposite of what a reader assumes.
 Not yet established: whether the other five decompose the same way. Only
 `v_nw03/deepseek` was run as a diagnostic.
 
+**Rules:** 19, 20
+
 **From:** scoring v_nw03 and v_dsp02
 
-## F42
+## F42. A reference testbench named so the scored path could never run it
 
 **v_ca05's reference testbench declared a module name the scored path could
 not run, so the ceiling every submission was compared against had never gone
@@ -2112,9 +2117,11 @@ The current 10/10 is harness-measured. Ceiling figures from before this session
 should be treated as unattested rather than wrong: they may well have been
 right, and nothing available now demonstrates it.
 
+**Rules:** 8, 10
+
 **From:** Agent 2's v_ca05 scoring run
 
-## F43
+## F50. Rule 11's inversion conceals a defective anchor from inside the task
 
 **Rule 11's inversion buys unfalsifiable expected values, and the price is that
 a defective anchor is undetectable from inside the task.** Locally authored code
@@ -2168,6 +2175,8 @@ ordering properties, not arithmetic. For those the equivalent is the second
 source, which is why that control exists. The requirement is: where an
 independent computation is POSSIBLE, its absence is a gap; where it is not, say
 so explicitly rather than leaving the difference unstated.
+
+**Rules:** 11
 
 **From:** Agent 2's rejection of fpnew_divsqrt_multi; the d_dsp02 anchor audit
 
@@ -2365,3 +2374,47 @@ choose on engineering merit and says nothing about checking whether the chosen
 point is one where the capability checks can still see anything -- amended.
 
 **Rules:** 18
+
+## F51. An accurate record of an invalid build passes every provenance check
+
+Two PPA figures were published from builds that did not meet timing:
+`d_nw01/chat` at 2,141,894 um2 with **-3.03 ns** of slack, and
+`d_dsp02/chat` at 440,336 um2 with **-0.697 ns**. Both were quoted against a
+reference that *did* close, and both ratios -- 13.9x and 6.4x -- went into the
+report.
+
+**Neither was a provenance failure, and that is the finding.** Every number
+traced to a run record. Every record was accurate. Every build completed, was
+DRC clean, and was correctly parsed. A pre-push audit checked all nine published
+PPA figures against their records and found **zero discrepancies** -- because
+there were none. The records were right about builds that were invalid.
+
+**Provenance answers "where did this number come from". It does not answer "is
+the thing it describes real".** A design that misses timing by 3 ns has an area
+and a power, and they are correctly measured properties of a circuit that cannot
+run at the clock it was built at. The operating point is imaginary; the
+measurement of it is not.
+
+**It was found by eye, and nearly not at all.** The d_dsp02 case surfaced only
+because an audit script happened to print slack in the same row as area, and the
+sign was visible. The d_nw01 case had been caught earlier and by hand. Neither
+check in the harness looked at slack before rendering, so nothing would have
+stopped either from being published a second time.
+
+**Why the common-clock rule did not catch it.** Reporting area at one clock
+every design can close is a separate requirement, and both figures satisfied a
+weaker reading of it: they were built at the *reference's* clock, which is one
+clock, applied uniformly. The defect is that "every design can close" was never
+checked -- only "every design was built at". A shared period is not evidence of
+a shared operating point.
+
+**Fixed by gating on slack where the number is RENDERED**, in both renderers
+independently, because a control applied by one of two readers is bypassed by
+using the other. Absent or unparseable slack renders normally: treating missing
+data as a negative verdict would invent a result, which is the same class of
+error pointing the other way.
+
+**Rules:** 22
+**Convention:** Controls: existence is not participation
+
+**From:** the d_dsp02 pre-push audit

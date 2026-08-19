@@ -48,6 +48,50 @@ scored_configuration:
     reasoning above stands on its own; the coincidence is convenient because it
     means the existing measurements were already taken here.
 
+# ---- F49: DISCRIMINATION AT THE SCORED SETTING, RE-MEASURED --------------
+# F49 observes that SYNC_STAGES is scored at 2, and that the crossing-latency
+# floor cannot tell a design that hardcodes two synchroniser flops from a
+# correct one at that setting. RE-MEASURED DIRECTLY rather than read off F3's
+# table, through the UNMODIFIED checker at the scored DATA_W=32/LOG_DEPTH=3:
+#
+#   design                        SS=2  lat.min  verdict     SS=3  lat.min  verdict
+#   p3_ignores_sync_stages (2 hc)   2    PASS                  2    FAIL
+#   second source (correct)         2    PASS                  3    PASS
+#   reference (patched)             3    PASS                  4    PASS
+#
+# CONFIRMED AS STATED: at SS=2 the probe and a correct design are
+# indistinguishable -- both read 2, both pass. The floor is lat.min >=
+# SYNC_STAGES, and at 2 everything clears it.
+#
+# BUT THE CONSEQUENCE F49 IMPLIES DOES NOT FOLLOW, and this is the part that
+# decides the question. The probe scores 9/18 on the CORRECTNESS SWEEP -- it
+# fails all nine SYNC_STAGES=3 configurations -- and ppa_candidate.sh gates PPA
+# on all_passed. A design that hardcodes two flops is REJECTED BEFORE IT IS
+# SCORED. It cannot appear in the table with a clean capability number.
+#
+# DECISION: SYNC_STAGES stays at 2 for the scored configuration.
+#
+# The reasoning is not that engineering merit outweighs discrimination -- rule
+# 18 as amended by F49 is explicit that merit alone does not establish
+# discrimination. It is that THE DISCRIMINATION IS PERFORMED ELSEWHERE AND WAS
+# MEASURED: the correctness sweep spans SYNC_STAGES 2 AND 3, so every design
+# reaching the scored column has already demonstrated it honours the parameter
+# at 3. Moving the scored point to 3 would relocate a check that already fires,
+# make every submission pay for margin the standard two-flop design does not
+# need, and invalidate every PPA number on this task.
+#
+# WHAT THE COLUMN THEREFORE MEANS, and this is the label the results table
+# carries: min crossing latency at the scored setting is NOT a capability
+# discriminator on its own. It is a property of designs that have already
+# passed the binding check at SYNC_STAGES=3. Read alone it would not separate a
+# correct design from a hardcoded probe -- the sweep does that, not this number.
+capability_discrimination:
+  scored_setting_discriminates: false
+  discriminating_setting: 3
+  enforced_by: correctness sweep (all 18 configs), not the scored metric
+  probe_result: p3_ignores_sync_stages scores 9/18 and is gated out before PPA
+  measured: 2026-08-19, unmodified checker, DATA_W=32 LOG_DEPTH=3
+
 scored_metrics:
   - {metric: capacity_beats_accepted, label: "cap"}
   # The MINIMUM crossing latency is the capability -- it is what the design can
@@ -115,14 +159,45 @@ second_source_note: >
   _src/_dst split, real dual-port memory instead of an exposed async_data array.
   All 18 configs pass. Found no over-constraint.
 
+# RULE 21 -- evidence of non-equivalence, recorded PER MUTANT.
+#
+# These previously carried `kill: "C5 phantom beat"`, which names the clause
+# that catches the mutant but not the configuration, the stimulus, or the point
+# of divergence. That is weaker than rule 21's bar and was recorded under a key
+# the evidence check does not recognise.
+#
+# WHY THE BAR IS WHERE IT IS. The risk rule 21 guards is a mutant that turns out
+# EQUIVALENT to the golden -- unkillable by anyone, and silently inflating the
+# denominator of every kill rate computed from the set. That has happened on
+# this task: `m05_original` forced SYNC_STAGES to 1, survived everything, and
+# was correct to survive, because synchroniser depth changes no logical value in
+# a zero-delay simulation. It was withdrawn (see mutant_withdrawn below).
+#
+# Each witness below was MEASURED, 2026-08-19, at the scored configuration
+# DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, by binding the mutant in place of
+# cdc_fifo_gray under the unmodified checker and recording its FIRST divergence.
 mutants:
-  - {id: m01, class: cdc-encoding,  kill: "C5 phantom beat"}
-  - {id: m02, class: cdc-encoding,  kill: "C1/C3 data mismatch"}
-  - {id: m03, class: boundary,      kill: "C1/C3 data mismatch"}
-  - {id: m04, class: control-flow,  kill: "C5 phantom at beat 0"}
-  - {id: m05, class: cdc-encoding,  kill: "C5 phantom beat"}
-  - {id: m06, class: boundary,      kill: "C1/C3 data mismatch"}
-  - {id: m07, class: reset,         kill: "C5 phantom at beat 0"}
+  - {id: m01, class: cdc-encoding, evidence: witness,
+     kill: "C5 phantom beat",
+     witness: "DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, phase A-equal, t=7695000: C5 phantom beat 601 -- read side delivered data with only 601 writes accepted"}
+  - {id: m02, class: cdc-encoding, evidence: witness,
+     kill: "C1/C3 data mismatch",
+     witness: "DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, phase A-equal, t=665000: C1/C3 beat 33 rd_data=0x10000028 expected 0x10000020"}
+  - {id: m03, class: boundary, evidence: witness,
+     kill: "C1/C3 data mismatch",
+     witness: "DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, phase B-fast-wr-slow-rd, t=8079000: C1/C3 beat 5 rd_data=0x1000000c expected 0x10000004"}
+  - {id: m04, class: control-flow, evidence: witness,
+     kill: "C5 phantom at beat 0",
+     witness: "DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, phase A-equal, t=225000: C5 phantom beat 0 -- read side delivered data with 0 writes accepted"}
+  - {id: m05, class: cdc-encoding, evidence: witness,
+     kill: "C5 phantom beat",
+     witness: "DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, phase A-equal, t=7525000: C5 phantom beat 601 -- read side delivered data with only 601 writes accepted"}
+  - {id: m06, class: boundary, evidence: witness,
+     kill: "C1/C3 data mismatch",
+     witness: "DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, phase A-equal, t=265000: C1/C3 beat 0 rd_data=0x0 expected 0x10000000"}
+  - {id: m07, class: reset, evidence: witness,
+     kill: "C5 phantom at beat 0",
+     witness: "DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2, phase A-equal, t=225000: C5 phantom beat 0 -- read side delivered data with 0 writes accepted"}
 mutant_withdrawn:
   id: m05_original
   what: forced SYNC_STAGES to 1

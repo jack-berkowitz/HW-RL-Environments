@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "faults_caught": "9/10",
+  "faults_hung": "0",
+  "git_sha": "89305fca0cf644f9099c5b384912f27f28afa76d-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "chat_vs_HARDER",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/0f6f5c72-f4e8-494d-afad-482534d98f0e/scratchpad/diag/chatfix/sub.sv",
+  "submission_sha256_16": "7948cb4c26835109",
+  "task": "v_nw03_axis_arb_mux",
+  "task_text_hash": "cea417c3c55f160d",
+  "timestamp_utc": "2026-08-18T00:43:02Z"
+}

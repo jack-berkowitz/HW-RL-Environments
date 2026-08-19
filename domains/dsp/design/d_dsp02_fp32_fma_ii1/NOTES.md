@@ -283,3 +283,70 @@ loosening would have been invisible afterwards.
 **And the checker earned its keep in the other direction**: it localised all
 three bugs to specific input vectors, which is why the second source is now
 correct rather than merely plausible.
+
+## The anchor's rounding, checked against an independent computation
+
+**Motivation.** Agent 2 rejected `fpnew_divsqrt_multi` — a sibling module in the
+same repository as this task's anchor — for three measured defects: truncation
+where RNE requires round-to-nearest, RDN and RUP inverted, and RMM with no
+counterpart in its two-bit field. That is close enough to home to matter.
+
+**Why the existing confirmation did not settle it.** This task's vector set is
+generated under rule 11's inversion: local code produces the INPUTS, the anchor
+produces the EXPECTED VALUES. That makes the expected values unfalsifiable from
+inside the task. If the anchor rounded wrongly, every vector would inherit the
+defect, the reference would pass, every mutant would behave as designed, and the
+task would pin the defect as its contract with nothing in the apparatus able to
+notice. Fifteen directed known-answer cases do not reach this: they confirm the
+cases whoever wrote them thought to test.
+
+**Method.** An independent fp32 FMA oracle in exact integer arithmetic
+(`tb/audit/independent_fma_oracle.py`). **No Python float appears anywhere in
+the reference computation.** Every fp32 value is a dyadic rational, exactly
+`(-1)^s * N * 2^E` with N and E integers; products and sums of dyadic rationals
+are dyadic, so `a*b+c` is computed EXACTLY with arbitrary-precision integers and
+rounded ONCE -- which is the definition of a fused multiply-add. The five
+rounding modes are implemented from the IEEE-754 rules directly, not by calling
+a library that might share an implementation, and therefore a bug, with the DUT.
+
+The harness (`tb/audit/anchor_rounding_audit_tb.sv`) drives the anchor and
+prints what it produces. **It does not know the expected values** -- comparison
+happens in Python. A harness carrying the expected values would be the same
+inversion this audit exists to break.
+
+**The oracle was validated before it was trusted.** Hand-computable cases:
+exact results, an exact halfway at an even mantissa (ties-to-even must stay), an
+exact halfway at an odd mantissa (ties-to-even must round up), a negative
+operand (RDN and RUP must swap roles), and exact cancellation (+0 in every mode
+except RDN). An oracle I wrote could be wrong, and then it would accuse the
+anchor falsely.
+
+**Result: 10,150 vectors, ZERO mismatches on results and on flags.**
+
+| set | vectors | result mismatches | flag mismatches |
+|---|---|---|---|
+| directed boundary cases | 150 | 0 | 0 |
+| randomized | 10,000 | 0 | 0 |
+
+Coverage: 610 subnormal results, 610 underflow, exact ties at eight mantissa
+patterns and five binades, near-ties either side, cancellation, and the overflow
+edge (RTZ and RDN correctly produce max-finite rather than infinity).
+
+**Tininess after rounding is correct**, which is the corner the spec pins
+explicitly. On `tiny_boundary_near` the same exact value gives `uf=0` under RNE,
+RUP and RMM -- rounding lifted it to the smallest normal -- and `uf=1` under RTZ
+and RDN, where it stayed subnormal. Underflow determined by the result after
+rounding, not before.
+
+**The check has power, which is the part that makes "clean" mean something.**
+The DUT produced more than one distinct result across modes on 25 of 30 directed
+cases, so rnd_mode demonstrably reaches the rounding logic. Against the three
+divsqrt defects specifically: RDN/RUP inversion would fail on 25 cases,
+truncation-where-RNE-is-required on 16, RMM aliased to RNE on 5.
+
+**What this does NOT cover.** NaN and infinity propagation. The oracle returns
+early on those paths; they are pinned by the spec and checked separately. This
+audit is about rounding of finite operands.
+
+**Standing.** d_dsp02's oracle is now CONFIRMED against an external truth rather
+than assumed. Its numbers may go into a cross-model report.

@@ -23,9 +23,49 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from mutant_evidence import mutants_for   # noqa: E402
+
+
+def evidence_note(task_dir):
+    """Per-mutant evidence, as `bmc<=34 x3, bmc<=14 x3`.
+
+    RULE 21 -- the TYPE is recorded per mutant, so the summary is per mutant
+    too. d_ca01 carries depth 34 on three and depth 14 on three others;
+    collapsing those to one number would quote a bound half the set never had.
+    A kill rate beside this is NOT evidence and does not imply the type.
+    """
+    ms = mutants_for(task_dir)
+    if not ms:
+        return ""
+    counts = {}
+    for _i, kind, depth in ms:
+        key = (f"bmc<={depth}" if kind == "bmc_cex" and depth
+               else (kind or "UNRECORDED"))
+        counts[key] = counts.get(key, 0) + 1
+    return ", ".join(f"{k} x{v}" if v > 1 else k
+                     for k, v in sorted(counts.items(),
+                                        key=lambda kv: (kv[0] == "UNRECORDED", kv[0])))
+
+# Submissions are stored under a short slug; the table prints the model as
+# released. One map so the two never drift apart.
+DISPLAY_NAME = {
+    "chat":     "ChatGPT 5.6 Sol",
+    "gemini":   "Gemini 3.1 Pro",
+    "qwen":     "Qwen 3.7 Plus",
+    "deepseek": "DeepSeek V4 Pro",
+}
+# Held back until there are enough results to report; excluded rather than
+# shown as an unexplained blank.
+WITHHELD_MODELS = {"kimi"}
+
+
+def display_name(slug):
+    return DISPLAY_NAME.get(slug, slug)
 
 # Internal metric key -> what a reader should see. Presentation only; the
 # records keep the internal names.
@@ -43,7 +83,16 @@ READABLE = {
     "aggregate_bursts_per_1000cyc": ("aggregate thruput", "bursts/1k cyc, all pairs"),
     "scored_beats_per_1000cyc":     ("beat rate", "data beats/1k cyc"),
     "capacity_beats_accepted":      ("FIFO capacity", "beats accepted before backpressure"),
-    "crossing_latency_rdclk_min":   ("min crossing lat", "read-clock cycles, minimum"),
+    # F49: this figure does NOT discriminate at the scored SYNC_STAGES=2 -- a
+    # design hardcoding two synchroniser flops reads identically to a correct
+    # one there. The parameter is bound by the correctness sweep at
+    # SYNC_STAGES=3, which every design in the table has passed; the hardcoded
+    # probe scores 9/18 there and never reaches scoring.
+    "crossing_latency_rdclk_min":   ("min crossing lat",
+        "read-clock cycles, minimum. NOT a capability discriminator on its own: "
+        "at the scored SYNC_STAGES=2 a design hardcoding two synchroniser flops "
+        "reads identically to a correct one. The parameter is bound by the "
+        "correctness sweep at SYNC_STAGES=3 (F49)"),
     "crossing_latency_rdclk_max":   ("max crossing lat", "read-clock cycles, maximum"),
     "wr_stall_cycles":              ("write stalls", "cycles the writer was blocked"),
     "latency_cycles":               ("latency", "clocks from accept to result"),
@@ -79,21 +128,21 @@ PPA_UNAVAILABLE = {
 
 BUILD_FAILURES = {
     ("d_nw01_axi4_xbar", "gemini.sv"):
-        "anonymous struct as parameter value; confirmed on both frontends "
-        "(slang 13 errors, Verilator 7)",
+        "anonymous struct as parameter value; rejected by slang, the "
+        "synthesis frontend (13 errors)",
     ("d_dsp02_fp32_fma_ii1", "deepseek.sv"):
-        "does not compile; confirmed on both frontends (slang 17 errors, "
+        "does not compile; rejected by slang, the synthesis frontend (17 errors, "
         "Verilator 3)",
     ("d_ca04_async_fifo_cdc", "kimi.sv"):
-        "identifier used before its declaration (slang). Verilator accepts it, "
+        "identifier used before its declaration, rejected by slang. Synthesis "
         "which is Verilator being permissive rather than the code being legal — "
         "synthesis uses slang, so it cannot be built",
     ("d_dsp02_fp32_fma_ii1", "qwen.sv"):
-        "does not compile; confirmed on both frontends (slang 2, Verilator 3)",
+        "does not compile; rejected by slang, the synthesis frontend (2 errors)",
     ("d_nw01_axi4_xbar", "deepseek.sv"):
-        "does not compile; confirmed on both frontends (slang 5, Verilator 2)",
+        "does not compile; rejected by slang, the synthesis frontend (5 errors)",
     ("d_nw01_axi4_xbar", "qwen.sv"):
-        "does not compile; confirmed on both frontends (slang 20, Verilator 11)",
+        "does not compile; rejected by slang, the synthesis frontend (20 errors)",
 }
 
 # Correctness failures. Distinct from a build failure: the design compiles and
@@ -155,6 +204,11 @@ FMAX_FILE = {
     ("d_ca04_async_fifo_cdc", "chat.sv"):               "d_ca04_cand_chat_fmax.json",
     ("d_nw01_axi4_xbar",      "axi4_xbar_ref.sv"):      "d_nw01_fmax.json",
     ("d_dsp02_fp32_fma_ii1",  "fp32_fma_ii1_ref.sv"):   "d_dsp02_fmax.json",
+    ("d_ca04_async_fifo_cdc", "gemini.sv"):             "d_ca04_cand_gemini_own_fmax_fmax.json",
+    ("d_ca04_async_fifo_cdc", "deepseek.sv"):           "d_ca04_cand_deepseek_scored_fmax.json",
+    ("d_ca04_async_fifo_cdc", "qwen.sv"):               "d_ca04_cand_qwen_at_4p5_fmax.json",
+    ("d_dsp02_fp32_fma_ii1",  "chat.sv"):               "d_dsp02_cand_chat_scored_fmax.json",
+    ("d_nw01_axi4_xbar",      "chat.sv"):               "d_nw01_cand_chat_scored_fmax.json",
 }
 
 
@@ -213,6 +267,21 @@ def main():
         for (t, sub) in BUILD_FAILURES:
             if t == task and (t, sub) not in rows:
                 rows.append((t, sub))
+        # AUDIT PROBES AND TASK-SHIPPED FILES ARE NOT SUBMISSIONS. Running one
+        # writes a record like any other, and p3_ignores_sync_stages duly
+        # appeared in the published d_ca04 table as though a model had produced
+        # it. A probe exists to test the harness; listing it beside candidates
+        # invites the reader to score it.
+        rows = [(t_, s) for (t_, s) in rows
+                if s.endswith("_ref.sv")          # the anchor DOES belong here
+                or not re.match(r"^(p\d|c\d\d|m[A-Z0-9]|fm_|fn_|tt_|nc\d|"
+                                r"stub_|probe_|ref_|.*second_source)", s)]
+
+        # Models held back until there are enough results to report. EXCLUDED
+        # rather than shown blank: a blank row invites the reader to wonder what
+        # went wrong, and nothing went wrong -- there is simply not enough yet.
+        rows = [(t, s) for (t, s) in rows
+                if s[:-3] not in WITHHELD_MODELS]
         if not rows:
             continue
 
@@ -267,10 +336,36 @@ def main():
                 area = power = fmx = "n/a"
                 notes.append(f"**area, power and Fmax unavailable** — {unavail}")
             if ppa:
-                a = ppa.get("design_area_um2")
-                area = f"{int(float(a)):,}" if a else "—"
-                pw = ppa.get("power_w")
-                power = f"{float(pw)*1000:.1f}" if pw else "—"
+                # RULE 22 -- A BUILD THAT MISSED TIMING PRODUCES NO REPORTABLE
+                # PPA. Area and power from a design that does not close at the
+                # clock it was built at describe a circuit that cannot run
+                # there, and the record is perfectly accurate about a build that
+                # is invalid. Two published figures were exactly this before the
+                # rule existed: d_nw01/chat at 2,141,894 um2 (wns -3.03) and
+                # d_dsp02/chat at 440,336 um2 (wns -0.697). Both were found by
+                # eye, and only because slack happened to be printed next to
+                # area during an audit -- checking numbers against records would
+                # have passed them, because the records were right.
+                wns = ppa.get("wns_ns")
+                timing_met = True
+                if wns not in (None, "", "None"):
+                    try:
+                        timing_met = float(wns) >= 0.0
+                    except ValueError:
+                        timing_met = True          # unparseable: do not invent
+                if not timing_met:
+                    area = power = "withheld"
+                    notes.append(
+                        f"**PPA withheld — the build did not meet timing** "
+                        f"(slack {float(wns):+.3f} ns at "
+                        f"{ppa.get('clk_period_ns')} ns). Area and power from a "
+                        f"design that does not close describe a circuit that "
+                        f"cannot run at that clock (rule 22).")
+                else:
+                    a = ppa.get("design_area_um2")
+                    area = f"{int(float(a)):,}" if a else "—"
+                    pw = ppa.get("power_w")
+                    power = f"{float(pw)*1000:.1f}" if pw else "—"
                 if not ppa.get("correctness_gate"):
                     notes.append("PPA predates the correctness interlock")
                     any_ungated = True
@@ -371,6 +466,25 @@ def main():
     }
     SUBMISSIONS = ("chat.sv", "deepseek.sv", "gemini.sv", "qwen.sv", "kimi.sv")
 
+    # RULE 17 / F38, applied to the report itself. The prompt document is part
+    # of the task text: v_ca05, v_nw03 and v_dsp02 were all re-prompted, so a
+    # record written against the old text answers a DIFFERENT question and must
+    # not share a table with one written against the new text.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from task_text_hash import task_text_hash
+    VTASK_DIR = {
+        "v_ca05_id_queue":     "domains/comp_arch/verification/v_ca05_id_queue",
+        "v_nw03_axis_arb_mux": "domains/networking/verification/v_nw03_axis_arb_mux",
+        "v_dsp02_fp_noncomp":  "domains/dsp/verification/v_dsp02_fp_noncomp",
+    }
+    CUR_TT = {}
+    for _tk, _d in VTASK_DIR.items():
+        _p = os.path.join(REPO, _d)
+        try:
+            CUR_TT[_tk] = task_text_hash(_p)[0] if os.path.isdir(_p) else None
+        except Exception:
+            CUR_TT[_tk] = None
+
     print("\n---\n")
     print("# Verification tasks\n")
     print("**A different measurement, on its own table on purpose.** A verification")
@@ -396,8 +510,18 @@ def main():
         if not rows:
             continue
         print(f"\n## {title}\n")
+        _cur = CUR_TT.get(tk)
+        if _cur:
+            print(f"Rows below answer task text `{_cur}` (spec + the prompt the")
+            print("model is handed). A submission scored against a different")
+            print("prompt is a different question and is not listed.\n")
         print("| testbench | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |")
         print("|---|---|---|---|---|---|")
+        _stale = []
+        for sub in list(rows):
+            _rh = vrecs[(tk, sub)].get("task_text_hash")
+            if _cur and _rh and _rh != _cur:
+                _stale.append((sub, _rh)); rows.remove(sub)
         for sub in rows:
             r = vrecs[(tk, sub)]
             g = r.get("golden_accepted", "?")
@@ -409,12 +533,22 @@ def main():
             d2 = {"PASS": "yes", "FAIL": "**no**", None: "—",
                   "not-run": "—", "unknown": "—"}.get(d2raw, "—")
             isref = (sub == VREF[tk])
-            name = "**reference testbench**" if isref else f"`{sub[:-3]}`"
+            name = "**reference testbench**" if isref else f"`{display_name(sub[:-3])}`"
             note = ""
             # A submission that did not compile never set a golden verdict.
             if g in ("unknown", "?") and conf in ("0/0", "?"):
                 g_s, conf_s, caught_s, d2 = "**did not compile**", "n/a", "n/a", "n/a"
                 note = "the testbench itself does not build"
+            elif str(caught).startswith("SUPPRESSED") and g == "PASS":
+                # Golden PASSED but the gate failed on a legal variant or the
+                # second DUT. The count exists and is uninformative (rule 16).
+                # This branch must NOT fire when the golden itself failed --
+                # claiming "accepts correct design: yes" there would contradict
+                # the row it is summarising.
+                g_s, conf_s, caught_s = "yes", conf, "*withheld*"
+                note = ("accepts the golden DUT but rejects a legal variant or "
+                        "the second DUT, so it rejects some correct hardware — "
+                        "its fault count carries no information")
             elif g == "PASS":
                 g_s = "yes"
                 conf_s = conf
@@ -432,6 +566,26 @@ def main():
                         "faulty hardware alike — a fault count from it carries "
                         "no information")
             print(f"| {name} | {g_s} | {d2} | {conf_s} | {caught_s} | {note} |")
+        for _s, _h in _stale:
+            # DISTINGUISH the two reasons a row has no current-prompt record.
+            # A file refused for TRANSPORT DAMAGE never reaches the harness and
+            # so never writes one; labelling that "scored against an older
+            # prompt" blames the task text for a paste corruption. Different
+            # causes, different fixes -- re-paste vs re-run.
+            _f = os.path.join(REPO, "candidates", tk.split("_")[0] + "_" +
+                              tk.split("_")[1], _s)
+            _dmg = False
+            if os.path.isfile(_f):
+                _dmg = subprocess.run(
+                    [sys.executable, os.path.join(REPO, "scripts", "check_transport.py"), _f],
+                    capture_output=True).returncode == 1
+            if _dmg:
+                print(f"| `{_s[:-3]}` | **damaged in transit** | n/a | n/a | n/a | "
+                      "the file was corrupted on paste; a SETUP problem, "
+                      "re-paste it — this is not a result about the model |")
+            else:
+                print(f"| `{_s[:-3]}` | *not scored against this prompt* | — | — | — | "
+                      f"last run answered task text `{_h}` |")
 
     print()
     print("- **accepts correct design** — does it pass a known-good implementation?")

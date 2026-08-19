@@ -3,43 +3,115 @@
   "design": "d_ca04_cand_gemini_own_fmax",
   "tier": "candidate",
   "pdk": "sky130hd",
-  "converged_period_ns": null,
-  "achieved_fmax_mhz": null,
-  "wns_at_converged_ns": null,
+  "converged_period_ns": 3.6562,
+  "achieved_fmax_mhz": 273.5,
+  "wns_at_converged_ns": 0.08,
   "confirming_rerun": {
-    "ran": false,
-    "passed": false,
+    "ran": true,
+    "passed": true,
     "fell_back": false
   },
   "bracket": {
     "seed_period_ns": 4.5,
-    "period_pass": null,
-    "period_fail": null,
-    "bracket_iterations": 1
+    "period_pass": 4.5,
+    "period_fail": 2.25,
+    "bracket_iterations": 2
   },
   "final_interval": {
-    "period_pass": null,
-    "period_fail": null
+    "period_pass": 3.6562,
+    "period_fail": 3.375
   },
-  "search_iterations": 0,
+  "search_iterations": 3,
   "resolution_ns": 0.5,
   "search_trajectory": [
     {
       "iteration": 1,
       "period_ns": 4.5,
-      "wns_ns": null,
-      "tns_ns": null,
-      "drc": null,
-      "pass": false,
-      "status": "tool_error",
-      "wall_time_s": 116.5,
+      "wns_ns": 0.71,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 361.8,
       "log": "fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter01_4.5000ns.log",
-      "note": "run_orfs_build.sh exited 125; see fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter01_4.5000ns.log"
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14515.2,
+      "provisional_power_mw": 0.0071195
+    },
+    {
+      "iteration": 2,
+      "period_ns": 2.25,
+      "wns_ns": -1.19,
+      "tns_ns": -37.2,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 495.0,
+      "log": "fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter02_2.2500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14640.3,
+      "provisional_power_mw": 0.01329
+    },
+    {
+      "iteration": 3,
+      "period_ns": 3.375,
+      "wns_ns": -0.05,
+      "tns_ns": -0.65,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 601.4,
+      "log": "fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter03_3.3750ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14366.3,
+      "provisional_power_mw": 0.0091284
+    },
+    {
+      "iteration": 4,
+      "period_ns": 3.9375,
+      "wns_ns": 0.15,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 198.1,
+      "log": "fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter04_3.9375ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14585.2,
+      "provisional_power_mw": 0.00811202
+    },
+    {
+      "iteration": 5,
+      "period_ns": 3.6562,
+      "wns_ns": 0.08,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 130.7,
+      "log": "fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter05_3.6562ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14433.8,
+      "provisional_power_mw": 0.00841508
+    },
+    {
+      "iteration": 6,
+      "period_ns": 3.6562,
+      "wns_ns": 0.08,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 125.9,
+      "log": "fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter06_3.6562ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14433.8,
+      "provisional_power_mw": 0.00841508
     }
   ],
-  "total_wall_time_s": 116.5,
-  "total_pnr_runs": 1,
-  "rtl_git_commit": "f44bc36f27f1187001aae1cd0e4fcbd0b1e1f174-dirty",
-  "timestamp": "2026-08-17T16:58:24.066385+00:00",
-  "aborted_reason": "seed run failed as a tool error: run_orfs_build.sh exited 125; see fmax_results/d_ca04_cand_gemini_own_fmax_logs/d_ca04_cand_gemini_own_fmax_iter01_4.5000ns.log"
+  "total_wall_time_s": 1913.5,
+  "total_pnr_runs": 6,
+  "rtl_git_commit": "a66b6da9a9e5285c650003fcd62ff58c9cfeb207-dirty",
+  "timestamp": "2026-08-19T04:02:19.635132+00:00",
+  "aborted_reason": null
 }

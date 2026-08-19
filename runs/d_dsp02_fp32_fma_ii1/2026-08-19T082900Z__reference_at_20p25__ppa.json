@@ -1,0 +1,18 @@
+{
+  "clk_period_ns": "20.25",
+  "correctness_gate": "passed:reference-1/1",
+  "design_area_um2": "59890",
+  "git_sha": "fceb425c34ca3d43b018441636884d9df1c17b67-dirty",
+  "kind": "ppa",
+  "label": "reference_at_20p25",
+  "orfs_nickname": "d_dsp02_ref_at_20p25",
+  "pdk": "sky130hd",
+  "power_w": "7.22e-02",
+  "status": "completed",
+  "submission": "domains/dsp/design/d_dsp02_fp32_fma_ii1/ref/fp32_fma_ii1_ref.sv",
+  "submission_sha256_16": "47a8351a62e5afe3",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "5ad30593403b4ae2",
+  "timestamp_utc": "2026-08-19T08:29:00Z",
+  "wns_ns": "3.26883"
+}

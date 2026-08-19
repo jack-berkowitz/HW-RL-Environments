@@ -73,6 +73,43 @@ for m in re.finditer(r"^(\d+)\. \*\*.*?\n(.*?)(?=^\d+\. \*\*|\n---)", rules_txt,
     fm = re.search(r"\*\*From:\*\*\s*(.+)", m.group(2))
     rule_from[n] = fm.group(1).strip() if fm else None
 
+# ---- HEADINGS ARE VALIDATED, NOT PATTERN-MATCHED --------------------------
+# The parser below requires `## F<n>. <title>`. Anything else -- a heading with
+# no trailing dot, or no title -- simply did not match, and the finding was
+# SILENTLY SKIPPED. F40, F41 and F42 were written that way and were never once
+# checked by this script, while it reported "linkage complete" on every run.
+#
+# A checker that skips what it cannot parse reports success for the subset it
+# happened to understand. That is the defect class this whole file exists to
+# catch, reproduced inside the checker itself, so malformed headings are now a
+# REFUSAL rather than a silent omission.
+_head_re = re.compile(r"^(#{2,3})\s+([PF]\d+)(\.?)[ \t]*(.*)$", re.M)
+_malformed, _seen, _dupes = [], {}, []
+for m in _head_re.finditer(find_txt):
+    fid, dot, title = m.group(2), m.group(3), m.group(4).strip()
+    line_no = find_txt[:m.start()].count("\n") + 1
+    if not dot or not title:
+        _malformed.append((line_no, fid, m.group(0).strip()))
+    if fid in _seen:
+        _dupes.append((fid, _seen[fid], line_no))
+    else:
+        _seen[fid] = line_no
+if _malformed:
+    print("REFUSED: malformed finding heading(s) -- these are SKIPPED by the")
+    print("parser, so their citations are never checked and they do not appear")
+    print("in any count. Expected `## F<n>. <title>`.")
+    for ln, fid, raw in _malformed:
+        print(f"    FINDINGS.md:{ln}: {raw!r}  ({fid} has no title" +
+              (" and no '.'" if not raw.rstrip().endswith(".") else "") + ")")
+if _dupes:
+    print("REFUSED: duplicate finding number(s) -- two different findings under")
+    print("one id corrupts the citation graph, and a set-based parse cannot see")
+    print("it because the ids collapse together.")
+    for fid, first, second in _dupes:
+        print(f"    {fid}: FINDINGS.md:{first} and FINDINGS.md:{second}")
+if _malformed or _dupes:
+    sys.exit(1)
+
 finding_ids = set(re.findall(r"^#{2,3} ([PF]\d+)\.", find_txt, re.M))
 finding_rules = {}
 finding_convs = {}

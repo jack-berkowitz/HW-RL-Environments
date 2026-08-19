@@ -345,10 +345,29 @@ for cand in "${CANDS[@]}"; do
   # that passes 16/16 and synthesises cleanly, because slang reports the
   # non-breaking spaces as "UTF-8 sequence in source text". ppa_candidate.sh
   # normalises before synthesising too, so this now sees exactly what ORFS will.
-  # References are skipped: their closure lives in the task's orfs/config.mk,
-  # not in spec/ + one file.
+  # THE EXEMPTION, and its terms. slang_check elaborates `spec/*_pkg.sv + ONE
+  # file`. That closure is complete for a SUBMISSION -- a candidate is required
+  # to be self-contained -- and it is not complete for anything the TASK ships,
+  # whose dependencies live in the task's own orfs/config.mk. Files under ref/
+  # were exempted for that reason; mutants/ and conformant/ have the identical
+  # property and were not, so d_ca01's mutants returned "7 error(s) ...
+  # 'bsg_cache_non...'" and its conformant perturbations 8 -- a missing vendored
+  # dependency reported as if the task's own files were malformed. Each was
+  # found separately, which is the tell that the exemption was enumerating
+  # directories instead of stating the property.
+  #
+  # Running those with --no-slang instead is F22's shape: a result produced
+  # OUTSIDE the scored path, printed in the same units as results produced
+  # inside it. So the exemption is extended rather than worked around, on the
+  # same terms:
+  #
+  #   EXEMPT if the file is shipped BY THE TASK (ref/, mutants/, conformant/)
+  #   -- its dependency closure is the task's and slang is not given it here.
+  #   NOT EXEMPT if the file is a SUBMISSION -- self-containment is part of
+  #   what is being measured, and ORFS synthesis uses slang, so a design
+  #   slang rejects could never have produced a PPA number.
   case "$cand" in
-    "$TASK_DIR"/ref/*) ;;
+    "$TASK_DIR"/ref/*|"$TASK_DIR"/mutants/*|"$TASK_DIR"/conformant/*) ;;
     *) if [ "$SLANG" = "1" ]; then
          slang_why="$(slang_check "$runfile")"
          if [ -n "$slang_why" ]; then
@@ -365,9 +384,25 @@ for cand in "${CANDS[@]}"; do
   printf '%-26s %-9s %s\n' "$name" "$p/$t" "$ff"
   # Immutable run record. Collection reads ONLY these, never the live ORFS
   # directory -- see scripts/write_run_record.py for why.
-  rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
-        "task_text_hash=$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
-          "$(basename "$cand" .sv)" "$RAW_DIR" 2>/dev/null)"
+  # The label goes in the LABEL position and the raw directory is passed as the
+  # only positional. Both were wrong here: task_text_hash sat where the label
+  # belongs, and -- worse -- the second line was missing its continuation
+  # backslash, so the command ended after argv[4] and the third line ran as a
+  # SEPARATE command ("chat: command not found"), swallowed by 2>/dev/null.
+  # Every design sim record written after that carried no verdict.
+  #
+  # stderr is NO LONGER discarded on this call. It hid a shell syntax error for
+  # a day and turned a failed command into a well-formed empty record. The
+  # inner task_text_hash.py keeps its own 2>/dev/null -- that one is a nested
+  # substitution whose diagnostics would otherwise land inside the label.
+  tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+  if ! rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+        "$(basename "$cand" .sv)" \
+        "task_text_hash=$tt" \
+        "$RAW_DIR")"; then
+    echo "  RECORD NOT WRITTEN for $name -- see the error above. The run happened;" >&2
+    echo "  nothing downstream can cite it until this is fixed." >&2
+  fi
   [ -n "$rec" ] && echo "  record: $rec"
   rm -rf "$RAW_DIR"
   if [ "$p" -eq "$t" ]; then ALLPASS=$((ALLPASS+1)); else NFAIL=$((NFAIL+1)); fi

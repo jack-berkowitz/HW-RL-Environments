@@ -281,6 +281,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
 
   allok=1; buildfail=0; NKILL=0; NMUT=0; NHUNG=0; NCONF=0; NCONF_OK=0
   DUT2_VERDICT="not-run"
+  CONF_FAILED=(); MUT_SURVIVED=(); MUT_HUNG=()
   GOLDEN_VERDICT=unknown
   for v in "${DUTS[@]}"; do
     build_variant "$v"
@@ -326,8 +327,9 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
         case "$verdict" in
           FAIL)    printf "  %-26s killed\n" "$v"; NKILL=$((NKILL+1)) ;;
           TIMEOUT) printf "  %-26s HUNG  <- no watchdog; not a kill\n" "$v"
-                   NHUNG=$((NHUNG+1)); allok=0 ;;
-          *)       printf "  %-26s SURVIVED  <- defect not caught\n" "$v"; allok=0 ;;
+                   MUT_HUNG+=("$v"); NHUNG=$((NHUNG+1)); allok=0 ;;
+          *)       printf "  %-26s SURVIVED  <- defect not caught\n" "$v"
+                   MUT_SURVIVED+=("$v"); allok=0 ;;
         esac
         NMUT=$((NMUT+1)) ;;
       *)       # golden, second DUT and conformant must all be ACCEPTED
@@ -341,11 +343,21 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
           # implementation. Different defects, so not one number.
           DUT2_VERDICT="$verdict"
         else
-          NCONF=$((NCONF+1)); [ "$verdict" = "PASS" ] && NCONF_OK=$((NCONF_OK+1))
+          NCONF=$((NCONF+1))
+          if [ "$verdict" = "PASS" ]; then NCONF_OK=$((NCONF_OK+1)); else CONF_FAILED+=("$v"); fi
         fi
         printf "  %-26s %s\n" "$v" "$verdict" ;;
     esac
   done
+
+  # THE VALIDITY GATE: golden, second DUT and conformant. Computed here because
+  # both the suppression below and the summary depend on it, and they must not
+  # disagree -- suppressing only on `golden` while REJECTING on conformant would
+  # print a kill count beside a REJECTED verdict.
+  GATE_OK=1
+  [ "$GOLDEN_VERDICT" = "PASS" ] || GATE_OK=0
+  [ "${#CONF_FAILED[@]}" -eq 0 ] || GATE_OK=0
+  case "$DUT2_VERDICT" in PASS|not-run) ;; *) GATE_OK=0 ;; esac
 
   # ---- RUN RECORD. Rule 8 applies to the verification half too, and did not
   # hold there: every v_ca05 number was a literal print() and nothing outside
@@ -357,7 +369,7 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
     "golden_accepted=$GOLDEN_VERDICT" \
     "second_dut_accepted=$DUT2_VERDICT" \
     "conformant_accepted=$NCONF_OK/$NCONF" \
-    "faults_caught=$([ "$GOLDEN_VERDICT" = "PASS" ] && echo "$NKILL/$NMUT" || echo "SUPPRESSED-gate-failed")" \
+    "faults_caught=$([ "${GATE_OK:-0}" -eq 1 ] && echo "$NKILL/$NMUT" || echo "SUPPRESSED-gate-failed")" \
     "faults_hung=$NHUNG" \
     "did_not_compile=$buildfail" \
     "kind_note=verification: per-mutant results are in the log; a rate is not reported" \
@@ -369,29 +381,65 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
   # everything (rule 16). Printing "4/6 caught" beside a real 4/6 is the
   # reporting-layer form of F20 -- a number that looks like a measurement and
   # is not. Suppressed, with the reason, rather than shown.
-  if [ "$GOLDEN_VERDICT" != "PASS" ] && [ "${NMUT:-0}" -gt 0 ]; then
-    echo "  -- fault-detection result SUPPRESSED: this testbench REJECTS THE"
-    echo "     GOLDEN DUT, so it rejects correct and faulty hardware alike and"
-    echo "     its $NKILL/$NMUT tells you nothing (rule 16). Hangs likewise: a"
-    echo "     hang is not detection, and $NHUNG of these hung."
+  if [ "$GATE_OK" -eq 0 ] && [ "${NMUT:-0}" -gt 0 ]; then
+    echo "  -- fault-detection result SUPPRESSED: this testbench REJECTS CORRECT"
+    echo "     HARDWARE (golden, second DUT, or a legal variant), so it rejects"
+    echo "     correct and faulty designs alike and its $NKILL/$NMUT tells you"
+    echo "     nothing (rule 16). Hangs likewise: a hang is not detection, and"
+    echo "     $NHUNG of these hung."
   fi
 
-  if [ "$allok" -eq 1 ]; then
-    echo "  => ACCEPTED: passes the golden DUT and every conformant perturbation."
-    NPASS=$((NPASS+1))
-  else
-    if [ "$buildfail" -eq 1 ]; then
-      echo "  => DID NOT COMPILE. This is NOT a verdict about the testbench's"
-      echo "     checking: nothing ran, so nothing was measured. Line numbers above"
-      echo "     refer to the submission."
-      echo "     Common causes seen here: a SystemVerilog RESERVED WORD used as an"
-      echo "     identifier (context, do, ref, expect, this, final, table), and"
-      echo "     transport corruption from the paste (see the note below)."
-    else
-      echo "  => REJECTED: see the FAIL rows above."
-      echo "     A failure on 'golden' means the testbench rejects correct hardware."
-      echo "     A failure on a '${CONF_PREFIX}*' row means it relies on unpromised behaviour."
+  # ---- SUMMARY -------------------------------------------------------------
+  # THE VALIDITY GATE AND FAULT DETECTION ARE SEPARATE OUTCOMES, and this
+  # summary used to collapse them: `allok` is cleared by ANY failure including
+  # a surviving mutant, so a testbench that passed the golden, every
+  # conformant row and dut2, and missed one mutant, printed "REJECTED" with an
+  # explanation naming golden and conformant failures that had not occurred.
+  # gemini on v_nw03 -- 9 of 10, the second-best result in the project -- read
+  # as a rejection. That is F36's shape: computed correctly per row, then
+  # misrepresented at the summary.
+  #
+  # The reason text is now DERIVED from the rows that actually failed. If
+  # nothing failed, nothing is claimed.
+  if [ "$buildfail" -eq 1 ]; then
+    echo "  => DID NOT COMPILE. This is NOT a verdict about the testbench's"
+    echo "     checking: nothing ran, so nothing was measured. Line numbers above"
+    echo "     refer to the submission."
+    echo "     Common causes seen here: a SystemVerilog RESERVED WORD used as an"
+    echo "     identifier (context, do, ref, expect, this, final, table), and"
+    echo "     transport corruption from the paste (see the note below)."
+  elif [ "$GATE_OK" -eq 0 ]; then
+    echo "  => REJECTED: failed the VALIDITY GATE."
+    [ "$GOLDEN_VERDICT" = "PASS" ] || \
+      echo "     - rejects the GOLDEN DUT: it rejects correct hardware."
+    if [ "${#CONF_FAILED[@]}" -gt 0 ]; then
+      echo "     - rejects ${#CONF_FAILED[@]} of $NCONF conformant perturbation(s): ${CONF_FAILED[*]}"
+      echo "       These differ from the golden only where the spec is silent, so"
+      echo "       rejecting one means relying on unpromised behaviour."
     fi
+    case "$DUT2_VERDICT" in PASS|not-run) ;; *)
+      echo "     - rejects the SECOND DUT: an independent correct implementation."
+      echo "       The testbench is fitted to the golden rather than the contract." ;;
+    esac
+  else
+    # Gate passed. Fault detection is reported, never used to reject.
+    if [ "$NMUT" -eq 0 ]; then
+      echo "  => VALID: passes the golden DUT, every conformant perturbation and"
+      echo "     the second DUT. No mutant set was run, so fault detection is"
+      echo "     UNMEASURED -- this says nothing about whether it finds bugs."
+    elif [ "$NKILL" -eq "$NMUT" ] && [ "$NHUNG" -eq 0 ]; then
+      echo "  => ACCEPTED: passes the validity gate and catches all $NMUT/$NMUT faults."
+      echo "     This is the ceiling the reference testbench establishes."
+    else
+      echo "  => VALID, with gaps in fault detection. NOT a rejection: this"
+      echo "     testbench accepts correct hardware and every legal variant."
+      echo "     Caught $NKILL of $NMUT faults against a ceiling of $NMUT."
+      [ "${#MUT_SURVIVED[@]}" -eq 0 ] || \
+        echo "     - missed: ${MUT_SURVIVED[*]}"
+      [ "${#MUT_HUNG[@]}" -eq 0 ] || \
+        echo "     - hung (not a catch: it stopped, it did not detect): ${MUT_HUNG[*]}"
+    fi
+    NPASS=$((NPASS+1))
   fi
   echo
 done

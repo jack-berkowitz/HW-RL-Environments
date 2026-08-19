@@ -32,6 +32,18 @@ run "rule <-> finding linkage" python3 scripts/check_rule_linkage.py
 # as unverifiable rather than passing.
 run "PPA record vs independent reading" python3 scripts/check_ppa_record.py --all
 
+# Every mutant declares an evidence type, and it is one rule 21 accepts.
+#
+# STRUCTURAL ONLY, AND THE NAME OVERSTATES WHAT IT DOES. It confirms a type is
+# RECORDED. It does not confirm the witness vector actually fails, that the
+# bounded counterexample exists, or that the quoted depth was the depth run. A
+# mutant can pass this check carrying a witness that never fired.
+#
+# The limitation is written here because F26's class is checks whose stated
+# scope exceeds their reach -- and a step labelled "mutant evidence" in a
+# regression will be read as having validated the evidence.
+run "mutant evidence recorded (structural)" python3 scripts/mutant_evidence.py
+
 # Collection refuses provisional_ fields and reads only run records (F20).
 run "results collection" python3 scripts/collect_results.py
 

@@ -102,6 +102,25 @@ def fmt(v, width, dash="--"):
     return str(v).rjust(width)
 
 
+def _timing_ok(ppa):
+    """False only when a PPA record explicitly reports negative slack.
+
+    RULE 22. A build that missed timing describes a circuit that cannot run at
+    the clock it was built at, so its area and power are not reportable. Absent
+    or unparseable slack is NOT treated as a failure -- that would invent a
+    verdict from missing data, which is the opposite error.
+    """
+    if not ppa:
+        return True
+    v = ppa.get("wns_ns")
+    if v in (None, "", "None"):
+        return True
+    try:
+        return float(v) >= 0.0
+    except ValueError:
+        return True
+
+
 def main():
     recs = load_records()
     if not recs:
@@ -164,16 +183,33 @@ def main():
             # is rule 20's prescription; it is not a fallback inventing a value.
             "configs": (f"{sim.get('configs_passed')}/{sim.get('configs_total')}"
                         if sim and sim.get("configs_total") is not None else None),
-            "correct": ("PASS" if sim and sim.get("all_passed") else
-                        ("FAIL" if sim else None)),
+            # THREE states, not two. `all_passed` MISSING is not the same as
+            # `all_passed` false: the first means nothing was measured, the
+            # second means the design failed. Rendering absence as FAIL made
+            # every design sim record written after 607d97f -- whose verdict
+            # block was silently dropped -- read as a result about the design.
+            # A blank cell sends someone to measure; FAIL sends them to debug
+            # RTL that is fine. Rule 20: unmeasured renders absent, and here it
+            # is named rather than blank so it cannot be mistaken for a gap in
+            # the table itself.
+            "correct": (None if not sim
+                        else "PASS" if sim.get("all_passed") is True
+                        else "FAIL" if sim.get("all_passed") is False
+                        else "NO VERDICT"),
             "clk": (ppa or {}).get("clk_period_ns"),
-            "area": (ppa or {}).get("design_area_um2"),
+            # RULE 22 -- withheld, not printed, when the build missed timing.
+            # The same gate lives in report_table.py. It is duplicated on
+            # purpose: this is the second renderer, and a control that only one
+            # reader applies is bypassed by using the other one.
+            "area": (None if not ppa else
+                     (ppa.get("design_area_um2") if _timing_ok(ppa) else "withheld")),
             # Rounded for DISPLAY ONLY -- the record keeps full precision.
             # Unrounded it overran its column and printed flush against the
             # area, so "294555" and "0.00365752" read as one 13-digit number.
             "wns": (lambda v: (f"{float(v):.4f}" if v not in (None, "", "None")
                                else None))((ppa or {}).get("wns_ns")),
-            "power": (ppa or {}).get("power_w"),
+            "power": (None if not ppa else
+                      (ppa.get("power_w") if _timing_ok(ppa) else "withheld")),
             # A PPA record written before the correctness gate moved into
             # ppa_candidate.sh carries no correctness_gate field. It is not
             # necessarily wrong -- d_ca04/gemini.sv later passed 18/18 -- but
@@ -186,7 +222,7 @@ def main():
         })
 
     cols = [("task", 24), ("submission", 18), ("sha", 9), ("configs", 8),
-            ("correct", 8), ("clk", 7), ("area", 11), ("wns", 8),
+            ("correct", 11), ("clk", 7), ("area", 11), ("wns", 8),
             ("power", 10), ("ppa", 20), ("when", 18)]
     hdr = "".join(c.rjust(w) if c not in ("task", "submission") else c.ljust(w)
                   for c, w in cols)

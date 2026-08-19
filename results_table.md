@@ -12,15 +12,14 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | FIFO capacity | min crossing lat | max crossing lat | write stalls | notes |
 |---|---|---|---|---|---|---|---|---|---|
-| **reference** | **18/18 pass** | 20,101 | 20.0 | 380.9 | 10 | 3 | 74 | 11046 |  |
+| **reference** | **18/18 pass** | 19,887 | 12.9 | 380.9 | 10 | 3 | 74 | 11046 |  |
 | `chat` | **18/18 pass** | 14,685 | 7.3 | 222.2 | 8 | 3 | 72 | 10914 |  |
-| `deepseek` | **18/18 pass** | — | — | — | 8 | 2 | 72 | 10912 |  |
-| `gemini` | **18/18 pass** | 14,515 | 7.1 | not swept | 8 | 2 | 72 | 10912 |  |
-| `qwen` | **18/18 pass** | — | — | — | 8 | 2 | 72 | 10912 |  |
-| `kimi` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | **build failure** — identifier used before its declaration (slang). Verilator accepts it, which is Verilator being permissive rather than the code being legal — synthesis uses slang, so it cannot be built |
+| `deepseek` | **18/18 pass** | 14,589 | 7.5 | 273.5 | 8 | 2 | 72 | 10912 |  |
+| `gemini` | **18/18 pass** | 14,515 | 7.1 | 273.5 | 8 | 2 | 72 | 10912 |  |
+| `qwen` | **18/18 pass** | 14,176 | 7.8 | 273.5 | 8 | 2 | 72 | 10912 |  |
 
 - **FIFO capacity** — beats accepted before backpressure
-- **min crossing lat** — read-clock cycles, minimum
+- **min crossing lat** — read-clock cycles, minimum. NOT a capability discriminator on its own: at the scored SYNC_STAGES=2 a design hardcoding two synchroniser flops reads identically to a correct one. The parameter is bound by the correctness sweep at SYNC_STAGES=3 (F49)
 - **max crossing lat** — read-clock cycles, maximum
 - **write stalls** — cycles the writer was blocked
 
@@ -28,11 +27,11 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | latency | init interval | notes |
 |---|---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | 440,336 | 669.0 | not swept | 3 | 1 |  |
-| **reference** | **1/1 pass** | 68,303 | 145.0 | 78.0 | 3 | 1 |  |
+| `chat` | **1/1 pass** | 360,899 | 443.0 | 49.4 | 3 | 1 |  |
+| **reference** | **1/1 pass** | 59,890 | 72.2 | 78.0 | 3 | 1 |  |
 | `gemini` | **FAILS** | n/a | n/a | n/a | n/a | n/a | **fails correctness** — fails the contract at vector 4 (a=1.0, b=0); no PPA, a number for a design that fails its contract is not a result |
-| `deepseek` | **did not build** | **0** | **0** | **0** | n/a | n/a | **build failure** — does not compile; confirmed on both frontends (slang 17 errors, Verilator 3) |
-| `qwen` | **did not build** | **0** | **0** | **0** | n/a | n/a | **build failure** — does not compile; confirmed on both frontends (slang 2, Verilator 3) |
+| `deepseek` | **did not build** | **0** | **0** | **0** | n/a | n/a | **build failure** — does not compile; rejected by slang, the synthesis frontend (17 errors, Verilator 3) |
+| `qwen` | **did not build** | **0** | **0** | **0** | n/a | n/a | **build failure** — does not compile; rejected by slang, the synthesis frontend (2 errors) |
 
 - **latency** — clocks from accept to result
 - **init interval** — clocks between accepts
@@ -41,11 +40,11 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | capacity (C1) | 1-pair thruput | 2-pair thruput | aggregate thruput | beat rate | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **reference** | **16/16 pass** | 154,245 | 87.5 | 190.5 | 27 | 2997 | 5994 | 1998 | 332 | PPA predates the correctness interlock |
-| `chat` | **16/16 pass** | n/a | n/a | n/a | 8 | 599 | 1198 | 399 | 359 | **area, power and Fmax unavailable** — place-and-route exceeded the 5.8 GB container memory limit during detailed routing (peak 5.70 GB) — a limit of this test setup, not a property of the design, which was at 75 DRC violations and improving |
-| `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — anonymous struct as parameter value; confirmed on both frontends (slang 13 errors, Verilator 7) |
-| `deepseek` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — does not compile; confirmed on both frontends (slang 5, Verilator 2) |
-| `qwen` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — does not compile; confirmed on both frontends (slang 20, Verilator 11) |
+| **reference** | **16/16 pass** | 146,932 | 48.6 | 190.5 | 27 | 2997 | 5994 | 1998 | 332 |  |
+| `chat` | **16/16 pass** | 2,086,235 | 448.0 | 111.1 | 8 | 599 | 1198 | 399 | 359 |  |
+| `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — anonymous struct as parameter value; rejected by slang, the synthesis frontend (13 errors) |
+| `deepseek` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — does not compile; rejected by slang, the synthesis frontend (5 errors) |
+| `qwen` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — does not compile; rejected by slang, the synthesis frontend (20 errors) |
 
 - **capacity (C1)** — checker's C1 capacity measure, master 0 — units unresolved, see note
 - **1-pair thruput** — bursts/1k cyc, one master-slave pair alone
@@ -96,33 +95,45 @@ sees the RTL.**
 
 ## v_ca05 — tag tracker (out-of-order queue)
 
+Rows below answer task text `7e7f9d22bce28ef5` (spec + the prompt the
+model is handed). A submission scored against a different
+prompt is a different question and is not listed.
+
 | testbench | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|
-| **reference testbench** | yes | yes | 4/4 | **6/6** | establishes the ceiling |
-| `chat` | yes | yes | 4/4 | **5/6** |  |
-| `deepseek` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
-| `gemini` | **no** | **no** | 0/4 | *withheld* | rejects the correct design, so it rejects correct and faulty hardware alike — a fault count from it carries no information |
-| `qwen` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
+| `tag_tracker_ref` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
+| `chat` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
+| `deepseek` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
+| `gemini` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
+| `qwen` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
 
 ## v_nw03 — frame-arbitrating stream mux
 
+Rows below answer task text `fe8126ce163812aa` (spec + the prompt the
+model is handed). A submission scored against a different
+prompt is a different question and is not listed.
+
 | testbench | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|
-| **reference testbench** | yes | yes | 5/5 | **6/6** | establishes the ceiling |
-| `chat` | **no** | **no** | 0/5 | *withheld* | rejects the correct design, so it rejects correct and faulty hardware alike — a fault count from it carries no information |
-| `deepseek` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
-| `gemini` | **no** | **no** | 0/5 | *withheld* | rejects the correct design, so it rejects correct and faulty hardware alike — a fault count from it carries no information |
-| `qwen` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
+| **reference testbench** | yes | yes | 5/5 | **10/10** | establishes the ceiling |
+| `ChatGPT 5.6 Sol` | yes | yes | 5/5 | **9/10** |  |
+| `DeepSeek V4 Pro` | yes | yes | 5/5 | **6/10** |  |
+| `Gemini 3.1 Pro` | yes | yes | 5/5 | **9/10** |  |
+| `Qwen 3.7 Plus` | **no** | **no** | 0/5 | *withheld* | rejects the correct design, so it rejects correct and faulty hardware alike — a fault count from it carries no information |
 
 ## v_dsp02 — FP non-computational ops
 
+Rows below answer task text `c2429e4f2fc3e2e1` (spec + the prompt the
+model is handed). A submission scored against a different
+prompt is a different question and is not listed.
+
 | testbench | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|
-| **reference testbench** | yes | yes | 5/5 | **6/6** | establishes the ceiling |
-| `chat` | **no** | **no** | 0/5 | *withheld* | rejects the correct design, so it rejects correct and faulty hardware alike — a fault count from it carries no information |
-| `deepseek` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
-| `gemini` | **no** | **no** | 0/5 | *withheld* | rejects the correct design, so it rejects correct and faulty hardware alike — a fault count from it carries no information |
-| `qwen` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
+| **reference testbench** | yes | yes | 5/5 | **10/10** | establishes the ceiling |
+| `ChatGPT 5.6 Sol` | yes | yes | 5/5 | **9/10** |  |
+| `DeepSeek V4 Pro` | yes | yes | 5/5 | **8/10** |  |
+| `Gemini 3.1 Pro` | **no** | **no** | 1/5 | *withheld* | rejects the correct design, so it rejects correct and faulty hardware alike — a fault count from it carries no information |
+| `Qwen 3.7 Plus` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
 
 - **accepts correct design** — does it pass a known-good implementation?
   A testbench that rejects correct hardware is unusable whatever else it
@@ -144,11 +155,3 @@ sees the RTL.**
 testbench failed the first column. A hang is likewise not a catch: the
 testbench did not detect the fault, it stopped.
 
-
----
-
-**"PPA predates the correctness interlock"** — these place-and-route
-numbers were produced before the pipeline required a passing
-correctness run first. All the designs so marked have since passed
-correctness, so the numbers stand; the note records that nothing
-enforced the ordering at the time they were taken.

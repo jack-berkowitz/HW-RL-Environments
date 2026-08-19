@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/5",
+  "did_not_compile": "0",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "git_sha": "5cc10b9441a42f710ec097e85f71541a5ee79882-dirty",
+  "golden_accepted": "FAIL",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "deepseek",
+  "second_dut_accepted": "FAIL",
+  "status": "rejected",
+  "submission": "candidates/v_dsp02/deepseek.sv",
+  "submission_sha256_16": "1d8dca873342a14f",
+  "task": "v_dsp02_fp_noncomp",
+  "task_text_hash": "c2429e4f2fc3e2e1",
+  "timestamp_utc": "2026-08-18T05:33:35Z"
+}

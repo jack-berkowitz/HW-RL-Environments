@@ -1,305 +1,416 @@
 module tag_tracker_tb;
 
-    localparam int TAG_W = 3;
-    localparam int SLOTS = 8;
-    localparam int N_MATCH = 1;
-    localparam bit FULL_RATE = 0;
-    localparam bit CUT_POP_PATH = 0;
+  // ---------------------------------------------------------------------------
+  // PROVIDED PLUMBING -- clock, reset and watchdog only.
+  // ---------------------------------------------------------------------------
+  logic clk;
+  initial begin clk = 1'b0; forever #5 clk = ~clk; end
 
-    localparam int unsigned GRANT_TIMEOUT = 200000;
-    localparam int unsigned WATCHDOG_LIMIT = 1000000;
+  logic rst_n;
+  initial rst_n = 1'b0;
 
-    typedef logic[31:0] payload_t;
-    typedef logic[TAG_W-1:0] tag_t;
+  task automatic bfm_reset(input int cycles = 4);
+    @(negedge clk);
+    rst_n = 1'b0;
+    repeat (cycles) @(posedge clk);
+    @(negedge clk);
+    rst_n = 1'b1;
+  endtask
 
-    logic clk_i;
-    logic rst_ni;
+  task automatic bfm_drive_point();
+    @(negedge clk);
+  endtask
 
-    tag_t  push_tag_i;
-    payload_t push_data_i;
-    logic  push_req_i;
-    logic  push_gnt_o;
+  task automatic bfm_tick();
+    @(posedge clk);
+  endtask
 
-    payload_t match_data_i [0:0];
-    payload_t match_mask_i [0:0];
-    logic [0:0] match_req_i;
-    logic [0:0] match_hit_o;
-    logic [0:0] match_gnt_o;
+  initial begin
+    #20_000_000;
+    $display("RESULT: FAIL (watchdog: no forward progress)");
+    $finish;
+  end
 
-    tag_t  pop_tag_i;
-    logic  pop_en_i;
-    logic  pop_req_i;
-    payload_t pop_data_o;
-    logic  pop_data_valid_o;
-    logic  pop_gnt_o;
+  // ---------------------------------------------------------------------------
+  // Testbench configuration
+  // ---------------------------------------------------------------------------
+  localparam int TIMEOUT = 1_000_000;
+  localparam int SLOTS = 8;
+  localparam int TAGS = 8;
 
-    logic  full_o;
-    logic  empty_o;
+  // DUT signals
+  logic [2:0] push_tag;
+  logic [31:0] push_data;
+  logic push_req;
+  logic push_gnt;
 
-    // Reference model
-    payload_t q[8][$];
-    int unsigned total_entries = 0;
+  logic [31:0] [0:0] match_data;
+  logic [31:0] [0:0] match_mask;
+  logic [0:0] match_req;
+  logic [0:0] match_hit;
+  logic [0:0] match_gnt;
 
-    bit watchdog_done = 0;
+  logic [2:0] pop_tag;
+  logic pop_en;
+  logic pop_req;
+  logic [31:0] pop_data;
+  logic pop_data_valid;
+  logic pop_gnt;
 
-    tag_tracker #(
-        .TAG_W(TAG_W),
-        .SLOTS(SLOTS),
-        .FULL_RATE(FULL_RATE),
-        .CUT_POP_PATH(CUT_POP_PATH),
-        .N_MATCH(N_MATCH),
-        .payload_t(logic[31:0])
-    ) dut (
-        .clk_i(clk_i),
-        .rst_ni(rst_ni),
-        .push_tag_i(push_tag_i),
-        .push_data_i(push_data_i),
-        .push_req_i(push_req_i),
-        .push_gnt_o(push_gnt_o),
-        .match_data_i(match_data_i),
-        .match_mask_i(match_mask_i),
-        .match_req_i(match_req_i),
-        .match_hit_o(match_hit_o),
-        .match_gnt_o(match_gnt_o),
-        .pop_tag_i(pop_tag_i),
-        .pop_en_i(pop_en_i),
-        .pop_req_i(pop_req_i),
-        .pop_data_o(pop_data_o),
-        .pop_data_valid_o(pop_data_valid_o),
-        .pop_gnt_o(pop_gnt_o),
-        .full_o(full_o),
-        .empty_o(empty_o)
-    );
+  logic full;
+  logic empty;
 
-    // Clock generator
-    initial begin
-        clk_i = 1'b0;
-        forever #5 clk_i = ~clk_i;
+  // Reference model: per-tag FIFO queues
+  logic [31:0] model_q [8][$];
+  int total_entries = 0;
+
+  // DUT
+  tag_tracker #(
+    .TAG_W(3),
+    .SLOTS(8),
+    .FULL_RATE(1'b0),
+    .CUT_POP_PATH(1'b0),
+    .N_MATCH(1)
+  ) dut (
+    .clk_i(clk),
+    .rst_ni(rst_n),
+
+    .push_tag_i(push_tag),
+    .push_data_i(push_data),
+    .push_req_i(push_req),
+    .push_gnt_o(push_gnt),
+
+    .match_data_i(match_data),
+    .match_mask_i(match_mask),
+    .match_req_i(match_req),
+    .match_hit_o(match_hit),
+    .match_gnt_o(match_gnt),
+
+    .pop_tag_i(pop_tag),
+    .pop_en_i(pop_en),
+    .pop_req_i(pop_req),
+    .pop_data_o(pop_data),
+    .pop_data_valid_o(pop_data_valid),
+    .pop_gnt_o(pop_gnt),
+
+    .full_o(full),
+    .empty_o(empty)
+  );
+
+  // ---------------------------------------------------------------------------
+  // Helper tasks
+  // ---------------------------------------------------------------------------
+  task automatic wait_cycles(input int n);
+    repeat (n) begin
+      @(posedge clk);
+      @(negedge clk);
+    end
+  endtask
+
+  task automatic fail_test(input string req, input string msg);
+    $display("FAIL %s: %s", req, msg);
+    $display("RESULT: FAIL");
+    $finish;
+  endtask
+
+  task automatic check_true(input logic cond, input string req, input string msg);
+    if (cond !== 1'b1) fail_test(req, msg);
+  endtask
+
+  task automatic check_status(input string req, input logic exp_empty, input logic exp_full);
+    if (empty !== exp_empty) begin
+      $display("FAIL %s: empty_o=%b expected=%b", req, empty, exp_empty);
+      $display("RESULT: FAIL");
+      $finish;
+    end
+    if (full !== exp_full) begin
+      $display("FAIL %s: full_o=%b expected=%b", req, full, exp_full);
+      $display("RESULT: FAIL");
+      $finish;
+    end
+  endtask
+
+  task automatic clear_model();
+    int t;
+    for (t = 0; t < TAGS; t++) begin
+      model_q[t].delete();
+    end
+    total_entries = 0;
+  endtask
+
+  task automatic do_push(input logic [2:0] tag, input logic [31:0] data);
+    int wait_cnt;
+    push_req = 1'b1;
+    push_tag = tag;
+    push_data = data;
+    wait_cnt = 0;
+
+    while (1) begin
+      @(negedge clk);
+      wait_cnt = wait_cnt + 1;
+      if (push_gnt === 1'b1) break;
+      if (wait_cnt >= TIMEOUT) fail_test("R1", "push not granted while space exists");
     end
 
-    // Watchdog: must never allow the testbench to hang forever
-    initial begin
-        repeat (WATCHDOG_LIMIT) @(posedge clk_i);
-        if (!watchdog_done) begin
-            $display("FAIL [watchdog] timeout waiting for test completion");
-            $display("RESULT: FAIL");
-            $finish;
-        end
+    model_q[tag].push_back(data);
+    total_entries = total_entries + 1;
+    push_req = 1'b0;
+  endtask
+
+  task automatic do_pop(
+    input logic [2:0] tag,
+    input logic en,
+    output logic [31:0] data_o,
+    output logic valid_o
+  );
+    int wait_cnt;
+    logic [31:0] expected_data;
+
+    pop_req = 1'b1;
+    pop_tag = tag;
+    pop_en = en;
+    wait_cnt = 0;
+
+    while (1) begin
+      @(negedge clk);
+      wait_cnt = wait_cnt + 1;
+      if (pop_gnt === 1'b1) break;
+      if (wait_cnt >= TIMEOUT) fail_test("R7", "pop not granted");
     end
 
-    task automatic fail(string req, string msg);
-        $display("FAIL [%s] %s", req, msg);
-        $display("RESULT: FAIL");
-        $finish;
-    endtask
+    valid_o = pop_data_valid;
+    data_o = pop_data;
 
-    task automatic check_status(string req);
-        logic exp_empty = (total_entries == 0);
-        logic exp_full  = (total_entries == SLOTS);
-        if (empty_o !== exp_empty) fail(req, "empty_o/full_o mismatch");
-        if (full_o  !== exp_full)  fail(req, "empty_o/full_o mismatch");
-    endtask
+    if (valid_o === 1'b1) begin
+      if (model_q[tag].size() == 0)
+        fail_test("R8", "pop_data_valid high but model has no entry for tag");
 
-    task automatic reset_dut();
-        rst_ni = 1'b0;
-        push_req_i = 1'b0;
-        pop_req_i = 1'b0;
-        match_req_i[0] = 1'b0;
-        push_tag_i = '0;
-        push_data_i = '0;
-        pop_tag_i = '0;
-        pop_en_i = 1'b0;
-        match_data_i[0] = '0;
-        match_mask_i[0] = '0;
-        for (int i = 0; i < 8; i++) q[i].delete();
-        total_entries = 0;
-        repeat (4) @(posedge clk_i);
-        rst_ni = 1'b1;
-        repeat (2) @(posedge clk_i);
-    endtask
+      expected_data = model_q[tag][0];
+      if (data_o !== expected_data)
+        fail_test("R2", "pop_data_o not oldest entry for tag");
 
-    task automatic do_push(tag_t tag, payload_t data, int timeout_cycles, string req);
-        int idx = int'(tag);
-        @(negedge clk_i);
-        push_tag_i = tag;
-        push_data_i = data;
-        push_req_i = 1'b1;
-        for (int i = 0; i < timeout_cycles; i++) begin
-            @(posedge clk_i);
-            if (push_req_i === 1'b1 && push_gnt_o === 1'b1) begin
-                q[idx].push_back(data);
-                total_entries++;
-                push_req_i = 1'b0;
-                return;
-            end
-        end
-        fail(req, "push_gnt not asserted within timeout");
-    endtask
-
-    task automatic do_pop(tag_t tag, logic pop_en, logic expected_valid,
-                          payload_t expected_data, int timeout_cycles, string req);
-        int idx = int'(tag);
-        @(negedge clk_i);
-        pop_tag_i = tag;
-        pop_en_i = pop_en;
-        pop_req_i = 1'b1;
-        for (int i = 0; i < timeout_cycles; i++) begin
-            @(posedge clk_i);
-            if (pop_req_i === 1'b1 && pop_gnt_o === 1'b1) begin
-                if (expected_valid) begin
-                    if (pop_data_valid_o !== 1'b1)
-                        fail(req, "pop_data_valid_o expected high");
-                    if (pop_data_o !== expected_data)
-                        fail(req, "pop_data_o did not match expected oldest entry");
-                end else begin
-                    if (pop_data_valid_o !== 1'b0)
-                        fail(req, "pop_data_valid_o expected low for empty tag");
-                end
-
-                if (pop_en === 1'b1 && expected_valid) begin
-                    if (q[idx].size() == 0)
-                        fail(req, "internal model queue unexpectedly empty");
-                    payload_t d = q[idx].pop_front();
-                    if (d !== expected_data)
-                        fail(req, "internal model mismatch on pop_front");
-                    total_entries--;
-                end
-
-                pop_req_i = 1'b0;
-                pop_en_i = 1'b0;
-                return;
-            end
-        end
-        fail(req, "pop_gnt not asserted within timeout");
-    endtask
-
-    task automatic do_search(payload_t data, payload_t mask, logic exp_hit, string req);
-        @(negedge clk_i);
-        match_data_i[0] = data;
-        match_mask_i[0] = mask;
-        match_req_i[0] = 1'b1;
-        for (int i = 0; i < GRANT_TIMEOUT; i++) begin
-            @(posedge clk_i);
-            if (match_req_i[0] === 1'b1 && match_gnt_o[0] === 1'b1) begin
-                if (match_hit_o[0] !== exp_hit)
-                    fail(req, "match_hit_o mismatch");
-                match_req_i[0] = 1'b0;
-                return;
-            end
-        end
-        fail(req, "match_gnt not asserted within timeout");
-    endtask
-
-    initial begin
-        reset_dut();
-        if (empty_o !== 1'b1) fail("R15", "empty_o not high after reset");
-        if (full_o  !== 1'b0) fail("R15", "full_o not low after reset");
-        check_status("R14/R15");
-
-        // R1/R2: capacity, and per-tag FIFO order for a single tag
-        for (int i = 0; i < SLOTS; i++) begin
-            payload_t p;
-            p = 32'h100 + i;
-            do_push(3'd0, p, GRANT_TIMEOUT, "R1");
-            check_status("R1/R14");
-        end
-        if (full_o !== 1'b1) fail("R5/R14", "full_o not high after SLOTS pushes");
-        if (empty_o !== 1'b0) fail("R14", "empty_o not low after SLOTS pushes");
-
-        // R13: all-zero mask matches every entry when store is non-empty
-        do_search(32'h0, 32'h0, 1'b1, "R13");
-        check_status("R13");
-
-        // R5: push_gnt must be low when the store is full
-        begin
-            @(negedge clk_i);
-            push_tag_i = 3'd1;
-            push_data_i = 32'hDEADBEEF;
-            push_req_i = 1'b1;
-            for (int i = 0; i < 4; i++) begin
-                @(posedge clk_i);
-                if (push_gnt_o !== 1'b0)
-                    fail("R5", "push_gnt_o high when full");
-            end
-            push_req_i = 1'b0;
-            @(posedge clk_i);
-        end
-        check_status("R5/R14");
-
-        // R2/R9: pop all entries of tag0 in FIFO order
-        for (int i = 0; i < SLOTS; i++) begin
-            payload_t expected;
-            expected = 32'h100 + i;
-            do_pop(3'd0, 1'b1, 1'b1, expected, GRANT_TIMEOUT, "R2");
-            check_status("R2/R14");
-        end
-        if (empty_o !== 1'b1) fail("R14", "empty_o not high after popping all");
-        if (full_o  !== 1'b0) fail("R14", "full_o not low after popping all");
-
-        // R10: pop of a tag with no entries completes with valid low
-        do_pop(3'd3, 1'b1, 1'b0, '0, GRANT_TIMEOUT, "R10");
-        check_status("R10");
-
-        // R13: all-zero mask on empty store: hit low
-        do_search(32'h0, 32'h0, 1'b0, "R13 empty");
-        check_status("R13 empty");
-
-        // R9: pop_en=0 inspects but does not remove
-        do_push(3'd4, 32'hAAAA5555, GRANT_TIMEOUT, "R9");
-        check_status("R9 push");
-        do_pop(3'd4, 1'b0, 1'b1, 32'hAAAA5555, GRANT_TIMEOUT, "R9 inspect");
-        check_status("R9 inspect");
-        do_pop(3'd4, 1'b1, 1'b1, 32'hAAAA5555, GRANT_TIMEOUT, "R9 remove");
-        check_status("R9 remove");
-        if (empty_o !== 1'b1) fail("R14", "empty_o not high after inspect/remove");
-        if (full_o  !== 1'b0) fail("R14", "full_o not low after inspect/remove");
-
-        // R2: per-tag FIFO order with interleaved tags
-        do_push(3'd1, 32'hB1, GRANT_TIMEOUT, "R2");
-        do_push(3'd2, 32'hC1, GRANT_TIMEOUT, "R2");
-        do_push(3'd1, 32'hB2, GRANT_TIMEOUT, "R2");
-        do_push(3'd2, 32'hC2, GRANT_TIMEOUT, "R2");
-        do_push(3'd1, 32'hB3, GRANT_TIMEOUT, "R2");
-        check_status("R2 interleaved push");
-        do_pop(3'd1, 1'b1, 1'b1, 32'hB1, GRANT_TIMEOUT, "R2");
-        do_pop(3'd1, 1'b1, 1'b1, 32'hB2, GRANT_TIMEOUT, "R2");
-        do_pop(3'd1, 1'b1, 1'b1, 32'hB3, GRANT_TIMEOUT, "R2");
-        do_pop(3'd2, 1'b1, 1'b1, 32'hC1, GRANT_TIMEOUT, "R2");
-        do_pop(3'd2, 1'b1, 1'b1, 32'hC2, GRANT_TIMEOUT, "R2");
-        check_status("R2 interleaved pop");
-        if (empty_o !== 1'b1) fail("R14", "empty_o not high after interleaved pops");
-
-        // R12: content-addressed search across all tags
-        reset_dut();
-        if (empty_o !== 1'b1) fail("R15", "empty_o not high after reset");
-        if (full_o  !== 1'b0) fail("R15", "full_o not low after reset");
-        check_status("R14/R15 reset2");
-
-        do_push(3'd0, 32'h0000000F, GRANT_TIMEOUT, "R12 setup");
-        do_push(3'd1, 32'h000000F0, GRANT_TIMEOUT, "R12 setup");
-        do_push(3'd2, 32'hF0000000, GRANT_TIMEOUT, "R12 setup");
-        do_push(3'd1, 32'h000000FF, GRANT_TIMEOUT, "R12 setup");
-        check_status("R12 setup");
-
-        do_search(32'h0000000F, 32'h0000000F, 1'b1, "R12 hit low nibble F");
-        do_search(32'h00000000, 32'h0000000F, 1'b1, "R12 hit low nibble 0");
-        do_search(32'h000000AB, 32'h000000FF, 1'b0, "R12 no match byte AB");
-        do_search(32'h12345678, 32'h00000000, 1'b1, "R13 mask zero");
-        do_search(32'hF0000000, 32'hF0000000, 1'b1, "R12 high nibble F");
-        do_search(32'h00000000, 32'h80000000, 1'b1, "R12 bit31 zero");
-        do_search(32'h80000000, 32'h80000000, 1'b1, "R12 bit31 one");
-        do_search(32'h0000000F, 32'hF000000F, 1'b1, "R12 combined mask");
-
-        do_pop(3'd1, 1'b1, 1'b1, 32'h000000F0, GRANT_TIMEOUT, "R12 after pop");
-        do_pop(3'd1, 1'b1, 1'b1, 32'h000000FF, GRANT_TIMEOUT, "R12 after pop");
-        do_search(32'h0000000F, 32'h0000000F, 1'b1, "R12 after removing tag1");
-        do_search(32'hF0000000, 32'hF0000000, 1'b1, "R12 high after removing tag1");
-        do_search(32'h000000FF, 32'h000000FF, 1'b0, "R12 no match FF after removal");
-        check_status("R12 after pops");
-
-        watchdog_done = 1;
-        $display("RESULT: PASS");
-        $finish;
+      if (en === 1'b1) begin
+        model_q[tag].pop_front();
+        total_entries = total_entries - 1;
+      end
+    end else begin
+      if (model_q[tag].size() != 0)
+        fail_test("R8", "pop_data_valid low but model has entries for tag");
     end
+
+    pop_req = 1'b0;
+  endtask
+
+  task automatic do_search(
+    input logic [31:0] mdata,
+    input logic [31:0] mmask,
+    output logic hit_o
+  );
+    int wait_cnt;
+
+    match_req[0] = 1'b1;
+    match_data[0] = mdata;
+    match_mask[0] = mmask;
+    wait_cnt = 0;
+
+    while (1) begin
+      @(negedge clk);
+      wait_cnt = wait_cnt + 1;
+      if (match_gnt[0] === 1'b1) break;
+      if (wait_cnt >= TIMEOUT) fail_test("R11", "search not granted");
+    end
+
+    hit_o = match_hit[0];
+    match_req[0] = 1'b0;
+  endtask
+
+  function automatic logic search_model(
+    input logic [31:0] mdata,
+    input logic [31:0] mmask
+  );
+    int t, i;
+    for (t = 0; t < TAGS; t++) begin
+      for (i = 0; i < model_q[t].size(); i++) begin
+        if ((model_q[t][i] & mmask) == (mdata & mmask))
+          return 1'b1;
+      end
+    end
+    return 1'b0;
+  endfunction
+
+  // ---------------------------------------------------------------------------
+  // Main stimulus
+  // ---------------------------------------------------------------------------
+  initial begin
+    // Local variables -- declare first
+    logic search_hit;
+    logic expected_hit;
+    logic pop_valid;
+    logic [31:0] pop_data_local;
+    int i;
+
+    // Initialize inputs
+    push_req = 1'b0;
+    push_tag = 3'b0;
+    push_data = 32'h0;
+    pop_req = 1'b0;
+    pop_tag = 3'b0;
+    pop_en = 1'b0;
+    match_req[0] = 1'b0;
+    match_data[0] = 32'h0;
+    match_mask[0] = 32'h0;
+
+    clear_model();
+
+    // Reset and initial status
+    bfm_reset(4);
+    wait_cycles(1);
+    check_status("R15", 1'b1, 1'b0);
+
+    // ---------------------------------------------------------------------
+    // Phase 1: capacity and per-tag FIFO with all entries under one tag
+    // ---------------------------------------------------------------------
+    for (i = 0; i < 8; i++) begin
+      do_push(3'd0, 32'hA0 + i[31:0]);
+      check_status("R14", 1'b0, (total_entries == SLOTS) ? 1'b1 : 1'b0);
+    end
+    check_status("R14", 1'b0, 1'b1);
+
+    // R5: push_gnt must be low when full
+    push_req = 1'b1;
+    push_tag = 3'd0;
+    push_data = 32'hDEAD_BEEF;
+    for (i = 0; i < 4; i++) begin
+      @(negedge clk);
+      check_true(full === 1'b1, "R14", "full_o low while store full");
+      check_true(push_gnt === 1'b0, "R5", "push_gnt high while store full");
+    end
+    push_req = 1'b0;
+
+    // R11/R12/R13: search across all tags
+    do_search(32'hA0, 32'hFFFF_FFFF, search_hit);
+    expected_hit = search_model(32'hA0, 32'hFFFF_FFFF);
+    check_true(search_hit === expected_hit, "R12", "search A0 hit mismatch");
+
+    do_search(32'hA7, 32'hFFFF_FFFF, search_hit);
+    expected_hit = search_model(32'hA7, 32'hFFFF_FFFF);
+    check_true(search_hit === expected_hit, "R12", "search A7 hit mismatch");
+
+    do_search(32'hC0, 32'hFFFF_FFFF, search_hit);
+    expected_hit = search_model(32'hC0, 32'hFFFF_FFFF);
+    check_true(search_hit === expected_hit, "R12", "search C0 miss mismatch");
+
+    do_search(32'h0000_0000, 32'h0000_0000, search_hit);
+    expected_hit = search_model(32'h0000_0000, 32'h0000_0000);
+    check_true(search_hit === expected_hit, "R13", "zero-mask search mismatch");
+    check_true(expected_hit === 1'b1, "R13", "zero-mask should hit when non-empty");
+
+    // R2/R7/R8: pop all tag 0 entries in FIFO order
+    for (i = 0; i < 8; i++) begin
+      do_pop(3'd0, 1'b1, pop_data_local, pop_valid);
+      check_true(pop_valid === 1'b1, "R8", "pop valid not high for existing tag");
+      check_true(pop_data_local === 32'hA0 + i[31:0], "R2", "tag0 FIFO order mismatch");
+    end
+    check_status("R14", 1'b1, 1'b0);
+
+    // R13 on empty store
+    do_search(32'h0000_0000, 32'h0000_0000, search_hit);
+    expected_hit = search_model(32'h0000_0000, 32'h0000_0000);
+    check_true(search_hit === expected_hit, "R13", "zero-mask empty mismatch");
+    check_true(search_hit === 1'b0, "R13", "zero-mask should miss on empty");
+
+    // ---------------------------------------------------------------------
+    // Phase 2: multi-tag operation, inspect, missing-tag pop
+    // ---------------------------------------------------------------------
+    for (i = 0; i < 4; i++) begin
+      do_push(3'd1, 32'hB0 + i[31:0]);
+      check_status("R14", 1'b0, (total_entries == SLOTS) ? 1'b1 : 1'b0);
+    end
+    for (i = 0; i < 4; i++) begin
+      do_push(3'd2, 32'hC0 + i[31:0]);
+      check_status("R14", 1'b0, (total_entries == SLOTS) ? 1'b1 : 1'b0);
+    end
+    check_status("R14", 1'b0, 1'b1);
+
+    // Search across multiple tags
+    do_search(32'hB2, 32'hFFFF_FFFF, search_hit);
+    expected_hit = search_model(32'hB2, 32'hFFFF_FFFF);
+    check_true(search_hit === expected_hit, "R12", "search B2 mismatch");
+
+    do_search(32'hC3, 32'hFFFF_FFFF, search_hit);
+    expected_hit = search_model(32'hC3, 32'hFFFF_FFFF);
+    check_true(search_hit === expected_hit, "R12", "search C3 mismatch");
+
+    do_search(32'hA0, 32'hFFFF_FFFF, search_hit);
+    expected_hit = search_model(32'hA0, 32'hFFFF_FFFF);
+    check_true(search_hit === expected_hit, "R12", "search removed A0 mismatch");
+
+    // Partial mask check
+    do_search(32'h0000_0000, 32'h0000_000F, search_hit);
+    expected_hit = search_model(32'h0000_0000, 32'h0000_000F);
+    check_true(search_hit === expected_hit, "R12", "partial mask hit mismatch");
+
+    do_search(32'h0000_000F, 32'h0000_000F, search_hit);
+    expected_hit = search_model(32'h0000_000F, 32'h0000_000F);
+    check_true(search_hit === expected_hit, "R12", "partial mask miss mismatch");
+
+    do_search(32'h0000_0000, 32'h0000_0000, search_hit);
+    expected_hit = search_model(32'h0000_0000, 32'h0000_0000);
+    check_true(search_hit === expected_hit, "R13", "zero-mask non-empty mismatch");
+    check_true(expected_hit === 1'b1, "R13", "zero-mask should hit when non-empty");
+
+    // R9: pop_en=0 inspects but does not remove
+    do_pop(3'd1, 1'b0, pop_data_local, pop_valid);
+    check_true(pop_valid === 1'b1, "R8", "pop inspect valid not high");
+    check_true(pop_data_local === 32'hB0, "R2", "pop inspect data not oldest");
+    check_true(total_entries == 8, "R9", "pop with pop_en=0 removed entry");
+    check_true(model_q[1].size() == 4, "R9", "pop with pop_en=0 removed entry");
+
+    // Remove oldest tag1 after inspect
+    do_pop(3'd1, 1'b1, pop_data_local, pop_valid);
+    check_true(pop_valid === 1'b1, "R8", "pop valid not high after inspect");
+    check_true(pop_data_local === 32'hB0, "R2", "pop data not B0 after inspect");
+    check_status("R14", 1'b0, 1'b0);
+
+    // Pop remaining tag1 FIFO
+    for (i = 1; i < 4; i++) begin
+      do_pop(3'd1, 1'b1, pop_data_local, pop_valid);
+      check_true(pop_valid === 1'b1, "R8", "pop valid not high for tag1");
+      check_true(pop_data_local === 32'hB0 + i[31:0], "R2", "tag1 FIFO order mismatch");
+    end
+    check_status("R14", 1'b0, 1'b0);
+
+    // R10: pop of a tag with no entries completes with valid low
+    do_pop(3'd3, 1'b1, pop_data_local, pop_valid);
+    check_true(pop_valid === 1'b0, "R10", "pop missing tag valid not low");
+
+    // Pop tag2 FIFO
+    for (i = 0; i < 4; i++) begin
+      do_pop(3'd2, 1'b1, pop_data_local, pop_valid);
+      check_true(pop_valid === 1'b1, "R8", "pop valid not high for tag2");
+      check_true(pop_data_local === 32'hC0 + i[31:0], "R2", "tag2 FIFO order mismatch");
+    end
+    check_status("R14", 1'b1, 1'b0);
+
+    // ---------------------------------------------------------------------
+    // R15: reset clears store
+    // ---------------------------------------------------------------------
+    do_push(3'd4, 32'hD0);
+    do_push(3'd4, 32'hD1);
+    check_status("R14", 1'b0, 1'b0);
+
+    push_req = 1'b0;
+    pop_req = 1'b0;
+    match_req[0] = 1'b0;
+    pop_en = 1'b0;
+
+    bfm_reset(4);
+    clear_model();
+    wait_cycles(1);
+    check_status("R15", 1'b1, 1'b0);
+
+    $display("RESULT: PASS");
+    $finish;
+  end
 
 endmodule

@@ -1,0 +1,19 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "0/0",
+  "did_not_compile": "0",
+  "faults_caught": "0/0",
+  "faults_hung": "0",
+  "git_sha": "831a32e6909788bd77beb5c4e7c3083a4ad2adc9-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "smoke",
+  "second_dut_accepted": "not-run",
+  "status": "completed",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/0f6f5c72-f4e8-494d-afad-482534d98f0e/scratchpad/iw/smoke.sv",
+  "submission_sha256_16": "7857e605beb007fc",
+  "task": "v_ca03_axi_iw_converter",
+  "task_text_hash": "",
+  "timestamp_utc": "2026-08-18T23:52:07Z"
+}
