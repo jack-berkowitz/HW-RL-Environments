@@ -127,19 +127,19 @@ Rows below answer task text 7e7f9d22bce28ef5 (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
-testbench                accepts correct design  accepts 2nd implementation  accepts legal variants  catches faults                 status
-------------------------------------------------------------------------------------------------------------------------------------------
-tag_tracker_ref  not scored against this prompt                           —                       —               —  last run answered ...
-chat             not scored against this prompt                           —                       —               —  last run answered ...
-deepseek         not scored against this prompt                           —                       —               —  last run answered ...
-gemini           not scored against this prompt                           —                       —               —  last run answered ...
-qwen             not scored against this prompt                           —                       —               —  last run answered ...
+testbench            accepts correct design  accepts 2nd implementation  accepts legal variants  catches faults                  status
+---------------------------------------------------------------------------------------------------------------------------------------
+reference testbench                     yes                         yes                     4/4           10/10                 ceiling
+ChatGPT 5.6 Sol                         yes                         yes                     4/4            9/10                        
+DeepSeek V4 Pro             did not compile                         n/a                     n/a             n/a     ZERO: did not build
+Gemini 3.1 Pro                          yes                         yes                     3/4        withheld  accepts the golden ...
+Qwen 3.7 Plus               did not compile                         n/a                     n/a             n/a     ZERO: did not build
 
-  tag_tracker_ref: last run answered task text f2926d08631309ca
-  chat: last run answered task text f2926d08631309ca
-  deepseek: last run answered task text f2926d08631309ca
-  gemini: last run answered task text f2926d08631309ca
-  qwen: last run answered task text f2926d08631309ca
+  reference testbench: establishes the ceiling
+  DeepSeek V4 Pro: the testbench itself does not build
+  Gemini 3.1 Pro: accepts the golden DUT but rejects a legal variant or the second DUT, so it
+      rejects some correct hardware — its fault count carries no information
+  Qwen 3.7 Plus: the testbench itself does not build
 
 
 V_NW03 — FRAME-ARBITRATING STREAM MUX

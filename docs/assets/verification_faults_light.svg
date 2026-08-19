@@ -6,20 +6,20 @@
 <text x="24" y="106" font-size="12" font-weight="600" fill="#0b0b0b">v_ca05</text>
 <text x="190" y="129.0" font-size="11.5" text-anchor="end" fill="#52514e">ChatGPT 5.6 Sol</text>
 <rect x="200" y="117" width="300" height="12" rx="4" fill="#e6e5e1"/>
-<rect x="200" y="117" width="300.0" height="12" rx="4" fill="#2a78d6"/>
-<text x="516" y="129.0" font-size="11.5" font-weight="600" fill="#0b0b0b">10 / 10</text>
+<rect x="200" y="117" width="270.0" height="12" rx="4" fill="#2a78d6"/>
+<text x="516" y="129.0" font-size="11.5" font-weight="600" fill="#0b0b0b">9 / 10</text>
 <text x="190" y="151.0" font-size="11.5" text-anchor="end" fill="#52514e">Gemini 3.1 Pro</text>
 <rect x="200" y="139" width="300" height="12" rx="4" fill="#e6e5e1"/>
 <rect x="200" y="139" width="5" height="12" rx="2.5" fill="#c9c7c1"/>
 <text x="516" y="151.0" font-size="11" fill="#83817a">not scoreable — rejects a legal variant</text>
-<text x="190" y="173.0" font-size="11.5" text-anchor="end" fill="#52514e">Qwen 3.7 Plus</text>
+<text x="190" y="173.0" font-size="11.5" text-anchor="end" fill="#52514e">DeepSeek V4 Pro</text>
 <rect x="200" y="161" width="300" height="12" rx="4" fill="#e6e5e1"/>
 <rect x="200" y="161" width="5" height="12" rx="2.5" fill="#c9c7c1"/>
-<text x="516" y="173.0" font-size="11" fill="#83817a">not scoreable — rejects a legal variant</text>
-<text x="190" y="195.0" font-size="11.5" text-anchor="end" fill="#52514e">DeepSeek V4 Pro</text>
+<text x="516" y="173.0" font-size="11" fill="#83817a">not scoreable — did not compile</text>
+<text x="190" y="195.0" font-size="11.5" text-anchor="end" fill="#52514e">Qwen 3.7 Plus</text>
 <rect x="200" y="183" width="300" height="12" rx="4" fill="#e6e5e1"/>
 <rect x="200" y="183" width="5" height="12" rx="2.5" fill="#c9c7c1"/>
-<text x="516" y="195.0" font-size="11" fill="#83817a">not scoreable — rejects the golden DUT</text>
+<text x="516" y="195.0" font-size="11" fill="#83817a">not scoreable — did not compile</text>
 <line x1="500" y1="114" x2="500" y2="198" stroke="#83817a" stroke-width="1.5" stroke-dasharray="3 2"/>
 <text x="504" y="111" font-size="9.5" fill="#83817a">ceiling 10/10</text>
 <text x="24" y="224" font-size="12" font-weight="600" fill="#0b0b0b">v_nw03</text>

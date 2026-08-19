@@ -13,16 +13,16 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: 12 submitted, 7 compiled, 6 correct, 6 produced a PPA number. Verification: 12 submitted, 11 compiled, 6 accepted all correct hardware, 6 produced a fault count." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: 12 submitted, 7 compiled, 6 correct, 6 produced a PPA number. Verification: 12 submitted, 9 compiled, 6 accepted all correct hardware, 6 produced a fault count." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
-**Most submissions do not reach a score, and they fail early.** Of 12 design submissions, **5 never compiled at all** and a sixth compiled but failed its contract — so half never reached a PPA number. The verification half is healthier on compilation, 11 of 12, but only 6 clear the validity gate: the rest reject some of the correct hardware they were supposed to accept.
+**Most submissions do not reach a score, and they fail early.** Of 12 design submissions, **5 never compiled at all** and a sixth compiled but failed its contract — so half never reached a PPA number. The verification half is healthier on compilation, 9 of 12, but only 6 clear the validity gate: the rest reject some of the correct hardware they were supposed to accept.
 
 Where numbers do exist, the picture is mixed rather than uniformly poor. On the CDC FIFO all four models are functionally correct across every legal configuration and land within 1.2 % of each other on area. On the FP32 multiply-add and the AXI crossbar the gap to the reference is large — 6.4× and 13.9× the area respectively — and on the crossbar the submission also runs at 111 MHz against the reference's 190.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each of the 12 verification submissions, against a ceiling of 10 shown as a dashed line per task. v_ca05: ChatGPT 5.6 Sol 10 of 10; Gemini 3.1 Pro and Qwen 3.7 Plus not scoreable for rejecting a legal variant; DeepSeek V4 Pro not scoreable for rejecting the golden DUT. v_nw03: ChatGPT 5.6 Sol 9, Gemini 3.1 Pro 9, DeepSeek V4 Pro 6; Qwen 3.7 Plus not scoreable. v_dsp02: ChatGPT 5.6 Sol 9, DeepSeek V4 Pro 8; Gemini 3.1 Pro not scoreable; Qwen 3.7 Plus did not compile." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each of the 12 verification submissions, against a ceiling of 10 shown as a dashed line per task. v_ca05: ChatGPT 5.6 Sol 9 of 10; Gemini 3.1 Pro not scoreable for rejecting a legal variant; DeepSeek V4 Pro and Qwen 3.7 Plus did not compile. v_nw03: ChatGPT 5.6 Sol 9, Gemini 3.1 Pro 9, DeepSeek V4 Pro 6; Qwen 3.7 Plus not scoreable. v_dsp02: ChatGPT 5.6 Sol 9, DeepSeek V4 Pro 8; Gemini 3.1 Pro not scoreable; Qwen 3.7 Plus did not compile." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---
@@ -156,10 +156,10 @@ Ceiling = what the task's own reference testbench achieves, shown as the dashed 
 | Task | Testbench | Accepts correct DUT | Accepts 2nd impl. | Accepts legal variants | Faults caught |
 |---|---|---|---|---|---|
 | **v_ca05** tag tracker | *reference (ceiling)* | yes | yes | 4/4 | **10/10** |
-| | ChatGPT 5.6 Sol | yes | yes | 4/4 | **10/10** — matches the ceiling |
+| | ChatGPT 5.6 Sol | yes | yes | 4/4 | **9/10** |
 | | Gemini 3.1 Pro | yes | yes | **3/4** | *withheld* |
-| | Qwen 3.7 Plus | yes | yes | **3/4** | *withheld* |
-| | DeepSeek V4 Pro | **no** | no | 0/4 | *withheld* |
+| | DeepSeek V4 Pro | *did not compile* | — | — | *withheld* |
+| | Qwen 3.7 Plus | *did not compile* | — | — | *withheld* |
 | **v_nw03** stream mux | *reference (ceiling)* | yes | yes | 5/5 | **10/10** |
 | | ChatGPT 5.6 Sol | yes | yes | 5/5 | **9/10** |
 | | Gemini 3.1 Pro | yes | yes | 5/5 | **9/10** |
@@ -171,9 +171,11 @@ Ceiling = what the task's own reference testbench achieves, shown as the dashed 
 | | Gemini 3.1 Pro | **no** | no | 1/5 | *withheld* |
 | | Qwen 3.7 Plus | *did not compile* | — | — | *withheld* |
 
-**Six of twelve submissions now clear the validity gate**, and five produce a fault count at or near the ceiling: ChatGPT 5.6 Sol reaches **10/10 on v_ca05**, and ChatGPT 5.6 Sol and Gemini 3.1 Pro both reach **9/10 on v_nw03**, with ChatGPT 5.6 Sol at **9/10 on v_dsp02**. Each of those accepted the golden DUT, an independent second implementation, and every legal variant before any fault count was reported.
+**Six of twelve submissions clear the validity gate**, and each of those six produces a fault count at or near the ceiling: ChatGPT 5.6 Sol reaches **9/10 on all three tasks**, Gemini 3.1 Pro **9/10 on v_nw03**, and DeepSeek V4 Pro **8/10 on v_dsp02** and 6/10 on v_nw03. Every one of those accepted the golden DUT, an independent second implementation, and every legal variant before any fault count was reported.
 
-Two failure modes remain visible and are worth separating. **DeepSeek V4 Pro** on v_ca05 and **Qwen 3.7 Plus** on v_nw03 **reject the golden DUT outright** — they would reject correct hardware. **Gemini 3.1 Pro** and **Qwen 3.7 Plus** on v_ca05 do something subtler: they accept the golden DUT and the second implementation, then reject one legal variant (`tt_c4_pop_gnt_delayed`), meaning they check something the specification never promised. Both cases have their fault counts withheld, for the same reason — a testbench that rejects some correct hardware rejects faulty hardware for the wrong reasons too.
+Nine of twelve compile. The three that do not are all syntax errors in the testbench itself — a `?` where an identifier belongs, an assignment pattern written without `'{`. Nothing ran, so nothing was measured; these say nothing about whether the model could check the hardware.
+
+Two failure modes remain among those that do compile, and the table keeps them apart. **Qwen 3.7 Plus on v_nw03 and Gemini 3.1 Pro on v_dsp02 reject the golden DUT outright** — they would reject correct hardware. **Gemini 3.1 Pro on v_ca05 fails more subtly**: it accepts the golden DUT and the independent second implementation, then rejects one legal variant (`tt_c4_pop_gnt_delayed`), meaning it checks something the specification never promised. Both have their fault counts withheld, for the same reason — a testbench that rejects some correct hardware rejects faulty hardware for the wrong reasons too.
 
 ---
 

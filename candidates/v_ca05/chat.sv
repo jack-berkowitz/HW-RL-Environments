@@ -1,61 +1,68 @@
+`timescale 1ns/1ps
+
 module tag_tracker_tb;
 
-  // ---------------------------------------------------------------------------
-  // Configuration
-  // ---------------------------------------------------------------------------
-  localparam int TAG_W       = 3;
-  localparam int SLOTS       = 8;
-  localparam int N_MATCH     = 1;
-  localparam int N_TAGS      = (1 << TAG_W);
-  localparam int OP_TIMEOUT  = 20_000;
+  localparam int TAG_W_P   = 3;
+  localparam int SLOTS_P   = 8;
+  localparam int N_MATCH_P = 1;
 
   typedef logic [31:0] payload_t;
-  typedef logic [TAG_W-1:0] tag_t;
+  typedef logic [TAG_W_P-1:0] tag_t;
+
+  typedef struct packed {
+    tag_t     tag;
+    payload_t data;
+  } rec_t;
 
   // ---------------------------------------------------------------------------
   // DUT signals
   // ---------------------------------------------------------------------------
-  tag_t      push_tag_i;
-  payload_t  push_data_i;
-  logic      push_req_i;
-  logic      push_gnt_o;
 
-  payload_t [N_MATCH-1:0] match_data_i;
-  payload_t [N_MATCH-1:0] match_mask_i;
-  logic     [N_MATCH-1:0] match_req_i;
-  logic     [N_MATCH-1:0] match_hit_o;
-  logic     [N_MATCH-1:0] match_gnt_o;
+  tag_t     push_tag;
+  payload_t push_data;
+  logic     push_req;
+  logic     push_gnt;
 
-  tag_t      pop_tag_i;
-  logic      pop_en_i;
-  logic      pop_req_i;
-  payload_t  pop_data_o;
-  logic      pop_data_valid_o;
-  logic      pop_gnt_o;
+  // These are PACKED dimensions, matching the DUT port map exactly.
+  payload_t [N_MATCH_P-1:0] match_data;
+  payload_t [N_MATCH_P-1:0] match_mask;
+  logic     [N_MATCH_P-1:0] match_req;
+  logic     [N_MATCH_P-1:0] match_hit;
+  logic     [N_MATCH_P-1:0] match_gnt;
 
-  logic      full_o;
-  logic      empty_o;
+  tag_t     pop_tag;
+  logic     pop_en;
+  logic     pop_req;
+  payload_t pop_data;
+  logic     pop_data_valid;
+  logic     pop_gnt;
+
+  logic full;
+  logic empty;
 
   // ---------------------------------------------------------------------------
-  // PROVIDED PLUMBING -- clock, reset and watchdog only.
-  // ---------------------------------------------------------------------------
-  // NO TRANSACTOR IS PROVIDED FOR THE REQUEST/GRANT PORTS. Driving them, and
-  // deciding when a request has completed, is part of the task.
-  //
-  // What is provided is the timing discipline, because getting it wrong is
-  // silent: reset is asserted and released away from the sampling edge, and the
-  // helper below moves you to the point in the cycle where it is safe to change
-  // stimulus.
+  // Reference model / reporting
   // ---------------------------------------------------------------------------
 
-  // ---- clock ----------------------------------------------------------------
+  rec_t model_q[$];
+  int   model_count;
+  int   fail_count;
+
+  // Used only so the independent watchdog can name the requirement associated
+  // with a request that has stopped making forward progress.
+  string active_req_name;
+  string active_req_desc;
+
+  // ---------------------------------------------------------------------------
+  // PROVIDED PLUMBING -- clock, reset and timing discipline.
+  // ---------------------------------------------------------------------------
+
   logic clk;
   initial begin
     clk = 1'b0;
     forever #5 clk = ~clk;
   end
 
-  // ---- reset (active low) ----------------------------------------------------
   logic rst_n;
   initial rst_n = 1'b0;
 
@@ -67,7 +74,6 @@ module tag_tracker_tb;
     rst_n = 1'b1;
   endtask
 
-  // ---- timing discipline -----------------------------------------------------
   task automatic bfm_drive_point();
     @(negedge clk);
   endtask
@@ -76,840 +82,836 @@ module tag_tracker_tb;
     @(posedge clk);
   endtask
 
-  // ---------------------------------------------------------------------------
-  // DUT
-  // ---------------------------------------------------------------------------
-  tag_tracker #(
-    .TAG_W        (TAG_W),
-    .SLOTS        (SLOTS),
-    .FULL_RATE    (1'b0),
-    .CUT_POP_PATH (1'b0),
-    .N_MATCH      (N_MATCH),
-    .payload_t    (payload_t)
-  ) dut (
-    .clk_i              (clk),
-    .rst_ni             (rst_n),
-
-    .push_tag_i         (push_tag_i),
-    .push_data_i        (push_data_i),
-    .push_req_i         (push_req_i),
-    .push_gnt_o         (push_gnt_o),
-
-    .match_data_i       (match_data_i),
-    .match_mask_i       (match_mask_i),
-    .match_req_i        (match_req_i),
-    .match_hit_o        (match_hit_o),
-    .match_gnt_o        (match_gnt_o),
-
-    .pop_tag_i          (pop_tag_i),
-    .pop_en_i           (pop_en_i),
-    .pop_req_i          (pop_req_i),
-    .pop_data_o         (pop_data_o),
-    .pop_data_valid_o   (pop_data_valid_o),
-    .pop_gnt_o          (pop_gnt_o),
-
-    .full_o             (full_o),
-    .empty_o            (empty_o)
-  );
-
-  // ---------------------------------------------------------------------------
-  // Edge samples
-  //
-  // Requests are driven on a negedge.  On each following posedge these
-  // registers capture the values belonging to the transaction that can
-  // complete at that edge.  The BFM examines the samples at the next negedge.
-  //
-  // This is important for a removing pop: pop_data_o might change immediately
-  // after the posedge because the head entry has just been removed.  Sampling
-  // it here preserves the value associated with the completing transaction.
-  // ---------------------------------------------------------------------------
-  logic                 samp_push_gnt;
-  logic [N_MATCH-1:0]   samp_match_gnt;
-  logic [N_MATCH-1:0]   samp_match_hit;
-  logic                 samp_pop_gnt;
-  logic                 samp_pop_valid;
-  payload_t             samp_pop_data;
-
-  always @(posedge clk) begin
-    samp_push_gnt   <= push_gnt_o;
-    samp_match_gnt  <= match_gnt_o;
-    samp_match_hit  <= match_hit_o;
-    samp_pop_gnt    <= pop_gnt_o;
-    samp_pop_valid  <= pop_data_valid_o;
-    samp_pop_data   <= pop_data_o;
-  end
-
-  // ---------------------------------------------------------------------------
-  // Reference model
-  //
-  // Static per-tag FIFOs are sufficient because total legal occupancy is at
-  // most SLOTS.  There is intentionally no global ordering model: R3 says
-  // ordering between different tags is unspecified.
-  // ---------------------------------------------------------------------------
-  payload_t ref_fifo [0:N_TAGS-1][0:SLOTS-1];
-  int       ref_count[0:N_TAGS-1];
-  int       ref_total;
-
-  int failures;
-
-  task automatic note_fail(
-    input string requirement,
-    input string message
-  );
-    begin
-      failures = failures + 1;
-      $display("FAIL %s: %s", requirement, message);
-    end
-  endtask
-
-  task automatic ref_clear();
-    integer t;
-    integer s;
-    begin
-      ref_total = 0;
-
-      for (t = 0; t < N_TAGS; t = t + 1) begin
-        ref_count[t] = 0;
-
-        for (s = 0; s < SLOTS; s = s + 1) begin
-          ref_fifo[t][s] = '0;
-        end
-      end
-    end
-  endtask
-
-  task automatic ref_push(
-    input tag_t     tag,
-    input payload_t data
-  );
-    integer idx;
-    begin
-      idx = int'(tag);
-
-      if ((ref_total < SLOTS) && (ref_count[idx] < SLOTS)) begin
-        ref_fifo[idx][ref_count[idx]] = data;
-        ref_count[idx] = ref_count[idx] + 1;
-        ref_total = ref_total + 1;
-      end
-    end
-  endtask
-
-  task automatic ref_remove_head(
-    input tag_t tag
-  );
-    integer idx;
-    integer j;
-    begin
-      idx = int'(tag);
-
-      if (ref_count[idx] > 0) begin
-        for (j = 0; j < ref_count[idx]-1; j = j + 1) begin
-          ref_fifo[idx][j] = ref_fifo[idx][j+1];
-        end
-
-        ref_fifo[idx][ref_count[idx]-1] = '0;
-        ref_count[idx] = ref_count[idx] - 1;
-        ref_total = ref_total - 1;
-      end
-    end
-  endtask
-
-  function automatic logic ref_search(
-    input payload_t data,
-    input payload_t mask
-  );
-    integer t;
-    integer j;
-    begin
-      ref_search = 1'b0;
-
-      for (t = 0; t < N_TAGS; t = t + 1) begin
-        for (j = 0; j < ref_count[t]; j = j + 1) begin
-          if ((ref_fifo[t][j] & mask) == (data & mask)) begin
-            ref_search = 1'b1;
-          end
-        end
-      end
-    end
-  endfunction
-
-  // ---------------------------------------------------------------------------
-  // R14 -- occupancy status is exact.
-  // Called only at safe negedge observation points after state/model updates.
-  // ---------------------------------------------------------------------------
-  task automatic check_status();
-    logic exp_empty;
-    logic exp_full;
-    begin
-      exp_empty = (ref_total == 0);
-      exp_full  = (ref_total == SLOTS);
-
-      if (empty_o !== exp_empty) begin
-        note_fail(
-          "R14",
-          $sformatf(
-            "empty_o=%0b, expected %0b at occupancy %0d",
-            empty_o, exp_empty, ref_total
-          )
-        );
-      end
-
-      if (full_o !== exp_full) begin
-        note_fail(
-          "R14",
-          $sformatf(
-            "full_o=%0b, expected %0b at occupancy %0d",
-            full_o, exp_full, ref_total
-          )
-        );
-      end
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // Reset helper.
-  // ---------------------------------------------------------------------------
-  task automatic reset_to_empty();
-    begin
-      bfm_reset(4);
-      ref_clear();
-
-      if (empty_o !== 1'b1) begin
-        note_fail("R15", "empty_o was not high after reset release");
-      end
-
-      if (full_o !== 1'b0) begin
-        note_fail("R15", "full_o was not low after reset release");
-      end
-
-      check_status();
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // Push BFM.
-  //
-  // R4: the model changes only on req && gnt.
-  // R6: no immediate-grant assumption is made.
-  // The large timeout is solely a finite-run safeguard.
-  // ---------------------------------------------------------------------------
-  task automatic do_push(
-    input tag_t     tag,
-    input payload_t data,
-    input string    timeout_requirement
-  );
-    integer i;
-    logic done;
-    begin
-      done = 1'b0;
-
-      bfm_drive_point();
-      push_tag_i  = tag;
-      push_data_i = data;
-      push_req_i  = 1'b1;
-
-      for (i = 0; (i < OP_TIMEOUT) && !done; i = i + 1) begin
-        bfm_tick();
-        bfm_drive_point();
-
-        if (samp_push_gnt === 1'b1) begin
-          if (ref_total >= SLOTS) begin
-            note_fail(
-              "R5",
-              "push completed while the reference store was full"
-            );
-          end
-          else begin
-            // R4 -- commit precisely on the completing push.
-            ref_push(tag, data);
-          end
-
-          done = 1'b1;
-        end
-
-        check_status();
-      end
-
-      push_req_i = 1'b0;
-
-      if (!done) begin
-        note_fail(
-          timeout_requirement,
-          $sformatf(
-            "push tag %0d did not complete within the finite test timeout",
-            tag
-          )
-        );
-      end
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // Pop BFM.
-  //
-  // result_requirement lets directed tests attribute the semantic check to
-  // R8, R9, R10, R2, or R15 as appropriate.
-  //
-  // pop_data_o is deliberately NOT examined if expected validity is false
-  // (R10).
-  // ---------------------------------------------------------------------------
-  task automatic do_pop(
-    input tag_t  tag,
-    input logic  remove_entry,
-    input string result_requirement
-  );
-    integer i;
-    integer idx;
-    logic done;
-    logic exp_valid;
-    payload_t exp_data;
-    begin
-      idx = int'(tag);
-
-      exp_valid = (ref_count[idx] > 0);
-      exp_data  = '0;
-
-      if (exp_valid) begin
-        exp_data = ref_fifo[idx][0];
-      end
-
-      done = 1'b0;
-
-      bfm_drive_point();
-      pop_tag_i = tag;
-      pop_en_i  = remove_entry;
-      pop_req_i = 1'b1;
-
-      for (i = 0; (i < OP_TIMEOUT) && !done; i = i + 1) begin
-        bfm_tick();
-        bfm_drive_point();
-
-        if (samp_pop_gnt === 1'b1) begin
-          if (samp_pop_valid !== exp_valid) begin
-            note_fail(
-              result_requirement,
-              $sformatf(
-                "pop tag %0d valid=%0b, expected %0b",
-                tag, samp_pop_valid, exp_valid
-              )
-            );
-          end
-          else if (exp_valid) begin
-            if (samp_pop_data !== exp_data) begin
-              note_fail(
-                result_requirement,
-                $sformatf(
-                  "pop tag %0d data=%08x, expected oldest=%08x",
-                  tag, samp_pop_data, exp_data
-                )
-              );
-            end
-          end
-
-          // Model the state required by the specification, even if a faulty
-          // DUT returned an incorrect valid bit.
-          if (remove_entry && exp_valid) begin
-            ref_remove_head(tag);
-          end
-
-          done = 1'b1;
-        end
-
-        check_status();
-      end
-
-      pop_req_i = 1'b0;
-      pop_en_i  = 1'b0;
-
-      if (!done) begin
-        if (!exp_valid) begin
-          // R10 explicitly requires an empty-tag pop to complete.
-          note_fail(
-            "R10",
-            $sformatf(
-              "pop of empty tag %0d did not complete within the finite test timeout",
-              tag
-            )
-          );
-        end
-        else begin
-          note_fail(
-            "R7",
-            $sformatf(
-              "pop tag %0d did not complete within the finite test timeout",
-              tag
-            )
-          );
-        end
-      end
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // Search BFM.
-  //
-  // No mutations occur concurrently, so the expected result is stable for the
-  // entire request regardless of how long arbitration delays the grant.
-  // ---------------------------------------------------------------------------
-  task automatic do_search(
-    input payload_t data,
-    input payload_t mask,
-    input string    result_requirement
-  );
-    integer i;
-    logic done;
-    logic exp_hit;
-    begin
-      exp_hit = ref_search(data, mask);
-      done = 1'b0;
-
-      bfm_drive_point();
-      match_data_i[0] = data;
-      match_mask_i[0] = mask;
-      match_req_i[0]  = 1'b1;
-
-      for (i = 0; (i < OP_TIMEOUT) && !done; i = i + 1) begin
-        bfm_tick();
-        bfm_drive_point();
-
-        if (samp_match_gnt[0] === 1'b1) begin
-          if (samp_match_hit[0] !== exp_hit) begin
-            note_fail(
-              result_requirement,
-              $sformatf(
-                "search data=%08x mask=%08x hit=%0b, expected %0b",
-                data, mask, samp_match_hit[0], exp_hit
-              )
-            );
-          end
-
-          done = 1'b1;
-        end
-
-        check_status();
-      end
-
-      match_req_i[0] = 1'b0;
-
-      if (!done) begin
-        note_fail(
-          "R11",
-          $sformatf(
-            "search data=%08x mask=%08x did not complete within the finite test timeout",
-            data, mask
-          )
-        );
-      end
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // R5 -- when occupancy is exactly SLOTS, push_gnt_o must stay low.
-  //
-  // No pop is present, so occupancy remains full throughout this test.
-  // ---------------------------------------------------------------------------
-  task automatic check_push_blocked_when_full(
-    input tag_t     tag,
-    input payload_t data
-  );
-    integer i;
-    begin
-      if (ref_total == SLOTS) begin
-        bfm_drive_point();
-        push_tag_i  = tag;
-        push_data_i = data;
-        push_req_i  = 1'b1;
-
-        for (i = 0; i < 4; i = i + 1) begin
-          bfm_tick();
-          bfm_drive_point();
-
-          if (samp_push_gnt !== 1'b0) begin
-            note_fail(
-              "R5",
-              $sformatf(
-                "push_gnt_o asserted while occupancy was SLOTS=%0d",
-                SLOTS
-              )
-            );
-          end
-
-          check_status();
-        end
-
-        push_req_i = 1'b0;
-      end
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // R15 -- assert reset while entries are actually present and check that the
-  // store is empty while reset remains asserted and after release.
-  // ---------------------------------------------------------------------------
-  task automatic reset_while_nonempty();
-    integer i;
-    begin
-      bfm_drive_point();
-      rst_n = 1'b0;
-
-      // R15 defines the required architectural state under reset.
-      ref_clear();
-
-      for (i = 0; i < 3; i = i + 1) begin
-        bfm_tick();
-        bfm_drive_point();
-
-        if (empty_o !== 1'b1) begin
-          note_fail(
-            "R15",
-            "empty_o was not high while rst_ni was asserted low"
-          );
-        end
-
-        if (full_o !== 1'b0) begin
-          note_fail(
-            "R15",
-            "full_o was not low while rst_ni was asserted low"
-          );
-        end
-      end
-
-      // We are at a negedge, so release is away from the sampling edge.
-      rst_n = 1'b1;
-
-      bfm_tick();
-      bfm_drive_point();
-
-      if (empty_o !== 1'b1) begin
-        note_fail(
-          "R15",
-          "empty_o was not high after reset release"
-        );
-      end
-
-      if (full_o !== 1'b0) begin
-        note_fail(
-          "R15",
-          "full_o was not low after reset release"
-        );
-      end
-
-      check_status();
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // Independent watchdog.
-  //
-  // The diagnostic does not impose an ordinary transaction-latency check; it
-  // guarantees unconditional simulation termination even if something outside
-  // the normal BFMs prevents forward progress.
-  // ---------------------------------------------------------------------------
+  // Independent unconditional watchdog.  It is deliberately the only bound
+  // placed on grant latency, because the specification otherwise leaves
+  // request-to-grant latency unconstrained.
   initial begin
     #20_000_000;
-    $display(
-      "FAIL R1/R7/R11: watchdog expired before the testbench completed"
-    );
+
+    if (active_req_name != "") begin
+      $display(
+        "FAIL %s: watchdog: no forward progress while %s",
+        active_req_name,
+        active_req_desc
+      );
+    end
+    else begin
+      $display("FAIL R15: watchdog: testbench did not terminate");
+    end
+
     $display("RESULT: FAIL");
     $finish;
   end
 
   // ---------------------------------------------------------------------------
+  // DUT
+  // ---------------------------------------------------------------------------
+
+  tag_tracker #(
+    .TAG_W        (TAG_W_P),
+    .SLOTS        (SLOTS_P),
+    .FULL_RATE    (1'b0),
+    .CUT_POP_PATH (1'b0),
+    .N_MATCH      (N_MATCH_P),
+    .payload_t    (payload_t)
+  ) dut (
+    .clk_i             (clk),
+    .rst_ni            (rst_n),
+
+    .push_tag_i        (push_tag),
+    .push_data_i       (push_data),
+    .push_req_i        (push_req),
+    .push_gnt_o        (push_gnt),
+
+    .match_data_i      (match_data),
+    .match_mask_i      (match_mask),
+    .match_req_i       (match_req),
+    .match_hit_o       (match_hit),
+    .match_gnt_o       (match_gnt),
+
+    .pop_tag_i         (pop_tag),
+    .pop_en_i          (pop_en),
+    .pop_req_i         (pop_req),
+    .pop_data_o        (pop_data),
+    .pop_data_valid_o  (pop_data_valid),
+    .pop_gnt_o         (pop_gnt),
+
+    .full_o            (full),
+    .empty_o           (empty)
+  );
+
+  // ---------------------------------------------------------------------------
+  // Failure helper
+  // ---------------------------------------------------------------------------
+
+  task automatic note_fail(
+    input string req_name,
+    input string msg
+  );
+    fail_count = fail_count + 1;
+    $display("FAIL %s: %s", req_name, msg);
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // R14 -- exact occupancy status
+  // ---------------------------------------------------------------------------
+
+  task automatic check_status(input string req_name);
+    automatic logic want_empty;
+    automatic logic want_full;
+
+    want_empty = (model_count == 0);
+    want_full  = (model_count == SLOTS_P);
+
+    if (empty !== want_empty) begin
+      note_fail(
+        req_name,
+        $sformatf(
+          "empty_o=%0b, expected %0b at occupancy %0d",
+          empty, want_empty, model_count
+        )
+      );
+    end
+
+    if (full !== want_full) begin
+      note_fail(
+        req_name,
+        $sformatf(
+          "full_o=%0b, expected %0b at occupancy %0d",
+          full, want_full, model_count
+        )
+      );
+    end
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // Push transaction
+  //
+  // R4: the reference model changes only on push_req_i && push_gnt_o.
+  // R6: no assumption is made that grant must immediately assert merely
+  //     because capacity is available.
+  // ---------------------------------------------------------------------------
+
+  task automatic push_one(
+    input tag_t     tag_v,
+    input payload_t data_v,
+    input string    progress_req_name
+  );
+    automatic logic done;
+    automatic logic sampled_gnt;
+    automatic rec_t item;
+
+    done        = 1'b0;
+    sampled_gnt = 1'b0;
+
+    active_req_name = progress_req_name;
+    active_req_desc = $sformatf("waiting for push grant, tag %0d", tag_v);
+
+    bfm_drive_point();
+    push_tag  = tag_v;
+    push_data = data_v;
+    push_req  = 1'b1;
+
+    while (!done) begin
+      // Sample the handshake value at the sampling edge, before changing any
+      // request signal.
+      bfm_tick();
+      sampled_gnt = push_gnt;
+
+      if (sampled_gnt) begin
+        // R4
+        item.tag  = tag_v;
+        item.data = data_v;
+        model_q.push_back(item);
+        model_count = model_count + 1;
+        done = 1'b1;
+      end
+    end
+
+    // Move away from the sampling edge before withdrawing the request.
+    bfm_drive_point();
+    push_req = 1'b0;
+
+    active_req_name = "";
+    active_req_desc = "";
+
+    // R14
+    check_status("R14");
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // R5 -- grant must remain low while the store is full.
+  // ---------------------------------------------------------------------------
+
+  task automatic check_push_blocked_when_full(
+    input tag_t     tag_v,
+    input payload_t data_v
+  );
+    automatic int i;
+    automatic logic sampled_gnt;
+
+    sampled_gnt = 1'b0;
+
+    bfm_drive_point();
+    push_tag  = tag_v;
+    push_data = data_v;
+    push_req  = 1'b1;
+
+    for (i = 0; i < 4; i = i + 1) begin
+      bfm_tick();
+      sampled_gnt = push_gnt;
+
+      if (sampled_gnt !== 1'b0) begin
+        note_fail(
+          "R5",
+          $sformatf(
+            "push_gnt_o asserted while occupancy was SLOTS=%0d",
+            SLOTS_P
+          )
+        );
+      end
+    end
+
+    bfm_drive_point();
+    push_req = 1'b0;
+
+    check_status("R14");
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // Pop transaction
+  //
+  // The expected entry is selected by bookkeeping: the first modeled entry
+  // having the requested tag.  No cross-tag ordering is assumed.
+  //
+  // Two response snapshots are retained:
+  //   pre_*  : values visible at the completing sampling edge
+  //   post_* : values visible later in the same cycle
+  //
+  // Accepting either permits combinational or registered response timing
+  // without imposing an out-of-scope timing choice.
+  // ---------------------------------------------------------------------------
+
+  task automatic pop_once(
+    input tag_t  tag_v,
+    input logic  remove_v,
+    input string valid_req_name,
+    input string data_req_name
+  );
+    automatic int       i;
+    automatic int       found_idx;
+    automatic logic     done;
+    automatic logic     sampled_gnt;
+    automatic logic     want_valid;
+    automatic payload_t want_data;
+
+    automatic logic     pre_valid;
+    automatic payload_t pre_data;
+    automatic logic     post_valid;
+    automatic payload_t post_data;
+
+    automatic logic     pre_ok;
+    automatic logic     post_ok;
+
+    found_idx   = -1;
+    done        = 1'b0;
+    sampled_gnt = 1'b0;
+    want_valid  = 1'b0;
+    want_data   = '0;
+
+    pre_valid   = 1'b0;
+    pre_data    = '0;
+    post_valid  = 1'b0;
+    post_data   = '0;
+
+    pre_ok      = 1'b0;
+    post_ok     = 1'b0;
+
+    // R2/R8: oldest entry for THIS tag only.
+    for (i = 0; i < model_q.size(); i = i + 1) begin
+      if ((found_idx < 0) && (model_q[i].tag == tag_v)) begin
+        found_idx = i;
+      end
+    end
+
+    if (found_idx >= 0) begin
+      want_valid = 1'b1;
+      want_data  = model_q[found_idx].data;
+    end
+
+    active_req_name = "R7";
+    active_req_desc = $sformatf("waiting for pop grant, tag %0d", tag_v);
+
+    bfm_drive_point();
+    pop_tag = tag_v;
+    pop_en  = remove_v;
+    pop_req = 1'b1;
+
+    while (!done) begin
+      bfm_tick();
+
+      sampled_gnt = pop_gnt;
+
+      if (sampled_gnt) begin
+        // Snapshot response at the completing edge.
+        pre_valid = pop_data_valid;
+        pre_data  = pop_data;
+        done      = 1'b1;
+      end
+    end
+
+    // Snapshot again later in the same cycle before changing the request.
+    bfm_drive_point();
+
+    post_valid = pop_data_valid;
+    post_data  = pop_data;
+
+    pop_req = 1'b0;
+    pop_en  = 1'b0;
+
+    active_req_name = "";
+    active_req_desc = "";
+
+    // R8/R10.  pop_data_o is explicitly ignored whenever valid is low.
+    if (want_valid) begin
+      pre_ok  = ((pre_valid  === 1'b1) && (pre_data  === want_data));
+      post_ok = ((post_valid === 1'b1) && (post_data === want_data));
+
+      if (!(pre_ok || post_ok)) begin
+        if ((pre_valid !== 1'b1) && (post_valid !== 1'b1)) begin
+          note_fail(
+            valid_req_name,
+            $sformatf(
+              "pop tag %0d did not return valid for an existing entry",
+              tag_v
+            )
+          );
+        end
+        else begin
+          note_fail(
+            data_req_name,
+            $sformatf(
+              "pop tag %0d did not return oldest payload 0x%08x "
+              // continued below
+              ,
+              tag_v,
+              want_data
+            )
+          );
+        end
+      end
+    end
+    else begin
+      // For an absent tag, both reasonable observation points must not claim
+      // a valid entry.  pop_data itself is intentionally never inspected.
+      if ((pre_valid === 1'b1) || (post_valid === 1'b1)) begin
+        note_fail(
+          valid_req_name,
+          $sformatf(
+            "pop tag %0d reported valid although that tag had no entries",
+            tag_v
+          )
+        );
+      end
+    end
+
+    // R9: state changes only for a valid completing removal.
+    if (remove_v && want_valid) begin
+      model_q.delete(found_idx);
+      model_count = model_count - 1;
+    end
+
+    // R14
+    check_status("R14");
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // Search transaction
+  // ---------------------------------------------------------------------------
+
+  task automatic search_once(
+    input payload_t data_v,
+    input payload_t mask_v,
+    input string    req_name
+  );
+    automatic int   i;
+    automatic logic done;
+    automatic logic sampled_gnt;
+    automatic logic want_hit;
+    automatic logic pre_hit;
+    automatic logic post_hit;
+
+    done        = 1'b0;
+    sampled_gnt = 1'b0;
+    want_hit    = 1'b0;
+    pre_hit     = 1'b0;
+    post_hit    = 1'b0;
+
+    // R12: existential masked comparison over every stored payload,
+    // independent of tag.
+    for (i = 0; i < model_q.size(); i = i + 1) begin
+      if (
+        (model_q[i].data & mask_v) ==
+        (data_v          & mask_v)
+      ) begin
+        want_hit = 1'b1;
+      end
+    end
+
+    active_req_name = "R11";
+    active_req_desc = "waiting for search grant";
+
+    bfm_drive_point();
+
+    match_data[0] = data_v;
+    match_mask[0] = mask_v;
+    match_req[0]  = 1'b1;
+
+    while (!done) begin
+      bfm_tick();
+
+      sampled_gnt = match_gnt[0];
+
+      if (sampled_gnt) begin
+        pre_hit = match_hit[0];
+        done    = 1'b1;
+      end
+    end
+
+    bfm_drive_point();
+
+    post_hit = match_hit[0];
+    match_req[0] = 1'b0;
+
+    active_req_name = "";
+    active_req_desc = "";
+
+    // Permit either combinational or registered presentation within the
+    // completion cycle.
+    if (!((pre_hit === want_hit) || (post_hit === want_hit))) begin
+      note_fail(
+        req_name,
+        $sformatf(
+          "search data=0x%08x mask=0x%08x did not return expected hit=%0b",
+          data_v, mask_v, want_hit
+        )
+      );
+    end
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // R15 reset while state is live.
+  // ---------------------------------------------------------------------------
+
+  task automatic reset_store_and_check();
+    active_req_name = "R15";
+    active_req_desc = "performing reset";
+
+    bfm_drive_point();
+
+    push_req  = 1'b0;
+    pop_req   = 1'b0;
+    pop_en    = 1'b0;
+    match_req = '0;
+    rst_n     = 1'b0;
+
+    repeat (4) begin
+      bfm_tick();
+    end
+
+    // Observe away from the sampling edge while reset remains asserted.
+    bfm_drive_point();
+
+    model_q.delete();
+    model_count = 0;
+
+    if (empty !== 1'b1) begin
+      note_fail(
+        "R15",
+        "empty_o was not high after reset emptied the store"
+      );
+    end
+
+    if (full !== 1'b0) begin
+      note_fail(
+        "R15",
+        "full_o was not low after reset emptied the store"
+      );
+    end
+
+    // Release reset at the safe drive point.
+    rst_n = 1'b1;
+
+    // Observe after a released sampling edge and away from that edge.
+    bfm_tick();
+    bfm_drive_point();
+
+    if (empty !== 1'b1) begin
+      note_fail(
+        "R15",
+        "empty_o was not high after reset release"
+      );
+    end
+
+    if (full !== 1'b0) begin
+      note_fail(
+        "R15",
+        "full_o was not low after reset release"
+      );
+    end
+
+    active_req_name = "";
+    active_req_desc = "";
+  endtask
+
+  // ---------------------------------------------------------------------------
   // Main test
   // ---------------------------------------------------------------------------
-  initial begin
 
-    failures = 0;
+  initial begin : main_test
+    automatic int i;
 
-    push_tag_i  = '0;
-    push_data_i = '0;
-    push_req_i  = 1'b0;
+    fail_count      = 0;
+    model_count     = 0;
+    active_req_name = "";
+    active_req_desc = "";
 
-    match_data_i = '0;
-    match_mask_i = '0;
-    match_req_i  = '0;
+    model_q.delete();
 
-    pop_tag_i = '0;
-    pop_en_i  = 1'b0;
-    pop_req_i = 1'b0;
+    push_tag  = '0;
+    push_data = '0;
+    push_req  = 1'b0;
 
-    ref_clear();
+    match_data = '0;
+    match_mask = '0;
+    match_req  = '0;
 
-    // =======================================================================
-    // R15 / R14 -- initial reset state.
-    // =======================================================================
-    reset_to_empty();
+    pop_tag = '0;
+    pop_en  = 1'b0;
+    pop_req = 1'b0;
 
-    // =======================================================================
-    // R10 -- popping a tag with no entries is legal, completes, and returns
-    // invalid.  pop_data_o is intentionally ignored in this case.
-    // =======================================================================
-    do_pop(
-      tag_t'(3),
+    // -------------------------------------------------------------------------
+    // R15: initial reset.
+    // -------------------------------------------------------------------------
+
+    active_req_name = "R15";
+    active_req_desc = "performing initial reset";
+
+    bfm_reset();
+
+    model_q.delete();
+    model_count = 0;
+
+    // Do not inspect in the same timestep as reset release.
+    bfm_tick();
+    bfm_drive_point();
+
+    if (empty !== 1'b1) begin
+      note_fail(
+        "R15",
+        "empty_o was not high after initial reset"
+      );
+    end
+
+    if (full !== 1'b0) begin
+      note_fail(
+        "R15",
+        "full_o was not low after initial reset"
+      );
+    end
+
+    active_req_name = "";
+    active_req_desc = "";
+
+    // -------------------------------------------------------------------------
+    // R4: with no push handshake, changing push inputs must not create state.
+    // R14 provides the direct occupancy observation.
+    // -------------------------------------------------------------------------
+
+    bfm_drive_point();
+    push_req  = 1'b0;
+    push_tag  = 3'd6;
+    push_data = 32'h1111_2222;
+
+    bfm_tick();
+
+    bfm_drive_point();
+    push_tag  = 3'd2;
+    push_data = 32'h3333_4444;
+
+    bfm_tick();
+
+    bfm_drive_point();
+
+    if (empty !== 1'b1) begin
+      note_fail(
+        "R4",
+        "store became non-empty without a push_req_i && push_gnt_o handshake"
+      );
+    end
+
+    if (full !== 1'b0) begin
+      note_fail(
+        "R14",
+        "full_o asserted while modeled occupancy was zero"
+      );
+    end
+
+    // -------------------------------------------------------------------------
+    // R10: an empty-tag pop is legal and returns valid low.
+    // pop_data_o is deliberately not checked.
+    // -------------------------------------------------------------------------
+
+    pop_once(
+      3'd5,
       1'b1,
+      "R10",
       "R10"
     );
 
-    // =======================================================================
-    // R12/R13 -- searches of an empty store.
-    // An all-zero mask must NOT hit because no entry exists.
-    // =======================================================================
-    do_search(
-      32'h1234_5678,
+    // -------------------------------------------------------------------------
+    // R12: zero mask over an empty store has no matching entry.
+    // -------------------------------------------------------------------------
+
+    search_once(
+      32'hDEAD_BEEF,
+      32'h0000_0000,
+      "R12"
+    );
+
+    // -------------------------------------------------------------------------
+    // R1: all SLOTS entries must be usable by ONE tag.
+    // -------------------------------------------------------------------------
+
+    for (i = 0; i < SLOTS_P; i = i + 1) begin
+      push_one(
+        3'd3,
+        32'h1000_0000 + i,
+        "R1"
+      );
+    end
+
+    // R5: no additional push grant while at exact capacity.
+    check_push_blocked_when_full(
+      3'd4,
+      32'hDEAD_BEEF
+    );
+
+    // -------------------------------------------------------------------------
+    // R2/R8: same-tag entries must leave in FIFO order.
+    // -------------------------------------------------------------------------
+
+    for (i = 0; i < SLOTS_P; i = i + 1) begin
+      pop_once(
+        3'd3,
+        1'b1,
+        "R8",
+        "R2"
+      );
+    end
+
+    // R10 after draining that tag.
+    pop_once(
+      3'd3,
+      1'b1,
+      "R10",
+      "R10"
+    );
+
+    // -------------------------------------------------------------------------
+    // R9: inspection must not remove.
+    // -------------------------------------------------------------------------
+
+    push_one(
+      3'd1,
+      32'hAAAA_0001,
+      "R1"
+    );
+
+    push_one(
+      3'd1,
+      32'hBBBB_0002,
+      "R1"
+    );
+
+    // Inspect A; it remains present.
+    pop_once(
+      3'd1,
+      1'b0,
+      "R8",
+      "R2"
+    );
+
+    // Must still remove A, not B.
+    pop_once(
+      3'd1,
+      1'b1,
+      "R9",
+      "R9"
+    );
+
+    // B is now oldest, but this is another inspection.
+    pop_once(
+      3'd1,
+      1'b0,
+      "R9",
+      "R9"
+    );
+
+    // B must still be present and removable.
+    pop_once(
+      3'd1,
+      1'b1,
+      "R9",
+      "R9"
+    );
+
+    // Re-isolate state before the interleaved-tag test.
+    reset_store_and_check();
+
+    // -------------------------------------------------------------------------
+    // R2/R3/R8:
+    // Interleave tags, then request them in an order different from global
+    // insertion order.  This checks only FIFO ordering WITHIN each requested
+    // tag; no cross-tag removal order is assumed.
+    // -------------------------------------------------------------------------
+
+    push_one(3'd0, 32'hA000_0000, "R1");
+    push_one(3'd1, 32'hB000_0000, "R1");
+    push_one(3'd0, 32'hA000_0001, "R1");
+    push_one(3'd1, 32'hB000_0001, "R1");
+
+    // Globally A0 is oldest, but requesting tag 1 must return B0.
+    pop_once(
+      3'd1,
+      1'b1,
+      "R8",
+      "R2"
+    );
+
+    // Oldest tag-0 entry is A0.
+    pop_once(
+      3'd0,
+      1'b1,
+      "R8",
+      "R2"
+    );
+
+    // Remaining tag-1 entry is B1.
+    pop_once(
+      3'd1,
+      1'b1,
+      "R8",
+      "R2"
+    );
+
+    // Remaining tag-0 entry is A1.
+    pop_once(
+      3'd0,
+      1'b1,
+      "R8",
+      "R2"
+    );
+
+    reset_store_and_check();
+
+    // -------------------------------------------------------------------------
+    // Search population across several tags.
+    // -------------------------------------------------------------------------
+
+    push_one(3'd0, 32'h1234_5678, "R1");
+    push_one(3'd1, 32'hA5A5_5A5A, "R1");
+    push_one(3'd2, 32'hFFFF_0000, "R1");
+    push_one(3'd0, 32'h0000_ABCD, "R1");
+
+    // R12 exact hit.
+    search_once(
+      32'hA5A5_5A5A,
+      32'hFFFF_FFFF,
+      "R12"
+    );
+
+    // R12 exact miss.
+    search_once(
+      32'hDEAD_BEEF,
+      32'hFFFF_FFFF,
+      "R12"
+    );
+
+    // R12 partial-mask hit.
+    search_once(
+      32'h1234_9999,
+      32'hFFFF_0000,
+      "R12"
+    );
+
+    // R12 partial-mask miss.
+    search_once(
+      32'h5678_9999,
+      32'hFFFF_0000,
+      "R12"
+    );
+
+    // R12 lower-half partial-mask hit.
+    search_once(
+      32'hFFFF_ABCD,
+      32'h0000_FFFF,
+      "R12"
+    );
+
+    // R13: zero mask must hit whenever the store is non-empty.
+    search_once(
+      32'hCAFE_BABE,
       32'h0000_0000,
       "R13"
     );
 
-    do_search(
-      32'h1234_5678,
-      32'hffff_ffff,
-      "R12"
-    );
+    // -------------------------------------------------------------------------
+    // R10: absent requested tag remains invalid even though other tags exist.
+    // -------------------------------------------------------------------------
 
-    // =======================================================================
-    // R8/R9 -- inspect without removal, then removal.
-    //
-    // The second pop proves pop_en=0 did not remove the item.
-    // The third pop proves pop_en=1 did remove it.
-    // =======================================================================
-    reset_to_empty();
-
-    do_push(
-      tag_t'(2),
-      32'hcafe_1234,
-      "R4"
-    );
-
-    if (ref_count[2] == 1) begin
-      do_pop(
-        tag_t'(2),
-        1'b0,
-        "R8"
-      );
-
-      do_pop(
-        tag_t'(2),
-        1'b1,
-        "R9"
-      );
-
-      do_pop(
-        tag_t'(2),
-        1'b1,
-        "R9"
-      );
-    end
-
-    // =======================================================================
-    // R2 -- simple per-tag FIFO order.
-    // =======================================================================
-    reset_to_empty();
-
-    do_push(
-      tag_t'(3),
-      32'h1010_0001,
-      "R4"
-    );
-
-    do_push(
-      tag_t'(3),
-      32'h2020_0002,
-      "R4"
-    );
-
-    do_push(
-      tag_t'(3),
-      32'h3030_0003,
-      "R4"
-    );
-
-    if (ref_count[3] == 3) begin
-      do_pop(
-        tag_t'(3),
-        1'b1,
-        "R2"
-      );
-
-      do_pop(
-        tag_t'(3),
-        1'b1,
-        "R2"
-      );
-
-      do_pop(
-        tag_t'(3),
-        1'b1,
-        "R2"
-      );
-    end
-
-    // =======================================================================
-    // R1 -- all SLOTS entries may carry the SAME tag.
-    // R14 -- full_o must become exact at occupancy SLOTS.
-    // =======================================================================
-    reset_to_empty();
-
-    do_push(tag_t'(5), 32'ha500_0000, "R1");
-    do_push(tag_t'(5), 32'ha500_0001, "R1");
-    do_push(tag_t'(5), 32'ha500_0002, "R1");
-    do_push(tag_t'(5), 32'ha500_0003, "R1");
-    do_push(tag_t'(5), 32'ha500_0004, "R1");
-    do_push(tag_t'(5), 32'ha500_0005, "R1");
-    do_push(tag_t'(5), 32'ha500_0006, "R1");
-    do_push(tag_t'(5), 32'ha500_0007, "R1");
-
-    if (ref_total == SLOTS) begin
-
-      // R5 -- no push grant is legal at full occupancy.
-      check_push_blocked_when_full(
-        tag_t'(6),
-        32'hdead_beef
-      );
-
-      // Make one legal slot available.
-      do_pop(
-        tag_t'(5),
-        1'b1,
-        "R2"
-      );
-
-      // R4 -- the request that received no grant while full must not have
-      // silently committed an entry.
-      do_search(
-        32'hdead_beef,
-        32'hffff_ffff,
-        "R4"
-      );
-
-      // Capacity becomes reusable after a removal.
-      do_push(
-        tag_t'(5),
-        32'ha500_0008,
-        "R1"
-      );
-
-      // Remaining legal FIFO sequence is 1..8.  This also stresses FIFO order
-      // at the maximum same-tag occupancy.
-      if (ref_count[5] == SLOTS) begin
-        do_pop(tag_t'(5), 1'b1, "R2");
-        do_pop(tag_t'(5), 1'b1, "R2");
-        do_pop(tag_t'(5), 1'b1, "R2");
-        do_pop(tag_t'(5), 1'b1, "R2");
-        do_pop(tag_t'(5), 1'b1, "R2");
-        do_pop(tag_t'(5), 1'b1, "R2");
-        do_pop(tag_t'(5), 1'b1, "R2");
-        do_pop(tag_t'(5), 1'b1, "R2");
-      end
-    end
-
-    // =======================================================================
-    // R12/R13 -- content-addressed search over ALL tags.
-    //
-    // Entries are intentionally interleaved by tag.  No cross-tag removal
-    // ordering is inferred or checked (R3).
-    // =======================================================================
-    reset_to_empty();
-
-    do_push(tag_t'(0), 32'h0011_0011, "R4");
-    do_push(tag_t'(1), 32'h1122_0022, "R4");
-    do_push(tag_t'(0), 32'h0033_0033, "R4");
-    do_push(tag_t'(2), 32'h2244_0044, "R4");
-    do_push(tag_t'(1), 32'h1155_0055, "R4");
-    do_push(tag_t'(3), 32'h3366_0066, "R4");
-
-    if (ref_total == 6) begin
-
-      // Exact hit.
-      do_search(
-        32'h2244_0044,
-        32'hffff_ffff,
-        "R12"
-      );
-
-      // Exact miss.
-      do_search(
-        32'hdead_beef,
-        32'hffff_ffff,
-        "R12"
-      );
-
-      // Only the high byte matters.  Unmasked bits of match_data differ from
-      // the stored payloads.
-      do_search(
-        32'h11ab_cdef,
-        32'hff00_0000,
-        "R12"
-      );
-
-      // High-byte miss.
-      do_search(
-        32'h77ab_cdef,
-        32'hff00_0000,
-        "R12"
-      );
-
-      // Low-byte masked hit.
-      do_search(
-        32'h0000_0055,
-        32'h0000_00ff,
-        "R12"
-      );
-
-      // R13 -- zero mask matches every stored entry.
-      do_search(
-        32'hdead_beef,
-        32'h0000_0000,
-        "R13"
-      );
-
-      // Per-tag FIFO checks.  The tags themselves are popped in an arbitrary
-      // order; only order WITHIN an individual tag is checked.
-      do_pop(tag_t'(1), 1'b1, "R2");
-      do_pop(tag_t'(1), 1'b1, "R2");
-
-      do_pop(tag_t'(0), 1'b1, "R2");
-      do_pop(tag_t'(0), 1'b1, "R2");
-
-      do_pop(tag_t'(2), 1'b1, "R8");
-      do_pop(tag_t'(3), 1'b1, "R8");
-
-      // R13 -- after the final removal, zero mask no longer hits.
-      do_search(
-        32'hffff_ffff,
-        32'h0000_0000,
-        "R13"
-      );
-    end
-
-    // =======================================================================
-    // R15 -- reset must discard entries that were already stored.
-    // =======================================================================
-    reset_to_empty();
-
-    do_push(tag_t'(7), 32'h7000_0001, "R4");
-    do_push(tag_t'(7), 32'h7000_0002, "R4");
-    do_push(tag_t'(1), 32'h1000_0003, "R4");
-
-    reset_while_nonempty();
-
-    // Check for stale storage even if a faulty implementation lies on its
-    // empty_o status.
-    do_search(
-      32'hffff_ffff,
-      32'h0000_0000,
-      "R15"
-    );
-
-    do_pop(
-      tag_t'(7),
+    pop_once(
+      3'd7,
       1'b1,
-      "R15"
+      "R10",
+      "R10"
     );
 
-    // -----------------------------------------------------------------------
-    // Final result -- exactly one RESULT line.
-    // -----------------------------------------------------------------------
-    if (failures == 0) begin
+    // -------------------------------------------------------------------------
+    // R1: use the remaining four slots with four more tags.  This verifies
+    // capacity is shared across arbitrary tag distributions rather than being
+    // partitioned into a smaller fixed capacity per tag.
+    // -------------------------------------------------------------------------
+
+    push_one(3'd3, 32'h3000_0003, "R1");
+    push_one(3'd4, 32'h4000_0004, "R1");
+    push_one(3'd5, 32'h5000_0005, "R1");
+    push_one(3'd6, 32'h6000_0006, "R1");
+
+    // R13 at full capacity.
+    search_once(
+      32'hFFFF_FFFF,
+      32'h0000_0000,
+      "R13"
+    );
+
+    // R5 at full mixed-tag occupancy.
+    check_push_blocked_when_full(
+      3'd7,
+      32'h7777_7777
+    );
+
+    // -------------------------------------------------------------------------
+    // R15: reset a full live store.
+    // -------------------------------------------------------------------------
+
+    reset_store_and_check();
+
+    // -------------------------------------------------------------------------
+    // Final result -- exactly one final RESULT line.
+    // -------------------------------------------------------------------------
+
+    if (fail_count == 0) begin
       $display("RESULT: PASS");
     end
     else begin

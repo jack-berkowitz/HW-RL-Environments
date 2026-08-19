@@ -17,8 +17,8 @@
 <rect x="210" y="140" width="145.8" height="26" rx="4" fill="#3987e5"/>
 <text x="470" y="158" font-size="11.5" font-weight="600" fill="#ffffff">7</text>
 <rect x="536" y="140" width="250" height="26" rx="4" fill="#333230"/>
-<rect x="536" y="140" width="229.2" height="26" rx="4" fill="#3987e5"/>
-<text x="796" y="158" font-size="11.5" font-weight="600" fill="#ffffff">11</text>
+<rect x="536" y="140" width="187.5" height="26" rx="4" fill="#3987e5"/>
+<text x="796" y="158" font-size="11.5" font-weight="600" fill="#ffffff">9</text>
 <text x="196" y="198" font-size="11.5" text-anchor="end" fill="#c3c2b7">Correct / accepts correct HW</text>
 <rect x="210" y="180" width="250" height="26" rx="4" fill="#333230"/>
 <rect x="210" y="180" width="125.0" height="26" rx="4" fill="#3987e5"/>

@@ -101,11 +101,11 @@ prompt is a different question and is not listed.
 
 | testbench | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|
-| `tag_tracker_ref` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
-| `chat` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
-| `deepseek` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
-| `gemini` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
-| `qwen` | *not scored against this prompt* | — | — | — | last run answered task text `f2926d08631309ca` |
+| **reference testbench** | yes | yes | 4/4 | **10/10** | establishes the ceiling |
+| `ChatGPT 5.6 Sol` | yes | yes | 4/4 | **9/10** |  |
+| `DeepSeek V4 Pro` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
+| `Gemini 3.1 Pro` | yes | yes | 3/4 | *withheld* | accepts the golden DUT but rejects a legal variant or the second DUT, so it rejects some correct hardware — its fault count carries no information |
+| `Qwen 3.7 Plus` | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
 
 ## v_nw03 — frame-arbitrating stream mux
 
