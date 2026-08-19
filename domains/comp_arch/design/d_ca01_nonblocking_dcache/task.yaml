@@ -200,6 +200,13 @@ mutants:
          subsumes the other. The interface's C2 text now states the overlap.
          mCAP1 is what isolates C1.}
 
+    - {name: m06_responses_in_order, clause: C2, evidence: bmc_cex, cex_depth: 34,
+       configs_passed: 0, of: 16, isolated: true,
+       provenance: >
+         Built as a CONFORMANT perturbation under R4's original text and promoted
+         here when that text proved wrong. Fails C2 and nothing else, so it is
+         the cleanly isolated C2 mutant that m05 is not.}
+
   cut_from_the_set: []      # none; every mutant obtained bmc_cex evidence
 
   found_a_checker_hole: >
@@ -236,49 +243,45 @@ second_source:
              note: "replacement for D3, named openly; the failed claim is kept"}
 mutants:         {status: NOT_STARTED, planned: "5-7, each wrapping the anchor, incl. one CAPABILITY-class"}
 conformant:
-  status: PARTIAL          # 2 of 4 built; c03 and the second source not started
+  status: BUILT            # 2 survive; the third turned out not to be conformant
+  gated: true              # re-run with the slang gate live once conformant/* was exempted
   overlap_declared: >
     Replacement policy (L1) has NO wrapper and cannot have one -- replacement is
     internal to the anchor and a wrapper cannot reach it. L1 is exercised by the
-    SECOND SOURCE's true-LRU choice instead, which is the same artifact serving
-    both purposes and is stated rather than left to be worked out.
+    SECOND SOURCE's true-LRU choice instead.
   built:
     - name: c01_self_initializing
       licence_clause: P1
       survives: 16/16
       evidence: bmc_cex
       cex_depth: 34
-      note: >
-        P1 says a design that clears its own tags on reset is EQUALLY conformant
-        and nothing in the task exercised that reading. This does, by writing
-        every (set, way) invalid through the anchor's tag-store path before
-        accepting anything.
       neutralise_control: >
-        It FAILED phase 1 on first build. Neutralised (init disabled) it PASSED,
-        so the wrapper was not broken independently of the perturbation -- the
-        perturbation was implemented wrongly. The anchor answers every operation
-        including the wrapper's own initialisation ops, and R3 promises one
-        response per ACCEPTED REQUEST; an internal init op is not one. Those
-        responses are now swallowed. A wrapper defect, not a spec defect, and
-        the neutralise step is what separated them.
+        FAILED phase 1 on first build; neutralised it PASSED, so the wrapper was
+        sound and the perturbation was at fault. The anchor answers the wrapper's
+        own initialisation ops and R3 promises one response per ACCEPTED REQUEST,
+        which an internal init op is not. Those responses are now swallowed.
+        A wrapper defect, not a spec defect.
     - name: c02_ready_gated_on_valid
       licence_clause: L5
       survives: 16/16
       evidence: bmc_cex
       cex_depth: 34
-      note: >
-        The latitude audit found L5 licensed a choice nothing in the task took.
-        This takes it. No transaction-level behaviour changes, which is why the
-        non-equivalence witness matters -- without it this would be
-        indistinguishable from a no-op.
-  not_started:
+  retired:
     - name: c03_responses_in_order
-      licence_clause: R4
-      design: >
-        Buffer responses and release them in issue order: an issue-order FIFO of
-        ids plus per-id storage released from the head. Witness: the reordering
-        counter reads > 0 for the reference and 0 for this.
-      also_serves: second source difference D3'
+      licence_claimed: R4
+      outcome: NOT CONFORMANT -- promoted to mutants/m06_responses_in_order.sv
+      finding: >
+        R4 said strictly in-order retirement was conformant; C2 requires a hit
+        accepted after an outstanding miss to be ANSWERED. Under in-order
+        retirement that hit is blocked behind the miss, so the two clauses could
+        not both be satisfied. Neutralise control passed, so this was the
+        perturbation and not the wrapper. R4 NARROWED: response order is free
+        except that a ready response must not be held behind an unready one --
+        a consequence of C2, not an independent requirement.
+      consequence: >
+        Second-source difference D3' is dead with it. D3'' (early fill
+        forwarding) named in tb/audit/SECOND_SOURCE_DIFFERENCES.md, with both
+        failures kept.
   l6_exercised_by: >
     The zero-latency control DUT built for the L6 fix runs with latency min=0
     against the reference's min=2, so L6's latitude is exercised in both

@@ -131,9 +131,29 @@
 //       response stream decodable; constraining store response data would
 //       encode a choice nothing needs.
 //
-//   R4. RESPONSE ORDER IS FREE. Responses may be returned in any order with
-//       respect to request order. Returning them strictly in order is
-//       conformant and is neither rewarded nor penalised.
+//   R4. RESPONSE ORDER IS FREE, WITH ONE EXCEPTION THAT FOLLOWS FROM C2.
+//       Responses may be returned in any order with respect to request order.
+//       Nothing rewards or penalises reordering, and no check counts it.
+//
+//       THE EXCEPTION: a response that is ready must not be held behind one
+//       that is not. STRICTLY IN-ORDER RETIREMENT IS THEREFORE NOT CONFORMANT
+//       -- a hit accepted after an outstanding miss would be blocked behind it,
+//       and C2 requires that hit to be ANSWERED, not merely accepted.
+//
+//       This is a CONSEQUENCE of C2 rather than an independent requirement, and
+//       it is stated because an earlier revision of this clause said flatly that
+//       strict in-order retirement was conformant. It is not, and the two
+//       clauses could not both be satisfied. Found by building the in-order
+//       design and running it: it fails C2 and nothing else.
+//
+//       WHY THIS IS NOT THE d_nw01 TRAP. There, a coverage floor REQUIRING
+//       cross-ID reordering failed the vendored reference and was removed --
+//       reordering was an optimisation on an axis the contract never named, so
+//       gating it invented a requirement. Here the axis IS named: hit under
+//       miss is what this task exists to measure, and C2 states it. The
+//       distinction is between requiring reordering in general (wrong) and
+//       requiring that one specific ready response not be blocked (what C2
+//       already says).
 //       AUTHORITY: stated task intent -- out-of-order completion is what
 //       hit-under-miss produces, and REQUIRING reordering would fail a correct
 //       design that declines to reorder. That failure mode is recorded: a

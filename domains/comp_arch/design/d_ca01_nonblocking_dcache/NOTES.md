@@ -1063,7 +1063,67 @@ applied to the instruction that asked for it.
 - **`mutants/*` slang exemption**: still not landed; kill counts remain
   `--no-slang` and not quotable.
 
-## Conformant set — two built, both survive, both witnessed
+## Conformant set — and the third one found a spec defect
+
+| perturbation | licence | result | witness |
+|---|---|---|---|
+| `c01_self_initializing` | **P1** | **16/16, gated** | `bmc_cex` depth 34 |
+| `c02_ready_gated_on_valid` | **L5** | **16/16, gated** | `bmc_cex` depth 34 |
+| `c03_responses_in_order` | claimed **R4** | **NOT CONFORMANT** → mutant `m06` | `bmc_cex` depth 34 |
+
+Both survivors re-run through the **gated** path after Agent 1 extended the slang
+exemption to `conformant/*`. No `--no-slang` anywhere in the conformant results.
+
+### c03 — R4 and C2 could not both be satisfied
+
+Built against R4's original text, which said flatly that *"returning them
+strictly in order is conformant and is neither rewarded nor penalised."* It
+failed C2.
+
+**Neutralise control first, before concluding anything about the checker.**
+Neutralised — buffer bypassed, everything else identical — it **passed**. So the
+wrapper was sound and the perturbation was the cause. The cause is a genuine
+conflict: C2 requires a hit accepted **after** an outstanding miss to be
+*answered*, and under strict in-order retirement that hit is blocked behind the
+miss. The two clauses contradict each other.
+
+**R4 is narrowed.** Response order stays free, with one exception that follows
+from C2 rather than standing on its own: a response that is ready must not be
+held behind one that is not. Strict in-order retirement is therefore not
+conformant.
+
+**Why this is not the d_nw01 trap.** There, a floor *requiring* cross-ID
+reordering failed the vendored reference and was removed — reordering was an
+optimisation on an axis the contract never named, so gating it invented a
+requirement. Here the axis *is* named: hit-under-miss is what this task exists to
+measure and C2 states it. Requiring reordering in general would be wrong;
+requiring that one specific ready response not be blocked is what C2 already
+said.
+
+**The artifact was promoted, not deleted.** `m06_responses_in_order` is now the
+**cleanly isolated C2 mutant** — it fails C2 and nothing else, where `m05` also
+trips C1. Both are kept: m05 is the likely wrong answer a submission produces,
+m06 is the instrument that validates C2 on its own. Seven mutants now, all
+carrying `bmc_cex`.
+
+**This is the conformant set doing exactly what it is for.** The build prompt's
+line is that a conformant perturbation must survive and a failure is a spec
+defect rather than a weak testbench. That is what happened, and the neutralise
+control is what made it readable — without it the reading was "C2 is wrong",
+which is the opposite conclusion.
+
+### Consequence for the second source
+
+**D3′ is dead with it.** In-order responses are not conformant, so the second
+source cannot take that difference. That is the *second* failed candidate for the
+third difference — D3 refuted by measurement, D3′ refuted by the conformant set.
+Both are kept in `SECOND_SOURCE_DIFFERENCES.md`, and **D3″ — early fill
+forwarding** — is named with its predicted witness (`fill_latency_cycles`) and
+its risk stated. If D3″ fails too, three failed candidates for one difference is
+itself the finding: it would say the anchor's choices on this axis are far less
+free than the spec reads.
+
+## Superseded — the earlier two-perturbation summary
 
 | perturbation | licence | survives | non-equivalence witness |
 |---|---|---|---|

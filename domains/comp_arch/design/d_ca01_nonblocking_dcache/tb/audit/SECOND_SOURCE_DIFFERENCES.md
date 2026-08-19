@@ -154,3 +154,50 @@ the clause against a standard — the port and the clause have to be held agains
 each other. It is the same lesson as auditing the artefact rather than the prose,
 one level along: **the latitude a spec advertises has to be checked against the
 interface that has to carry it.**
+
+---
+
+## D3 AND D3′ HAVE BOTH FAILED. D3″ NAMED.
+
+Two candidates for the third difference are now dead, and both failures are kept
+here rather than replaced quietly, because between them they map the design space
+more usefully than a difference that had simply worked.
+
+**D3 — fetch first, write the victim back after. REFUTED BY MEASUREMENT.**
+The anchor already does exactly that: traced across a dirty replacement, the
+transaction order is `we=0` (fill) then `we=1` (writeback). Not a difference.
+
+**D3′ — strictly in-order responses. REFUTED BY THE CONFORMANT SET, and it took
+a spec correction with it.** Built as conformant perturbation `c03`, licensed by
+R4's original text, which said flatly that in-order retirement was conformant. It
+failed C2. The neutralised copy passed, so the wrapper was sound and the
+perturbation was the cause — and the cause turned out to be a genuine conflict
+between two clauses: a hit accepted *after* an outstanding miss is blocked behind
+that miss under in-order retirement, and C2 requires that hit to be **answered**.
+
+**R4 has been narrowed** and the artifact is now mutant `m06_responses_in_order`
+— where it is the cleanly isolated C2 mutant, failing C2 and nothing else, which
+`m05` does not manage. **So the second source cannot take this difference: it is
+not conformant.**
+
+**D3″ — EARLY FILL FORWARDING.** The second source returns the requested word
+directly from the fill stream, on the beat that carries it, rather than after the
+whole block has landed and been written into the data array.
+
+*Why it is free:* L6 leaves latency unconstrained, and R4 as narrowed forbids only
+holding a ready response behind an unready one — forwarding early does the
+opposite.
+
+*Engineering content:* it needs a comparator on the beat index and a bypass path
+into the response port, and it buys the requester several cycles on every miss.
+A real trade, not a coin flip.
+
+*Predicted witness, by measurement:* `fill_latency_cycles`. The anchor replays a
+queued miss against the data array only after the fill completes; the second
+source answers at the beat carrying the word. The metric is already emitted.
+
+*Risk, stated:* the anchor's exact fill-to-response latency has not been measured,
+so the size of the gap is unknown. If it turns out the anchor already forwards,
+D3″ fails too and is recorded like the other two. **Three failed candidates for
+one difference would itself be the finding** — it would say the anchor's choices
+on this axis are far less free than a reading of the spec suggests.
