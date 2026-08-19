@@ -98,6 +98,25 @@ mutants:
     developed against the cases it must distinguish. Writing iw_m3 first is what
     exposed that A4 needed a stated bound to be falsifiable at all.
 
+conformant_perturbations:
+  - {id: iw_c1_permuted_allocation, licence: "D3, section 8.1",
+     witness: "master id at request 0: golden 0, perturbation 2 -- all 40 differ"}
+  - {id: iw_c2_extra_latency, licence: "section 8.2",
+     witness: "master request cycle at 0: golden 1, perturbation 2 -- all 40 differ"}
+  - {id: iw_c3_ready_withheld, licence: "section 8.3",
+     witness: "acceptance cycle at 0: golden 1, perturbation 2 -- 30 of 40 differ"}
+  - {id: iw_c4_garbage_when_invalid, licence: "section 8.5",
+     witness: "values and cycles identical; idle-line changes 10 vs 130"}
+  - {id: iw_c5_channel_arbitration, licence: "section 8.3",
+     witness: "master id at request 3: golden 3, perturbation 0 -- 19 differ"}
+  enumeration: conformant/README.md
+  all_survive: true
+  note: >
+    iw_c2 and iw_c5 first reported as no-ops. Both were harness gaps -- master
+    request timing was not captured, and writes were not driven so the channel
+    arbitration was unreachable. Recorded because the alarm was correct and the
+    instrument was not.
+
 scoring_ceiling:
   reference: 5 of 5
   caveat: >
