@@ -1,7 +1,8 @@
 # v_ca03 `id_width_conv` — evidence trail
 
-**STATUS: steps 1-3 complete. Reference ceiling 5 of 5.** Second DUT and
-conformant set are NOT built, so the task is not yet scoreable end to end.
+**STATUS: steps 1-4 complete. Reference ceiling 5 of 5, second DUT built and
+independent.** The conformant set is NOT built, so the task is not yet
+scoreable end to end.
 
 **Selected after `fpnew_divsqrt_multi` failed step 1** — see §0.
 
@@ -232,3 +233,64 @@ stimulus, so a design that wrongly refused work drove its own coverage to zero.
 That is rule 4 exactly: *could a correct implementation score zero here?* — and
 worse, a faulty one could. The floors now count what the testbench **offered**,
 which is the only thing it controls. The mutants found this, not review.
+
+---
+
+## 8. Step 4 — the second DUT, and why its clean pass is evidence this time
+
+It passes the reference testbench on the first attempt with zero rule-5
+adjudications, which is the fourth in a row across four tasks. **That pattern is
+ambiguous on its own** — it is equally consistent with a model that tracks the
+contract and with a second implementation written by someone holding the same
+picture of the table. So the difference was measured rather than asserted.
+
+### The policies genuinely differ
+
+Allocate two slave ids, retire the first, then allocate a new one:
+
+| | master ids chosen |
+|---|---|
+| reference implementation | `0 1 0` then `0 1 0 2` — reuses the just-freed id (lowest-free) |
+| this second DUT | `0 1 2` then `0 1 2 3` — takes the next in rotation, leaving the freed id alone |
+
+**2 of 4 address handshakes differ in the master id chosen.** The reference
+testbench accepted both, so it is not encoding "lowest-free" anywhere — which is
+the specific way a model of this contract would most easily become a model of
+*this implementation*. On the evidence, the clean pass is independence rather
+than agreement.
+
+**It does not show the model is complete.** It shows it is not policy-bound.
+
+### The first measurement was wrong, and the probe was at fault
+
+The first attempt reported *"same choices throughout — paraphrase risk"*. With
+the table full, **only one master id is ever free**, so there is no choice to
+differ on: both must pick it. A divergence requires two or more free ids with
+the rotating pointer past the lowest, and the probe never created that state.
+Same class as the v_dsp02 witness harness that could not see the thing it was
+witnessing — the alarm was real, the cause was the instrument.
+
+## 9. Sharpening rule 4, from what the mutants did here
+
+Rule 4 says a coverage floor must measure stimulus, and tests it by asking
+*could a correct implementation score zero here?* **This task produced the
+sharper form of the same defect, and it is worse than the rule currently
+states.**
+
+Every one of the five mutants initially failed a FLOOR check as well as its own
+clause, because the counters incremented only when the design **accepted** the
+offered stimulus. So:
+
+> **A faulty design can suppress the very coverage that would convict it.** The
+> floor fires instead of the clause, and the defect is misattributed — a
+> capacity bug reads as "the testbench never reached the state", which is
+> exactly the diagnosis that sends a reader looking at the testbench instead of
+> the design.
+
+The existing test — *could a correct implementation score zero?* — does not
+catch this, because a correct implementation scores fine. The test that does is:
+**can the DUT influence this counter at all?** If the answer is yes, the floor
+is measuring the design.
+
+Floors here now count what the testbench **offered**, which is the only quantity
+it controls. Found by running the mutants, not by review.

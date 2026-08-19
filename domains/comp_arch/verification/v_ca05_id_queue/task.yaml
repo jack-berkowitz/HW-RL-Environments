@@ -59,14 +59,34 @@ conformant_perturbations:
   - {id: c4, licence: "latitude 6", change: pop_gnt_o delayed one cycle}
 
 mutants:
-  - {id: m1, class: boundary,   defect: accepts SLOTS-1, full_o one entry early, violates: R1}
-  - {id: m2, class: ordering,   defect: returns newest entry for a tag, violates: R2}
-  - {id: m3, class: capability, defect: half capacity, every transaction correct, violates: R1}
-  - {id: m4, class: liveness,   defect: tag 0 never granted (starvation, not deadlock), violates: R1}
-  - {id: m5, class: data,       defect: masked compare ignores bits 31:24, violates: R12}
-  - {id: m6, class: boundary,   defect: empty_o high at exactly one entry, violates: R14}
+  - {id: m1, class: boundary,   defect: "accepts SLOTS-1, full_o one entry early", violates: R1,
+     witness: "differential vs the golden: push_gnt 0 vs 1 @ t=106000"}
+  - {id: m2, class: ordering,   defect: "returns newest entry for a tag", violates: R2,
+     witness: "differential vs the golden: pop_data a0000006 vs a0000000 @ t=136000"}
+  - {id: m3, class: capability, defect: "half capacity, every transaction correct", violates: R1,
+     witness: "differential vs the golden: push_gnt 0 vs 1 @ t=76000"}
+  - {id: m4, class: liveness,   defect: "tag 0 never granted (starvation, not deadlock)", violates: R1,
+     witness: "differential vs the golden: push_gnt 0 vs 1 @ t=40000"}
+  - {id: m5, class: data,       defect: "masked compare ignores bits 31:24", violates: R12,
+     witness: "differential vs the golden: match_hit 1 vs 0 @ t=146000"}
+  - {id: m6, class: boundary,   defect: "empty_o high at exactly one entry", violates: R14,
+     witness: "differential vs the golden: empty 1 vs 0 @ t=46000"}
+  - {id: m7, class: boundary,   defect: "per-tag cap of SLOTS/2 while total capacity is correct", violates: R1,
+     witness: "R1 fails under the reference testbench's fill-one-tag phase at the scored configuration"}
+  - {id: m8, class: boundary,   defect: "peek removes the entry when a tag holds exactly one", violates: R9,
+     witness: "R9 fails under the reference testbench's one-entry peek phase at the scored configuration"}
+  - {id: m9, class: boundary,   defect: "a zero mask reports no hit", violates: R13,
+     witness: "R13 fails under the reference testbench's zero-mask search at the scored configuration"}
+  - {id: m10, class: boundary,  defect: "full_o asserts one cycle late", violates: R14,
+     witness: "R14 fails under the reference testbench's fill-to-capacity phase at the scored configuration"}
   all_have_nonequivalence_witnesses: true
   witness_harness: mutants/nonequiv_tb.sv
+  note: >
+    m1-m6 carry MEASURED differential witnesses from nonequiv_tb.sv. m7-m10 were
+    added later and carry clause-and-stimulus witnesses: each is the clause that
+    fails under a named phase of the reference testbench at the scored
+    configuration. Both are `witness` under rule 21; the first shape is stronger
+    and the difference is recorded rather than smoothed over.
 
 second_dut:
   status: WIRED

@@ -1,0 +1,238 @@
+// =============================================================================
+// id_width_conv_alt.sv -- SECOND DUT for v_ca03. Locally written.
+// =============================================================================
+// An independent implementation of spec/id_width_conv_spec.md, written from the
+// specification. The point of this file is INDEPENDENCE OF ALLOCATION POLICY:
+// if it merely wrapped a differently-plumbed copy of the same table, it and the
+// reference implementation would share their blind spots and the boundary
+// mutants would be unkillable exactly where they matter.
+//
+// THE THREE DIFFERENCES (rule 5), named before writing:
+//
+//   1. ALLOCATION POLICY. A ROTATING pointer: the next master identifier after
+//      the one most recently allocated, wrapping. The reference implementation
+//      allocates the LOWEST free identifier via a leading-zero count. After a
+//      free-then-allocate the two make visibly different choices -- the
+//      reference reuses the identifier just released, this one does not touch
+//      it until the pointer comes round.
+//
+//   2. TABLE ORGANISATION. A directory keyed by SLAVE identifier holding
+//      {mapped, master id, outstanding count}, plus a reverse array keyed by
+//      master identifier. The reference keeps its table keyed by master
+//      identifier. The occupancy question A3 asks -- how many distinct slave
+//      ids are live -- is a popcount here and a table scan there.
+//
+//   3. NO BUFFERING. Address and response channels are combinational
+//      pass-throughs with the identifier substituted, so the master request
+//      appears in the same cycle the slave request is accepted. The reference
+//      registers its path. Legal under latitude 2, and it gives a different
+//      latency signature at every boundary.
+// =============================================================================
+
+module id_width_conv_alt #(
+    parameter int unsigned SLV_ID_W        = 4,
+    parameter int unsigned MST_ID_W        = 2,
+    parameter int unsigned ADDR_W          = 32,
+    parameter int unsigned DATA_W          = 32,
+    parameter int unsigned MAX_UNIQ_IDS    = 4,
+    parameter int unsigned MAX_TXNS_PER_ID = 2
+) (
+    input  logic clk_i,
+    input  logic rst_ni,
+
+    input  logic [SLV_ID_W-1:0]   s_awid,
+    input  logic [ADDR_W-1:0]     s_awaddr,
+    input  logic [7:0]            s_awlen,
+    input  logic                  s_awvalid,
+    output logic                  s_awready,
+    input  logic [DATA_W-1:0]     s_wdata,
+    input  logic [DATA_W/8-1:0]   s_wstrb,
+    input  logic                  s_wlast,
+    input  logic                  s_wvalid,
+    output logic                  s_wready,
+    output logic [SLV_ID_W-1:0]   s_bid,
+    output logic [1:0]            s_bresp,
+    output logic                  s_bvalid,
+    input  logic                  s_bready,
+    input  logic [SLV_ID_W-1:0]   s_arid,
+    input  logic [ADDR_W-1:0]     s_araddr,
+    input  logic [7:0]            s_arlen,
+    input  logic                  s_arvalid,
+    output logic                  s_arready,
+    output logic [SLV_ID_W-1:0]   s_rid,
+    output logic [DATA_W-1:0]     s_rdata,
+    output logic [1:0]            s_rresp,
+    output logic                  s_rlast,
+    output logic                  s_rvalid,
+    input  logic                  s_rready,
+
+    output logic [MST_ID_W-1:0]   m_awid,
+    output logic [ADDR_W-1:0]     m_awaddr,
+    output logic [7:0]            m_awlen,
+    output logic                  m_awvalid,
+    input  logic                  m_awready,
+    output logic [DATA_W-1:0]     m_wdata,
+    output logic [DATA_W/8-1:0]   m_wstrb,
+    output logic                  m_wlast,
+    output logic                  m_wvalid,
+    input  logic                  m_wready,
+    input  logic [MST_ID_W-1:0]   m_bid,
+    input  logic [1:0]            m_bresp,
+    input  logic                  m_bvalid,
+    output logic                  m_bready,
+    output logic [MST_ID_W-1:0]   m_arid,
+    output logic [ADDR_W-1:0]     m_araddr,
+    output logic [7:0]            m_arlen,
+    output logic                  m_arvalid,
+    input  logic                  m_arready,
+    input  logic [MST_ID_W-1:0]   m_rid,
+    input  logic [DATA_W-1:0]     m_rdata,
+    input  logic [1:0]            m_rresp,
+    input  logic                  m_rlast,
+    input  logic                  m_rvalid,
+    output logic                  m_rready
+);
+
+  localparam int unsigned NSID = 1 << SLV_ID_W;
+  localparam int unsigned NMID = 1 << MST_ID_W;
+
+  // ---- difference 2: directory keyed by SLAVE id, reverse keyed by master ----
+  logic                 r_mapped [NSID];
+  logic [MST_ID_W-1:0]  r_mid    [NSID];
+  int unsigned          r_cnt    [NSID];
+  logic                 r_used   [NMID];
+  logic [SLV_ID_W-1:0]  r_owner  [NMID];
+  logic [MST_ID_W-1:0]  r_ptr;
+
+  logic                 w_mapped [NSID];
+  logic [MST_ID_W-1:0]  w_mid    [NSID];
+  int unsigned          w_cnt    [NSID];
+  logic                 w_used   [NMID];
+  logic [SLV_ID_W-1:0]  w_owner  [NMID];
+  logic [MST_ID_W-1:0]  w_ptr;
+
+  function automatic int unsigned n_live_r();
+    n_live_r = 0;
+    for (int i = 0; i < NSID; i++) if (r_mapped[i]) n_live_r++;
+  endfunction
+  function automatic int unsigned n_live_w();
+    n_live_w = 0;
+    for (int i = 0; i < NSID; i++) if (w_mapped[i]) n_live_w++;
+  endfunction
+
+  // ---- difference 1: rotating allocation, never lowest-free -----------------
+  function automatic logic [MST_ID_W-1:0] pick_r();
+    pick_r = r_ptr;
+    for (int k = 0; k < NMID; k++) begin
+      automatic int unsigned c = (int'(r_ptr) + k) % NMID;
+      if (!r_used[c]) return MST_ID_W'(c);
+    end
+  endfunction
+  function automatic logic [MST_ID_W-1:0] pick_w();
+    pick_w = w_ptr;
+    for (int k = 0; k < NMID; k++) begin
+      automatic int unsigned c = (int'(w_ptr) + k) % NMID;
+      if (!w_used[c]) return MST_ID_W'(c);
+    end
+  endfunction
+
+  // ---- A3 + A5, read side ---------------------------------------------------
+  wire r_known   = r_mapped[s_arid];
+  wire r_ok      = r_known ? (r_cnt[s_arid] < MAX_TXNS_PER_ID)
+                           : (n_live_r() < MAX_UNIQ_IDS);
+  wire [MST_ID_W-1:0] r_use = r_known ? r_mid[s_arid] : pick_r();
+
+  // difference 3: combinational pass-through, no buffering
+  assign m_arvalid = s_arvalid & r_ok;
+  assign s_arready = m_arready & r_ok;
+  assign m_arid    = r_use;
+  assign m_araddr  = s_araddr;
+  assign m_arlen   = s_arlen;
+
+  assign s_rvalid = m_rvalid;
+  assign m_rready = s_rready;
+  assign s_rid    = r_owner[m_rid];
+  assign s_rdata  = m_rdata;
+  assign s_rresp  = m_rresp;
+  assign s_rlast  = m_rlast;
+
+  // ---- A3 + A5, write side --------------------------------------------------
+  wire w_known   = w_mapped[s_awid];
+  wire w_ok      = w_known ? (w_cnt[s_awid] < MAX_TXNS_PER_ID)
+                           : (n_live_w() < MAX_UNIQ_IDS);
+  wire [MST_ID_W-1:0] w_use = w_known ? w_mid[s_awid] : pick_w();
+
+  assign m_awvalid = s_awvalid & w_ok;
+  assign s_awready = m_awready & w_ok;
+  assign m_awid    = w_use;
+  assign m_awaddr  = s_awaddr;
+  assign m_awlen   = s_awlen;
+
+  assign m_wvalid = s_wvalid;
+  assign s_wready = m_wready;
+  assign m_wdata  = s_wdata;
+  assign m_wstrb  = s_wstrb;
+  assign m_wlast  = s_wlast;
+
+  assign s_bvalid = m_bvalid;
+  assign m_bready = s_bready;
+  assign s_bid    = w_owner[m_bid];
+  assign s_bresp  = m_bresp;
+
+  // ---- state ----------------------------------------------------------------
+  always_ff @(posedge clk_i) begin
+    if (!rst_ni) begin
+      for (int i = 0; i < NSID; i++) begin
+        r_mapped[i] <= 1'b0; r_cnt[i] <= 0; w_mapped[i] <= 1'b0; w_cnt[i] <= 0;
+      end
+      for (int i = 0; i < NMID; i++) begin r_used[i] <= 1'b0; w_used[i] <= 1'b0; end
+      r_ptr <= '0; w_ptr <= '0;
+    end else begin
+      // read allocate
+      if (s_arvalid && s_arready) begin
+        if (!r_known) begin
+          r_mapped[s_arid] <= 1'b1;
+          r_mid   [s_arid] <= r_use;
+          r_used  [r_use]  <= 1'b1;
+          r_owner [r_use]  <= s_arid;
+          r_cnt   [s_arid] <= 1;
+          r_ptr            <= MST_ID_W'((int'(r_use) + 1) % NMID);   // difference 1
+        end else begin
+          r_cnt[s_arid] <= r_cnt[s_arid] + 1;
+        end
+      end
+      // read retire
+      if (m_rvalid && m_rready && m_rlast) begin
+        automatic logic [SLV_ID_W-1:0] sid = r_owner[m_rid];
+        if (!(s_arvalid && s_arready && s_arid == sid)) begin
+          if (r_cnt[sid] <= 1) begin
+            r_cnt[sid] <= 0; r_mapped[sid] <= 1'b0; r_used[r_mid[sid]] <= 1'b0;
+          end else r_cnt[sid] <= r_cnt[sid] - 1;
+        end
+      end
+      // write allocate
+      if (s_awvalid && s_awready) begin
+        if (!w_known) begin
+          w_mapped[s_awid] <= 1'b1;
+          w_mid   [s_awid] <= w_use;
+          w_used  [w_use]  <= 1'b1;
+          w_owner [w_use]  <= s_awid;
+          w_cnt   [s_awid] <= 1;
+          w_ptr            <= MST_ID_W'((int'(w_use) + 1) % NMID);
+        end else begin
+          w_cnt[s_awid] <= w_cnt[s_awid] + 1;
+        end
+      end
+      // write retire
+      if (m_bvalid && m_bready) begin
+        automatic logic [SLV_ID_W-1:0] sid = w_owner[m_bid];
+        if (!(s_awvalid && s_awready && s_awid == sid)) begin
+          if (w_cnt[sid] <= 1) begin
+            w_cnt[sid] <= 0; w_mapped[sid] <= 1'b0; w_used[w_mid[sid]] <= 1'b0;
+          end else w_cnt[sid] <= w_cnt[sid] - 1;
+        end
+      end
+    end
+  end
+
+endmodule

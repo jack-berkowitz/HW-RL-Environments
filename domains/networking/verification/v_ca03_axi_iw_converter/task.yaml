@@ -55,11 +55,55 @@ scored_configuration:
     reach of a testbench, which is where the discriminating mutants live.
 
 second_dut:
-  status: ABSENT
-  required: true
-  why: >
-    Not yet built. Recorded as ABSENT rather than claimed, so the harness warns
-    on every run instead of implying a gate that does not exist.
+  status: BUILT
+  file: dut2/id_width_conv_alt.sv
+  differences:
+    - "allocation policy: a ROTATING pointer -- the next master id after the one
+       most recently allocated -- against the reference implementation's
+       LOWEST-FREE via leading-zero count"
+    - "table organisation: a directory keyed by SLAVE id holding {mapped, master
+       id, count} plus a reverse array, against a table keyed by master id"
+    - "no buffering: address and response channels are combinational
+       pass-throughs, so the master request appears in the cycle the slave
+       request is accepted; the reference registers its path (latitude 2)"
+  nonequivalence_witness: >
+    MEASURED, and the first probe was wrong. Allocate two ids, retire the first,
+    allocate a new one: the reference reuses the just-freed master id (0 1 0),
+    the alternative takes the next in rotation (0 1 2), and again on the next
+    (0 1 0 2 against 0 1 2 3). 2 of 4 address handshakes differ in master id
+    choice. The policies are genuinely different, so the reference testbench has
+    accepted two different allocation disciplines rather than one written twice.
+  witness_caveat: >
+    The FIRST attempt at this measurement reported "same choices throughout --
+    paraphrase risk". That was a defect in the probe, not the DUT: with the
+    table full only one master id is ever free, so no CHOICE exists to differ
+    on. A choice requires two or more free ids with the rotating pointer past
+    the lowest. The probe now provokes that state deliberately.
+  result: passes the reference testbench, zero rule-5 adjudications
+
+mutants:
+  - {id: iw_m1_table_one_too_small, class: boundary, violates: A3, killed_by: A3,
+     witness: "a new id refused at MAX_UNIQ-1 distinct outstanding, t=520"}
+  - {id: iw_m2_depth_one_too_small, class: boundary, violates: A5, killed_by: "A3 then A5",
+     witness: "an already-outstanding id refused at a full table, t=800"}
+  - {id: iw_m3_entry_freed_late, class: boundary, violates: A4, killed_by: A4,
+     witness: "new id accepted 4 cycles after retirement against A4's 2-cycle window, t=2030"}
+  - {id: iw_m4_same_id_blocked_when_full, class: boundary, violates: A3, killed_by: A3,
+     witness: "an already-outstanding id refused at a full table, t=800"}
+  - {id: iw_m5_reads_and_writes_share, class: boundary, violates: A1, killed_by: A1,
+     witness: "a write refused while only reads occupied the table, t=3180"}
+  built_first: true
+  note: >
+    All five were written BEFORE the reference testbench, so the model was
+    developed against the cases it must distinguish. Writing iw_m3 first is what
+    exposed that A4 needed a stated bound to be falsifiable at all.
+
+scoring_ceiling:
+  reference: 5 of 5
+  caveat: >
+    Weaker than it looks: the model was written with these five boundaries in
+    hand. It says the model is consistent with the cases it was built from, not
+    that it is complete.
 
 scoring:
   validity_gate: submission must PASS the golden DUT
