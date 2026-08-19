@@ -1063,6 +1063,62 @@ applied to the instruction that asked for it.
 - **`mutants/*` slang exemption**: still not landed; kill counts remain
   `--no-slang` and not quotable.
 
+## Conformant set — two built, both survive, both witnessed
+
+| perturbation | licence | survives | non-equivalence witness |
+|---|---|---|---|
+| `c01_self_initializing` | **P1** | **16/16** | `bmc_cex`, depth 34 |
+| `c02_ready_gated_on_valid` | **L5** | **16/16** | `bmc_cex`, depth 34 |
+
+Both had to survive, and both do. The witness is what rule 16 demands and it is
+not decoration here — `c02` changes no transaction-level behaviour at all, so
+without a proof that it is observable it would be indistinguishable from a
+perturbation that does nothing and reports the reassuring answer.
+
+**`c01` failed the checker on first build, and the neutralise step is what made
+the result readable.** Neutralised — initialisation disabled, everything else
+identical — it **passed**. So the wrapper was not broken independently of the
+perturbation, and the perturbation itself was at fault: the anchor answers every
+operation including the ones the wrapper issues for itself, and R3 promises one
+response per **accepted request**, which an internal init operation is not. Those
+responses are now swallowed. **A wrapper defect, not a spec defect** — and
+without the neutralise run the honest reading would have been "P1 is wrong",
+which would have sent me to change the contract.
+
+**L1 has no wrapper and cannot have one.** Replacement is internal to the anchor
+and no wrapper reaches it. L1 is exercised by the second source's true-LRU choice
+instead — the same artifact serving both purposes, stated here rather than left
+for a reader to work out.
+
+**L6 is already exercised in both directions** by the zero-latency control DUT
+built for the L6 fix: `latency min=0` against the reference's `min=2`.
+
+## Not started, and stopping at the boundary rather than half-building
+
+- **`c03_responses_in_order`** (licence R4, also second-source difference D3′).
+  Design specified in `task.yaml`: an issue-order FIFO of ids plus per-id
+  storage, released from the head; witness is the reordering counter reading
+  > 0 for the reference and 0 for this.
+- **The second source.** Three differences named and committed before any of it
+  exists (`tb/audit/SECOND_SOURCE_DIFFERENCES.md`), D3 already refuted by
+  measurement and replaced by D3′, D1 flagged highest-risk. Three debug
+  iterations are budgeted normal cost, and rule 5's disambiguation governs every
+  failure — run the failing input through the anchor first, and never loosen a
+  check to accommodate it.
+
+This is a clean boundary rather than a stopping point of convenience: everything
+above is committed, runs, and carries its evidence. A half-built second source
+would be worth less than none, because its job is to falsify and a partial one
+cannot.
+
+## For Agent 1 — one more exemption
+
+The slang gate now exempts `ref/*` and `mutants/*`. **`conformant/*` needs the
+same treatment** and for the identical reason: these wrap the vendored anchor and
+have the reference's dependency profile, so they come back with 7–8 slang errors
+about a missing include path rather than anything about the perturbation. Worked
+around with `--no-slang`; the conformant results above are otherwise ungated.
+
 ## Next — the second source, not started
 
 Reference shim, then the real testbench (coverage floors, liveness monitor,

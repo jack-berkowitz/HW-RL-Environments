@@ -1,0 +1,48 @@
+{
+  "all_passed": false,
+  "configs_passed": 0,
+  "configs_total": 1,
+  "coverage": {
+    "DATA_W_32_SETS_8_WAYS_2_MAX_MISSES_2": {
+      "served_per_requester": "107 94 94 94 94 91 90 91 84 84 83 83 83 83 83 83"
+    }
+  },
+  "git_sha": "9249336d96bddb9f03a9add3d419b436861926fa-dirty",
+  "kind": "sim",
+  "label": "c01_self_initializing",
+  "metrics": {
+    "DATA_W_32_SETS_8_WAYS_2_MAX_MISSES_2": {
+      "accept_rate": "see fields",
+      "accept_rate_accepts": "1409",
+      "accept_rate_cycles": "35381",
+      "checks": "see fields",
+      "checks_n": "16",
+      "latency": "see fields",
+      "latency_max": "20084",
+      "latency_min": "2",
+      "latency_n": "1406",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "9",
+      "max_outstanding": "see fields",
+      "max_outstanding_n": "0",
+      "mem_txns": "see fields",
+      "mem_txns_fills": "814",
+      "mem_txns_total": "1279",
+      "mem_txns_writebacks": "465",
+      "wb_words_checked": "see fields",
+      "wb_words_checked_n": "1860"
+    }
+  },
+  "per_config": [
+    {
+      "config": "DATA_W_32_SETS_8_WAYS_2_MAX_MISSES_2",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "domains/comp_arch/design/d_ca01_nonblocking_dcache/conformant/c01_self_initializing.sv",
+  "submission_sha256_16": "fada2974a721db73",
+  "task": "d_ca01_nonblocking_dcache",
+  "task_text_hash": "32a4a0ceedaecadd",
+  "timestamp_utc": "2026-08-19T05:23:24Z"
+}

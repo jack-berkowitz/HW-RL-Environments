@@ -236,14 +236,54 @@ second_source:
              note: "replacement for D3, named openly; the failed claim is kept"}
 mutants:         {status: NOT_STARTED, planned: "5-7, each wrapping the anchor, incl. one CAPABILITY-class"}
 conformant:
-  status: NOT_STARTED
+  status: PARTIAL          # 2 of 4 built; c03 and the second source not started
   overlap_declared: >
-    D2 (true LRU) and D3' (in-order responses) are the SAME artifacts as two of
-    the second source's differences, serving both purposes. They are not
-    independent evidence.
-  planned_distinct:
-    - self-initializing design      # P1 says this is conformant; untested otherwise
-    - req_ready_o gated on req_valid_i   # L5 licences it and nothing exercises it
+    Replacement policy (L1) has NO wrapper and cannot have one -- replacement is
+    internal to the anchor and a wrapper cannot reach it. L1 is exercised by the
+    SECOND SOURCE's true-LRU choice instead, which is the same artifact serving
+    both purposes and is stated rather than left to be worked out.
+  built:
+    - name: c01_self_initializing
+      licence_clause: P1
+      survives: 16/16
+      evidence: bmc_cex
+      cex_depth: 34
+      note: >
+        P1 says a design that clears its own tags on reset is EQUALLY conformant
+        and nothing in the task exercised that reading. This does, by writing
+        every (set, way) invalid through the anchor's tag-store path before
+        accepting anything.
+      neutralise_control: >
+        It FAILED phase 1 on first build. Neutralised (init disabled) it PASSED,
+        so the wrapper was not broken independently of the perturbation -- the
+        perturbation was implemented wrongly. The anchor answers every operation
+        including the wrapper's own initialisation ops, and R3 promises one
+        response per ACCEPTED REQUEST; an internal init op is not one. Those
+        responses are now swallowed. A wrapper defect, not a spec defect, and
+        the neutralise step is what separated them.
+    - name: c02_ready_gated_on_valid
+      licence_clause: L5
+      survives: 16/16
+      evidence: bmc_cex
+      cex_depth: 34
+      note: >
+        The latitude audit found L5 licensed a choice nothing in the task took.
+        This takes it. No transaction-level behaviour changes, which is why the
+        non-equivalence witness matters -- without it this would be
+        indistinguishable from a no-op.
+  not_started:
+    - name: c03_responses_in_order
+      licence_clause: R4
+      design: >
+        Buffer responses and release them in issue order: an issue-order FIFO of
+        ids plus per-id storage released from the head. Witness: the reordering
+        counter reads > 0 for the reference and 0 for this.
+      also_serves: second source difference D3'
+  l6_exercised_by: >
+    The zero-latency control DUT built for the L6 fix runs with latency min=0
+    against the reference's min=2, so L6's latitude is exercised in both
+    directions already; no separate conformant wrapper is needed for it.
+
 testbench:
   status: BUILT
   reference_result: 16/16
