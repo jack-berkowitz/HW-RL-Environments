@@ -1,8 +1,7 @@
 # v_ca03 `id_width_conv` — evidence trail
 
-**STATUS: step 1 complete, plumbing wired. Spec, reference testbench, second
-DUT, conformant set and mutants are NOT built.** No ceiling exists and the task
-is not scoreable.
+**STATUS: steps 1-2 complete. Reference testbench, second DUT, conformant set
+and mutants are NOT built.** No ceiling exists and the task is not scoreable.
 
 **Selected after `fpnew_divsqrt_multi` failed step 1** — see §0.
 
@@ -110,3 +109,59 @@ members**, per the recipe. The boundaries this module offers are unusually good:
 the table at `MAX_UNIQ_IDS` entries against one fewer, the per-ID transaction
 count at `MAX_TXNS_PER_ID`, and the cycle an entry is freed against the cycle
 after. Each is a state a clause can name and a mutant can sit exactly on.
+
+---
+
+## 4. Step 2 — which clauses force a MODEL, not a comparison
+
+The selection criterion for this task was headroom, and headroom comes from
+clauses a submission cannot discharge by comparing an output against an
+expected value. Enumerated deliberately:
+
+| clause | what a submission must maintain | model or compare |
+|---|---|---|
+| A2, A3 table size and the stall boundary | the **set** of slave ids currently outstanding, per direction | **MODEL** |
+| A4 retirement frees an entry | the exact edge each id's last transaction completes on | **MODEL** |
+| A5 depth per identifier | a **count** per id, not just membership | **MODEL** |
+| B1 per-identifier ordering | a FIFO per id of accepted requests | **MODEL** |
+| B3 write data ordering | the address-acceptance order, against the data stream | **MODEL** |
+| C1, C2 identifier restoration | which transaction produced each response | **MODEL** |
+| D1 distinct while co-outstanding | the live slave-id to master-id **mapping** | **MODEL** |
+| D2 reuse only after retirement | that mapping *plus* retirement timing | **MODEL** |
+| D4 one in, one out | a count on both ports | model (weak) |
+| E1 payload integrity | — | compare |
+| F1 reset | — | compare |
+
+**Nine of eleven require state.** That is the difference from the three earlier
+tasks, where a scoreboard plus an expected value per transaction was enough.
+
+### The boundaries these clauses put in reach, for the first-pass mutant set
+
+Every one is a state a clause names, with a design that can be right everywhere
+except on it — the shape that produced `fn_m8` and `tt_m8`:
+
+1. the table at `MAX_UNIQ_IDS` entries against one fewer (A3)
+2. the per-id count at `MAX_TXNS_PER_ID` against one fewer (A5)
+3. the cycle an entry is freed against the cycle after (A4, D2)
+4. a same-id request at a full table, which A3 explicitly does **not** block
+5. reads against writes at the shared boundary, which A1 counts separately
+
+## 5. The spec was checked against the artefact before anything was built on it
+
+Eight assertions the spec makes beyond step 1, all verified through the shipped
+port map — `tb/audit/spec_conformance_probe.sv`:
+
+| clause | check | result |
+|---|---|---|
+| A3 | at `MAX_UNIQ-1` distinct ids a new id is accepted | ok |
+| A3 | at `MAX_UNIQ` distinct ids a new id is refused | ok |
+| D1 | 4 co-outstanding slave ids use 4 **distinct** master ids | ok |
+| A1 | a write with a 5th id is accepted while 4 reads are outstanding — reads and writes are counted separately | ok |
+| A4 | after the reads drain, a new id is accepted | ok |
+| A5 | a 2nd transaction with the same id is accepted | ok |
+| A5 | a 3rd is refused at `MAX_TXNS_PER_ID = 2` | ok |
+| C1 | responses carry slave ids 7 and 3, not master ids | ok |
+
+A clause the golden does not satisfy would otherwise surface later as the
+reference testbench failing its own validity gate, and be read as a checker
+defect.
