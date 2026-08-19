@@ -1153,7 +1153,72 @@ for a reader to work out.
 **L6 is already exercised in both directions** by the zero-latency control DUT
 built for the L6 fix: `latency min=0` against the reference's `min=2`.
 
-## Not started, and stopping at the boundary rather than half-building
+## Second source — three debug iterations spent, NOT PASSING, and the pattern differs from d_dsp02
+
+`tb/nonblocking_dcache_alt_ref.sv`, ~330 lines, independently written, sharing no
+code with the shim and not instantiating the anchor. All three declared
+differences are implemented: MSHR file merging against all outstanding records
+(D1), true LRU (D2), early fill forwarding (D3″).
+
+**Status: it does not pass.** Three iterations were budgeted and three were used.
+Reporting where it actually stands rather than at the end of a build.
+
+| iter | symptom | adjudication |
+|---|---|---|
+| 1 | fails C2 — no response while a fill outstanding | **harness setup defect** |
+| 2 | fails C1 — only 1 outstanding | **harness setup defect, same class** |
+| 3 | `got=…dd exp=…c9`, a masked-store byte | **the second source is wrong** |
+
+**The pattern is not d_dsp02's three-for-three, and forcing it into that shape
+would be wrong.** Two of the three were defects in the harness, and both were
+found *only because a forwarding design exists*.
+
+### The two harness defects, and why neither is a loosened check
+
+Both are the same mistake in two places: **treating a response as evidence that
+the memory transaction finished.** L6 leaves latency free, and a design that
+forwards the requested word off the fill stream answers while beats are still in
+flight. So:
+
+- The C2 phase warmed a line, waited for its response, then stalled the memory —
+  freezing that warming fill half-done. The line was never installed, and the
+  "hit" the phase depends on missed.
+- The C1 phase asserted its stall before the previous phase's fill had drained,
+  leaving a record permanently outstanding and one fewer available.
+
+Both fixes make the phase **wait for the memory model to go idle** before
+stalling. **Neither weakens a check.** C1 and C2 require exactly what they
+required; what was missing is that the stimulus never established its own
+precondition — the F12 shape, a check whose precondition was never met.
+
+Verified after the change, and this is the part that matters: reference
+**16/16**, `mCAP1` **8/16** still failing C1, `m05` **0/16** still failing C2,
+`m06` **0/16**, `c01`/`c02` **16/16**. Nothing moved.
+
+**This is the second source doing its declared job.** It is a falsifier, and it
+falsified two harness assumptions that the anchor could never have exposed
+because the anchor does not forward — measured flat at 13 cycles. A checker
+validated only against a non-forwarding design had a latent assumption in it, and
+only an independent implementation making a different legal choice could find it.
+
+### The outstanding design bug
+
+`got=…dd exp=…c9` — one byte, from a masked store, in the randomized soak and
+again in the readback sweep. The anchor is correct on the same stimulus, so by
+rule 5 the second source is wrong and **no check was touched**.
+
+Diagnosis so far, stated as a hypothesis because it is not yet confirmed by
+instrumentation: a request arriving in the same cycle a fill completes reads
+`valid_q` before the fill's non-blocking update lands, so it is treated as a
+miss, allocates a fresh record for a line that has just become resident, and the
+re-fetch overwrites the block — discarding a store already applied to it. That
+would lose exactly one word, which is the shape of the symptom.
+
+**Not fixed.** Three iterations is the budget; a fourth belongs in a session with
+room to confirm the hypothesis by instrumentation rather than reason about it,
+which is what this task's own convention says to do.
+
+## Earlier boundary note, superseded
 
 - **`c03_responses_in_order`** (licence R4, also second-source difference D3′).
   Design specified in `task.yaml`: an issue-order FIFO of ids plus per-id

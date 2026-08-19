@@ -482,9 +482,25 @@ module nonblocking_dcache_tb #(
     // ================= P3: C2 hit under miss ==============================
     phase = 3;
     b_addr = mk_addr(3, 2, 0);
-    send(4'd7, 1'b0, b_addr, '0, '1, acc); drain(4000);   // resident
+    send(4'd7, 1'b0, b_addr, '0, '1, acc);
+    drain(4000);
+    // WAIT FOR THE LINE TO BE INSTALLED, not merely answered. A response is not
+    // evidence that the block has landed: L6 leaves latency free, and a design
+    // that forwards the requested word off the fill stream answers before the
+    // remaining beats arrive. The second source does exactly that, and this
+    // phase used to stall the memory immediately after the response -- freezing
+    // the warming fill half-finished, so the line was never resident and the
+    // "hit" below missed. C2 still requires what it always required; what was
+    // wrong was that the stimulus never established its own precondition.
+    while (mstate != M_IDLE) @(negedge clk);
     // Withhold the fill DATA, not the request. The transaction is accepted and
     // then starves, which is the condition a non-blocking design must survive.
+    // Begin from a quiescent memory. `drain` returns when every request has been
+    // ANSWERED, which for a design that forwards off the fill stream happens
+    // while beats are still in flight. Stalling here would freeze the previous
+    // phase's fill half-done and leave its line uninstalled -- which is what
+    // the second source exposed, in this phase and in the C2 warm-up.
+    while (mstate != M_IDLE) @(negedge clk);
     mem_data_stall = 1'b1;
     send(4'd8, 1'b0, mk_addr(4, 3, 0), '0, '1, acc);      // MISS, held
     chk(acc, "C2: a miss was not accepted while memory was stalled");
@@ -508,6 +524,12 @@ module nonblocking_dcache_tb #(
     // transaction and armed it. That is protection by phase ORDERING, which is
     // incidental and would evaporate if the phases were reordered. Withholding
     // data removes the dependency: the transaction is accepted here too.
+    // Begin from a quiescent memory. `drain` returns when every request has been
+    // ANSWERED, which for a design that forwards off the fill stream happens
+    // while beats are still in flight. Stalling here would freeze the previous
+    // phase's fill half-done and leave its line uninstalled -- which is what
+    // the second source exposed, in this phase and in the C2 warm-up.
+    while (mstate != M_IDLE) @(negedge clk);
     mem_data_stall = 1'b1;
     cap_accepted = 0;
     for (i = 0; i < int'(MAX_MISSES) + 4; i++) begin

@@ -247,7 +247,25 @@ watchdog:
 # NOT YET BUILT -- step 3. Listed so their absence is visible rather than implied.
 # ---------------------------------------------------------------------------
 second_source:
-  status: NOT_STARTED       # gate satisfied; next session
+  status: BUILT_NOT_PASSING
+  file: tb/nonblocking_dcache_alt_ref.sv
+  differences_implemented: [D1, D2, D3_prime_prime]
+  iterations_used: 3        # of 3 budgeted
+  adjudications:
+    - {iter: 1, symptom: "fails C2", verdict: HARNESS_SETUP_DEFECT,
+       detail: "C2 warm-up treated a response as proof the line was installed; a forwarding design answers mid-fill"}
+    - {iter: 2, symptom: "fails C1, only 1 outstanding", verdict: HARNESS_SETUP_DEFECT,
+       detail: "C1 stalled the memory before the previous phase's fill had drained, leaking a record"}
+    - {iter: 3, symptom: "masked-store byte wrong", verdict: SECOND_SOURCE_IS_WRONG, open: true}
+  no_check_was_loosened: >
+    Both harness fixes make a phase wait for the memory model to go idle before
+    stalling -- establishing the phase's own precondition. Verified unchanged
+    afterwards: reference 16/16, mCAP1 8/16 on C1, m05 0/16 on C2, m06 0/16,
+    c01/c02 16/16.
+  what_it_bought: >
+    Two harness assumptions the anchor could never have exposed, because the
+    anchor does not forward (measured flat at 13 cycles). A checker validated
+    only against a non-forwarding design carried a latent precondition.
   r4_narrowing_regression_check: >
     Every artifact built before R4 was narrowed was re-run against the narrowed
     clause: reference 16/16, mCAP1 8/16, m01-m06 0/16, c01/c02 16/16. NO VERDICT
