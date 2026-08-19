@@ -119,6 +119,20 @@ anchor_measurements:
     result: EVIDENCED -- one fill, stored word survives the fill
     control: store to an already-resident line, clean
     consequence: TASK_CATALOG row correction, see NOTES.md
+  fill_to_response_latency:
+    method: one isolated miss per word-offset, fresh line each, scored configuration
+    results_back_to_back: {0: 13, 1: 13, 2: 13, 3: 13}
+    results_throttled_4x: {0: 22, 1: 22, 2: 22, 3: 22}
+    conclusion: >
+      FLAT across word offsets in both conditions -- the anchor does not forward
+      the requested word off the fill stream; it waits for the block and replays.
+    control: >
+      Throttling the fill moved every latency 13 -> 22, so the measurement is
+      sensitive to fill timing. Without that the flat reading would have been
+      indistinguishable from a probe that cannot see fill timing at all.
+    consequence: >
+      Second-source difference D3'' (early fill forwarding) SURVIVES, measured
+      before being written rather than after -- which is the mistake D3 made.
   req_ready_vs_valid:
     result: >
       independent for LOAD/STORE; dependent for management ops, which are out of
@@ -233,7 +247,12 @@ watchdog:
 # NOT YET BUILT -- step 3. Listed so their absence is visible rather than implied.
 # ---------------------------------------------------------------------------
 second_source:
-  status: NOT_STARTED
+  status: NOT_STARTED       # gate satisfied; next session
+  r4_narrowing_regression_check: >
+    Every artifact built before R4 was narrowed was re-run against the narrowed
+    clause: reference 16/16, mCAP1 8/16, m01-m06 0/16, c01/c02 16/16. NO VERDICT
+    CHANGED. A spec edit that silently flips something built earlier is the kind
+    of thing that surfaces much later, so it was checked rather than assumed.
   differences_named: true          # tb/audit/SECOND_SOURCE_DIFFERENCES.md, committed before the shim
   D1: {claim: "merge against all outstanding lines", risk: highest, status: unmeasured}
   D2: {claim: "true LRU vs tree-PLRU", status: unmeasured, also_conformant: true}

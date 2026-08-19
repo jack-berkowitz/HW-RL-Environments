@@ -201,3 +201,46 @@ so the size of the gap is unknown. If it turns out the anchor already forwards,
 D3″ fails too and is recorded like the other two. **Three failed candidates for
 one difference would itself be the finding** — it would say the anchor's choices
 on this axis are far less free than a reading of the spec suggests.
+
+---
+
+## D3″ MEASURED AND IT SURVIVES — the anchor does not forward
+
+Measured before writing a line of it, which is the mistake D3 made and this does
+not repeat.
+
+**Method.** One isolated miss per word-offset within the block, each to a fresh
+line, at the scored configuration. If the anchor forwards the requested word as
+its beat arrives, latency rises with the offset. If it waits for the whole block
+to land and then replays, latency is flat.
+
+| requested word offset | 0 | 1 | 2 | 3 |
+|---|---|---|---|---|
+| fill-to-response latency, cycles | **13** | **13** | **13** | **13** |
+
+**Flat. The anchor does not forward — it waits for the block, then replays.**
+
+**The flat reading was not believed until the measurement was shown to move.**
+A probe that reports a constant is indistinguishable from a probe insensitive to
+what it claims to measure. Control: throttle the fill to one beat every four
+cycles and re-run.
+
+| | offset 0 | 1 | 2 | 3 |
+|---|---|---|---|---|
+| beats back-to-back | 13 | 13 | 13 | 13 |
+| beats throttled 4x | **22** | **22** | **22** | **22** |
+
+The measurement responds to fill timing — 13 → 22 — and stays flat across
+offsets in both conditions. So the flatness is a property of the anchor, not of
+the probe.
+
+**D3″ stands, and its witness is now quantified rather than predicted:** the
+anchor's fill-to-response latency is **13 cycles at the scored configuration and
+independent of the requested word's offset**. A forwarding second source answers
+offset 0 several cycles sooner and shows latency rising with offset. The metric
+is `fill_latency_cycles`, already emitted.
+
+**So the third difference is settled after two failures**, and the axis is not as
+closed as it was starting to look. D3 failed because the anchor already did it;
+D3′ failed because it was not conformant; D3″ is a genuine free choice the anchor
+declines to take.
