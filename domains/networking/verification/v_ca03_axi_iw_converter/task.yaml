@@ -117,6 +117,12 @@ conformant_perturbations:
     arbitration was unreachable. Recorded because the alarm was correct and the
     instrument was not.
 
+watchdog:
+  tb_sim_time_limit: 4000000        # time units
+  tb_sim_time_measured: 15us
+  harness_sim_timeout_s: 25
+  harness_wall_measured_s: 0.02
+
 scoring_ceiling:
   reference: 5 of 5
   caveat: >
