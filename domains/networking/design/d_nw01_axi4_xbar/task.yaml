@@ -135,6 +135,43 @@ scored_configuration:
   # metric row at all. Found while building the reader-facing table.
   MAX_TRANS: 8
   MAX_BURST_LEN: 255
+
+  # ---- F49 AMENDMENT: DOES THE SCORED POINT DISCRIMINATE? MEASURED. --------
+  # Rule 18 as amended requires that the scored configuration be shown to
+  # discriminate, not merely chosen for engineering reasons. `capability_blind_spot`
+  # above records that MAX_TRANS=2 does not. Nobody had asked the question at 8.
+  #
+  # Measured 2026-08-19 through the UNMODIFIED checker, at the scored geometry
+  # NUM_MST=2 NUM_SLV=2 MAX_BURST_LEN=255:
+  #
+  #   design                        MT=2  outstd  verdict   MT=8  outstd  verdict
+  #   reference (CUT_ALL_AX)               3      PASS             27     PASS
+  #   second source (correct)              2      PASS              8     PASS
+  #   mCAP1 (one outstanding per master)   1      PASS              1     FAIL
+  #   mX1  (no cross-ID interleaving)      1      PASS              1     FAIL
+  #
+  # AT MAX_TRANS=2 EVERYTHING PASSES -- confirming the blind spot directly rather
+  # than inheriting it. AT MAX_TRANS=8 BOTH capability mutants are killed and both
+  # correct designs pass. The scored point discriminates.
+  #
+  # AND IT DISCRIMINATES ON THE RIGHT AXIS, which is the part F13 makes
+  # mandatory to check. Both mutants die on C1, the CAPACITY floor:
+  #   "master 0 accepted only 1 outstanding reads with no response drained;
+  #    floor is 4 for MAX_TRANS=8 (C1)"
+  # Neither dies on reordering. The reordering metric still prints
+  # `cross_id_reorderings=0 (DUT choice -- reported, never gated)`. F13 removed a
+  # reordering floor because reordering is an optimisation on an axis the
+  # contract never named, and the vendored reference legitimately declines to
+  # reorder at low depth. That floor is not reintroduced here, and the
+  # discrimination does not depend on it.
+  capability_discrimination:
+    scored_setting_discriminates: true
+    scored_setting: {MAX_TRANS: 8, MAX_BURST_LEN: 255, NUM_MST: 2, NUM_SLV: 2}
+    non_discriminating_setting: 2
+    discriminating_clause: C1 (outstanding-capacity floor, ceil(MAX_TRANS/2)=4)
+    mutants_killed_at_scored_point: [mCAP1_one_outstanding_per_master, mX1_no_cross_id_interleaving]
+    reordering_gated: false      # F13 -- reported as a DUT choice, never gated
+    measured: 2026-08-19, unmodified checker
   metric_config_rationale: >
     MAX_TRANS=8 because this task's own capability_blind_spot note records that
     NO capability check discriminates at MAX_TRANS=2 -- C1's floor is

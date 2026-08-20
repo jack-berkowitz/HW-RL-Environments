@@ -1,0 +1,19 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "faults_caught": "5/5",
+  "faults_hung": "0",
+  "git_sha": "b0cda6d01a38af9b14a7d44b333a56605c475a24-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "ref",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "domains/networking/verification/v_ca03_axi_iw_converter/tb/id_width_conv_spec_tb.sv",
+  "submission_sha256_16": "2e84e549b303c38d",
+  "task": "v_ca03_axi_iw_converter",
+  "task_text_hash": "c328435ef50f48b2",
+  "timestamp_utc": "2026-08-20T01:18:09Z"
+}
