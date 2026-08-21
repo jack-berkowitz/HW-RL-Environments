@@ -1,0 +1,165 @@
+id: v_nw04
+module: ptp_time_base
+domain: networking
+type: verification
+catalog: TASK_CATALOG.md
+tier: B
+
+oracle_class: A
+reference:
+  refs_lock_repo: alexforencich/verilog-ethernet
+  licence: MIT
+  mode: vendor
+  file: refs/verilog-ethernet/rtl/ptp_clock.v
+  closure: []          # zero dependencies -- a single self-contained file
+  golden: dut/ptp_time_base.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/ptp_time_base_iface.sv (port map) and
+    spec/ptp_time_base_spec.md only. dut/ holds the anchor VERBATIM plus a
+    Class A port shim, used for scoring and never given to a submission. The
+    anchor copy keeps its upstream MIT header unaltered. It is vendored under a
+    .sv name because the harness globs dut/*.sv -- a .v file would be silently
+    left out of the compile.
+  provenance_caveat: >
+    The file is present at the path refs.manifest.yaml names, in a repo
+    refs.lock pins. Its CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+
+harness:
+  golden_top: ptp_time_base
+  tb_module: ptp_time_base_tb
+  conformant_prefix: pt_c
+  mutant_prefix: pt_m
+  golden_file: dut/ptp_time_base.sv
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 60
+
+spec: [spec/ptp_time_base_spec.md, spec/ptp_time_base_iface.sv]
+
+# ---- rule 18: ONE scored configuration, named, with its rationale ------------
+scored_configuration:
+  note: the module takes no parameters; the whole configuration is pinned inside the shim
+  pinned_inside_the_shim:
+    PERIOD_NS: "4'h6"
+    PERIOD_FNS: "16'h6666"      # 6.4 ns -> 156.25 MHz
+    FNS_WIDTH: 16
+    DRIFT_ENABLE: 1
+    DRIFT_NS: "4'h0"
+    DRIFT_FNS: "16'h0002"
+    DRIFT_RATE: "16'h0005"
+    PIPELINE_OUTPUT: 0
+  rationale: >
+    6.4 ns is a period whose fractional part is not representable in whole
+    nanoseconds, so a design that drops fractional bits is wrong from the first
+    increment rather than only over a long horizon. A default drift of 2 fns
+    every 5 cycles keeps a second, independently-phased contributor in the
+    increment at all times, so a testbench cannot model the rate as a single
+    constant. PIPELINE_OUTPUT=0 keeps the output path direct, so response
+    latency is not a second free variable on top of the one L1 already names.
+  pinned_rationale: >
+    Not exposed as parameters at all. The clauses about the nominal rate, the
+    drift period and the one-second wrap are properties of specific numbers;
+    exposing them would let a submission build the golden at a different
+    configuration and fail the validity gate for a configuration error rather
+    than a verification error.
+
+second_dut:
+  status: WIRED
+  file: dut2/ptp_time_base_alt.sv
+  note: >
+    The SAME artefact as the policy-divergent perturbation of Tier-B step 5c,
+    generated from it so the two cannot drift. Independently written from the
+    spec; it does not instantiate the golden.
+  differences:
+    - "control latency (clause L1): acts on every control input in the SAME cycle
+       its valid is asserted. The golden registers first -- a new period is
+       reflected two cycles later, and adj_active_o rises one cycle later."
+    - "increment phase (clause L2): drives both time bases from the same increment
+       on the same cycle, with adj_active_o exactly in phase with the increments
+       it marks. The golden hands ts96_o its increment one cycle after ts64_o, so
+       the drift lands on different cycles in the two bases."
+    - "structure: a single flat accumulator with a direct comparison against one
+       second, against the anchor's pipelined borrow-lookahead scheme."
+  nonequivalence_witness: >
+    Measured on the golden: ts96_o and ts64_o receive the drift on different
+    cycles (ts64 419430 fns while ts96 takes 419432, and the reverse two cycles
+    later); the alt gives both the same increment on the same cycle. A testbench
+    that requires the two bases to move together fails the alt, and one that
+    arms its counters after driving a valid miscounts the alt by one.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpremised_reliance: must PASS the policy-divergent perturbation and dut2
+  fault_detection: reported PER MUTANT, never as a rate
+  reference_ceiling: 8 of 8
+
+conformant_perturbations:
+  - id: pt_c1_zero_latency
+    licence: "L1 and L2"
+    kind: POLICY-DIVERGENT, Tier-B step 5c
+    change: >
+      An INDEPENDENT implementation, not a wrapper. Zero control latency, and
+      both time bases driven by the same increment on the same cycle.
+    reference_tb_verdict: PASS
+  policy_independence: >
+    All eight defects re-derived on the divergent implementation
+    (mutants/policy/) and re-run: every one is caught on BOTH bases, and both
+    clean implementations pass. 18 of 18. Rerun with
+    mutants/check_policy_independence.sh.
+
+mutants:
+  - {id: pt_m1_drift_period_off_by_one, violates: D2,
+     defect: "the drift lands every drift_rate+1 increments",
+     witness: "cycle 7, ts64 short by 2 fns -- one drift application missed"}
+  - {id: pt_m2_adjust_one_short, violates: A2,
+     defect: "the offset adjustment is applied adj_count-1 times",
+     witness: "cycle 48, adj_active_o golden 1 / mutant 0"}
+  - {id: pt_m3_adj_active_one_long, violates: A3,
+     defect: "adj_active_o is high for adj_count+1 cycles while adj_count increments are adjusted",
+     witness: "cycle 42, adj_active_o golden 0 / mutant 1"}
+  - {id: pt_m4_wrap_one_ns_early, violates: W1,
+     defect: "the one-second wrap happens one nanosecond early",
+     witness: "cycle 162, ts96 ns golden 1 / mutant 2"}
+  - {id: pt_m5_pps_two_cycles, violates: W3,
+     defect: "pps_o is asserted for two cycles per wrap",
+     witness: "cycle 163, pps_o golden 0 / mutant 1"}
+  - {id: pt_m6_fns_truncated_in_ts96, violates: "I1/F3",
+     defect: "the 96-bit base drops the bottom four fractional bits of every increment",
+     witness: "cycle 2, ts96 fns short by 8"}
+  - {id: pt_m7_adjust_unsigned, violates: A5,
+     defect: "the offset adjustment is treated as unsigned, so a negative one advances the clock",
+     witness: "cycle 66, ts64 ahead by 1048576 fns = exactly 2^20"}
+  - {id: pt_m8_reset_keeps_period, violates: R2,
+     defect: "reset leaves the last programmed period in place",
+     witness: "cycle 204, ts64 advancing at the programmed rate, not the default"}
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness            # Tier-B: simulation witness only, no bmc_cex
+  witness_harness: mutants/nonequiv_tb.sv
+  generator: mutants/gen_mutants.py
+  depth: >
+    None is reachable by simply running the clock and watching time increase.
+    Four need a counted or periodic obligation measured exactly, two need the
+    one-second boundary, which at 6.4 ns per cycle is over 150 million cycles
+    away and reachable only by SETTING the base close to it, one needs a
+    negative adjustment, and one needs a reset after programming.
+
+negative_controls:
+  known_bad_dut:
+    status: PASS
+    detail: >
+      negctl/stuck_dut.sv (all 5 outputs tied low, generated from the port map)
+      and negctl/reset_polarity_dut.sv (rst_i treated as active low) are both
+      caught at cycle 9, each naming clause I1, not by the watchdog.
+  null_testbench:
+    status: SEE v_nw02 NOTES -- harness-level, being fixed by another agent
+    detail: >
+      negctl/null_tb.sv drives nothing and never instantiates the DUT. The
+      harness reports 0 of 8 and names every miss, but does not reject it; the
+      validity gate is satisfied vacuously. Reported from v_nw02; the fix is in
+      scripts/, outside this task's boundary.
+
+watchdog:
+  tb_sim_time_limit: 3ms
+  reference_wall_measured_s: 0.01
+  harness_sim_timeout_s: 60

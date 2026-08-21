@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/1",
+  "did_not_compile": "0",
+  "discriminates": "false",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "0cebdec5640fc62d1232a47e2ddbbe60e3474dc7-dirty",
+  "golden_accepted": "FAIL",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "gate_test",
+  "second_dut_accepted": "FAIL",
+  "status": "rejected",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/2381f2fe-5b48-47a1-8d06-7bf301d0b593/scratchpad/always_fail_tb.sv",
+  "submission_sha256_16": "ca0f238684023301",
+  "task": "v_nw02_axi_atop_filter",
+  "task_text_hash": "2c9f76502150e876",
+  "timestamp_utc": "2026-08-21T21:59:40Z"
+}

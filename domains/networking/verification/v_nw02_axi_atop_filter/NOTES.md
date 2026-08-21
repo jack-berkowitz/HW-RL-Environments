@@ -91,7 +91,7 @@ forward progress in both directions. The two controls now report
 `FAIL X4: a W beat was offered for 64 cycles and never accepted` and
 `FAIL W3/X4: AW id=1 was never accepted`.
 
-**(a) null testbench: NOT rejected — see the harness finding below.**
+**(a) null testbench: rejected**, after the harness gap recorded below was fixed.
 
 ## Rule 4 — the coverage floor defect, again
 
@@ -129,8 +129,14 @@ task's boundary (`scripts/` is owned elsewhere):
    "2 of 2 submission(s) passed the validity gate" has been told that a
    do-nothing submission passed.
 
-Tier-B step 5 requires the null control to be *rejected*. It is not. Reported
-rather than worked around.
+Tier-B step 5 requires the null control to be *rejected*. It was not.
+
+**Resolved.** The harness now builds a `gate-mutant` with every output tied high
+and requires a submission to REJECT it before any fault-detection number counts.
+The null testbench is now reported `INVALID: this submission does not
+DISCRIMINATE` and `EXCLUDED FROM SCORING`, and the footer counts discriminating
+submissions rather than gate-passing ones. Re-verified against this task after
+the fix; negative control (a) now passes.
 
 ## Watchdogs
 

@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "faults_caught": "0/8",
+  "faults_hung": "0",
+  "git_sha": "612f80387ab7a8ec85a3a1c075af9e2788365a49-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "reproduce_null",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "domains/networking/verification/v_nw02_axi_atop_filter/negctl/null_tb.sv",
+  "submission_sha256_16": "5dac3308e7c07b76",
+  "task": "v_nw02_axi_atop_filter",
+  "task_text_hash": "2c9f76502150e876",
+  "timestamp_utc": "2026-08-21T21:52:22Z"
+}
