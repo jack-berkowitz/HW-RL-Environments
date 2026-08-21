@@ -1,6 +1,56 @@
 # d_ca01 `nonblocking_dcache` — build notes
 
-**Status: STEPS 1-3 IN PROGRESS.** Shim and scoring testbench are landed and the
+## STATUS: CLOSED OUT. Everything except PPA is complete. Handed to Agent 1.
+
+| artifact | state |
+|---|---|
+| `spec/nonblocking_dcache_iface.sv` | complete, clause-by-clause authorities, latitude audited |
+| `ref/nonblocking_dcache_ref.sv` | thin shim, **16/16 gated** |
+| `tb/nonblocking_dcache_tb.sv` | scoring checker, passes the anchor 16/16 |
+| `mutants/` | **7**, each with `bmc_cex` evidence and a recorded depth |
+| `conformant/` | **2**, both survive 16/16 gated, both witnessed |
+| `tb/nonblocking_dcache_alt_ref.sv` | second source — **probe, not a deliverable.** Does not pass; see below |
+| `probe/PASTE.md` | paste-ready solicitation prompt |
+| `candidates/d_ca01/` | created, empty |
+| **PPA** | **NOT STARTED — Agent 1** |
+
+### Handoff to Agent 1 — three things that will cost a build if missed
+
+1. **`config.mk` needs `-DYOSYS`** on the slang read. Without it `bsg_defines.sv`
+   expands `BSG_VIVADO_SYNTH_FAILS` to a poison identifier and the read dies in
+   `bsg_mem_1rw_sync_mask_write_bit_synth.sv:108`, which reads as a syntax error
+   in basejump rather than a missing define.
+2. **Scored configuration is `DATA_W=32 SETS=16 WAYS=4 MAX_MISSES=8`.** 8 kbit of
+   data array — sized deliberately to close, given the container memory ceiling
+   that already killed one route on this bench.
+3. **The reference is the only artifact to build.** The second source does not
+   pass the checker and must not be given a PPA number.
+
+### The one open defect, logged against the SECOND SOURCE
+
+`tb/nonblocking_dcache_alt_ref.sv` loses one byte of a masked store —
+`got=…dd exp=…c9`, in the soak and again in the readback sweep. **The anchor is
+correct on the same stimulus, so rule 5 adjudicates this as the second source
+being wrong, and nothing in the checker was touched.**
+
+Not fixed, deliberately. The second source is a probe rather than a shipped
+artefact; the checker is validated and closing the task does not depend on it.
+The hypothesis on record — a request arriving in the same cycle a fill completes
+reads `valid_q` before the fill's non-blocking update lands, allocates a fresh
+record for a line that has just become resident, and the re-fetch discards a
+store already applied — is a hypothesis, not a diagnosis, and confirming it by
+instrumentation is a fourth iteration nobody needs.
+
+**What the second source bought before it stopped: two harness defects, written
+up as F52.** Both were invisible to the reference and to all seven mutants,
+because every one of them wraps the anchor and shares its non-forwarding
+behaviour. That is the argument for rule 5 the project did not previously have —
+a negative control feeds the checker a bad input and cannot establish that a
+check's precondition holds for a design that is right in an unfamiliar way.
+
+---
+
+**Superseded status line:** STEPS 1-3 IN PROGRESS. Shim and scoring testbench are landed and the
 testbench passes the anchor 16/16. Mutants, conformant set and second source are
 not started.
 

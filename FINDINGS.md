@@ -2418,3 +2418,58 @@ error pointing the other way.
 **Convention:** Controls: existence is not participation
 
 **From:** the d_dsp02 pre-push audit
+
+## F52. Negative controls cannot see an assumption the reference and every mutant share
+
+`d_ca01`'s checker had a latent precondition in two phases: **it treated a
+response as evidence that the memory transaction had finished.** The C2 phase
+warmed a line, waited for its response, then stalled the memory -- freezing its
+own warming fill half-done, so the line was never installed and the "hit" the
+phase depends on missed. The C1 phase asserted its stall before the previous
+phase's fill had drained, leaking a miss record and leaving one fewer available.
+
+Spec clause L6 leaves latency unconstrained, so **a design that forwards the
+requested word off the fill stream answers while beats are still in flight.**
+The anchor does not forward -- measured flat at 13 cycles across all four word
+offsets, with a throttle control confirming the measurement responds. Neither did
+any of the seven mutants, because every one of them wraps the anchor.
+
+**So the checker was validated, thoroughly, against a population that shared the
+assumption.** Reference 16/16. Seven mutants each failing their own clause, all
+with bounded counterexamples. Two conformant perturbations surviving. Every
+negative control fired exactly where it should. **None of it could see this**,
+and the reason is structural rather than an oversight:
+
+> **A negative control feeds the checker a BAD input. It establishes that a
+> check fires when the design is wrong. It cannot establish that the check's
+> PRECONDITION holds for a design that is right in an unfamiliar way** -- because
+> a control that shares the assumption satisfies the precondition by accident,
+> exactly as the reference does.
+
+The independently written second source found both within two runs, by making a
+legal choice on a clause the spec had explicitly left free.
+
+**This is the argument for rule 5 that the project did not previously have.**
+Before this, the second source's recorded value was as a falsifier of
+over-constrained *checks* -- `d_dsp02` went three for three the other way, every
+failure adjudicated "the second source is wrong", and the rule's worth was that
+it prevented three loosenings. Here it did something the mutant set structurally
+could not: it exposed a precondition that was never established, in a phase whose
+own negative control passed.
+
+**Neither fix loosened a check.** Both make the phase wait for the memory model
+to go idle before stalling -- establishing the precondition the stimulus had
+assumed. Verified afterwards, and this is the part that makes it reportable:
+reference 16/16, capability mutant still 8/16 on C1, blocking mutant still 0/16
+on C2, isolated C2 mutant 0/16, both conformant perturbations 16/16. Nothing
+moved.
+
+**The transferable form.** When a checker is validated only against artifacts
+derived from one implementation -- a reference plus mutants that wrap it -- the
+validation covers behaviour but not assumptions. Any property the reference has
+incidentally is a property the whole validation population has. **Targeting the
+second source at the opposite legal choice on each named latitude clause is what
+converts that blind spot into a test**, and it is cheap: two runs found both
+defects here.
+
+**Rules:** 3, 5
