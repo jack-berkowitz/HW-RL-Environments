@@ -1,6 +1,6 @@
 id: v_ca03
 module: id_width_conv
-domain: networking
+domain: comp_arch
 type: verification
 catalog: TASK_CATALOG.md
 

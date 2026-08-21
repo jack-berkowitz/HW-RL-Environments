@@ -1,7 +1,7 @@
 # Model answers for v_ca03 id_width_conv.
 
 **TESTBENCHES, not RTL** — module `id_width_conv_tb`, from
-`domains/networking/verification/v_ca03_axi_iw_converter/probe/PASTE.md`.
+`domains/comp_arch/verification/v_ca03_axi_iw_converter/probe/PASTE.md`.
 
 ```bash
 ./scripts/sim_verification.sh v_ca03 candidates/v_ca03/chat.sv
