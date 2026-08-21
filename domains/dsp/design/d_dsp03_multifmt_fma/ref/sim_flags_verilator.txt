@@ -1,0 +1,30 @@
+# Extra Verilator arguments for d_dsp03. ONE TOKEN PER LINE -- `-y` and its path
+# are two tokens and must be two lines, or the pair arrives as a single argument
+# and Verilator rejects it with "Invalid option: -y /path". %REPO% expands to the
+# repository root; blank lines and lines starting with # are ignored.
+#
+# THE REFERENCE is a shim over vendored cvfpu RTL. A self-contained candidate
+# needs none of this: -y is consulted only for modules that are otherwise
+# unresolved, so these are harmless there.
++incdir+%REPO%/refs/common_cells/include
+-y
+%REPO%/refs/cvfpu/src
+-y
+%REPO%/refs/common_cells/src
+
+# fpnew_opgroup_multifmt_slice's -y closure reaches fpnew_mxdotp_multi_wrapper.sv
+# even though this contract instantiates no MXDOTP unit, and that file imports
+# fpnew_mxdotp_multi_pkg. Both directories go on the search path and the package
+# is named explicitly below. Without them the build fails with
+# "Import package not found: 'fpnew_mxdotp_multi_pkg'".
+-y
+%REPO%/refs/cvfpu/src/mxdotp
+-y
+%REPO%/refs/cvfpu/src/pace
+
+# Packages, in dependency order. SystemVerilog requires a package to be
+# elaborated before anything importing it, so these are named explicitly rather
+# than left to -y.
+%REPO%/refs/common_cells/src/cf_math_pkg.sv
+%REPO%/refs/cvfpu/src/mxdotp/fpnew_mxdotp_multi_pkg.sv
+%REPO%/refs/cvfpu/src/fpnew_pkg.sv

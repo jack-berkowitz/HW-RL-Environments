@@ -126,6 +126,19 @@ case "$TASK_NAME" in
       # parameters -- a quantity that is never swept is a constant.
       CFGS=(); for sc in 2 4; do for mc in 2 4; do for dw in 8 32; do
         CFGS+=("S_COUNT=$sc M_COUNT=$mc DATA_W=$dw"); done; done; done ;;
+  d_dsp03_multifmt_fma)
+      # ONE swept parameter, two values = 2 configs. Kept in step with
+      # `configs:` in the task's task.yaml; if one changes the other must.
+      # The per-format geometry and the lane count are DERIVED, not parameters:
+      # lanes = WIDTH/format_width, so declaring either would claim a
+      # flexibility nothing binds.
+      #
+      # WIDTH is the capacity parameter and it is bound by RESULT BITS, not by a
+      # rate: at WIDTH=64 a vectorial 16-bit operation has four lanes and the
+      # vector set carries ~1000 four-lane cases whose lanes all differ. Both
+      # values are scored for correctness; S0 pins WIDTH=64 for PPA because that
+      # is where the capability check discriminates.
+      CFGS=(); for w in 32 64; do CFGS+=("WIDTH=$w"); done ;;
   *)  # REFUSE. This used to print a note and run the TB's own defaults, which
       # reported "1 config" for a task with eight legal ones -- a partial sweep
       # presented as a full one. That is the same defect as picking a testbench

@@ -1,0 +1,247 @@
+id: d_dsp03
+module: fp_multifmt_fma
+domain: dsp
+type: design
+catalog: TASK_CATALOG.md
+procedure: TIER-B
+
+catalog_divergence: >
+  The catalog row d_dsp03 names the task `multifmt_slice` after the anchor
+  module. The contract here is narrower and is named for what it pins:
+  fused multiply-add only, three formats, packed SIMD. `multifmt_slice` would
+  have named the artifact rather than the contract. Also: the row rates it
+  Class B; it is Class A -- cvfpu and its common_cells closure are vendored and
+  elaborate clean at both WIDTH settings. I do not own TASK_CATALOG.md; both
+  corrections are recorded here and reported.
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/cvfpu
+  sha: 6e5267e2fe75198f91ef9304ddd56c0028eea526
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/cvfpu/src/fpnew_opgroup_multifmt_slice.sv
+  closure: [fpnew_fma_multi, fpnew_classifier, fpnew_rounding, lzc, cf_math_pkg, fpnew_pkg]
+  shim: ref/fp_multifmt_fma_ref.sv
+  shim_note: >
+    Parameter binding, rename and enum decode only. OpGroup=ADDMUL (which also
+    keeps the DIVSQRT generate shut -- its default DivSqrtSel names pa_fdsu_top,
+    which is NOT vendored), IntFmtConfig and the MX configs zero, PaceFeatures
+    zero, NumPipeRegs=0, EnableVectors=1.
+  format_mask_note: >
+    FpFmtConfig is built BY INDEX and then asserted by the WIDTH it produces.
+    `fmt_logic_t` is `logic [0:NUM_FP_FORMATS-1]` -- ASCENDING -- and
+    NUM_FP_FORMATS is 9 in this revision, so the obvious literal
+    {{(N-1){1'b0}},1'b1} selects FP4, not FP32. That is not a hypothetical: it
+    is what d_dsp01 did, and the unit elaborated four bits wide, returned zero,
+    and asserted done in the same cycle as the start. See F53.
+
+anchor_conformance:
+  status: VERIFIED_BEFORE_USE
+  tool: tb/audit/ieee754_fma_model.py
+  result: 13860 of 13860 vectors bit-exact, results AND flags, both widths
+  why_this_step_exists: >
+    Rule 11 keeps locally written code away from expected values, which makes a
+    FABRICATED answer impossible and says nothing about whether the vendored
+    anchor knows the right one. d_dsp01 satisfied rule 11 exactly and its anchor
+    was correctly rounded in no mode but RTZ -- F54. An anchor is a CANDIDATE
+    for the reference until its output has been checked against the standard the
+    contract cites.
+  model_validation: >
+    The model's own rounder is checked against a property it does not compute:
+    the bracketing representable pair is found by BINARY SEARCH OVER BIT
+    PATTERNS and the rounder must have picked the member the mode requires.
+    3000 trials x 2 signs x 5 modes at each of FP32, FP16, BF16: 0 mismatches.
+  model_defect_found: >
+    The model was wrong first, not the anchor. 28 vectors disagreed on UF, all
+    where the exact result is tiny and inexact and gradual underflow rounds it
+    to ZERO. Clause 7.5 defines tininess-after as rounding at the target
+    PRECISION with an UNBOUNDED EXPONENT, not as inspecting the delivered value
+    -- which is already zero, so a `val != 0` guard drops UF. The anchor was
+    right. Corrected in the model and in the second source.
+
+spec: [spec/fp_multifmt_fma_iface.sv]
+
+scored_configuration:
+  WIDTH: 64
+  rationale: >
+    Chosen so the capability check can DISCRIMINATE, which is the deciding
+    criterion here rather than engineering merit. WIDTH is bound by RESULT BITS,
+    not by a rate: lanes = WIDTH/format_width, so a vectorial 16-bit operation
+    has two lanes at WIDTH=32 and four at WIDTH=64. At WIDTH=32 a design that
+    hardcodes two lanes is indistinguishable from a correct one, because two is
+    all that configuration ever has. At WIDTH=64 it cannot produce the upper two.
+  discrimination_evidence:
+    measured: true
+    reference: PASS at WIDTH=32, PASS at WIDTH=64
+    capability_reduced_control: PASS at WIDTH=32, FAIL at WIDTH=64
+    first_failing_vector: "1080, fmt=FP16 vec=1 lanes=4"
+    note: >
+      The control passing at the unscored configuration is the evidence, not an
+      inconvenience: it is the direct measurement that WIDTH=32 cannot tell the
+      two apart and WIDTH=64 can. F49 records what shipping the other choice
+      costs.
+
+configs:   # 2; keep in step with the d_dsp03 arm in sim_candidate.sh
+  - {WIDTH: 32}
+  - {WIDTH: 64}   # <- scored
+
+vectors:
+  files: [vectors/vectors_w32.hex, vectors/vectors_w64.hex]
+  counts: {w32: 6300, w64: 7560}
+  captured_by: tb/audit/capture_vectors_tb.sv
+  record_note: >
+    288-bit records carry the WIDTH they were captured at, and the checker
+    refuses a file whose records disagree with its own WIDTH. Scope is not
+    allowed to ride on the filename.
+  directed_bands: >
+    Two bands the random draw does not reach in useful quantity. NEAR-
+    CANCELLATION sets c to the negation of the product's leading M+1 significand
+    bits, so a*b+c is the product's own tail -- the case a design that rounds
+    the product before adding gets wrong wholesale. UNDERFLOW arranges exponents
+    so the product lands within a few ulps of the smallest normal. Both are
+    input generation, not oracle generation. They took UF coverage from 27 to
+    451 at WIDTH=32 and surfaced the model's tininess defect above.
+
+results:
+  reference: 2/2   # PASS at WIDTH=32 and WIDTH=64, 13860/13860 vectors checked
+
+negative_controls:
+  - name: nc_a_stuck_output
+    kind: synthetic known-bad
+    result: 0/2
+    failure_reason: "vec 0/1, FP32 scalar: result 0 against a non-zero expected value"
+    build_note: >
+      WRONG RESET POLARITY WAS TRIED FIRST AND PASSED AT BOTH WIDTHS. That is
+      not a hole in the checker: the reference binds NumPipeRegs=0 and is purely
+      combinational, so it has no state for a reset to hold and inverting rst_ni
+      changes nothing observable. The control was vacuous, not the checker
+      blind. Recorded because that control is standard equipment here and is
+      inert against every combinational DUT in this project.
+  - name: nc_b_two_lanes
+    kind: capability-reduced
+    result: 1/2
+    isolated: true
+    detail: >
+      Declares WIDTH and only ever computes two lanes; lanes 2 and 3 are copies
+      of lanes 0 and 1. PASSES at WIDTH=32 and FAILS at WIDTH=64 on the
+      four-lane FP16/BF16 vectors. Flags, every scalar case and every two-lane
+      case are left correct, so the ONLY thing that can fail is the lane count
+      (rule 16).
+  - name: nc_c_flush_to_zero
+    kind: capability-reduced
+    result: 0/2
+    isolated: true
+    detail: >
+      Flushes subnormal RESULTS to a signed zero in every format and lane;
+      operands and flags untouched. A3 is the headline capability of this task
+      and a capability no control isolates is a capability nobody has checked.
+      Fails at both widths -- the vector set carries 158/299/271 subnormal
+      results per format at WIDTH=32 and 284/358/265 at WIDTH=64.
+
+second_source:
+  file: tb/fp_multifmt_fma_alt_ref.sv
+  status: PROBE_COMPLETE
+  adjudication_rounds_used: 2     # of 2
+  result: 2/2   # 13860/13860 vectors bit-exact, results and flags
+  targeted_opposite_choices:
+    L4_handshake: >
+      REGISTERED. The reference is purely combinational, latency 0, in_ready_o
+      high every cycle. This one is a state machine whose in_ready_o does not
+      look at in_valid_i and whose out_valid_o is a flop.
+    L2_latency: "3-cycle pipeline against the reference's 0. Measured 4-14 against 0."
+    L3_throughput: "one operation at a time. Measured 187 ops/1000cyc against 427."
+    L1_algorithm: >
+      Exact integer significands with a bounded alignment window and an explicit
+      sticky, against the anchor's structure. No shared code, no anchor instance.
+  genuinely_different: >
+    Verified rather than assumed: over the same vector set the two run in 33511
+    and 40350 cycles against the reference's 14758 and 17680, at latency 4-14
+    against 0, and at 187 ops/1000cyc against 427.
+  round_1: >
+    `sh` and `shu` -- the rounding shift amounts -- were declared `int unsigned`,
+    so they wrapped whenever k < M, which is every cancellation case, and
+    `mag >> sh` returned zero. A defect in the second source, not the harness.
+    Adjudicated and fixed rather than debugged to green; it passed on the next
+    run with nothing else changed.
+  round_2: >
+    A SPEC DEFECT, and the kind only a second source finds. The second source
+    passed every simulation config and was then REJECTED BY THE SYNTHESIS
+    FRONTEND: "unroll limit of 4000 exhausted". Its leading-one search is a
+    132-iteration loop nested inside a lane loop whose bound is the runtime lane
+    count, which slang cannot bound at elaboration. Verilator accepts both
+    without comment.
+    .
+    T1 said "must elaborate under both slang and Verilator" and gave no hint
+    about the one construct that most commonly breaks it here -- so a
+    conformant, bit-exact design would have scored full correctness and produced
+    NO PPA NUMBER AT ALL, with the cause surfacing much later as an unexplained
+    mid-pipeline failure. Fixed in the spec as T5, with the constant-bound
+    idiom spelled out, and the second source's loops were bounded to match.
+    Re-verified afterwards: reference 2/2, all three controls unchanged,
+    second source 2/2, spec lints at both widths. Nothing moved.
+  what_it_bought: >
+    T5 above, and one thing more that is a positive result rather than a null.
+    The checker had already been wrong TWICE about handshake observation, both
+    times against a zero-latency design and both times invisible to all three
+    controls: it raced its own driver at the negedge, and it deadlocked on
+    latched backpressure. A registered, one-at-a-time, multi-cycle design is the
+    case those defects would have survived into. It retired 13860/13860 with no
+    queue desync and no liveness failure, which is the first positive evidence
+    that the handshake observation is right rather than merely not-yet-wrong.
+  also_bought: >
+    It demonstrates the task is SOLVABLE at the pinned contract, independently
+    of the anchor.
+
+harness_defects_found:
+  - by: the reference, during the first scoring run
+    defect: >
+      Backpressure was latched for the whole duration of one issue() call, so
+      out_ready_i stayed low while the driver waited on in_ready_o. L4 permits
+      in_ready_o to depend on out_ready_i and the reference, at zero pipeline
+      depth, does exactly that -- instant deadlock. 4200 of 6300 vectors lost,
+      and it looked exactly like a candidate wedging. The stall window is now a
+      level and the stalling is driven by a free-running LFSR.
+  - by: the reference, immediately after
+    defect: >
+      The transfer monitor fired on the NEGEDGE, the same edge on which issue()
+      clears in_valid_i with a blocking assignment. The two orders give
+      different answers; it double-counted transfers, slid the expected-value
+      queue by one, and reported 6116 mismatches against a bit-exact reference.
+      Moved to the POSEDGE -- the edge the DUT itself samples, and the one no
+      testbench assignment races.
+  - by: building the capture rig
+    defect: >
+      Same class, earlier: the capture rig's driver waited for its own input
+      transfer and then looked for a result, which cannot see a result presented
+      in the same cycle the operation was accepted. Both rigs now observe both
+      sides with one monitor at the transfer edge.
+  - by: running the second source through the real gated path
+    defect: >
+      ref/sim_flags_verilator.txt put `-y` and its path on ONE line. The loader
+      appends one array element PER LINE, so the pair arrived as a single
+      argument and Verilator rejected it: "Invalid option: -y /path". Every
+      config reported COMPILE_ERROR. Split to one token per line, which is what
+      the loader documents and what d_ca01's flag file already does. Found only
+      by running scripts/sim_candidate.sh rather than verilator directly --
+      building by hand had worked all along.
+
+difficulty_assessment: >
+  Not a first-try problem. Bit-exact fused multiply-add across three formats
+  with different exponent/mantissa splits, subnormal operands AND results at
+  full precision, five rounding modes, tininess detected after rounding,
+  IEEE 754 clause 6.3 exact-zero signs, canonical NaN, NaN-boxing above the
+  lanes in use, and 2- or 4-lane SIMD that scales with a declared parameter. The
+  second source -- written with the finished spec in hand and no ambiguity to
+  resolve -- still took an iteration, on a signed-shift declaration.
+
+ppa: ABSENT
+ppa_note: >
+  Agent 1 owns PPA. Tier-B pins a fixed clock period rather than sweeping fmax;
+  the period, the resolved-config hash and the task-text hash are Agent 1's to
+  record. No find_fmax. Note for whoever runs it: the reference is
+  COMBINATIONAL (NumPipeRegs=0), so it will not meet a tight period -- that is a
+  property of the shim's spec-minimal binding, not of the contract, which leaves
+  latency free under L2.
+
+skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
