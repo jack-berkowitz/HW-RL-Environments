@@ -1,6 +1,32 @@
-Implement the SystemVerilog module described by the contract below.
-Reply with ONE self-contained file and nothing else -- no prose, no fences.
+# Task: implement a multi-format fused multiply-add unit in SystemVerilog
 
+You are given a **port map and a complete specification**. Write the RTL. You
+will not be shown any reference implementation.
+
+Your answer is run against a checker across **2 parameter combinations** and must
+pass every one. It is also synthesised, so it must be legal SystemVerilog for two
+different frontends.
+
+**The difficulty is per-format bit-exactness on shared hardware.** Every result is
+compared bit for bit against an external reference, and so are the five exception
+flags. Three things break designs here. FP16 and BF16 are both 16 bits and are
+*not* the same format -- 5/10 against 8/7. The operation is FUSED, so there is
+exactly one rounding of the exact product-plus-addend, and `round(round(a*b) + c)`
+differs on a large fraction of inputs. And subnormals are handled at full
+precision in every format, as operands and as results; flush-to-zero fails on the
+vectors, not on a rate.
+
+The lane count is not decoration: a vectorial operation computes `WIDTH/format_width`
+independent lanes, so at `WIDTH = 64` a 16-bit operation has FOUR of them. A design
+that handles two because two is what the narrow configuration needed passes one
+configuration and fails the other.
+
+## What to submit
+
+**One self-contained file** containing only `module fp_multifmt_fma`, with the
+exact port list below. No package, no include, nothing outside the file.
+
+```systemverilog
 // =============================================================================
 // fp_multifmt_fma_iface.sv  --  PORT DEFINITION ONLY (no implementation)
 // =============================================================================
@@ -242,6 +268,19 @@ Reply with ONE self-contained file and nothing else -- no prose, no fences.
 //       below, including port names and the parameter name.
 //   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to
 //       anything outside itself.
+//   T5. LOOP BOUNDS MUST BE CONSTANTS, AND THE TOTAL UNROLL MUST BE MODEST.
+//       The synthesis frontend elaborates procedural loops by unrolling them and
+//       gives up after 4000 iterations in total per block. A loop whose bound is
+//       a RUNTIME value -- for instance `for (k = 0; k < N; k++)` where N is the
+//       lane count derived from `fmt_i` and `vec_i` -- cannot be bounded at
+//       elaboration, and a wide leading-one search nested inside it exhausts the
+//       budget. Verilator accepts both happily, so this fails ONLY at synthesis.
+//       Write `for (k = 0; k < WIDTH/16; k++) if (k < N) ...`: a constant bound
+//       with a runtime guard inside.
+//       AUTHORITY: measured, not assumed. An independently written conformant
+//       implementation of this contract hit exactly this and was rejected by the
+//       frontend while passing every simulation config -- so it would have
+//       scored full correctness and produced no PPA number at all.
 // =============================================================================
 
 module fp_multifmt_fma #(
@@ -270,3 +309,4 @@ module fp_multifmt_fma #(
   // Implementation goes here.
 
 endmodule
+```
