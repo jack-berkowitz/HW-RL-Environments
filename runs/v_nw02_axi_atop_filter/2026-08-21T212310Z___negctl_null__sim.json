@@ -1,0 +1,19 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "faults_caught": "0/8",
+  "faults_hung": "0",
+  "git_sha": "f8e21fc403d2e4df2e0da42de02e67b64ac12ff7-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "_negctl_null",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "candidates/v_nw02/_negctl_null.sv",
+  "submission_sha256_16": "5dac3308e7c07b76",
+  "task": "v_nw02_axi_atop_filter",
+  "task_text_hash": "",
+  "timestamp_utc": "2026-08-21T21:23:10Z"
+}

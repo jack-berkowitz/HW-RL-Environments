@@ -1,0 +1,165 @@
+id: v_nw02
+module: atop_filter
+domain: networking
+type: verification
+catalog: TASK_CATALOG.md
+tier: B
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/axi
+  refs_lock_sha: 4da15979747f326bde2f9869c64e587ce599772c
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/axi/src/axi_atop_filter.sv
+  closure: [refs/axi/src/axi_pkg.sv, refs/common_cells/src/cf_math_pkg.sv,
+            refs/common_cells/src/stream_register.sv, refs/common_cells/src/spill_register.sv,
+            refs/common_cells/src/spill_register_flushable.sv, refs/common_cells/src/fifo_v3.sv,
+            refs/common_cells/src/counter.sv, refs/common_cells/src/delta_counter.sv,
+            refs/axi/include/axi/typedef.svh, refs/axi/include/axi/assign.svh,
+            refs/common_cells/include/common_cells/registers.svh,
+            refs/common_cells/include/common_cells/assertions.svh]
+  golden: dut/atop_filter.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/atop_filter_iface.sv (port map) and
+    spec/atop_filter_spec.md only. dut/ holds the anchor VERBATIM plus a Class A
+    port shim, used for scoring and never given to a submission. The anchor
+    copies keep their upstream SHL-0.51 headers unaltered.
+  provenance_caveat: >
+    The files are present at the paths refs.manifest.yaml names, in a repo
+    refs.lock pins. Their CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+
+harness:
+  golden_top: atop_filter
+  tb_module: atop_filter_tb
+  conformant_prefix: af_c
+  mutant_prefix: af_m
+  golden_file: dut/atop_filter.sv
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  include_dirs: domains/networking/verification/v_nw02_axi_atop_filter/dut/include
+  sim_timeout_s: 60
+
+spec: [spec/atop_filter_spec.md, spec/atop_filter_iface.sv]
+
+# ---- rule 18: ONE scored configuration, named, with its rationale ------------
+scored_configuration:
+  ID_W: 4
+  ADDR_W: 32
+  DATA_W: 32
+  USER_W: 1
+  rationale: >
+    ID_W=4 gives sixteen ids, enough that a manufactured response carrying a
+    STALE id is distinguishable from one carrying the right id -- at ID_W=1 the
+    two coincide half the time. DATA_W=32 makes wstrb a real four-bit sideband.
+    USER_W=1 keeps the user field present, at minimum width, as a thing the
+    contract leaves unconstrained on manufactured responses (clause L2).
+  pinned_inside_the_shim: [MAX_WRITE_TXNS=4]
+  pinned_rationale: >
+    Not exposed as a parameter. Clauses W2/W3 are properties of a specific
+    bound; exposing it would let a submission build the golden at a different
+    bound and fail the validity gate for a configuration error rather than a
+    verification error. Four is the smallest bound at which an off-by-one is
+    distinguishable from both "never stalls" and "stalls immediately".
+
+second_dut:
+  status: WIRED
+  file: dut2/atop_filter_alt.sv
+  note: >
+    The SAME artefact as the policy-divergent perturbation of Tier-B step 5c,
+    generated from it so the two cannot drift. Independently written from the
+    spec; it does not instantiate the golden.
+  differences:
+    - "manufactured-response ORDER: emits the B first and holds every R beat until
+       the B is taken. The golden emits the R beats first (measured: R at cycles
+       5-8, B at cycle 12). This is clause L1, and it is the difference that
+       matters -- a testbench fitted to the golden's order fails here."
+    - "manufactured-response FIELDS: drives a non-zero pattern on rdata/ruser/buser
+       where the golden drives zero (clause L2)."
+    - "W-before-AW: refuses a W beat until its AW has been accepted; the golden
+       accepts early W beats and tracks them with an underflow counter."
+    - "atomic concurrency: admits one atomic write at a time; the golden's AW
+       admission is governed by its write-debt counter instead."
+
+watchdog:
+  tb_sim_time_limit: 4ms
+  reference_wall_measured_s: 0.32
+  harness_sim_timeout_s: 60           # 187x margin
+  full_sweep_wall_s: 59                # 11 DUT builds
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpremised_reliance: must PASS the policy-divergent perturbation and dut2
+  fault_detection: reported PER MUTANT, never as a rate
+  reference_ceiling: 8 of 8
+
+conformant_perturbations:
+  - id: af_c1_b_before_r
+    licence: "L1 and L2"
+    kind: POLICY-DIVERGENT, Tier-B step 5c
+    change: >
+      An INDEPENDENT implementation, not a wrapper -- it does not instantiate
+      the golden. Emits the manufactured B FIRST and holds every R beat until
+      the B is taken; the golden emits the R beats first. Also drives a non-zero
+      pattern on rdata/ruser/buser of a manufactured response where the golden
+      drives zero.
+    witness: >
+      golden emits R at cycles 5-8 and B at cycle 12; this one emits B first.
+      Each channel is independent of the other's backpressure in the golden
+      (B completed at 51 with R stalled; R flowed at 93-96 with B stalled), so
+      the ordering is free rather than forced.
+    reference_tb_verdict: PASS
+  policy_independence: >
+    All eight defects were re-derived on top of this divergent implementation
+    (mutants/policy/) and re-run: every one is caught on BOTH bases, and the
+    clean divergent implementation still passes. No mutant is killed by the
+    latitude choice. Rerun with mutants/check_policy_independence.sh.
+
+mutants:
+  - {id: af_m1_budget_off_by_one,    violates: W2,     defect: "admits a fifth outstanding downstream write",
+     witness: "cycle 146, s_awready: admits a write the bound forbids"}
+  - {id: af_m2_debt_frees_on_b,      violates: W4,     defect: "debt falls on a B arriving, not on a W burst completing",
+     witness: "cycle 5, s_wready: debt still held against a completed burst"}
+  - {id: af_m3_rresp_class_on_bit4,  violates: "C2/F5", defect: "read-response obligation read from atop[4], not atop[5]",
+     witness: "cycle 11, R beat for id=2 -- an atomic STORE, which owes none"}
+  - {id: af_m4_rbeats_short_by_one,  violates: F4,     defect: "multi-beat atomic write gets awlen R beats, not awlen+1",
+     witness: "cycle 59, R burst for id=4 ends a beat early"}
+  - {id: af_m5_rlast_also_on_first,  violates: F4,     defect: "rlast on the first injected beat as well as the last",
+     witness: "cycle 57, golden last=0 mutant last=1 on the first beat"}
+  - {id: af_m6_rinject_okay,         violates: F4,     defect: "manufactured R beats carry OKAY; the B still carries SLVERR",
+     witness: "cycle 34, R beat id=3: golden resp=10, mutant resp=00"}
+  - {id: af_m7_absorbed_w_forwarded, violates: F2,     defect: "W beats of a filtered write also reach the master port",
+     witness: "cycle 11, master W valid=1 where the golden has 0"}
+  - {id: af_m8_stale_response_id,    violates: "F3/F4", defect: "manufactured responses carry the previous atomic write's id",
+     witness: "cycle 12, B id=0 where the golden gives id=2"}
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness            # Tier-B: simulation witness only, no bmc_cex
+  witness_harness: mutants/nonequiv_tb.sv
+  generator: mutants/gen_mutants.py
+  depth: >
+    Seven of the eight require state to be built before the defect is reachable.
+    af_m6 is the one a single directed atomic load would catch; kept as the
+    anchor of the set rather than removed.
+
+negative_controls:
+  known_bad_dut:
+    status: PASS
+    detail: >
+      negctl/stuck_dut.sv (all 45 outputs tied low, generated from the port map)
+      and negctl/reset_polarity_dut.sv (rst_ni treated as active high) are both
+      caught by the reference testbench, each naming a clause. Both were
+      initially caught only by the simulation watchdog -- the reference
+      testbench waited unbounded for w_ready and ar_ready. Fixed; X4 widened to
+      cover forward progress in both directions.
+  null_testbench:
+    status: FAIL -- NOT REJECTED BY THE HARNESS
+    detail: >
+      negctl/null_tb.sv drives nothing, observes nothing, NEVER INSTANTIATES THE
+      DUT, and prints RESULT: PASS. sim_verification.sh reports it as "VALID,
+      with gaps in fault detection ... Caught 0 of 8" and counts it in "2 of 2
+      submission(s) passed the validity gate". The harness DOES discriminate
+      0-of-8 from 8-of-8 and names every miss, so its measurement is sound, but
+      the validity gate is satisfied vacuously and the footer reads as a pass.
+      Not fixable from this task: scripts/ is outside this agent's boundary.
+      See NOTES.md.

@@ -1,0 +1,19 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "faults_caught": "8/8",
+  "faults_hung": "0",
+  "git_sha": "b1fe9adb8a5db13ef7527661c103b1fa98e822eb-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "reference",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "candidates/v_nw02/reference.sv",
+  "submission_sha256_16": "89e40c9f1dc88023",
+  "task": "v_nw02_axi_atop_filter",
+  "task_text_hash": "",
+  "timestamp_utc": "2026-08-21T21:25:56Z"
+}
