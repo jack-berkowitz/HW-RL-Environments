@@ -1,0 +1,29 @@
+# Extra Verilator arguments for d_dsp01. One token per line; %REPO% expands to
+# the repository root.
+#
+# The REFERENCE is a shim over cvfpu's fpnew_divsqrt_multi, whose closure pulls
+# in div_sqrt_top_mvp from the separate fpu_div_sqrt_mvp repo (it is NOT in
+# cvfpu) plus lzc and friends from common_cells, and includes
+# common_cells/registers.svh.
+#
+# NOTE ON THE INCLUDE PATH: refs/cvfpu/src/common_cells is an EMPTY directory --
+# an uninitialised submodule -- so the include path must point at the top-level
+# refs/common_cells/include. Pointing it at cvfpu's own produces a "cannot find
+# registers.svh" that reads like a missing file rather than a missing checkout.
+#
+# Packages come before the -y search paths: SystemVerilog requires a package to
+# be elaborated before anything importing it, and cf_math_pkg comes first
+# because fpnew_pkg uses it. defs_div_sqrt_mvp is the divsqrt unit's own.
+#
+# A self-contained candidate needs none of this; -y is consulted only for
+# modules that are otherwise unresolved.
++incdir+%REPO%/refs/common_cells/include
+-y
+%REPO%/refs/cvfpu/src
+-y
+%REPO%/refs/common_cells/src
+-y
+%REPO%/refs/fpu_div_sqrt_mvp/hdl
+%REPO%/refs/common_cells/src/cf_math_pkg.sv
+%REPO%/refs/cvfpu/src/fpnew_pkg.sv
+%REPO%/refs/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv

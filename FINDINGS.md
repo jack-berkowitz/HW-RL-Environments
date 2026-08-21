@@ -2473,3 +2473,144 @@ converts that blind spot into a test**, and it is cheap: two runs found both
 defects here.
 
 **Rules:** 3, 5
+
+## F53. An ascending packed mask accepts the obvious literal and selects the wrong element
+
+`d_dsp01`'s shim bound cvfpu's format mask the way the type name invites:
+
+```systemverilog
+.FpFmtConfig ({{(fpnew_pkg::NUM_FP_FORMATS-1){1'b0}}, 1'b1})   // "FP32 only"
+```
+
+The comment is what the author meant. The code selects **FP4**.
+
+`fmt_logic_t` is `logic [0:NUM_FP_FORMATS-1]` -- **ascending** -- and
+`NUM_FP_FORMATS` is 9 in this vendored cvfpu, not the 5 the older published
+version had. A literal's rightmost bit is its LSB, and in an ascending vector
+the LSB is index `N-1`. So the mask set index 8, which `FP_ENCODINGS` gives as
+2 exponent bits and 1 mantissa bit: a 4-bit float.
+
+**What that produced is the part worth recording.** `max_fp_width` returned 4,
+the divider elaborated as a 4-bit unit, `operands_i` narrowed to 8 bits total,
+every operand was truncated to nothing, and the unit returned `0` with `Done_SO`
+asserted in the same cycle as the start. It did not fail to elaborate. It did
+not fail to simulate. It did not hang. **It ran, it handshook correctly, and it
+answered every question with zero** -- and a capture rig reading it would have
+written two thousand perfectly well-formed wrong vectors had a separate harness
+bug not stalled it first.
+
+The only evidence anywhere was one line:
+
+```
+%Warning-WIDTHTRUNC: Input port connection 'operands_i' expects 8 bits on the
+pin connection, but pin connection's VARREF 'ops' generates 64 bits.
+```
+
+among **124 WIDTHEXPAND and 9 WIDTHTRUNC warnings** that the vendored tree emits
+as a matter of course. Nothing distinguishes the fatal one from the noise, and
+`-Wno-fatal` is required to build the tree at all.
+
+**The transferable form, and it is not "read the typedef".** Reading the typedef
+is what fixes this instance. What prevents the class is that **a parameter bound
+by a literal whose meaning depends on a packing convention must be bound by
+index and then CHECKED BY ITS CONSEQUENCE**:
+
+```systemverilog
+function automatic fpnew_pkg::fmt_logic_t fmt_fp32_only();
+  fmt_fp32_only = '0;
+  fmt_fp32_only[fpnew_pkg::FP32] = 1'b1;      // by index, not by literal
+endfunction
+localparam fpnew_pkg::fmt_logic_t FP32_ONLY = fmt_fp32_only();
+
+initial if (fpnew_pkg::max_fp_width(FP32_ONLY) != 32)
+  $fatal(1, "FP32_ONLY selects a %0d-bit format", fpnew_pkg::max_fp_width(FP32_ONLY));
+```
+
+Indexing alone still breaks silently if the vendored package renumbers its
+formats -- which is exactly what happened between the cvfpu version this mask
+was written against and the one in `refs/`. **The width assertion is the part
+that survives the next version bump.**
+
+Exposure checked across the project: `d_dsp02` binds `FpFormat` (the enum) rather
+than a mask and is unaffected. `d_dsp03 multifmt_slice` and `v_dsp01
+fp_cast_multi` both take `fmt_logic_t` masks and will meet this exactly.
+
+**Rules:** 1, 20
+
+## F54. A vendored dependency one version out of step makes a golden reference that is wrong in five of five rounding modes
+
+`d_dsp01`'s contract was bit-exact IEEE-754 binary32 divide and square root
+across all five rounding modes. Its anchor, `cvfpu/fpnew_divsqrt_multi` over
+`fpu_div_sqrt_mvp/div_sqrt_top_mvp`, **implements none of them correctly.**
+
+Measured, after F53 was fixed and against a `Fraction`-exact rounding model that
+was itself first validated at 0 disagreements in 180 cases against binary64
+division rounded to binary32 (safe: 53 >= 2*24+2, so no double rounding):
+
+```
+ driven |     RNE     RTZ     RDN     RUP     RMM      n     <- fraction of results
+    RNE |   0.900   0.772   0.744   0.611   0.900    180        matching the model
+    RTZ |   0.698   1.000   0.736   0.604   0.698    182        under each mode
+    RDN |   0.737   0.715   0.419   0.914   0.737    186
+    RUP |   0.738   0.786   0.909   0.428   0.738    187
+    RMM |   0.701   1.000   0.679   0.652   0.701    187
+```
+
+Read down the diagonal for what was asked and across for what was delivered:
+
+* **RDN and RUP are swapped.** `defs_div_sqrt_mvp.sv` defines
+  `NEAREST=0, TRUNC=1, PLUSINF=2, MINUSINF=3`; `fpnew_pkg` defines
+  `RNE=0, RTZ=1, RDN=2, RUP=3`. `fpnew_divsqrt_multi` wires `rnd_mode_q`
+  straight to `RM_SI` with no remap, so 2 means "toward -inf" upstream and
+  "toward +inf" downstream. Driven RDN matches the model's RUP at 0.914.
+* **RMM does not exist downstream.** `C_RM` has four encodings; 4 falls through
+  to `default` and truncates. Driven RMM matches RTZ at **1.000**.
+* **RNE is still wrong on 10% of cases after the encodings line up.** `1.0/15.0`
+  returns `3d888888` where correct rounding is `3d888889`. Not a subnormal
+  effect -- 16 of the 18 RNE misses are normal/normal/normal.
+* Flags are independently wrong: `x/1.0` for subnormal `x` is exact and returns
+  UF and NX; a subnormal-operand division that IS inexact returns neither.
+  200 of 922 in-range divisions disagree on flags.
+* **Subnormal results are wrong too** -- 81 of 112 bit-exact, so the one
+  capability the task was built to measure (A3) is 28% wrong in the reference.
+
+The encoding swap is version skew: `refs/fpu_div_sqrt_mvp` is not the revision
+`cvfpu` expects, and the interface between them is four untyped bits with no
+overlap in meaning and no way to fail loudly.
+
+**Why this is a finding and not a bug report.** The apparatus was working. The
+spec cited IEEE 754-2019 clause by clause, the shim was thin, the capture rig
+obeyed rule 11 and generated inputs only, and every expected value came from
+externally-authored RTL exactly as the rule requires. **Rule 11 guarantees that
+locally written code cannot invent a wrong answer. It does not guarantee that
+the vendored RTL knows the right one** -- and with expected values taken from
+the anchor by construction, a wrong anchor is invisible to every check that
+compares a candidate against them. Mutants would have been killed, negative
+controls would have failed, a second source would have been adjudicated wrong,
+and the task would have shipped a scored contract whose golden answers are
+wrong in four modes out of five.
+
+**What actually caught it** was an independent model of the *contract* -- not of
+the anchor -- run over the captured vectors before anything downstream was
+built. That step is cheap and it is the only thing between "rule 11 was
+followed" and "the answers are right".
+
+> **Rule 11 moves the risk from fabrication to provenance. When a contract is
+> pinned to an external standard rather than to the anchor's behaviour, the
+> anchor is a CANDIDATE for the reference, not the reference, until its output
+> has been checked against the standard the contract cites.**
+
+`d_dsp01` is **withdrawn**, not deferred: no correctly-rounded FP divider exists
+in `refs/`. `fpnew_divsqrt_th_32` is present but its `pa_fdsu_top`, `pa_fpu_dp`
+and `pa_fpu_frbus` are not vendored, and there is no network. Narrowing the
+contract to RTZ-only with flags out of scope is the one thing the anchor does
+support -- and it is fitting the contract to the artifact, which is the
+anti-pattern this finding is about.
+
+Exposure: `d_dsp02` uses `fpnew_fma`, a different unit with vendored
+dependencies, and is unaffected. The catalog's suggestion of `fpnew_divsqrt` as
+a **verification** task should be read against this: the unit is a legitimate
+target for a verification task precisely because it is non-conforming, but its
+output must never be used as a golden reference.
+
+**Rules:** 5, 8, 11, 15
