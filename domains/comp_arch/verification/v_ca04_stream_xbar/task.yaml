@@ -1,0 +1,169 @@
+id: v_ca04
+module: route_xbar
+domain: comp_arch
+type: verification
+catalog: TASK_CATALOG.md
+tier: B
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/common_cells
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/common_cells/src/stream_xbar.sv
+  closure: [refs/common_cells/src/stream_demux.sv, refs/common_cells/src/rr_arb_tree.sv,
+            refs/common_cells/src/lzc.sv, refs/common_cells/src/spill_register.sv,
+            refs/common_cells/src/spill_register_flushable.sv,
+            refs/common_cells/src/cf_math_pkg.sv,
+            refs/common_cells/include/common_cells/assertions.svh,
+            refs/common_cells/include/common_cells/registers.svh]
+  golden: dut/route_xbar.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/route_xbar_iface.sv (port map) and
+    spec/route_xbar_spec.md only. dut/ holds the anchor VERBATIM plus a Class A
+    port shim, used for scoring and never given to a submission. The anchor
+    copies keep their upstream SHL-0.51 headers unaltered.
+  provenance_caveat: >
+    The files are present at the paths refs.manifest.yaml names, in a repo
+    refs.lock pins. Their CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+  assertion_suppression: >
+    dut/aa_asserts_off.sv defines COMMON_CELLS_ASSERTS_OFF and is named to sort
+    FIRST in the harness's lexicographic glob of dut/*.sv. The anchor carries
+    built-in protocol assertions that abort the simulation with $stop and print
+    the ANCHOR'S FILENAME AND MODULE PATH to stdout when a submission's stimulus
+    slips. That is two problems: the run produces no RESULT line, so the
+    submission fails on the GOLDEN and reads as "rejected correct hardware" when
+    the fault is its own stimulus; and the abort names the design the task is
+    built on. The assertions check only source-side obligations, which clause H2
+    states as obligations on the submission.
+
+harness:
+  golden_top: route_xbar
+  tb_module: route_xbar_tb
+  conformant_prefix: xb_c
+  mutant_prefix: xb_m
+  golden_file: dut/route_xbar.sv
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  include_dirs: domains/comp_arch/verification/v_ca04_stream_xbar/dut/include
+  sim_timeout_s: 60
+
+spec: [spec/route_xbar_spec.md, spec/route_xbar_iface.sv]
+
+scored_configuration:
+  N_IN: 4
+  N_OUT: 4
+  DATA_W: 32
+  SEL_W: 2
+  IDX_W: 2
+  rationale: >
+    Four inputs is the smallest count at which round-robin service is
+    distinguishable from any fixed order and at which a starved input is a
+    minority rather than half the machine. Four outputs makes the two-bit
+    selector fully covered, so no selector value is out of range and no clause
+    has to describe an undefined case. DATA_W=32 leaves room to encode both the
+    source input and a per-input sequence number in every payload, which is what
+    makes R3 checkable against something other than the design's own claim.
+  pinned_inside_the_shim: [OutSpillReg=0, ExtPrio=0, AxiVldRdy=1, LockIn=1]
+  pinned_rationale: >
+    Not exposed as parameters. Fairness is a property of round-robin arbitration
+    at a specific port count and A3 is a property of a locked-in decision;
+    exposing either would let a submission build the golden off-spec and fail
+    the validity gate for a configuration error rather than a verification one.
+
+second_dut:
+  status: WIRED
+  file: dut2/route_xbar_alt.sv
+  note: >
+    The SAME artefact as the policy-divergent perturbation of Tier-B step 5c,
+    generated from it so the two cannot drift. Independently written from the
+    spec; it does not instantiate the golden.
+  differences:
+    - "rotation direction (clause L2): rotates DOWNWARD -- after serving input k
+       the next favoured contender is k-1. The golden rotates upward. Both meet
+       the A2 window; they differ in the order within it."
+    - "output registration (clause L3): every output is REGISTERED, so a beat is
+       always delivered the cycle after it is accepted. The golden's outputs are
+       combinational, so a beat can be accepted and delivered in the same cycle."
+    - "structure: a per-output held-beat register with an explicit scan, against
+       the anchor's demux-plus-arbiter-tree with a lock register."
+  nonequivalence_witness: >
+    Measured: the golden serves a tied set in the order 0 1 2 3 and can deliver
+    in the accepting cycle; the alt serves 3 2 1 0 and never delivers before the
+    following cycle. A testbench that assumes either the rotation direction or
+    the zero-latency path fails it.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpremised_reliance: must PASS the policy-divergent perturbation and dut2
+  fault_detection: reported PER MUTANT, never as a rate
+  reference_ceiling: 8 of 8
+
+conformant_perturbations:
+  - id: xb_c1_registered_down_rotation
+    licence: "L1, L2 and L3"
+    kind: POLICY-DIVERGENT, Tier-B step 5c
+    change: an INDEPENDENT crossbar, not a wrapper; downward rotation and registered outputs
+    reference_tb_verdict: PASS
+  policy_independence: >
+    All eight defects re-derived on the divergent implementation
+    (mutants/policy/) and re-run: every one caught on BOTH bases, both clean
+    implementations pass. 18 of 18. Rerun with
+    mutants/check_policy_independence.sh.
+
+mutants:
+  - {id: xb_m1_fixed_priority, violates: A2,
+     defect: "fixed priority instead of round robin",
+     witness: "cycle 2, output 0: golden serves input 1, mutant serves input 0 again"}
+  - {id: xb_m2_marginal_starvation, violates: A2,
+     defect: "every input eventually served, but the rotation advances only every 64 cycles",
+     witness: "cycle 2, output 0: golden serves input 1, mutant serves input 0 again"}
+  - {id: xb_m3_idx_off_by_one, violates: R3,
+     defect: "out_idx_o names the input one place along from the true source",
+     witness: "cycle 1, output 0: golden idx 0, mutant idx 1, same payload"}
+  - {id: xb_m4_sel_top_bit_dropped, violates: R1,
+     defect: "the top selector bit is ignored, so outputs 2 and 3 are unreachable",
+     witness: "cycle 42, out_valid_o golden 1111 mutant 0011"}
+  - {id: xb_m5_lockin_off, violates: A3,
+     defect: "an arbitration decision is not locked in; an offered beat can be re-aimed",
+     witness: "cycle 185, output 0: golden holds input 3's beat, mutant re-aims to input 1"}
+  - {id: xb_m6_duplicate_delivery, violates: "R1/R4",
+     defect: "the core advances on every second acceptance, so each beat is delivered twice",
+     witness: "cycle 1, in_ready_o golden 0001 mutant 0000"}
+  - {id: xb_m7_payload_from_neighbour, violates: R2,
+     defect: "each input's payload is taken from the next input along",
+     witness: "cycle 1, output 0: golden data 5a000000, mutant 5a100000, both idx 0"}
+  - {id: xb_m8_head_of_line, violates: I2,
+     defect: "no input is accepted unless every output is ready",
+     witness: "cycle 43, in_ready_o golden 1110 mutant 0000"}
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness
+  witness_harness: mutants/nonequiv_tb.sv
+  generator: mutants/gen_mutants.py
+  depth: >
+    None falls to a single beat through an idle crossbar. Two need a tied set
+    measured against a window rather than against "eventually served", one needs
+    the contender set changed while an output is stalled AND the already-offered
+    input to outrank the arriving one, one needs an output that is only
+    reachable through the high selector bit, and two need a monitor on the input
+    side rather than the output side.
+
+negative_controls:
+  known_bad_dut:
+    status: PASS
+    detail: >
+      negctl/stuck_dut.sv (all 4 outputs tied low, generated from the port map)
+      and negctl/reset_polarity_dut.sv (rst_ni treated as active high) are both
+      caught, each naming clauses I1 and I2, not by the watchdog.
+  null_testbench:
+    status: PASS -- rejected
+    detail: >
+      negctl/null_tb.sv drives nothing and never instantiates the DUT. The
+      harness runs a gate-mutant with every output tied high and requires a
+      submission to reject it; the null testbench is reported INVALID and
+      EXCLUDED FROM SCORING.
+
+watchdog:
+  tb_sim_time_limit: 2ms
+  harness_sim_timeout_s: 60
