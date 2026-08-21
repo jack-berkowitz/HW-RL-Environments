@@ -1,0 +1,12 @@
+# Extra Verilator arguments for d_nw03. One token per line; %REPO% expands to the
+# repository root.
+#
+# The REFERENCE is a shim over vendored Forencich RTL -- axis_switch and its
+# closure: axis_demux, axis_register, axis_fifo, axis_arb_mux, arbiter,
+# priority_encoder. A self-contained candidate needs none of it; -y is consulted
+# only for modules that are otherwise unresolved, so the flag is harmless there.
+#
+# The vendored RTL is Verilog-2001 with `default_nettype none, and it declares
+# `timescale. No include paths are needed -- the closure is flat in one directory.
+-y
+%REPO%/refs/verilog-axis/rtl

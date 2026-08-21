@@ -1,0 +1,130 @@
+id: d_nw03
+module: axis_switch_oq
+domain: networking
+type: design
+catalog: TASK_CATALOG.md
+procedure: TIER-B
+
+oracle_class: A
+reference:
+  refs_lock_repo: alexforencich/verilog-axis
+  sha: 48ff7a7e2ef782cf778d47910cf85835c64b1bce
+  licence: MIT
+  mode: vendor
+  file: refs/verilog-axis/rtl/axis_switch.v
+  closure: [axis_demux, axis_register, axis_fifo, axis_arb_mux, arbiter, priority_encoder]
+  shim: ref/axis_switch_oq_ref.sv
+  shim_note: >
+    Parameter binding, rename and reset-polarity inversion only. ID/USER tied
+    off (the contract carries neither), S_DEST_WIDTH bound equal to
+    clog2(M_COUNT) so M_BASE=0 routes tdest as the port index directly, and
+    KEEP_ENABLE forced 1 at every width because the anchor's default would
+    disable keep propagation at DATA_W=8.
+  arbitration_pinned: >
+    ARB_TYPE_ROUND_ROBIN=1 is bound EXPLICITLY, not inherited. The catalog
+    records that at this anchor family's default arbitration three of four
+    backlogged inputs were served zero frames across 406 -- starvation, which
+    C3 forbids.
+
+spec: [spec/axis_switch_oq_iface.sv]
+
+scored_configuration:
+  S_COUNT: 4
+  M_COUNT: 4
+  DATA_W: 32
+  rationale: >
+    Chosen so the capability check can DISCRIMINATE, which is the deciding
+    criterion here rather than engineering merit. C1's floor is 2.0 beats/cycle
+    and the ceiling at 2x2 is 2.0, so at the small configurations a correct
+    design cannot clear the floor and a serialised one cannot be told apart. At
+    4x4 the correct design measures 2.40 and the capability-reduced control
+    measures 0.81, with the floor between them. DATA_W=32 because at 8 the
+    KEEP_W is 1 and R2's partial-final-beat case degenerates.
+  discrimination_evidence:
+    reference_at_scored: 2.40 beats/cycle
+    capability_reduced_control: 0.81 beats/cycle
+    floor: 2.0
+
+configs:   # full cross = 8; keep in step with the d_nw03 arm in sim_candidate.sh
+  - {S_COUNT: 2, M_COUNT: 2, DATA_W: 8}
+  - {S_COUNT: 2, M_COUNT: 2, DATA_W: 32}
+  - {S_COUNT: 2, M_COUNT: 4, DATA_W: 8}
+  - {S_COUNT: 2, M_COUNT: 4, DATA_W: 32}
+  - {S_COUNT: 4, M_COUNT: 2, DATA_W: 8}
+  - {S_COUNT: 4, M_COUNT: 2, DATA_W: 32}
+  - {S_COUNT: 4, M_COUNT: 4, DATA_W: 8}
+  - {S_COUNT: 4, M_COUNT: 4, DATA_W: 32}   # <- scored
+
+results:
+  reference: 8/8
+
+negative_controls:
+  - name: nc_a_reset_polarity
+    kind: synthetic known-bad
+    result: 0/8
+    failure_reason: "phase 1: input 0 never delivered a frame to output 0"
+  - name: nc_b_outputs_serialised
+    kind: capability-reduced
+    result: 6/8
+    isolated: true
+    detail: >
+      Fails exactly and only the two configurations where C1 is enforced
+      (S_COUNT=M_COUNT=4), and fails on C1: 486 beats / 601 cycles against a
+      floor of 2.0. Correct on R3, R4, R5, C2 and C3 -- the only thing it lacks
+      is the concurrency the port counts claim.
+    build_note: >
+      Its first version held an output's turn until the frame completed, which
+      deadlocked when that output was backpressured and made it fail C2 instead
+      of C1 -- a control that trips the wrong check validates neither. Now it
+      yields the turn unless a beat is actually transferring; frame atomicity is
+      per output port, so yielding mid-frame is safe.
+
+second_source:
+  file: tb/axis_switch_oq_alt_ref.sv
+  status: PROBE_COMPLETE
+  adjudication_rounds_used: 0     # of 2; it passed first run, so nothing to adjudicate
+  result: 8/8
+  targeted_opposite_choices:
+    L2_buffering: STORE-AND-FORWARD against the anchor's cut-through
+    L1_arbitration: OLDEST-FIRST against the anchor's round-robin
+    L5_ready: gated on valid, which the anchor does not do
+  genuinely_different: >
+    Verified rather than assumed: at the scored configuration the two measure
+    2.40 and 2.57 beats/cycle over the same window, over different cycle counts
+    (7940 vs 8183) and different frame mixes. It took the other path and the
+    checker accepted both.
+  what_it_bought: >
+    One spec defect, found BEFORE it was written: L2 permits store-and-forward,
+    and a store-and-forward design cannot be built without a bound on frame
+    length, which the spec did not state. R6 was added and the harness now
+    drives the bound with a coverage floor. Latitude the interface could not
+    express -- found by trying to USE the clause, not by reading it.
+
+harness_defects_found:
+  - by: the reference itself
+    defect: >
+      The routing check keyed on frames FULLY ACCEPTED, which forbids
+      cut-through; L2 permits it and the anchor does it. Re-keyed onto frames
+      STARTED.
+  - by: instrumenting a rate that read wrong
+    defect: >
+      Every per-cycle tally used `x <= x + 1` inside a port loop -- a
+      non-blocking assignment evaluated N times against the same old value, so
+      the counter capped at ONE PER CYCLE however many ports transferred. A
+      switch delivering four beats a cycle measured 0.93, which is exactly what
+      a fully serialised design produces, so the C1 check would have PASSED the
+      capability-reduced control. Fixed by accumulating in blocking temporaries
+      and applying once.
+  - by: sweeping all 8 configurations
+    defect: >
+      C1's floor failed the reference at 2x2, where the ceiling is the floor.
+      Now enforced only where it can discriminate, and reported elsewhere with
+      an explicit statement that it is not capability evidence.
+
+ppa: ABSENT
+ppa_note: >
+  Agent 1 owns PPA. Tier-B pins a fixed clock period rather than sweeping fmax;
+  the period, the resolved-config hash and the task-text hash are Agent 1's to
+  record. No find_fmax.
+
+skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
