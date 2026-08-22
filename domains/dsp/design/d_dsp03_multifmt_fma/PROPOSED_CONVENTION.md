@@ -146,6 +146,26 @@ NEW=$(git commit-tree $TREE -p HEAD -F msg.txt)
 git update-ref HEAD $NEW
 ```
 
+**A FOURTH STEP IS REQUIRED, and omitting it is what made this dangerous.** The
+procedure above protects the other agent's staging AT COMMIT TIME and then
+leaves the real index stale against the new HEAD, because `commit-tree` +
+`update-ref` never touch it. Measured: after two temp-index commits the shared
+index still held the previous `RULES.md` and `FINDINGS.md` blobs, so a plain
+`git commit` from it would have REVERTED a rule that had just landed.
+
+    git read-tree HEAD                       # refresh the real index
+    git add -A -- <the other agent's paths>  # re-stage what was there
+
+`git update-index --force-remove` is NOT the way to re-stage a deletion: it
+fails silently and leaves the deletion unstaged. `git add -A --` with explicit
+paths works.
+
+> **The failure is silent in BOTH directions and neither agent saw their own.**
+> One index carried staged deletions of seven of the other agent's files; the
+> other carried blobs that would have reverted a just-landed rule. Same root
+> cause, opposite sign, and in both cases `git status` showed something that
+> looked entirely ordinary. Each was found by the other agent, not by its owner.
+
 then **verify the real index is untouched, do not assume it**:
 
 ```bash
@@ -156,3 +176,42 @@ The shared index is shared mutable state and nothing about a commit reveals that
 another agent was mid-stage in it. The `cmp` is the same discipline as the
 no-alteration diff and the apparatus reproduction above: verify, and record the
 verification.
+
+## Addendum — candidate artefacts are committed ON ARRIVAL
+
+Not when the surrounding work is ready, not when the batch is complete, not
+when the scoring run finishes. **On arrival.**
+
+This is the same shape as the two collisions above, and it is the one that
+actually cost something. Three instances in one session:
+
+1. Agent 1's F55, F56, rule 23 and the rule-20 amendment sat uncommitted in
+   shared files, and were carried into someone else's commit — recoverable,
+   and only because a diff showed what was there.
+2. This convention draft sat uncommitted in a file that a literal reading of
+   "delete PROPOSED_RULE.md" would have removed — caught by reading the
+   instruction against the file rather than executing it.
+3. **A candidate submission was lost.** `candidates/d_dsp02/claude.sv` existed
+   on disk, was never committed, and re-solicitation overwrote it. Its identity
+   survives in a run record (`submission_sha256_16 7b3240027cc7837c`); its
+   content is gone permanently.
+
+> **The first two were caught by a diff. The third had no diff to catch it —
+> the file had never been in git, so nothing anywhere registered a change. The
+> loss was silent and total.**
+
+That is why this addendum is not "commit more often". A submission is an
+EXTERNAL ARTEFACT: it cannot be regenerated, because the model that produced it
+is not deterministic and its version may no longer be reachable. Losing a
+derived file costs a rebuild. Losing a solicited answer costs the answer.
+
+**The practical rule:** a file arriving from outside the project — a model
+submission, a vendored drop, a hand-collected log — is committed before any
+work is done ON it, including before it is scored. A commit whose message is
+only "land <model>.sv as received" is a complete and correct commit.
+
+The consequence in the record is visible now: `deepseek` and `qwen` carry
+withdrawal rationales and `claude` does not, because claude's prior artefact was
+not withdrawn, it was lost. Recording that distinction after the fact required
+reconstructing intent from a run record. Committing on arrival would have made
+it a one-line diff instead.

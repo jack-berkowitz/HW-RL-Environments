@@ -493,6 +493,24 @@ defects. It runs with the regression.
     it is a false one; it guarantees only that the instrument was pointed at a
     known answer before it was believed.
 
+    **NO ENFORCEMENT SCRIPT, AND THAT IS A DECISION.** One was designed and
+    deliberately not built. It can gate PRESENCE -- numbers with no reproduction
+    marker beside them, or a marker whose expected and actual disagree -- but it
+    cannot gate CORRESPONDENCE: that the apparatus which reproduced the known
+    answer is the same apparatus, in the same configuration, that produced the
+    number. **All of this session's instances would have passed it.** The
+    `--Mdir` loop genuinely reproduced the reference at 0 kills, and then a later
+    iteration silently ran a different binary; a truthful marker from the first
+    iteration sits beside a number from the fifth.
+
+    Closing that gap requires rigs to emit the marker and the number FROM ONE
+    INVOCATION with a build identity in both. That is a reporting change, not a
+    check, and engineering a script around the limit would produce a gate that
+    reads as load-bearing and is not.
+
+    **Revisit when several rigs emit markers natively** -- at that point a script
+    enforces a convention that exists rather than inventing one.
+
     **From:** F60
 
 ---

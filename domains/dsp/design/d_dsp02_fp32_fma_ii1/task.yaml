@@ -199,6 +199,104 @@ second_source:
     how independence quietly disappears. This task is NOT marked green on it.
     See F59: the prior 4290/4290 held over the region the set reached.
 
+candidate_set:
+  status: RE-SOLICITED against PASTE.md, 2026-08-21
+  task_text_hash: 530f3e4189421457      # spec + probe/PASTE.md together
+  models: 3
+  submissions: [chat, claude, gemini]
+
+  # EXPLICIT MAPPING, established by comparing HEAD against disk rather than
+  # inferred from filenames. The claude case is why: its filename is unchanged
+  # across the boundary and the artefact behind it is not.
+  mapping_prior_to_current:
+    - prior: chat
+      head_artefact: candidates/d_dsp02/chat.sv   @ f2c7320062120baa
+      disposition: SUPERSEDED
+      by: candidates/d_dsp02/chat.sv @ d9643ea68fd0f4a1
+      prior_artefact_recoverable: yes -- committed in HEAD
+    - prior: claude
+      head_artefact: NONE -- never committed
+      disposition: SUPERSEDED
+      by: candidates/d_dsp02/claude.sv @ 3d6313924582dadc
+      prior_artefact_recoverable: >
+        NO. LOST TO OVERWRITE. Identity is known from its run record
+        (submission_sha256_16 7b3240027cc7837c) but the content is gone.
+        This is an ARTEFACT LOSS, not a withdrawal -- see NOTES.md.
+    - prior: gemini
+      head_artefact: candidates/d_dsp02/gemini.sv @ 04f7896fab9d5b2d
+      disposition: SUPERSEDED
+      by: candidates/d_dsp02/gemini.sv @ 0e7de75676697935
+      prior_artefact_recoverable: yes -- committed in HEAD
+    - prior: deepseek
+      head_artefact: candidates/d_dsp02/deepseek.sv @ a7e71697001b1da7
+      disposition: WITHDRAWN
+    - prior: qwen
+      head_artefact: candidates/d_dsp02/qwen.sv @ f20425b287b0dcca
+      disposition: WITHDRAWN
+    unaccounted_for: none
+    footnote: >
+      An even earlier chat submission (5b821c2b2e0ea818) was superseded before
+      HEAD and is not part of the five-to-three boundary.
+
+  withdrawn:
+    models: [deepseek, qwen]
+    status: WITHDRAWN, NOT PENDING, NOT IN PROGRESS
+    artefacts: >
+      DELETED FROM candidates/d_dsp02/, DELIBERATELY. The files no longer exist
+      at those paths and are not to be restored. They remain retrievable from
+      git history at the commit preceding this one, and their identities are
+      recorded below -- but any row or table referring to them must state that
+      the artefact is GONE rather than point at a path that no longer resolves.
+    reason: >
+      Not re-solicited. Their prior submissions were build failures at the
+      pre-bump spec -- both rejected by slang, the synthesis frontend -- and
+      they answer a task text that no longer exists. They are not awaiting a
+      run; nothing is scheduled for them.
+    retained:
+      pre_bump_task_text_hash: 5ad30593403b4ae2
+      deepseek_submission_sha256_16: a7e71697001b1da7   # artefact deleted
+      qwen_submission_sha256_16:     f20425b287b0dcca   # artefact deleted
+      note: >
+        Rows and hashes retained, not deleted and not re-scored. They are
+        historical results against a superseded task text, and the artefacts
+        they name are no longer present in the tree.
+
+  before_after_granularity:
+    warning: >
+      NO PRIOR RECORD FOR ANY MODEL carries the per-shape floors (BAND, FTZ,
+      EXACT, zero case). Those floors were added on 2026-08-21 and did not
+      exist when any pre-bump record was written, so a per-shape before/after
+      is not available from the records for anyone -- this is not specific to
+      claude.
+    what_IS_claude_specific: >
+      chat's and gemini's PRIOR SUBMISSIONS are recoverable from HEAD, so a
+      per-shape "before" could be RECONSTRUCTED for them by re-running the
+      committed artefact against the current checker. Claude's cannot: the
+      file is gone. So claude's before/after is permanently coarser than
+      chat's and gemini's, and no amount of re-running fixes it.
+    what_the_prior_claude_row_does_carry: >
+      More than a total. 1/1 PASS over 4290 vectors, 16 stimulus-coverage
+      categories (per-mode counts, subn_op 1223, subn_res 146, underflow 103,
+      zero_res 40, tiny_edge 195, exact 640, overflow 486, snan 31, qnan_a 46,
+      qnan_b 42, disagree 80) and metrics (latency 3, II 1, c3_dead_cycles 0).
+      What it lacks is the per-shape breakdown, which nothing from that era has.
+
+  COMPARABILITY WARNING -- read before quoting anything cross-model from this task:
+    what_changed: >
+      The post-change set is THREE models where the prior set was five. A table
+      showing three must not be read as a run in progress: it is the whole set.
+    composition: >
+      The two withdrawn models -- deepseek, qwen -- are OPEN-WEIGHT. The three
+      surviving -- chat, claude, gemini -- are all CLOSED FRONTIER LABS. The set
+      is therefore not merely smaller, it is narrower in kind: it no longer
+      contains an open-weight design at all.
+    consequence: >
+      Any cross-model claim on d_dsp02 is a claim about three closed frontier
+      models and nothing else. It is NOT directly comparable to tasks carrying
+      five, and a per-task pass rate from this task cannot be averaged with
+      theirs without naming the axis (rule 17). "3 of 3 passed" and "3 of 5
+      passed" are different populations, not different scores.
+
 version_boundary:
   changed_on: 2026-08-21
   pre_bump_task_text_hash:  5ad30593403b4ae2

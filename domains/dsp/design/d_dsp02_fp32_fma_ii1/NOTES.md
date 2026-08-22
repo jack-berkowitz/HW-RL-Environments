@@ -351,3 +351,63 @@ audit is about rounding of finite operands.
 
 **Standing.** d_dsp02's oracle is now CONFIRMED against an external truth rather
 than assumed. Its numbers may go into a cross-model report.
+
+## Candidate set after the prompt change, 2026-08-21
+
+**The set is three models, and three is the whole set — not a run in progress.**
+
+`chat`, `claude` and `gemini` were re-solicited against `probe/PASTE.md` and
+carry task-text hash `530f3e4189421457`, which covers the spec **and** the
+prompt together. Each has a solicitation record beside it in
+`candidates/d_dsp02/<model>.solicitation.md` — the prior five had none, and a
+pinned prompt with no solicitation record just moves the reproducibility gap up
+a level.
+
+**`deepseek` and `qwen` are WITHDRAWN, not pending.** They are not being
+re-solicited and nothing is scheduled for them. Both were build failures at the
+pre-bump spec — rejected by slang, the synthesis frontend — and they answer a
+task text that no longer exists. Their rows and hashes are retained as
+historical against `5ad30593403b4ae2`, not deleted and not re-scored.
+
+### What that does to cross-model claims from this task
+
+The two withdrawn models are **open-weight**. The three that remain are all
+**closed frontier labs**. So the set is not just smaller by two, it is narrower
+in kind: after this change d_dsp02 contains no open-weight design at all.
+
+Any cross-model statement from this task is therefore a statement about three
+closed frontier models. It is not directly comparable to tasks carrying five,
+and its pass rate cannot be averaged with theirs without naming the axis
+(rule 17) — *3 of 3* and *3 of 5* are different populations, not different
+scores.
+
+### The prior Claude submission was LOST TO OVERWRITE
+
+Recorded because the distinction matters and would otherwise be invisible:
+`deepseek` and `qwen` carry withdrawal rationales and `claude` does not, and the
+reason is not that claude's was withdrawn without one.
+
+**It is an artefact loss, not a decision.** The earlier `candidates/d_dsp02/claude.sv`
+existed on disk and was never committed. Re-solicitation overwrote it. Git reads
+today's `claude.sv` as an *addition* for that reason alone — **Claude was in the
+prior five and is not a new model.**
+
+Its identity survives in the run record — `submission_sha256_16 7b3240027cc7837c`,
+1/1 PASS at task text `5ad30593403b4ae2` — so a future file can be proven to be
+or not be that one. The content cannot be recovered.
+
+**The asymmetry this creates is narrower than it first looks, and sharper.** No
+pre-bump record for *any* model carries the per-shape floors (BAND, FTZ, EXACT,
+zero case) — those were added on 2026-08-21 and did not exist. So a per-shape
+before/after is unavailable from the records for everyone.
+
+What is claude-specific: `chat` and `gemini`'s prior submissions are committed in
+HEAD, so a per-shape "before" could be **reconstructed** for them by re-running
+the committed artefact against the current checker. Claude's cannot be. Its
+before/after is permanently coarser than the other two's, and re-running cannot
+fix it.
+
+**The general lesson, which is the third instance of it today:** uncommitted
+work is work that can vanish without anyone noticing. Agent 1's findings and the
+convention draft both came close; this one actually happened. Unlike the other
+two there was no diff to catch it — the loss was silent and total.
