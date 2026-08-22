@@ -235,13 +235,55 @@ difficulty_assessment: >
   second source -- written with the finished spec in hand and no ambiguity to
   resolve -- still took an iteration, on a signed-shift declaration.
 
+orfs:
+  config: orfs/config.mk
+  sdc: orfs/constraint.sdc
+  synthesises_at_scored_config_by_default: >
+    The shim's parameter default IS S0 -- WIDTH=64 -- so nothing in config.mk
+    pins it. If the default ever drifts from `scored_configuration:` above, the
+    PPA number silently stops being the scored one. Both must move together.
+  closure_note: >
+    config.mk names SEVEN vendored files and no more. The slice instantiates
+    eight different unit types, but every one except fpnew_fma_multi sits inside
+    an `OpGroup ==` generate branch that is false at ADDMUL, and slang does not
+    elaborate a dead branch. That matters: fpnew_divsqrt_th_32's own
+    dependencies (pa_fdsu_top, pa_fpu_dp, pa_fpu_frbus) are NOT VENDORED, so a
+    frontend that elaborated dead branches could not build this design at all.
+    The Verilator flow needs -y paths to refs/cvfpu/src/mxdotp and .../pace only
+    because -y resolution is not branch-aware.
+  synthesis_verified:
+    stage: 1_synth only (place-and-route not run -- Agent 1's)
+    area_um2: 150130.24
+    worst_slack_ns: +3.42
+    tns_ns: 0.00
+    at_period_ns: 65.0
+    combinational_delay_ns: 35.58
+    how_the_period_was_chosen: >
+      MEASURED, not guessed, and the first two guesses were wrong. 20 ns
+      (reasoning from d_dsp02's 20.25) gave -23.58; 50 ns gave -5.58. Both runs
+      produced the SAME NETLIST -- identical area to four decimals -- so the raw
+      slacks are not two different critical paths but one, seen through two I/O
+      budgets: slack = 0.6*period - logic, and both solve to logic = 35.58 ns.
+      The I/O budget takes 40% of the period (20% each side), so a purely
+      combinational design needs period >= 35.58/0.6 = 59.3 ns before it can
+      meet timing at all. 65 ns leaves 3.42 ns for place-and-route to spend.
+    why_2x_d_dsp02: >
+      d_dsp02 is the same shape at 20.25 ns. The lanes here are parallel, so
+      width alone does not explain the gap. The depth comes from SHARING:
+      fpnew_fma_multi selects exponent and mantissa widths per format, which
+      puts muxes INSIDE the alignment and normalisation paths rather than beside
+      them, and the slice adds lane packing on top. Format-parametric sharing is
+      what this task is about, and this is what it costs.
+
 ppa: ABSENT
 ppa_note: >
   Agent 1 owns PPA. Tier-B pins a fixed clock period rather than sweeping fmax;
   the period, the resolved-config hash and the task-text hash are Agent 1's to
-  record. No find_fmax. Note for whoever runs it: the reference is
-  COMBINATIONAL (NumPipeRegs=0), so it will not meet a tight period -- that is a
-  property of the shim's spec-minimal binding, not of the contract, which leaves
-  latency free under L2.
+  record. No find_fmax. The reference is COMBINATIONAL (NumPipeRegs=0), so it
+  will not meet a tight period -- a property of the shim's spec-minimal binding,
+  not of the contract, which leaves latency free under L2. The ORFS config above
+  is validated through synthesis only: it builds and meets timing at its
+  starting constraint, so a full run will not die on a config error, but no
+  place-and-route number exists yet.
 
 skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]

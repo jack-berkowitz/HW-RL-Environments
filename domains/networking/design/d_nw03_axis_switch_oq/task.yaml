@@ -121,10 +121,39 @@ harness_defects_found:
       Now enforced only where it can discriminate, and reported elsewhere with
       an explicit statement that it is not capability evidence.
 
+orfs:
+  config: orfs/config.mk
+  sdc: orfs/constraint.sdc
+  synthesises_at_scored_config_by_default: >
+    The shim's parameter defaults ARE S0 -- S_COUNT=4, M_COUNT=4, DATA_W=32 --
+    so nothing in config.mk pins the geometry. If a shim default ever drifts
+    from `scored_configuration:` above, the PPA number silently stops being the
+    scored one. Both must move together.
+  closure_note: >
+    config.mk names FOUR vendored files: priority_encoder, arbiter,
+    axis_register, axis_switch. That is SHORTER than `reference.closure` above,
+    which also lists axis_demux, axis_fifo and axis_arb_mux -- those are what
+    Verilator's -y search pulled in, not what axis_switch instantiates.
+    Verified by running the same read_slang the synthesis gate uses, with
+    exactly this list: exit 0, 0 errors.
+  synthesis_verified:
+    stage: 1_synth only (place-and-route not run -- Agent 1's)
+    area_um2: 18410.16
+    worst_slack_ns: +5.72
+    tns_ns: 0.00
+    at_period_ns: 10.0
+    reading: >
+      The constraint is loose: the post-synthesis critical path is about 4.3 ns
+      against a 10 ns period. Left loose deliberately -- place-and-route, clock
+      tree and wire delay all spend that margin, and a starting constraint that
+      already fails at synthesis tells the flow nothing.
+
 ppa: ABSENT
 ppa_note: >
   Agent 1 owns PPA. Tier-B pins a fixed clock period rather than sweeping fmax;
   the period, the resolved-config hash and the task-text hash are Agent 1's to
-  record. No find_fmax.
+  record. No find_fmax. The ORFS config above is validated through synthesis
+  only -- it builds and meets timing at its starting constraint, so a full run
+  will not die on a config error, but no place-and-route number exists yet.
 
 skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
