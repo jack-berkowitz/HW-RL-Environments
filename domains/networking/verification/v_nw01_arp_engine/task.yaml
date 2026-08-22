@@ -1,0 +1,153 @@
+id: v_nw01
+module: arp_engine
+domain: networking
+type: verification
+catalog: TASK_CATALOG.md
+tier: B
+
+oracle_class: A
+reference:
+  refs_lock_repo: alexforencich/verilog-ethernet
+  licence: MIT
+  mode: vendor
+  file: refs/verilog-ethernet/rtl/arp.v
+  closure: [refs/verilog-ethernet/rtl/arp_cache.v, refs/verilog-ethernet/rtl/arp_eth_rx.v,
+            refs/verilog-ethernet/rtl/arp_eth_tx.v, refs/verilog-ethernet/rtl/lfsr.v]
+  golden: dut/arp_engine.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/arp_engine_iface.sv (port map) and
+    spec/arp_engine_spec.md only. dut/ holds the anchor VERBATIM plus a Class A
+    port shim, used for scoring and never given to a submission. The anchor
+    copies keep their upstream MIT headers unaltered, and are vendored under .sv
+    names because the harness globs dut/*.sv -- a .v file would be silently left
+    out of the compile.
+  provenance_caveat: >
+    The files are present at the paths refs.manifest.yaml names, in a repo
+    refs.lock pins. Their CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+
+harness:
+  golden_top: arp_engine
+  tb_module: arp_engine_tb
+  conformant_prefix: ae_c
+  mutant_prefix: ae_m
+  golden_file: dut/arp_engine.sv
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 120
+
+spec: [spec/arp_engine_spec.md, spec/arp_engine_iface.sv]
+
+scored_configuration:
+  pinned_inside_the_shim:
+    DATA_WIDTH: 8
+    CACHE_ADDR_WIDTH: 2          # 4 entries
+    REQUEST_RETRY_COUNT: 4
+    REQUEST_RETRY_INTERVAL: 64
+    REQUEST_TIMEOUT: 256
+  rationale: >
+    THE TIMERS ARE PINNED SMALL AND THAT IS THE POINT. At the anchor's defaults
+    a retry interval is 250 million cycles and a timeout 3.75 billion; neither
+    boundary is reachable in simulation, so neither could be stated as a
+    checkable bound and the retry and timeout clauses would be untestable.
+    Four cache entries make displacement reachable -- at the anchor's default of
+    512 a testbench could never fill it. Eight-bit data keeps an ARP frame 28
+    single-byte beats, so the frame format is checkable byte by byte.
+
+second_dut:
+  status: WIRED
+  file: dut2/arp_engine_alt.sv
+  note: >
+    The SAME artefact as the policy-divergent perturbation of Tier-B step 5c,
+    generated from it so the two cannot drift. It does NOT instantiate the
+    golden. It shares the anchor's frame serialiser and deserialiser, which are
+    mechanical byte packing that clause F fixes completely and which carry none
+    of the contract's substance -- stated plainly rather than claimed as full
+    independence. The protocol engine, the cache and the retry logic are its own.
+  differences:
+    - "cache policy (clause L1): fully associative with round-robin replacement,
+       against the golden's direct-mapped hash. A different set of older entries
+       survives an insert."
+    - "error payload (clause L2): drives a recognisable pattern on resp_mac_o when
+       resp_error_o is high; the golden leaves whatever it last held."
+    - "timing (clause L3): a cache hit is answered the cycle after the lookup, and
+       retries go out on a different phase inside the window Q4 allows."
+  nonequivalence_witness: >
+    Retries are spaced 70 cycles on the alt against the golden's 65, and a cache
+    hit is answered a different number of cycles after acceptance. Both sit
+    inside the windows Q4 and X3 fix, so both are legal and observably different.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpremised_reliance: must PASS the policy-divergent perturbation and dut2
+  fault_detection: reported PER MUTANT, never as a rate
+  reference_ceiling: 8 of 8
+
+conformant_perturbations:
+  - id: ae_c1_assoc_cache_rr
+    licence: "L1, L2 and L3"
+    kind: POLICY-DIVERGENT, Tier-B step 5c
+    change: an independent protocol engine and cache; shares only the frame codec
+    reference_tb_verdict: PASS
+  policy_independence: >
+    All eight defects re-derived on the divergent engine (mutants/policy/) and
+    re-run: every one caught on BOTH bases, both clean implementations pass.
+    18 of 18. Rerun with mutants/check_policy_independence.sh.
+
+mutants:
+  - {id: ae_m1_one_retry_short, violates: Q4,
+     defect: "only three request frames are sent, not four",
+     witness: "an unanswered lookup transmitted 3 requests; exactly 4 are required"}
+  - {id: ae_m2_retry_interval_long, violates: Q4,
+     defect: "requests are spaced 96 cycles apart, not 64",
+     witness: "requests 0 and 1 are 97 cycles apart; the window is 64..80"}
+  - {id: ae_m3_timeout_short, violates: Q5,
+     defect: "the lookup gives up 128 cycles after the last request, not 256",
+     witness: "gave up 128 cycles after the last request; the window is 256..300"}
+  - {id: ae_m4_subnet_ignored, violates: Q3,
+     defect: "every address looks local, so an off-subnet lookup asks for the target",
+     witness: "asked for 08080808, expected the gateway c0a801fe"}
+  - {id: ae_m5_replies_not_learned, violates: C1,
+     defect: "only requests are learned from; a reply teaches the cache nothing",
+     witness: "a matching reply did not resolve the lookup"}
+  - {id: ae_m6_answers_any_target, violates: A2,
+     defect: "a request for somebody else's address is answered too",
+     witness: "a request for another station produced 1 frame"}
+  - {id: ae_m7_reply_target_is_us, violates: A1,
+     defect: "the reply names our own address as the target",
+     witness: "reply TPA c0a80101, expected the requester's SPA c0a80107"}
+  - {id: ae_m8_ethtype_ignored, violates: A3,
+     defect: "a frame that is not ARP is processed anyway",
+     witness: "a frame with eth_type 0800 produced 1 frame"}
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness
+  generator: mutants/gen_mutants.py
+  depth: >
+    None falls to a single lookup. Three are timing bounds that need a lookup
+    deliberately left unanswered for hundreds of cycles, one needs an address
+    outside the local subnet, one needs a reply distinguished from a request as
+    a source of learning, two need frames aimed at somebody else, and one needs
+    a frame that is not ARP at all.
+
+negative_controls:
+  known_bad_dut:
+    status: PASS
+    detail: >
+      negctl/stuck_dut.sv (all 14 outputs tied low, generated from the port map)
+      and negctl/reset_polarity_dut.sv (rst_i treated as active low) are both
+      caught naming clauses X3, Q2 and Q6. The stuck DUT was initially caught
+      only by the watchdog with ZERO violations, because the testbench waited
+      unbounded for the design to accept a lookup or a frame byte; those waits
+      are now bounded and X3 was widened to cover forward progress in both
+      directions.
+  null_testbench:
+    status: PASS -- rejected
+    detail: >
+      negctl/null_tb.sv drives nothing and never instantiates the DUT. The
+      harness runs a gate-mutant with every output tied high and requires a
+      submission to reject it; the null testbench is reported INVALID and
+      EXCLUDED FROM SCORING.
+
+watchdog:
+  tb_sim_time_limit: 8ms
+  harness_sim_timeout_s: 120
