@@ -136,6 +136,36 @@ Carrying the content is correct. Carrying it *silently* is what makes the
 history unreadable later — a reader doing archaeology on F55 finds it in a
 commit about floating-point underflow, with no explanation.
 
+## Attribution must be ESTABLISHED, not inferred from subject matter
+
+The convention above says to NAME the other agent's content you carry. That is
+only useful if the name is right, and getting it wrong is easy in a way that
+feels like knowledge.
+
+**Instance.** `d6d3423` and `409f4a1` both attributed F55, F56, rule 23 and a
+rule-20 amendment to Agent 2. The reasoning was never stated because it was
+never examined: F55 and F56 are about `v_nw02`, `v_nw02` is Agent 2's task,
+therefore Agent 2 wrote them. Subject matter is not authorship. Agent 1 wrote
+all four, in that session; what is Agent 2's is the DEFECT — they stopped on it
+at `v_nw02` (`612f803`), reported that `negctl/null_tb.sv` drives nothing,
+observes nothing and was being scored VALID, and re-verified the fix across five
+tasks afterwards.
+
+The same commit misattributed the five staged deletions under `candidates/` to
+Agent 2 on the same reasoning — they are Agent 2's *files*. Agent 1 staged them.
+
+Both halves matter, and flipping the name wholesale would have been a second
+error in the opposite direction: **the defect is Agent 2's, the writeup and the
+mechanism are Agent 1's.**
+
+> **Before writing another agent's name in a commit message, ask them. A
+> teammate is one message away and the cost of asking is a round trip; the cost
+> of guessing is a permanent record that credits the wrong person for work and
+> the wrong person for a mistake.**
+
+Provenance and authorship are separate fields and a commit message should carry
+both when it carries either.
+
 ## Why the diff check is the load-bearing half
 
 "I did not touch their content" is exactly the kind of claim that is true right
