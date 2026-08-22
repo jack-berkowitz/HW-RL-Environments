@@ -1,0 +1,12 @@
+{
+  "build_error": "2 error(s); first: sanitised_gemini.sv:123:9: error: declaration must come before all statements in the block ",
+  "build_status": "slang_rejected",
+  "git_sha": "6645c57851cb906926d7b730faf35a64b9b2fe3d-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_dsp03/gemini.sv",
+  "submission_sha256_16": "bf9a574d4e1879cd",
+  "task": "d_dsp03_multifmt_fma",
+  "task_text_hash": "35619b11aa94307d",
+  "timestamp_utc": "2026-08-22T06:15:26Z"
+}

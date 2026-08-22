@@ -1,0 +1,212 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 8,
+  "configs_total": 8,
+  "coverage": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "1076 1130"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "1076 1130"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "1207 1260"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "1207 1260"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "703 746 701 708"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "703 746 701 708"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "1007 1062 997 985"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "1007 1062 997 985"
+    }
+  },
+  "git_sha": "7aed2d85624df2afcda3e1018684086ef2b69bad-dirty",
+  "kind": "sim",
+  "label": "chat",
+  "metrics": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "9925",
+      "beats_cycles": "7607",
+      "beats_delivered": "9925",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "16",
+      "frames": "see fields",
+      "frames_total": "2206",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "9925",
+      "beats_cycles": "7607",
+      "beats_delivered": "9925",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "16",
+      "frames": "see fields",
+      "frames_total": "2206",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "11110",
+      "beats_cycles": "7876",
+      "beats_delivered": "11110",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2467",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "11110",
+      "beats_cycles": "7876",
+      "beats_delivered": "11110",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2467",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "12862",
+      "beats_cycles": "7666",
+      "beats_delivered": "12862",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1202",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2858",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "12862",
+      "beats_cycles": "7666",
+      "beats_delivered": "12862",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1202",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2858",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "18240",
+      "beats_cycles": "7937",
+      "beats_delivered": "18240",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1966",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "41",
+      "frames": "see fields",
+      "frames_total": "4051",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "18240",
+      "beats_cycles": "7937",
+      "beats_delivered": "18240",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1966",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "41",
+      "frames": "see fields",
+      "frames_total": "4051",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0"
+    }
+  },
+  "per_config": [
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "candidates/d_nw03/chat.sv",
+  "submission_sha256_16": "70c9fe1ab10a2faf",
+  "task": "d_nw03_axis_switch_oq",
+  "task_text_hash": "862695f5e86cf47b",
+  "timestamp_utc": "2026-08-22T00:05:22Z"
+}

@@ -1,0 +1,73 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 2,
+  "configs_total": 2,
+  "coverage": {},
+  "git_sha": "8efe898ec2fdd1a2a0d045a3344371ac6cd5daf4-dirty",
+  "kind": "sim",
+  "label": "chat",
+  "metrics": {
+    "WIDTH_32": {
+      "checks": "6300",
+      "coverage": "see fields",
+      "coverage_bf16": "2520",
+      "coverage_fp16": "2520",
+      "coverage_fp32": "1260",
+      "coverage_vecdistinct": "0",
+      "cycles": "14758",
+      "flags": "see fields",
+      "flags_nv": "310",
+      "flags_nx": "5047",
+      "flags_of": "928",
+      "flags_subn": "158",
+      "flags_uf": "451",
+      "latency": "see fields",
+      "latency_max": "0",
+      "latency_mean": "0.00",
+      "latency_min": "0",
+      "throughput": "see fields",
+      "throughput_ops_per_1000cyc": "426",
+      "vectors": "6300",
+      "width": "32"
+    },
+    "WIDTH_64": {
+      "checks": "7560",
+      "coverage": "see fields",
+      "coverage_bf16": "2520",
+      "coverage_fp16": "2520",
+      "coverage_fp32": "2520",
+      "coverage_vecdistinct": "1257",
+      "cycles": "17680",
+      "flags": "see fields",
+      "flags_nv": "802",
+      "flags_nx": "6310",
+      "flags_of": "1694",
+      "flags_subn": "284",
+      "flags_uf": "568",
+      "latency": "see fields",
+      "latency_max": "0",
+      "latency_mean": "0.00",
+      "latency_min": "0",
+      "throughput": "see fields",
+      "throughput_ops_per_1000cyc": "427",
+      "vectors": "7560",
+      "width": "64"
+    }
+  },
+  "per_config": [
+    {
+      "config": "WIDTH_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "WIDTH_64",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "candidates/d_dsp03/chat.sv",
+  "submission_sha256_16": "1604693995aa8efc",
+  "task": "d_dsp03_multifmt_fma",
+  "task_text_hash": "c4b5edc12f407731",
+  "timestamp_utc": "2026-08-21T23:50:13Z"
+}

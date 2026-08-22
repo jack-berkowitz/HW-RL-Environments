@@ -1,0 +1,12 @@
+{
+  "build_error": "20 error(s); first: sanitised_qwen.sv:18:39: error: cannot refer to automatic variable 'i' from static initializer ",
+  "build_status": "slang_rejected",
+  "git_sha": "9f427b895c5f911b23ee83b8657b1c6e192f891a-dirty",
+  "kind": "sim",
+  "label": "qwen",
+  "submission": "candidates/d_nw01/qwen.sv",
+  "submission_sha256_16": "824428c7f10ed2fe",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "4e277da1edfe8af7",
+  "timestamp_utc": "2026-08-22T01:41:00Z"
+}

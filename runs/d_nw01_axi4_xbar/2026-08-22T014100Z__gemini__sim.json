@@ -1,0 +1,12 @@
+{
+  "build_error": "13 error(s); first: sanitised_gemini.sv:90:24: error: missing '(' in parameter list ",
+  "build_status": "slang_rejected",
+  "git_sha": "9f427b895c5f911b23ee83b8657b1c6e192f891a-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_nw01/gemini.sv",
+  "submission_sha256_16": "e32b6d7f120299b0",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "4e277da1edfe8af7",
+  "timestamp_utc": "2026-08-22T01:41:00Z"
+}
