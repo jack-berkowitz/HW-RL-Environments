@@ -458,6 +458,43 @@ defects. It runs with the regression.
     **From:** F55
 
 
+24. **Any apparatus used to produce a number must first reproduce known-good
+    reference output, and that reproduction must be RECORDED alongside the
+    numbers it licenses.** A number read off an apparatus that has not
+    reproduced a known answer is not a measurement. It is a number.
+
+    **Scope is MEASUREMENT APPARATUS**, not testbenches specifically: simulation
+    probes and capture rigs, checkers and coverage floors, and ad-hoc
+    measurement scripts. The last is not padding — it is where this was actually
+    needed. A shell loop reusing one `--Mdir` across the artifacts it measured
+    re-ran the previous binary whenever a build failed, and reported a capability
+    mutant killing **6** vectors where the true number is **907**. A rule scoped
+    to "probes" would not have covered it.
+
+    **Both halves are load-bearing.** Reproducing a known answer is a habit that
+    decays invisibly — nothing about a run says whether the operator checked
+    first. Recording the reproduction next to the numbers is what makes the check
+    auditable by someone who was not there:
+
+        COUNTER VALIDATION: the reference must score 0 before any number below
+        is read.  reference -> 0 kills on the pre-band 4290
+
+    **It generalises rule 2's absence case from checkers to instruments.** A
+    check that cannot fail proves nothing when it passes; an apparatus that has
+    not reproduced a known answer proves nothing when it reports one. The same
+    idea from opposite ends.
+
+    **WHAT IT DOES NOT CLAIM.** Reproduction is necessary and NOT sufficient. A
+    control that reproduces correctly inside its target region can still be wrong
+    outside it: `nc_d_band_unbounded_tininess` matched the reference on every
+    band vector and killed 20 vectors on a set with zero band coverage. That is
+    rule 4's and F59's defect — a measurement quoted beyond the region it
+    covers — and this rule does not reach it. Read as a guarantee of correctness
+    it is a false one; it guarantees only that the instrument was pointed at a
+    known answer before it was believed.
+
+    **From:** F60
+
 ---
 
 **Nothing you write is trusted until it has been run.**

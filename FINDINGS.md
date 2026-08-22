@@ -3012,7 +3012,7 @@ floor's own detector, which is instance 4.
 Distinct from F59, and worth separating: there the number was right and its
 scope was misread; here the number was WRONG and nothing said so.
 
-**Six instances this session, five of them the same shape** — the apparatus
+**Eight instances this session, five of them the same shape** — the apparatus
 drove and observed at edges that do not correspond to the transfer it claimed to
 be watching:
 
@@ -3056,7 +3056,16 @@ same hour, in bash rather than in RTL. Any rule scoped to "probes" or to
    looking implausible, and it was found by the rule this finding proposes,
    inside the step that drafted it.
 
-**What caught the other six was luck of implausibility, not a control.** 50/50 across
+8. **The first catch by the rule itself.** d_dsp02's new coverage floors were
+   validated against a deliberately short-circuited tally — the apparatus made
+   to walk half its input. It correctly reported `COVERAGE METRIC ABSENT:
+   tallied 2145 of 4290` and SUPPRESSED the hole reporting, where the old code
+   would have printed two coverage holes from masks it had no basis to read.
+   Found by pointing the instrument at a known-failing input before trusting it,
+   which is rule 24, and it is the first defect this session caught that way
+   rather than by a number looking implausible.
+
+**What caught six of the eight was luck of implausibility, not a control.** 50/50 across
 every shape is obviously wrong; 6 is not. Had mCAP1's true count been 8 instead
 of 907, the wrong number would have been reported, believed, and recorded — and
 it would have understated a capability mutant's kill rate by two orders of
@@ -3074,4 +3083,4 @@ Rule 3 requires negative controls for checks and rule 16 requires them to be
 isolated. Neither reaches the instrument doing the measuring. A rule is proposed
 in `domains/dsp/design/d_dsp03_multifmt_fma/PROPOSED_RULE.md`.
 
-**Rules:** 3, 16
+**Rules:** 3, 16, 24
