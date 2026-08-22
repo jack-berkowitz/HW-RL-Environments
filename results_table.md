@@ -95,15 +95,16 @@ sees the RTL.**
 
 ## v_ai02 — stream realign
 
-Rows below answer task text `271d1a50467d76ed` (spec + the prompt the
+Rows below answer task text `c53e9bdba7ff4d52` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| `ChatGPT 5.6 Sol` | **no** | **no** | yes | 1/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `claude` | **no** | **no** | yes | 1/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `stream_realign_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `df21476af2453246` |
+| `chat` | — | *not scored against this prompt* | — | — | — | last run answered task text `271d1a50467d76ed` |
+| `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `271d1a50467d76ed` |
+| `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `271d1a50467d76ed` |
 
 ## v_ca03 — axi iw converter
 

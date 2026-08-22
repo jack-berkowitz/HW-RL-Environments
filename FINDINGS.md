@@ -3012,7 +3012,7 @@ floor's own detector, which is instance 4.
 Distinct from F59, and worth separating: there the number was right and its
 scope was misread; here the number was WRONG and nothing said so.
 
-**Eight instances this session, five of them the same shape** — the apparatus
+**Nine instances this session, five of them the same shape** — the apparatus
 drove and observed at edges that do not correspond to the transfer it claimed to
 be watching:
 
@@ -3065,7 +3065,17 @@ same hour, in bash rather than in RTL. Any rule scoped to "probes" or to
    which is rule 24, and it is the first defect this session caught that way
    rather than by a number looking implausible.
 
-**What caught six of the eight was luck of implausibility, not a control.** 50/50 across
+9. **The first PREVENTED instance, as opposed to caught.** After instance 8, the
+   commit script gained a guard asserting the staged path count before
+   committing. On its first real outing it refused: `git add` had failed on an
+   untracked path, nothing was staged, and without the guard the script would
+   have produced a SECOND empty commit carrying a two-thousand-word message and
+   no content — exactly what instance 8's own predecessor did. Nothing was
+   caught here because nothing went wrong; the distinction matters because
+   every other instance in this list was found after the fact, and this is the
+   first one the discipline stopped before it happened.
+
+**What caught six of the nine was luck of implausibility, not a control.** 50/50 across
 every shape is obviously wrong; 6 is not. Had mCAP1's true count been 8 instead
 of 907, the wrong number would have been reported, believed, and recorded — and
 it would have understated a capability mutant's kill rate by two orders of

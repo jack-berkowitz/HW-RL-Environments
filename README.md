@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 22, compiled 16, correct 14, PPA measured 7. Verification: submitted 30, compiled 27, tells correct from broken 14, fault count 11." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 22, compiled 16, correct 14, PPA measured 7. Verification: submitted 30, compiled 24, tells correct from broken 14, fault count 11." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** Of 22 design
@@ -37,7 +37,7 @@ area and slower.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol not scoreable (invalid); claude not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); claude 4 of 5; Gemini 3.1 Pro not scoreable (invalid). v_ca04: ChatGPT 5.6 Sol 7 of 8; claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid). v_ca05: ChatGPT 5.6 Sol 9 of 10; claude not scoreable (gate); DeepSeek V4 Pro not scoreable (nobuild); Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (nobuild). v_dsp02: ChatGPT 5.6 Sol 9 of 10; claude 10 of 10; DeepSeek V4 Pro 8 of 10; Gemini 3.1 Pro not scoreable (invalid); Qwen 3.7 Plus not scoreable (nobuild). v_nw02: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 9 of 10; claude 9 of 10; DeepSeek V4 Pro 6 of 10; Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (invalid). v_nw04: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); claude 4 of 5; Gemini 3.1 Pro not scoreable (invalid). v_ca04: ChatGPT 5.6 Sol 7 of 8; claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid). v_ca05: ChatGPT 5.6 Sol 9 of 10; claude not scoreable (gate); DeepSeek V4 Pro not scoreable (nobuild); Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (nobuild). v_dsp02: ChatGPT 5.6 Sol 9 of 10; claude 10 of 10; DeepSeek V4 Pro 8 of 10; Gemini 3.1 Pro not scoreable (invalid); Qwen 3.7 Plus not scoreable (nobuild). v_nw02: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 9 of 10; claude 9 of 10; DeepSeek V4 Pro 6 of 10; Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (invalid). v_nw04: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---

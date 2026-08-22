@@ -12,7 +12,13 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
-export LEC_CHECK=0
+# LEC_CHECK=0 is a ROSETTA workaround, not a design choice: under
+# --platform linux/amd64 on Apple Silicon, CTS dies with "child killed: illegal
+# instruction" unless logical-equivalence checking is off. On a native x86 host
+# there is no such fault and the check should be ON, so this defers to an
+# inherited value instead of overriding it. Hardcoding 0 here silently disabled
+# a real check on any machine that did not need the workaround.
+export LEC_CHECK="${LEC_CHECK:-0}"
 LOG="$REPO/fmax_results/overnight2_$(date +%Y%m%d_%H%M%S).log"
 PLAN=0; [ "${1:-}" = "--plan" ] && PLAN=1
 say () { echo "$(date '+%H:%M:%S') $*" | tee -a "$LOG"; }

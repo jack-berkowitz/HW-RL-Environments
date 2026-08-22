@@ -106,13 +106,19 @@ module stream_realign_tb;
       else begin
         automatic beat_t b = inflight[0];
         automatic logic [31:0] want  = b.realign ? join_beats(b.data, m_held, m_rot) : b.data;
-        automatic logic [3:0]  wstrb = b.realign ? 4'hF : b.strb;
+        // R3 binds ONLY while realigning; the transparent-mode output strobe
+        // is latitude (L3). This used to read `b.realign ? 4'hF : b.strb`,
+        // requiring pass-through in transparent mode -- which the anchor never
+        // does, and which the second implementation always does. Either
+        // requirement makes one of two correct designs non-conforming, so the
+        // check is confined to the mode where the contract is definite.
+        automatic logic [3:0]  wstrb = 4'hF;
         if (qdata !== want)
           fail(b.realign ? "R2" : "P1",
                $sformatf("cycle %0d: output beat is %08x, expected %08x -- input %08x joined with the held beat %08x at rotation %0d",
                          cyc, qdata, want, b.data, m_held, m_rot));
-        if (qstrb !== wstrb)
-          fail(b.realign ? "R3" : "P1",
+        if (b.realign && qstrb !== wstrb)
+          fail("R3",
                $sformatf("cycle %0d: output strobe is %b, expected %b", cyc, qstrb, wstrb));
         if (b.realign) begin
           for (int i = 0; i < 4; i++) line_out.push_back(qdata[8*i +: 8]);

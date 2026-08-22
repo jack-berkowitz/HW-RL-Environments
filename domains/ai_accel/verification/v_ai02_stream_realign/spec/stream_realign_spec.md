@@ -33,11 +33,14 @@ Byte 0 of a beat is bits `[7:0]`, byte 1 is `[15:8]`, and so on.
 
 ## P. Pass-through, when `realign_i` is low
 
-- **P1.** With `realign_i` low the unit is transparent: every input beat
-  appears on the output with `pop_data_o` equal to `push_data_i` and
-  `pop_strb_o` equal to `push_strb_i`, and the two handshakes are the same
-  handshake — `pop_valid_o` follows `push_valid_i` and `push_ready_o` follows
-  `pop_ready_i`.
+- **P1.** With `realign_i` low the unit is transparent **on the data path**:
+  every input beat appears on the output with `pop_data_o` equal to
+  `push_data_i`, and the two handshakes are the same handshake — `pop_valid_o`
+  follows `push_valid_i` and `push_ready_o` follows `pop_ready_i`.
+- **P2.** `pop_strb_o` while `realign_i` is low is **not specified** — see L3.
+  Transparency here covers the data path and the handshake only. Do **not**
+  require the output strobe to equal `push_strb_i`, and do not require it to be
+  all ones either.
 
 ## R. Realignment, when `realign_i` is high
 
@@ -90,14 +93,44 @@ from 0 to 4 and is *not* taken modulo the beat width — a fully set strobe give
   it may equally hold it until the sink is ready. Do not require either.
 - **L2.** `pop_data_o` and `pop_strb_o` in any cycle where `pop_valid_o` is
   low. A payload nothing can observe carries no requirement.
+- **L3.** `pop_strb_o` on an output beat produced while `realign_i` is **low**.
+  Conforming implementations differ here and both readings are defensible: the
+  unit this task is anchored on drives the output strobe to all ones in every
+  mode, from a single unconditional assignment, while an independently written
+  implementation of the same contract passes `push_strb_i` through. A testbench
+  must accept **either**. R3 still binds while `realign_i` is high, where the
+  behaviour is not in doubt.
 
-These two are the whole of the latitude in this contract.
+These three are the whole of the latitude in this contract.
+
+> **On L3, and why the transparent-mode strobe is latitude rather than a
+> requirement.** An earlier revision of P1 said `pop_strb_o` equals
+> `push_strb_i` while `realign_i` is low. That was **wrong about the anchor**,
+> which drives the output strobe to all ones from one unconditional assignment
+> and never reflects `push_strb_i` in any mode. Three independent submissions
+> read that clause correctly, drove a partial strobe with `realign_i` low,
+> observed all ones, and reported a violation. Every one of them was right, and
+> every one was scored as rejecting correct hardware.
+>
+> The error survived because the reference testbench drove a partial strobe only
+> while realigning; in transparent mode its strobe was always all ones, so
+> expected and observed agreed for a reason unrelated to the clause being true.
+> A check that cannot fail is not a check.
+>
+> Correcting the clause to *require* all ones would have been the mirror of the
+> same error. The second implementation of this contract **does** pass
+> `push_strb_i` through, so a requirement either way makes one of two correct
+> designs non-conforming, and a submission diligent enough to test the clause
+> would have been failed for correctly rejecting the other. Where two correct
+> implementations disagree and the contract never chose between them, the honest
+> record is that it does not specify the behaviour.
 
 ---
 
 ## What this contract does not say
 
-It says nothing about what `push_strb_i` means while realigning — R3 fixes the
-output strobe regardless. It places no requirement on the unit's behaviour if a
+It says nothing about what `push_strb_i` means in **any** mode — P2 and R3
+together fix the output strobe to all ones unconditionally, so `push_strb_i` is
+accepted and never observed on the output. It places no requirement on the unit's behaviour if a
 line's first beat never arrives, nor on `strb_i` in any cycle other than a
 line's first beat, which R4 makes the only one that matters.

@@ -24,8 +24,8 @@
 <text x="562" y="230" fill="#e8e8e8" font-size="13" font-weight="600">30 of 30</text>
 <text x="238" y="260" fill="#9a9a9a" font-size="13" text-anchor="end">compiled</text>
 <rect x="250" y="245" width="300" height="16" rx="3" fill="#333"/>
-<rect x="250" y="245" width="270" height="16" rx="3" fill="#5b8dfb"/>
-<text x="562" y="260" fill="#e8e8e8" font-size="13" font-weight="600">27 of 30</text>
+<rect x="250" y="245" width="240" height="16" rx="3" fill="#5b8dfb"/>
+<text x="562" y="260" fill="#e8e8e8" font-size="13" font-weight="600">24 of 30</text>
 <text x="238" y="290" fill="#9a9a9a" font-size="13" text-anchor="end">tells correct from broken</text>
 <rect x="250" y="275" width="300" height="16" rx="3" fill="#333"/>
 <rect x="250" y="275" width="140" height="16" rx="3" fill="#5b8dfb"/>

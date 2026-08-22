@@ -87,11 +87,14 @@ Byte 0 of a beat is bits `[7:0]`, byte 1 is `[15:8]`, and so on.
 
 ## P. Pass-through, when `realign_i` is low
 
-- **P1.** With `realign_i` low the unit is transparent: every input beat
-  appears on the output with `pop_data_o` equal to `push_data_i` and
-  `pop_strb_o` equal to `push_strb_i`, and the two handshakes are the same
-  handshake — `pop_valid_o` follows `push_valid_i` and `push_ready_o` follows
-  `pop_ready_i`.
+- **P1.** With `realign_i` low the unit is transparent **on the data path**:
+  every input beat appears on the output with `pop_data_o` equal to
+  `push_data_i`, and the two handshakes are the same handshake — `pop_valid_o`
+  follows `push_valid_i` and `push_ready_o` follows `pop_ready_i`.
+- **P2.** `pop_strb_o` while `realign_i` is low is **not specified** — see L3.
+  Transparency here covers the data path and the handshake only. Do **not**
+  require the output strobe to equal `push_strb_i`, and do not require it to be
+  all ones either.
 
 ## R. Realignment, when `realign_i` is high
 
@@ -144,8 +147,15 @@ from 0 to 4 and is *not* taken modulo the beat width — a fully set strobe give
   it may equally hold it until the sink is ready. Do not require either.
 - **L2.** `pop_data_o` and `pop_strb_o` in any cycle where `pop_valid_o` is
   low. A payload nothing can observe carries no requirement.
+- **L3.** `pop_strb_o` on an output beat produced while `realign_i` is **low**.
+  Conforming implementations differ here and both readings are defensible: the
+  unit this task is anchored on drives the output strobe to all ones in every
+  mode, from a single unconditional assignment, while an independently written
+  implementation of the same contract passes `push_strb_i` through. A testbench
+  must accept **either**. R3 still binds while `realign_i` is high, where the
+  behaviour is not in doubt.
 
-These two are the whole of the latitude in this contract.
+These three are the whole of the latitude in this contract.
 
 ---
 
