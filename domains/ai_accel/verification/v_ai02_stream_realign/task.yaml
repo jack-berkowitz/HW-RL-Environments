@@ -1,0 +1,144 @@
+id: v_ai02
+module: stream_realign
+domain: ai_accel
+type: verification
+catalog: TASK_CATALOG.md
+tier: B
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/hwpe-stream
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/hwpe-stream/rtl/streamer/hwpe_stream_source_realign.sv
+  closure: [refs/hwpe-stream/rtl/hwpe_stream_package.sv,
+            refs/hwpe-stream/rtl/hwpe_stream_interfaces.sv,
+            refs/tech_cells_generic/src/rtl/tc_clk.sv]
+  golden: dut/stream_realign.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/stream_realign_iface.sv (port map) and
+    spec/stream_realign_spec.md only. dut/ holds the anchor VERBATIM plus a
+    Class A port shim, used for scoring and never given to a submission. The
+    anchor copies keep their upstream headers unaltered.
+  provenance_caveat: >
+    The files are present at the paths refs.manifest.yaml names, in a repo
+    refs.lock pins. Their CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+
+harness:
+  golden_top: stream_realign
+  tb_module: stream_realign_tb
+  conformant_prefix: sr_c
+  mutant_prefix: sr_m
+  golden_file: dut/stream_realign.sv
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 60
+
+spec: [spec/stream_realign_spec.md, spec/stream_realign_iface.sv]
+
+scored_configuration:
+  beat_width_bits: 32
+  strb_width: 4
+  pinned_inside_the_shim: [DECOUPLED=0, DATA_WIDTH=32, STRB_FIFO_DEPTH=4, enable=1, last_packet=0]
+  rationale: >
+    Four bytes per beat is the smallest width at which the rotation takes more
+    than two distinct values, so an off-by-one in it is distinguishable from a
+    reversal. DECOUPLED=0 is the configuration whose control inputs are all
+    live: on the decoupled path the unit derives first and last from an internal
+    word counter instead, and strb_valid and line_length come alive with it.
+  dead_ports_omitted: >
+    strb_valid_i and line_length_i are read ONLY on the DECOUPLED path and are
+    dead at this configuration, so they are not in the port map. A port the
+    design never reads is a port map that lies.
+
+second_dut:
+  status: WIRED
+  file: dut2/stream_realign_alt.sv
+  note: >
+    The SAME artefact as the policy-divergent perturbation of Tier-B step 5c,
+    generated from it so the two cannot drift. Independently written from the
+    spec; it does not instantiate the golden.
+  differences:
+    - "readiness (clause L1): every beat waits for the sink, the first one
+       included. The golden accepts a line's first beat whether or not the sink
+       is ready, since that beat produces no output."
+    - "idle payload (clause L2): drives a fixed pattern on pop_data_o and zero on
+       pop_strb_o while pop_valid_o is low; the golden drives the computed value."
+    - "structure: an explicit popcount and a case-selected join, against the
+       anchor's barrel shifter with width-truncated shift amounts."
+  nonequivalence_witness: >
+    With the sink held not ready at a line's first beat the golden accepts it and
+    the alt does not, so push_ready_o differs while the source is offering.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpremised_reliance: must PASS the policy-divergent perturbation and dut2
+  fault_detection: reported PER MUTANT, never as a rate
+  reference_ceiling: 8 of 8
+
+conformant_perturbations:
+  - id: sr_c1_first_beat_waits
+    licence: "L1 and L2"
+    kind: POLICY-DIVERGENT, Tier-B step 5c
+    change: an INDEPENDENT implementation, not a wrapper; every beat waits for the sink
+    reference_tb_verdict: PASS
+  policy_independence: >
+    All eight defects re-derived on the divergent implementation
+    (mutants/policy/) and re-run: every one caught on BOTH bases, both clean
+    implementations pass. 18 of 18. Rerun with
+    mutants/check_policy_independence.sh.
+
+mutants:
+  - {id: sr_m1_rotation_off_by_one, violates: "R2/R5",
+     defect: "the rotation is one byte more than the strobe calls for",
+     witness: "cycle 19, output 00000000 where the golden gives 13121110"}
+  - {id: sr_m2_first_beat_emitted, violates: R1,
+     defect: "a line's first beat produces an output beat instead of being retained",
+     witness: "cycle 17, pop_valid_o golden 0 / mutant 1"}
+  - {id: sr_m3_first_beat_not_retained, violates: "R2/R5",
+     defect: "the first beat is not retained, so the next beat joins stale data",
+     witness: "cycle 19, output 0f0e0d0c where the golden gives 13121110"}
+  - {id: sr_m4_rotation_reversed, violates: R2,
+     defect: "the two halves are joined the wrong way round",
+     witness: "cycle 33, output 22212027 where the golden gives 24232221"}
+  - {id: sr_m5_strobe_passed_through, violates: R3,
+     defect: "the output strobe carries the input strobe instead of all ones",
+     witness: "cycle 80, output strobe 0011 where the golden gives 1111"}
+  - {id: sr_m6_rotation_recaptured, violates: R4,
+     defect: "the rotation is recaptured every cycle instead of only at a line's first beat",
+     witness: "cycle 98, output 5b5a5958 where the golden gives 59585756"}
+  - {id: sr_m7_always_realigns, violates: P1,
+     defect: "the unit realigns even when realign_i is low",
+     witness: "cycle 4, pop_valid_o golden 1 / mutant 0"}
+  - {id: sr_m8_last_ignored, violates: R6,
+     defect: "a final beat with an empty strobe produces no output",
+     witness: "cycle 98, pop_valid_o golden 1 / mutant 0"}
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness
+  witness_harness: mutants/nonequiv_tb.sv
+  generator: mutants/gen_mutants.py
+  depth: >
+    None falls to a single beat. Three need the rotation exercised at more than
+    one value, one needs a line's first beat distinguished from the rest, one
+    needs the input strobe driven to something other than all ones, and one
+    needs a final beat whose strobe is empty.
+
+negative_controls:
+  known_bad_dut:
+    status: PASS
+    detail: >
+      negctl/stuck_dut.sv (all 4 outputs tied low, generated from the port map)
+      and negctl/reset_polarity_dut.sv (rst_ni treated as active high) are both
+      caught naming clauses X3 and R2, not by the watchdog.
+  null_testbench:
+    status: PASS -- rejected
+    detail: >
+      negctl/null_tb.sv drives nothing and never instantiates the DUT. The
+      harness runs a gate-mutant with every output tied high and requires a
+      submission to reject it; the null testbench is reported INVALID and
+      EXCLUDED FROM SCORING.
+
+watchdog:
+  tb_sim_time_limit: 2ms
+  harness_sim_timeout_s: 60
