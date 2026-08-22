@@ -2614,3 +2614,464 @@ target for a verification task precisely because it is non-conforming, but its
 output must never be used as a golden reference.
 
 **Rules:** 5, 8, 11, 15
+
+---
+
+## F55. A gate that anything can satisfy is not a gate
+
+`domains/networking/verification/v_nw02_axi_atop_filter/negctl/null_tb.sv`
+declares the module the task requires, drives nothing, observes nothing, never
+instantiates the DUT, and prints `RESULT: PASS`. The harness scored it:
+
+```
+  golden                     PASS
+  dut2                       PASS
+  => VALID, with gaps in fault detection... Caught 0 of 8 faults
+1 of 1 submission(s) passed the validity gate.
+```
+
+**"Passed the validity gate" was true and meant nothing.** The gate asked
+whether the submission produced PASS on the golden DUT and PASS on a second
+correct DUT. A file that prints `RESULT: PASS` unconditionally satisfies both
+by construction. So does one that instantiates the DUT and asserts nothing. The
+0-of-8 kill rate was reported as *gaps in fault detection*, framing a testbench
+that tests nothing as a weak testbench rather than as not a testbench.
+
+The gate's two conditions were both **PASS-shaped**. Nothing in it could ever
+be failed by doing less work, and a condition that cannot be failed by doing
+less work does not measure work.
+
+### Why the obvious fix is the wrong one
+
+The tempting repair is to require that the submission instantiate the DUT --
+grep the source, or fail if the top module has no child instance. **This does
+not work, and the reason generalises.**
+
+Instantiation is a property of the SOURCE. Any source-level or lint-shaped
+condition is satisfiable by writing the source that satisfies it, and here that
+is one line:
+
+```systemverilog
+    atop_filter dut ();     // instantiated. Nothing connected, nothing checked.
+```
+
+That file passes an instantiation check and still tests nothing. The gate would
+have moved from trivially satisfiable to trivially satisfiable-with-one-more-line.
+This was confirmed, not assumed: the instantiate-and-ignore testbench was written
+and run, and under the structural framing it would have been accepted.
+
+> **A gate must require a property that has no source-level counterfeit. The
+> only such properties are behavioural: to produce two different OUTCOMES on two
+> different DUTs, a submission must actually observe something that differs
+> between them.** There is no way to fake a distinction you did not make.
+
+### The gate as built
+
+Every submission now runs against a **gate mutant** in addition to the golden,
+and must produce *different verdicts*: PASS on the golden, FAIL on the mutant.
+Same verdict on both means the submission did not discriminate, and it is
+**INVALID** -- a distinct state from a low kill rate, and it suppresses the
+kill rate entirely rather than reporting it as a score.
+
+The mutant is generated mechanically by `scripts/make_gate_mutant.py` from the
+task's own golden DUT. It copies the module header **verbatim** and ties every
+output port to `'1`.
+
+**Verbatim, because a regenerated interface drifts.** If the mutant's port list
+is reconstructed rather than copied, it can disagree with the golden's, the
+mutant fails to bind, and every submission "fails" it for a reason that has
+nothing to do with the submission.
+
+**`'1`, because it must keep transactions flowing.** One rule does both jobs:
+data outputs become all-ones, which is wrong under essentially any stimulus, so
+a submission that checks a single data output catches it; and handshake outputs
+(`valid`, `ready`, `last`, `grant`) become ASSERTED. Tying handshakes low would
+make submissions HANG rather than report a mismatch, and a hang diagnoses
+nothing -- Agent 2 hit exactly that at `v_nw02`, where two known-bad DUTs were
+caught only by watchdog because `send_w`/`issue_ar` waited unbounded.
+
+The port parser tracks the **last-seen direction** across commas, because
+direction persists in SystemVerilog: `output logic a, b` declares both as
+outputs. Matching the word `output` per item would silently miss `b`, leave it
+undriven, elaborate cleanly, and produce a mutant that is only half wrong.
+
+The mutant is identified by the explicit identifier `__gate_mutant__`, never by
+position or path, and it **never enters a kill-rate numerator or denominator**.
+It is not the Tier-B step 5b authoring control, which is a different artifact
+serving a different purpose and may legitimately be subtle. This one is
+deliberately maximally obvious: the gate is a floor, not a scoring axis, and a
+subtle gate mutant produces false INVALIDs on legitimate-but-narrow testbenches,
+which is the expensive direction to be wrong in.
+
+### Validating the gate itself
+
+This is a check whose failure mode is ABSENCE -- a broken one reports nothing
+and looks identical to a clean run. It was therefore run against known-bad and
+known-good input before landing:
+
+| # | input | required | observed |
+|---|---|---|---|
+| 1 | `null_tb.sv` (drives nothing) | INVALID | INVALID, `golden=PASS gate=PASS` |
+| 2 | instantiate-and-ignore | INVALID | INVALID -- the case a structural gate accepts |
+| 3 | always-reports-FAIL | INVALID | INVALID, `golden=FAIL gate=FAIL` |
+| 4 | `v_nw02` reference TB | VALID, 8/8 unchanged | VALID, 8/8 |
+| 5 | `v_ca05` reference TB | VALID, 10/10 unchanged | VALID, 10/10 |
+| 6 | syntactically broken DUT as the mutant | `null_tb` still not accepted | refusal, exit 2 |
+
+Case 3 matters on its own: a testbench that always fails is caught by the SAME
+condition as one that always passes. The gate requires a DIFFERENCE, so both
+constant functions fail it. A gate phrased as "must fail the mutant" would have
+accepted the always-FAIL file.
+
+### What case 6 exposed
+
+Case 6 asks whether the gate is secretly relying on elaboration failure. If the
+mutant does not build, every submission fails it identically -- including
+`null_tb.sv`, which would then show PASS-golden / FAIL-mutant and **satisfy the
+very gate it was written to fail**.
+
+It does not rely on that. But the first run surfaced a second defect: with a
+broken mutant, `null_tb.sv` came back **`DID NOT COMPILE`** -- attributing a
+harness setup failure to the submission, which compiled fine. The wrong party
+was blamed, in the same units as a real verdict.
+
+The mutant's elaboration is now checked BEFORE any submission is scored, and a
+failure is a **refusal (exit 2) with nothing scored and no run record written**,
+never a verdict about anyone's work. Confirmed: exit 2, zero run records.
+
+### The shape
+
+Three of this repository's findings are now the same shape: **a control whose
+stated scope exceeds its reach, reported in the same units as a real result.**
+F26 named the class. F51 was a provenance audit that could not see an accurate
+record of an invalid build. This is a validity gate that could not see a
+submission that verified nothing. In each case the check ran, returned cleanly,
+and the clean return was read as evidence of the property it never tested.
+
+The distinguishing question is not *does the check pass?* but *what input would
+make it fail?* For the old gate the honest answer was **none** -- and that
+answer was available before any submission was scored against it.
+
+**Rules:** 8, 18, 23
+
+---
+
+## F56. A shell pipeline lost the verdict, and the loss read as failure
+
+`v_nw02`'s reference testbench was scored twice from the same bytes:
+
+```
+standalone            golden=PASS   =>  VALID, catches 8/8
+inside a batch        golden=FAIL   =>  INVALID, does not discriminate
+```
+
+`md5 2ebf74b2eaa295a80b29e98aa993bbfd` both times, no `$urandom` anywhere, so
+the simulation is deterministic. The harness was not.
+
+### First diagnosis, and why it was wrong
+
+The obvious reading was that a simulation had been killed under load and so
+printed no `RESULT` line. That was wrong, and it was wrong in the direction
+that flatters the investigator: it blamed the environment for a defect in this
+repository's own code. What actually happens is that the simulation completes
+normally, writes its verdict, and **the harness misreads its own log**.
+
+### The mechanism
+
+```bash
+set -uo pipefail                                   # line 42
+...
+if echo "$out" | grep -qE "^RESULT: *PASS"; then verdict=PASS; else verdict=FAIL; fi
+```
+
+`grep -q` exits the instant it matches. `echo` is still writing the rest of the
+log into the pipe, takes **SIGPIPE**, and dies with 141. `pipefail` makes the
+pipeline report the first non-zero status in it -- so **the pipeline returns
+141 while grep matched**. Measured on the failing case:
+
+```
+DBGX v=__gate_mutant__   gp=1   gf=141   gfile=0
+                                 ^^^^^^   ^^^^^^
+                 pipeline: SIGPIPE        same grep, reading the FILE: match
+```
+
+The log is 97 KB and its `RESULT: FAIL` is on line 1709 of 1713. The golden's
+log is 352 bytes.
+
+**That size difference is the whole behaviour.** Under about 64 KB the log fits
+entirely in the pipe buffer, `echo` finishes before `grep` can exit, no SIGPIPE
+is possible, and the verdict is read correctly -- every time, for years. Above
+it, whether `echo` is still writing when `grep` exits is a **scheduling race**,
+which is why the same file gave different answers standalone and under load,
+and why this looked like a load problem rather than a code defect.
+
+### Two defects, and the second hid behind the first
+
+The failed read then fell into `else`, and the `else` said `FAIL`:
+
+- **The misread** -- a pipeline that discards its own success. The cause.
+- **The default** -- `else verdict=FAIL`, which converts *any* failure to
+  obtain a verdict into a verdict of failure. Not the cause, but the reason the
+  misread was invisible: it produced a plausible, well-formed, entirely
+  fabricated result instead of an error.
+
+Either alone is survivable. A misread that produced no verdict would have been
+noticed the first time. A default that fires only on genuinely absent verdicts
+would rarely fire. Together they manufacture failures for submissions whose
+testbenches print the most output, which is to say the ones doing the most
+checking.
+
+### The fix
+
+Read the file, never a pipe:
+
+```bash
+if   grep -qE "^RESULT: *PASS" "$WORK/run.log"; then verdict=PASS
+elif grep -qE "^RESULT: *FAIL" "$WORK/run.log"; then verdict=FAIL
+else verdict=CRASH; CRASH_RC="$rc"
+fi
+```
+
+No pipe, no SIGPIPE, no race, and no size dependence. `CRASH` is a third
+outcome -- absence of a verdict, reported as `NO VERDICT`, excluded from
+scoring and explicitly not counted against the submission.
+
+Confirmed on the case that exposed it: `v_dsp02/chat` went from `INVALID -- does
+not discriminate` to **VALID, 9/10**, which is what it scored before the gate
+existed.
+
+### Why nothing downstream could see it
+
+The record was faithful. It recorded a `FAIL` that the harness had invented, so
+every provenance check confirmed it, and re-reading the record only re-confirmed
+it. This is F51's shape at the point of measurement rather than of reporting:
+**an accurate record of a fabricated value**. It became visible only because the
+new gate produced a verdict that could be checked against a known-good answer,
+and that answer disagreed.
+
+Rule 20 said of its four instances: *"all in the reporting path and none in
+measurement."* That was a description of where the class had been looked for.
+
+**Every result from the affected batches was discarded rather than filtered.**
+Which rows the race hit is not recoverable, and reconstructing a corrupted
+measurement is the same error one level up.
+
+**Rules:** 8, 20, 23
+
+## F57. A contract that cites a standard its own oracle does not implement
+
+`d_dsp02`'s A6 and `d_dsp03`'s A7 both pinned the underflow flag as "tininess
+detected AFTER rounding", citing IEEE 754-2019 clause 7.5. The vendored anchor
+does not implement that rule, and neither does any other cvfpu FMA unit.
+
+**The words are the trap.** "Tininess after rounding" names TWO INCOMPATIBLE
+RULES:
+
+* colloquially — inspect the result you DELIVERED; if it is not subnormal, no
+  underflow;
+* clause 7.5 — round the exact value at the destination precision with an
+  **UNBOUNDED EXPONENT RANGE**, then test THAT against the smallest normal.
+
+They agree everywhere except one band: an exact result strictly below the
+smallest normal that rounds UP onto it. There the delivered result is normal
+(no underflow) while the unbounded-exponent value is still tiny (underflow).
+Measured on the anchor, FP32 `a=00ffffff b=3f000000 c=0`:
+
+```
+RNE 00800000 exp1 NX      RTZ 007fffff exp0 UF NX     RDN 007fffff exp0 UF NX
+RUP 00800000 exp1 NX      RMM 00800000 exp1 NX
+```
+
+Identical in FP16 and BF16, and identical in `fpnew_fma` and
+`fpnew_opgroup_multifmt_slice` — a house convention, not a single-file bug.
+
+**Both specs were self-consistent and one was still wrong.** `d_dsp02`'s prose
+had always said the right thing — "a result that is tiny before rounding but
+rounds up to the smallest normal is NOT underflow" — and only the CITATION named
+the other rule. No candidate was ever mis-scored by it. `d_dsp03` had the
+citation and no such sentence, so it was ambiguous where it mattered, and its
+own second source and Python model implemented the standard's reading rather
+than the reference's.
+
+> **A citation is a load-bearing contract term, not decoration. Naming a clause
+> imports whatever that clause says — including the half the author did not
+> mean — and where the clause and the oracle disagree, the contract has a
+> requirement nobody chose.**
+
+The fix is not a better citation. It is to state the rule LONGHAND and cite
+nothing: UF iff inexact AND the delivered result's biased exponent field is
+zero, with the divergence band worked per format and the departure from clause
+7.5 stated as the task's deliberate choice. That is the treatment A4 already
+gave canonical NaN, where IEEE permits either and the task picks one. The
+difference is that A4 knew it was choosing.
+
+Rule 15 already requires every contract term to cite an authority. This is the
+case rule 15 does not cover: the authority was cited, existed, and said
+something the oracle does not do. "PINNED BY THIS TASK" is a legitimate
+authority and is the right one whenever the standard's answer and the
+reference's answer differ.
+
+**Rules:** 11, 12, 15
+
+## F58. A mutant whose stated intent and actual edit diverge
+
+`d_dsp02/mutants/mA6_underflow_before_rounding.sv` was described in its header,
+in NOTES.md and in task.yaml as "detecting tininess before rounding — the OTHER
+READING IEEE-754 PERMITS". Its actual edit is one line:
+
+```systemverilog
+assign flag_underflow = is_subn(raw_result) | raw_status.UF;
+```
+
+That is not before-rounding detection. It ORs "the result is subnormal" into the
+anchor's own underflow, which drops the INEXACTNESS condition — it raises UF on
+an EXACT subnormal result, where the reference correctly clears it. Measured
+against the band vectors, all 10 of its kills land on the `EXACT` shape and none
+on `BAND`.
+
+**The kill count was never wrong.** 57 on the original vector set, reproduced
+exactly. Every number in the record was accurate. What was wrong was the
+COVERAGE MAP: the mutant set claimed a mutant sitting on the alternative reading
+of tininess, and no such mutant existed. The clause the task believed was
+guarded was unguarded, and the guard that did exist was pointed somewhere else
+and scoring well.
+
+> **A mutant's stated intent is a claim about WHAT THE SET COVERS. Its edit is
+> the only thing that determines what it actually kills. When those diverge, the
+> kill count stays honest and the coverage map silently becomes fiction — and
+> the kill count is the thing everyone reads.**
+
+Rule 21 requires every mutant to carry recorded evidence of non-equivalence and
+pins the evidence TYPE. That evidence was present and correct here. What nothing
+required was that the recorded INTENT match the edit, and no verdict changes
+when it does not.
+
+Found only because renaming the mutant required reading it. The check is cheap
+and nothing was doing it: read the edit, then read the description, and confirm
+they describe the same defect.
+
+**Rules:** 3, 16, 21
+
+## F59. A pass count is evidence only over the region the vector set reaches
+
+Six instances this session, all the same defect wearing different hats. Every
+number was arithmetically correct. Every one was read as saying more than it
+said.
+
+1. **`d_dsp03`'s anchor audit: 13860/13860 conforming.** The vector set never
+   reached the underflow band — zero cases in 13860 — so the audit was SILENT
+   about the one clause that turned out to be contested, not exonerating.
+2. **`mA6`'s kill count: 57.** Accurate, and describing a different defect than
+   the record claimed. See F58.
+3. **`d_dsp02`'s second source: 4290/4290.** Agreement held over the region the
+   set reached. Extending it by 50 directed vectors produced 10 failures, all in
+   one shape, including wrong RESULT bits — a defect that had been there all
+   along with nothing pointed at it.
+4. **The first band-coverage detector.** Written to catch exactly this class, and
+   it scored 10 hits per format on a set with ZERO band coverage, because
+   "delivered result is the smallest normal and inexact" also matches results
+   that rounded DOWN onto it. **A coverage floor whose own detector would have
+   certified the absence it exists to detect.** The class is not confined to
+   results; it reaches the instruments built to detect the class.
+5. **`nc_d`'s isolation claim: "every kill is a BAND row, 0 result-bit
+   differences".** True over the 370 band vectors, which is the only region it
+   was ever measured over. Pointed at the base set, the same control killed 20
+   vectors at WIDTH=32 and 30 at WIDTH=64 with zero band coverage present — a
+   control failing for reasons unrelated to its target (rule 16), standing in
+   for the independence that had just been removed by construction.
+6. **A review acceptance issued on that claim.** Step 3 was accepted on a
+   measurement scoped to the region where the claim held. This is the only
+   instance where the defect reached a DECISION rather than an artefact, and it
+   is the one most worth having in the record.
+
+**The sharpest illustration is an asymmetry nobody would have predicted.**
+`d_dsp02` — the task that looked exposed, whose 6 flag mismatches opened this
+entire thread — HAD band coverage: those 6 mismatches ARE 6 band cases, sitting
+in its original 4290 all along. `d_dsp03` — the task that audited clean at
+13860/13860 — had NONE.
+
+> **The task that looked exposed had the coverage. The task that audited clean
+> had none. Clean and covered are INDEPENDENT PROPERTIES, and a pass count
+> distinguishes neither.**
+
+Rule 2 requires a coverage floor for every stated requirement and rule 4
+requires floors to measure stimulus. Both were followed. Neither says what to do
+about a requirement whose floor is *absent* — and absence produces a clean run,
+which is indistinguishable from a covered one by the only number anyone reads.
+
+The transferable form: **before quoting a pass count as evidence for a clause,
+state the region the set reaches and show the clause is inside it.** Concretely,
+that means a floor per contested clause whose failure mode is absence, validated
+against a known-failing input — and for this clause it also meant checking the
+floor's own detector, which is instance 4.
+
+**Rules:** 2, 4, 5
+
+## F60. Measurement apparatus that reports confidently while measuring something else
+
+Distinct from F59, and worth separating: there the number was right and its
+scope was misread; here the number was WRONG and nothing said so.
+
+**Six instances this session, five of them the same shape** — the apparatus
+drove and observed at edges that do not correspond to the transfer it claimed to
+be watching:
+
+1. The capture rig waited for its own input transfer, then looked for a result.
+   A zero-latency design presents the result in the cycle the operation is
+   accepted; the rig missed a one-cycle window and hung. Zero vectors, and
+   because `$fwrite` is buffered and lost on the watchdog `$finish`, a stall at
+   vector 2000 and a stall at vector 0 look identical from outside.
+2. The scoring testbench latched a backpressure decision for the duration of one
+   `issue()`, deadlocking against an `in_ready_o` that depends on `out_ready_i`.
+   4200 of 6300 vectors lost, presenting as a candidate wedging.
+3. The scoring testbench's monitor fired on the NEGEDGE, the same edge on which
+   `issue()` clears `in_valid_i` with a blocking assignment. It double-counted
+   transfers, slid the expected-value queue by one, and reported **6116
+   mismatches against a bit-exact reference**.
+4. The corner probe sampled at the input handshake — correct for the
+   combinational reference, off-by-N for the 3-cycle second source. It reported
+   **51 disagreements** that were entirely its own.
+5. A measurement probe declared `logic iv = 1`, so it transacted during reset
+   and offset every record. It reported both mutants killing **50 of 50 band
+   vectors across every shape**.
+6. **And one that is not a drive/observe defect at all.** A shell loop reused a
+   single `--Mdir` across every artifact it measured. A failed build leaves the
+   previous binary in place and `[ -x ]` still passes, so the loop silently
+   re-ran the previous mutant. It reported `mCAP1_flush_to_zero` killing **6**
+   vectors; the true number is **907**. It reported mA8's number under mCAP1's
+   name.
+
+**Instance 6 is the one that matters for scope.** It happened while executing an
+audit whose entire purpose was catching this class, using a loop written that
+same hour, in bash rather than in RTL. Any rule scoped to "probes" or to
+"testbenches" would have missed it.
+
+7. **And one caught by a CONTROL rather than by luck.** Validating this very
+   finding's linkage, a test that injected a bogus rule citation to prove the
+   checker sees the new findings SILENTLY FAILED TO MATCH -- the pattern did not
+   occur in the file, nothing was modified, and the checker's "linkage complete"
+   was vacuous. Caught by asserting the edit applied, then re-run: the checker
+   correctly reported `finding F60 cites rule 99, which does not exist`. This is
+   the FIRST instance this session found by a control instead of by a number
+   looking implausible, and it was found by the rule this finding proposes,
+   inside the step that drafted it.
+
+**What caught the other six was luck of implausibility, not a control.** 50/50 across
+every shape is obviously wrong; 6 is not. Had mCAP1's true count been 8 instead
+of 907, the wrong number would have been reported, believed, and recorded — and
+it would have understated a capability mutant's kill rate by two orders of
+magnitude in a task's permanent record.
+
+Every one of these was found by a number looking wrong, and a number only looks
+wrong when the reader already knows roughly what to expect. That is not
+available for a measurement whose whole purpose is to establish a value nobody
+knows yet.
+
+> **An apparatus that has not reproduced a known answer has not been shown to
+> measure anything. Its output is a number, not a measurement.**
+
+Rule 3 requires negative controls for checks and rule 16 requires them to be
+isolated. Neither reaches the instrument doing the measuring. A rule is proposed
+in `domains/dsp/design/d_dsp03_multifmt_fma/PROPOSED_RULE.md`.
+
+**Rules:** 3, 16

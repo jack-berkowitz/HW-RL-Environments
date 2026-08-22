@@ -181,3 +181,69 @@ Row `d_dsp03`:
    narrower than the anchor module: ADDMUL/FMADD only, three formats, packed
    SIMD. Naming it after the anchor would name the artifact rather than the
    contract.
+
+## Independence on the underflow clause is now absent BY CONSTRUCTION
+
+**2026-08-21.** A7a pins the underflow predicate to the delivered result's
+exponent field, longhand, citing no standard. Until then the second source and
+the Python model both implemented IEEE 754-2019 clause 7.5's unbounded-exponent
+rule — a correct reading of the standard, and a genuinely independent one. Both
+were changed to track the pinned decision.
+
+**Neither was wrong, and neither change is a bug fix.** The second source and
+the reference were answering different questions; the task has since decided
+which question it is asking. Both files record it in those terms rather than as
+a correction.
+
+The consequence, stated rather than left implicit: **on this one clause the
+second source can no longer disagree with the anchor, so it can no longer
+falsify it.** Independence survives everywhere else — the arithmetic, the
+rounding, the special cases, the handshake, the lane packing — but inside the
+underflow band the three artefacts now agree by construction rather than by
+convergence, and agreement that was engineered is not evidence.
+
+**Discrimination on that band therefore rests on the mutant set.** `mBAND`
+implements clause 7.5's predicate, which differs from the pinned rule under
+RNE/RUP/RMM, and must be killed by the band vectors in all three formats;
+`mA6` drops the inexactness condition. If either stops being killed, nothing
+else is watching this clause.
+
+The second source's other differences from the reference are untouched by the
+change and were re-measured after it, byte-identical to the run before it:
+
+| | reference | second source |
+|---|---|---|
+| latency min/max | 0 / 0 | 4 / 14 |
+| throughput ops/1000cyc | 427 | 187 |
+| cycles, W32 / W64 | 14758 / 17680 | 33511 / 40350 |
+| `in_ready_o` | high every cycle | `= (state == IDLE)` |
+| algorithm | cvfpu datapath | exact integer significands, bounded window, explicit sticky |
+
+## Version boundary, 2026-08-21
+
+The task text changed: `c4b5edc12f407731` -> `35619b11aa94307d`. A7a now pins
+underflow longhand and the vector set reaches the band it turns on.
+
+**WHAT MADE THE BUMP MATERIAL WAS NOT THE BAND.** This matters to anyone reading
+the boundary later, because the clause that opened the whole thread is not the
+clause that changed the requirement.
+
+On `d_dsp02` the two halves came apart cleanly. Its A6 prose had always stated
+the band correctly -- "a result that is tiny before rounding but rounds up to
+the smallest normal is NOT underflow" -- so for the band the bump there is
+GENUINELY DOCUMENTATION-ONLY: same requirement, better attribution. What was
+never determined was the ZERO case. A4b said underflow is raised "only when the
+result is tiny AFTER rounding AND inexact" and directed the reader to the
+delivered result; a delivered zero is not tiny, so the natural reading yields no
+underflow where the anchor sets it. 14 of d_dsp02's original 4290 sit there.
+
+On THIS task neither half was determined -- the spec named clause 7.5 and
+nothing else -- and the vector set reached neither. But the asymmetry is worth
+carrying: **the band is what was argued about, and the zero case is what
+actually moved.**
+
+**The prior 13860/13860 is retained and is not comparable to anything after this
+line.** It is accurate over the region its set reached, and that region did not
+include the band -- zero cases in 13860. It is instance 1 in F59. No candidate
+has ever been scored against this task, so nothing needs re-scoring; the boundary
+is recorded so that a later reader does not compare across it.

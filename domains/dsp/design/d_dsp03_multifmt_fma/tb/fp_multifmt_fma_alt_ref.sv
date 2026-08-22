@@ -61,16 +61,16 @@ module fp_multifmt_fma #(
                                            input int unsigned E, input int unsigned M,
                                            input logic [2:0] rm);
     int unsigned bias, LIM, k, i;
-    // sh and shu are SIGNED. Declared unsigned they wrap when k < M -- which is
-    // every cancellation case -- and `mag >> sh` then returns zero.
-    int signed   sh, shu;
-    int signed   Xa, Xb, Xc, Xp, Xr, Xmax, Xmin, dp, dc, bexp, bexpu;
+    // sh is SIGNED. Declared unsigned it wraps when k < M -- which is every
+    // cancellation case -- and `mag >> sh` then returns zero.
+    int signed   sh;
+    int signed   Xa, Xb, Xc, Xp, Xr, Xmax, Xmin, dp, dc, bexp;
     logic [63:0] ea, ebv, ec, ma, mb, mc, qn, canon, top;
     logic        sa, sb, sc, sp, sres, za, zb, zc, ia, ib, ic, na, nb, nc, sna, snb, snc;
     logic [AW-1:0] Sa, Sb, Sc, Sp, accp, accc, mag, magu;
     logic signed [AW-1:0] acc;
-    logic [AW-1:0] q, qu, lowmask;
-    logic        rbit, sticky, stky_pre, inexact, up, upu, tiny, ovf;
+    logic [AW-1:0] q, lowmask;
+    logic        rbit, sticky, stky_pre, inexact, up, tiny, ovf;
     logic [4:0]  fg;
     logic [63:0] rbits;
 
@@ -159,7 +159,6 @@ module fp_multifmt_fma #(
     // rounding position, with gradual underflow
     sh  = (int'(k) - int'(M) > (1 - int'(bias) - int'(M)) - Xr)
         ? (k - M) : ((1 - int'(bias) - int'(M)) - Xr);
-    shu = k - M;                              // UNBOUNDED exponent, for tininess
 
     // helper: round `mag` at shift `s`, returns q and whether it rounded up
     q = (sh <= 0) ? (mag << (-sh)) : (mag >> sh);
@@ -180,23 +179,23 @@ module fp_multifmt_fma #(
     if (up) q = q + 1;
     if (q[M+1]) begin q = q >> 1; sh = sh + 1; end
 
-    // tininess AFTER rounding: round at the target precision with an UNBOUNDED
-    // exponent (clause 7.5), NOT the delivered value, which gradual underflow
-    // may already have flushed to zero.
-    qu = (shu <= 0) ? (mag << (-shu)) : (mag >> shu);
-    if (shu <= 0) upu = 1'b0;
-    else begin
-      case (rm)
-        3'd0: upu = mag[shu-1] & (((mag & ((AW'(1) << (shu-1)) - AW'(1))) != 0) | qu[0]);
-        3'd1: upu = 1'b0;
-        3'd2: upu = (mag[shu-1] | ((mag & ((AW'(1) << (shu-1)) - AW'(1))) != 0)) & sres;
-        3'd3: upu = (mag[shu-1] | ((mag & ((AW'(1) << (shu-1)) - AW'(1))) != 0)) & ~sres;
-        default: upu = mag[shu-1];
-      endcase
-    end
-    if (upu) qu = qu + 1;
-    bexpu = (qu[M+1] ? (shu + 1) : shu) + Xr + int'(M) + int'(bias);
-    tiny  = (bexpu < 1);
+    // UNDERFLOW predicate -- TRACKS A PINNED TASK DECISION, 2026-08-21.
+    //
+    // This is NOT a bug fix and this file was NOT wrong before. It previously
+    // implemented IEEE 754-2019 clause 7.5's tininess-after-rounding rule:
+    // round at the target precision with an UNBOUNDED EXPONENT, then test
+    // against the smallest normal. That is a correct reading of the standard.
+    //
+    // The CONTRACT changed under it. A7a now pins the delivered-result rule
+    // longhand and cites no standard: UF iff inexact AND the delivered result's
+    // biased exponent field is zero. The second source and the reference were
+    // answering different questions; the task has since decided which question
+    // it is asking.
+    //
+    // The delivered exponent field is zero exactly when the significand did not
+    // normalise -- see the assembly below, where !q[M] takes the subnormal/zero
+    // branch and leaves the exponent field at 0.
+    tiny = ~q[M];
 
     // ---- assemble ------------------------------------------------------------
     bexp = sh + Xr + int'(M) + int'(bias);

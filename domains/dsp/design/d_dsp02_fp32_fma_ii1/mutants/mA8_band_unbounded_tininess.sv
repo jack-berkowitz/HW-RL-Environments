@@ -1,18 +1,31 @@
 // =============================================================================
-// mA6_underflow_before_rounding -- MUTANT. NEVER SHIPPED.
-// class: contract-tininess
+// mA8_band_unbounded_tininess -- MUTANT. NEVER SHIPPED.
+// class: contract-underflow (A6)
 // =============================================================================
-// injected defect: raises underflow whenever the result is subnormal, rather
-//                  than only when it is tiny AFTER rounding and inexact.
+// injected defect: implements IEEE 754-2019 clause 7.5's UNBOUNDED-EXPONENT
+//                  tininess rule where A6 pins the DELIVERED-RESULT rule. The
+//                  two disagree in exactly one band -- an exact result strictly
+//                  below the smallest normal that rounds UP onto it -- and this
+//                  mutant takes the standard's side.
 //
-// This is the OTHER READING IEEE-754 PERMITS -- detecting tininess before
-// rounding. The spec pins "after" in A6/A4b precisely because both are
-// conformant, so this mutant tests whether that pin is enforced. It differs from
-// the reference only on flags, never on the result value.
+// WHY IT EXISTS. A6 no longer cites IEEE-754; underflow is pinned by this task,
+// longhand, because "tininess after rounding" names two incompatible rules.
+// A clause that departs from a standard needs a mutant sitting on the OTHER
+// reading, or nothing establishes that the departure is enforced rather than
+// merely written down. mA6 tests the INEXACTNESS half of A6's predicate; this
+// tests the EXPONENT-FIELD half.
+//
+// CONSTRUCTION LIMIT, stated because it bounds what a pass would mean: a
+// wrapper cannot see the exact value, so it cannot evaluate clause 7.5 in
+// general. What it CAN see is the only place the two rules can differ -- a
+// delivered result whose magnitude is exactly the smallest normal, reached
+// inexactly. A delivered subnormal or zero is tiny under both rules; anything
+// above the smallest normal is tiny under neither. So injecting underflow there
+// is precisely the difference between the two readings.
+//
+// It differs from the reference only on flags, never on the result value.
 // Built as a WRAPPER around the vendored anchor, so the arithmetic is correct
-// everywhere except the injected defect, and so it remains a standalone
-// fp32_fma_ii1 module that differential simulation can instantiate beside the
-// reference.
+// everywhere except the injected defect.
 // =============================================================================
 `timescale 1ns/1ps
 
@@ -70,7 +83,12 @@ module fp32_fma_ii1 (
     assign result         = raw_result;
     assign flag_invalid   = raw_status.NV;
     assign flag_overflow  = raw_status.OF;
-    // INJECTED: underflow from result form alone, ignoring inexactness
-    assign flag_underflow = is_subn(raw_result) | raw_status.UF;
+    // INJECTED: clause 7.5's reading -- underflow also when an inexact result
+    // landed exactly ON the smallest normal, which is where it rounded UP from
+    // below the boundary.
+    function automatic bit is_min_normal(input logic [31:0] x);
+        return (x[30:23] == 8'd1) && (x[22:0] == 23'd0);
+    endfunction
+    assign flag_underflow = raw_status.UF | (raw_status.NX & is_min_normal(raw_result));
     assign flag_inexact   = raw_status.NX;
 endmodule

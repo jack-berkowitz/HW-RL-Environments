@@ -169,7 +169,8 @@ reasons and would not isolate the property.
 | `mA1_unfused_multiply_add` | fused-vs-unfused (A1) | 1182 | `(1+2⁻¹²)² − (1+2⁻¹¹)` → `0`, reference `2⁻²⁴` |
 | `mA4_nan_payload_propagate` | contract-NaN (A4) | 62 | sNaN operand → `0x7FC00001`, reference `0x7FC00000` |
 | `mA5_signed_zero_always_positive` | special values (A5) | 14 | `(−0)+(+0)` under RDN → `+0`, reference `−0` |
-| `mA6_underflow_before_rounding` | contract-tininess (A6) | 57 | exact subnormal → `UF` set, reference clear |
+| `mA6_underflow_ignores_inexact` | contract-underflow (A6.1) | 57 | exact subnormal → `UF` set, reference clear |
+| `mA8_band_unbounded_tininess` | contract-underflow (A6.2) | 6 | rounds up onto smallest normal → `UF` set, reference clear |
 | `mA7_inexact_dropped_on_subnormal` | flags (A7) | 89 | subnormal result → `NX` clear, reference set |
 
 **Reference passes with 0 failures. Every mutant shows 0 coverage holes and 0

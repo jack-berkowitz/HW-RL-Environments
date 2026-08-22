@@ -92,20 +92,21 @@ def round_frac(v, sign, E, M, mode):
         bits = (sign << (E + M)) | q                   # subnormal
     else:
         bits = (sign << (E + M)) | ((exp + (P - 1) + bias) << M) | (q & ((1 << M) - 1))
-    # TININESS AFTER ROUNDING, clause 7.5: "a non-zero result computed as though
-    # both the exponent range and the precision were unbounded would lie
-    # strictly between +/- b**emin". So it is rounded at the target PRECISION
-    # with an UNBOUNDED exponent -- NOT the value actually delivered.
+    # UNDERFLOW predicate -- TRACKS A PINNED TASK DECISION, 2026-08-21.
     #
-    # Testing the delivered value instead is wrong in exactly one place, and it
-    # is a place this vector set reaches 28 times: when the exact result is tiny
-    # and gradual underflow rounds it to ZERO. The delivered value is then 0, a
-    # "val != 0" guard drops UF, and the anchor -- which is right -- looks
-    # wrong. With unbounded exponent range a non-zero exact value never rounds
-    # to zero, so the non-zero condition is automatic here.
-    qu, _ = _round_at(v, e - (P - 1), sign, mode)
-    tiny_after = Fraction(qu) * Fraction(2) ** (e - (P - 1)) < Fraction(2) ** emin
-    return bits, (NX if inexact else 0) | (UF if (inexact and tiny_after) else 0)
+    # NOT a bug fix, and this model was not wrong before. It implemented IEEE
+    # 754-2019 clause 7.5's tininess-after-rounding rule -- round at the target
+    # precision with an UNBOUNDED EXPONENT, then test against the smallest
+    # normal -- which is a correct reading of the standard.
+    #
+    # The CONTRACT changed under it. A7a (d_dsp03) and A6 (d_dsp02) now pin the
+    # delivered-result rule longhand and cite no standard: UF iff inexact AND
+    # the delivered result's biased exponent field is zero, which covers
+    # subnormals and zeros alike. The two rules agree everywhere except one
+    # band -- an exact result below the smallest normal that rounds UP to it --
+    # where they disagree under RNE, RUP and RMM.
+    expfield = (bits >> M) & ((1 << E) - 1)
+    return bits, (NX if inexact else 0) | (UF if (inexact and expfield == 0) else 0)
 
 def fma(ab, bb, cb, E, M, mode):
     """Bit-exact fused multiply-add. Returns (bits, flags)."""

@@ -104,7 +104,45 @@ vectors:
     451 at WIDTH=32 and surfaced the model's tininess defect above.
 
 results:
-  reference: 2/2   # PASS at WIDTH=32 and WIDTH=64, 13860/13860 vectors checked
+  reference: 2/2   # PASS at WIDTH=32 and WIDTH=64, 14230/14230 vectors checked
+
+version_boundary:
+  changed_on: 2026-08-21
+  pre_bump_task_text_hash:  c4b5edc12f407731
+  post_bump_task_text_hash: 35619b11aa94307d
+  what_changed: >
+    A7 split, and a new A7a pinning underflow longhand as "inexact AND the
+    delivered result's biased exponent field is zero", with the IEEE-754 clause
+    7 authority removed from UF and the departure from clause 7.5 stated per
+    format. F57. The vector set gained 370 directed band vectors, the checker
+    gained a per-format band coverage floor, nc_d was added and then corrected,
+    and the second source and Python model were changed to track the pinned
+    decision.
+  material_to_rule_17: YES -- and more broadly than d_dsp02's
+  reasoning: >
+    Unlike d_dsp02, the pre-change spec here did NOT state the delivered-result
+    rule anywhere. It named clause 7.5 and nothing else, so a candidate reading
+    it literally would implement the unbounded-exponent rule -- which is what
+    this task's own second source and Python model both did. The requirement was
+    genuinely undetermined in the band, and is now determined.
+    .
+    The VECTOR SET also changed, which is the stronger reason. 13860/13860 was
+    measured on a set that never reached the band -- zero cases in 13860. The
+    post-bump set reaches it in all three formats and the checker refuses a set
+    that does not. A pass on one set is not a pass on the other.
+  prior_result:
+    value: 13860/13860
+    task_text_hash: c4b5edc12f407731
+    vectors: {w32: 6300, w64: 7560}
+    status: >
+      RETAINED AS HISTORICAL, not deleted and not re-scored. It is accurate over
+      the region its set reached and says nothing about the band -- see F59,
+      where it is instance 1. It is not comparable to any post-bump number.
+  current_result:
+    value: 14230/14230
+    task_text_hash: 35619b11aa94307d
+    vectors: {w32: 6470, w64: 7760}
+  candidates_affected: NONE -- no candidate has ever been scored against this task.
 
 negative_controls:
   - name: nc_a_stuck_output

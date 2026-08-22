@@ -95,11 +95,32 @@ contract_terms_requiring_authority:
     authority: RISC-V; IEEE-754 only RECOMMENDS payload propagation
     alternative_out_of_scope: payload-propagating NaN
   - id: A4b
-    term: underflow/overflow flag semantics
-    authority: IEEE-754 §7.4, §7.5
+    term: overflow flag semantics; invalid always yields the canonical quiet NaN
+    authority: IEEE-754 §7.4 for overflow; A4 (task-pinned) for the NaN result
   - id: A6
-    term: tininess detected AFTER rounding
-    authority: IEEE-754 §7.5 permits before or after; this pins after
+    term: >
+      UNDERFLOW is set iff the result is inexact AND the delivered result's
+      biased exponent field is zero (subnormal or zero).
+    authority: PINNED BY THIS TASK -- no standard is cited, deliberately.
+    departure_from_standard: >
+      DEPARTS from IEEE-754 §7.5 tininess-after-rounding in exactly one band:
+      an exact result strictly below the smallest normal that rounds UP to the
+      smallest normal. §7.5 rounds at the destination precision with an
+      UNBOUNDED EXPONENT RANGE and calls that underflow; this task inspects the
+      DELIVERED result and does not. They disagree in RNE, RUP and RMM and
+      agree in RTZ and RDN. 6 of the 4290 vectors sit in that band.
+    why_longhand: >
+      "Tininess after rounding" names TWO INCOMPATIBLE RULES -- the colloquial
+      one (inspect the delivered result) and §7.5's (round with unbounded
+      exponent, then test). This spec's PROSE always described the first and was
+      correct; only the CITATION named the second. Same words, two rules, so the
+      clause is now stated in full and cites nothing.
+    requirement_unchanged: >
+      The behaviour required of a submission is IDENTICAL to what A6 has always
+      said in prose -- "a result that is tiny before rounding but rounds up to
+      the smallest normal is NOT underflow". No candidate was ever mis-scored by
+      this. What changed is the attribution and the predicate's precision (the
+      zero case, which "subnormal" alone does not cover).
     note: >
       F14. The spec already SAID "tininess after rounding" and that still would
       not have caught the inherited choice -- it was found by counting flag
@@ -160,6 +181,67 @@ second_source:
     signedness bug: {2'b0, ep} is UNSIGNED, so ep = -13 read as 4083 and gave a
     shift amount of 4139 where 43 was correct. Found by instrumenting, not by
     reasoning -- hand-tracing said the logic was correct.
+  result_scope: >
+    THE 4290/4290 ABOVE IS ACCURATE OVER THE SET IT WAS MEASURED ON, and that
+    set is the pre-2026-08-21 4290. It is not a statement about the extended
+    4340. Do not delete it and do not restate it as a current number.
+  extended_set_result: 4330/4340
+  extended_set_defect: >
+    OPEN. The 50 directed band vectors added on 2026-08-21 expose 10 failures,
+    all in one shape -- smallest subnormal squared, both signs, all five
+    rounding modes -- and they include WRONG RESULT BITS, not only flags. The
+    diagnosis is an exponent-underflow bug: the significand product survives
+    while the exponent wraps out of range without being clamped to the subnormal
+    path (2^-298 delivering 1d000000). BAND, LOW, HIGH and EXACT all pass, so it
+    is NOT the underflow-flag clause.
+    Filed in OPEN_DEFECT_second_source_ftz.md. NOT FIXED, and NOT fixed by the
+    agent who found it -- repairing another owner's second source in passing is
+    how independence quietly disappears. This task is NOT marked green on it.
+    See F59: the prior 4290/4290 held over the region the set reached.
+
+version_boundary:
+  changed_on: 2026-08-21
+  pre_bump_task_text_hash:  5ad30593403b4ae2
+  post_bump_task_text_hash: 13e3c4673f8a3270
+  what_changed: >
+    A4b and A6. The overflow and canonical-NaN authorities were split out and
+    kept; underflow was rewritten longhand as "inexact AND the delivered
+    result's biased exponent field is zero", the IEEE-754 §7.5 citation was
+    removed, and the departure from §7.5 in the round-up-to-smallest-normal band
+    was stated explicitly. F57.
+  material_to_rule_17: YES -- NOT documentation-only
+  reasoning: >
+    The first read of this was that the requirement was unchanged, because A6's
+    prose ALREADY said the right thing about the band: "a result that is tiny
+    before rounding but rounds up to the smallest normal is NOT underflow".
+    That is true, and for the BAND the bump really is documentation-only.
+    .
+    It does not hold for the ZERO case, and that is the half nobody checked.
+    A4b said underflow is raised "only when the result is tiny AFTER rounding
+    AND inexact", and A6 directed the reader to inspect the DELIVERED result.
+    A delivered result of zero is not tiny -- IEEE defines tininess for a
+    NON-ZERO result -- so the natural literal reading of the pre-change prose
+    yields NO UNDERFLOW for a tiny inexact value that rounds all the way to
+    zero. The anchor sets it.
+    .
+    MEASURED: 14 of the original 4290 sit in exactly that case -- delivered
+    result zero, inexact, UF set. The pre-change spec did not determine them,
+    and its most natural reading determined them WRONGLY. A candidate that read
+    the contract carefully could have failed 14 scored vectors on a requirement
+    the contract did not state.
+    .
+    So the requirement DID change: the zero case went from undetermined to
+    determined. That is material under rule 17 and the landed results are
+    labelled with the pre-bump hash rather than re-scored.
+  landed_results_treatment: >
+    RETAINED, labelled pre-bump, NOT re-scored and NOT deleted. Every landed
+    d_dsp02 candidate run was scored against 5ad30593403b4ae2 and is comparable
+    only to other pre-bump runs.
+  candidates_actually_affected: >
+    NONE OBSERVED. The landed candidate records were checked: no candidate
+    failed on the zero case. That is the outcome, not the justification -- the
+    exposure was real and no candidate happening to hit it is luck of the draw,
+    not evidence the contract was adequate. F59.
 
 # ---------------------------------------------------------------------------
 ppa:

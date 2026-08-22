@@ -72,12 +72,11 @@
 //
 //   A4b. THE OTHER IMPLEMENTATION-DEFINED CHOICES, pinned for the same reason:
 //
-//        * UNDERFLOW is raised only when the result is tiny AFTER rounding AND
-//          inexact. A tiny but exact result does NOT raise it. (IEEE permits
-//          detecting tininess before rounding; this task requires after -- see
-//          A6.)
 //        * OVERFLOW always raises `inexact` as well.
+//          AUTHORITY: IEEE 754-2019 clause 7.4.
 //        * `invalid` always yields the canonical quiet NaN as the result.
+//          AUTHORITY: PINNED BY THIS TASK -- see A4.
+//        * UNDERFLOW is pinned by A6 below, longhand, and cites no standard.
 //
 //        Each of these was verified against the reference across the vector set
 //        rather than assumed: 103 underflow cases all inexact and none exact,
@@ -88,10 +87,65 @@
 //       quiet NaN. Signed zero follows IEEE: (-0) + (+0) is +0 in every mode
 //       EXCEPT RDN, where it is -0.
 //
-//   A6. TININESS IS DETECTED AFTER ROUNDING. A result that is tiny before
-//       rounding but rounds up to the smallest normal is NOT underflow. The
-//       vector set contains cases where before- and after-rounding detection
-//       disagree, so this is checked and not merely stated.
+//   A6. UNDERFLOW -- PINNED BY THIS TASK. NO STANDARD IS CITED AS AUTHORITY,
+//       DELIBERATELY; see "why this is written out longhand" below.
+//
+//       THE RULE. UF is set if and only if BOTH of these hold:
+//         (1) the result is INEXACT -- it differs from the exact value of
+//             a*b + c; AND
+//         (2) the DELIVERED result's biased exponent field is ZERO -- that is,
+//             the value actually driven on the result port is a subnormal or a
+//             zero, of either sign.
+//       Nothing else sets UF. A tiny result that is EXACT does not set it, and
+//       a result whose exponent field is non-zero does not set it however small
+//       the exact value was.
+//
+//       WHY THIS IS WRITTEN OUT LONGHAND AND CITES NOTHING. "Tininess detected
+//       after rounding" names TWO INCOMPATIBLE RULES. Colloquially it means
+//       what (2) says: look at the result you delivered. IEEE 754-2019 clause
+//       7.5 uses the same words for something else -- round the exact value at
+//       the destination precision with an UNBOUNDED EXPONENT RANGE, then test
+//       THAT against the smallest normal. The two agree everywhere except one
+//       band, and inside that band they disagree in three of the five rounding
+//       modes. Naming the clause therefore settles nothing, so the rule is
+//       stated in full above and no standard is cited as its authority.
+//
+//       THE BAND, WORKED. An exact result strictly below the smallest normal
+//       that rounds UP to exactly the smallest normal. Under (2) that is NOT
+//       underflow: the delivered exponent field is 1. Under clause 7.5 it IS,
+//       because the unbounded-exponent value is still below the smallest
+//       normal. THIS TASK REQUIRES (2).
+//
+//         fmt   a         b         c   exact value
+//         FP32  00ffffff  3f000000  0   (1 - 2^-24) * 2^-126
+//         FP16  07ff      3800      0   (1 - 2^-11) * 2^-14
+//         BF16  00ff      3f00      0   (1 - 2^-8)  * 2^-126
+//
+//         mode   FP32      FP16  BF16   exp field   UF  NX
+//         RNE    00800000  0400  0080   1            0   1
+//         RTZ    007fffff  03ff  007f   0            1   1
+//         RDN    007fffff  03ff  007f   0            1   1
+//         RUP    00800000  0400  0080   1            0   1
+//         RMM    00800000  0400  0080   1            0   1
+//
+//       THE ZERO CASE, which is why (2) says "exponent field is zero" and not
+//       "is subnormal". A result that is tiny and inexact and rounds all the
+//       way to ZERO DOES set UF, because its exponent field is zero. FP32
+//       a=00000001 b=00000001 c=00000000 delivers 00000000 under RNE, RTZ, RDN
+//       and RMM and 00000001 under RUP, and sets UF and NX in all five modes.
+//
+//       DEPARTURE, STATED PLAINLY. This task DEPARTS from IEEE 754-2019 clause
+//       7.5's tininess-after-rounding rule in the round-up-to-smallest-normal
+//       band above. That is the task's deliberate choice, not an oversight and
+//       not a claim about what the standard requires. It is pinned this way
+//       because it is what the reference does, and a contract that cites an
+//       authority its own oracle does not implement is a contract defect: the
+//       requirement would be inherited rather than chosen.
+//
+//       SCOPE NOTE. This module's format is binary32. The FP16 and BF16 rows
+//       are shown because the SAME convention is pinned across this project's
+//       floating-point tasks and the rule is not binary32-specific -- they are
+//       not a requirement on this module, which never sees those formats.
 //
 //   A7. EXCEPTION FLAGS: `invalid`, `overflow`, `underflow`, `inexact`. Every
 //       flag is compared bit-exactly on every vector. There is no divide-by-
