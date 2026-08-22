@@ -96,6 +96,10 @@ VINC=()
 for d in $INCDIRS; do VINC+=("+incdir+$REPO/$d"); done
 
 GOLDEN_TOP="$(yget golden_top)"
+# Explicit identifier for the gate mutant. It is NOT a scored mutant and must
+# never enter a kill-rate numerator or denominator, so it is matched by this
+# constant rather than by position in DUTS or by a name prefix.
+GATE_ID="__gate_mutant__"
 TB_MOD="$(yget tb_module)"
 CONF_PREFIX="$(yget conformant_prefix)"
 MUT_PREFIX="$(yget mutant_prefix)"
@@ -211,9 +215,54 @@ for f in "$DUT_DIR"/*.sv; do
   SUPPORT+=("$f")
 done
 
+# ---- THE VALIDITY GATE ------------------------------------------------------
+# A submission must produce DIFFERENT verdicts on the golden and on a
+# mechanically generated gate mutant: PASS the golden, FAIL the mutant. One that
+# cannot tell them apart did not measure anything, whatever else it reports.
+#
+# This replaced a gate that was satisfiable without discriminating. negctl/
+# null_tb.sv instantiates no DUT, drives nothing, prints RESULT: PASS -- and the
+# harness reported "1 of 1 submission(s) passed the validity gate" and scored it
+# 0/8. An instantiate-and-ignore testbench did the same.
+#
+# NOT a DUT-instantiation check. Instantiation is a source-level property and is
+# satisfied by instantiating the DUT and ignoring it; every source-level or
+# lint-style gate is gameable by construction. A required DIFFERENCE IN OUTCOME
+# has no source-level counterfeit.
+#
+# The mutant is GENERATED, not authored: one script, any golden, every output
+# tied to '1. It is not the per-task Tier-B authoring control, which may
+# legitimately be subtle; this is a floor and is deliberately maximally obvious.
+GATE_MUT="$WORK/gate_mutant.sv"
+GATE_OK_TO_RUN=1
+if ! python3 "$REPO/scripts/make_gate_mutant.py" \
+        "$DUT_DIR/$GOLDEN_TOP.sv" "$GOLDEN_TOP" "$GATE_MUT" >/dev/null 2>&1; then
+  echo "REFUSED: could not generate the validity-gate mutant from" >&2
+  echo "  $DUT_DIR/$GOLDEN_TOP.sv. Without it the gate cannot run, and a run" >&2
+  echo "  without the gate cannot report a validity verdict. Nothing scored." >&2
+  exit 2
+fi
+
+# THE GATE MUTANT MUST ELABORATE. A syntactically broken one is useless as a
+# gate: it fails to build, every submission fails identically, and the failure
+# surfaces as "the submission does not build" -- blaming the submission for a
+# harness defect. Worse, a broken mutant makes null_tb.sv show PASS-golden /
+# FAIL-mutant, which SATISFIES a naive gate. Checked here, and a failure is a
+# REFUSAL, never a verdict about anyone's submission.
+if ! verilator --lint-only -Wno-lint -Wno-fatal --timing --top-module "$GOLDEN_TOP" \
+     ${VINC[@]+"${VINC[@]}"} "${SUPPORT[@]}" "$GATE_MUT" >"$WORK/gate_lint.log" 2>&1; then
+  echo "REFUSED: the generated validity-gate mutant does not elaborate." >&2
+  echo "  This is a HARNESS SETUP problem, not a verdict about any submission." >&2
+  echo "  A gate mutant that fails to build cannot discriminate: every" >&2
+  echo "  submission would fail it identically, including one that checks" >&2
+  echo "  nothing. Nothing was scored." >&2
+  grep -m3 "%Error" "$WORK/gate_lint.log" | sed 's|^|    |' >&2
+  exit 2
+fi
+
 # One passthrough + one wrapper per perturbation, each presenting itself as
 # `tag_tracker` and delegating to `tag_tracker_golden`.
-DUTS=("golden")
+DUTS=("golden" "$GATE_ID")
 if [ -f "$CONF" ]; then
   while read -r m; do DUTS+=("$m"); done < <(grep -oE "^module (${CONF_PREFIX}[A-Za-z0-9_]+)" "$CONF" | awk '{print $2}')
 fi
@@ -235,6 +284,7 @@ build_variant() {   # $1 = golden | tt_cN_...  -> writes variant.sv + extra.sv
   case "$1" in
     ${MUT_PREFIX}*) SRC="$MUT" ;;
     dut2)           SRC="$TASK_DIR/$SECOND_DUT_FILE" ;;
+    "$GATE_ID")     SRC="$GATE_MUT" ;;
     *)              SRC="$CONF" ;;
   esac
   if ! python3 "$REPO/scripts/_verif_variant.py" "$WORK" "$1" "$SRC" "$GOLDEN_TOP"; then
@@ -265,6 +315,14 @@ import sys,io
 src=open(sys.argv[1],encoding='utf-8',errors='replace').read()
 open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WORK/sub.sv"
 
+  # IDENTITY OF THE BYTES WE ACTUALLY READ, taken now rather than at record
+  # time. The record is written after every variant has run; hashing the path
+  # then reports whatever is on disk at that later moment, which is a different
+  # file if the candidate was replaced mid-run.
+  SUB_SHA="$(python3 -c "
+import hashlib,sys
+print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest()[:16])" "$sub")"
+
   # Transport damage is a SETUP problem, not a result. Refuse before compiling
   # so a paste artifact is never attributed to the model.
   if ! python3 "$REPO/scripts/check_transport.py" "$sub" >"$WORK/tp.log" 2>&1; then
@@ -275,12 +333,28 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
 
   if ! grep -qE "^\s*module\s+$TB_MOD\b" "$WORK/sub.sv"; then
     echo "  REJECTED: does not declare module $TB_MOD"
+    # A REJECTION IS A RESULT AND MUST LEAVE A RECORD. `continue` used to skip
+    # the record writer, so this submission produced NOTHING in runs/ and any
+    # table counting from records omitted it -- the same defect fixed on the
+    # design side for slang rejections. v_ca04/gemini was invisible this way.
+    #
+    # No golden/gate verdict and no fault count are written: nothing ran.
+    # `build_status` says what happened, and absence everywhere else renders
+    # as NO VERDICT rather than as a claim about the testbench's checking.
+    tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+    python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$sub" sim "$label" \
+      "submission_sha256_16=$SUB_SHA" \
+      "task_text_hash=$tt" \
+      "build_status=wrong_module_name" \
+      "build_error=does not declare module $TB_MOD" >/dev/null || \
+      echo "  RECORD NOT WRITTEN for $label" >&2
     echo
     continue
   fi
 
   allok=1; buildfail=0; NKILL=0; NMUT=0; NHUNG=0; NCONF=0; NCONF_OK=0
   DUT2_VERDICT="not-run"
+  GATE_VERDICT="not-run"   # fail closed: anything but FAIL is not a gate pass
   CONF_FAILED=(); MUT_SURVIVED=(); MUT_HUNG=()
   GOLDEN_VERDICT=unknown
   for v in "${DUTS[@]}"; do
@@ -318,15 +392,55 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
       kill -9 "$rpid" 2>/dev/null; wait "$rpid" 2>/dev/null
       verdict=TIMEOUT
     else
-      wait "$rpid" 2>/dev/null
+      wait "$rpid" 2>/dev/null; rc=$?
       out="$(cat "$WORK/run.log")"
-      if echo "$out" | grep -qE "^RESULT: *PASS"; then verdict=PASS; else verdict=FAIL; fi
+      # THREE outcomes, not two. A simulation that DIED -- killed by the OS,
+      # out of memory, a runtime abort -- prints no RESULT line at all.
+      # Reading "no PASS" as FAIL turns a machine event into a verdict about
+      # the submission, and it is LOAD DEPENDENT: v_nw02's reference testbench
+      # scored PASS standalone and FAIL inside a batch running alongside an
+      # ORFS build. Byte-identical file, opposite verdict. An absent verdict
+      # is ABSENT (rule 20), not a failure.
+      #
+      # GREP THE FILE, NEVER `echo "$out" | grep -q`. With `set -o pipefail`
+      # (line 42) that pipeline returns the FIRST failure in it, and `grep -q`
+      # exits the instant it matches -- so `echo` is still writing, takes
+      # SIGPIPE, and the pipeline reports 141 WHILE GREP MATCHED. Measured:
+      # gp=1 gf=141 gfile=0 on a 97 KB log whose line 1709 is `RESULT: FAIL`.
+      # It only bites above the ~64 KB pipe buffer, so short logs always
+      # worked and long ones lost their verdict -- which is why this looked
+      # like load and read as "the submission failed".
+      if   grep -qE "^RESULT: *PASS" "$WORK/run.log"; then verdict=PASS
+      elif grep -qE "^RESULT: *FAIL" "$WORK/run.log"; then verdict=FAIL
+      else verdict=CRASH; CRASH_RC="$rc"
+      fi
     fi
     case "$v" in
+      "$GATE_ID")
+        # THE VALIDITY GATE. This DUT has every output tied to '1. A submission
+        # that observes ANY output at all must reject it. Producing the same
+        # verdict here as on the golden means the submission did not
+        # discriminate, and nothing it reports afterwards is a measurement.
+        #
+        # FAIL CLOSED. Only an explicit FAIL counts as discriminating. TIMEOUT
+        # and a missing verdict are NOT passes: an absent result must never read
+        # as a gate pass, which is the same defect as a missing sim verdict
+        # rendering as a score.
+        GATE_VERDICT="$verdict"
+        case "$verdict" in
+          FAIL)    printf "  %-26s rejected (gate)\n" "gate-mutant" ;;
+          TIMEOUT) printf "  %-26s HUNG on the gate mutant\n" "gate-mutant" ;;
+          CRASH)   printf "  %-26s DIED (no verdict) on the gate mutant\n" "gate-mutant" ;;
+          *)       printf "  %-26s ACCEPTED  <- did not discriminate\n" "gate-mutant" ;;
+        esac
+        # NOT a scored mutant: never touches NKILL or NMUT.
+        ;;
       ${MUT_PREFIX}*)   # a mutant must be CAUGHT: PASS here means the defect was missed
         case "$verdict" in
           FAIL)    printf "  %-26s killed\n" "$v"; NKILL=$((NKILL+1)) ;;
           TIMEOUT) printf "  %-26s HUNG  <- no watchdog; not a kill\n" "$v"
+                   MUT_HUNG+=("$v"); NHUNG=$((NHUNG+1)); allok=0 ;;
+          CRASH)   printf "  %-26s DIED  <- no verdict; not a kill\n" "$v"
                    MUT_HUNG+=("$v"); NHUNG=$((NHUNG+1)); allok=0 ;;
           *)       printf "  %-26s SURVIVED  <- defect not caught\n" "$v"
                    MUT_SURVIVED+=("$v"); allok=0 ;;
@@ -354,8 +468,16 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
   # both the suppression below and the summary depend on it, and they must not
   # disagree -- suppressing only on `golden` while REJECTING on conformant would
   # print a kill count beside a REJECTED verdict.
+  # DISCRIMINATION comes first: PASS the golden, FAIL the gate mutant. Anything
+  # else is INVALID, not "valid with gaps". Fail closed -- only an explicit FAIL
+  # on the mutant counts, so TIMEOUT / no-verdict / not-run all read as INVALID.
+  DISCRIMINATES=1
+  [ "$GOLDEN_VERDICT" = "PASS" ] || DISCRIMINATES=0
+  [ "$GATE_VERDICT"   = "FAIL" ] || DISCRIMINATES=0
+
   GATE_OK=1
   [ "$GOLDEN_VERDICT" = "PASS" ] || GATE_OK=0
+  [ "$DISCRIMINATES" -eq 1 ] || GATE_OK=0
   [ "${#CONF_FAILED[@]}" -eq 0 ] || GATE_OK=0
   case "$DUT2_VERDICT" in PASS|not-run) ;; *) GATE_OK=0 ;; esac
 
@@ -364,10 +486,13 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
   # the terminal ever saw it. That is F20 reproduced on this side of the
   # harness -- a control built for the design path and never carried across.
   python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$sub" sim "$label" \
+    "submission_sha256_16=$SUB_SHA" \
     "status=$([ "$allok" -eq 1 ] && echo completed || echo rejected)" \
     "all_passed=$([ "$allok" -eq 1 ] && echo true || echo false)" \
     "golden_accepted=$GOLDEN_VERDICT" \
     "second_dut_accepted=$DUT2_VERDICT" \
+    "gate_mutant_verdict=$GATE_VERDICT" \
+    "discriminates=$([ "${DISCRIMINATES:-0}" -eq 1 ] && echo true || echo false)" \
     "conformant_accepted=$NCONF_OK/$NCONF" \
     "faults_caught=$([ "${GATE_OK:-0}" -eq 1 ] && echo "$NKILL/$NMUT" || echo "SUPPRESSED-gate-failed")" \
     "faults_hung=$NHUNG" \
@@ -401,7 +526,42 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
   #
   # The reason text is now DERIVED from the rows that actually failed. If
   # nothing failed, nothing is claimed.
-  if [ "$buildfail" -eq 1 ]; then
+  # A GOLDEN THAT NEVER PRODUCED A VERDICT IS NOT A REJECTION. The simulation
+  # died without printing RESULT, so there is nothing to interpret. This branch
+  # precedes the INVALID one deliberately: saying "it does not discriminate" of
+  # a run that produced no verdict states a property of the submission that was
+  # never measured. Two causes, and this cannot tell them apart -- the machine
+  # (killed under load, out of memory) or the submission (a runtime abort).
+  # Both are reported; neither is scored.
+  if [ "$buildfail" -eq 0 ] && [ "$GOLDEN_VERDICT" = "CRASH" ]; then
+    echo "  => NO VERDICT. The run against the correct DUT produced no RESULT"
+    echo "     line: the simulation died rather than reporting PASS or FAIL"
+    printf "     (exit %s). NOT a statement about this testbench's checking.\n" \
+           "${CRASH_RC:-unknown}"
+    echo "     Either the machine killed it (load, memory) or the submission"
+    echo "     aborted at runtime. Re-run it alone before reading anything into"
+    echo "     it. A byte-identical file has scored PASS standalone and died"
+    echo "     inside a batch sharing the machine with an ORFS build."
+    echo "     EXCLUDED FROM SCORING, and not counted against the submission."
+  elif [ "$buildfail" -eq 0 ] && [ "$DISCRIMINATES" -eq 0 ]; then
+    echo "  => INVALID: this submission does not DISCRIMINATE."
+    echo "     It must PASS the golden DUT and FAIL a DUT with every output tied"
+    echo "     to '1. It did not, so it is not measuring the design under test."
+    printf "     golden=%s  gate-mutant=%s\n" "$GOLDEN_VERDICT" "$GATE_VERDICT"
+    if [ "$GOLDEN_VERDICT" = "PASS" ] && [ "$GATE_VERDICT" = "PASS" ]; then
+      echo "     Accepting both means it accepts anything: a testbench that"
+      echo "     drives nothing, or instantiates the DUT and checks nothing,"
+      echo "     lands here."
+    elif [ "$GOLDEN_VERDICT" = "FAIL" ] && [ "$GATE_VERDICT" = "FAIL" ]; then
+      echo "     Rejecting both means it rejects anything, which is the same"
+      echo "     non-measurement pointing the other way."
+    elif [ "$GATE_VERDICT" = "TIMEOUT" ] || [ "$GATE_VERDICT" = "not-run" ] \
+         || [ "$GATE_VERDICT" = "CRASH" ]; then
+      echo "     No verdict from the gate mutant. An absent result is NOT a gate"
+      echo "     pass; the gate fails closed."
+    fi
+    echo "     EXCLUDED FROM SCORING. Its fault-detection numbers are not a score."
+  elif [ "$buildfail" -eq 1 ]; then
     echo "  => DID NOT COMPILE. This is NOT a verdict about the testbench's"
     echo "     checking: nothing ran, so nothing was measured. Line numbers above"
     echo "     refer to the submission."
@@ -445,7 +605,9 @@ open(sys.argv[2],'w',encoding='utf-8').write(src.replace(' ',' '))" "$sub" "$WO
 done
 
 echo "================================================================================"
-echo "$NPASS of ${#SUBS[@]} submission(s) passed the validity gate."
+echo "$NPASS of ${#SUBS[@]} submission(s) DISCRIMINATE: they pass the golden DUT"
+echo "and reject a DUT with every output tied to '1. One that does not is INVALID"
+echo "and is excluded from scoring, whatever else it reports."
 echo
 if [ "${NMUT:-0}" -eq 0 ]; then
   echo "MUTANT KILL RATE NOT MEASURED -- $TASK_NAME has no mutant set."

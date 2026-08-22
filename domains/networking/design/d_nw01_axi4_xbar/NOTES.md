@@ -979,3 +979,34 @@ that is recorded as interesting and **does not move the bar**.
 `task.yaml` keeps it under a separate `ppa_internal_control` key rather than as a
 third row of `ppa_reference_envelope.points`, for the same reason the run records
 are immutable: **if two things can be confused, eventually they will be.**
+
+---
+
+## Outstanding-transaction capacity (moved from README, 2026-08-21)
+
+Moved here to keep the README to one table per task. This is the measurement
+behind the capacity claim; the README carries only a pointer to it.
+
+### Outstanding-transaction capacity
+
+An AXI master can have several read requests in flight at once. **Outstanding capacity** is how many the crossbar will accept before it stops granting. It is a buffering choice, not a quality score. More outstanding transactions hide more memory latency, and cost area and power to store. Neither end of the range is "better"; the number is only meaningful next to the area it cost.
+
+Capacity is measured by offering **K distinct AXI IDs** and counting accepted requests. **A design's real capacity is the value at which that count stops rising with K.** While it is still rising, the number is describing the test, not the hardware.
+
+| What was measured | K=1 | 2 | 4 | 8 | 16 | Stops rising? |
+|---|---|---|---|---|---|---|
+| **Reference**: PULP `axi_xbar`, as configured in the table above (`CUT_ALL_AX`) | 9 | 15 | 27 | 51 | 99 | **no** |
+| Same reference, pipelining turned off (`NO_LATENCY`) | 7 | 13 | 25 | 49 | 97 | **no** |
+| Second source: an independently written crossbar | 8 | 8 | 8 | 8 | 8 | **yes, 8** |
+| ChatGPT 5.6 Sol | 8 | 8 | 8 | 8 | 8 | **yes, 8** |
+| `mX1`: deliberately broken crossbar | 8 | 8 | 8 | 8 | 8 | **yes, 8** |
+| `mCAP1`: deliberately broken crossbar | 1 | 1 | 1 | 1 | 1 | **yes, 1** |
+
+**The two reference rows are one design, not two.** Both are the same vendored PULP `axi_xbar`; they differ only in a configuration switch for how much pipelining it inserts. The first row is the configuration used everywhere else in this README. The gap between them is exactly **2 at every K**, so that switch is worth a constant 2 outstanding requests regardless of the test.
+
+**The "second source" is a second correct implementation of the same specification**, written independently so that a checker cannot be quietly fitted to one design's habits. It is not a competitor and it is not scored; it exists to catch a checker that only works on the reference.
+
+**`mX1` and `mCAP1` are deliberately broken designs**: seeded faults used to prove the checker can detect a problem at all. `mCAP1` accepts only one request at a time, which is the failure the capacity check exists to catch, and the check does catch it. A test that nothing fails is not evidence that anything passed.
+
+**The reference has no capacity figure here, and its 99 is not a win.** It never stops rising, because the test runs out of distinct AXI IDs before the hardware runs out of buffering. The ID field is 4 bits, so 16 IDs is the ceiling of the *stimulus*, not of the design. 99 is a lower bound at 16 IDs. It is deliberately not placed in the same column as the four figures that did stop rising, because those are properties of the hardware and this one is not.
+

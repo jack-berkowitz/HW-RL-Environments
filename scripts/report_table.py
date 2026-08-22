@@ -241,6 +241,30 @@ SCORED_CFG = {
 
 
 def main():
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from task_text_hash import task_text_hash
+    # RESOLVED FROM DISK, FOR EVERY TASK. This was a hand-written map of three
+    # verification tasks, so the stale-prompt guard covered 3 of 9 verification
+    # tasks and 0 of 6 design tasks -- a task absent from the map was not
+    # "checked and current", it was never checked, and it rendered as though it
+    # were. d_dsp02's spec was rewritten (hash 5ad30593403b4ae2 ->
+    # 13e3c4673f8a3270) and all five of its landed candidates kept rendering as
+    # current results against a superseded text.
+    #
+    # Same defect as the SUBMISSIONS tuple that dropped claude.sv: an allowlist
+    # whose failure mode is a silent omission rather than an error.
+    CUR_TT = {}
+    for _p in sorted(glob.glob(os.path.join(REPO, "domains", "*", "*", "*"))):
+        if not os.path.isfile(os.path.join(_p, "task.yaml")):
+            continue
+        try:
+            CUR_TT[os.path.basename(_p)] = task_text_hash(_p)[0]
+        except Exception:
+            # A task whose text cannot be hashed (no recognised prompt) yields
+            # None, and None DISABLES the comparison rather than failing every
+            # row: absence of a current hash is not evidence a record is stale.
+            CUR_TT[os.path.basename(_p)] = None
+
     recs = load_records()
     tds = task_dirs()
 
@@ -294,6 +318,18 @@ def main():
         hdr.append("notes")
         print("| " + " | ".join(hdr) + " |")
         print("|" + "|".join("---" for _ in hdr) + "|")
+
+        _cur_tt = CUR_TT.get(task)
+        _stale_design = []
+        for key in list(rows):
+            _s = (joined.get(key) or {}).get("sim") or {}
+            _rh = _s.get("task_text_hash")
+            # "unknown" is the ABSENCE of a recorded hash, not a different one.
+            # A record written before hashing existed has not been shown to
+            # answer a stale prompt; rule 20 says absence renders as absence,
+            # never as a negative verdict.
+            if _cur_tt and _rh not in (None, "", "unknown") and _rh != _cur_tt:
+                _stale_design.append((key[1], _rh)); rows.remove(key)
 
         for key in rows:
             sub = key[1]
@@ -419,8 +455,17 @@ def main():
             cells.append("; ".join(notes) if notes else "")
             print("| " + " | ".join(cells) + " |")
 
+        # NAMED, NEVER DROPPED. A row removed without a line here would be
+        # indistinguishable from a submission that was never made, which is the
+        # disappearance this guard exists to prevent.
+        for _s, _h in _stale_design:
+            print(f"| `{display_name(os.path.basename(_s)[:-3])}` | "
+                  f"*not scored against this prompt* | — | — | — | "
+                  + "".join("— | " for _ in mets)
+                  + f"last run answered task text `{_h}`; the task text is now "
+                    f"`{_cur_tt}` |")
+
         if mets:
-            print()
             for k, _ in mets:
                 lbl, desc = READABLE.get(k, (k, ""))
                 if desc:
@@ -449,41 +494,56 @@ def main():
     print("2-cycle crossing is a genuine result or an artefact. Unresolved.\n")
 
     # ---- verification tasks, SEPARATE TABLE, data-driven ------------------
-    VTASKS = {
-        "v_ca05_id_queue":       ("v_ca05 — tag tracker (out-of-order queue)",
-                                  "tag_tracker_tb"),
-        "v_nw03_axis_arb_mux":   ("v_nw03 — frame-arbitrating stream mux",
-                                  "frame_arb_mux_tb"),
-        "v_dsp02_fp_noncomp":    ("v_dsp02 — FP non-computational ops",
-                                  "fp_noncomp_tb"),
-    }
-    # The task's own reference testbench, which establishes the ceiling. Named
-    # explicitly (rule 10) so a stray record cannot become "the reference".
-    VREF = {
-        "v_ca05_id_queue":     "tag_tracker_ref.sv",
-        "v_nw03_axis_arb_mux": "frame_arb_mux_ref.sv",
-        "v_dsp02_fp_noncomp":  "fp_noncomp_ref.sv",
-    }
-    SUBMISSIONS = ("chat.sv", "deepseek.sv", "gemini.sv", "qwen.sv", "kimi.sv")
+    # EVERY VERIFICATION TASK WITH SUBMISSIONS, DERIVED FROM DISK. These were
+    # two hand-written maps naming three tasks, so the verification section
+    # covered 3 of 8 tasks that have submissions -- v_ca03, v_ca04, v_nw02,
+    # v_nw04 and v_ai02 were simply absent from the report, with nothing saying
+    # so. Third instance of this shape in one file, after the SUBMISSIONS tuple
+    # that dropped claude.sv and the VTASK_DIR map that disabled the
+    # stale-prompt guard on 12 of 15 tasks.
+    #
+    # The title comes from task.yaml where it has one, and the reference row is
+    # whichever record was run from the task's own tb/ directory -- a role, not
+    # a filename, so it cannot go stale when a file is renamed.
+    VTASKS, VREF = {}, {}
+    for _td in sorted(glob.glob(os.path.join(REPO, "domains", "*", "verification", "v_*"))):
+        _tk = os.path.basename(_td)
+        if not os.path.isfile(os.path.join(_td, "task.yaml")):
+            continue
+        _y = open(os.path.join(_td, "task.yaml"), encoding="utf-8", errors="replace").read()
+        _m = re.search(r"^[ \t]*title:[ \t]*(.+)$", _y, re.M)
+        _tb = re.search(r"^[ \t]*tb_module:[ \t]*(\S+)", _y, re.M)
+        # Fall back to the descriptive half of the directory name, not the
+        # whole thing: "v_ai02 — v_ai02_stream_realign" reads as a stutter.
+        _title = (_m.group(1).strip().strip('"\'') if _m
+                  else " ".join(_tk.split("_")[2:]).replace("_", " ") or _tk)
+        VTASKS[_tk] = (f"{_tk.split('_')[0]}_{_tk.split('_')[1]} — {_title}",
+                       _tb.group(1) if _tb else "")
+        for _f in sorted(glob.glob(os.path.join(_td, "tb", "*.sv"))):
+            VREF[_tk] = os.path.basename(_f)
+            break
+    # DERIVED FROM DISK, NOT LISTED HERE. A hardcoded tuple of model filenames
+    # silently drops any model not in it, and it did: `claude.sv` submissions
+    # existed for v_ca03 and were absent from this table because the tuple had
+    # never been updated. A list of who counts as a competitor is a list that
+    # goes stale every time a new model is added, and its failure mode is a
+    # missing row rather than an error.
+    #
+    # This is only safe because `candidates/` now holds submissions and nothing
+    # else: the reference testbenches that used to sit there as
+    # `candidates/<task>/reference.sv` were byte-identical duplicates of each
+    # task's own tb/, and they are gone. Membership of the directory IS the
+    # definition of a submission, so there is nothing left to filter by name.
+    SUBMISSIONS = tuple(sorted({
+        os.path.basename(f)
+        for f in glob.glob(os.path.join(REPO, "candidates", "*", "*.sv"))
+    }))
 
     # RULE 17 / F38, applied to the report itself. The prompt document is part
     # of the task text: v_ca05, v_nw03 and v_dsp02 were all re-prompted, so a
     # record written against the old text answers a DIFFERENT question and must
     # not share a table with one written against the new text.
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from task_text_hash import task_text_hash
-    VTASK_DIR = {
-        "v_ca05_id_queue":     "domains/comp_arch/verification/v_ca05_id_queue",
-        "v_nw03_axis_arb_mux": "domains/networking/verification/v_nw03_axis_arb_mux",
-        "v_dsp02_fp_noncomp":  "domains/dsp/verification/v_dsp02_fp_noncomp",
-    }
-    CUR_TT = {}
-    for _tk, _d in VTASK_DIR.items():
-        _p = os.path.join(REPO, _d)
-        try:
-            CUR_TT[_tk] = task_text_hash(_p)[0] if os.path.isdir(_p) else None
-        except Exception:
-            CUR_TT[_tk] = None
+
 
     print("\n---\n")
     print("# Verification tasks\n")
@@ -505,7 +565,8 @@ def main():
                 vrecs[(tk, sub)] = r
 
     for tk, (title, tbmod) in VTASKS.items():
-        rows = [VREF[tk]] + [s for s in SUBMISSIONS if (tk, s) in vrecs]
+        rows = ([VREF[tk]] if tk in VREF else []) \
+               + [s for s in SUBMISSIONS if (tk, s) in vrecs]
         rows = [s for s in rows if (tk, s) in vrecs]
         if not rows:
             continue
@@ -515,8 +576,8 @@ def main():
             print(f"Rows below answer task text `{_cur}` (spec + the prompt the")
             print("model is handed). A submission scored against a different")
             print("prompt is a different question and is not listed.\n")
-        print("| testbench | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |")
-        print("|---|---|---|---|---|---|")
+        print("| testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |")
+        print("|---|---|---|---|---|---|---|")
         _stale = []
         for sub in list(rows):
             _rh = vrecs[(tk, sub)].get("task_text_hash")
@@ -527,16 +588,35 @@ def main():
             g = r.get("golden_accepted", "?")
             conf = r.get("conformant_accepted", "?")
             caught = r.get("faults_caught", "?")
+            # RULE 23. `discriminates` is absent from every record written
+            # before the gate existed. Rule 20: unmeasured renders ABSENT, not
+            # "yes". Reading a missing field as a pass would silently certify
+            # exactly the submissions the gate was built to catch.
+            disc_raw = r.get("discriminates")
+            disc = {"true": "yes", True: "yes",
+                    "false": "**no**", False: "**no**"}.get(disc_raw, "—")
             # Rule 20: a record written before the second DUT was wired in has
             # not been measured against it. That renders absent, not "yes".
             d2raw = r.get("second_dut_accepted")
             d2 = {"PASS": "yes", "FAIL": "**no**", None: "—",
                   "not-run": "—", "unknown": "—"}.get(d2raw, "—")
-            isref = (sub == VREF[tk])
+            isref = (sub == VREF.get(tk))
             name = "**reference testbench**" if isref else f"`{display_name(sub[:-3])}`"
             note = ""
             # A submission that did not compile never set a golden verdict.
-            if g in ("unknown", "?") and conf in ("0/0", "?"):
+            if disc_raw in ("false", False) and g not in ("unknown", "?"):
+                # INVALID. Not a low score -- a non-measurement. It returned
+                # the SAME verdict on the golden and on a DUT with every
+                # output tied to '1, so it cannot be distinguishing them, and
+                # every number downstream of that is uninformative.
+                gm = r.get("gate_mutant_verdict", "?")
+                g_s = "yes" if g == "PASS" else "**no**"
+                conf_s, caught_s = conf, "*withheld*"
+                note = ("**INVALID** — same verdict on the golden DUT and on a "
+                        f"deliberately broken one (golden={g}, broken={gm}), so "
+                        "it is not measuring the design under test. Excluded "
+                        "from scoring (rule 23)")
+            elif g in ("unknown", "?") and conf in ("0/0", "?"):
                 g_s, conf_s, caught_s, d2 = "**did not compile**", "n/a", "n/a", "n/a"
                 note = "the testbench itself does not build"
             elif str(caught).startswith("SUPPRESSED") and g == "PASS":
@@ -565,7 +645,7 @@ def main():
                 note = ("rejects the correct design, so it rejects correct and "
                         "faulty hardware alike — a fault count from it carries "
                         "no information")
-            print(f"| {name} | {g_s} | {d2} | {conf_s} | {caught_s} | {note} |")
+            print(f"| {name} | {disc} | {g_s} | {d2} | {conf_s} | {caught_s} | {note} |")
         for _s, _h in _stale:
             # DISTINGUISH the two reasons a row has no current-prompt record.
             # A file refused for TRANSPORT DAMAGE never reaches the harness and
@@ -580,14 +660,22 @@ def main():
                     [sys.executable, os.path.join(REPO, "scripts", "check_transport.py"), _f],
                     capture_output=True).returncode == 1
             if _dmg:
-                print(f"| `{_s[:-3]}` | **damaged in transit** | n/a | n/a | n/a | "
+                print(f"| `{_s[:-3]}` | n/a | **damaged in transit** | n/a | n/a | n/a | "
                       "the file was corrupted on paste; a SETUP problem, "
                       "re-paste it — this is not a result about the model |")
             else:
-                print(f"| `{_s[:-3]}` | *not scored against this prompt* | — | — | — | "
+                print(f"| `{_s[:-3]}` | — | *not scored against this prompt* | — | — | — | "
                       f"last run answered task text `{_h}` |")
 
     print()
+    print("- **tells correct from broken** — the gate. Every testbench is run twice:")
+    print("  once against the correct DUT and once against one with every output tied")
+    print("  high. It must PASS the first and FAIL the second. A testbench that")
+    print("  returns the same verdict on both is not observing the design at all, and")
+    print("  no number after this column means anything. A file that drives nothing")
+    print("  and prints PASS scores 0 here; before this column existed it was reported")
+    print("  as merely having gaps in fault detection. A dash means the run predates")
+    print("  the gate and was never measured against it.")
     print("- **accepts correct design** — does it pass a known-good implementation?")
     print("  A testbench that rejects correct hardware is unusable whatever else it")
     print("  catches, so this gates everything after it.")

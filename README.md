@@ -13,174 +13,223 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: 12 submitted, 7 compiled, 6 correct, 6 produced a PPA number. Verification: 12 submitted, 9 compiled, 6 accepted all correct hardware, 6 produced a fault count." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 22, compiled 16, correct 14, PPA measured 7. Verification: submitted 30, compiled 27, tells correct from broken 14, fault count 11." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
-**Most submissions do not reach a score, and they fail early.** Of 12 design submissions, **5 never compiled at all** and a sixth compiled but failed its contract, so half never reached a PPA number. The verification half is healthier on compilation, 9 of 12, but only 6 clear the validity gate: the rest reject some of the correct hardware they were supposed to accept.
+**Most submissions do not reach a score, and they fail early.** Of 22 design
+submissions, 6 never compile: most are rejected by the synthesis frontend
+before simulation. 14 of the 16 that build are correct across every legal
+configuration.
 
-Where numbers do exist, the picture is mixed rather than uniformly poor. On the CDC FIFO all four models are functionally correct across every legal configuration and land within 1.2 % of each other on area. On the FP32 multiply-add and the AXI crossbar the gap to the reference is large (6.4× and 13.9× the area respectively), and on the crossbar the submission also runs at 111 MHz against the reference's 190.
+Of 30 verification submissions, 3 do not compile and a further 13
+fail the validity gate, leaving 11 with a fault count. **That gate is the
+binding constraint on this half.** A testbench that fails it returns the same
+verdict on correct and broken hardware, and every one that does so here rejects
+the correct design too, so it rejects everything and its fault count carries no
+information.
+
+Where a testbench does clear the gate it usually scores near the ceiling, so the
+distribution is bimodal rather than centred on a middling value. Where PPA
+exists, the gap to the reference is large and not uniform: on the CDC FIFO the
+submissions are 26 to 29 % smaller at the same clock, trading frequency for area,
+while on the AXI crossbar the one measured submission is 14.2× the reference's
+area and slower.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each of the 12 verification submissions, against a ceiling of 10 shown as a dashed line per task. v_ca05: ChatGPT 5.6 Sol 9 of 10; Gemini 3.1 Pro not scoreable for rejecting a legal variant; DeepSeek V4 Pro and Qwen 3.7 Plus did not compile. v_nw03: ChatGPT 5.6 Sol 9, Gemini 3.1 Pro 9, DeepSeek V4 Pro 6; Qwen 3.7 Plus not scoreable. v_dsp02: ChatGPT 5.6 Sol 9, DeepSeek V4 Pro 8; Gemini 3.1 Pro not scoreable; Qwen 3.7 Plus did not compile." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol not scoreable (invalid); claude not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); claude 4 of 5; Gemini 3.1 Pro not scoreable (invalid). v_ca04: ChatGPT 5.6 Sol 7 of 8; claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid). v_ca05: ChatGPT 5.6 Sol 9 of 10; claude not scoreable (gate); DeepSeek V4 Pro not scoreable (nobuild); Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (nobuild). v_dsp02: ChatGPT 5.6 Sol 9 of 10; claude 10 of 10; DeepSeek V4 Pro 8 of 10; Gemini 3.1 Pro not scoreable (invalid); Qwen 3.7 Plus not scoreable (nobuild). v_nw02: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 9 of 10; claude 9 of 10; DeepSeek V4 Pro 6 of 10; Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (invalid). v_nw04: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---
 
 ## Design results
 
-Every design that ran appears, including the reference implementation each task is anchored on. What each block does, and where that hardware is used in real silicon, is described in [The tasks, and where this hardware is used](#the-tasks-and-where-this-hardware-is-used) below.
+One table per task. Correctness is every legal parameter combination the task
+defines. Area and power are post-route at one clock period every design in the
+row closes; a design that misses timing has no reportable area (rule 22), and an
+unmeasured cell is left blank rather than filled (rule 20).
 
-**Read the clock period before comparing areas.** Area is meaningless without the frequency it was achieved at. A design synthesised at a slower clock is smaller for that reason alone.
-
-### d_dsp02: FP32 fused multiply-add
-
-| Design | Correctness | Built at | Area (µm²) | Power (mW) | Own Fmax (MHz) | Latency (cycles) | Throughput |
-|---|---|---|---|---|---|---|---|
-| reference | 1/1 | **20.25 ns** | **59,890** | 72.2 | 78.0 | 3 | 1 result/cycle |
-| ChatGPT 5.6 Sol | 1/1 | **20.25 ns** | **360,899** | 443.0 | 49.4 | 3 | 1 result/cycle |
-| Gemini 3.1 Pro | **fails at vector 4** (a=1.0, b=0) | n/a | n/a | n/a | n/a | n/a | n/a |
-| DeepSeek V4 Pro | **did not build** | n/a | 0 | 0 | 0 | n/a | n/a |
-| Qwen 3.7 Plus | **did not build** | n/a | 0 | 0 | 0 | n/a | n/a |
-
-**Latency** is clocks from accepting an operation to its result; **throughput** is how often a new operation can be accepted. 1 result/cycle means fully pipelined, so a result emerges every cycle after the first. The specification fixes throughput at 1 and deliberately leaves latency free, so a design may pipeline as deeply as it likes.
-
-**20.25 ns is ChatGPT's own maximum frequency and the slower of the two**, so it is the clock both designs close at: the reference with 3.27 ns of slack, the submission with 0.12 ns. At that point the submitted FMA is **6.0× the area and 6.1× the power** of the reference.
-
-The gap decomposes not to the multiplier (485 versus 486 full adders, essentially identical) but to unshared shifters: 7.9× the muxes and 8× the half-adders. The arithmetic core is right; the structure around it duplicates hardware the reference reuses.
-
-> An earlier published figure of 440,336 µm² (a 6.4× ratio) came from a build at the reference's 12.8125 ns that **missed timing by 0.697 ns**, and has been withdrawn. It described the design at a clock it cannot run at.
-
-### d_nw01: AXI4 crossbar
-
-| Design | Correctness | Built at | Area (µm²) | Power (mW) | Own Fmax (MHz) |
-|---|---|---|---|---|---|
-| reference | 16/16 configs | **9.0 ns** | **146,932** | 48.6 | 190.5 |
-| ChatGPT 5.6 Sol | 16/16 configs | **9.0 ns** | **2,086,235** | 448.0 | 111.1 |
-| Gemini 3.1 Pro | **did not build** | n/a | 0 | 0 | n/a |
-| DeepSeek V4 Pro | **did not build** | n/a | 0 | 0 | n/a |
-| Qwen 3.7 Plus | **did not build** | n/a | 0 | 0 | n/a |
-
-**9.0 ns is the clock both designs can close**: ChatGPT's crossbar reaches 111.1 MHz, the reference 190.5 MHz, so the slower of the two sets the comparison point. Both close timing there, so these two numbers are directly comparable.
-
-**The submitted crossbar is 14.2× the area and 9.2× the power of the reference.** That is the largest gap on any task here, and unlike the CDC FIFO it is not a specialisation trade. The reference is the general, parameterisable design and it is still the far smaller one.
-
-Three of the four models did not produce a crossbar that builds at all, which is itself the headline: an AXI4 crossbar has to hold ordering rules across several masters and slaves simultaneously, and it is the task in this set where submissions most often fail before reaching measurement.
-
-An earlier figure of 2,141,894 µm² has been **withdrawn**: it came from a build at the reference's 5.25 ns that missed timing by 3.03 ns, describing a design at a clock it cannot run at. Area, power and period are reported here at one clock every design closes.
-
-#### Outstanding-transaction capacity
-
-An AXI master can have several read requests in flight at once. **Outstanding capacity** is how many the crossbar will accept before it stops granting. It is a buffering choice, not a quality score. More outstanding transactions hide more memory latency, and cost area and power to store. Neither end of the range is "better"; the number is only meaningful next to the area it cost.
-
-Capacity is measured by offering **K distinct AXI IDs** and counting accepted requests. **A design's real capacity is the value at which that count stops rising with K.** While it is still rising, the number is describing the test, not the hardware.
-
-| What was measured | K=1 | 2 | 4 | 8 | 16 | Stops rising? |
-|---|---|---|---|---|---|---|
-| **Reference**: PULP `axi_xbar`, as configured in the table above (`CUT_ALL_AX`) | 9 | 15 | 27 | 51 | 99 | **no** |
-| Same reference, pipelining turned off (`NO_LATENCY`) | 7 | 13 | 25 | 49 | 97 | **no** |
-| Second source: an independently written crossbar | 8 | 8 | 8 | 8 | 8 | **yes, 8** |
-| ChatGPT 5.6 Sol | 8 | 8 | 8 | 8 | 8 | **yes, 8** |
-| `mX1`: deliberately broken crossbar | 8 | 8 | 8 | 8 | 8 | **yes, 8** |
-| `mCAP1`: deliberately broken crossbar | 1 | 1 | 1 | 1 | 1 | **yes, 1** |
-
-**The two reference rows are one design, not two.** Both are the same vendored PULP `axi_xbar`; they differ only in a configuration switch for how much pipelining it inserts. The first row is the configuration used everywhere else in this README. The gap between them is exactly **2 at every K**, so that switch is worth a constant 2 outstanding requests regardless of the test.
-
-**The "second source" is a second correct implementation of the same specification**, written independently so that a checker cannot be quietly fitted to one design's habits. It is not a competitor and it is not scored; it exists to catch a checker that only works on the reference.
-
-**`mX1` and `mCAP1` are deliberately broken designs**: seeded faults used to prove the checker can detect a problem at all. `mCAP1` accepts only one request at a time, which is the failure the capacity check exists to catch, and the check does catch it. A test that nothing fails is not evidence that anything passed.
-
-**The reference has no capacity figure here, and its 99 is not a win.** It never stops rising, because the test runs out of distinct AXI IDs before the hardware runs out of buffering. The ID field is 4 bits, so 16 IDs is the ceiling of the *stimulus*, not of the design. 99 is a lower bound at 16 IDs. It is deliberately not placed in the same column as the four figures that did stop rising, because those are properties of the hardware and this one is not.
+*PPA for d_ca01, d_dsp03, d_nw03 and the `claude` submissions is measuring now
+and lands blank until it completes. d_dsp02 is withheld entirely: its
+specification was revised, so every submission answers a superseded prompt until
+re-run.*
 
 ### d_ca04: asynchronous CDC FIFO
 
-**Every design below is built at the same 4.5 ns and closes timing there**, so area and power are directly comparable. 4.5 ns is ChatGPT's maximum frequency and the slowest of the four, and all four sweeps are now measured, so this is the one clock every model demonstrably meets, not an assumption.
+Built at **4.5 ns**, the slowest own-Fmax among the measured designs, so all close there.
 
-| Design | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
+| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
 |---|---|---|---|---|
-| reference | 18/18 configs | 19,887 | 12.9 | **380.9** |
-| ChatGPT 5.6 Sol | 18/18 configs | 14,685 | 7.30 | 222.2 |
-| DeepSeek V4 Pro | 18/18 configs | 14,589 | 7.45 | 273.5 |
-| Gemini 3.1 Pro | 18/18 configs | 14,515 | 7.12 | 273.5 |
-| Qwen 3.7 Plus | 18/18 configs | **14,176** | 7.85 | 273.5 |
+| reference | 18/18 | 19,887 | 12.90 | 380.9 |
+| ChatGPT 5.6 Sol | 18/18 | 14,685 | 7.30 | 222.2 |
+| DeepSeek V4 Pro | 18/18 | 14,589 | 7.45 | 273.5 |
+| Gemini 3.1 Pro | 18/18 | 14,515 | 7.12 | 273.5 |
+| Qwen 3.7 Plus | 18/18 | **14,176** | 7.85 | 273.5 |
+| Claude | 18/18 | | | |
 
-**All four models pass every one of the 18 legal parameter combinations, and all four are 26-29 % smaller and roughly 40 % lower power than the reference at the same clock.** They cluster tightly, from 14,176 to 14,685 µm², a 3.6 % spread, which suggests they are converging on a similar structure rather than one model finding something the others missed.
+Five of five correct, within 3.6 % of each other on area and 26 to 29 % below the
+reference, which buys its size back as frequency. Cell-count evidence for reading
+that as a library-versus-point-solution trade rather than a win is in
+[NOTES.md](domains/comp_arch/design/d_ca04_async_fifo_cdc/NOTES.md).
 
-The reference wins the axis they lose: it closes at **380.9 MHz**, where three of the four models reach 273.5 MHz and ChatGPT 222.2 MHz. That is the trade, and it is a reasonable one: the vendored design buys speed with area, the models buy area with speed. Neither is "better" without a target frequency to judge against.
+### d_nw01: AXI4 crossbar
 
-*Own Fmax is each design's own maximum, from its own sweep. It is reported for context and is not a like-for-like column, because each figure comes from a different clock.*
+Built at **9.0 ns**, the submission's own maximum and the slower of the two.
 
-#### Why the reference is larger, and why that is not a defect
+| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
+|---|---|---|---|---|
+| reference | 16/16 | 146,932 | 48.60 | 190.5 |
+| ChatGPT 5.6 Sol | 16/16 | 2,086,235 | 448.00 | 111.1 |
+| Claude | 16/16 | | | |
+| DeepSeek V4 Pro | rejected by slang | | | |
+| Gemini 3.1 Pro | rejected by slang | | | |
+| Qwen 3.7 Plus | rejected by slang | | | |
 
-The gap is **structural, not timing pressure**. Relaxing the reference's clock from 2.625 ns to 4.5 ns, a 71 % longer period and far more slack for the synthesiser to trade area against, shrank it by **1.1 %**, from 20,101 to 19,887 µm². It is not big because it is being pushed hard; it is big because of what it contains.
+Three of five never reach measurement. The measured submission is 14.2× the area
+and 9.2× the power of the reference, and slower. Outstanding-transaction capacity
+is in [NOTES.md](domains/networking/design/d_nw01_axi4_xbar/NOTES.md); the
+reference never saturates within the stimulus, so it has a lower bound, not a figure.
 
-The post-route cell counts say where it goes:
+### d_ca01: non-blocking data cache
 
-| | reference | Qwen 3.7 Plus | ChatGPT 5.6 Sol |
-|---|---|---|---|
-| sequential cells (flip-flops) | 346 | 280 | 288 |
-| combinational cells | **666** | 142 | 158 |
-| total standard cells | 3,212 | 1,958 | 2,072 |
+Reference closes at **10.0 ns (100.0 MHz)**, WNS +0.04 ns. It misses 9.375 ns by 0.07 ns.
 
-**Storage is nearly the same. Combinational logic is 4.2-4.7× larger.** The models did not omit the buffering; they omitted the surrounding structure. Three things account for it, all visible in the source:
+| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
+|---|---|---|---|---|
+| reference | 16/16 | | | 100.0 |
+| ChatGPT 5.6 Sol | 16/16 | | | |
+| Claude | 16/16 | | | |
+| Gemini 3.1 Pro | 8/16, a load returns the wrong value | | | |
 
-- **A generic payload type.** `cdc_fifo_gray` is declared `parameter type T`, so it must work for arbitrary structs, not just a 32-bit word. Generic width costs muxing that a fixed-width design never pays.
-- **Six separate Gray↔binary conversion blocks**, three per clock domain, instantiated as standalone modules. A hand-written FIFO for one width typically folds these into the pointer logic.
-- **Two spill registers** on the output path. These are why the reference accepts **10** beats before backpressure where the candidates accept 8, an extra pipeline stage that buys the frequency headroom showing up in its 380.9 MHz.
+The largest design here, and the only task whose mutants carry bounded formal
+counterexamples rather than simulation witnesses.
 
-So the reference is a **library component**: parameterisable over payload type and depth, pipelined for a high clock, and reusable across a whole SoC. The models wrote a **point solution**: one width, one depth, one clock target. A point solution is legitimately smaller. Reading the 26-29 % as "the models beat the reference" would be reading a specialised design against a general one and calling the specialisation a win.
+### d_nw03: output-queued AXI-Stream switch
 
-What the comparison does show is that all four models produce correct, synthesisable, competitively-sized hardware for a fixed specification. That is a real result. It is just not the same claim as being better than the library.
+| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | 8/8 | | | |
+| Claude | 8/8 | | | |
+| Gemini 3.1 Pro | 8/8 | | | |
+
+All three pass everything. **This task does not discriminate on correctness** and
+needs harder configurations or more mutants before that column carries
+information. Its PPA is measuring now, which is the only axis on which it can
+currently separate anything.
+
+### d_dsp03: multi-format FMA
+
+| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | 2/2 | | | |
+| Claude | 0/2, wrong flags at vector 6300 | | | |
+| Gemini 3.1 Pro | rejected by slang | | | |
+
+### d_dsp02: FP32 fused multiply-add
+
+**Withheld.** The specification was revised to pin the underflow convention
+longhand, moving the task text from `5ad30593403b4ae2` to `13e3c4673f8a3270`. All
+five submissions were scored against the old text, so their verdicts stand but
+none is currently reportable. They are being re-run.
+
+Previously measured at 20.25 ns: reference 59,890 µm², ChatGPT 360,899 µm², a 6.0×
+ratio at the same clock. Those numbers are correct for the text they answered.
 
 ---
 
-## How a verification submission is judged
+## Verification results
 
-The order matters. Fault detection is only meaningful *after* the testbench is shown to be valid.
+One table per task. **Tells correct from broken** is the gate: every testbench
+runs against the correct DUT and against one with every output tied high, and
+must pass the first and fail the second. Returning the same verdict on both means
+it is not observing the design, so its fault count is withheld rather than
+printed. A file that drives nothing and prints `PASS` scores 0 here.
 
-| Stage | Question | Why it gates the next |
+The ceiling is what each task's own reference testbench achieves, which proves
+every seeded fault is findable.
+
+### v_dsp02: FP non-computational ops (ceiling 10/10)
+
+| Submission | Tells correct from broken | Faults caught |
 |---|---|---|
-| 1. **Validity gate: golden DUT** | Does it accept a known-correct implementation? | A testbench that rejects correct hardware is unusable no matter what else it catches. |
-| 2. **Validity gate: second DUT** | Does it accept an *independent* correct implementation with different internals? | Passing the reference alone cannot distinguish a testbench that checks the *specification* from one fitted to how one implementation happens to work. |
-| 3. **Validity gate: conformant perturbations** | Does it accept variants that differ only where the spec is deliberately silent? | Rejecting one means it checked something the spec never promised. |
-| 4. **Fault detection** | How many seeded faults does it catch, out of the ceiling? | Reported per fault, never as a rate. |
+| Claude | yes | **10/10** |
+| ChatGPT 5.6 Sol | yes | **9/10** |
+| DeepSeek V4 Pro | yes | 8/10 |
+| Gemini 3.1 Pro | **no** | *withheld* |
+| Qwen 3.7 Plus | did not compile | |
 
-**A fault count from a testbench that failed the gate is withheld, not printed.** A testbench that rejects everything appears to catch everything. Publishing "5 of 10 caught" next to a genuine 5 of 10 would be a number that looks like a measurement and is not.
+### v_nw03: frame-arbitrating stream mux (ceiling 10/10)
 
-**A hang is not a catch.** If the simulation times out, the testbench did not detect the fault. It stopped.
+| Submission | Tells correct from broken | Faults caught |
+|---|---|---|
+| ChatGPT 5.6 Sol | yes | **9/10** |
+| Claude | yes | **9/10** |
+| DeepSeek V4 Pro | yes | 6/10 |
+| Gemini 3.1 Pro | rejects a legal variant | *withheld* |
+| Qwen 3.7 Plus | **no** | *withheld* |
 
-### Verification results
+### v_ca05: tag tracker (ceiling 10/10)
 
-Twelve submissions, four models across three tasks. The ceiling under each task name is what that task's own reference testbench achieves.
+| Submission | Tells correct from broken | Faults caught |
+|---|---|---|
+| ChatGPT 5.6 Sol | yes | **9/10** |
+| Claude | rejects a legal variant | *withheld* |
+| Gemini 3.1 Pro | rejects a legal variant | *withheld* |
+| DeepSeek V4 Pro | did not compile | |
+| Qwen 3.7 Plus | did not compile | |
 
-| Task | Model | Accepts correct DUT | Accepts 2nd impl. | Accepts legal variants | Faults caught |
-|---|---|---|---|---|---|
-| **v_ca05** tag tracker<br><sub>ceiling 10/10</sub> | ChatGPT 5.6 Sol | yes | yes | 4/4 | **9/10** |
-| | Gemini 3.1 Pro | yes | yes | **3/4** | *withheld* |
-| | DeepSeek V4 Pro | *did not compile* | n/a | n/a | *withheld* |
-| | Qwen 3.7 Plus | *did not compile* | n/a | n/a | *withheld* |
-| **v_nw03** stream mux<br><sub>ceiling 10/10</sub> | ChatGPT 5.6 Sol | yes | yes | 5/5 | **9/10** |
-| | Gemini 3.1 Pro | yes | yes | 5/5 | **9/10** |
-| | DeepSeek V4 Pro | yes | yes | 5/5 | 6/10 |
-| | Qwen 3.7 Plus | **no** | no | 0/5 | *withheld* |
-| **v_dsp02** FP non-computational<br><sub>ceiling 10/10</sub> | ChatGPT 5.6 Sol | yes | yes | 5/5 | **9/10** |
-| | DeepSeek V4 Pro | yes | yes | 5/5 | 8/10 |
-| | Gemini 3.1 Pro | **no** | no | 1/5 | *withheld* |
-| | Qwen 3.7 Plus | *did not compile* | n/a | n/a | *withheld* |
+### v_nw04: PTP time base (ceiling 8/8)
 
-**Every row above is a model submission.** The reference testbench is not a competitor and is not listed: it sets the *ceiling*, shown under each task name. The ceiling is what the task's own reference achieves, and it is what proves every seeded fault is catchable at all, so a submission missing one is missing something demonstrably findable.
+| Submission | Tells correct from broken | Faults caught |
+|---|---|---|
+| Claude | yes | **8/8** |
+| ChatGPT 5.6 Sol | **no** | *withheld* |
+| Gemini 3.1 Pro | **no** | *withheld* |
 
-**Six of twelve submissions clear the validity gate**, and each of those six produces a fault count at or near the ceiling: ChatGPT 5.6 Sol reaches **9/10 on all three tasks**, Gemini 3.1 Pro **9/10 on v_nw03**, and DeepSeek V4 Pro **8/10 on v_dsp02** and 6/10 on v_nw03. Every one of those accepted the golden DUT, an independent second implementation, and every legal variant before any fault count was reported.
+### v_ca04: stream crossbar (ceiling 8/8)
 
-Nine of twelve compile. The three that do not are all syntax errors in the testbench itself: a `?` where an identifier belongs, an assignment pattern written without `'{`. Nothing ran, so nothing was measured; these say nothing about whether the model could check the hardware.
+| Submission | Tells correct from broken | Faults caught |
+|---|---|---|
+| Claude | yes | **8/8** |
+| ChatGPT 5.6 Sol | yes | **7/8** |
+| Gemini 3.1 Pro | **no** | *withheld* |
 
-Two failure modes remain among those that do compile, and the table keeps them apart. **Qwen 3.7 Plus on v_nw03 and Gemini 3.1 Pro on v_dsp02 reject the golden DUT outright**, and would reject correct hardware. **Gemini 3.1 Pro on v_ca05 fails more subtly**: it accepts the golden DUT and the independent second implementation, then rejects one legal variant (`tt_c4_pop_gnt_delayed`), meaning it checks something the specification never promised. Both have their fault counts withheld, for the same reason: a testbench that rejects some correct hardware rejects faulty hardware for the wrong reasons too.
+### v_ca03: AXI ID-width converter (ceiling 5/5)
+
+| Submission | Tells correct from broken | Faults caught |
+|---|---|---|
+| Claude | yes | **4/5** |
+| ChatGPT 5.6 Sol | **no** | *withheld* |
+| Gemini 3.1 Pro | **no** | *withheld* |
+
+### v_nw02: AXI atomic-op filter (ceiling 8/8)
+
+| Submission | Tells correct from broken | Faults caught |
+|---|---|---|
+| ChatGPT 5.6 Sol | **no** | *withheld* |
+| Claude | **no** | *withheld* |
+| Gemini 3.1 Pro | **no** | *withheld* |
+
+### v_ai02: byte-stream realignment (ceiling 8/8)
+
+| Submission | Tells correct from broken | Faults caught |
+|---|---|---|
+| ChatGPT 5.6 Sol | **no** | *withheld* |
+| Claude | **no** | *withheld* |
+| Gemini 3.1 Pro | **no** | *withheld* |
+
+**The gate, not fault detection, is the binding constraint.** Roughly half of all
+testbenches return the same verdict on correct and broken hardware, and every one
+of those rejects the correct design as well: they reject everything. Three tasks,
+v_nw02, v_ai02 and v_nw04 for two of three models, are failed by every submission
+or nearly so. Where a testbench does clear the gate, it usually scores near the
+ceiling, and Claude reaches it on three tasks.
 
 ---
 
 ## The tasks, and where this hardware is used
 
-Reference for the results above. Six tasks across three domains, every one anchored on a real, widely deployed open-source IP block rather than a toy. The reference implementation is vendored from upstream at a pinned commit, so "correct" means agreeing with hardware that people actually tape out.
+Reference for the results above. Thirteen tasks across three domains, every one anchored on a real, widely deployed open-source IP block rather than a toy. The reference implementation is vendored from upstream at a pinned commit, so "correct" means agreeing with hardware that people actually tape out.
 
 ### Computer architecture: the plumbing inside a CPU or SoC
 
@@ -188,6 +237,9 @@ Reference for the results above. Six tasks across three domains, every one ancho
 |---|---|---|---|---|
 | **d_ca04** *design* | Asynchronous CDC FIFO | Moves data between two unrelated clocks without corrupting it | Any chip with more than one clock, which is nearly all of them. The classic source of bugs that appear only in silicon | `pulp-platform/common_cells` |
 | **v_ca05** *verification* | Tag tracker / ID queue | Tracks outstanding transactions so out-of-order responses can be matched to requests | Cache controllers, memory controllers, any out-of-order interconnect | `pulp-platform/common_cells` |
+| **d_ca01** *design* | Non-blocking data cache | Serves hits while misses are still outstanding, instead of stalling until each fill returns | Every performance CPU. The difference between a core that stalls on every miss and one that keeps working | `bespoke-silicon-group/basejump_stl` |
+| **v_ca03** *verification* | AXI ID-width converter | Remaps wide master IDs onto a narrower slave ID space without breaking ordering | Any SoC joining subsystems whose ID widths disagree, which is most of them | `pulp-platform/axi` |
+| **v_ca04** *verification* | Stream crossbar | Routes N stream inputs to M outputs with per-output arbitration | On-chip switch fabric, DMA engines, any many-to-many datapath | `pulp-platform/common_cells` |
 
 ### DSP: floating-point arithmetic
 
@@ -195,6 +247,7 @@ Reference for the results above. Six tasks across three domains, every one ancho
 |---|---|---|---|---|
 | **d_dsp02** *design* | FP32 fused multiply-add | Computes `a×b+c` in one rounding step, one result per cycle | The core operation of every ML accelerator and GPU shader; the bulk of the silicon in a matrix engine | `pulp-platform/cvfpu` |
 | **v_dsp02** *verification* | FP non-computational ops | Sign manipulation, comparison, min/max, classification: the IEEE-754 operations that move bits rather than compute | Every FPU. Individually simple, collectively full of edge cases: NaN, signed zero, subnormals | `pulp-platform/cvfpu` |
+| **d_dsp03** *design* | Multi-format FMA | One multiply-add datapath serving several floating-point widths | Mixed-precision ML accelerators, where fp32 and bf16 share hardware | `pulp-platform/cvfpu` |
 
 ### Networking: on-chip interconnect
 
@@ -202,6 +255,9 @@ Reference for the results above. Six tasks across three domains, every one ancho
 |---|---|---|---|---|
 | **d_nw01** *design* | AXI4 crossbar | Routes transactions between several masters and several slaves, keeping AXI's ordering rules | The backbone of essentially every ARM-based SoC | `pulp-platform/axi` |
 | **v_nw03** *verification* | Frame-arbitrating stream mux | Merges several AXI-Stream inputs into one without interleaving packets | NIC datapaths, video pipelines, anything moving framed data | `alexforencich/verilog-axis` |
+| **d_nw03** *design* | Output-queued stream switch | Switches AXI-Stream traffic with per-output queueing | Ethernet switch fabrics, NoC routers | `alexforencich/verilog-axis` |
+| **v_nw02** *verification* | AXI atomic-op filter | Strips or absorbs AXI atomic operations a downstream slave cannot handle | SoCs mixing AXI5 masters with older slaves | `pulp-platform/axi` |
+| **v_nw04** *verification* | PTP time base | Maintains a fractional-nanosecond clock that can be slewed and stepped | Time-synchronised Ethernet, IEEE 1588 endpoints | `alexforencich/verilog-ethernet` |
 
 These are deliberately not textbook exercises. They are blocks with real specifications, real edge cases, and a known-correct implementation to measure against, which is what makes a wrong answer detectable rather than a matter of taste.
 
@@ -250,7 +306,7 @@ This is active work, and several numbers are deliberately marked *unattested* ra
 - **Cross-design area ratios are not established.** d_ca04's reference and candidates were built at different clock periods; d_dsp02 and d_nw01 match periods but have task-text-hash gaps that block a mechanical comparability assertion.
 - **Outstanding-capacity is bounded by the harness, not the design, for any design that does not saturate.** `SLV_ID_W = 4` caps the stimulus at 16 distinct AXI IDs; a design still rising in K at that point has only a lower bound, and measuring it would need a wider ID field: a change to the interface, not to the stimulus.
 - **The correctness checkers verify the functional half of CDC correctness only.** Synchroniser depth and whether crossings are constrained at all need static CDC analysis or formal methods, which are not in this harness.
-- **Sample sizes are small**: four to six submissions per task, one attempt each, no temperature sweep. Treat individual model rankings as anecdotes; the *distribution of failure modes* is the durable result.
+- **Sample sizes are small**: two to six submissions per task, one attempt each, no temperature sweep. Treat individual model rankings as anecdotes; the *distribution of failure modes* is the durable result.
 
 ## Licence and third-party code
 

@@ -35,7 +35,11 @@ def main():
     variant = os.path.join(work, "variant.sv")
     extra = os.path.join(work, "extra.sv")
 
-    if which == "dut2":
+    # The gate mutant is a WHOLE DUT presenting itself as `top`, exactly like
+    # the second DUT: it does not delegate to the golden, so the golden does not
+    # appear at all. Handled on the same branch because the substitution is
+    # identical; only the source file differs.
+    if which in ("dut2", "__gate_mutant__"):
         # The SECOND DUT is an INDEPENDENT implementation, not a perturbation of
         # the golden: it does not delegate, so the golden does not appear at all.
         # A testbench that passes the golden and fails this one is fitted to the
@@ -47,7 +51,7 @@ def main():
             out = re.sub(r"\bmodule %s_alt\b" % re.escape(top),
                          "module %s" % top, src)
             if out == src:
-                sys.exit("second DUT %s declares neither 'module %s' nor "
+                sys.exit("substituted DUT %s declares neither 'module %s' nor "
                          "'module %s_alt' -- nothing would be substituted, and a "
                          "silent no-op here runs the GOLDEN while claiming to run "
                          "the second DUT." % (conf, top, top))

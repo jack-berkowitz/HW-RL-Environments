@@ -392,6 +392,29 @@ for cand in "${CANDS[@]}"; do
          slang_why="$(slang_check "$runfile")"
          if [ -n "$slang_why" ]; then
            printf '%-26s %-9s %s\n' "$name" "SLANG" "$(echo "$slang_why" | cut -c1-72)"
+           # A FRONTEND REJECTION IS A RESULT, AND IT MUST LEAVE A RECORD.
+           # This used to `continue` straight past the record writer, so a
+           # submission that failed here produced NOTHING in runs/ -- and a
+           # report counting submissions from records therefore dropped
+           # exactly the ones that did worst. Six of this project's
+           # submissions were invisible that way, and the funnel read 8
+           # correct of 10 for a true 8 of 18.
+           #
+           # NO configs_total IS WRITTEN AT ALL, deliberately. Key/values
+           # arrive as STRINGS, so `configs_total=0` would store "0", and "0"
+           # is truthy in Python -- a reader testing `if rec.get(...)` would
+           # count this build failure as a compiled submission. Absence is the
+           # only encoding that cannot be misread, and it is also the true one:
+           # nothing was configured because nothing ran. `all_passed` likewise
+           # stays absent and renders as NO VERDICT, not as a failure of the
+           # DESIGN. What failed is the build, and that is what the record says.
+           tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+           python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+             "$(basename "$cand" .sv)" \
+             "task_text_hash=$tt" \
+             "build_status=slang_rejected" \
+             "build_error=$(echo "$slang_why" | tr '\n' ' ' | cut -c1-200)" >/dev/null || \
+             echo "  RECORD NOT WRITTEN for $name (slang reject)" >&2
            NSLANG=$((NSLANG+1)); continue
          fi
        fi ;;

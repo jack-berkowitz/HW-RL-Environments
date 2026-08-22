@@ -109,6 +109,16 @@ def main():
     rec = {
         "task": task,
         "submission": os.path.relpath(submission, REPO) if submission.startswith(REPO) else submission,
+        # HASHED AT RECORD TIME, WHICH IS AFTER THE RUN. If the candidate file
+        # is replaced while the run is in flight, this pairs the NEW file's
+        # identity with the OLD file's results. That is not hypothetical:
+        # v_nw03/gemini.sv changed from efbbf3f0 to 2052ed18 on 2026-08-18, and
+        # the 18:44 record carries 2052ed18 with `golden=PASS, 9/10` -- a result
+        # the 08-18 harness itself does not reproduce on 2052ed18 (checked by
+        # running that exact harness commit against it: golden=FAIL).
+        #
+        # Callers that know the identity of the bytes they actually READ should
+        # pass `submission_sha256_16=...` explicitly; the kv merge below wins.
         "submission_sha256_16": sha256(submission),
         "label": label,
         "kind": kind,                       # "sim" | "ppa"
@@ -155,10 +165,28 @@ def main():
                          "config output. Refusing to write a record with an empty "
                          "verdict; nothing written." % raw)
             passed = sum(1 for c in configs if c["verdict"] == "PASS")
+            # RULE 20 AT THE POINT OF MEASUREMENT (F56). A config that printed
+            # no TEST_RESULT produced NO VERDICT -- the simulation died rather
+            # than reporting. Counting it with the failures makes a machine
+            # event (an OOM kill under load) look like a defect in the design,
+            # and the arithmetic hides it: 15/16 reads as one broken config.
+            #
+            # all_passed is therefore THREE-valued:
+            #   False  some config genuinely FAILED -- a real result
+            #   None   nothing failed, but some config never reported -- the
+            #          run is INCOMPLETE and its rate is not yet a score
+            #   True   every config reported PASS
+            # None is not False. Absence of a verdict is not a failing verdict.
+            nover = sum(1 for c in configs if c["verdict"] == "NO_VERDICT")
+            real_fail = any(c["verdict"] in ("FAIL", "COMPILE", "HOLES")
+                            for c in configs)
             rec.update({
                 "configs_total": len(configs),
                 "configs_passed": passed,
-                "all_passed": bool(configs) and passed == len(configs),
+                "configs_no_verdict": nover,
+                "all_passed": (False if real_fail
+                               else None if nover
+                               else bool(configs) and passed == len(configs)),
                 "per_config": configs,
                 "metrics": metrics,
                 "coverage": coverage,

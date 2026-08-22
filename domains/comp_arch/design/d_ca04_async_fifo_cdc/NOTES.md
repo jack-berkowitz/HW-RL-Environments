@@ -506,3 +506,34 @@ the specification never states.**
 tradeoff rather than a ranking, which is itself the finding: a PPA-scored
 benchmark needs either a stated frequency target or an Fmax gate, or it is
 scoring an arbitrary point on someone's tradeoff curve.
+
+---
+
+## Why the reference is larger, and why that is not a defect (moved from README, 2026-08-21)
+
+Moved here to keep the README to one table per task. This is the post-route
+cell-count evidence behind the "library component, not bloat" reading; the
+README carries only a pointer to it.
+
+### Why the reference is larger, and why that is not a defect
+
+The gap is **structural, not timing pressure**. Relaxing the reference's clock from 2.625 ns to 4.5 ns, a 71 % longer period and far more slack for the synthesiser to trade area against, shrank it by **1.1 %**, from 20,101 to 19,887 µm². It is not big because it is being pushed hard; it is big because of what it contains.
+
+The post-route cell counts say where it goes:
+
+| | reference | Qwen 3.7 Plus | ChatGPT 5.6 Sol |
+|---|---|---|---|
+| sequential cells (flip-flops) | 346 | 280 | 288 |
+| combinational cells | **666** | 142 | 158 |
+| total standard cells | 3,212 | 1,958 | 2,072 |
+
+**Storage is nearly the same. Combinational logic is 4.2-4.7× larger.** The models did not omit the buffering; they omitted the surrounding structure. Three things account for it, all visible in the source:
+
+- **A generic payload type.** `cdc_fifo_gray` is declared `parameter type T`, so it must work for arbitrary structs, not just a 32-bit word. Generic width costs muxing that a fixed-width design never pays.
+- **Six separate Gray↔binary conversion blocks**, three per clock domain, instantiated as standalone modules. A hand-written FIFO for one width typically folds these into the pointer logic.
+- **Two spill registers** on the output path. These are why the reference accepts **10** beats before backpressure where the candidates accept 8, an extra pipeline stage that buys the frequency headroom showing up in its 380.9 MHz.
+
+So the reference is a **library component**: parameterisable over payload type and depth, pipelined for a high clock, and reusable across a whole SoC. The models wrote a **point solution**: one width, one depth, one clock target. A point solution is legitimately smaller. Reading the 26-29 % as "the models beat the reference" would be reading a specialised design against a general one and calling the specialisation a win.
+
+What the comparison does show is that all four models produce correct, synthesisable, competitively-sized hardware for a fixed specification. That is a real result. It is just not the same claim as being better than the library.
+

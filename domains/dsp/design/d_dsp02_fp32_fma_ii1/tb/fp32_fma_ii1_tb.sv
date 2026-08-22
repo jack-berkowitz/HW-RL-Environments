@@ -85,10 +85,65 @@ module fp32_fma_ii1_tb #(
         return (x[30:23] == 8'hFE) && (x[22:0] == 23'h7FFFFF);
     endfunction
 
+    // ---- A6's two contested regions ----------------------------------------
+    // A6 pins underflow as "inexact AND the delivered result's biased exponent
+    // field is zero" and departs from IEEE 754-2019 clause 7.5 in one band. Two
+    // regions decide that clause and BOTH were unguarded until now: the vector
+    // set reached them, and nothing required it to.
+    //
+    // BAND: an exact result strictly below the smallest normal that rounds UP
+    // onto it. A6 says not underflow; clause 7.5 says underflow. This is the
+    // only place the two readings differ.
+    //
+    // PRECISE AND DELIBERATELY CONSERVATIVE -- read before "simplifying" it.
+    // "delivered result is the smallest normal and inexact" is a SUPERSET: a
+    // result that rounded DOWN onto the smallest normal from above satisfies it
+    // and is not in the band at all. So this restricts to c == +0, where the
+    // exact value is just a*b and the comparison is exact integer arithmetic on
+    // significands and exponents. It UNDER-COUNTS -- band cases reached with a
+    // non-zero addend are invisible to it -- and that is the right direction:
+    // every hit it reports is real. A set extension adding non-zero-addend band
+    // vectors will NOT move this number, and that is expected, not a failure.
+    function automatic bit a6_band (input logic [31:0] va, input logic [31:0] vb,
+                                    input logic [31:0] vc, input logic [31:0] vr);
+        logic [7:0]  ea, eb;
+        logic [23:0] sa, sb;
+        logic [63:0] prod;
+        int          xa, xb, msb, i;
+        a6_band = 1'b0;
+        if (vc != 32'd0) return 1'b0;              // exact value must be a*b
+        ea = va[30:23]; eb = vb[30:23];
+        if (ea == 8'hFF || eb == 8'hFF) return 1'b0;                    // inf/NaN
+        if ((ea == 0 && va[22:0] == 0) || (eb == 0 && vb[22:0] == 0)) return 1'b0;  // zero
+        sa = (ea == 0) ? {1'b0, va[22:0]} : {1'b1, va[22:0]};
+        sb = (eb == 0) ? {1'b0, vb[22:0]} : {1'b1, vb[22:0]};
+        xa = ((ea == 0) ? 1 : int'(ea)) - 127 - 23;
+        xb = ((eb == 0) ? 1 : int'(eb)) - 127 - 23;
+        prod = 64'(sa) * 64'(sb);
+        msb = 0;
+        for (i = 0; i < 64; i++) if (prod[i]) msb = i;
+        if (!((msb + xa + xb) < -126)) return 1'b0;   // exact |a*b| below 2^-126?
+        if (vr[30:23] != 8'd1 || vr[22:0] != 23'd0) return 1'b0;  // landed ON it
+        return 1'b1;
+    endfunction
+
     // ---- STIMULUS coverage counters ----------------------------------------
     // Every one counts what was DRIVEN. None inspects the DUT.
     int cov_subn_op = 0, cov_subn_res = 0, cov_snan = 0, cov_qnan_a = 0, cov_qnan_b = 0;
     int cov_szero_res = 0, cov_of = 0, cov_uf = 0, cov_tiny_edge = 0;
+    // A6 band, as (sign,mode) COMBINATIONS rather than a total:
+    //   bit 0 pos/RNE  1 pos/RUP  2 pos/RMM  3 neg/RNE  4 neg/RDN  5 neg/RMM
+    logic [5:0] cov_a6_band  = 6'b0;
+    // A6 zero case, likewise:
+    //   0 pos/RNE 1 pos/RTZ 2 pos/RDN 3 pos/RMM  4 neg/RNE 5 neg/RTZ 6 neg/RUP 7 neg/RMM
+    logic [7:0] cov_a6_zero  = 8'b0;
+    int cov_a6_band_n = 0, cov_a6_zero_n = 0;
+    // How many vectors the tally actually walked. ABSENCE IS NOT A ZERO
+    // VERDICT: a floor reporting 000000 because the tally never ran is a
+    // different fact from a set that genuinely contains no band vectors, and
+    // rendering the first as the second would be the same error as scoring a
+    // record with no task_text_hash as a mismatched one.
+    int cov_tallied = 0;
     int cov_exact = 0, cov_mode [0:4];
     int cov_mode_disagree = 0;
     int cov_c3_offered = 0, cov_c3_accepted = 0, cov_c3_dead = 0;
@@ -247,6 +302,7 @@ module fp32_fma_ii1_tb #(
             automatic logic [135:0] v = vec[i];
             automatic logic [31:0] va = v_a(v), vb = v_b(v), vc = v_c(v), vr = v_res(v);
             automatic logic [3:0]  vf = v_flg(v);
+            cov_tallied++;
             cov_mode[v_rnd(v)]++;
             if (is_subn(va) || is_subn(vb) || is_subn(vc)) cov_subn_op++;
             if (is_subn(vr))                                cov_subn_res++;
@@ -259,6 +315,32 @@ module fp32_fma_ii1_tb #(
             if (!vf[0])                                     cov_exact++; // !NX
             // tininess boundary: a result at or adjacent to the smallest normal
             if (vr[30:23] == 8'd0 || vr[30:23] == 8'd1)     cov_tiny_edge++;
+            if (a6_band(va, vb, vc, vr)) begin
+                cov_a6_band_n++;
+                case ({vr[31], v_rnd(v)})
+                    {1'b0, 3'd0}: cov_a6_band[0] = 1'b1;
+                    {1'b0, 3'd3}: cov_a6_band[1] = 1'b1;
+                    {1'b0, 3'd4}: cov_a6_band[2] = 1'b1;
+                    {1'b1, 3'd0}: cov_a6_band[3] = 1'b1;
+                    {1'b1, 3'd2}: cov_a6_band[4] = 1'b1;
+                    {1'b1, 3'd4}: cov_a6_band[5] = 1'b1;
+                    default: ;
+                endcase
+            end
+            if (is_zero(vr) && vf[0]) begin        // rounded to zero, INEXACT
+                cov_a6_zero_n++;
+                case ({vr[31], v_rnd(v)})
+                    {1'b0, 3'd0}: cov_a6_zero[0] = 1'b1;
+                    {1'b0, 3'd1}: cov_a6_zero[1] = 1'b1;
+                    {1'b0, 3'd2}: cov_a6_zero[2] = 1'b1;
+                    {1'b0, 3'd4}: cov_a6_zero[3] = 1'b1;
+                    {1'b1, 3'd0}: cov_a6_zero[4] = 1'b1;
+                    {1'b1, 3'd1}: cov_a6_zero[5] = 1'b1;
+                    {1'b1, 3'd3}: cov_a6_zero[6] = 1'b1;
+                    {1'b1, 3'd4}: cov_a6_zero[7] = 1'b1;
+                    default: ;
+                endcase
+            end
         end
         // modes disagree: same (a,b,c) appearing under >1 mode with >1 result
         for (int i = 0; i + 4 < n_vec; i++) begin
@@ -306,6 +388,8 @@ module fp32_fma_ii1_tb #(
             $display("// coverage: modes RNE=%0d RTZ=%0d RDN=%0d RUP=%0d RMM=%0d disagree=%0d",
                      cov_mode[0], cov_mode[1], cov_mode[2], cov_mode[3], cov_mode[4],
                      cov_mode_disagree);
+            $display("// COVERAGE: a6_band=%0d combos=%06b   a6_zero=%0d combos=%08b",
+                     cov_a6_band_n, cov_a6_band, cov_a6_zero_n, cov_a6_zero);
 
             // Each of these is a STIMULUS property: what the vector set drove.
             if (cov_subn_op       == 0) begin miss++; $display("// COVERAGE HOLE: no subnormal operand driven"); end
@@ -321,8 +405,45 @@ module fp32_fma_ii1_tb #(
             if (cov_mode_disagree == 0) begin miss++; $display("// COVERAGE HOLE: no input where rounding modes disagree -- a design hardcoding RNE would pass"); end
             for (int m = 0; m < 5; m++)
                 if (cov_mode[m] == 0) begin miss++; $display("// COVERAGE HOLE: rounding mode %0d never driven", m); end
+            // ---- ABSENCE GUARD, before any floor is read --------------------
+            // If the tally did not walk every loaded vector, the counters below
+            // are not a measurement of anything and must not be reported as
+            // coverage holes. Distinguishing the two is the whole point: a hole
+            // says "the set does not reach this"; absence says "we do not know".
+            if (cov_tallied != n_vec) begin
+                note_fail($sformatf(
+                    "COVERAGE METRIC ABSENT: tallied %0d of %0d vectors -- the floors below are NOT evidence and are not reported as holes",
+                    cov_tallied, n_vec));
+            end else begin
+
+            // ---- A6's two regions, checked as COMBINATIONS, not totals ----
+            // A total is satisfiable by many hits in one mode, which would
+            // certify a set that exercises one corner repeatedly and the rest
+            // not at all. Both requirements below are derived from the ROUNDING
+            // DIRECTION, not from what the set happens to contain.
+            //
+            // *** THE MISSING MODES ARE UNREACHABLE, NOT MISSING. ***
+            // BAND is entered only by rounding AWAY FROM ZERO onto the smallest
+            // normal, so RTZ can never reach it -- rounding toward zero cannot
+            // cross upward. Six pairs, not ten.
+            // ZERO is entered only by rounding TOWARD ZERO, so pos/RUP and
+            // neg/RDN can never reach it -- those round away and land on the
+            // smallest subnormal. Eight pairs, not ten.
+            // Do not "complete" either list; a wrong requirement is not a
+            // stricter one.
+            if (cov_a6_band !== 6'b111111) begin
+                miss++;
+                $display("// COVERAGE HOLE: A6 band (sign,mode) pairs = %06b, need 111111 [0 pos/RNE 1 pos/RUP 2 pos/RMM 3 neg/RNE 4 neg/RDN 5 neg/RMM]",
+                         cov_a6_band);
+            end
+            if (cov_a6_zero !== 8'b11111111) begin
+                miss++;
+                $display("// COVERAGE HOLE: A6 zero-case (sign,mode) pairs = %08b, need 11111111 [0 pos/RNE 1 pos/RTZ 2 pos/RDN 3 pos/RMM 4 neg/RNE 5 neg/RTZ 6 neg/RUP 7 neg/RMM]",
+                         cov_a6_zero);
+            end
             if (miss > 0)
                 note_fail($sformatf("%0d coverage holes -- the vector set did not exercise the target corners", miss));
+            end   // absence guard
         end
 
         if (checks < n_vec)
