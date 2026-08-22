@@ -274,7 +274,8 @@ defects. It runs with the regression.
     design* at *that specific pinned configuration* renders as **absent**, and
     absent renders as absent.
 
-    Four instances, all in the reporting path and none in measurement:
+    Five instances. The first four are in the reporting path; the fifth is in
+    MEASUREMENT, and this list once said there were none there:
 
     | | what it invented |
     |---|---|
@@ -282,6 +283,7 @@ defects. It runs with the regression.
     | metric merge | `dict.update` across 18 configs, so each row showed whichever config was written last |
     | F28 name drop | structured metrics filed under bare `min`/`max`/`n`, overwritable by any other metric |
     | absent crossing latency | read ABSENT for a metric emitted on every one of 18 configs |
+    | **F56 verdict default** | a verdict the harness failed to READ was classified **FAIL** |
 
     **The measurements were right every time.** What produced a wrong number was
     a reporting path that preferred a plausible value to no value. A fallback is
@@ -292,7 +294,24 @@ defects. It runs with the regression.
     Absent is never the unhelpful answer. A blank cell prompts someone to go and
     measure; a borrowed number does not.
 
-    **From:** F28, F29
+    **This rule binds at the point of MEASUREMENT, not only at rendering.**
+    That was not obvious and the omission cost a batch: `else verdict=FAIL` is a
+    default, and it was not read as one because it lived in a runner rather
+    than a renderer. A default in a renderer is recoverable -- re-run the
+    renderer against the record. A default in measurement is not: the record
+    then contains the invented value, and every downstream check confirms it
+    faithfully. **A crashed, killed, or timed-out run has no verdict, and no
+    verdict is never a failing verdict.**
+
+    **Failing to OBTAIN a value is not a value.** F56's default fired not
+    because a run produced no verdict but because a `pipefail` pipeline threw
+    away `grep`'s success and returned SIGPIPE instead. The `else` branch could
+    not tell "the answer is no" from "I could not read the answer", so it
+    published the first as though it were the second -- a well-formed,
+    plausible, fabricated result. Any branch that assigns a verdict on the
+    failure path of a READ is this defect.
+
+    **From:** F28, F29, F56
 
 21. **Every mutant carries recorded evidence of non-equivalence, and the TYPE is
     recorded per mutant.** Two accepted values:
@@ -386,6 +405,57 @@ defects. It runs with the regression.
     down?* -- is answered by putting it in both.
 
     **From:** F51
+
+23. **A verification submission is scored only if it is SHOWN to discriminate.**
+    Every submission runs against the golden DUT and against a mechanically
+    generated **gate mutant**, and must return DIFFERENT verdicts: PASS on the
+    golden, FAIL on the mutant. The same verdict on both means it did not tell
+    a correct DUT from a broken one, and it is **INVALID** -- which is not a low
+    score, and which suppresses the kill rate rather than reporting it.
+
+    **The gate must have no source-level counterfeit.** A structural condition
+    -- "instantiates the DUT", "contains an assertion" -- is satisfied by
+    writing the line that satisfies it. `atop_filter dut ();` instantiates the
+    DUT and tests nothing. Only a required difference in OUTCOME cannot be
+    faked: to produce two verdicts you must observe something that differs.
+
+    **A DIFFERENCE, not a failure.** "Must fail the mutant" would accept a
+    testbench that reports FAIL unconditionally. Both constant functions --
+    always-PASS and always-FAIL -- are non-discriminating, and both are INVALID.
+
+    **The mutant is generated, never authored.** `scripts/make_gate_mutant.py`
+    copies the golden's module header verbatim and ties every output to `'1`.
+    Verbatim because a reconstructed interface drifts and then every submission
+    fails for the wrong reason; `'1` because it makes data outputs wrong while
+    leaving handshakes ASSERTED, so submissions report a mismatch instead of
+    hanging, and a hang diagnoses nothing.
+
+    **It is not a scored mutant** and never enters a kill rate, in either
+    position. It is identified by the explicit identifier `__gate_mutant__`,
+    never by position or path. It is also **not** the Tier-B step 5b authoring
+    control, which is a separate artifact and may legitimately be subtle. The
+    gate is a floor: it is deliberately obvious, because a subtle gate produces
+    false INVALIDs on narrow-but-legitimate work, which is the expensive
+    direction.
+
+    **A gate that cannot build is a refusal, not a verdict.** If the generated
+    mutant fails to elaborate, every submission fails it identically -- and a
+    null testbench would then show PASS-golden/FAIL-mutant and satisfy the gate
+    it was meant to fail. Elaboration is therefore checked BEFORE anything is
+    scored, and a failure exits 2 with nothing scored and no record written.
+    Blaming a submission for a harness defect is its own error.
+
+    **Enforced in the RECORD, not in the renderers.** When a submission does
+    not discriminate, `sim_verification.sh` writes
+    `faults_caught=SUPPRESSED-gate-failed` -- there is no number in the record
+    for a renderer to print. Rule 22 needed the gate duplicated across
+    `report_table.py` and `collect_results.py` because slack is a legitimate
+    recorded field that the report must decline to quote. Here the value never
+    exists, which answers rule 8's test -- *can this be skipped by calling
+    something one level down?* -- more completely than duplication can: there
+    is no level down that has the number.
+
+    **From:** F55
 
 
 ---

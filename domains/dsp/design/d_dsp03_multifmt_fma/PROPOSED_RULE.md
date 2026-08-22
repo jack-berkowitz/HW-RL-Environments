@@ -143,3 +143,73 @@ up until it isn't, and nothing about a commit reveals a stray edit inside a
 region the committer was not thinking about. The diff makes it checkable in one
 line, and it is the same discipline as the proposed measurement rule above:
 **verify, then record the verification, rather than remember to be careful.**
+
+## Addendum — the unit is the finding-and-rule PAIR, not the file
+
+Attribution and a no-alteration diff are **necessary and not sufficient**.
+
+`check_rule_linkage.py` enforces a BIDIRECTIONAL invariant across two files:
+every finding cites a rule that exists, and every rule cites a finding that
+exists. So **any commit boundary that cuts between a finding and the rule it
+cites yields a tree that fails its own check** — no matter how carefully either
+half was staged.
+
+**Instance: `d6d3423`.** That commit was staged correctly, attributed
+explicitly, and diff-checked (`git diff HEAD -- FINDINGS.md` showed zero removed
+lines, so nothing pre-existing was altered). It carried Agent 2's completed F55
+and F56 because the file cannot be staged per-hunk. It still broke the
+invariant: F55 and F56 cite rule 23, which lived only in Agent 2's uncommitted
+`RULES.md`. Against the committed tree:
+
+```
+rules: 22   findings: 65   conventions: 29
+LINKAGE BROKEN -- 2 problem(s):
+  finding F55 cites rule 23, which does not exist in RULES.md
+  finding F56 cites rule 23, which does not exist in RULES.md
+```
+
+Clean in the working tree, broken in the tree anyone else would fetch. Every
+individual precaution held and the result was still a repository that fails its
+own consistency check.
+
+So the convention needs a third clause:
+
+> **When carrying another agent's content in a shared file, carry the whole
+> citation graph it participates in.** A finding and the rule it cites are ONE
+> unit. Check the tree, not the file: extract the commit and run
+> `check_rule_linkage.py` against the extraction before considering the commit
+> done.
+
+## Addendum — committing when the shared index holds another agent's staging
+
+Also worth requiring rather than improvising, because it came up in the same
+commit and the obvious moves are both wrong.
+
+The shared index held five staged deletions of `candidates/v_*/reference.sv`
+belonging to Agent 2, in flight. `git add` + `git commit` would have carried
+them into an unrelated commit. `git restore --staged` would have undone their
+staging. `git commit -- <paths>` cannot add untracked files, so it is not an
+escape either.
+
+What works, and should be the standing answer:
+
+```bash
+export GIT_INDEX_FILE=/tmp/myidx        # a PRIVATE index
+git read-tree HEAD
+git add <explicit paths>                 # never -A
+TREE=$(git write-tree)
+unset GIT_INDEX_FILE
+NEW=$(git commit-tree $TREE -p HEAD -F msg.txt)
+git update-ref HEAD $NEW
+```
+
+then **verify the real index is untouched, do not assume it**:
+
+```bash
+cmp .git/index /tmp/real_index.bak
+```
+
+The shared index is shared mutable state and nothing about a commit reveals that
+another agent was mid-stage in it. The `cmp` is the same discipline as the
+no-alteration diff and the apparatus reproduction above: verify, and record the
+verification.
