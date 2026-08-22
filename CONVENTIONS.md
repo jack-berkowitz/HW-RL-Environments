@@ -729,3 +729,108 @@ frozen manifest with a correction recorded against it is more honest than a
 manifest quietly edited to match what was later discovered.
 
 **From:** Agent 3's toolchain audit; the d_ca01 EC work that hit it
+
+## Committing in a tree another agent is working in
+
+**From:** F61. The mechanics of the invariant are rule 13's; this is how to
+avoid the pothole.
+
+Several agents share one working tree and one `.git/index`. Git's granularity is
+per-file and the index is per-repository, so **the unit that collides is the
+file, not the edit** — two agents editing disjoint regions of `FINDINGS.md` have
+no conflict to resolve and every opportunity to publish each other's work under
+the wrong name.
+
+### Committing a shared file you did not write all of
+
+`FINDINGS.md`, `RULES.md` and `CONVENTIONS.md` are append-only and unowned.
+Interactive staging is unavailable here, so whoever commits carries whatever else
+is in the file. Carrying it is correct — holding the file back leaves findings
+unlanded, and a finding absent from `FINDINGS.md` cannot be cited by a rule, so
+the graph cannot validate it. Carrying it *silently* is what makes the history
+unreadable later.
+
+1. **Name the other agent's content in the commit message.**
+2. **Prove nothing pre-existing was altered — measured, not asserted:**
+   `git diff HEAD -- FINDINGS.md | grep '^-' | grep -v '^---'`
+   Every removed line must be one you wrote. A removal anywhere else is a
+   stop-and-report, not a conflict to resolve in passing.
+3. **Establish attribution; do not infer it from subject matter.** A finding
+   about someone's task was not necessarily written by them. Ask — a teammate is
+   one message away, and the cost of guessing is a permanent record crediting
+   the wrong person for work and the wrong person for a mistake. Record
+   provenance and authorship as separate fields when you carry either.
+
+### Committing while the shared index holds someone else's staging
+
+`git add` + `git commit` carries their staging into your commit;
+`git restore --staged` destroys it; `git commit -- <paths>` cannot add untracked
+files. Build through a private index instead:
+
+1. `export GIT_INDEX_FILE=/tmp/myidx`
+2. `git read-tree HEAD`
+3. `git add -A -- <explicit paths>` — never a bare `-A`
+4. **`scripts/check_linkage_tree.sh --staged`**
+5. `TREE=$(git write-tree)`; `unset GIT_INDEX_FILE`;
+   `git commit-tree $TREE -p HEAD -F msg` ; `git update-ref HEAD <new>`
+6. `git read-tree HEAD` — **refresh the real index against the NEW HEAD**
+7. `git add -A -- <the other agent's paths>` — re-stage what was there
+
+Then `cmp .git/index /tmp/real_index.bak` to confirm you left it as you found it.
+
+**Steps 4, 6 and 7 are not optional and each exists because it was skipped
+once.** Omitting 6 leaves the real index carrying stale blobs: measured, a plain
+commit from it would have reverted a rule landed seconds earlier. And
+`git update-index --force-remove` is **not** the way to re-stage a deletion — it
+fails silently and leaves it unstaged. `git add -A --` with explicit paths works.
+
+**The failure is silent in both directions and neither agent saw their own.** One
+index carried staged deletions of seven of the other agent's files; the other
+carried blobs that would have reverted a just-landed rule. `git status` showed
+something entirely ordinary in both cases, and each was found by the other agent.
+
+### The gate is a convenience; the audit is the check
+
+**Before pushing, whoever pushes runs:**
+
+    scripts/check_linkage_tree.sh --audit origin/main..HEAD
+
+In practice that is Jack. It is his step, not an agent's.
+
+`--staged` can be wired to a pre-commit hook (`scripts/install_hooks.sh`), and
+that covers ordinary `git commit`. **It would have missed the only instance we
+have.** `d6d3423` was made with `commit-tree` + `update-ref`, which runs no hooks
+at all — and that is the procedure recommended above. `--no-verify` bypasses it,
+and `.git/hooks` is not versioned so it does not reach another clone. Trust the
+audit, not the hook.
+
+Both test the **resulting tree**, never whether a file is dirty. An uncommitted
+change that does not break linkage is not a reason to block, and a check that
+fires on file state gets routed around within a week.
+
+The override (`LINKAGE_OVERRIDE="reason"`) prints a `LINKAGE-OVERRIDE:` trailer
+to paste into the message. It buys a labelled exception, not silence: `--audit`
+reports a failing tree without the trailer as unexplained.
+
+### This binds whoever commits, not only agents
+
+A broad `git add <dir>` from the repository owner reintroduces exactly what the
+private-index procedure prevents. `d103a3f` and `7e97cb6` carried an agent's
+in-progress work, another agent's staged deletions, and an uncommitted edit to a
+finding, under messages naming none of them. Nothing broke and nothing needs
+undoing — but the hazard is the same one under a different hand, and the owner is
+the one person whose commits nobody else reviews.
+
+### Candidate artefacts are committed ON ARRIVAL
+
+Not when the surrounding work is ready, not when the batch completes, not when
+scoring finishes. A file arriving from outside the project — a model submission,
+a vendored drop, a hand-collected log — is committed **before any work is done on
+it, including before it is scored.** A commit whose message is only
+`land <model>.sv as received` is complete and correct.
+
+Losing a derived file costs a rebuild. **Losing a solicited answer costs the
+answer** — the model is not deterministic and its version may no longer be
+reachable. `candidates/d_dsp02/claude.sv` was lost exactly this way, and unlike
+every other collision here there was no diff to catch it: the file had never
+been in git, so nothing registered a change.

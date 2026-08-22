@@ -3012,7 +3012,7 @@ floor's own detector, which is instance 4.
 Distinct from F59, and worth separating: there the number was right and its
 scope was misread; here the number was WRONG and nothing said so.
 
-**Nine instances this session, five of them the same shape** — the apparatus
+**Ten instances this session, five of them the same shape** — the apparatus
 drove and observed at edges that do not correspond to the transfer it claimed to
 be watching:
 
@@ -3075,7 +3075,23 @@ same hour, in bash rather than in RTL. Any rule scoped to "probes" or to
    every other instance in this list was found after the fact, and this is the
    first one the discipline stopped before it happened.
 
-**What caught six of the nine was luck of implausibility, not a control.** 50/50 across
+10. **A sweep, found by noticing a file was no longer dirty.** An uncommitted
+    edit to THIS FINDING -- instance 9 -- was carried into a repo-owner commit
+    (`d103a3f`/`7e97cb6`) that neither party intended to include it. Benign: the
+    content was finished and correct, and nothing needs undoing. It was noticed
+    only because `git status` stopped listing the file as modified, which is the
+    same attention-not-apparatus pattern as everything above it — **no diff
+    caught this one either, because nothing was wrong.**
+
+    **It happened WHILE the check for that class was being written.** Pair it
+    with instance 4: the first band-coverage detector would have certified a set
+    with zero coverage, and it was the instrument built to detect exactly that.
+    Twice in one session a defect of this class appeared INSIDE the apparatus
+    built to catch it. That is the strongest thing in this finding, and it is
+    the reason the remedies get no exemption: **a rule, a floor, or a check is
+    an artefact like any other, and is subject to the defect it addresses.**
+
+**What caught six of the ten was luck of implausibility, not a control.** 50/50 across
 every shape is obviously wrong; 6 is not. Had mCAP1's true count been 8 instead
 of 907, the wrong number would have been reported, believed, and recorded — and
 it would have understated a capability mutant's kill rate by two orders of
@@ -3094,3 +3110,54 @@ isolated. Neither reaches the instrument doing the measuring. A rule is proposed
 in `domains/dsp/design/d_dsp03_multifmt_fma/PROPOSED_RULE.md`.
 
 **Rules:** 3, 16, 24
+
+## F61. Two agents, one working tree: the collision is the file, not the edit
+
+Four collisions in one session, none of them a merge conflict and none caught by
+the tools built for merge conflicts.
+
+1. **A finding-number collision.** F50 was claimed twice; renumbered to F52.
+2. **A shared file carried another agent's work.** `d6d3423` committed
+   `FINDINGS.md` whole because git stages whole files and interactive staging is
+   unavailable here. It carried 243 lines of Agent 1's completed F55 and F56.
+   Nothing was altered -- verified by diff, zero removed lines -- and the commit
+   still **broke the repository's own invariant**, because those findings cite
+   rule 23 and `RULES.md` was left uncommitted. Correctly staged, correctly
+   attributed, correctly diff-checked, and broken anyway.
+3. **A shared INDEX carried another agent's staging, in both directions.** One
+   agent's index held staged deletions of seven of the other's files; the other's
+   held blobs that would have REVERTED a rule landed seconds earlier. Same root
+   cause, opposite sign. `git status` looked entirely ordinary in both cases, and
+   **each was found by the other agent, never by its owner.**
+4. **An artefact was lost outright.** `candidates/d_dsp02/claude.sv` existed on
+   disk, was never committed, and re-solicitation overwrote it. Its identity
+   survives in a run record; its content does not. Unlike the others there was
+   no diff to catch it -- the file had never been in git, so nothing anywhere
+   registered a change. **The loss was silent and total.**
+
+**The unit that collides is the FILE, not the edit.** Every one of these is a
+consequence of git's granularity meeting a shared working tree: staging is
+per-file, the index is per-repository, and neither has any notion of which agent
+a hunk belongs to. Two agents editing disjoint regions of `FINDINGS.md` have no
+conflict to resolve and every opportunity to publish each other's work under the
+wrong name, or half of a matched pair.
+
+**And the invariant is not per-file either.** `check_rule_linkage.py` spans
+`RULES.md` and `FINDINGS.md`, so a finding and the rule it cites are ONE UNIT. A
+commit boundary drawn between them yields a tree that fails its own check no
+matter how carefully either half was handled -- which is instance 2, and is why
+attribution and a no-alteration diff are necessary and not sufficient.
+
+**The remedy is not more care.** Care produced instance 2. What was missing was a
+check on the RESULTING TREE rather than on file state, and an audit that reads
+what actually happened rather than what was intended. Both now exist; the
+procedure, its required steps, and the honest limits of the gate are recorded in
+`CONVENTIONS.md` under *Committing in a tree another agent is working in*.
+
+**The limit, stated because it would otherwise be discovered later.** The gate is
+a pre-commit hook and hooks do not run on `commit-tree` + `update-ref` -- which
+is the path that produced instance 2 and the path the procedure recommends. The
+gate would have missed the only instance we have. The audit is the check; the
+hook is a convenience.
+
+**Convention:** Committing in a tree another agent is working in
