@@ -19,6 +19,7 @@ Verification tasks are NOT in this table. Kill rate against a known ceiling is
 not commensurable with area and frequency, and putting them in one grid would
 invite a reader to average them.
 """
+import functools
 import glob
 import json
 import os
@@ -241,35 +242,99 @@ def task_dirs():
 # candidate row -- attributing the reference's frequency to designs that had
 # never been swept. Absent is the correct answer; a plausible wrong number is
 # not.
-FMAX_FILE = {
-    ("d_ca04_async_fifo_cdc", "async_fifo_cdc_ref.sv"): "d_ca04_fmax.json",
-    ("d_ca04_async_fifo_cdc", "chat.sv"):               "d_ca04_cand_chat_fmax.json",
-    ("d_nw01_axi4_xbar",      "axi4_xbar_ref.sv"):      "d_nw01_fmax.json",
-    ("d_dsp02_fp32_fma_ii1",  "fp32_fma_ii1_ref.sv"):   "d_dsp02_fmax.json",
-    ("d_ca04_async_fifo_cdc", "gemini.sv"):             "d_ca04_cand_gemini_own_fmax_fmax.json",
-    ("d_ca04_async_fifo_cdc", "deepseek.sv"):           "d_ca04_cand_deepseek_scored_fmax.json",
-    ("d_ca04_async_fifo_cdc", "qwen.sv"):               "d_ca04_cand_qwen_at_4p5_fmax.json",
-    ("d_dsp02_fp32_fma_ii1",  "chat.sv"):               "d_dsp02_cand_chat_scored_fmax.json",
-    ("d_nw01_axi4_xbar",      "chat.sv"):               "d_nw01_cand_chat_scored_fmax.json",
-}
+@functools.lru_cache(maxsize=None)
+def _fx_git(*a):
+    r = subprocess.run(("git",)+a, cwd=REPO, capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+@functools.lru_cache(maxsize=None)
+def _fx_src_commit(path):
+    """Commit that last touched this source, or None if dirty/untracked."""
+    if not os.path.isfile(path):
+        return None
+    if _fx_git("status", "--porcelain", "--", path):
+        return None
+    return _fx_git("log", "-1", "--format=%H", "--", path) or None
+
+
+@functools.lru_cache(maxsize=None)
+def _fx_is_ancestor(a, b):
+    if not a or not b:
+        return False
+    return subprocess.run(("git", "merge-base", "--is-ancestor", a, b),
+                          cwd=REPO, capture_output=True).returncode == 0
+
+
+def _fx_short(task):
+    return "_".join(task.split("_")[:2])
+
+
+def _fx_src(task, sub):
+    if sub.endswith("_ref.sv"):
+        g = glob.glob(os.path.join(REPO, "domains", "*", "design", task, "ref", sub))
+        return g[0] if g else None
+    p = os.path.join(REPO, "candidates", _fx_short(task), sub)
+    return p if os.path.isfile(p) else None
+
+
+def _fx_sweeps(task, sub):
+    s = _fx_short(task)
+    if sub.endswith("_ref.sv"):
+        pats = ["%s_fmax.json" % s]
+    else:
+        lab = sub[:-3]
+        pats = ["%s_cand_%s_fmax.json" % (s, lab), "%s_cand_%s_*_fmax.json" % (s, lab)]
+    out = []
+    for pat in pats:
+        out += glob.glob(os.path.join(REPO, "fmax_results", pat))
+    return sorted(set(out))
 
 
 def fmax_for(task, sub):
-    """Fmax from THIS design's own sweep, or None. Never inferred, never
-    borrowed from another design, never derived from a PPA build period."""
-    name = FMAX_FILE.get((task, sub))
-    if not name:
+    """Fmax from THIS design's own sweep of THESE bytes, or None. Never
+    inferred, never borrowed from another design, never derived from a PPA
+    build period.
+
+    This replaced a hand-written {(task, submission): filename} map -- the
+    seventh allowlist of that shape in this file, and the first one caught
+    serving wrong numbers rather than merely missing rows. It had d_nw01/chat
+    at 111.11 from a pre-C3 sweep (the current answer is 142.22) and
+    d_ca04/chat at 222.22 from a pre-B1 sweep (currently 273.5), while five
+    freshly converged sweeps had no entry at all and rendered blank.
+
+    A sweep counts only if the commit that last touched the source is an
+    ANCESTOR of the commit the sweep ran at. That is the same test that caught
+    the second host sweeping d_nw03's candidates thirteen hours before those
+    candidates existed -- a 44% Fmax difference on gemini that no filename
+    would have revealed. A dirty or untracked source fails closed: we cannot
+    say which bytes a past sweep saw, and under rule 20 not knowing is not a
+    value."""
+    src = _fx_src(task, sub)
+    if not src:
         return None, None
-    p = os.path.join(REPO, "fmax_results", name)
-    if not os.path.isfile(p):
+    sc = _fx_src_commit(src)
+    if not sc:
         return None, None
-    try:
-        d = json.load(open(p))
-    except Exception:
+    best = None
+    for p in _fx_sweeps(task, sub):
+        try:
+            d = json.load(open(p))
+        except Exception:
+            continue
+        if d.get("fmax_invalid_reason") is not None:
+            continue                                    # rule 7
+        if d.get("achieved_fmax_mhz") is None:
+            continue
+        rc = (d.get("rtl_git_commit") or "").replace("-dirty", "").strip()
+        if not _fx_is_ancestor(sc, rc):
+            continue                                    # sweep predates these bytes
+        ts = d.get("timestamp") or ""
+        if best is None or ts >= best[0]:
+            best = (ts, d)
+    if best is None:
         return None, None
-    if d.get("fmax_invalid_reason") is not None:
-        return None, None          # rule 7: an invalid bracket is not an Fmax
-    return d.get("achieved_fmax_mhz"), d.get("converged_period_ns")
+    return best[1].get("achieved_fmax_mhz"), best[1].get("converged_period_ns")
 
 
 # The configuration each task's metrics are read at (rule 18). Named
