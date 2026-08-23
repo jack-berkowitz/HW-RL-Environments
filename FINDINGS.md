@@ -3628,3 +3628,75 @@ renamed out of the namespace, and the substitution must be proved by a control
 that fails when the substitution does not happen. That is rule 24 applied to a
 substitution step rather than to a measurement: the apparatus here is the
 rename, and it had never been pointed at a known answer.
+
+## F67. A prose claim can outrun a correct apparatus, and no control in the stack is pointed at prose
+
+Two defects so far have a home. A **contract** defect is the spec saying
+something wrong or leaving something unsaid -- v_nw04's `X2b`, cited by two
+clauses and defined nowhere; v_ai02's missing `L4`. An **apparatus** defect is
+the instrument not measuring what it claims -- F66, and the rename and grep
+faults beside it. Rule 24 exists for the second class.
+
+This is a third, and it sits downstream of both: the contract is right, the
+apparatus is right, the number is right, and **the sentence reporting it claims
+more than what ran**. Every control in the stack can pass and the prose can still
+be false, because no control is pointed at the prose.
+
+Both instances are v_nw02, within a day of each other.
+
+**One: the instrument's own summary line.** `check_policy_independence.sh` ended
+its run with
+
+    OK: every defect is caught on BOTH bases, so none of them is killed by
+        the latitude choice.
+
+It had run eleven checks -- one clean policy base and ten defects re-derived on
+it -- all on the **policy base**. It never compiled the golden. The eleven
+verdicts were individually correct and the summary named a scope twice their
+size. It read as 22 of 22 to anyone who did not go and count, which for a while
+included the agent that had just run it.
+
+**Two: a commit message.** `6e39080` asserted:
+
+    The golden-base half (golden PASS, ten mutants killed) comes from
+    scripts/sim_verification.sh.
+
+At the moment that was written, v_nw02's most recent reference run carried
+`task_text_hash e07eba252fa0afa8` against a dirty tree at `245aa0fa` -- a
+different task text, and a tree predating the guarded mutants entirely. The
+sentence was true of *a* run. It was not true of the state it was written about.
+It became true afterwards, when the run was actually done at `f660156`.
+
+**What the two share is the failure mode, not the subject.** Each is a
+true-sounding sentence that was true once, or true of a neighbouring thing,
+asserted about the current state without anyone checking that it still held. Neither
+is a lie in the sense of a wrong number; both are claims whose *scope* exceeds
+what was executed. And both were durable: the first sat in a script's output for
+as long as the script existed, the second is in permanent history.
+
+**Why the existing controls miss it.** Rule 24 makes an apparatus prove itself to
+the operator, and its second half -- record the reproduction beside the numbers
+-- addresses part of this. But it reaches numbers, not the sentences around them.
+Rule 17's task-text hash catches a comparison across two different questions; it
+says nothing about a summary that misdescribes one run. Rule 20 catches a missing
+value being defaulted; here no value was missing. The number was there and
+correct in every instance.
+
+The asymmetry is worth naming: rule 24 protects the operator from the instrument.
+Nothing protects the reader from the operator. Prose is what actually gets
+consumed -- nobody re-derives a figure from the log when a sentence beside it
+already says what it means.
+
+**What was done.** The script's summary now states what it ran and says plainly
+that "both bases" would claim a check it never performed. The commit-message
+claim was made true by running the golden half at `f660156` -- same scored inputs
+as the 11/11 policy run, the only difference between the two trees being a
+documentation file.
+
+**Rules:** 24
+
+This extends rule 24's subject from the instrument to the sentence that reports
+it: a summary may not name scope the run did not cover, and a claim that
+something "was established" must name the run that established it and the state
+it was established in. Stating that as a standing rule needs an edit to RULES.md,
+which is not this agent's file; flagged for its owner rather than taken.
