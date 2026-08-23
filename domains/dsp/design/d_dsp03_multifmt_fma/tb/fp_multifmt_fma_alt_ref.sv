@@ -145,6 +145,23 @@ module fp_multifmt_fma #(
     // the discarded tail sits below the window: it nudges the magnitude up if it
     // shares the result's sign and down otherwise, and either way it is only
     // ever a sticky.
+    //
+    // THE CASE THIS DOES NOT GUARD, and why that is a choice rather than luck.
+    // If `acc` were ZERO while `stky_pre` were set, the true value would be the
+    // discarded tail alone -- nonzero, carrying the DROPPED term's sign, and
+    // smaller than any representable increment. `mag - 1` would then wrap. It
+    // cannot arise HERE: Xr is `max(Xp,Xc) - LIM`, so the larger term is always
+    // retained and `acc` is non-zero whenever anything was dropped.
+    //
+    // That reasoning is about THIS WINDOW and does not transfer. d_dsp02's
+    // second source frames differently, its accumulator CAN empty while a
+    // sticky is set, and it wrapped exactly this way -- `0 - 1` across 160 bits,
+    // delivering 1d000000 for a product near 2^-298. Same guard, same argument
+    // for omitting it, right in one design and wrong in the other.
+    //
+    // A guard whose necessity depends on a framing choice is a guard whose
+    // ABSENCE must be justified against that choice every time it is reused. Do
+    // not carry this omission into another design without re-deriving it.
     if (stky_pre) begin
       if (((dp < 0) ? sp : sc) != sres) mag = mag - 1;
     end

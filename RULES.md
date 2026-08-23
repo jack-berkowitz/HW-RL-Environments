@@ -63,6 +63,28 @@ defects. It runs with the regression.
    The wrong branch loosens a check to accommodate a bug, and a loosened check is
    invisible afterwards.
 
+    **DIFFERENCES MAY BE MEASURED OR INSPECTION-VERIFIABLE.** At least TWO must
+    be measured -- a number from a run, not from a reading. An
+    inspection-verifiable difference must name the specific FILE AND CONSTRUCT,
+    so a reader checks it in one lookup instead of taking it on trust.
+
+    **They must be INDEPENDENT.** A measurement that is a consequence of another
+    difference restates it and does not count twice. On `d_dsp02` the second
+    source's ASSIGNW/FUNC counts (137/26 against 30/16) look like a third
+    difference and are not: they compare a shim plus a vendored closure against a
+    monolith, which is the closure difference in another unit. Counting a
+    consequence twice is how three is reached dishonestly.
+
+    **Why the relaxation.** A second source that reaches identical results by a
+    different route is BEHAVIOURALLY INVISIBLE -- that is the success condition,
+    not a measurement failure. The only instruments that see architectural
+    difference are area and timing, which means synthesis, which is contended by
+    PPA queues. A rule satisfiable only through a contended resource gets
+    satisfied by declaration instead, and three asserted differences read the
+    same in the record as three measured ones while meaning nothing. An honest
+    two beats a decorative three. Where an instrument was unavailable, say which
+    and why, and upgrade the record if it frees up.
+
     **From:** F11
 
 6. **No metric may be quoted from a run that failed its own gate.** A build that
@@ -512,6 +534,40 @@ defects. It runs with the regression.
     enforces a convention that exists rather than inventing one.
 
     **From:** F60
+
+25. **Every capability a module has is either priced by an existing axis or
+    bounded in the specification.** Before a design task is published, enumerate
+    what the module can DO -- how much it holds, how many things it tracks, how
+    long it may take, how much it may spend -- and for each, ask whether latency,
+    area or power already charges for it. Anything that does not fall out of
+    those axes needs a stated bound.
+
+    **An unpriced axis makes a submission unfalsifiable and the comparison
+    meaningless.** `d_nw01` required outstanding capacity, ordering and liveness,
+    and said nothing about how much data the crossbar might buffer to deliver
+    them. A submission buffered a full 256-beat burst per master, 20,480 bits of
+    flip-flops, and was correct on every axis the task checked while measuring
+    14.2x the reference's area. It was a conforming answer to an incomplete
+    specification, and the PPA gap was measuring the specification.
+
+    **Bound it in the spec, do not add a metric for it.** A capability metric
+    credits the spending, which then demands an exchange rate -- how much area is
+    a buffered beat worth -- and rule 22's refusal to weight area against
+    frequency applies with equal force here. A bound costs one normative clause
+    and no columns; a metric costs a column on every table and an answer nobody
+    has.
+
+    **Say which resource is bounded.** Tracking a transaction costs a counter;
+    holding its data costs storage. `d_nw01`'s C3 bounds beats held, not
+    transactions tracked, and says so, because a design that confuses them
+    either over-builds or fails a capacity floor it could have met cheaply.
+
+    **A ceiling is as normative as a floor.** `MAX_BURST_LEN` was already written
+    this way -- nothing above it is ever driven, so provisioning beyond it is
+    wasted area rather than insurance. Buffering simply never received the same
+    sentence.
+
+    **From:** F62
 
 ---
 

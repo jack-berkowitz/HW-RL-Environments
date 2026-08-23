@@ -358,10 +358,25 @@ than assumed. Its numbers may go into a cross-model report.
 
 `chat`, `claude` and `gemini` were re-solicited against `probe/PASTE.md` and
 carry task-text hash `530f3e4189421457`, which covers the spec **and** the
-prompt together. Each has a solicitation record beside it in
-`candidates/d_dsp02/<model>.solicitation.md` — the prior five had none, and a
-pinned prompt with no solicitation record just moves the reproducibility gap up
-a level.
+prompt together.
+
+**Solicitation records were created for the three and then REMOVED BY DECISION.**
+They are not missing and they were not left unfilled: they existed, held only
+`TODO` fields, and were deleted deliberately. An all-`TODO` file in the tree is
+worse than no file, because it reads as an omission rather than a choice.
+
+The reasoning is consistency, and it is Jack's call. **No other task in this repo
+carries solicitation records.** A scoring gate applying to one task of fourteen
+is an inconsistency, not a standard — the records were a response to this task's
+specific artefact loss and were over-applied when they became a blocking
+requirement for scoring.
+
+So the three current submissions carry **no provenance record beyond their file
+hashes and the `task_text_hash` they were scored against**, which is exactly what
+every other task in the repo carries. What d_dsp02 has that the others do not is
+a pinned prompt: the hash covers the spec and the text the model was handed
+together, so those two can no longer drift apart silently. That was the part of
+the gap worth closing, and it is closed.
 
 **`deepseek` and `qwen` are WITHDRAWN, not pending.** They are not being
 re-solicited and nothing is scheduled for them. Both were build failures at the
@@ -411,3 +426,77 @@ fix it.
 work is work that can vanish without anyone noticing. Agent 1's findings and the
 convention draft both came close; this one actually happened. Unlike the other
 two there was no diff to catch it — the loss was silent and total.
+
+## Scored against the pinned prompt, 2026-08-22
+
+**Run records:** `runs/d_dsp02_fp32_fma_ii1/2026-08-23T0114*__{chat,claude,gemini}__sim.json`,
+all three at `task_text_hash 530f3e4189421457` with submission hashes
+`d9643ea68fd0f4a1`, `3d6313924582dadc`, `0e7de75676697935` — matching the files
+in the tree.
+
+> **These records did not exist when the results below were first written, and
+> that was a defect.** The scoring was run by invoking `verilator` directly on
+> the testbench and the candidate. Only `scripts/sim_candidate.sh` calls
+> `write_run_record.py`, so nothing was written to `runs/` and no record anywhere
+> carried the new task-text hash or any of the three file hashes. The numbers
+> were right — the probe was validated against the reference first — but they
+> existed **outside the record system**, which is what rule 8 exists to prevent:
+> collection reads only records, so a number with no record cannot be checked by
+> anyone but its author. Agent 1 found it by looking for the hashes and finding
+> none. Re-run through `sim_candidate.sh`; the verdicts are unchanged.
+
+Three submissions, 4340 vectors, both A6 floors active. The scoring probe was
+validated first: it reproduces `vectors.hex` from the reference exactly,
+4340/4340, before any submission number was read off it (rule 24). The absence
+guard was clear on all three runs — the tally walked all 4340 each time, so these
+counts are evidence rather than absence.
+
+| submission | BAND | LOW | HIGH | FTZ | EXACT | zero-case | base | verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| *(n)* | 10 | 10 | 10 | 10 | 10 | 14 | 4276 | |
+| `chat` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **PASS** |
+| `claude` | 0 | 0 | 0 | 0 | 0 | 0 | 0 | **PASS** |
+| `gemini` | 10 | 10 | 10 | 10 | 10 | 11 | 3365 | **FAIL**, 3426 wrong |
+
+### gemini REGRESSED against a more precisely specified contract
+
+This is a finding in its own right and it is the honest counterweight to
+assuming that pinning a clause improves candidate behaviour. Both gemini
+artefacts were run against the **same** vectors — the prior one recovered from
+`2777a3b~1` — so this is a like-for-like measurement, not a comparison of
+records:
+
+| gemini | BAND | FTZ | zero-case | base | total wrong |
+|---|---:|---:|---:|---:|---:|
+| prior (`04f7896fab9d5b2d`) | 6 | 10 | 0 | 2653 | **2669** |
+| current (`0e7de75676697935`) | 10 | 10 | 11 | 3365 | **3426** |
+
+**The verdict did not change — FAIL before, FAIL after — and the behaviour got
+worse on every axis that moved.** BAND 6→10, zero-case 0→11, total 2669→3426.
+A pinned clause and a pinned prompt did not pull this submission toward the
+contract; it is wrong on strictly more of it than before.
+
+Two distinct defects are visible in its first mismatches. `1.0 × 2^-149 + 0`
+returns `00000000` where the answer is `00000001` — flush-to-zero on a subnormal
+result, which A3 names as a failure. And `2^-126 × 2^-30` returns `7f800000`,
+**positive infinity where the exact value underflows to zero** — an exponent
+range violation resolved in the wrong direction entirely.
+
+`chat` shows no such movement: prior and current artefacts are both clean on
+every shape, 0 wrong out of 4340 each.
+
+### Claude's before/after is coarser, and cannot be improved
+
+Stated once, plainly: the prior `claude.sv` was lost to overwrite, so there is no
+artefact to re-run. Its only "before" is the stale run record — 1/1 PASS on 4290
+with 16 stimulus-coverage categories and no per-shape breakdown, because the A6
+floors did not exist then. Claude passes now on every shape. Whether it passed
+the BAND and zero cases before is **unknowable**, and unlike chat and gemini no
+amount of re-running recovers it.
+
+### The move is spec-plus-prompt, not spec alone
+
+The prior five answered a spec with no pinned prompt. The task text went
+`5ad30593403b4ae2` → `13e3c4673f8a3270` (the A6 rewrite) → `530f3e4189421457`
+(the prompt added). Both halves moved, so nothing here attributes a difference
+to either one.

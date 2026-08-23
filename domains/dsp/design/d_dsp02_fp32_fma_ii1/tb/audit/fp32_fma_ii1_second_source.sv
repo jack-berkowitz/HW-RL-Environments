@@ -154,19 +154,48 @@ module fp32_fma_ii1 (
     logic [ACC_W-1:0]        mag;
     logic                    sticky_in;
 
+    // THE ENTIRE EXACT VALUE CAN LIE BELOW THE RETAINED WINDOW, and the code had
+    // no representation for it. 2^-149 * 2^-149 shifts out of the accumulator
+    // completely: acc_p = 0 with p_sticky = 1. The value is NOT zero -- the
+    // sticky says so -- but the accumulator is, and two separate things then go
+    // wrong. The borrow below computes 0 - 1 and wraps all 160 bits on, giving
+    // 1d000000 for a product near 2^-298. And the assemble block reads an empty
+    // accumulator as "the result is exactly zero", which skips rounding
+    // entirely: wrong sign under RDN, no round-up under RUP, and no UF because
+    // `unf` is only assigned in the subnormal branch that path never reaches.
+    //
+    // One gap, three symptoms. What the contract asks for is in A1: the result
+    // is round(a*b + c), and an exact value that is nonzero but smaller than
+    // any representable increment is ROUNDED, not declared zero. Its sign is
+    // the sign of whichever term was dropped, and rounding sees sig=0, g=0,
+    // r=0, s=1 -- which yields +/-0 under RNE, RTZ and RMM, the smallest
+    // subnormal under the mode that rounds away from zero, and UF via A6, whose
+    // condition (2) is "delivered exponent field is zero" and so covers zero as
+    // well as subnormal. Derived from A1/A2/A6 and the format; fpnew_fma.sv was
+    // not opened.
+    logic all_below;
     always_comb begin
         automatic logic signed [ACC_W+1:0] pa, pc;
+        automatic bit borrow;
         pa = $signed({2'b0, acc_p});
         pc = $signed({2'b0, acc_c});
         sum_s = (sp ? -pa : pa) + (sc ? -pc : pc);
-        // a borrow into the sticky region flips its sense on subtraction
+        // a borrow into the sticky region flips its sense on subtraction --
+        // GUARDED ON sum_s != 0, because at zero there is nothing to borrow
+        // from and the true value is the dropped tail, not minus one ulp.
+        borrow    = (sum_s != 0) && eff_sub && (p_sticky | c_sticky);
         sticky_in = p_sticky | c_sticky;
-        if (sum_s < 0) begin
+        all_below = (sum_s == 0) && (p_sticky | c_sticky);
+        if (all_below) begin
+            res_sign  = p_sticky ? sp : sc;   // sign of the DROPPED term
+            mag       = '0;
+            sticky_in = 1'b1;
+        end else if (sum_s < 0) begin
             res_sign = 1'b1;
-            mag = (-sum_s) - (eff_sub && (p_sticky | c_sticky) ? 1 : 0);
+            mag = (-sum_s) - (borrow ? 1 : 0);
         end else begin
             res_sign = 1'b0;
-            mag = sum_s[ACC_W-1:0] - (eff_sub && (p_sticky | c_sticky) ? 1 : 0);
+            mag = sum_s[ACC_W-1:0] - (borrow ? 1 : 0);
         end
         if (eff_sub && (p_sticky | c_sticky)) sticky_in = 1'b1;
     end
@@ -237,8 +266,10 @@ module fp32_fma_ii1 (
     logic        ovf, unf;
     always_comb begin
         ovf = 1'b0; unf = 1'b0;
-        if (!any_bits) begin
-            // exact zero: sign is + except under RDN
+        if (!any_bits && !all_below) begin
+            // EXACT zero -- and only exact. all_below means the accumulator is
+            // empty but the value is not, so that case must round instead.
+            // sign is + except under RDN
             res_n = (rnd_mode == 3'd2) ? 32'h80000000 : 32'h00000000;
             if (eff_sub == 1'b0 && sp && sc) res_n = {1'b1, 31'd0};
         end else if (e_f >= 14'sd255) begin

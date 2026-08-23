@@ -2858,7 +2858,14 @@ measurement is the same error one level up.
 
 **Rules:** 8, 20, 23
 
-## F57. A contract that cites a standard its own oracle does not implement
+## F57. A requirement the oracle determines and the contract leaves open
+
+**Two routes to the same place: a wrong citation, and silence.** Both leave a
+requirement that the oracle decides and the contract does not, so a design that
+is conformant by the text can still fail. The finding is defined by that
+consequence, not by the mechanism.
+
+### Instance 1 — the citation was wrong
 
 `d_dsp02`'s A6 and `d_dsp03`'s A7 both pinned the underflow flag as "tininess
 detected AFTER rounding", citing IEEE 754-2019 clause 7.5. The vendored anchor
@@ -2910,6 +2917,39 @@ case rule 15 does not cover: the authority was cited, existed, and said
 something the oracle does not do. "PINNED BY THIS TASK" is a legitimate
 authority and is the right one whenever the standard's answer and the
 reference's answer differ.
+
+### Instance 2 — the contract said nothing at all
+
+**No clause in either task states the delivered VALUE when the exact
+product-sum falls outside the representable exponent range**, in either
+direction. Below: nothing says it rounds to +/-0 or to the smallest subnormal
+per mode. Above: `d_dsp02`'s A4b says overflow raises `inexact` and `d_dsp03`'s
+A7 says the rounded result "exceeds the format's range" -- both describe when a
+FLAG is set, never what value comes out. It is inferable from A1's
+`round(a*b + c)` plus the binary32 format, and nowhere stated.
+
+**Two independent artefacts failed in exactly that region**, which is how it was
+found -- not by reading the spec:
+
+* `gemini`'s re-solicited submission returns `7f800000` for `2^-126 * 2^-30`.
+  **Positive infinity where the exact value underflows to zero** -- a range
+  violation resolved in the wrong direction entirely.
+* `d_dsp02`'s second source returns `1d000000` for a product near `2^-298`: the
+  significand survives while the exponent wraps.
+
+Same corner, same silence, two designs that never saw each other.
+
+**The mechanisms differ and the consequence does not.** A wrong citation actively
+misleads -- a reader who follows it implements the wrong thing. Silence merely
+under-determines -- a reader infers correctly, or does not. But in both cases the
+ANCHOR has an answer, the CONTRACT does not, and the gap is invisible until
+something fails in it. The remedy is identical: state the rule longhand, and
+cite nothing you have not checked the oracle against.
+
+**Recorded as OPEN, deliberately not fixed.** A clause moves `task_text_hash` a
+third time and invalidates three submissions solicited hours earlier. That is a
+scheduling decision, not a correctness one. See
+`domains/dsp/design/d_dsp02_fp32_fma_ii1/OPEN_DEFECT_range_value_unspecified.md`.
 
 **Rules:** 11, 12, 15
 
@@ -3148,6 +3188,24 @@ commit boundary drawn between them yields a tree that fails its own check no
 matter how carefully either half was handled -- which is instance 2, and is why
 attribution and a no-alteration diff are necessary and not sufficient.
 
+**FIRST LIVE CATCH, and it is the same shape as instance 2.** Assembling a
+routine commit the following day, `--staged` refused before anything was
+written:
+
+    LINKAGE BROKEN -- 1 problem(s):
+      finding F62 cites rule 25, which does not exist in RULES.md
+
+`FINDINGS.md` had acquired another agent's F62, which cites their rule 25, still
+uncommitted in `RULES.md` — and the path list being executed excluded `RULES.md`
+by explicit instruction. Instance 2 cost a push and a follow-up commit to
+notice; this cost eleven seconds and produced no bad tree.
+
+**Neither agent did anything wrong, either time.** The path list was correct when
+it was written and wrong when it was executed, because the shared file changed
+under both of us in between. There is no amount of care that closes that window:
+the instruction and the execution are separated in time and the file is not.
+**That is precisely why the remedy had to be a check rather than a discipline.**
+
 **The remedy is not more care.** Care produced instance 2. What was missing was a
 check on the RESULTING TREE rather than on file state, and an audit that reads
 what actually happened rather than what was intended. Both now exist; the
@@ -3161,3 +3219,80 @@ gate would have missed the only instance we have. The audit is the check; the
 hook is a convenience.
 
 **Convention:** Committing in a tree another agent is working in
+
+---
+
+## F62. An unpriced axis is not a design choice, it is a gap in the specification
+
+`d_nw01/chat` is correct on every axis this task checks: 16 of 16 configurations,
+full outstanding capacity, no deadlock, no starvation. It is **14.2x the
+reference's area** and slower.
+
+The cause is one declaration:
+
+```systemverilog
+localparam int RBUF_DEPTH = 256;
+slv_r_t rbuf_mem [NUM_MST-1:0][RBUF_DEPTH-1:0];   // 2 x 256 x ~40 bits
+```
+
+A full maximum-length burst buffered per master, about 20,480 bits of
+flip-flops, in a PDK with no inferred SRAM. The reference's entire R-path
+storage is a pair of two-entry spill registers, roughly 80 bits.
+
+**The submission was not wrong.** `MAX_BURST_LEN = 255` means a 256-beat burst
+can arrive, and absorbing one is a defensible thing for a crossbar to do. The
+specification described what the design must ACHIEVE -- capacity, ordering,
+liveness -- and never described what it might SPEND achieving it. Buffering was
+an axis with a benefit and no stated cost.
+
+> **Where a specification names a capability but no bound on the resources that
+> deliver it, a submission that spends without limit is conforming, and the PPA
+> comparison is measuring the gap in the specification rather than the design.**
+
+### Why a metric would have been the wrong fix
+
+The obvious repair is to report buffer depth as a `capability` metric beside
+area. That fails on its own terms. A capability metric credits the design for
+the buffering, which then requires an exchange rate -- how much area is a
+buffered beat worth? -- and this project refuses to invent exactly that kind of
+weighting for area against frequency. It also multiplies the per-task numbers
+a reader has to hold, and each one is a number nobody knows how to reward.
+
+The bound belongs in the specification, where it costs one clause and no
+columns. C3 now caps in-crossbar storage at 4 R and 4 W beats per master port
+and says why: a crossbar routes, and anything needing deeper storage belongs on
+the other side of the master port. Tracking transactions stays cheap and
+unbounded; holding their data does not.
+
+### The audit this prompted
+
+Every design candidate was scanned for large registered arrays, against its
+reference:
+
+| task | finding |
+|---|---|
+| **d_nw01** | chat **20,480 b**; every other candidate 0 |
+| d_ca01 | chat 10,496 b, claude 10,240 b, gemini 10,240 b -- storage-matched within 2.5% |
+| d_ca04, d_dsp02, d_dsp03, d_nw03 | no large arrays in any candidate |
+
+So `d_nw01/chat` is the only storage-driven PPA outlier in the set, and
+`d_dsp02`'s 6.0x is confirmed structural rather than storage -- consistent with
+its post-route cell counts, which show an identical multiplier and duplicated
+shifters.
+
+**Two of my three scans were wrong before they were right**, which is worth
+recording because the errors were silent. The first could not match a
+declaration split across two lines, and so missed the very array that prompted
+the audit. The second parsed `[N-1:0]` but not `[0:N-1]`, and so dropped a cache
+tag array. Both returned a clean-looking table. A scan that reports "no large
+arrays" is indistinguishable from a scan that cannot see them.
+
+### The general rule this generalises to
+
+Enumerate what a module can DO, and for each capability ask whether it is
+already priced by latency or by area and power. If it is not, the specification
+must bound it. `MAX_BURST_LEN` was already written this way -- "a CEILING,
+nothing above it is ever driven, so provisioning for longer bursts is wasted
+area, not insurance" -- and buffering simply never got the same treatment.
+
+**Rules:** 17, 22, 25

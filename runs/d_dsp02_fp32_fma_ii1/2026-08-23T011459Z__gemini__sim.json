@@ -1,0 +1,51 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "RDN": "894",
+      "RMM": "847",
+      "RNE": "860",
+      "RTZ": "850",
+      "RUP": "889",
+      "disagree": "100",
+      "exact": "650",
+      "overflow": "486",
+      "qnan_a": "46",
+      "qnan_b": "42",
+      "snan": "31",
+      "subn_op": "1243",
+      "subn_res": "172",
+      "tiny_edge": "235",
+      "underflow": "127",
+      "zero_res": "48"
+    }
+  },
+  "git_sha": "4748d2bc03e714e25a91a0107d419474f35f4439-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "metrics": {
+    "": {
+      "c3_accepted": "4340",
+      "c3_dead_cycles": "0",
+      "c3_offered": "4340",
+      "checks": "4340",
+      "init_interval": "1",
+      "latency_cycles": "3",
+      "vectors": "4340"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "candidates/d_dsp02/gemini.sv",
+  "submission_sha256_16": "0e7de75676697935",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "530f3e4189421457",
+  "timestamp_utc": "2026-08-23T01:14:59Z"
+}
