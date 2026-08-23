@@ -105,9 +105,14 @@ conformant_perturbations:
     reference_tb_verdict: PASS
   policy_independence: >
     All ten defects re-derived on the divergent implementation
-    (mutants/policy/) and re-run: every one is caught on BOTH bases, and both
-    clean implementations pass. 22 of 22. Rerun with
-    mutants/check_policy_independence.sh.
+    (mutants/policy/) and re-run: every one caught on BOTH bases, both clean
+    implementations pass. 22 of 22.
+
+    RULE 24: this number is licensed by an observed run of
+    mutants/check_policy_independence.sh on 2026-08-23, which printed 22 lines
+    of "as expected". It was previously carried over from an earlier run and
+    edited into this file by string substitution without re-measuring.
+    Rerun with mutants/check_policy_independence.sh.
 
 mutants:
   design: >

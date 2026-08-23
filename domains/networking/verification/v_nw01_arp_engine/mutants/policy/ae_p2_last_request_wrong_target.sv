@@ -57,7 +57,7 @@ module arp_engine (
   input  logic        clear_cache_i
 );
   localparam int RETRIES  = 4;
-  localparam int INTERVAL = 96;    // inside Q4's 64..80 window, and not the golden's phase
+  localparam int INTERVAL = 70;    // inside Q4's 64..80 window, and not the golden's phase
   localparam int TIMEOUT  = 270;   // inside Q5's 256..300 window
 
   // ---- frame deserialiser (shared; clause F is mechanical) -----------------
@@ -120,6 +120,34 @@ module arp_engine (
   int          timer, tries;
   logic [47:0] pend_sha; logic [31:0] pend_spa;
 
+  // ---- mutant guard state: contract-level only ----------------------------
+  // The SAME quantities the golden-base defects count, recomputed from this
+  // implementation's own ports.
+  int   g_lookup_q, g_timeout_q, g_rx_q, g_occ_q, g_att_q;
+  logic g_out_q;
+  // A clear that only counts once it has taken effect: resetting the occupancy
+  // on the first cycle of the pulse would let the rest of the pulse through.
+  wire  g_clr_eff = clear_cache_i && !(g_occ_q >= 4);
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      g_lookup_q <= 0; g_timeout_q <= 0; g_rx_q <= 0; g_occ_q <= 0;
+      g_att_q <= 0; g_out_q <= 1'b0;
+    end else begin
+      if (clear_cache_i)                       g_rx_q  <= 0;
+      else if (s_hdr_valid_i && s_hdr_ready_o) g_rx_q  <= g_rx_q + 1;
+      if (g_clr_eff)                           g_occ_q <= 0;
+      else if (s_hdr_valid_i && s_hdr_ready_o) g_occ_q <= g_occ_q + 1;
+      if (m_hdr_valid_o && m_hdr_ready_i && g_out_q) g_att_q <= g_att_q + 1;
+      if (req_valid_i && req_ready_o) begin
+        g_lookup_q <= g_lookup_q + 1; g_out_q <= 1'b1; g_att_q <= 0;
+      end
+      if (resp_valid_o && resp_ready_i) begin
+        g_out_q <= 1'b0;
+        if (resp_error_o) g_timeout_q <= g_timeout_q + 1;
+      end
+    end
+  end
+
   wire arp_ok = rx_valid && rx_eth_type == 16'h0806
                 && rx_htype == 16'h0001 && rx_ptype == 16'h0800;   // clause A3
   wire in_subnet = (req_ip_i & subnet_mask_i) == (local_ip_i & subnet_mask_i);
@@ -135,7 +163,8 @@ module arp_engine (
   assign tx_oper     = (st == REPLY) ? 16'd2 : 16'd1;
   assign tx_dest_mac = (st == REPLY) ? pend_sha : 48'hFF_FF_FF_FF_FF_FF;
   assign tx_tha      = (st == REPLY) ? pend_sha : 48'd0;
-  assign tx_tpa      = (st == REPLY) ? pend_spa : ask_ip;
+  assign tx_tpa      = (st == REPLY) ? pend_spa
+                     : ((tries == RETRIES-1) ? (ask_ip ^ 32'h0000_0001) : ask_ip);
 
   always_ff @(posedge clk_i) begin
     if (rst_i) begin

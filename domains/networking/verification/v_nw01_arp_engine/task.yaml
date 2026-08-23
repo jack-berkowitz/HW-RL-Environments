@@ -90,9 +90,17 @@ conformant_perturbations:
     change: an independent protocol engine and cache; shares only the frame codec
     reference_tb_verdict: PASS
   policy_independence: >
-    All eight defects re-derived on the divergent engine (mutants/policy/) and
-    re-run: every one caught on BOTH bases, both clean implementations pass.
-    18 of 18. Rerun with mutants/check_policy_independence.sh.
+    All ten guarded defects re-derived on the policy-divergent engine
+    (mutants/policy/) -- a fully associative round-robin cache instead of the
+    anchor's direct-mapped hash, and different timing inside the windows Q4 and
+    Q5 allow -- and re-run: every one caught on BOTH bases, both clean
+    implementations pass. 22 of 22.
+
+    RULE 24: licensed by an observed run of
+    mutants/check_policy_independence.sh on 2026-08-23 (22 lines "as expected",
+    "OK: every defect is caught on BOTH bases"). The previous policy set was
+    STALE -- eight files under the old total-mutant names, left behind when the
+    guarded set replaced them. It was regenerated, not re-labelled.
 
 mutants:
   design: >
@@ -117,7 +125,7 @@ mutants:
   - {id: ae_m3_cached_mac_wrong_when_full, violates: "Q1",
      guard: "four or more frames learned since the last clear -- the cache is full",
      defect: "the MAC answered from the cache has its low byte corrupted",
-     witness: "FAIL Q1: answered 010203040507, expected the cached 010203040506"}
+     witness: "FAIL Q1: an address taught just before the clear: answered 010203040507, expected the cached 010203040506"}
   - {id: ae_m4_insert_dropped_when_full, violates: "C2",
      guard: "four frames have already been learned since the last clear",
      defect: "the insert silently fails, so the address stays unknown",

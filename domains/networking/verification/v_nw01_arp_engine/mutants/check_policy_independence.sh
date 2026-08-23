@@ -1,7 +1,7 @@
 #!/bin/bash
 # TIER-B 5c: no mutant may be killed by the POLICY difference alone.
 #
-# The eight defects of mutants.sv are re-derived on the policy-divergent engine
+# The ten defects of mutants.sv are re-derived on the policy-divergent engine
 # (mutants/policy/), which uses a fully associative round-robin cache instead of
 # a direct-mapped hash and different timing inside the windows clauses Q4 and Q5
 # allow. A verdict that differs from the same defect on the golden base means
@@ -30,8 +30,18 @@ run_one() {   # $1 label, $2 expected, $3.. files
   else printf '  %-32s %-4s BUT EXPECTED %s\n' "$label" "$got" "$expect"; fails=$((fails+1)); fi
 }
 
-echo "reference testbench vs the GOLDEN base and its eight defects"
+echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
+echo "         implementation must PASS. Each defect line is the positive half."
+echo
+echo "reference testbench vs the GOLDEN base and its ten defects"
+_r24=$fails
 run_one "golden (clean)" PASS "${GBASE[@]}" "$D/arp_engine.sv"
+if [ "$fails" -ne "$_r24" ]; then
+  echo "  RULE24: a CLEAN implementation was reported as failing. That is the"
+  echo "          control, not a result -- the instrument has not reproduced a"
+  echo "          known answer, so no verdict below it is a measurement."
+  exit 2
+fi
 for M in $(grep -oE "^module ae_m[A-Za-z0-9_]+" "$T/mutants/mutants.sv" | awk '{print $2}'); do
   python3 -c "
 import re
@@ -42,10 +52,17 @@ open('$W/$M.sv','w').write(b.replace('module $M','module arp_engine',1))"
 done
 
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and the same eight defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same ten defects"
 sed 's/module ae_c1_assoc_cache_rr/module arp_engine/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean_policy.sv"
+_r24=$fails
 run_one "policy base (clean)" PASS "${PBASE[@]}" "$W/clean_policy.sv"
+if [ "$fails" -ne "$_r24" ]; then
+  echo "  RULE24: a CLEAN implementation was reported as failing. That is the"
+  echo "          control, not a result -- the instrument has not reproduced a"
+  echo "          known answer, so no verdict below it is a measurement."
+  exit 2
+fi
 for f in "$T"/mutants/policy/*.sv; do
   run_one "$(basename "$f" .sv)" FAIL "${PBASE[@]}" "$f"
 done

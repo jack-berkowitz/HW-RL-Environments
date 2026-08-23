@@ -120,6 +120,34 @@ module arp_engine (
   int          timer, tries;
   logic [47:0] pend_sha; logic [31:0] pend_spa;
 
+  // ---- mutant guard state: contract-level only ----------------------------
+  // The SAME quantities the golden-base defects count, recomputed from this
+  // implementation's own ports.
+  int   g_lookup_q, g_timeout_q, g_rx_q, g_occ_q, g_att_q;
+  logic g_out_q;
+  // A clear that only counts once it has taken effect: resetting the occupancy
+  // on the first cycle of the pulse would let the rest of the pulse through.
+  wire  g_clr_eff = clear_cache_i && !(g_occ_q >= 4);
+  always_ff @(posedge clk_i) begin
+    if (rst_i) begin
+      g_lookup_q <= 0; g_timeout_q <= 0; g_rx_q <= 0; g_occ_q <= 0;
+      g_att_q <= 0; g_out_q <= 1'b0;
+    end else begin
+      if (clear_cache_i)                       g_rx_q  <= 0;
+      else if (s_hdr_valid_i && s_hdr_ready_o) g_rx_q  <= g_rx_q + 1;
+      if (g_clr_eff)                           g_occ_q <= 0;
+      else if (s_hdr_valid_i && s_hdr_ready_o) g_occ_q <= g_occ_q + 1;
+      if (m_hdr_valid_o && m_hdr_ready_i && g_out_q) g_att_q <= g_att_q + 1;
+      if (req_valid_i && req_ready_o) begin
+        g_lookup_q <= g_lookup_q + 1; g_out_q <= 1'b1; g_att_q <= 0;
+      end
+      if (resp_valid_o && resp_ready_i) begin
+        g_out_q <= 1'b0;
+        if (resp_error_o) g_timeout_q <= g_timeout_q + 1;
+      end
+    end
+  end
+
   wire arp_ok = rx_valid && rx_eth_type == 16'h0806
                 && rx_htype == 16'h0001 && rx_ptype == 16'h0800;   // clause A3
   wire in_subnet = (req_ip_i & subnet_mask_i) == (local_ip_i & subnet_mask_i);
@@ -145,7 +173,7 @@ module arp_engine (
       if (clear_cache_i) c_val <= '0;                       // clause C3
 
       // learn from every ARP frame, whatever its operation (clause C1)
-      if (arp_ok && rx_ready && rx_oper == 16'd1) begin
+      if (arp_ok && rx_ready) begin
         automatic int hit = lookup_idx(rx_spa);
         if (hit >= 0) c_mac[hit] <= rx_sha;
         else begin
@@ -176,12 +204,12 @@ module arp_engine (
         HIT: st <= ANSWER;                                  // answered next cycle (L3)
         ASK: if (tx_ready) begin
           tries <= tries + 1;
-          timer <= (tries + 1 >= RETRIES) ? TIMEOUT : INTERVAL;
+          timer <= (tries + 1 >= (RETRIES + ((g_lookup_q >= 3) ? 1 : 0))) ? TIMEOUT : INTERVAL;
           st <= WAIT;
         end
         WAIT: begin
           if (timer > 0) timer <= timer - 1;
-          else if (tries < RETRIES) st <= ASK;
+          else if (tries < (RETRIES + ((g_lookup_q >= 3) ? 1 : 0))) st <= ASK;
           else begin got_err <= 1'b1; st <= ANSWER; end     // clause Q5
         end
         ANSWER: if (resp_ready_i) st <= IDLE;

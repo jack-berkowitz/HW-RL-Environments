@@ -30,17 +30,30 @@ run_one() {  # $1 = label, $2 = dut file, $3 = expected (PASS|FAIL)
   fi
 }
 
+echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
+echo "         implementation must PASS. Each defect line is the positive half."
+echo
 echo "reference testbench vs the POLICY-DIVERGENT base and its ten defects"
 sed 's/module af_c1_b_before_r/module atop_filter/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean.sv"
+_r24=$fails
 run_one "policy base (clean)" "$W/clean.sv" PASS
+if [ "$fails" -ne "$_r24" ]; then
+  echo "  RULE24: a CLEAN implementation was reported as failing. That is the"
+  echo "          control, not a result -- the instrument has not reproduced a"
+  echo "          known answer, so no verdict below it is a measurement."
+  exit 2
+fi
 for f in "$T"/mutants/policy/*.sv; do
   run_one "$(basename "$f" .sv)" "$f" FAIL
 done
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "OK: every defect is caught on BOTH bases, so none of them is killed by"
-  echo "    the latitude choice. The clean policy implementation still passes."
+  echo "OK: all 11 checks here pass -- the clean policy implementation, and each"
+  echo "    of the ten defects re-derived on it. THIS SCRIPT COVERS THE POLICY"
+  echo "    BASE ONLY. The golden-base half (golden PASS, ten mutants killed) is"
+  echo "    established by scripts/sim_verification.sh, not here. Saying \"both"
+  echo "    bases\" in this message would claim a check this script never ran."
 else
   echo "MISMATCH in $fails case(s) -- a mutant is sensitive to the policy choice."
 fi

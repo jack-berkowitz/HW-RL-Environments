@@ -110,13 +110,14 @@ conformant_perturbations:
   policy_independence: >
     All ten defects re-derived on the divergent implementation
     (mutants/policy/) and re-run: every one caught on BOTH bases, both clean
-    implementations pass. 22 of 22. Rerun with
-    mutants/check_policy_independence.sh. Every guard is expressed over
-    CONTRACT-LEVEL state -- how many inputs contend, how long an output has
-    stalled, how many beats it has delivered -- and never over a register
-    private to the anchor. That is what makes the re-derivation possible at
-    all: a guard reading the anchor's lock register could not be restated on an
-    implementation that has no such register.
+    implementations pass. 22 of 22.
+
+    RULE 24: this number is licensed by an observed run of
+    mutants/check_policy_independence.sh on 2026-08-23, which printed 22 lines
+    of "as expected" and "OK: every defect is caught on BOTH bases". It was
+    previously carried over from an earlier run and edited into this file by
+    string substitution without re-measuring; that is what this re-run replaces.
+    Rerun with mutants/check_policy_independence.sh.
 
 mutants:
   design: >
