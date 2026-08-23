@@ -63,3 +63,41 @@ because floating-point addition is not associative, which is precisely what A2's
 ordering sentence asserts. It kills 3203 vectors and, unlike every other
 control, also moves `status_o` (3057) -- the per-stage flags shift when the
 partial sums do.
+
+
+## nc_g -- the capacity-reduced control (HEIGHT discrimination)
+
+Every control above is a correctness perturbation: wrong at every geometry.
+`nc_g_height_blind_depth` answers a different question -- **is HEIGHT
+load-bearing?** The reference passing at both geometries is not evidence that a
+HEIGHT-blind design would fail at either, and without this control the
+two-configuration argument in task.yaml was an assertion. It was recorded as
+`measured: PARTIAL` until this ran.
+
+It hands the reference the literal `4` as chain depth instead of the HEIGHT
+parameter. Its ports stay HEIGHT-wide, so it accepts all eight operand pairs and
+discards stages 4..7.
+
+| geometry | result | z kills | first z kill | status kills | first status kill |
+|---|---|---|---|---|---|
+| HEIGHT=4 | **PASS** | 0 / 3400 | -- | 0 / 3400 | -- |
+| HEIGHT=8 | **FAIL** | 3208 / 3400 | cycle 14 | 3189 / 3400 | cycle 13 |
+
+### Witness
+
+Not decoded from the random stream -- a directed settled field, so the arithmetic
+is checkable by hand. HEIGHT=8, x=1.0 and w=2.0 on every stage, y=+0, held until
+settled:
+
+```
+reference z[0] = 0x4C00   = 16.0 = 8 * (1.0*2.0)      <- contract
+nc_g      z[0] = 0x4800   =  8.0 = 4 * (1.0*2.0)      <- pinned depth
+```
+
+A real non-equivalence, not a no-op perturbation. Both instances receive the same
+eight operand pairs.
+
+At HEIGHT=4 the pin equals the parameter, the port mapping is the identity, and
+nc_g is bit-for-bit the reference -- which is exactly why it passes there. A
+control that also failed at HEIGHT=4 would be a broken control rather than a
+finding about the task.

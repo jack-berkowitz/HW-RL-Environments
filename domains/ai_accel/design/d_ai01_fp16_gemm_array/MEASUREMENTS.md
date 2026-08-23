@@ -329,3 +329,50 @@ Two tool notes, both found here rather than inherited:
 * OpenSTA cannot read yosys's default `write_verilog` output for this design
   (syntax error). `-noattr -noexpr -nodec` after `opt_clean -purge; splitnets
   -ports; opt_clean -purge` produces a netlist it accepts.
+
+## 10. Apparatus defect: a git pathspec glob that returned a false empty
+
+Recorded here so it is not lost; the finding number and any backward audit are
+Jack's to scope.
+
+Checking whether another agent's working tree had been disturbed, I ran
+`git status --porcelain -- 'domains/*/verification'` and got **no output at all**,
+which reads as "nothing modified, nothing staged, nothing untracked". Re-run
+with the four directory paths written out explicitly
+(`domains/ai_accel/verification domains/comp_arch/verification
+domains/dsp/verification domains/networking/verification`) the same query
+returns **140 lines**. Git pathspec globbing does not behave like shell globbing
+here, and the quoted `*` did not match across the path segment as intended. The
+failure mode is the dangerous one: an empty result from a scoped status query is
+indistinguishable from a clean tree, and I was one step from reporting a
+verified-clean result that the command had never actually checked. Same shape as
+the array scans in F62 and the shared `--Mdir` in F60 -- an instrument that
+reports confidently while measuring something other than what was asked.
+
+
+## 11. HEIGHT discrimination (spec P1), via nc_g
+
+task.yaml recorded `measured: PARTIAL` because nothing had established that
+HEIGHT is load-bearing. Measured here.
+
+`controls/nc_g_height_blind_depth.sv` pins the chain depth to the literal 4
+rather than deriving it from HEIGHT, keeping HEIGHT-wide ports.
+
+| geometry | result | z kills | first z kill | status kills | first status kill |
+|---|---|---|---|---|---|
+| HEIGHT=4 | PASS | 0 / 3400 | -- | 0 / 3400 | -- |
+| HEIGHT=8 | FAIL | 3208 / 3400 | cycle 14 | 3189 / 3400 | cycle 13 |
+
+Witness, directed and hand-checkable rather than decoded from the random stream
+-- HEIGHT=8, x=1.0, w=2.0 on every stage, y=+0, held until settled:
+
+```
+reference z[0] = 0x4C00 = 16.0 = 8 * 2.0
+nc_g      z[0] = 0x4800 =  8.0 = 4 * 2.0
+```
+
+The prediction was written into the control's header before the run: PASS at 4
+because the pin equals the parameter and the mapping is the identity, FAIL at 8
+because four products are delivered where eight are required. Both held.
+
+`measured:` in task.yaml moved from PARTIAL to true on this result.

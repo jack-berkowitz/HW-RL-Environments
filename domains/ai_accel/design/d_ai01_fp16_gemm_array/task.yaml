@@ -145,13 +145,32 @@ scored_configuration:
     hardcodes one depth cannot pass at the other. WIDTH is pure replication and
     would not discriminate.
   discrimination_evidence:
-    measured: PARTIAL
+    measured: true
+    reference: PASS at HEIGHT=4, PASS at HEIGHT=8 (3400/3400 cycles each)
+    capacity_reduced_control: nc_g_height_blind_depth
+    control_result: PASS at HEIGHT=4, FAIL at HEIGHT=8
+    numbers:
+      HEIGHT_4: {result: PASS, z_kills: 0, status_kills: 0, first_kill: none}
+      HEIGHT_8: {result: FAIL, z_kills: 3208, first_z_kill_cycle: 14,
+                 status_kills: 3189, first_status_kill_cycle: 13}
+    witness: >
+      HEIGHT=8, x=1.0 and w=2.0 on every stage, y=+0, field held until settled.
+      The reference delivers 0x4C00 (16.0 = 8 * 2.0); nc_g delivers 0x4800
+      (8.0 = 4 * 2.0). Hand-checkable, and a real non-equivalence rather than a
+      no-op perturbation. Both instances are handed the same eight operand pairs
+      -- nc_g's ports are HEIGHT-wide, it simply discards stages 4..7.
     detail: >
-      The reference passes at both HEIGHT=4 and HEIGHT=8, 3400/3400 cycles each.
-      No capability-reduced control that passes at HEIGHT=4 and fails at HEIGHT=8
-      has been built yet, so the d_dsp03-style two-configuration discrimination
-      argument is NOT yet established by measurement for this task. Stated as
-      absent rather than assumed.
+      HEIGHT IS LOAD-BEARING, and this is now measured rather than assumed.
+      nc_g pins the chain depth to the literal 4 instead of deriving it from
+      HEIGHT. At HEIGHT=4 that is the identity and it is bit-for-bit the
+      reference; at HEIGHT=8 it computes a four-deep dot product where the
+      contract requires eight, and additionally carries the four-deep operand
+      skew, so it fails on both z_o and status_o.
+      .
+      The control passing at the unscored configuration is the evidence, not an
+      inconvenience: it is the direct measurement that HEIGHT=4 cannot tell a
+      HEIGHT-blind design from a conformant one and HEIGHT=8 can. This is why
+      the scored configuration is the larger geometry.
 
 configs:
   - {HEIGHT: 4, WIDTH: 8}
@@ -206,6 +225,9 @@ negative_controls:
   - {name: nc_d_overflow_always_inf, targets: "A5 mode-dependence", z_kills: 230, status_kills: 0, isolated: true}
   - {name: nc_e_positive_zero_only,  targets: "A6 sign, A8",       z_kills: 132,  status_kills: 0, isolated: true}
   - {name: nc_f_reversed_chain,      targets: "A2 ordering",       z_kills: 3203, status_kills: 3057}
+  - {name: nc_g_height_blind_depth,  targets: "P1 HEIGHT is load-bearing",
+     kind: capacity-reduced, at_HEIGHT_4: PASS, at_HEIGHT_8: FAIL,
+     z_kills_at_8: 3208, status_kills_at_8: 3189, isolated: true}
   discrimination_note: >
     nc_c at 84 and nc_e at 132 out of 3400 are the useful ones: they fire only on
     the behaviour their clause describes, so passing them is evidence about that
