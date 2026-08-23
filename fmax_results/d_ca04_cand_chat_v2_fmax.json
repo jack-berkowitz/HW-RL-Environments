@@ -1,0 +1,117 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_ca04_cand_chat_v2",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": 3.6562,
+  "achieved_fmax_mhz": 273.5,
+  "wns_at_converged_ns": 0.11,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 4.5,
+    "period_pass": 4.5,
+    "period_fail": 2.25,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 3.6562,
+    "period_fail": 3.375
+  },
+  "search_iterations": 3,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 4.5,
+      "wns_ns": 0.73,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 322.9,
+      "log": "fmax_results/d_ca04_cand_chat_v2_logs/d_ca04_cand_chat_v2_iter01_4.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14625.3,
+      "provisional_power_mw": 0.00756274
+    },
+    {
+      "iteration": 2,
+      "period_ns": 2.25,
+      "wns_ns": -1.18,
+      "tns_ns": -36.86,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 1540.7,
+      "log": "fmax_results/d_ca04_cand_chat_v2_logs/d_ca04_cand_chat_v2_iter02_2.2500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14879.3,
+      "provisional_power_mw": 0.013685
+    },
+    {
+      "iteration": 3,
+      "period_ns": 3.375,
+      "wns_ns": -0.04,
+      "tns_ns": -0.32,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 719.0,
+      "log": "fmax_results/d_ca04_cand_chat_v2_logs/d_ca04_cand_chat_v2_iter03_3.3750ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14996.9,
+      "provisional_power_mw": 0.0101051
+    },
+    {
+      "iteration": 4,
+      "period_ns": 3.9375,
+      "wns_ns": 0.18,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 199.3,
+      "log": "fmax_results/d_ca04_cand_chat_v2_logs/d_ca04_cand_chat_v2_iter04_3.9375ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14848,
+      "provisional_power_mw": 0.00872324
+    },
+    {
+      "iteration": 5,
+      "period_ns": 3.6562,
+      "wns_ns": 0.11,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 190.4,
+      "log": "fmax_results/d_ca04_cand_chat_v2_logs/d_ca04_cand_chat_v2_iter05_3.6562ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14934.3,
+      "provisional_power_mw": 0.00933205
+    },
+    {
+      "iteration": 6,
+      "period_ns": 3.6562,
+      "wns_ns": 0.11,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 198.0,
+      "log": "fmax_results/d_ca04_cand_chat_v2_logs/d_ca04_cand_chat_v2_iter06_3.6562ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14934.3,
+      "provisional_power_mw": 0.00933205
+    }
+  ],
+  "total_wall_time_s": 3171.2,
+  "total_pnr_runs": 6,
+  "rtl_git_commit": "11eaedefb968bfb009a6b556ad1b62b42a8559e8-dirty",
+  "timestamp": "2026-08-23T09:09:55.907951+00:00",
+  "aborted_reason": null
+}

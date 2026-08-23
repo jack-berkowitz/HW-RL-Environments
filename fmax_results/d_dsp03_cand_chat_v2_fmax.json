@@ -1,7 +1,7 @@
 {
   "fmax_invalid_reason": null,
-  "design": "d_dsp02",
-  "tier": "dsp",
+  "design": "d_dsp03_cand_chat_v2",
+  "tier": "candidate",
   "pdk": "sky130hd",
   "converged_period_ns": null,
   "achieved_fmax_mhz": null,
@@ -12,7 +12,7 @@
     "fell_back": false
   },
   "bracket": {
-    "seed_period_ns": 20.25,
+    "seed_period_ns": 12.0,
     "period_pass": null,
     "period_fail": null,
     "bracket_iterations": 1
@@ -26,20 +26,20 @@
   "search_trajectory": [
     {
       "iteration": 1,
-      "period_ns": 20.25,
+      "period_ns": 12.0,
       "wns_ns": null,
       "tns_ns": null,
       "drc": null,
       "pass": false,
       "status": "tool_error",
-      "wall_time_s": 0.2,
-      "log": "fmax_results/d_dsp02_logs/d_dsp02_iter01_20.2500ns.log",
-      "note": "run_orfs_build.sh exited 1; see fmax_results/d_dsp02_logs/d_dsp02_iter01_20.2500ns.log"
+      "wall_time_s": 0.1,
+      "log": "fmax_results/d_dsp03_cand_chat_v2_logs/d_dsp03_cand_chat_v2_iter01_12.0000ns.log",
+      "note": "run_orfs_build.sh exited 1; see fmax_results/d_dsp03_cand_chat_v2_logs/d_dsp03_cand_chat_v2_iter01_12.0000ns.log"
     }
   ],
-  "total_wall_time_s": 0.2,
+  "total_wall_time_s": 0.1,
   "total_pnr_runs": 1,
   "rtl_git_commit": "11eaedefb968bfb009a6b556ad1b62b42a8559e8-dirty",
-  "timestamp": "2026-08-23T07:24:38.377313+00:00",
-  "aborted_reason": "seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp02_logs/d_dsp02_iter01_20.2500ns.log"
+  "timestamp": "2026-08-23T07:24:37.578273+00:00",
+  "aborted_reason": "seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp03_cand_chat_v2_logs/d_dsp03_cand_chat_v2_iter01_12.0000ns.log"
 }

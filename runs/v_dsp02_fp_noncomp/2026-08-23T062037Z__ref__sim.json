@@ -1,0 +1,21 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "10/10",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "21c06e83371a945712d92b6d4aa9c644349b8f72-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "ref",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "domains/dsp/verification/v_dsp02_fp_noncomp/tb/fp_noncomp_spec_tb.sv",
+  "submission_sha256_16": "36fbd383c837fa51",
+  "task": "v_dsp02_fp_noncomp",
+  "task_text_hash": "eacc3c043e2a5767",
+  "timestamp_utc": "2026-08-23T06:20:37Z"
+}
