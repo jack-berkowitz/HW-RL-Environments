@@ -97,6 +97,7 @@ module arp_engine_tb;
   int cov_lookups = 0, cov_hits = 0, cov_misses = 0, cov_replies_in = 0;
   int cov_requests_in = 0, cov_timeouts = 0;
   bit cov_offsubnet = 0, cov_clear = 0, cov_reset = 0, cov_nonarp = 0, cov_notforus = 0;
+  bit cov_second_timeout = 0, cov_busy_request = 0;
 
   function automatic logic [31:0] asked_for(input logic [31:0] ip);
     return ((ip & MASK) == (LIP & MASK)) ? ip : GWIP;   // clause Q3
@@ -338,6 +339,72 @@ module arp_engine_tb;
       repeat (700) @(posedge clk);
     end
 
+    // -- 7a. a SECOND unanswered lookup -------------------------------------
+    // Q4 fixes the count at exactly four for EVERY unanswered lookup, not only
+    // the first. A design that gives up one retry early from the second one
+    // onward passes phase 3 and fails nothing until a second lookup times out.
+    begin
+      bit got, err; logic [47:0] mac; int took;
+      txq.delete();
+      start_lookup(32'hC0A8_0131);
+      cov_misses++; cov_timeouts++; cov_second_timeout = 1'b1;
+      await_response(2000, got, err, mac, took);
+      if (!got)      fail("Q5", "the SECOND unanswered lookup never gave up");
+      else if (!err) fail("Q5", "the SECOND unanswered lookup was resolved without an error");
+      if (txq.size() != RETRIES)
+        fail("Q4", $sformatf("the SECOND unanswered lookup transmitted %0d request(s); exactly %0d are required, on every lookup alike",
+                             txq.size(), RETRIES));
+      for (int i = 0; i < txq.size(); i++)
+        check_request(txq[i], 32'hC0A8_0131, $sformatf("second unanswered lookup, retry %0d", i));
+    end
+    repeat (6) @(posedge clk);
+
+    // -- 7b. a request arrives WHILE one of our own lookups is outstanding ----
+    // A1 and A2 hold whatever else the engine is doing. Every request above is
+    // fed to an idle engine, so a design that answers correctly only when idle,
+    // or that answers requests meant for other stations while it is busy,
+    // passes phase 4 and fails nothing until the two overlap.
+    begin
+      int n_reply = 0, n_foreign = 0;
+      bit got, err; logic [47:0] mac; int took;
+      txq.delete();
+      start_lookup(32'hC0A8_0141);            // unknown, so it stays outstanding
+      cov_misses++;
+      repeat (12) @(posedge clk);
+      send_frame(16'd1, 48'hAA_BB_CC_DD_EE_01, 32'hC0A8_0142, 48'd0, LIP);
+      cov_requests_in++; cov_busy_request = 1'b1;
+      repeat (80) @(posedge clk);
+      for (int i = 0; i < txq.size(); i++) begin
+        if (txq[i].oper === 16'd2) begin
+          automatic frame_t f = txq[i];
+          n_reply++;
+          if (f.sha !== LMAC)
+            fail("A1", $sformatf("reply SHA %012x while a lookup was outstanding, expected local_mac_i", f.sha));
+          if (f.spa !== LIP)
+            fail("A1", $sformatf("reply SPA %08x while a lookup was outstanding, expected local_ip_i", f.spa));
+          if (f.tha !== 48'hAA_BB_CC_DD_EE_01)
+            fail("A1", $sformatf("reply THA %012x while a lookup was outstanding, expected the requester's SHA", f.tha));
+          if (f.tpa !== 32'hC0A8_0142)
+            fail("A1", $sformatf("reply TPA %08x while a lookup was outstanding, expected c0a80142", f.tpa));
+        end
+      end
+      if (n_reply != 1)
+        fail("A1", $sformatf("a request for our own address produced %0d reply frame(s) while a lookup was outstanding; exactly 1 is required",
+                             n_reply));
+
+      // ...and one meant for SOMEBODY ELSE, still while we are busy
+      txq.delete();
+      send_frame(16'd1, 48'hAA_BB_CC_DD_EE_02, 32'hC0A8_0143, 48'd0, 32'hC0A8_01CD);
+      repeat (80) @(posedge clk);
+      for (int i = 0; i < txq.size(); i++) if (txq[i].oper === 16'd2) n_foreign++;
+      if (n_foreign != 0)
+        fail("A2", $sformatf("a request for another station's address produced %0d reply frame(s) while a lookup was outstanding",
+                             n_foreign));
+
+      await_response(3000, got, err, mac, took);   // let it retire
+    end
+    repeat (6) @(posedge clk);
+
     // -- 8. reset mid-stream ------------------------------------------------
     begin
       cov_reset = 1'b1;
@@ -361,6 +428,8 @@ module arp_engine_tb;
     if (!cov_offsubnet)      fail("COVERAGE", "no off-subnet lookup was driven -- Q3 is untested");
     if (!cov_notforus)       fail("COVERAGE", "no request for another station was driven -- A2 is untested");
     if (!cov_nonarp)         fail("COVERAGE", "no non-ARP frame was driven -- A3 is untested");
+    if (!cov_second_timeout) fail("COVERAGE", "only ONE lookup was ever left unanswered -- Q4's count is unchecked on any later one");
+    if (!cov_busy_request)   fail("COVERAGE", "no ARP request arrived while one of our own lookups was outstanding");
     if (!cov_clear)          fail("COVERAGE", "clear_cache_i was never asserted");
     if (!cov_reset)          fail("COVERAGE", "reset was never asserted mid-stream");
 

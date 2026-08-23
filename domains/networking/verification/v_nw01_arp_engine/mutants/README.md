@@ -1,55 +1,66 @@
 # v_nw01 mutant set — these MUST BE CAUGHT
 
-The discriminating measure for a submitted testbench. Opposite sign to
-`conformant/`: that one satisfies the spec and must survive; these violate it
-and must be caught.
+Every mutant is **generated**, by `gen_mutants.py`, as a mechanical edit of a
+renamed copy of the anchor. Each edit is an exact `old -> new` pair asserted to
+match **exactly once**, so a silent no-op cannot produce a mutant identical to
+the golden that every testbench "kills" by doing nothing.
 
-Every mutant is **generated**, by `gen_mutants.py`, as a mechanical edit of the
-golden shim and — where the defect is internal — of a renamed copy of the
-anchor. Each edit is an exact `old -> new` pair asserted to match **exactly
-once**. Four are pure changes to the pinned timers and the subnet mask: that is
-the honest way to build a retry or routing defect, because a hand-written faulty
-engine fails for incidental reasons and isolates nothing.
+## Every defect in this set is GUARDED
+
+    defect := wrong_behaviour AND rare_predicate over contract-level state
+
+The guards name how many lookups have timed out, how many frames have been
+learned since the last clear, which retry it is, and whether one of our own
+lookups is outstanding when a frame arrives — all counted from the module's own
+ports, so each can be restated against an independent implementation.
 
 ## The set
 
-| id | clause | defect | why one successful lookup misses it |
+| id | clause | guard — fires only when… | defect |
 |---|---|---|---|
-| `ae_m1_one_retry_short` | **Q4** | three request frames are sent, not four | needs a lookup deliberately left unanswered, and the frames *counted* |
-| `ae_m2_retry_interval_long` | **Q4** | requests are 96 cycles apart, not 64 | needs the *spacing between* frames measured, not just their number |
-| `ae_m3_timeout_short` | **Q5** | gives up 128 cycles after the last request, not 256 | needs the interval from the final request to the error timed |
-| `ae_m4_subnet_ignored` | **Q3** | every address looks local, so an off-subnet lookup asks for the target | every in-subnet lookup behaves perfectly; only an address outside the subnet exposes it |
-| `ae_m5_replies_not_learned` | **C1** | only requests are learned from; a reply teaches nothing | needs a reply distinguished from a request *as a source of learning* |
-| `ae_m6_answers_any_target` | **A2** | a request for somebody else's address is answered too | needs a frame aimed at a station that is not us |
-| `ae_m7_reply_target_is_us` | **A1** | the reply names our own address as its target | the reply is sent, to the right station, with the right operation — only one field is wrong |
-| `ae_m8_ethtype_ignored` | **A3** | a frame that is not ARP is processed anyway | needs a frame with a non-ARP ethertype, which a testbench that only speaks ARP never sends |
+| `ae_m1_three_requests_from_second_lookup` | **Q4** | the second unanswered lookup, and every one after it | only THREE request frames are transmitted instead of four |
+| `ae_m2_last_request_wrong_target` | **Q3** | the LAST of the four requests | it asks for an address one off from the one looked up |
+| `ae_m3_cached_mac_wrong_when_full` | **Q1** | four or more frames learned since the last clear -- the cache is full | the MAC answered from the cache has its low byte corrupted |
+| `ae_m4_insert_dropped_when_full` | **C2** | four frames have already been learned since the last clear | the insert silently fails, so the address stays unknown |
+| `ae_m5_requests_not_learned_after_two` | **C1** | two or more frames have already been learned since the last clear | a received ARP REQUEST does not insert its sender pair; replies still do |
+| `ae_m6_reply_target_wrong_while_busy` | **A1** | one of our own lookups is outstanding when the request arrives | the reply names the wrong target hardware address |
+| `ae_m7_answers_foreign_target_while_busy` | **A2** | one of our own lookups is outstanding when the request arrives | a request whose TPA is not local_ip_i is answered anyway |
+| `ae_m8_ethtype_low_nibble_ignored` | **A3** | the eth_type differs from 0x0806 only in its low nibble, after two frames | a frame that is not ARP is processed as ARP |
+| `ae_m9_clear_ignored_when_full` | **C3** | the cache holds four entries when the clear arrives | clear_cache_i does not reach the cache, so every entry survives it |
+| `ae_m10_five_requests_on_third_lookup` | **Q4** | the third lookup since reset, and every one after it | FIVE request frames are transmitted instead of four |
 
-None falls to a single successful lookup, and three cannot be seen at all
-without leaving a lookup unanswered for hundreds of cycles.
+## Witnesses — rule 21
 
-## Witnesses
+`witness.sh` substitutes each mutant for the golden shim, runs the reference
+against it, and reports the first clause failure.
 
-Each mutant's first failure under the reference testbench, which names the
-clause and the measurement:
-
-| id | first failure |
+| id | first clause failure |
 |---|---|
-| `ae_m1_one_retry_short` | `Q4: an unanswered lookup transmitted 3 request(s); exactly 4 are required` |
-| `ae_m2_retry_interval_long` | `Q4: requests 0 and 1 are 97 cycles apart; the window is 64..80` |
-| `ae_m3_timeout_short` | `Q5: gave up 128 cycles after the last request; the window is 256..300` |
-| `ae_m4_subnet_ignored` | `Q3: asked for 08080808, expected c0a801fe` |
-| `ae_m5_replies_not_learned` | `Q6: a matching reply did not resolve the lookup` |
-| `ae_m6_answers_any_target` | `A2: a request for somebody else's address produced 1 frame(s)` |
-| `ae_m7_reply_target_is_us` | `A1: reply TPA c0a80101, expected the requester's SPA c0a80107` |
-| `ae_m8_ethtype_ignored` | `A3: a frame with eth_type 0800 produced 1 frame(s); it must be ignored` |
+| `ae_m1_three_requests_from_second_lookup` | FAIL Q4: the SECOND unanswered lookup transmitted 3 request(s); exactly 4 are required, on every lookup alike |
+| `ae_m2_last_request_wrong_target` | FAIL Q3: retry 3: asked for c0a80108, expected c0a80109 |
+| `ae_m3_cached_mac_wrong_when_full` | FAIL Q1: answered 010203040507, expected the cached 010203040506 |
+| `ae_m4_insert_dropped_when_full` | FAIL Q1/X3: an address taught just before the clear: no response within 40 cycles |
+| `ae_m5_requests_not_learned_after_two` | FAIL Q1/X3: the address of a station that asked us: no response within 40 cycles |
+| `ae_m6_reply_target_wrong_while_busy` | FAIL A1: reply THA 000000000000 while a lookup was outstanding, expected the requester's SHA |
+| `ae_m7_answers_foreign_target_while_busy` | FAIL A2: a request for another station's address produced 1 reply frame(s) while a lookup was outstanding |
+| `ae_m8_ethtype_low_nibble_ignored` | FAIL A3: a frame with eth_type 0800 produced 1 frame(s); it must be ignored |
+| `ae_m9_clear_ignored_when_full` | FAIL C3: after clear_cache a previously cached address was still answered from the cache |
+| `ae_m10_five_requests_on_third_lookup` | FAIL Q4: an unanswered lookup transmitted 5 request(s); exactly 4 are required |
 
-The generator's uniqueness assertion earned its place here: `m7`'s target
-assignment appears **twice** in the anchor, once on the ARP path and once on the
-InARP path, and the run stopped rather than silently mutating both.
+## The reference killed six of ten
 
-## Reference testbench ceiling
+Three of the four it missed came down to **one thing the run never did**: an
+incoming ARP frame arriving while one of our own lookups was outstanding. Every
+request in the testbench was fed to an idle engine, so A1 and A2 were only ever
+checked in the quiet case. The fourth needed a **second** lookup to time out.
 
-**8 of 8**, checked against a second, independent base: all eight defects
-re-derived on the policy-divergent engine and re-run, 18 of 18 verdicts
-matching, both clean implementations passing. See
-`check_policy_independence.sh` and NOTES.md.
+That second lookup then had to be moved *ahead* of the reset phase. Reset clears
+the timed-out count, so a "second unanswered lookup" placed after a reset is the
+first one again — the phase existed and measured nothing.
+
+## A guard that defeated itself
+
+`ae_m9` gates the cache's clear on the cache being full. The occupancy it read
+was reset on the **first cycle of the clear pulse**, so the remaining three
+cycles of a four-cycle pulse cleared the cache normally and the defect never
+appeared. The gate now holds its decision across the whole pulse.
