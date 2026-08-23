@@ -3351,4 +3351,280 @@ This is the coverage-side counterpart of F59 — a pass count is evidence only o
 the region the vector set reaches — with a sharper edge, because here the
 coverage report itself asserted that the region HAD been reached.
 
+
+### Exposure checked across the project, and the gate
+
+Every built v3 task was checked against this shape. The test is whether a GAP
+exists: a clause requiring a specific delivered value, guarded by a floor that
+can be satisfied without that value ever appearing. A stimulus-side floor over a
+deterministic mapping has no gap — driving the stimulus forces the delivered
+value. Flag-side floors at floating-point boundaries do, because one flag covers
+several delivered values and no flag carries a zero's sign.
+
+**`d_dsp03_multifmt_fma` — HIT, and GATED.** Clause A6 (EXACT-ZERO SIGN,
+authority IEEE 754-2019 clause 6.3) requires +0 in every rounding mode except
+roundTowardNegative, where it requires −0, and requires same-sign zero terms to
+carry their sign. **No A6 coverage exists in the testbench at all.** The only
+floor touching zeros is `floor_chk("zero results", cov_zero, 50)`, which is
+sign-blind and mode-blind: fifty `+0` results satisfy it completely, and A6's
+entire content is about which zeros are `−0`.
+
+The committed vector sets DO exercise it, measured rather than assumed:
+
+| set | exact −0, per format | of those, under RDN |
+|---|---|---|
+| `vectors_w32.hex` | 11 (fp32, fp16, bf16 each) | 3 each |
+| `vectors_w64.hex` | 11 each | 3 each |
+
+Scanner validated before its numbers were read (rule 24): its per-format record
+counts reproduce the testbench's own METRIC line exactly — fp32=1310, fp16=2580,
+bf16=2580 at WIDTH=32.
+
+**THE ADEQUACY CLAIM ATTACHES TO THESE BYTES, NOT TO THE FILENAMES:**
+
+    vectors_w32.hex   git blob f7798be1226ff26387e5edffd5b67c4049344cb3
+                      sha256   2cdd376e701fa157c07ac1eb4f21492320d816aad24774b2ec76bf6f627d88a6
+                      6470 records
+    vectors_w64.hex   git blob 8b6a463ce71f27ffabd1918157aa266cf61e3f7e
+                      sha256   65fff50f0de17f81127a03eff01249fc54051e6b42ff2d024a81d51c805f7817
+                      7760 records
+
+**GATE.** Hard gate on regenerating, reordering or re-deriving either file, and
+on any A6-relevant revision of `spec/fp_multifmt_fma_iface.sv`, until a
+sign × mode floor for exact zeros exists in `tb/fp_multifmt_fma_tb.sv` — in the
+shape that already guards A7a, whose `cov_band_combo[f]` is keyed on
+`{sgn, f_rnd}` with `sgn` taken from `lane_of(f_r(...))`, the delivered result
+lane's sign bit.
+
+**NOT a gate on scoring the committed set**, whose adequacy is the measurement
+above. A6 is exercised today by accident of the generator, not by anything that
+would notice its loss — which is the whole distinction between a latent hole and
+an active one. Any change to those bytes trips the gate automatically, because
+the claim is pinned to the hashes.
+
+**`d_dsp02_fp32_fma_ii1` — CHECKED AND CLEARED. Recorded so it is not
+re-suspected.** The suspicion was reasonable and wrong: its underflow rule sits
+next to a flag and looks exactly like this shape. Two things clear it. First, it
+has no exact-zero-sign clause at all — its A-clauses are A1, A2, A3, A4, A4b, A5,
+A6, A7, A9, and A6 is UNDERFLOW, not zero sign. Second, the floor guarding A6 is
+already delivered-value-side: `cov_a6_zero` is keyed on `{vr[31], v_rnd(v)}` —
+**the sign bit of the delivered result** crossed with the rounding mode, eight
+combinations, gated on inexact — backed by run-failing holes at
+`cov_subn_res == 0` and `cov_szero_res == 0`. It reads the value, not the flag.
+
+**Not this shape:** `d_ca01` and `d_nw03` (floors entirely stimulus-side, over
+mappings the stimulus determines); `d_ca04` (has real status flags, but its
+payload floor is delivered-value-side — "no payload above bit 31 was ever set");
+`d_nw01` (DECERR is a delivered RESP value, floored stimulus-side, and driving an
+unmapped access determines the response); `v_dsp02` (its testbench labels the
+section "coverage floors, all stimulus-side").
+
+**Unmeasured, and marked so rather than asserted clean:** `v_ai02`, `v_ca03`,
+`v_ca04`, `v_ca05`, `v_nw01`, `v_nw02`, `v_nw03`, `v_nw04`. Verification tasks
+gate on mutant discrimination rather than delivered-value floors, so this shape
+does not map onto them directly and they were not audited in depth.
+
 **Rules:** 16, 24
+
+## F64. An ad-hoc query used as evidence is measurement apparatus, and decays the same way
+
+Four times in one session a one-off query returned a clean-looking answer that
+was not an answer. None announced itself. Each was caught only because it was
+cross-checked against a value already known by other means, and each would
+otherwise have been quoted as a result.
+
+**1. A git pathspec glob that returned a false empty.** Checking whether another
+agent's working tree had been disturbed:
+
+```
+git status --porcelain -- 'domains/*/verification'      ->  no output at all
+```
+
+which reads as "nothing modified, nothing staged, nothing untracked". Re-run with
+the four directories written out explicitly, the same query returns **140 lines**.
+Git pathspec globbing does not behave like shell globbing, and the quoted `*` did
+not match across the path segment. I was one step from reporting a verified-clean
+tree that the command had never checked.
+
+**2. A shell glob abort that read as a missing file.** Enumerating built tasks,
+`ls $d/spec/*.sv $d/spec/*.md` under zsh aborts the whole expression when the
+second pattern matches nothing — so every design task, all of which have a
+`spec/*_iface.sv`, was reported `spec:NO`. The absence of `.md` files erased the
+`.sv` files from the answer.
+
+**3. An awk counter that returned zero for everything.** Counting scored
+configurations per task, an awk block-matcher returned `0` for all seven design
+tasks, including `d_ai01`, which demonstrably has two. Re-run through a real YAML
+parser: `d_ca04` has 18, `d_nw01` has 16, `d_nw03` has 8. A zero from a counter is
+indistinguishable from a zero in the data.
+
+**4. A string replacement that silently did nothing, and reported success.**
+Found while writing THIS finding, which is the reason it is here. A Python
+`str.replace` anchored on `--` was run against a file whose text had been
+normalised to `—`; the anchor never matched, no bytes changed, and the script
+printed `written` because the print was unconditional. The verification grep
+immediately afterwards returned `0` occurrences of text that had supposedly just
+been inserted. **This is the worst of the four, and it is worst for a structural reason: it is
+the only WRITE-SIDE instance.** The other three misreport a read — they return a
+wrong answer to a question, and the damage is bounded by what is done with that
+answer. This one misreports a write: the file was not changed, and the operator
+was told it was. A "recorded" claim that recorded nothing defeats the recording
+half of rule 24 directly, and nothing downstream can detect it, because every
+later reader sees a file that is simply missing text nobody knows was meant to be
+there.
+
+That asymmetry is what makes grep-and-assert-after-edit load-bearing rather than
+belt-and-braces. A read-side check is a second opinion on a number. A write-side
+check is the only evidence that an edit happened at all.
+
+### The general rule this generalises to
+
+**An ad-hoc query used as evidence is measurement apparatus.** Rule 24 already
+names "ad-hoc measurement scripts" in scope and says the last item "is not
+padding — it is where this was actually needed". Every instance above is smaller
+than a script: a single command line, a glob, a one-liner. Size is not the
+boundary. If a number or a status is going to be read off it and believed, it is
+an instrument, and it must reproduce a known-good answer before its output is
+read.
+
+The check is usually one line and costs nothing:
+
+* run the scoped query against a directory whose contents you already know;
+* count something the target already reports, and compare — the d_dsp03 vector
+  scan in F63 was validated this way, by reproducing the testbench's own
+  `fp32=1310 fp16=2580 bf16=2580` before its zero-sign counts were trusted;
+* after any in-place edit, grep for the text you believe you just wrote, with a
+  fixed-string match, and assert rather than print.
+
+**A silent-zero and a silent-empty are the dangerous shapes.** `0`, empty output
+and "no matches" are the same tokens a correct run produces when the answer
+genuinely is nothing, so they never look like failures. A wrong non-zero number
+gets questioned; a wrong zero gets believed.
+
+**What this does not claim.** Cross-checking catches an instrument pointed at the
+wrong thing. It does not catch an instrument pointed at the right thing and
+reasoning wrongly about it — that is F59's and rule 4's territory, a measurement
+quoted beyond the region it covers. It also cannot help when no independently
+known value exists to check against; in that case the honest move is to mark the
+result unmeasured, as F63's exposure section does for the eight verification
+tasks, rather than to quote an unvalidated query.
+
+**Rules:** 24
+
+## F65. A precondition checked after the expensive work is not a precondition, and cleanup that ignores exit status destroys the evidence
+
+Three reference builds — d_ca01 at 10.0 ns, d_ca04 at 3.6562, d_nw03 at 4.7500 —
+each ran ORFS to completion and each produced no record. Roughly two hours of
+wall time, nothing measured, nothing left on disk to re-measure.
+
+Two independent defects had to line up.
+
+**The precondition ran last.** `reference_ppa.sh` was adopted verbatim from the
+second host, where the shell profile exports `ORFS_FLOW_DIR`. Every other script
+in this repo defaults that variable (`run_orfs_build.sh:65`,
+`ppa_candidate.sh:215`, `build_queue.sh:97`, `mac_sweep_queue.sh:64` — all
+`${ORFS_FLOW_DIR:-...}`). This one alone demanded it, with `:?`, and read it at
+the *extraction* step:
+
+    CLK_PERIOD_NS="$PER" bash scripts/run_orfs_build.sh ...   # 40 minutes
+    FLOW="${ORFS_FLOW_DIR:?ORFS_FLOW_DIR must be set}"        # then this
+
+The guard was correct and fired correctly. It fired after place-and-route. A
+required-input check placed downstream of the work it guards buys nothing: the
+cost it exists to avoid has already been paid by the time it speaks.
+
+**The cleanup did not read exit status.** The wrapper reclaimed flow output after
+every build unconditionally:
+
+    timeout 5400 bash scripts/reference_ppa.sh "$1" "$2" "$3" 2>&1 | tail -10
+    for sub in results objects logs reports; do rm -rf "$FD/$sub/sky130hd/$nick"; done
+
+Alone, defect one costs a re-run — the routed database is still sitting there and
+the numbers can be extracted by hand. Together they cost the builds outright. The
+`rm -rf` deleted exactly the artifact that made the failure cheap.
+
+Both fixed: the flow directory is resolved and existence-checked before
+`run_orfs_build.sh` is called, with the same default the rest of the repo uses, so
+a misconfigured host costs a second; and the wrapper reclaims only after
+confirming the record file appeared, otherwise printing where the output was kept.
+
+Note what did *not* fail. No wrong number entered the corpus. Rule 20 held —
+failing to obtain a value produced no value, not a default — and rule 24's
+insistence that apparatus prove itself is precisely what this violated: the
+wrapper was never once observed to write a record before three builds were fed to
+it. The reportable damage is entirely wasted compute, which is the cheap failure
+mode, and it stayed cheap only by luck of which host ran it.
+
+**The general form.** A check on an input must run before the work that consumes
+it, and cleanup must be conditional on the success of what it cleans up after.
+Both are rule 24 applied to a wrapper rather than to a measurement: this
+apparatus was never pointed at a known answer before three builds were fed to it.
+
+**Rules:** 24
+
+## F66. A mutant that impersonates the module it replaces is a duplicate definition, and the compiler silently runs the original
+
+**A mutant that takes the golden's module name and delegates to the golden is a
+duplicate definition. The compiler picks one, and every mutant silently runs the
+golden — reporting "no defect found" from a rig that never instantiated a
+defect.**
+
+Found while building step 5c for the four verification tasks that had none. The
+golden half of the new `check_policy_independence.sh` reported all ten mutants
+`PASS BUT EXPECTED FAIL` — a clean sweep of nothing. The policy half, written
+minutes earlier and structurally identical, was 11 of 11.
+
+The mutants here wrap an implementation: each takes the top module's name so the
+testbench instantiates it unchanged, and delegates to the real design inside. So
+the build was handed two modules called `fp_noncomp` — the golden and the mutant
+wearing its name. Verilator resolved the collision without complaint and ran the
+golden every time.
+
+    run_one "$M" FAIL $OTHER "$D/$TOP.sv" "$W/$M.sv"     # both define $TOP
+
+The fix is the one the harness already uses: rename the golden to `<top>_golden`,
+rewrite the mutant's inner instantiation to match, and never pass the original
+under its own name.
+
+**What makes this worth a number is the shape, not the bug.** It is the fourth
+instrument fault in this batch and the fourth to produce *silence that reads as
+success*:
+
+  - a rename using `\b` in BSD `sed`, which matched nothing, so ten witnesses ran
+    the golden and reported "no difference observed";
+  - a runner grepping `^FAIL` against a testbench printing `[FAIL] R14 :`, so ten
+    real failures were reported as no failure;
+  - a guard reading an occupancy that its own clear reset on the pulse's first
+    cycle, so the predicate disarmed the defect it gated;
+  - this one.
+
+None would have been caught by a positive-only or a negative-only control. A
+negative control alone passes: the golden really does behave like the golden. A
+positive control alone passes on the three where the failure path was live. Both
+halves together catch all four, which is why rule 24's controls are now paired
+and refuse to report rather than warn.
+
+**Scope, checked rather than assumed.** The pattern needs a mutant that both
+takes the top's name *and* delegates. It does not appear in the design tasks: all
+29 design mutants across four tasks are standalone DUTs declaring the top
+themselves, none references a `_golden` module, and `sim_candidate.sh` passes the
+testbench and one candidate — its header documents the hazard explicitly. Nor in
+the PPA path: `ppa_candidate.sh` points `VERILOG_FILES` at the candidate plus
+spec packages, never at a reference. No kill count and no PPA number was produced
+through this fault.
+
+**One latent hazard, reported and not fixed.** `scripts/_verif_variant.py`
+rewrites the delegating instantiation as `\b<top>(\s*)#\(` — the parameterised
+form only. A mutant delegating as `<top> i_g (`, with no parameter list, would
+slip past it and land in the scoring path, where the consequence is a kill count
+rather than a witness string. Checked: today every delegating mutant across the
+nine tasks uses the `#(` form, 31 instantiations, zero bare. The gap is latent,
+not live. `scripts/` is outside this agent's boundary; flagged for its owner.
+
+**Rules:** 24
+
+When a mutant impersonates the module it replaces, the thing it replaces must be
+renamed out of the namespace, and the substitution must be proved by a control
+that fails when the substitution does not happen. That is rule 24 applied to a
+substitution step rather than to a measurement: the apparatus here is the
+rename, and it had never been pointed at a known answer.
