@@ -1,0 +1,15 @@
+12:30:08 === PC DSP QUEUE START ===
+12:30:08 SKIP sweep d_dsp03 ref -- converged 46.875 ns, ref/ and orfs/ unchanged since
+12:30:08 SWEEP d_dsp03_cand_chat (seed 12.0ns)
+12:30:08 SWEEP d_dsp03_cand_claude (seed 12.0ns)
+12:30:08 SKIP sweep d_dsp02 ref -- converged 12.8125 ns, ref/ and orfs/ unchanged since
+12:30:08 SWEEP d_dsp02_cand_chat (seed 20.25ns)
+12:30:08 SWEEP d_dsp02_cand_claude (seed 20.25ns)
+12:30:08 --- common-clock builds ---
+12:30:08 BUILD d_dsp03/reference at 46.875 ns
+12:30:09 BUILD d_dsp03/chat at 46.875 ns
+12:30:09 BUILD d_dsp03/claude at 46.875 ns
+12:30:09 BUILD d_dsp02/reference at 12.8125 ns
+12:30:09 BUILD d_dsp02/chat at 12.8125 ns
+12:30:09 BUILD d_dsp02/claude at 12.8125 ns
+12:30:09 === PC DSP QUEUE DONE ===

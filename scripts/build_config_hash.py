@@ -61,12 +61,42 @@ def clock_periods(sdc_path):
                   re.findall(r"^set\s+(\w*period\w*)\s+([\d.]+)", txt, re.M))
 
 
+# PERIODS ARE NORMALISED BEFORE HASHING, BECAUSE THE HASH IS OVER A STRING.
+# Two callers passing the SAME clock in different formats produced different
+# hashes, so rule 17 refused to compare builds that were physically identical:
+#   fixed_clock_ppa.sh  -> CLK_PERIOD_NS=9.0      -> 2a133c2a85f8933a
+#   overnight_ppa2.sh   -> CLK_PERIOD_NS=9.0000   -> d0a75612c6e3be79
+# (period_for and mac_sweep_queue.sh both format with printf "%.4f"). The two
+# d_nw01/claude builds behind those hashes came out byte-identical -- 110645
+# um^2, 1.56e-02 W, WNS 0.213807 -- and were still declared incomparable.
+#
+# Fixing it here rather than in each caller means every caller converges without
+# having to remember, including ones not yet written. Canonical form is the
+# MINIMAL decimal: round to 4 dp (the resolution bisection actually produces),
+# strip trailing zeros, keep one decimal place. Chosen because it is what the
+# existing corpus already uses -- "9.0" and "10.0" preserve six records on disk
+# where "%.4f" would have preserved one.
+_PERIOD_KEYS = ("CLK_PERIOD_NS", "ABC_CLOCK_PERIOD_IN_PS")
+
+
+def canon_period(v):
+    """9.0 / 9.0000 -> '9.0';  7.03125 -> '7.0312';  10 -> '10.0'."""
+    try:
+        s = f"{float(v):.4f}".rstrip("0")
+    except (TypeError, ValueError):
+        return v                      # not numeric -- pass through untouched
+    return s + "0" if s.endswith(".") else s
+
+
 def main():
     if len(sys.argv) < 3:
         print(__doc__.strip().splitlines()[0])
         return 2
     cfg_path, sdc_path = sys.argv[1], sys.argv[2]
     overrides = dict(kv.split("=", 1) for kv in sys.argv[3:] if "=" in kv)
+    for k in _PERIOD_KEYS:
+        if k in overrides:
+            overrides[k] = canon_period(overrides[k])
 
     try:
         cfg = open(cfg_path, errors="replace").read()

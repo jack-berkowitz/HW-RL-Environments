@@ -1,0 +1,7 @@
+19:08:20 === PART 2 START ===
+19:08:20 SKIP sweep d_nw03 ref (done)
+19:08:20 SKIP sweep d_nw03_cand_chat (done)
+19:08:20 SKIP sweep d_nw03_cand_claude (done)
+19:08:20 SKIP sweep d_nw03_cand_gemini (done)
+19:08:20 SKIP sweep d_dsp03 ref (done)
+19:08:20 SWEEP d_dsp03_cand_chat (seed 48.0ns)

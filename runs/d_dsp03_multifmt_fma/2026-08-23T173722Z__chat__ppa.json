@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=fp_multifmt_fma; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=65000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=65.0;",
+  "build_config_hash": "9afc32562ebebe1f",
+  "clk_period_ns": "65.0",
+  "correctness_gate": "passed:2026-08-23T052222Z__chat__sim.json",
+  "design_area_um2": "578999",
+  "git_sha": "6f038fd48ed51d76f320f9cec2949a35d8737fdd-dirty",
+  "kind": "ppa",
+  "label": "chat",
+  "orfs_nickname": "d_dsp03_cand_chat",
+  "pdk": "sky130hd",
+  "power_w": "4.20e-01",
+  "status": "completed",
+  "submission": "candidates/d_dsp03/chat.sv",
+  "submission_sha256_16": "f8d75b75b2b29475",
+  "synth_area_um2": "461875.475200",
+  "task": "d_dsp03_multifmt_fma",
+  "timestamp_utc": "2026-08-23T17:37:22Z",
+  "wns_ns": "2.3478"
+}

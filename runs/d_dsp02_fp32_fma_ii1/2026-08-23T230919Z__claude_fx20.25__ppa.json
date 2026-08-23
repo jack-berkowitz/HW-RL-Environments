@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=fp32_fma_ii1; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=10000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10; override.CLK_PERIOD_NS=20.25;",
+  "build_config_hash": "d873960e537af20d",
+  "clk_period_ns": "20.25",
+  "correctness_gate": "passed:2026-08-23T060026Z__claude__sim.json",
+  "design_area_um2": "83525",
+  "git_sha": "02878521f12cddd0b0225078e4c581f1d9925b8f-dirty",
+  "kind": "ppa",
+  "label": "claude_fx20.25",
+  "orfs_nickname": "d_dsp02_cand_claude_fx20.25",
+  "pdk": "sky130hd",
+  "power_w": "2.01e-02",
+  "status": "completed",
+  "submission": "candidates/d_dsp02/claude.sv",
+  "submission_sha256_16": "a0f584e2ca2c6731",
+  "synth_area_um2": "69380.291200",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "timestamp_utc": "2026-08-23T23:09:19Z",
+  "wns_ns": "1.80308"
+}
