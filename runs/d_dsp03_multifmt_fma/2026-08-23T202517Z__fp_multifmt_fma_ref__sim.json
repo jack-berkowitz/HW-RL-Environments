@@ -1,0 +1,26 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {},
+  "git_sha": "6f038fd48ed51d76f320f9cec2949a35d8737fdd-dirty",
+  "kind": "sim",
+  "label": "fp_multifmt_fma_ref",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "WIDTH_32",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "WIDTH_64",
+      "verdict": "COMPILE"
+    }
+  ],
+  "submission": "domains/dsp/design/d_dsp03_multifmt_fma/ref/fp_multifmt_fma_ref.sv",
+  "submission_sha256_16": "b94afb9713ca7e72",
+  "task": "d_dsp03_multifmt_fma",
+  "task_text_hash": "8eb2ae18667fe22a",
+  "timestamp_utc": "2026-08-23T20:25:17Z"
+}

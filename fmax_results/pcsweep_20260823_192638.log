@@ -1,0 +1,6 @@
+19:26:38 === PC SWEEP QUEUE START ===
+19:26:38 SWEEP d_dsp03_cand_chat_v2 (seed 53.0ns) <- candidates/d_dsp03/chat.sv
+19:26:38 SWEEP d_dsp03_cand_claude_v2 (seed 45.0ns) <- candidates/d_dsp03/claude.sv
+19:26:38 SWEEP d_ca01_cand_claude_v2 (seed 10.0ns) <- candidates/d_ca01/claude.sv
+19:26:39 SWEEP d_ca01_cand_gemini_v2 (seed 10.0ns) <- candidates/d_ca01/gemini.sv
+19:26:39 === PC SWEEP QUEUE DONE ===

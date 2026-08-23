@@ -26,12 +26,33 @@ NICK="$(awk '
   $0 ~ /^[[:space:]]*export[[:space:]]+DESIGN_NAME[[:space:]]*[:?]?=/      {sub(/^[^=]*=/,"");gsub(/[[:space:]]/,"");m=$0}
   END{print (n!=""?n:m)}' "$CFG")"
 
-echo "task=$TASK_NAME  ref=$REF  nick=$NICK  clk=${PER}ns  label=$LABEL"
+# RESOLVE AND CHECK THE FLOW DIR *BEFORE* BUILDING, NOT AFTER.
+# This used to read ORFS_FLOW_DIR with a `:?` guard after run_orfs_build.sh
+# returned. On a host that exports the variable it never fires; on one that does
+# not, the build runs to completion and THEN the script dies at the record write
+# -- so the extraction is lost along with the routed output if the caller
+# reclaims unconditionally. That cost the Mac three completed reference builds
+# (d_ca01, d_ca04, d_nw03) and about two hours, measuring nothing.
+# Default identically to run_orfs_build.sh:65 so both agree on the location, and
+# fail before spending an hour rather than after.
+# CHECK FOR AN ORFS TREE, NOT MERELY A DIRECTORY. An empty
+# /Users/jackberkowitz/tools/OpenROAD-flow-scripts/flow exists on the Linux box
+# -- left behind by an earlier run that fell through to this same default -- so a
+# plain `[ -d ]` passes on a path that is not a flow tree at all, and the build
+# proceeds against nothing. Require the files run_orfs_build.sh actually mounts.
+FLOW="${ORFS_FLOW_DIR:-/Users/jackberkowitz/tools/OpenROAD-flow-scripts/flow}"
+if [ ! -f "$FLOW/Makefile" ] || [ ! -d "$FLOW/platforms" ]; then
+  echo "ERROR: '$FLOW' is not an OpenROAD-flow-scripts flow/ directory" >&2
+  echo "       (needs Makefile and platforms/; it may exist but be empty)" >&2
+  echo "       set ORFS_FLOW_DIR to the flow/ directory of an ORFS clone" >&2
+  exit 2
+fi
+
+echo "task=$TASK_NAME  ref=$REF  nick=$NICK  clk=${PER}ns  label=$LABEL  flow=$FLOW"
 
 CLK_PERIOD_NS="$PER" bash scripts/run_orfs_build.sh "/work/${CFG#$REPO/}" || {
   echo "BUILD FAILED"; exit 1; }
 
-FLOW="${ORFS_FLOW_DIR:?ORFS_FLOW_DIR must be set}"
 RPT="$FLOW/reports/sky130hd/$NICK/base"
 FLOG="$FLOW/logs/sky130hd/$NICK/base"
 

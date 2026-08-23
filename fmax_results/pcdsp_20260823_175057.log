@@ -1,0 +1,9 @@
+17:50:57 === PC FIXED-CLOCK BUILDS START ===
+17:50:57 BUILD d_dsp03/reference at 46.875 ns
+17:50:57 SKIP build d_dsp03/chat at 46.875 (already built)
+17:50:57 BUILD d_dsp03/claude at 46.875 ns
+17:50:57 BUILD d_dsp02/reference at 20.25 ns
+17:50:57 BUILD d_dsp02/chat at 20.25 ns
+17:50:57 BUILD d_dsp02/claude at 20.25 ns
+17:50:57 BUILD d_dsp03/chat at 53.0 ns
+17:50:57 === PC FIXED-CLOCK BUILDS DONE ===

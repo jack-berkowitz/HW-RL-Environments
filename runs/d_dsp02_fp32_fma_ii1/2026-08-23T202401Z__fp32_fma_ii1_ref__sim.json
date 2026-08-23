@@ -1,0 +1,22 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "6f038fd48ed51d76f320f9cec2949a35d8737fdd-dirty",
+  "kind": "sim",
+  "label": "fp32_fma_ii1_ref",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "COMPILE"
+    }
+  ],
+  "submission": "domains/dsp/design/d_dsp02_fp32_fma_ii1/ref/fp32_fma_ii1_ref.sv",
+  "submission_sha256_16": "47a8351a62e5afe3",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "617eb4240908e773",
+  "timestamp_utc": "2026-08-23T20:24:01Z"
+}
