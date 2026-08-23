@@ -17,7 +17,7 @@ module ptp_time_base_tb;
   localparam longint FNS_PER_NS = 65536;
   localparam longint NS_PER_S   = 1_000_000_000;
   localparam longint FNS_PER_S  = NS_PER_S * FNS_PER_NS;
-  localparam int     SETTLE     = 6;      // clause L1 allows 4; two cycles of margin
+  localparam int     SETTLE     = 10;     // clause L1 allows 8; two cycles of margin
   localparam longint DEF_PERIOD = 6 * FNS_PER_NS + 16'h6666;
   localparam longint DEF_DRIFT  = 2;
   localparam int     DEF_RATE   = 5;
@@ -58,7 +58,10 @@ module ptp_time_base_tb;
   longint m_adj    = 0;               // fns, signed
   longint m_drift  = DEF_DRIFT;       // fns, signed
   int     m_rate   = DEF_RATE;
-  int     settle   = 20;              // no checking until the first steady run
+  int     settle   = 8;               // clause X2b: the warm-up the SPEC grants,
+                                      // and no more. It was 20 -- an allowance the
+                                      // reference took and the submission was not
+                                      // given, which is not a fair measurement.
   bit     checking = 1'b0;
 
   // observation state. EACH BASE IS CHECKED ON ITS OWN: clause L2 leaves the
@@ -107,6 +110,16 @@ module ptp_time_base_tb;
       return;
     end
     if (has_adj) adj_applied[b]++;
+    // A configured drift must keep ARRIVING, not merely be correctly spaced when
+    // it does. Without this, a design that stops applying it looks like one
+    // running at exactly its period -- a legal increment, and silently wrong.
+    if (m_drift != 0 && last_drift[b] >= 0 && (cyc - last_drift[b]) > 4*m_rate) begin
+      if (drift_bad[b] < 2)
+        fail("D2", $sformatf("cycle %0d, %s: no drift has been applied for %0d cycles; drift_rate_i is %0d, so one is due every %0d",
+                             cyc, base_name(b), cyc - last_drift[b], m_rate, m_rate));
+      drift_bad[b]++;
+      last_drift[b] = cyc;      // re-arm so one stall does not report every cycle
+    end
     if (has_drift) begin
       drift_hits[b]++;
       if (last_drift[b] >= 0 && (cyc - last_drift[b]) != m_rate) begin

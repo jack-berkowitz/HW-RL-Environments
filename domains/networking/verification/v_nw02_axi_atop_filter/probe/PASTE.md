@@ -210,8 +210,22 @@ read response (`[5:4] == 01`), and atomic with a read response
   returns **exactly `s_awlen_i + 1`** R beats, each with `s_rresp_o == 2'b10`
   (SLVERR) and `s_rid_o` equal to the `s_awid_i` of that write, with
   `s_rlast_o` asserted on the **final** beat and on no other.
+
+  **Two things about when these beats appear, because neither is obvious and
+  both change how you must count them.** They may begin **before the B response
+  of the same write** — L1 leaves that order free, and this implementation in
+  fact emits them first. They may also begin **before that write's W burst has
+  finished**. So the arrival of an R beat tells you nothing about which write it
+  belongs to, and neither does its position in the stream.
+
+  **Attribute an R beat by its `s_rid_o`**, which F4 fixes to the `s_awid_i` of
+  the write that owes it. Counting beats in arrival order, or assuming they
+  follow the B, will attribute them to the wrong write and report violations
+  that are not there.
 - **F5.** For a filtered write for which C2 does **not** hold, the unit returns
-  **no** R beats at all.
+  **no** R beats at all. Note this is a statement about *that write*: an R beat
+  carrying a different `s_rid_o` belongs to a different write and says nothing
+  about this one.
 
 ## W. The outstanding-write bound
 
@@ -233,7 +247,17 @@ read response (`[5:4] == 01`), and atomic with a read response
 ## X. Reset, protocol and liveness
 
 - **X1.** `rst_ni` is active low and may be asserted asynchronously. While it
-  is low, no output `valid` on any channel is asserted.
+  is low the unit **originates** nothing: `m_awvalid_o` and `m_wvalid_o` stay
+  low and no manufactured response is produced.
+
+  It does **not** gate the pass-through. A B or R response arriving on the
+  master port is forwarded combinationally, so `s_bvalid_o` and `s_rvalid_o`
+  follow their master-port inputs whatever `rst_ni` is doing. To observe reset
+  behaviour on those channels, hold the master port quiet.
+  **This applies from the first rising clock edge onward.** Before any clock
+  edge has occurred the design's registers hold no defined value, so its
+  outputs are unknown rather than low. Sampling them at time zero, before
+  the first edge, tests nothing this contract promises.
 - **X2.** After reset is released the unit owes no response and holds no
   transaction; its behaviour does not depend on anything presented while reset
   was low.
@@ -246,6 +270,14 @@ read response (`[5:4] == 01`), and atomic with a read response
   - a W beat it is required to consume is accepted within **64 cycles** of being
     offered, and an AW is accepted within **64 cycles** of the §W bound
     permitting it.
+
+  **"Provided the receiving side holds its `ready` asserted" is load-bearing on
+  both bullets.** The unit may hold a filtered write open until the responses it
+  owes for that write have been taken — including the R beats, which F4 says may
+  appear before the B. If you leave R beats unconsumed and then offer another
+  atomic write, nothing obliges the unit to accept it, and no bound here is
+  violated. Hold `s_rready_i` and `s_bready_i` asserted, or account for the
+  backpressure you are applying.
 
 ---
 
@@ -275,7 +307,6 @@ It says nothing about `s_awaddr_i` — no address is privileged, and no write is
 filtered on the basis of where it points. It says nothing about the value of
 `m_wstrb_o` beyond P2's "unmodified". It places no bound on read traffic: the
 number of outstanding reads is not limited by §W, which concerns writes only.
-
 
 ---
 
@@ -346,6 +377,14 @@ testbench to be rejected with none of its checking ever running:
 
 - **Identify a result by bookkeeping, not by matching on its value.** Values
   repeat, so content matching is ambiguous and will mis-attribute.
+
+- **`checker` / `endchecker` is not supported.** Nor are `bind`, `program`
+  blocks, or SVA sequence/property declarations. Write your checks as
+  ordinary `always` blocks and tasks.
+
+- **`automatic` belongs on declarations inside a task, function or
+  procedural block — never at module scope.** `automatic int x;` written
+  among the module's signals is a syntax error, not a lifetime hint.
 
 - Do not use `#` delays for anything except the clock generator and the watchdog.
 - No UVM, no `randsequence`, no DPI. Queues and associative arrays are fine.

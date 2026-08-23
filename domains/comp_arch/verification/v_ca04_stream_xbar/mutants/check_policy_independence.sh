@@ -15,6 +15,11 @@ fails=0
 BASE=("$D/aa_asserts_off.sv" "$D/cf_math_pkg.sv" "$D/lzc.sv" "$D/rr_arb_tree.sv"
       "$D/spill_register.sv" "$D/spill_register_flushable.sv" "$D/stream_demux.sv"
       "$D/stream_xbar.sv")
+# four of the ten defects live INSIDE the arbiter, so their renamed copies have
+# to be in the compile too
+for f in "$D"/rr_arb_tree_m*.sv "$D"/stream_xbar_m*.sv; do
+  [ -e "$f" ] && BASE+=("$f")
+done
 
 run_one() {   # $1 label, $2 expected, $3.. files
   local label="$1" expect="$2"; shift 2

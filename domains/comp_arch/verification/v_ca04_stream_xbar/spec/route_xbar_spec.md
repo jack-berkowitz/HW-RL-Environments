@@ -73,8 +73,17 @@ Nothing is promised about the relative order of beats from *different* inputs.
 
 ## X. Reset and liveness
 
-- **X1.** `rst_ni` is asynchronous and active low. While it is low no
-  `out_valid_o` bit is asserted.
+- **X1.** `rst_ni` is asynchronous and active low. While it is low the crossbar
+  accepts nothing and completes nothing.
+
+  Reset governs what the unit **originates**, not what it merely passes
+  through. A purely combinational path from an input to an output is not
+  gated by reset, so driving that input while reset is asserted will drive
+  the output too. To observe reset behaviour, hold the inputs quiet.
+  **This applies from the first rising clock edge onward.** Before any clock
+  edge has occurred the design's registers hold no defined value, so its
+  outputs are unknown rather than low. Sampling them at time zero, before
+  the first edge, tests nothing this contract promises.
 - **X2.** After reset is released the crossbar holds no beat and owes no
   delivery.
 - **X3 (liveness bound).** A beat offered on input `k` whose bound output is

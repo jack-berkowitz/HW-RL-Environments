@@ -1,7 +1,7 @@
 #!/bin/bash
 # TIER-B 5c: no mutant may be killed by the POLICY difference alone.
 #
-# The eight defects of mutants.sv are re-derived on top of the policy-divergent
+# The ten defects of mutants.sv are re-derived on top of the policy-divergent
 # implementation (mutants/policy/), which acts on every control input in its own
 # cycle and drives both time bases from the same increment -- the opposite
 # choice on both named latitude clauses. Each is run against the reference
@@ -27,7 +27,7 @@ run_one() {   # $1 label, $2 expected, $3.. files
   else printf '  %-34s %-4s BUT EXPECTED %s\n' "$label" "$got" "$expect"; fails=$((fails+1)); fi
 }
 
-echo "reference testbench vs the GOLDEN base and its eight defects"
+echo "reference testbench vs the GOLDEN base and its ten defects"
 run_one "golden (clean)" PASS "$T/dut/ptp_clock.sv" "$T/dut/ptp_time_base.sv"
 for M in $(grep -oE "^module pt_m[A-Za-z0-9_]+" "$T/mutants/mutants.sv" | awk '{print $2}'); do
   python3 -c "
