@@ -3296,3 +3296,59 @@ nothing above it is ever driven, so provisioning for longer bursts is wasted
 area, not insurance" -- and buffering simply never got the same treatment.
 
 **Rules:** 17, 22, 25
+
+## F63. A coverage floor tallied from flags does not cover a delivered-value requirement
+
+d_ai01's scoring testbench carries combination floors on the two clauses that
+tabulate what the unit must DELIVER at the ends of the binary16 range: A5
+(overflow) and A6 (underflow), each of them rounding-mode x sign, ten cells
+apiece. At the scored configuration both reported **10/10**.
+
+Both floors are tallied from `status_o` — the per-stage IEEE exception flags.
+
+The same run reported `negzero=0`: across 3000 cycles, a negative zero was
+**never once delivered** on `z_o`.
+
+Those two statements are consistent, and that is the finding. A6's
+sign-preservation sentence ("a negative exact result delivers -0, never +0") and
+A8's exact-zero-sign rule ("-0 under roundTowardNegative alone") are requirements
+about **the sign of a delivered value**. No exception flag reports that sign. The
+UF flag fires identically whether the unit delivers +0 or -0, so a floor built on
+UF can read 10/10 while the property those clauses actually constrain has never
+been exercised at all.
+
+### The measurement
+
+`nc_e_positive_zero_only` delivers +0 wherever the reference delivers -0 and
+changes nothing else. Against the original vector set it would have **passed** —
+it perturbs only the encoding 0x8000, which that set never produced.
+
+This was measured rather than argued. After adding two directed phases that force
+a signed zero onto `z_o`, `nc_e` kills 132 of 3400 vectors, and **every one of
+those kills lands at cycle 3031 or later** — entirely inside the added phases.
+The random body of the set, the part that produced 10/10 on both flag floors,
+contributes none of them.
+
+So the floors were not merely incomplete. They were reporting full coverage of
+two clauses while one of the specific behaviours those clauses require was
+unreachable by the stimulus and unkillable by a control aimed straight at it.
+
+### The general rule this generalises to
+
+**A floor must be tallied from the same observable the clause constrains.**
+
+When a clause says "deliver X", the floor must count deliveries of X. Counting
+the exception state that accompanies X is a different measurement, and the two
+come apart exactly where a specification is most likely to be wrong: at the
+boundary cases where a standard permits more than one delivered value and the
+implementation picks one.
+
+The diagnostic question is cheap: for each clause with a floor, name the signal
+the floor reads, and name the signal the clause talks about. If they are not the
+same signal, the floor is evidence about something else.
+
+This is the coverage-side counterpart of F59 — a pass count is evidence only over
+the region the vector set reaches — with a sharper edge, because here the
+coverage report itself asserted that the region HAD been reached.
+
+**Rules:** 16, 24

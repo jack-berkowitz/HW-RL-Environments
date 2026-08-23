@@ -1,0 +1,295 @@
+title: FP16 weight-broadcast multiply-accumulate array
+id: d_ai01
+module: fp16_gemm_array
+domain: ai_accel
+type: design
+catalog: TASK_CATALOG.md
+procedure: TIER-B
+
+catalog_divergence: >
+  THE CATALOG'S PREMISE FOR THIS ROW IS REFUTED, and the divergence is larger
+  than a rename. Row d_ai01 reads: `systolic_16x16_dbuf` -- "16x16 array with
+  weight double-buffering and accumulator drain overlapping compute. The
+  scheduling is the task; the MAC is trivial."
+  .
+  RedMulE is TWO-LEVEL. redmule_top instantiates redmule_x_buffer,
+  redmule_w_buffer, redmule_z_buffer, redmule_engine, redmule_scheduler and
+  redmule_streamer as siblings; there is no intermediate module. Verified by
+  grepping every instantiation site in refs/redmule/rtl. So the composition the
+  row describes -- array plus double-buffering plus drain overlap -- is not
+  exposed at ANY shimmable boundary. Reaching it requires either taking all of
+  redmule_top (an HWPE memory-mapped accelerator with TCDM master ports, a
+  register file and an XIF control interface, which is a different and far
+  larger task) or writing a sequencer inside the shim, which would put behaviour
+  in the reference and disqualify it the way d_dsp01 was disqualified.
+  .
+  This task is therefore built at the redmule_engine boundary, and it INVERTS
+  the row's last sentence: the scheduling is not reachable, and the MAC is not
+  trivial. What is left is a genuinely hard contract -- a chain of binary16
+  fused multiply-adds with a contractual operand skew, five rounding modes,
+  subnormal support at both ends, and mode-dependent delivered values at the
+  range boundaries.
+  .
+  The row also rates the geometry 16x16. That is capped to 8x8 here on measured
+  synthesis area -- see scored_configuration. Note the catalog's own remark at
+  line 564 that "ORFS runtime grows a lot. A 16x16 systolic array or a full AXI4
+  crossbar is a..." anticipates exactly this.
+  .
+  I do not own TASK_CATALOG.md. The divergence is recorded here and reported.
+
+manifest_divergence: >
+  refs.manifest.yaml lists the redmule entry as `tasks: [ai_v03]`. d_ai01 is not
+  named, although TASK_CATALOG.md gives "PULP redmule datapath" as this row's
+  reference. The manifest field looks incomplete rather than contradictory.
+  Recorded, not edited -- refs.manifest.yaml is not mine.
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/redmule
+  sha: 7fa9fbe8a29e8572810ae12b92c19749045ac860
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/redmule/rtl/redmule_engine.sv
+  closure: [redmule_row, redmule_ce, redmule_fma, redmule_noncomp,
+            fpnew_classifier, fpnew_rounding, lzc, cf_math_pkg, fpnew_pkg,
+            redmule_pkg, hci_package, hwpe_stream_package, tc_clk,
+            cluster_clk_cells]
+  shim: ref/fp16_gemm_array_ref.sv
+  shim_top: ref/fp16_gemm_array_top.sv
+  shim_note: >
+    Parameter binding, rename, struct flatten and enum decode only. FpFormat=FP16,
+    Height/Width from the module parameters, NumPipeRegs=3, PipeConfig=DISTRIBUTED,
+    op1=FMADD (which clock-gates redmule_ce's stage-2 noncomp unit off entirely,
+    so z_output_o is the stage-1 FMA result and nothing else), op_mod=0,
+    is_boxed all ones, TagType/AuxType=logic.
+    .
+    cntrl_engine_t has twelve fields but redmule_engine reads exactly two of them
+    -- accumulate and row_clk_gate_en. The other ten are shadowed by dedicated
+    top-level ports on the same module. The two live fields are surfaced as
+    scalars; the dead ten are driven to their bound values so no field is left X.
+  split_note: >
+    The shim declares fp16_gemm_array_ref_inner and a separate pass-through top
+    declares the contract name. The split exists so the negative controls can wrap
+    the reference and perturb one behaviour each without a module-name collision.
+  format_mask_note: >
+    FpFormat is bound by enum and then CHECKED BY THE WIDTH IT PRODUCES
+    (fp_width(FP16) == 16, asserted at elaboration), and confirmed independently
+    by measurement: the settled 16x16 trace is the FP16 encoding sequence
+    0x4000, 0x4400, ... 0x5000 for 2.0, 4.0, ... 32.0. d_dsp01's FP4 elaboration
+    is why the assertion and the measurement both exist -- see F53.
+  scope_narrowing: >
+    in_valid_i and out_ready_i are bound HIGH and in_ready_o, out_valid_o and
+    busy_o are NOT surfaced. Deliberate, with a reason: every measurement the
+    contract rests on was taken under that binding, and the handshake protocol is
+    characterised only to first order (the interaction of backpressure with chain
+    advance was not separated from reg_enable_i). Scoring a port whose protocol
+    is not fully characterised is scoring the anchor while the text only appears
+    to specify it. MEASUREMENTS.md section 6.
+
+anchor_conformance:
+  status: VERIFIED_BEFORE_USE
+  method: four measurement probes under tb/audit/, all recorded in MEASUREMENTS.md
+  result: >
+    The anchor is a conforming IEEE 754-2019 binary16 fused multiply-add.
+    Overflow, underflow, subnormal delivery, tininess-without-inexactness,
+    exact-zero sign and the three non-finite cases were each measured across all
+    five rounding modes and agree with the standard in every case.
+  why_this_step_exists: >
+    Rule 11 keeps locally written code away from expected values; it says nothing
+    about whether the vendored anchor knows the right answer. d_dsp01 satisfied
+    rule 11 exactly and its anchor was correctly rounded in no mode but RTZ (F54).
+  probe_defects_found:
+    - >
+      probe_skew_tb's FIRST MODEL WAS WRONG. delay(K) = D*(H-K) produced a uniform
+      2-cycle shortfall at every stage. The stage-to-stage spacing came back as
+      exactly 4, which is origin-independent and agreed with probe_schedule_tb, so
+      the formula was wrong rather than the instrument. Corrected to
+      delay(k) = D*(H-1-k)+2 and re-measured: 0 mismatches out of 6 trials at H=4
+      and 0 out of 10 at H=8, bias path included.
+    - >
+      probe_corners_tb's first cut read z=0 for EVERY corner case while the status
+      flags varied correctly -- a one-edge-early sample, not an anchor returning
+      zero. Fixed by holding the operands stable across several edges.
+    - >
+      probe_control_tb first reported that flush_i does nothing, because it
+      sampled after DEASSERTING flush. A direct cycle-by-cycle trace shows flush
+      does clear z_o to 0x0000 while asserted; the chain simply refills within one
+      cycle of deassertion.
+  note: >
+    All three were defects in my instruments, not in the anchor. They are recorded
+    because a probe that has never been wrong has usually never been checked.
+
+spec: [spec/fp16_gemm_array_iface.sv]
+measurements: MEASUREMENTS.md
+probe: probe/PASTE.md
+task_text_hash: 84950ba1d90be2d8
+
+scored_configuration:
+  HEIGHT: 8
+  WIDTH: 8
+  rationale: >
+    Capped by SYNTHESIS FEASIBILITY, not by the anchor and not by the contract.
+    Measured on sky130hd: one redmule_ce is 23,034.59 um^2, and redmule_engine at
+    8x8 is 1,631,831.31 um^2. The largest design this repository has ever built is
+    d_nw01_axi4_xbar at 2.09 mm^2, so 8x8 at 1.63 mm^2 is inside the proven
+    envelope while the catalog's 16x16 would be roughly 5.9 mm^2 -- about 2.8x
+    anything built here.
+  extrapolation_note: >
+    The 8x8 figure is MEASURED, not scaled. Per-element scaling from one
+    redmule_ce would have predicted 1.47 mm^2; the real number is 11% higher,
+    the difference being row output registers and fanout that do not exist inside
+    a lone element. The geometry decision rests on the measured number.
+  why_HEIGHT_is_the_parameterised_axis: >
+    HEIGHT changes the OBSERVABLE SCHEDULE -- it sets both the chain latency
+    D*(H-1)+2 and the per-stage operand skew of spec A3 -- so a design that
+    hardcodes one depth cannot pass at the other. WIDTH is pure replication and
+    would not discriminate.
+  discrimination_evidence:
+    measured: PARTIAL
+    detail: >
+      The reference passes at both HEIGHT=4 and HEIGHT=8, 3400/3400 cycles each.
+      No capability-reduced control that passes at HEIGHT=4 and fails at HEIGHT=8
+      has been built yet, so the d_dsp03-style two-configuration discrimination
+      argument is NOT yet established by measurement for this task. Stated as
+      absent rather than assumed.
+
+configs:
+  - {HEIGHT: 4, WIDTH: 8}
+  - {HEIGHT: 8, WIDTH: 8}   # <- scored
+
+vectors:
+  files: [vectors/vectors_h4.hex, vectors/vectors_h8.hex]
+  counts: {h4: 3400, h8: 3400}
+  record_bits: {h4: 1006, h8: 1742}
+  captured_by: tb/audit/capture_vectors_tb.sv
+  record_note: >
+    ONE RECORD IS ONE CYCLE: the whole operand field and control state presented
+    at that cycle, followed by z_o and status_o sampled immediately after the same
+    edge. The contract is temporal (spec A3), so a record holding only an operand
+    triple could not express it. Replay compares at the same cycle indices, so
+    neither rig has to model the skew.
+  layout_note: >
+    tb/fp16_gemm_array_vec.svh is included by BOTH the capture rig and the scoring
+    TB. A layout that lived separately in each would present a silent disagreement
+    as a DUT mismatch on every vector.
+  directed_bands: >
+    Operand draws are banded rather than uniform: uniform 16-bit patterns are ~3%
+    infinity/NaN and mostly enormous exponents, so an 8-deep chain saturates to
+    infinity within a stage or two and stops testing the adder. Band 0 (magnitudes
+    around 1) carries the bulk; bands 1-3 drive underflow, overflow and
+    subnormals. Ten corner values are planted on a walking (row, stage) schedule
+    from cycle 400.
+  directed_tail: >
+    Cycles 3000-3399 hold two settled configurations that force a SIGNED ZERO onto
+    z_o: 3000-3199 collapses a negative tiny result to -0 (A6 sign preservation),
+    3200-3399 drives (-0)*(+1.0)+(+0) (A8, which is -0 under roundTowardNegative
+    alone). Added because the first vector set delivered no -0 at all. See
+    controls/CONTROLS.md.
+
+results:
+  reference: 2/2   # PASS at HEIGHT=4 and HEIGHT=8, 3400/3400 cycles each, z and status
+  coverage_at_scored_config:
+    rounding_modes: 5/5
+    A5_overflow_mode_x_sign: 10/10
+    A6_underflow_mode_x_sign: 10/10
+    controls_exercised: [accumulate, flush, stall, row_gate]
+    delivered_classes: [subnormal, infinity, nan, negative_zero]
+    floors: OK
+
+negative_controls:
+  measured_over: vectors/vectors_h8.hex, 3400 cycles
+  record: controls/CONTROLS.md
+  controls:
+  - {name: nc_a_stuck_output,        targets: "floor case",        z_kills: 3399, status_kills: 0}
+  - {name: nc_b_extra_pipe_stage,    targets: "A3, L1 skew",       z_kills: 2784, status_kills: 0}
+  - {name: nc_c_flush_subnormal,     targets: "F1, A6 middle",     z_kills: 84,   status_kills: 0, isolated: true}
+  - {name: nc_d_overflow_always_inf, targets: "A5 mode-dependence", z_kills: 230, status_kills: 0, isolated: true}
+  - {name: nc_e_positive_zero_only,  targets: "A6 sign, A8",       z_kills: 132,  status_kills: 0, isolated: true}
+  - {name: nc_f_reversed_chain,      targets: "A2 ordering",       z_kills: 3203, status_kills: 3057}
+  discrimination_note: >
+    nc_c at 84 and nc_e at 132 out of 3400 are the useful ones: they fire only on
+    the behaviour their clause describes, so passing them is evidence about that
+    clause rather than about the harness. nc_d at 230 is the bug a plausible
+    submission actually writes -- delivering infinity on every overflow is what
+    falls out of reading a general rounding clause without A5's table -- and it is
+    caught in the random body of the set at cycle 18.
+  nc_e_is_why_the_floor_exists: >
+    MEASURED, not argued: every one of nc_e's 132 kills lands at cycle 3031 or
+    later, entirely inside the directed tail. Against the pre-tail vector set --
+    which reported coverage negzero=0 while still showing 10/10 on both
+    combination floors, because those are tallied from per-stage FLAGS -- nc_e
+    changes nothing and would have PASSED.
+
+second_source:
+  status: ABSENT
+  note: >
+    Not yet written. Tier-B does not require it, and its absence is stated rather
+    than implied: nothing here has been checked against an independent
+    implementation of the contract, so the evidence that the task is SOLVABLE at
+    the pinned contract is not yet in hand.
+
+orfs:
+  config: orfs/config.mk
+  sdc: orfs/constraint.sdc
+  synthesises_at_scored_config_by_default: >
+    The shim's parameter defaults ARE S0 -- HEIGHT=8, WIDTH=8 -- so nothing in
+    config.mk pins them. If a default ever drifts from `scored_configuration:`
+    above, the PPA number silently stops being the scored one.
+  closure_note: >
+    The VERILOG_FILES list is Verilator's own dependency output for the elaborated
+    hierarchy, not a hand-assembled list, and was then verified by running
+    read_slang with exactly that list: exit 0, 45.4 s, 1292 MB peak. slang `stat`
+    reported 256 $mul at 16x16 -- one multiplier per element -- which is the check
+    that the list builds the design meant rather than merely A design.
+  frontend_note: >
+    read_slang is BUILT IN to the Yosys in openroad/orfs:latest (0.67).
+    `plugin -i slang` fails there with "cannot open shared object file".
+  synthesis_verified:
+    stage: synthesis + OpenSTA only (place-and-route not run -- Agent 1's)
+    area_um2: 1631831.31
+    logic_delay_ns: 35.385
+    closes_at_period_ns: 44.62
+    sdc_starting_period_ns: 50.0
+    how_the_period_was_chosen: >
+      MEASURED at two periods and reconciled. Arrival 39.385 at 20 ns and 43.385
+      at 40 ns differ by exactly the input-delay change (4.000 ns), so they are
+      one path through two I/O budgets; both give logic = 35.385 ns. Required is
+      period - 0.311, so the path closes at period >= 44.62 and 50 ns leaves
+      +4.30 ns for place-and-route.
+    why_the_path_is_long: >
+      It is an input-to-register path. A lone redmule_ce is 15.672 ns; the array
+      is 35.385. The difference is the operand broadcast -- w_i fans out to all
+      64 elements and x_i to a whole row each, unbuffered at synthesis, so the
+      boundary paths carry the array's fanout before reaching the first register.
+
+  elaboration:
+    verilator: "0 errors"
+    slang: "exit 0"
+    widthtrunc_warnings: >
+      All 10 are internal to redmule_fma.sv -- 37/38-bit alignment widths and
+      int-literal shift amounts, the same set cvfpu's fpnew_fma emits. None
+      touches a shim binding, and the 37/38 widths are consistent with FP16.
+
+ppa: ABSENT
+ppa_note: >
+  Agent 1 owns PPA. Tier-B pins a fixed clock period rather than sweeping fmax.
+  No place-and-route run exists. The SDC's starting period is derived from a
+  measured critical path rather than guessed -- see orfs/constraint.sdc -- but
+  the final pin is Agent 1's, and should be overridden with CLK_PERIOD_NS rather
+  than by editing the file.
+
+skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task, second_source]
+
+difficulty_assessment: >
+  Not a first-try problem, and not for the reason the catalog row expected. The
+  MAC is not trivial: it is a bit-exact binary16 fused multiply-add chain with
+  five rounding modes, subnormal operands AND results, tininess signalled only
+  when inexact, IEEE 754 clause 6.3 exact-zero signs, canonical NaN, and
+  mode-dependent delivered values at BOTH ends of the range -- ten distinct
+  values on overflow and ten on underflow, which is what A5 and A6 tabulate.
+  .
+  On top of that the dataflow is contractual. Stage k consumes its operands
+  D*(H-1-k)+2 enabled ticks before the result appears, so a coherent dot product
+  requires the operand pairs to be presented STAGGERED, and a design with the
+  right arithmetic and the wrong skew fails on ordinary vectors -- nc_b kills
+  2784 of 3400 while changing no delivered value at all.
