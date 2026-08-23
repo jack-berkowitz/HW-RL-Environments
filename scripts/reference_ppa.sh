@@ -17,16 +17,10 @@ TASK="$1"          # e.g. d_nw01
 PER="$2"           # e.g. 9.0   -- MUST match the candidates' string exactly
 LABEL="$3"         # e.g. reference_fx9.0
 
-# ORFS_FLOW_DIR is resolved HERE, before the build, not at extraction time.
-# It used to be read after run_orfs_build.sh returned, with a `:?` guard. On a
-# host that had not exported it that guard fired AFTER a completed place-and-route
-# -- three references built to 6_report and none produced a record. Every other
-# script in this repo defaults it (run_orfs_build.sh:65); only this one demanded
-# it, because it was written on a host whose profile exported it. Same default
-# here, checked up front, so a misconfigured host costs a second and not an hour.
-FLOW="${ORFS_FLOW_DIR:-$HOME/tools/OpenROAD-flow-scripts/flow}"
-[ -d "$FLOW" ] || { echo "ORFS_FLOW_DIR does not resolve to a directory: $FLOW" >&2; exit 2; }
-export ORFS_FLOW_DIR="$FLOW"
+# The flow directory is resolved and checked below, before the build. Both hosts
+# fixed this independently after it cost three completed reference builds; the
+# check kept is the stricter one -- a bare `[ -d ]` passes on an empty directory
+# that is not a flow tree.
 
 TASK_DIR="$(dirname "$(dirname "$(find domains -path "*${TASK}_*/orfs/config.mk" | head -1)")")"
 CFG="$TASK_DIR/orfs/config.mk"
@@ -58,6 +52,7 @@ if [ ! -f "$FLOW/Makefile" ] || [ ! -d "$FLOW/platforms" ]; then
   echo "       set ORFS_FLOW_DIR to the flow/ directory of an ORFS clone" >&2
   exit 2
 fi
+export ORFS_FLOW_DIR="$FLOW"   # so run_orfs_build.sh cannot resolve it differently
 
 echo "task=$TASK_NAME  ref=$REF  nick=$NICK  clk=${PER}ns  label=$LABEL  flow=$FLOW"
 
