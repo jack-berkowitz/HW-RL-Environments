@@ -294,3 +294,44 @@ is measuring the design.
 
 Floors here now count what the testbench **offered**, which is the only quantity
 it controls. Found by running the mutants, not by review.
+## The difficulty pivot — the mutant set was rebuilt
+
+The five previous mutants were boundary-shaped, which was the right instinct,
+but every one of them was **total**: it held on every transaction of its class
+and so fired on the first one any testbench drove. That measures coverage, not
+checking.
+
+Ten guarded defects replace them. Each pairs a wrong behaviour with a rare
+predicate over contract-level state — a burst length, how many identifiers are
+outstanding, how long the table has been full, an ordinal beat or response, how
+busy the table was at a retirement. Guards read the slave port handshakes and
+the golden's own response stream, never its table, so each can be restated
+against an independent design.
+
+### The reference was the weaker half
+
+It killed **three of ten**. It was read-only and single-beat: the master-side
+responder returned one constant beat with `rlast` always high, so a correct
+response and a wrong one looked identical. C1, E1 and D4 were unchecked, and
+nothing on the write side had ever been driven.
+
+Rebuilt, it honours `arlen`, derives each beat's data from the address its own
+transaction carried — which E1 forwards unmodified, so the expectation follows
+from the contract rather than from the design — checks every beat rather than
+only the last, drives writes and checks their responses, and sustains enough
+traffic to pass a count in the dozens. 10/10, with all five conformant
+perturbations still passing.
+
+### Two silent instruments
+
+`BOUNDARY 5` accepted a write address and never supplied its `W` burst. That
+transaction stayed outstanding for the rest of the run holding a table entry, so
+every later write boundary was measured one entry short — and the failure was
+reported against the design.
+
+The witness runner used `sed` with `\b`, which BSD sed does not support. The
+rename that substitutes a mutant for the golden matched nothing, so every
+witness ran the **golden** and reported "no failure observed" for ten mutants
+the harness kills. Both are the same shape as F26: a check whose stated scope
+exceeds its reach, reporting silence as a result.
+

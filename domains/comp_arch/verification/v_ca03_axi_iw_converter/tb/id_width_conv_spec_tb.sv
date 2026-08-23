@@ -69,6 +69,8 @@ module id_width_conv_tb;
   int unsigned live_r [NID];          // A5: outstanding reads per slave id
   int unsigned live_w [NID];
   int unsigned addr_q [NID][$];       // B1: accepted read addrs, per id, in order
+  int unsigned len_q  [NID][$];       // each accepted read's burst length
+  int unsigned rbeat  [NID];          // beats seen so far of the head burst
   int unsigned map_of [NID];          // D1: master id assigned to a live slave id
   bit          map_valid [NID];
   int unsigned owner_of [1<<MST_ID_W];// D1 reverse: which slave id holds a master id
@@ -85,25 +87,53 @@ module id_width_conv_tb;
     return 1'b1;
   endfunction
 
-  int unsigned n_ar=0, n_mar=0, n_r=0;
+  int unsigned n_ar=0, n_mar=0, n_r=0, n_rbeat=0, n_aw=0, n_b=0;
+  int unsigned cov_longburst=0, cov_wfull=0, cov_mixed_w=0, cov_boundary_long=0;
+  int unsigned n_rbeat_exp=0, n_aw_issued=0;
   int unsigned cov_full_new=0, cov_full_same=0, cov_depth=0, cov_retire=0, cov_mixed=0;
 
-  // master-side slave model, responds in the order it received per master id
-  int unsigned mq [$];
+  // ---- master-side slave model ---------------------------------------------
+  // MULTI-BEAT. It honours m_arlen and derives each beat's data from the
+  // address it was given, so the slave-side checker can predict every beat from
+  // the transaction's own address. A single-beat responder that returns a
+  // constant cannot check E1 (payload forwarded unmodified), C1 (the response
+  // carries its transaction's identifier) or D4 (one transaction in, one out) --
+  // every beat looks like every other beat.
+  int unsigned mq_id [$], mq_addr [$], mq_len [$];
+  int unsigned m_beat = 0;
   logic reply_en = 0;
   always @(posedge clk) if (rst_n && m_arvalid && m_arready) begin
-    // D1: this master id must not already belong to a DIFFERENT live slave id
     n_mar++;
-    mq.push_back(m_arid);
+    mq_id.push_back(m_arid); mq_addr.push_back(m_araddr); mq_len.push_back(m_arlen);
   end
   always_comb begin
-    m_rvalid = reply_en && (mq.size() > 0);
-    m_rid    = (mq.size() > 0) ? MST_ID_W'(mq[0]) : '0;
-    m_rdata  = 32'hC0DE_0000 + ((mq.size() > 0) ? mq[0] : 0);
-    m_rlast  = 1'b1;
+    m_rvalid = reply_en && (mq_id.size() > 0);
+    m_rid    = (mq_id.size() > 0) ? MST_ID_W'(mq_id[0]) : '0;
+    m_rdata  = (mq_id.size() > 0) ? (mq_addr[0] + m_beat) : '0;
+    m_rlast  = (mq_id.size() > 0) && (m_beat == mq_len[0]);
     m_rresp  = 2'b00;
   end
-  always @(posedge clk) if (rst_n && m_rvalid && m_rready) void'(mq.pop_front());
+  always @(posedge clk) if (rst_n && m_rvalid && m_rready) begin
+    if (m_beat == mq_len[0]) begin
+      void'(mq_id.pop_front()); void'(mq_addr.pop_front()); void'(mq_len.pop_front());
+      m_beat <= 0;
+    end else m_beat <= m_beat + 1;
+  end
+
+  // Write responses. B is returned only once the write's own W burst has
+  // completed at the master port; clause B3 puts the beats in address order, so
+  // pairing the head of the AW queue with each m_wlast is exact.
+  int unsigned awq [$], bq [$];
+  always @(posedge clk) if (rst_n && m_awvalid && m_awready) awq.push_back(m_awid);
+  always @(posedge clk) if (rst_n && m_wvalid && m_wready && m_wlast) begin
+    if (awq.size() > 0) begin bq.push_back(awq[0]); void'(awq.pop_front()); end
+  end
+  always_comb begin
+    m_bvalid = reply_en && (bq.size() > 0);
+    m_bid    = (bq.size() > 0) ? MST_ID_W'(bq[0]) : '0;
+    m_bresp  = 2'b00;
+  end
+  always @(posedge clk) if (rst_n && m_bvalid && m_bready) void'(bq.pop_front());
 
   assign m_awready = 1'b1;
   assign m_wready  = 1'b1;
@@ -112,14 +142,17 @@ module id_width_conv_tb;
   always @(posedge clk) begin
     if (!rst_n) begin
       for (int i = 0; i < NID; i++) begin
-        live_r[i] <= 0; live_w[i] <= 0; addr_q[i].delete(); map_valid[i] <= 1'b0;
+        live_r[i] <= 0; live_w[i] <= 0; addr_q[i].delete(); len_q[i].delete();
+        rbeat[i] <= 0; map_valid[i] <= 1'b0;
       end
       for (int i = 0; i < (1<<MST_ID_W); i++) owner_valid[i] <= 1'b0;
     end else begin
       if (s_arvalid && s_arready) begin
         live_r[s_arid] <= live_r[s_arid] + 1;
         addr_q[s_arid].push_back(s_araddr);
+        len_q[s_arid].push_back(s_arlen);
         n_ar++;
+        n_rbeat_exp <= n_rbeat_exp + s_arlen + 1;   // stimulus, not response
       end
       // D1: a master id may serve only one live slave id at a time
       if (m_arvalid && m_arready) begin
@@ -127,15 +160,50 @@ module id_width_conv_tb;
           fail("D1", $sformatf("master id %0d serves slave id %0d and %0d at once",
                                m_arid, owner_of[m_arid], s_arid_at_mar));
       end
-      if (s_rvalid && s_rready && s_rlast) begin
-        // C2: a response must belong to an outstanding transaction
-        if (live_r[s_rid] == 0)
-          fail("C2", $sformatf("read response for slave id %0d with none outstanding", s_rid));
-        else begin
-          live_r[s_rid] <= live_r[s_rid] - 1;
-          void'(addr_q[s_rid].pop_front());     // B1: consume in acceptance order
+      // ---- every read data BEAT, not only the last -----------------------
+      if (s_rvalid && s_rready) begin
+        n_rbeat++;
+        if (addr_q[s_rid].size() == 0) begin
+          // C1/C2 together: either this beat carries an identifier that has
+          // nothing outstanding, or an identifier that is not its own.
+          fail("C2", $sformatf("read beat for slave id %0d with none outstanding", s_rid));
+        end else begin
+          automatic int unsigned exp_data = addr_q[s_rid][0] + rbeat[s_rid];
+          automatic bit exp_last = (rbeat[s_rid] == len_q[s_rid][0]);
+          if (s_rdata !== exp_data[DATA_W-1:0])
+            fail("E1", $sformatf("read beat %0d of slave id %0d carries %08x, expected %08x -- the data a beat carries follows from the address its transaction was issued with, which E1 forwards unmodified",
+                                 rbeat[s_rid], s_rid, s_rdata, exp_data[DATA_W-1:0]));
+          if (s_rresp !== 2'b00)
+            fail("E1", $sformatf("read beat of slave id %0d carries resp %b, expected 00", s_rid, s_rresp));
+          if (s_rlast !== exp_last)
+            fail("D4", $sformatf("slave id %0d: rlast is %0b on beat %0d of a %0d-beat burst -- one accepted transaction produces exactly one response, of exactly its own length",
+                                 s_rid, s_rlast, rbeat[s_rid], len_q[s_rid][0] + 1));
+          if (s_rlast) begin
+            live_r[s_rid] <= live_r[s_rid] - 1;
+            void'(addr_q[s_rid].pop_front());   // B1: consume in acceptance order
+            void'(len_q[s_rid].pop_front());
+            rbeat[s_rid] <= 0;
+            n_r++;
+          end else begin
+            rbeat[s_rid] <= rbeat[s_rid] + 1;
+          end
         end
-        n_r++;
+      end
+
+      // ---- the WRITE side ------------------------------------------------
+      if (s_awvalid && s_awready) begin
+        live_w[s_awid] <= live_w[s_awid] + 1;
+        n_aw++;
+      end
+      if (s_bvalid && s_bready) begin
+        n_b++;
+        if (live_w[s_bid] == 0)
+          fail("C2", $sformatf("write response for slave id %0d with none outstanding", s_bid));
+        else
+          live_w[s_bid] <= live_w[s_bid] - 1;
+        if (s_bresp !== 2'b00)
+          fail("E1", $sformatf("write response for slave id %0d carries resp %b, expected 00 -- a converter alters identifiers and nothing else",
+                               s_bid, s_bresp));
       end
     end
   end
@@ -145,10 +213,11 @@ module id_width_conv_tb;
 
   // ---- driver --------------------------------------------------------------
   // Offers a read and reports whether it was accepted within `budget`.
-  task automatic offer_ar(input int unsigned id, input int budget, output bit acc, output int took);
+  task automatic offer_ar(input int unsigned id, input int budget, output bit acc,
+                          output int took, input int unsigned len = 0);
     acc = 0; took = 0;
     @(negedge clk); s_arvalid = 1; s_arid = id[SLV_ID_W-1:0];
-    s_araddr = 32'h1000 + (id << 8) + n_ar; s_arlen = 0;
+    s_araddr = 32'h1000 + (id << 8) + n_ar; s_arlen = len[7:0];
     while (took < budget) begin
       @(posedge clk);
       if (s_arready) begin acc = 1; break; end
@@ -156,6 +225,30 @@ module id_width_conv_tb;
     end
     @(negedge clk) s_arvalid = 0;
   endtask
+  // Offers a write address; send_w then drives its data burst. Both hold valid
+  // until ready, so no offer is ever withdrawn.
+  task automatic offer_aw(input int unsigned id, input int budget, output bit acc,
+                          output int took, input int unsigned len = 0);
+    acc = 0; took = 0;
+    @(negedge clk); s_awvalid = 1; s_awid = id[SLV_ID_W-1:0];
+    s_awaddr = 32'h5000 + (id << 8) + n_aw; s_awlen = len[7:0];
+    while (took < budget) begin
+      @(posedge clk);
+      if (s_awready) begin acc = 1; break; end
+      took++;
+    end
+    @(negedge clk) s_awvalid = 0;
+  endtask
+
+  task automatic send_w(input int unsigned len);
+    for (int b = 0; b <= int'(len); b++) begin
+      @(negedge clk); s_wvalid = 1; s_wdata = 32'hD000_0000 + b;
+      s_wstrb = '1; s_wlast = (b == int'(len));
+      forever begin @(posedge clk); if (s_wready) break; end
+    end
+    @(negedge clk); s_wvalid = 0; s_wlast = 0;
+  endtask
+
   task automatic drain(input int n);
     reply_en = 1; repeat (n) @(posedge clk); reply_en = 0;
   endtask
@@ -231,8 +324,14 @@ module id_width_conv_tb;
       while (w < 30) begin @(posedge clk); if (s_awready) begin wacc = 1; break; end w++; end
       @(negedge clk) s_awvalid = 0;
       if (!wacc) fail("A1", "a WRITE was refused while only READS occupied the table");
+      // Send this write's data and let it retire. Accepting an address and
+      // never supplying its W burst leaves the transaction outstanding for the
+      // rest of the run, holding a table entry -- every later write boundary is
+      // then measured one entry short, and the failure is reported against the
+      // design rather than against the stimulus that caused it.
+      else begin n_aw_issued++; send_w(0); end
     end
-    drain(80);
+    drain(160);
 
     // ---- random traffic against the model --------------------------------
     phase = "random";
@@ -255,11 +354,65 @@ module id_width_conv_tb;
     // the design, not the stimulus -- these all fired on every mutant before
     // this was fixed.
 
+    // ---- BOUNDARY 6: the same boundary, probed with LONG BURSTS ----------
+    // A3 bounds the number of distinct identifiers, not their burst lengths. A
+    // design that applies the bound one entry early only for long bursts passes
+    // every single-beat probe above and fails nothing until a burst arrives.
+    phase = "boundary with long bursts";
+    drain(80);
+    for (int i = 0; i < MAX_UNIQ-1; i++) begin
+      offer_ar(i, 8, acc, took, 6);
+      if (!acc) fail("A3", $sformatf("id %0d refused with only %0d distinct outstanding, seven-beat burst", i, i));
+    end
+    offer_ar(MAX_UNIQ-1, 8, acc, took, 6);
+    if (!acc) fail("A3", "a new id was refused at MAX_UNIQ-1 distinct outstanding, seven-beat burst");
+    cov_boundary_long++; cov_longburst++;
+    drain(300);
+
+    // ---- WRITES, to a full write table -----------------------------------
+    // Everything above is read-only. A1 counts reads and writes SEPARATELY, and
+    // nothing on the write side -- the response identifier, its resp field, or
+    // whether one write produces exactly one response -- has been observed yet.
+    phase = "writes";
+    for (int i = 0; i < MAX_UNIQ; i++) begin
+      offer_aw(i, 400, acc, took, 1);
+      if (!acc) fail("A3", $sformatf("write id %0d refused with only %0d distinct write ids outstanding", i, i));
+      else begin n_aw_issued++; send_w(1); end
+    end
+    cov_wfull++;
+    // A read offered while ONLY writes occupy the table must be accepted.
+    offer_ar(5, 12, acc, took, 0);
+    if (!acc) fail("A1", "a READ was refused while only WRITES occupied the table");
+    cov_mixed_w++;
+    drain(300);
+
+    // ---- sustained traffic: enough beats and responses to pass a count ----
+    // A defect that appears on the thirty-second beat, or after the sixteenth
+    // write response, is invisible to a run that issues a handful of each.
+    phase = "sustained";
+    for (int k = 0; k < 16; k++) begin
+      offer_ar(k % MAX_UNIQ, 60, acc, took, 3);
+      offer_aw(k % MAX_UNIQ, 60, acc, took, 0);
+      if (acc) begin n_aw_issued++; send_w(0); end
+      drain(40);
+    end
+    drain(400);
+
     if (cov_full_new < 2)  fail("FLOOR", "the table boundary was not exercised from both sides");
     if (cov_full_same < 1) fail("FLOOR", "a same-id request at a full table was never offered");
     if (cov_depth < 2)     fail("FLOOR", "the per-id depth boundary was not exercised from both sides");
     if (cov_retire < 1)    fail("FLOOR", "the retirement window was never measured");
     if (cov_mixed < 1)     fail("FLOOR", "reads and writes were never mixed at the boundary");
+    if (cov_boundary_long < 1)
+      fail("FLOOR", "the table boundary was never probed with a long burst");
+    if (cov_longburst < 1)
+      fail("FLOOR", "no burst longer than one beat was ever issued -- E1, C1 and D4 go unchecked on a single-beat run");
+    if (cov_wfull < 1)     fail("FLOOR", "the WRITE table was never filled");
+    if (cov_mixed_w < 1)   fail("FLOOR", "a read was never offered while only writes occupied the table");
+    if (n_rbeat_exp < 40)
+      fail("FLOOR", $sformatf("only %0d read data beats were ever ASKED FOR", n_rbeat_exp));
+    if (n_aw_issued < 16)
+      fail("FLOOR", $sformatf("only %0d writes were issued", n_aw_issued));
 
     $display("METRIC: reads accepted %0d, master reads %0d, responses %0d", n_ar, n_mar, n_r);
     if (n_fail == 0) $display("RESULT: PASS");
