@@ -62,13 +62,66 @@ print("yes")
 PY
 }
 
+# A SWEEP IS "DONE" ONLY IF IT CONVERGED -- NOT IF ITS FILE EXISTS.
+# find_fmax writes fmax_results/<nick>_fmax.json even when the seed run fails as
+# a tool error: converged_period_ns and achieved_fmax_mhz come out null and
+# aborted_reason is set. Skipping on [ -f <json> ] therefore marks a FAILED sweep
+# as complete, and a restart produces a queue that finishes cleanly with no Fmax
+# in it. Four such files had to be deleted by hand here after the AVX-512 aborts;
+# nine were produced on the Mac during its disk outage.
+converged () {   # $1 = path to a *_fmax.json; true only if it really converged
+  python3 - "$1" <<'PY'
+import json, sys
+try: d = json.load(open(sys.argv[1]))
+except Exception: raise SystemExit(1)
+raise SystemExit(0 if d.get("converged_period_ns") is not None
+                      and not d.get("aborted_reason") else 1)
+PY
+}
+
+# FLOW-OUTPUT CLEANUP. ORFS keeps every intermediate stage -- roughly 2 GB for a
+# d_ca01-sized design and 6 GB for the pre-C3 crossbar. Left to accumulate this
+# filled the Mac's disk, wedged Docker and destroyed 13 in-flight sweeps. By the
+# time this runs the numbers are already extracted into the ppa/fmax record, and
+# check_ppa_record.py handles a missing flow dir ("flow dir gone").
+# NOTE: run_orfs_build.sh wipes a design's outputs BEFORE each build, so this is
+# about cross-design accumulation, not about the design just built.
+flow_clean () {   # $1 = ORFS design nickname
+  local n="$1" plat="${PLATFORM:-sky130hd}" d
+  [ -n "$n" ] || return 0
+  [ -n "${ORFS_FLOW_DIR:-}" ] || return 0
+  for d in results objects logs reports; do
+    rm -rf "${ORFS_FLOW_DIR}/${d}/${plat}/${n}"
+  done
+  say "  cleared flow outputs for ${n}"
+}
+
+# The reference's ORFS output directory is named after DESIGN_NICKNAME (falling
+# back to DESIGN_NAME) exactly as run_orfs_build.sh derives it -- read it from the
+# task's own config so cleanup cannot target the wrong directory.
+ref_nick () {   # $1 = task
+  local cfg; cfg="$(find domains -path "*${1}_*/orfs/config.mk" | head -1)"
+  [ -n "$cfg" ] || return 0
+  awk '
+    $0 ~ /^[[:space:]]*export[[:space:]]+DESIGN_NICKNAME[[:space:]]*[:?]?=/ {
+      sub(/^[^=]*=/,""); gsub(/[[:space:]]/,""); nick=$0 }
+    $0 ~ /^[[:space:]]*export[[:space:]]+DESIGN_NAME[[:space:]]*[:?]?=/ {
+      sub(/^[^=]*=/,""); gsub(/[[:space:]]/,""); name=$0 }
+    END { print (nick != "" ? nick : name) }
+  ' "$cfg"
+}
+
 sweep () {   # task, model, seed
   local task="$1" model="$2" seed="$3" nick="${1}_cand_${2}"
   local cand="candidates/${task}/${model}.sv"
   [ -f "$cand" ] || { say "MISSING $cand"; return 0; }
   local ok; ok="$(buildable "$cand")"
   [ "$ok" = "yes" ] || { say "SKIP sweep $nick -- correctness gate: $ok"; return 0; }
-  if [ -f "$REPO/fmax_results/${nick}_fmax.json" ]; then say "SKIP sweep $nick (done)"; return 0; fi
+  if converged "$REPO/fmax_results/${nick}_fmax.json"; then say "SKIP sweep $nick (done)"; return 0; fi
+  if [ -f "$REPO/fmax_results/${nick}_fmax.json" ]; then
+    say "REDO sweep $nick -- previous attempt did not converge, discarding its json"
+    rm -f "$REPO/fmax_results/${nick}_fmax.json"
+  fi
   say "SWEEP $nick (seed ${seed}ns)"
   [ "$PLAN" = "1" ] && return 0
   # STALE SNAPSHOT GUARD -- COMPARE CONTENT, NOT PRESENCE.
@@ -100,15 +153,28 @@ sweep () {   # task, model, seed
   fi
   python3 scripts/find_fmax.py --design "$nick" --seed-period-ns "$seed" \
       --resolution-ns 0.5 --skip-sim-check >>"$LOG" 2>&1
+  flow_clean "$nick"
 }
 refsweep () {  # task, seed
   local task="$1" seed="$2"
-  if [ -f "$REPO/fmax_results/${task}_fmax.json" ]; then say "SKIP sweep $task ref (done)"; return 0; fi
+  if converged "$REPO/fmax_results/${task}_fmax.json"; then say "SKIP sweep $task ref (done)"; return 0; fi
+  if [ -f "$REPO/fmax_results/${task}_fmax.json" ]; then
+    say "REDO sweep $task ref -- previous attempt did not converge, discarding its json"
+    rm -f "$REPO/fmax_results/${task}_fmax.json"
+  fi
   say "SWEEP $task reference (seed ${seed}ns)"
   [ "$PLAN" = "1" ] && return 0
   python3 scripts/find_fmax.py --design "$task" --seed-period-ns "$seed" \
       --resolution-ns 0.5 --skip-sim-check >>"$LOG" 2>&1
+  flow_clean "$(ref_nick "$task")"
 }
+# EMIT THE CANONICAL PERIOD, NOT "%.4f". This used to print 9.0000 where
+# fixed_clock_ppa.sh prints 9.0. build_config_hash.py hashes that string, so the
+# same clock produced two hashes and rule 17 refused to compare builds that were
+# byte-identical. build_config_hash.py now normalises defensively, but emitting
+# the canonical form here keeps the LABEL agreeing with the hash as well --
+# otherwise records read claude_at_9.0000 while hashing as 9.0.
+# Canonical = round to 4 dp, strip trailing zeros, keep one decimal.
 period_for () { python3 - "$REPO" "$@" <<'PY'
 import json, os, sys
 repo = sys.argv[1]; per=[]
@@ -117,7 +183,11 @@ for n in sys.argv[2:]:
     if os.path.isfile(p):
         d = json.load(open(p))
         if d.get("converged_period_ns"): per.append(float(d["converged_period_ns"]))
-print(f"{max(per):.4f}" if per else "")
+if per:
+    s = f"{max(per):.4f}".rstrip("0")
+    print(s + "0" if s.endswith(".") else s)
+else:
+    print("")
 PY
 }
 build_at () {  # task, label, period
@@ -158,9 +228,11 @@ PY2
   if [ "$label" = "reference" ]; then
     local cfg; cfg="$(find domains -path "*${task}_*/orfs/config.mk" | head -1)"
     CLK_PERIOD_NS="$per" bash scripts/run_orfs_build.sh "/work/$cfg" >>"$LOG" 2>&1
+    flow_clean "$(ref_nick "$task")"
   else
     CLK_PERIOD_NS="$per" bash scripts/ppa_candidate.sh "$task" \
       "candidates/${task}/${label}.sv" "${label}_at_${per}" >>"$LOG" 2>&1
+    flow_clean "${task}_cand_${label}_at_${per}"
   fi
 }
 
