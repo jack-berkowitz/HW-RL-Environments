@@ -3564,6 +3564,8 @@ apparatus was never pointed at a known answer before three builds were fed to it
 
 ## F66. A mutant that impersonates the module it replaces is a duplicate definition, and the compiler silently runs the original
 
+*Authored by Agent 2; swept into c4f3f00 by another agent's whole-file commit rather than landed on its own.*
+
 **A mutant that takes the golden's module name and delegates to the golden is a
 duplicate definition. The compiler picks one, and every mutant silently runs the
 golden — reporting "no defect found" from a rig that never instantiated a
