@@ -246,3 +246,26 @@ boundary, and that is the discrimination the whole exercise is for.
 **The check to apply while writing each clause:** *could a design satisfy this
 everywhere except at one boundary?* If yes, that boundary is a mutant. If no,
 the clause is probably qualitative and will not discriminate.
+## The difficulty pivot — every defect is now guarded by an ordinal
+
+The previous set was total within its class: each defect fired on the FIRST
+operation of the class it targeted, so any testbench that drove that class at
+all caught it, whether or not it was checking the clause.
+
+There is no occupancy or burst here to key a guard on — the unit is
+combinational at the contract level. What it has is the sequence of operations,
+and clauses that hold on every one of them. Each defect now fires only from the
+Nth operation of its own class since reset.
+
+### The thresholds were raised, and the signal for that was unambiguous
+
+At ordinals of 2 to 5 the reference killed all ten **without any change to the
+reference at all**. A guard that costs the reference nothing is shallower than
+what the reference already does, and it is not measuring anything.
+
+Raised to 4-10, `fn_m9` went out of reach: the +0/-0 equality pair was compared
+only once or twice in passing by the pool sweep. The REFERENCE was extended to
+drive it eight times rather than the guard dialled back. That is the right
+direction whenever the reference can be made to get there; loosening the guard
+is the fallback, not the fix.
+
