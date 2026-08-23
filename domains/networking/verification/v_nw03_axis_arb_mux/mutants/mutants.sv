@@ -36,8 +36,30 @@ module fm_m1_drops_high_payload #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   logic [DATA_WIDTH-1:0] g_data;
-  assign m_tdata_o = {{(DATA_WIDTH/2){1'b0}}, g_data[(DATA_WIDTH/2)-1:0]};
+  // GUARD: the fifth frame forwarded, and every frame after it.
+  assign m_tdata_o = (g_frame_q >= 4)
+                     ? {{(DATA_WIDTH/2){1'b0}}, g_data[(DATA_WIDTH/2)-1:0]} : g_data;
 
   frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
     .clk_i(clk_i), .rst_i(rst_i),
@@ -76,21 +98,52 @@ module fm_m2_priority_arbitration #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
-  axis_arb_mux #(
-      .S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .KEEP_ENABLE(1),
-      .KEEP_WIDTH(DATA_WIDTH/8), .ID_ENABLE(0), .S_ID_WIDTH(1), .M_ID_WIDTH(1),
-      .DEST_ENABLE(0), .DEST_WIDTH(1), .USER_ENABLE(1), .USER_WIDTH(USER_WIDTH),
-      .LAST_ENABLE(1), .UPDATE_TID(0),
-      .ARB_TYPE_ROUND_ROBIN(0),          // <-- the defect
-      .ARB_LSB_HIGH_PRIORITY(1)
-  ) i_anchor (
-      .clk(clk_i), .rst(rst_i),
-      .s_axis_tdata(s_tdata_i), .s_axis_tkeep(s_tkeep_i), .s_axis_tvalid(s_tvalid_i),
-      .s_axis_tready(s_tready_o), .s_axis_tlast(s_tlast_i),
-      .s_axis_tid('0), .s_axis_tdest('0), .s_axis_tuser(s_tuser_i),
-      .m_axis_tdata(m_tdata_o), .m_axis_tkeep(m_tkeep_o), .m_axis_tvalid(m_tvalid_o),
-      .m_axis_tready(m_tready_i), .m_axis_tlast(m_tlast_o),
-      .m_axis_tid(), .m_axis_tdest(), .m_axis_tuser(m_tuser_o));
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
+
+  // The anchor is left ROUND-ROBIN. Fixed priority is imposed by this wrapper,
+  // and only while THREE OR MORE inputs are offering at once: under two-way
+  // contention the rotation is untouched and every fairness check passes.
+  //
+  // GUARD: three or more inputs asserting tvalid in the same cycle.
+  logic [S_COUNT-1:0] g_valid, g_ready;
+  always_comb begin
+    g_valid    = s_tvalid_i;
+    s_tready_o = g_ready;
+    if (g_cont() >= 3) begin
+      // serve only the lowest-numbered contender
+      for (int k = 0; k < S_COUNT; k++) begin
+        automatic bit lower = 1'b0;
+        for (int j = 0; j < k; j++) if (s_tvalid_i[j]) lower = 1'b1;
+        if (lower) begin g_valid[k] = 1'b0; s_tready_o[k] = 1'b0; end
+      end
+    end
+  end
+
+  frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
+    .clk_i(clk_i), .rst_i(rst_i),
+    .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i), .s_tvalid_i(g_valid),
+    .s_tready_o(g_ready), .s_tlast_i(s_tlast_i), .s_tuser_i(s_tuser_i),
+    .m_tdata_o(m_tdata_o), .m_tkeep_o(m_tkeep_o), .m_tvalid_o(m_tvalid_o),
+    .m_tready_i(m_tready_i), .m_tlast_o(m_tlast_o), .m_tuser_o(m_tuser_o));
 endmodule
 
 // -----------------------------------------------------------------------------
@@ -118,6 +171,26 @@ module fm_m3_frame_interleaved #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   localparam int H = S_COUNT/2;
   localparam int KW = DATA_WIDTH/8;
 
@@ -127,7 +200,15 @@ module fm_m3_frame_interleaved #(
   logic                  a_valid, b_valid, a_last, b_last, a_ready, b_ready;
   logic                  toggle;
 
-  wire pick_a = a_valid && (!b_valid || toggle);
+  // GUARD: the first FOUR frames are perfectly atomic, and within any frame
+  // the choice is held through its first two beats. Only from the fifth
+  // frame onward, and only on a frame that runs to a third beat, can an
+  // in-progress frame be re-aimed at the other half.
+  logic pick_q = 1'b0;
+  wire  pick_free = a_valid && (!b_valid || toggle);
+  wire  g_may_reaim = (g_fbeat_q >= 2) && (g_frame_q >= 4);
+  wire  pick_a = (g_fbeat_q != 0 && !g_may_reaim) ? pick_q : pick_free;
+  always_ff @(posedge clk_i) if (m_tvalid_o && m_tready_i) pick_q <= pick_a;
 
   assign m_tvalid_o = pick_a ? a_valid : b_valid;
   assign m_tdata_o  = pick_a ? a_data  : b_data;
@@ -181,10 +262,31 @@ module fm_m4_tuser_crossed #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   logic [S_COUNT-1:0][USER_WIDTH-1:0] crossed;
   always_comb
     for (int k = 0; k < S_COUNT; k++)
-      crossed[k] = s_tuser_i[(k + 1) % S_COUNT];
+      // GUARD: the fifth frame onward.
+      crossed[k] = (g_frame_q >= 4) ? s_tuser_i[(k + 1) % S_COUNT] : s_tuser_i[k];
 
   frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
     .clk_i(clk_i), .rst_i(rst_i),
@@ -218,6 +320,26 @@ module fm_m5_early_tlast #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   logic g_valid, g_last, first;
 
   always_ff @(posedge clk_i)
@@ -225,7 +347,8 @@ module fm_m5_early_tlast #(
     else if (g_valid && m_tready_i)   first <= g_last;
 
   assign m_tvalid_o = g_valid;
-  assign m_tlast_o  = g_last | first;   // <-- the defect
+  // GUARD: the third frame onward -- the first two are exact.
+  assign m_tlast_o  = g_last | (first && (g_frame_q >= 2));
 
   frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
     .clk_i(clk_i), .rst_i(rst_i),
@@ -258,8 +381,29 @@ module fm_m6_reset_ignored #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
-    .clk_i(clk_i), .rst_i(1'b0),       // <-- the defect
+    // GUARD: the first reset works; the second and every later one is ignored.
+    .clk_i(clk_i), .rst_i(rst_i && (g_rst_q < 1)),
     .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i), .s_tvalid_i(s_tvalid_i),
     .s_tready_o(s_tready_o), .s_tlast_i(s_tlast_i), .s_tuser_i(s_tuser_i),
     .m_tdata_o(m_tdata_o), .m_tkeep_o(m_tkeep_o), .m_tvalid_o(m_tvalid_o),
@@ -298,8 +442,29 @@ module fm_m7_tuser_wrong_on_last #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   logic [USER_WIDTH-1:0] g_user;
-  assign m_tuser_o = m_tlast_o ? ~g_user : g_user;
+  // GUARD: the final beat of a frame four beats or longer.
+  assign m_tuser_o = (m_tlast_o && (g_fbeat_q >= 3)) ? ~g_user : g_user;
   frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
     .clk_i(clk_i), .rst_i(rst_i), .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i),
     .s_tvalid_i(s_tvalid_i), .s_tready_o(s_tready_o), .s_tlast_i(s_tlast_i),
@@ -331,8 +496,30 @@ module fm_m8_tkeep_full_on_last #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   logic [(DATA_WIDTH/8)-1:0] g_keep;
-  assign m_tkeep_o = m_tlast_o ? {(DATA_WIDTH/8){1'b1}} : g_keep;
+  // GUARD: the final beat of a frame four beats or longer.
+  assign m_tkeep_o = (m_tlast_o && (g_fbeat_q >= 3))
+                     ? {(DATA_WIDTH/8){1'b1}} : g_keep;
   frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
     .clk_i(clk_i), .rst_i(rst_i), .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i),
     .s_tvalid_i(s_tvalid_i), .s_tready_o(s_tready_o), .s_tlast_i(s_tlast_i),
@@ -366,6 +553,26 @@ module fm_m9_marginal_starvation #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   logic [8:0] cnt;
   always_ff @(posedge clk_i) if (rst_i) cnt <= '0; else cnt <= cnt + 1;
   // Input S_COUNT-1 is admitted only in a short window out of every 320 cycles.
@@ -412,6 +619,26 @@ module fm_m10_deep_beat_corruption #(
     output logic                                   m_tlast_o,
     output logic [USER_WIDTH-1:0]                  m_tuser_o
 );
+  // ---- mutant guard state: contract-level only ---------------------------
+  // Counted from the PORT handshakes -- beats forwarded, frames completed, the
+  // beat index within the frame in progress, how many inputs are offering at
+  // once, and how many resets have COMPLETED. Nothing inside the golden is
+  // read, so every guard can be restated against an independent design.
+  int unsigned g_beat_q = 0, g_frame_q = 0, g_fbeat_q = 0, g_rst_q = 0;
+  logic        g_rst_prev = 1'b0;
+  function automatic int unsigned g_cont();
+    g_cont = 0;
+    for (int k = 0; k < S_COUNT; k++) if (s_tvalid_i[k]) g_cont++;
+  endfunction
+  always_ff @(posedge clk_i) begin
+    g_rst_prev <= rst_i;
+    if (!rst_i && g_rst_prev) g_rst_q <= g_rst_q + 1;   // a reset just ENDED
+    if (m_tvalid_o && m_tready_i) begin
+      g_beat_q <= g_beat_q + 1;
+      if (m_tlast_o) begin g_frame_q <= g_frame_q + 1; g_fbeat_q <= 0; end
+      else                 g_fbeat_q <= g_fbeat_q + 1;
+    end
+  end
   logic [DATA_WIDTH-1:0] g_data;
   logic [3:0] beat_idx;
   always_ff @(posedge clk_i) begin
@@ -419,7 +646,9 @@ module fm_m10_deep_beat_corruption #(
     else if (m_tvalid_o && m_tready_i)
       beat_idx <= m_tlast_o ? 4'd0 : (beat_idx == 4'hF ? 4'hF : beat_idx + 1);
   end
-  assign m_tdata_o = (beat_idx >= 4'd3) ? {g_data[DATA_WIDTH-1:1], ~g_data[0]} : g_data;
+  // GUARD: the fourth beat onward of a frame, and only from the fifth frame.
+  assign m_tdata_o = ((beat_idx >= 4'd3) && (g_frame_q >= 4))
+                     ? {g_data[DATA_WIDTH-1:1], ~g_data[0]} : g_data;
 
   frame_arb_mux #(.S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)) i_g (
     .clk_i(clk_i), .rst_i(rst_i), .s_tdata_i(s_tdata_i), .s_tkeep_i(s_tkeep_i),

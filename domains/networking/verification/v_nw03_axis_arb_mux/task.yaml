@@ -1,3 +1,4 @@
+title: frame-arbitrating stream mux
 id: v_nw03
 module: frame_arb_mux
 domain: networking
@@ -93,24 +94,67 @@ conformant_perturbations:
   all_survive: true
 
 mutants:
-  - {id: fm_m1, class: capability, defect: "tdata above bit 15 silently dropped -- behaves as DATA_WIDTH=16",
-     violates: S4,  witness: "beat 0: golden 1443000036, mutant 0000000036", killed_by: S4}
-  - {id: fm_m2, class: starvation, defect: "fixed priority instead of rotation",
-     violates: S10, witness: "beat 5: golden 1d9c80004e, mutant 3c46801418",  killed_by: S10}
-  - {id: fm_m3, class: atomicity,  defect: "two half-muxes with a beat-level mux between them; frames interleave",
-     violates: S3,  witness: "beat 0: golden 1443000036, mutant 07fc0000a6",  killed_by: "S3 first, S10 later"}
-  - {id: fm_m4, class: sideband,   defect: "tuser taken from the neighbouring input",
-     violates: S4,  witness: "beat 4: golden 3c33001031, mutant 3c33001033",  killed_by: S4}
-  - {id: fm_m5, class: boundary,   defect: "tlast also asserted on the first beat of every multi-beat frame",
-     violates: S4,  witness: "beat 0: golden 1443000036, mutant 1443000037",  killed_by: S4}
-  - {id: fm_m6, class: reset,      defect: "golden never sees rst_i; beats held at reset survive it",
-     violates: S12, witness: "beat 101, immediately after the mid-stream reset", killed_by: S12}
+  design: >
+    GUARDED, uniformly. Each defect is a wrong behaviour paired with a rare
+    predicate over contract-level state -- which frame it is, how deep into the
+    frame, how many inputs are contending, how many resets have completed. All
+    counted from the port handshakes, never from inside the golden.
+  - {id: fm_m1_drops_high_payload, violates: "S4",
+     guard: "the fifth frame forwarded, and every one after it",
+     defect: "the top half of tdata is zeroed",
+     witness: "FAIL [S4] input 0 tdata: expected ab750060 got 00000060 (t=225000)"}
+  - {id: fm_m2_priority_arbitration, violates: "S10",
+     guard: "three or more inputs are offering in the same cycle",
+     defect: "fixed priority replaces the rotation -- two-way contention is still fair",
+     witness: "FAIL [S10] input 1 has started no frame in 109 completed output frames (window 16) (t=2835000)"}
+  - {id: fm_m3_frame_interleaved, violates: "S3",
+     guard: "the fifth frame onward, at its third beat or later",
+     defect: "an in-progress frame is re-aimed at the other half of the inputs",
+     witness: "FAIL [S3] mid-frame switch: frame from input 3 interrupted by input 1 (t=395000)"}
+  - {id: fm_m4_tuser_crossed, violates: "S4",
+     guard: "the fifth frame onward",
+     defect: "tuser is taken from the next input along",
+     witness: "FAIL [S4] input 1 tuser: expected 1 got 0 (t=265000)"}
+  - {id: fm_m5_early_tlast, violates: "S4",
+     guard: "the third frame onward",
+     defect: "tlast is also asserted on a frame's FIRST beat",
+     witness: "FAIL [S4] input 2 tlast: expected 0 got 1 (t=135000)"}
+  - {id: fm_m6_reset_ignored, violates: "S12",
+     guard: "the SECOND reset, and every one after it",
+     defect: "rst_i does not reach the design",
+     witness: "FAIL [S12] m_tvalid_o high on the first cycle after reset release (t=20175000)"}
+  - {id: fm_m7_tuser_wrong_on_last, violates: "S4",
+     guard: "the final beat of a frame four beats or longer",
+     defect: "tuser is inverted there",
+     witness: "FAIL [S4] input 0 tuser: expected 0 got 1 (t=105000)"}
+  - {id: fm_m8_tkeep_full_on_last, violates: "S4",
+     guard: "the final beat of a frame four beats or longer",
+     defect: "tkeep is forced to all ones",
+     witness: "FAIL [S4] input 2 tkeep: expected c got f (t=165000)"}
+  - {id: fm_m9_marginal_starvation, violates: "S10",
+     guard: "a 300-cycle window out of every 320",
+     defect: "the last input is not admitted -- it is served in the remaining 20",
+     witness: "FAIL [S10] input 3 has started no frame in 113 completed output frames (window 16) (t=2695000)"}
+  - {id: fm_m10_deep_beat_corruption, violates: "S4",
+     guard: "the fourth beat onward of a frame, from the fifth frame",
+     defect: "one payload bit is flipped",
+     witness: "FAIL [S4] input 0 tdata: expected d5ca0090 got e9ba0060 (t=285000)"}
   all_have_nonequivalence_witnesses: true
-  witness_harness: mutants/nonequiv_tb.sv
-  isolation: >
-    Five of six trip exactly one clause. fm_m3 trips S3 first and S10 later --
-    one defect with two symptoms, recorded rather than called clean isolation.
-
+  evidence_type: witness
+  witness_runner: mutants/witness.sh
+  depth: >
+    Every frame the reference drove was one to five beats long, so S3 atomicity
+    was only ever checked on short frames. It now drives frames of six to ten
+    beats under full contention, with mid-frame backpressure so the re-aim
+    window is actually open.
+  a_guard_measured_before_it_was_kept: >
+    fm_m3 was first keyed on the fifth beat of a frame. Instrumenting showed the
+    reference reached that depth 112 times and produced ZERO mid-frame switches
+    -- the depth was reachable and the switch was not. Re-keyed onto frame
+    ordinal plus beat depth, which the reference provably reaches.
+  reference_reachability: >
+    The reference kills all ten. A mutant it cannot reach is unverified, not
+    difficult.
 second_dut:
   status: WIRED
   file: dut2/frame_arb_mux_alt.sv

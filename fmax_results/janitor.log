@@ -1,0 +1,11 @@
+00:37:42 reclaimed d_ca01_nonblocking_dcache (1.8G)  free=39Gi
+00:37:42 reclaimed d_ca04_ref_reference_at_4p5 (105M)  free=39Gi
+00:37:42 reclaimed d_ca04_ref_reference_postpatch_2p625 (106M)  free=39Gi
+00:37:42 reclaimed d_dsp02_ref_at_20p25 (302M)  free=40Gi
+00:37:43 reclaimed d_nw01_nolat (380M)  free=40Gi
+00:37:43 reclaimed d_nw01_ref_at_9p0 (591M)  free=41Gi
+00:37:43 reclaimed d_nw01_ref_nolatency ( 13M)  free=41Gi
+01:58:02 reclaimed d_ca04_async_fifo_cdc (106M)  free=41Gi
+02:58:03 reclaimed d_ca04_async_fifo_cdc (106M)  free=40Gi
+04:09:39 reclaimed d_nw03_axis_switch_oq (126M)  free=40Gi
+11:11:50 queue ended; janitor exiting

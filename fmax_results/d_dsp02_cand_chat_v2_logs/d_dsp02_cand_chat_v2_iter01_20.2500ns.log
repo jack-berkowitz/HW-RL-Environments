@@ -1,0 +1,3 @@
+clean build: wiped sky130hd/d_dsp02_cand_chat_v2 (results, logs, objects, reports)
+constraining to CLK_PERIOD_NS=20.2500 (SDC + synthesis)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?

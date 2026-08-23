@@ -143,6 +143,7 @@ module fp_noncomp_tb;
   int unsigned cov_nan_a = 0, cov_nan_b = 0, cov_snan = 0, cov_qnan = 0;
   int unsigned cov_zero_pair = 0, cov_noncanon_nan = 0, cov_stall = 0, cov_reset = 0;
   int unsigned cov_op [4];
+  int unsigned cov_signed_zero_eq = 0;
 
   // ---- checker --------------------------------------------------------------
   always @(posedge clk) begin
@@ -295,6 +296,19 @@ module fp_noncomp_tb;
     @(negedge clk) out_ready = 1'b1;
     drain();
 
+    // -- C2: the signed-zero pair, driven REPEATEDLY --------------------------
+    // +0 and -0 compare EQUAL, and the clause holds on every comparison, not
+    // only the first one a sweep happens to reach. A pool sweep drives this
+    // pair once or twice; a design that is right the first few times and wrong
+    // afterwards is invisible to that.
+    phase = "C2:signed-zero equality";
+    for (int k = 0; k < 8; k++) begin
+      issue(OP_CMP, 3'd2, 32'h0000_0000, 32'h8000_0000);   // +0 == -0
+      issue(OP_CMP, 3'd2, 32'h8000_0000, 32'h0000_0000);   // -0 == +0
+      cov_signed_zero_eq = cov_signed_zero_eq + 1;
+    end
+    drain();
+
     // -- D: random pairs ------------------------------------------------------
     phase = "D:random";
     for (int k = 0; k < 400; k++) begin
@@ -340,6 +354,8 @@ module fp_noncomp_tb;
     if (cov_snan < 50)         fail("FLOOR", $sformatf("signalling-NaN operands: %0d < 50", cov_snan));
     if (cov_qnan < 50)         fail("FLOOR", $sformatf("quiet-NaN operands: %0d < 50", cov_qnan));
     if (cov_zero_pair < 8)     fail("FLOOR", $sformatf("both-operands-zero cases: %0d < 8", cov_zero_pair));
+    if (cov_signed_zero_eq < 4)
+      fail("COVERAGE", "the +0/-0 pair was compared fewer than four times -- a clause that holds on EVERY comparison is checked on one");
     if (cov_noncanon_nan < 10) fail("FLOOR", $sformatf("non-canonical NaN operands: %0d < 10", cov_noncanon_nan));
     if (cov_stall < 20)        fail("FLOOR", $sformatf("output stall cycles: %0d < 20", cov_stall));
     if (cov_reset < 1)         fail("FLOOR", "no reset applied with an operation in flight");

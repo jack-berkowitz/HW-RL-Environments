@@ -74,6 +74,7 @@ module frame_arb_mux_tb;
   logic  run_en       = 1'b0;   // offer beats at all
   logic  gap_en       = 1'b0;   // idle cycles between frames
   logic  force_single = 1'b0;   // drive the single-beat corner (S2)
+  logic  force_long   = 1'b0;   // drive LONG frames (S3 atomicity)
   logic  drain_mode   = 1'b0;   // finish the frame in progress, then stop
   logic  done_f       [S];      // this input has reached a frame boundary
   string phase        = "init";
@@ -83,6 +84,7 @@ module frame_arb_mux_tb;
   int unsigned cov_single_frames = 0, cov_frames_in [S];
   int unsigned cov_stall_midframe = 0, cov_resets = 0;
   int unsigned cov_hi_payload = 0, cov_partial_keep = 0, cov_frames_phaseC = 0;
+  int unsigned cov_long_frames = 0;
 
   for (genvar k = 0; k < S; k++) begin : g_drive
     assign s_tdata[k]  = cur_data[k];
@@ -95,7 +97,9 @@ module frame_arb_mux_tb;
   // Blocking form, used ONLY from the initial block at a negedge, where there
   // is no sampling edge to race.
   task automatic seed_beat(input int unsigned k);
-    cur_len[k]  = force_single ? 1 : (1 + $urandom_range(0, 4));
+    cur_len[k]  = force_single ? 1
+                : force_long ? (6 + $urandom_range(0, 4))
+                : (1 + $urandom_range(0, 4));
     cur_beat[k] = 0;
     seq[k]      = seq[k] + 1;
     cur_data[k] = {16'($urandom), 12'(seq[k]), 4'(k)};
@@ -296,6 +300,31 @@ module frame_arb_mux_tb;
       wait_frames(4);
     end
 
+    // S3 atomicity over LONG frames, under full contention.
+    //
+    // Every frame above is one to five beats. A design that holds its choice
+    // for the first few beats of a frame and can be re-aimed afterwards is
+    // atomic on all of them and interleaves only on longer ones -- so the
+    // clause is checked, and the case that breaks it is never constructed.
+    // Six to ten beats, all four inputs offering, ready held high.
+    phase = "D2:long frames";
+    force_long = 1'b1;
+    @(negedge clk) m_tready = 1'b1;
+    gap_en = 1'b0;
+    wait_frames(60);
+    cov_long_frames = cov_long_frames + 60;
+    // and again with mid-frame backpressure, so the re-aim window is open
+    for (int i = 0; i < 8; i++) begin
+      while (!owner_valid) @(posedge clk);
+      repeat (3) @(posedge clk);
+      @(negedge clk) m_tready = 1'b0;
+      repeat (4 + i) begin @(posedge clk); cov_stall_midframe = cov_stall_midframe + 1; end
+      @(negedge clk) m_tready = 1'b1;
+      wait_frames(3);
+    end
+    force_long = 1'b0;
+    wait_frames(10);
+
     phase = "E:gaps";
     gap_en = 1'b1;
     fork
@@ -361,6 +390,8 @@ module frame_arb_mux_tb;
       fail("FLOOR", $sformatf("beats with non-zero tdata[31:16]: %0d < 20", cov_hi_payload));
     if (cov_partial_keep < 20)
       fail("FLOOR", $sformatf("beats with partial tkeep: %0d < 20", cov_partial_keep));
+    if (cov_long_frames < 40)
+      fail("FLOOR", $sformatf("frames longer than five beats: %0d < 40 -- S3 atomicity is checked only on short frames", cov_long_frames));
     if (cov_frames_phaseC < 200)
       fail("FLOOR", $sformatf("frames completed under continuous load: %0d < 200", cov_frames_phaseC));
 

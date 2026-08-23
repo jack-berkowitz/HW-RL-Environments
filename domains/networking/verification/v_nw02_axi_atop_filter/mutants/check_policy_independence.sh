@@ -1,7 +1,7 @@
 #!/bin/bash
 # TIER-B 5c: no mutant may be killed by the POLICY difference alone.
 #
-# The eight defects of mutants.sv are re-derived on top of the policy-divergent
+# The ten defects of mutants.sv are re-derived on top of the policy-divergent
 # implementation (mutants/policy/), which makes the opposite legal choice on
 # both named latitude clauses. Each is then run against the reference
 # testbench. A verdict that differs from the same defect on the golden base
@@ -30,7 +30,7 @@ run_one() {  # $1 = label, $2 = dut file, $3 = expected (PASS|FAIL)
   fi
 }
 
-echo "reference testbench vs the policy-divergent base and its eight defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and its ten defects"
 sed 's/module af_c1_b_before_r/module atop_filter/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean.sv"
 run_one "policy base (clean)" "$W/clean.sv" PASS

@@ -95,40 +95,74 @@ conformant_perturbations:
     18 of 18. Rerun with mutants/check_policy_independence.sh.
 
 mutants:
-  - {id: ae_m1_one_retry_short, violates: Q4,
-     defect: "only three request frames are sent, not four",
-     witness: "an unanswered lookup transmitted 3 requests; exactly 4 are required"}
-  - {id: ae_m2_retry_interval_long, violates: Q4,
-     defect: "requests are spaced 96 cycles apart, not 64",
-     witness: "requests 0 and 1 are 97 cycles apart; the window is 64..80"}
-  - {id: ae_m3_timeout_short, violates: Q5,
-     defect: "the lookup gives up 128 cycles after the last request, not 256",
-     witness: "gave up 128 cycles after the last request; the window is 256..300"}
-  - {id: ae_m4_subnet_ignored, violates: Q3,
-     defect: "every address looks local, so an off-subnet lookup asks for the target",
-     witness: "asked for 08080808, expected the gateway c0a801fe"}
-  - {id: ae_m5_replies_not_learned, violates: C1,
-     defect: "only requests are learned from; a reply teaches the cache nothing",
-     witness: "a matching reply did not resolve the lookup"}
-  - {id: ae_m6_answers_any_target, violates: A2,
-     defect: "a request for somebody else's address is answered too",
-     witness: "a request for another station produced 1 frame"}
-  - {id: ae_m7_reply_target_is_us, violates: A1,
-     defect: "the reply names our own address as the target",
-     witness: "reply TPA c0a80101, expected the requester's SPA c0a80107"}
-  - {id: ae_m8_ethtype_ignored, violates: A3,
-     defect: "a frame that is not ARP is processed anyway",
-     witness: "a frame with eth_type 0800 produced 1 frame"}
+  design: >
+    GUARDED, uniformly. Every defect is a wrong behaviour paired with a rare
+    predicate over contract-level state, so it is caught only by a testbench
+    that CONSTRUCTS the named configuration and is still checking when it
+    arrives. A total defect fires on the first transaction of its class and
+    measures coverage rather than checking.
+  guards_are_contract_level: >
+    Lookups accepted, lookups answered with an error, frames received since the
+    last clear, frames transmitted, request frames sent for the current lookup,
+    whether one of our own lookups is outstanding -- all counted from this
+    module's own PORTS, never from a private register of the design.
+  - {id: ae_m1_three_requests_from_second_lookup, violates: "Q4",
+     guard: "the second unanswered lookup, and every one after it",
+     defect: "only THREE request frames are transmitted instead of four",
+     witness: "FAIL Q4: the SECOND unanswered lookup transmitted 3 request(s); exactly 4 are required, on every lookup alike"}
+  - {id: ae_m2_last_request_wrong_target, violates: "Q3",
+     guard: "the LAST of the four requests",
+     defect: "it asks for an address one off from the one looked up",
+     witness: "FAIL Q3: retry 3: asked for c0a80108, expected c0a80109"}
+  - {id: ae_m3_cached_mac_wrong_when_full, violates: "Q1",
+     guard: "four or more frames learned since the last clear -- the cache is full",
+     defect: "the MAC answered from the cache has its low byte corrupted",
+     witness: "FAIL Q1: answered 010203040507, expected the cached 010203040506"}
+  - {id: ae_m4_insert_dropped_when_full, violates: "C2",
+     guard: "four frames have already been learned since the last clear",
+     defect: "the insert silently fails, so the address stays unknown",
+     witness: "FAIL Q1/X3: an address taught just before the clear: no response within 40 cycles"}
+  - {id: ae_m5_requests_not_learned_after_two, violates: "C1",
+     guard: "two or more frames have already been learned since the last clear",
+     defect: "a received ARP REQUEST does not insert its sender pair; replies still do",
+     witness: "FAIL Q1/X3: the address of a station that asked us: no response within 40 cycles"}
+  - {id: ae_m6_reply_target_wrong_while_busy, violates: "A1",
+     guard: "one of our own lookups is outstanding when the request arrives",
+     defect: "the reply names the wrong target hardware address",
+     witness: "FAIL A1: reply THA 000000000000 while a lookup was outstanding, expected the requester's SHA"}
+  - {id: ae_m7_answers_foreign_target_while_busy, violates: "A2",
+     guard: "one of our own lookups is outstanding when the request arrives",
+     defect: "a request whose TPA is not local_ip_i is answered anyway",
+     witness: "FAIL A2: a request for another station's address produced 1 reply frame(s) while a lookup was outstanding"}
+  - {id: ae_m8_ethtype_low_nibble_ignored, violates: "A3",
+     guard: "the eth_type differs from 0x0806 only in its low nibble, after two frames",
+     defect: "a frame that is not ARP is processed as ARP",
+     witness: "FAIL A3: a frame with eth_type 0800 produced 1 frame(s); it must be ignored"}
+  - {id: ae_m9_clear_ignored_when_full, violates: "C3",
+     guard: "the cache holds four entries when the clear arrives",
+     defect: "clear_cache_i does not reach the cache, so every entry survives it",
+     witness: "FAIL C3: after clear_cache a previously cached address was still answered from the cache"}
+  - {id: ae_m10_five_requests_on_third_lookup, violates: "Q4",
+     guard: "the third lookup since reset, and every one after it",
+     defect: "FIVE request frames are transmitted instead of four",
+     witness: "FAIL Q4: an unanswered lookup transmitted 5 request(s); exactly 4 are required"}
   all_have_nonequivalence_witnesses: true
   evidence_type: witness
+  witness_runner: mutants/witness.sh
   generator: mutants/gen_mutants.py
   depth: >
-    None falls to a single lookup. Three are timing bounds that need a lookup
-    deliberately left unanswered for hundreds of cycles, one needs an address
-    outside the local subnet, one needs a reply distinguished from a request as
-    a source of learning, two need frames aimed at somebody else, and one needs
-    a frame that is not ARP at all.
-
+    The reference killed SIX of these as first guarded. Three of the four it
+    missed needed one thing the run never did: an incoming ARP frame arriving
+    while one of our OWN lookups was outstanding. Every request above was fed to
+    an idle engine.
+  a_guard_that_defeated_itself: >
+    ae_m9 gates the cache's clear on the cache being full, and the occupancy it
+    reads was itself reset on the first cycle of the clear pulse -- so the
+    remaining cycles of a four-cycle pulse cleared the cache normally and the
+    defect never appeared. The gate now holds across the whole pulse.
+  reference_reachability: >
+    The reference kills all ten. A mutant it cannot reach is unverified, not
+    difficult.
 negative_controls:
   known_bad_dut:
     status: PASS

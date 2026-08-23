@@ -1,3 +1,4 @@
+title: FP non-computational ops
 id: v_dsp02
 module: fp_noncomp
 domain: dsp
@@ -105,23 +106,65 @@ conformant_perturbations:
   all_survive: true
 
 mutants:
-  - {id: fn_m1, class: capability, defect: "subnormals classified as zero",
-     violates: S12, killed_by: S12, witness: "classify 00000001: +subnormal vs +zero"}
-  - {id: fn_m2, class: standards,  defect: "IEEE 754-2019 minimum/maximum propagates NaN",
-     violates: S4,  killed_by: S4,  witness: "min(qNaN,+0): 00000000 vs 7fc00000"}
-  - {id: fn_m3, class: signed_zero, defect: "MINMAX treats -0.0 and +0.0 as interchangeable",
-     violates: S3,  killed_by: S3,  witness: "min(-0,+0): 80000000 vs 00000000"}
-  - {id: fn_m4, class: flags,      defect: "equality made a signalling comparison",
-     violates: S9,  killed_by: S9,  witness: "feq(qNaN,+0): result same, status 00000 vs 10000"}
-  - {id: fn_m5, class: variant,    defect: "SGNJX implemented as SGNJ",
-     violates: S1,  killed_by: S1,  witness: "sgnjx(-0,+0): 80000000 vs 00000000"}
-  - {id: fn_m6, class: payload,    defect: "SGNJ canonicalises a NaN instead of preserving payload",
-     violates: S1,  killed_by: S1,  witness: "sgnj(ffd5a5a5,+0): 7fd5a5a5 vs 7fc00000"}
+  design: >
+    GUARDED, uniformly. Each defect is a wrong behaviour paired with an ORDINAL
+    over contract-level state: it fires only from the Nth operation of its own
+    class since reset. The clause it violates holds on EVERY operation, so
+    catching it needs a testbench that keeps checking rather than one that
+    spot-checks each operand class once.
+  why_ordinals: >
+    This unit is combinational at the contract level -- no occupancy, no burst,
+    no queue to key a guard on. What it has is the sequence of operations and
+    clauses that hold on every one of them. Ordinals are the contract-level
+    state this design actually has.
+  thresholds: >
+    Raised once. At ordinals of 2 to 5 the reference killed all ten with NO
+    change to the reference at all, which is the signal that a guard is
+    shallower than the reference's own sweeps. Raised, fn_m9 went out of reach
+    and the REFERENCE was extended to meet it rather than the guard loosened.
+  - {id: fn_m1_classify_subnormal_as_zero, violates: "S12",
+     guard: "the EIGHTH subnormal classify since reset",
+     defect: "a subnormal is classified as zero",
+     witness: "FAIL [S12] classify a=807fffff : mask expected 0000000100 got 0000001000"}
+  - {id: fn_m2_ieee2019_minmax, violates: "S4",
+     guard: "the SIXTH minmax with exactly one NaN operand",
+     defect: "IEEE 754-2019 minimum/maximum semantics: the NaN propagates",
+     witness: "FAIL [S4] op=1 mode=1 a=00000000 b=7fa00000 : result expected 00000000 got 7fc00000"}
+  - {id: fn_m3_minmax_ignores_zero_sign, violates: "S3",
+     guard: "the FOURTH minmax of two zeros",
+     defect: "-0.0 and +0.0 are treated as interchangeable",
+     witness: "FAIL [S3] op=1 mode=0 a=80000000 b=00000000 : result expected 80000000 got 00000000"}
+  - {id: fn_m4_feq_is_signalling, violates: "S9",
+     guard: "the FOURTH quiet comparison with a NaN operand",
+     defect: "equality is made a SIGNALLING comparison",
+     witness: "FAIL [S9] op=2 mode=2 a=80000000 b=7fc00000 : NV expected 0 got 1"}
+  - {id: fn_m5_sgnjx_becomes_sgnj, violates: "S1",
+     guard: "the TENTH sign-injection XOR since reset",
+     defect: "sgnjx behaves as sgnj",
+     witness: "FAIL [S1] op=0 mode=2 a=80000000 b=00000000 : result expected 80000000 got 00000000"}
+  - {id: fn_m6_sgnj_canonicalises_nan, violates: "S1",
+     guard: "the SIXTH sign-injection on a NaN",
+     defect: "the NaN payload is canonicalised instead of carried through",
+     witness: "FAIL [S1] op=0 mode=0 a=ffd5a5a5 b=00000000 : result expected 7fd5a5a5 got 7fc00000"}
+  - {id: fn_m7_sgnj_quiets_snan, violates: "S1",
+     guard: "the SIXTH sign-injection on a signalling NaN",
+     defect: "the sNaN is quieted; sign injection is not an arithmetic operation",
+     witness: "FAIL [S1] op=0 mode=2 a=7fa00000 b=80000000 : result expected ffa00000 got ffe00000"}
+  - {id: fn_m8_max_subnormal_is_normal, violates: "S12",
+     guard: "the FOURTH classify of the largest subnormal",
+     defect: "it is classified as the smallest normal",
+     witness: "FAIL [S12] classify a=807fffff : mask expected 0000000100 got 0000000010"}
+  - {id: fn_m9_feq_distinguishes_zeros, violates: "S7",
+     guard: "the FOURTH equality comparison of +0 against -0",
+     defect: "they compare unequal",
+     witness: "FAIL [S7] op=2 mode=2 a=80000000 b=00000000 : result expected 00000001 got 00000000"}
+  - {id: fn_m10_minmax_snan_not_invalid, violates: "S6",
+     guard: "the EIGHTH minmax with a signalling NaN operand",
+     defect: "no invalid flag is raised",
+     witness: "FAIL [S6] op=1 mode=1 a=80000000 b=ff812345 : NV expected 1 got 0"}
   all_have_nonequivalence_witnesses: true
-  witness_harness: mutants/nonequiv_tb.sv
-  isolation: "all six trip EXACTLY ONE clause, and it is the clause each targets"
-  reachability: >
-    Every mutant targets a corner the specification NAMES -- see mutants/README.md.
-    fp_noncomp has no liveness property and an enormous corner space, so the
-    failure mode is a mutant nobody kills because the corner is unreachable from a
-    spec-only reading. None had to be retired, but the check is the point.
+  evidence_type: witness
+  witness_runner: mutants/witness.sh
+  reference_reachability: >
+    The reference kills all ten. A mutant it cannot reach is unverified, not
+    difficult.

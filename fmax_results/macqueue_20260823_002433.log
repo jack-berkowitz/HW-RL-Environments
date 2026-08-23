@@ -1,0 +1,267 @@
+00:24:33 === MAC QUEUE START ===
+00:24:33 --- d_ca04 ---
+00:24:33 SWEEP d_ca04 reference (seed 4.5ns)
+design d_ca04 (comp_arch, sky130hd)
+config domains/comp_arch/design/d_ca04_async_fifo_cdc/orfs/config.mk
+orfs output directory: d_ca04_async_fifo_cdc
+TWO-CLOCK design: second clock scaled with the first at ratio 1.6000 so the domain relationship is held fixed
+
+=== phase 1: bracketing from 4.5 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_ca04
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_ca04_logs/d_ca04_iter01_4.5000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_ca04_fmax.json
+==============================================================
+00:24:34 SWEEP d_ca04_cand_chat_v2 (seed 4.5ns)
+task      : d_ca04 (async_fifo_cdc)
+candidate : candidates/d_ca04/chat.sv
+config    : orfs_runs/d_ca04_cand_chat_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_ca04_cand_chat_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_ca04_cand_chat_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_ca04_cand_chat_v2 (candidate, sky130hd)
+config orfs_runs/d_ca04_cand_chat_v2/config.mk
+TWO-CLOCK design: second clock scaled with the first at ratio 1.6000 so the domain relationship is held fixed
+
+=== phase 1: bracketing from 4.5 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_ca04_cand_chat_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_ca04_cand_chat_v2_logs/d_ca04_cand_chat_v2_iter01_4.5000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_ca04_cand_chat_v2_fmax.json
+==============================================================
+00:24:34 SWEEP d_ca04_cand_claude_v2 (seed 4.5ns)
+task      : d_ca04 (async_fifo_cdc)
+candidate : candidates/d_ca04/claude.sv
+config    : orfs_runs/d_ca04_cand_claude_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_ca04_cand_claude_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_ca04_cand_claude_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_ca04_cand_claude_v2 (candidate, sky130hd)
+config orfs_runs/d_ca04_cand_claude_v2/config.mk
+TWO-CLOCK design: second clock scaled with the first at ratio 1.6000 so the domain relationship is held fixed
+
+=== phase 1: bracketing from 4.5 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_ca04_cand_claude_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_ca04_cand_claude_v2_logs/d_ca04_cand_claude_v2_iter01_4.5000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_ca04_cand_claude_v2_fmax.json
+==============================================================
+00:24:35 d_ca04: no periods, no builds
+00:24:35 --- d_nw03 ---
+00:24:35 SWEEP d_nw03 reference (seed 4.0ns)
+design d_nw03 (networking, sky130hd)
+config domains/networking/design/d_nw03_axis_switch_oq/orfs/config.mk
+orfs output directory: d_nw03_axis_switch_oq
+
+=== phase 1: bracketing from 4.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_nw03
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_nw03_logs/d_nw03_iter01_4.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_nw03_fmax.json
+==============================================================
+00:24:35 SWEEP d_nw03_cand_chat_v2 (seed 4.0ns)
+task      : d_nw03 (axis_switch_oq)
+candidate : candidates/d_nw03/chat.sv
+config    : orfs_runs/d_nw03_cand_chat_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_nw03_cand_chat_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_nw03_cand_chat_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_nw03_cand_chat_v2 (candidate, sky130hd)
+config orfs_runs/d_nw03_cand_chat_v2/config.mk
+
+=== phase 1: bracketing from 4.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_nw03_cand_chat_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_nw03_cand_chat_v2_logs/d_nw03_cand_chat_v2_iter01_4.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_nw03_cand_chat_v2_fmax.json
+==============================================================
+00:24:35 SWEEP d_nw03_cand_claude_v2 (seed 4.0ns)
+task      : d_nw03 (axis_switch_oq)
+candidate : candidates/d_nw03/claude.sv
+config    : orfs_runs/d_nw03_cand_claude_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_nw03_cand_claude_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_nw03_cand_claude_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_nw03_cand_claude_v2 (candidate, sky130hd)
+config orfs_runs/d_nw03_cand_claude_v2/config.mk
+
+=== phase 1: bracketing from 4.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_nw03_cand_claude_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_nw03_cand_claude_v2_logs/d_nw03_cand_claude_v2_iter01_4.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_nw03_cand_claude_v2_fmax.json
+==============================================================
+00:24:36 SWEEP d_nw03_cand_gemini_v2 (seed 4.0ns)
+task      : d_nw03 (axis_switch_oq)
+candidate : candidates/d_nw03/gemini.sv
+config    : orfs_runs/d_nw03_cand_gemini_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_nw03_cand_gemini_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_nw03_cand_gemini_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_nw03_cand_gemini_v2 (candidate, sky130hd)
+config orfs_runs/d_nw03_cand_gemini_v2/config.mk
+
+=== phase 1: bracketing from 4.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_nw03_cand_gemini_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_nw03_cand_gemini_v2_logs/d_nw03_cand_gemini_v2_iter01_4.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_nw03_cand_gemini_v2_fmax.json
+==============================================================
+00:24:36 d_nw03: no periods, no builds
+00:24:36 --- d_dsp03 ---
+00:24:36 SWEEP d_dsp03 reference (seed 12.0ns)
+design d_dsp03 (dsp, sky130hd)
+config domains/dsp/design/d_dsp03_multifmt_fma/orfs/config.mk
+orfs output directory: d_dsp03_multifmt_fma
+
+=== phase 1: bracketing from 12.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_dsp03
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp03_logs/d_dsp03_iter01_12.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_dsp03_fmax.json
+==============================================================
+00:24:37 SWEEP d_dsp03_cand_chat_v2 (seed 12.0ns)
+task      : d_dsp03 (fp_multifmt_fma)
+candidate : candidates/d_dsp03/chat.sv
+config    : orfs_runs/d_dsp03_cand_chat_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_dsp03_cand_chat_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_dsp03_cand_chat_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_dsp03_cand_chat_v2 (candidate, sky130hd)
+config orfs_runs/d_dsp03_cand_chat_v2/config.mk
+
+=== phase 1: bracketing from 12.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_dsp03_cand_chat_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp03_cand_chat_v2_logs/d_dsp03_cand_chat_v2_iter01_12.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_dsp03_cand_chat_v2_fmax.json
+==============================================================
+00:24:37 SWEEP d_dsp03_cand_claude_v2 (seed 12.0ns)
+task      : d_dsp03 (fp_multifmt_fma)
+candidate : candidates/d_dsp03/claude.sv
+config    : orfs_runs/d_dsp03_cand_claude_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_dsp03_cand_claude_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_dsp03_cand_claude_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_dsp03_cand_claude_v2 (candidate, sky130hd)
+config orfs_runs/d_dsp03_cand_claude_v2/config.mk
+
+=== phase 1: bracketing from 12.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_dsp03_cand_claude_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp03_cand_claude_v2_logs/d_dsp03_cand_claude_v2_iter01_12.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_dsp03_cand_claude_v2_fmax.json
+==============================================================
+00:24:38 d_dsp03: no periods, no builds
+00:24:38 --- d_dsp02 ---
+00:24:38 SWEEP d_dsp02 reference (seed 20.25ns)
+design d_dsp02 (dsp, sky130hd)
+config domains/dsp/design/d_dsp02_fp32_fma_ii1/orfs/config.mk
+orfs output directory: d_dsp02_fp32_fma_ii1
+
+=== phase 1: bracketing from 20.25 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_dsp02
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp02_logs/d_dsp02_iter01_20.2500ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_dsp02_fmax.json
+==============================================================
+00:24:38 SWEEP d_dsp02_cand_chat_v2 (seed 20.25ns)
+task      : d_dsp02 (fp32_fma_ii1)
+candidate : candidates/d_dsp02/chat.sv
+config    : orfs_runs/d_dsp02_cand_chat_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_dsp02_cand_chat_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_dsp02_cand_chat_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_dsp02_cand_chat_v2 (candidate, sky130hd)
+config orfs_runs/d_dsp02_cand_chat_v2/config.mk
+
+=== phase 1: bracketing from 20.25 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_dsp02_cand_chat_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp02_cand_chat_v2_logs/d_dsp02_cand_chat_v2_iter01_20.2500ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_dsp02_cand_chat_v2_fmax.json
+==============================================================
+00:24:38 SWEEP d_dsp02_cand_claude_v2 (seed 20.25ns)
+task      : d_dsp02 (fp32_fma_ii1)
+candidate : candidates/d_dsp02/claude.sv
+config    : orfs_runs/d_dsp02_cand_claude_v2/config.mk
+results   : $ORFS_FLOW_DIR/{results,reports,logs}/sky130hd/d_dsp02_cand_claude_v2/base/
+expect ~25 min under emulation.
+
+clean build: wiped sky130hd/d_dsp02_cand_claude_v2 (results, logs, objects, reports)
+Cannot connect to the Docker daemon at unix:///Users/jackberkowitz/.docker/run/docker.sock. Is the docker daemon running?
+ORFS build failed -- see the log above.
+design d_dsp02_cand_claude_v2 (candidate, sky130hd)
+config orfs_runs/d_dsp02_cand_claude_v2/config.mk
+
+=== phase 1: bracketing from 20.25 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_dsp02_cand_claude_v2
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 1; see fmax_results/d_dsp02_cand_claude_v2_logs/d_dsp02_cand_claude_v2_iter01_20.2500ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.0 min
+  written to       : fmax_results/d_dsp02_cand_claude_v2_fmax.json
+==============================================================
+00:24:39 d_dsp02: no periods, no builds
+00:24:39 === MAC QUEUE DONE ===

@@ -92,6 +92,34 @@ off-subnet address was asked for, whether a request for another station was
 sent, whether a non-ARP frame was sent, and whether clear and reset were
 exercised. None counts a DUT response.
 
+## The difficulty pivot — the mutant set was rebuilt
+
+Ten guarded defects replace eight total ones. Each is a wrong behaviour paired
+with a rare predicate over contract-level state: how many lookups have timed
+out, how many frames have been learned since the last clear, which retry it is,
+whether one of our own lookups is outstanding when a frame arrives. All are
+counted from the module's own ports.
+
+### The reference killed six, and one gap explained three of the misses
+
+Every ARP request in the testbench was fed to an **idle** engine. A1 and A2 were
+therefore only ever checked in the quiet case, and three mutants keyed on "a
+lookup of ours is outstanding" walked straight through. The fourth needed a
+SECOND lookup to time out, where the run had only ever timed one out.
+
+The second-lookup phase then had to move **ahead of the reset phase**. Reset
+clears the timed-out count, so a "second unanswered lookup" placed after a reset
+is the first one all over again: the phase was there, ran, and measured nothing.
+That is the same failure mode as a coverage floor that counts the wrong thing --
+it looks like a check and is not one.
+
+### A guard that defeated itself
+
+`ae_m9` ignores `clear_cache_i` when the cache is full. The occupancy it reads
+was reset on the FIRST cycle of the clear pulse, so the remaining three cycles
+of a four-cycle pulse cleared the cache normally -- the predicate disarmed the
+defect it was gating. The gate now latches its decision for the whole pulse.
+
 ## Watchdogs
 
 | | |

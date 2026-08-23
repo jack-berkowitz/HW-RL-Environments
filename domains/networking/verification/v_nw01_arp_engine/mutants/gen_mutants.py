@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Generate the v_nw01 mutant set.
+"""Generate the v_nw01 mutant set -- GUARDED.
 
-Every mutant is a MECHANICAL edit of the golden shim, and where the defect is
-internal, of a renamed copy of the anchor. Each edit is an exact old -> new
-string pair asserted to match EXACTLY ONCE, so a silent no-op cannot produce a
-mutant identical to the golden.
+Every mutant is a MECHANICAL edit of a renamed copy of the anchor. Each edit is
+an exact old -> new pair asserted to match EXACTLY ONCE, so a silent no-op
+cannot produce a mutant identical to the golden that every testbench "kills" by
+doing nothing.
 
-Three are pure changes to the pinned timers. That is the honest way to build a
-retry or timeout defect: a hand-written faulty engine fails for incidental
-reasons and isolates nothing.
+EVERY DEFECT IS GUARDED:
+
+    wrong_behaviour AND rare_predicate over contract-level state
+
+Guards read this module's own PORTS -- lookups accepted, frames received,
+frames transmitted, responses taken, clears -- never a private register of the
+design. Step 5c re-derives every defect on an independent implementation that
+does not have those registers.
 
 Run:  python3 mutants/gen_mutants.py
 """
@@ -19,8 +24,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 TASK = os.path.dirname(HERE)
 DUT = os.path.join(TASK, "dut")
-SHIM = open(os.path.join(DUT, "arp_engine.sv"), encoding="utf-8").read()
 ANCHOR = open(os.path.join(DUT, "arp.sv"), encoding="utf-8").read()
+SHIM = open(os.path.join(DUT, "arp_engine.sv"), encoding="utf-8").read()
 BODY = SHIM[SHIM.index("module arp_engine ("):]
 
 
@@ -32,106 +37,147 @@ def sub1(text, old, new, what):
     return text.replace(old, new)
 
 
-SHIMLEVEL = {
- "m1_one_retry_short": ("Q4", "only three request frames are sent, not four",
-   [(".REQUEST_RETRY_COUNT    (4),", ".REQUEST_RETRY_COUNT    (3),")]),
- "m2_retry_interval_long": ("Q4", "requests are spaced 96 cycles apart, not 64",
-   [(".REQUEST_RETRY_INTERVAL (64),", ".REQUEST_RETRY_INTERVAL (96),")]),
- "m3_timeout_short": ("Q5", "the lookup gives up 128 cycles after the last request, not 256",
-   [(".REQUEST_TIMEOUT        (256)", ".REQUEST_TIMEOUT        (128)")]),
- "m4_subnet_ignored": ("Q3", "every address looks local, so an off-subnet lookup asks for the target instead of the gateway",
-   [(".subnet_mask (subnet_mask_i),", ".subnet_mask (32'd0),")]),
-}
+DECL = "reg [5:0] arp_request_retry_cnt_reg = 6'd0, arp_request_retry_cnt_next;"
+GUARD = DECL + """
 
-INTERNAL = {
- "m5_replies_not_learned": ("C1", "only requests are learned from; a reply teaches the cache nothing",
-   [("            cache_write_request_valid_next = 1'b1;",
-     "            cache_write_request_valid_next = (incoming_arp_oper == ARP_OPER_ARP_REQUEST);")]),
- "m6_answers_any_target": ("A2", "a request for somebody else's address is answered too",
-   [("                if (incoming_arp_tpa == local_ip) begin",
-     "                if (1'b1) begin")]),
- "m7_reply_target_is_us": ("A1", "the reply names our own address as the target instead of the requester's",
-   [("""                    outgoing_arp_oper_next = ARP_OPER_ARP_REPLY;
-                    outgoing_arp_tha_next = incoming_arp_sha;
-                    outgoing_arp_tpa_next = incoming_arp_spa;""",
-     """                    outgoing_arp_oper_next = ARP_OPER_ARP_REPLY;
-                    outgoing_arp_tha_next = incoming_arp_sha;
-                    outgoing_arp_tpa_next = local_ip;""")]),
- "m8_ethtype_ignored": ("A3", "a frame that is not ARP is processed anyway",
-   [("        if (incoming_eth_type == 16'h0806 && incoming_arp_htype == 16'h0001 && incoming_arp_ptype == 16'h0800) begin",
-     "        if (incoming_arp_htype == 16'h0001 && incoming_arp_ptype == 16'h0800) begin")]),
+// ---- mutant guard state: contract-level only -----------------------------
+// Every quantity here is counted from this module's PORTS, so each guard can
+// be restated against any implementation of the same contract.
+reg [7:0] g_lookup_q  = 8'd0;   // lookups accepted since reset
+reg [7:0] g_timeout_q = 8'd0;   // lookups answered with an error
+reg [7:0] g_rx_q      = 8'd0;   // ARP frames received since reset or clear
+reg [7:0] g_tx_q      = 8'd0;   // frames transmitted since reset
+reg [7:0] g_att_q     = 8'd0;   // request frames sent for the CURRENT lookup
+reg       g_out_q     = 1'b0;   // a lookup of ours is outstanding
+reg [7:0] g_clr_q     = 8'd0;   // clears seen
+reg [7:0] g_occ_q     = 8'd0;   // frames learned since the last EFFECTIVE clear
+
+// A clear that only counts once it has taken effect. Resetting the occupancy
+// on the first cycle of the pulse would let the rest of the pulse through, so
+// the predicate would defeat itself on any clear longer than one cycle.
+wire g_clr_eff = clear_cache && !(g_occ_q >= 8'd4);
+
+always @(posedge clk) begin
+    if (rst) begin
+        g_lookup_q <= 8'd0; g_timeout_q <= 8'd0; g_rx_q <= 8'd0;
+        g_tx_q <= 8'd0; g_att_q <= 8'd0; g_out_q <= 1'b0; g_clr_q <= 8'd0;
+    end else begin
+        if (clear_cache) begin g_clr_q <= g_clr_q + 8'd1; g_rx_q <= 8'd0; end
+        else if (s_eth_hdr_valid && s_eth_hdr_ready) g_rx_q <= g_rx_q + 8'd1;
+        if (g_clr_eff) g_occ_q <= 8'd0;
+        else if (s_eth_hdr_valid && s_eth_hdr_ready) g_occ_q <= g_occ_q + 8'd1;
+        if (m_eth_hdr_valid && m_eth_hdr_ready) begin
+            g_tx_q <= g_tx_q + 8'd1;
+            if (g_out_q) g_att_q <= g_att_q + 8'd1;
+        end
+        if (arp_request_valid && arp_request_ready) begin
+            g_lookup_q <= g_lookup_q + 8'd1; g_out_q <= 1'b1; g_att_q <= 8'd0;
+        end
+        if (arp_response_valid && arp_response_ready) begin
+            g_out_q <= 1'b0;
+            if (arp_response_error) g_timeout_q <= g_timeout_q + 8'd1;
+        end
+    end
+end"""
+
+E_INITRETRY = "                    arp_request_retry_cnt_next = REQUEST_RETRY_COUNT-1;"
+E_RETRYTPA = """                outgoing_arp_tpa_next = arp_request_ip_reg;
+                arp_request_retry_cnt_next = arp_request_retry_cnt_reg - 1;"""
+E_MACHIT = """                    cache_query_request_valid_next = 1'b0;
+                    arp_response_valid_next = 1'b1;
+                    arp_response_error_next = 1'b0;
+                    arp_response_mac_next = cache_query_response_mac;"""
+E_INSERT = "            cache_write_request_valid_next = 1'b1;"
+E_REPLYTHA = """                    outgoing_arp_oper_next = ARP_OPER_ARP_REPLY;
+                    outgoing_arp_tha_next = incoming_arp_sha;"""
+E_TPAMATCH = "                if (incoming_arp_tpa == local_ip) begin"
+E_ETHTYPE = ("        if (incoming_eth_type == 16'h0806 && incoming_arp_htype == 16'h0001 "
+             "&& incoming_arp_ptype == 16'h0800) begin")
+E_CLEAR = "    .clear_cache(clear_cache)"
+
+MUTANTS = {
+ "m1_three_requests_from_second_lookup": ("Q4",
+   "only THREE request frames are transmitted instead of four",
+   "the second unanswered lookup, and every one after it -- the first is exact",
+   [(E_INITRETRY,
+     "                    arp_request_retry_cnt_next = REQUEST_RETRY_COUNT-1\n"
+     "                                                 - ((g_timeout_q >= 8'd1) ? 1 : 0);")]),
+ "m2_last_request_wrong_target": ("Q3",
+   "the request frame asks for an address one off from the one looked up",
+   "the LAST of the four requests -- the first three carry the right address",
+   [(E_RETRYTPA,
+     "                outgoing_arp_tpa_next = (arp_request_retry_cnt_reg == 1)\n"
+     "                                        ? (arp_request_ip_reg ^ 32'h0000_0001)\n"
+     "                                        : arp_request_ip_reg;\n"
+     "                arp_request_retry_cnt_next = arp_request_retry_cnt_reg - 1;")]),
+ "m3_cached_mac_wrong_when_full": ("Q1",
+   "the MAC answered from the cache has its low byte corrupted",
+   "four or more frames have been learned since the last clear -- the cache is full",
+   [(E_MACHIT,
+     "                    cache_query_request_valid_next = 1'b0;\n"
+     "                    arp_response_valid_next = 1'b1;\n"
+     "                    arp_response_error_next = 1'b0;\n"
+     "                    arp_response_mac_next = (g_rx_q >= 8'd4)\n"
+     "                        ? (cache_query_response_mac ^ 48'h0000_0000_0001)\n"
+     "                        : cache_query_response_mac;")]),
+ "m4_insert_dropped_when_full": ("C2",
+   "the insert silently fails, so the address stays unknown",
+   "four frames have already been learned since the last clear",
+   [(E_INSERT, "            cache_write_request_valid_next = (g_rx_q < 8'd4);")]),
+ "m5_requests_not_learned_after_two": ("C1",
+   "a received ARP REQUEST does not insert its sender pair; replies still do",
+   "two or more frames have already been learned since the last clear",
+   [(E_INSERT,
+     "            cache_write_request_valid_next =\n"
+     "                !((incoming_arp_oper == ARP_OPER_ARP_REQUEST) && (g_rx_q >= 8'd2));")]),
+ "m6_reply_target_wrong_while_busy": ("A1",
+   "the reply names the wrong target hardware address",
+   "one of our own lookups is outstanding when the request arrives",
+   [(E_REPLYTHA,
+     "                    outgoing_arp_oper_next = ARP_OPER_ARP_REPLY;\n"
+     "                    outgoing_arp_tha_next = g_out_q ? 48'h0000_0000_0000\n"
+     "                                                    : incoming_arp_sha;")]),
+ "m7_answers_foreign_target_while_busy": ("A2",
+   "a request whose TPA is not local_ip_i is answered anyway",
+   "one of our own lookups is outstanding when the request arrives",
+   [(E_TPAMATCH, "                if ((incoming_arp_tpa == local_ip) || g_out_q) begin")]),
+ "m8_ethtype_low_nibble_ignored": ("A3",
+   "a frame whose eth_type is not 0x0806 is processed as ARP",
+   "the eth_type differs from 0x0806 only in its low nibble, and two frames "
+   "have already been received",
+   [(E_ETHTYPE,
+     "        if (((incoming_eth_type == 16'h0806)\n"
+     "             || ((g_rx_q >= 8'd2) && (incoming_eth_type[15:4] == 12'h080)))\n"
+     "            && incoming_arp_htype == 16'h0001 && incoming_arp_ptype == 16'h0800) begin")]),
+ "m9_clear_ignored_when_full": ("C3",
+   "clear_cache_i does not reach the cache, so every entry survives it",
+   "the cache holds four entries when the clear arrives -- a clear on a partly filled cache works",
+   [(E_CLEAR, "    .clear_cache(g_clr_eff)")]),
+ "m10_five_requests_on_third_lookup": ("Q4",
+   "FIVE request frames are transmitted instead of four",
+   "the third lookup since reset, and every one after it",
+   [(E_INITRETRY,
+     "                    arp_request_retry_cnt_next = REQUEST_RETRY_COUNT-1\n"
+     "                                                 + ((g_lookup_q >= 8'd3) ? 1 : 0);")]),
 }
 
 blocks = []
-for tag, (clause, note, edits) in sorted(SHIMLEVEL.items()):
-    b = BODY
-    for old, new in edits:
-        b = sub1(b, old, new, tag)
-    b = sub1(b, "module arp_engine (", "module ae_%s (" % tag, "%s/rename" % tag)
-    b = sub1(b, "  arp #(", "  // MUTANT ae_%s -- violates %s: %s\n  arp #(" % (tag, clause, note),
-             "%s/mark" % tag)
-    blocks.append(b)
-
-for tag, (clause, note, edits) in sorted(INTERNAL.items()):
-    txt = ANCHOR
+for tag, (clause, note, guard, edits) in sorted(MUTANTS.items(),
+                                                key=lambda kv: int(kv[0].split("_")[0][1:])):
+    txt = sub1(ANCHOR, DECL, GUARD, "%s/guard" % tag)
     for old, new in edits:
         txt = sub1(txt, old, new, "%s/anchor" % tag)
-    txt = re.sub(r"\barp\b(?=\s*#\(|\s*$)", "arp_%s" % tag, txt, count=0)
-    txt = txt.replace("module arp #", "module arp_%s #" % tag, 1)
+    txt = re.sub(r"\barp\b(?=\s*#\()", "arp_%s" % tag, txt)
+    txt = sub1(txt, "module arp #", "module arp_%s #" % tag, "%s/modrename" % tag)
     open(os.path.join(DUT, "arp_%s.sv" % tag), "w", encoding="utf-8").write(txt)
     b = sub1(BODY, "module arp_engine (", "module ae_%s (" % tag, "%s/rename" % tag)
-    b = sub1(b, "  arp #(", "  // MUTANT ae_%s -- violates %s: %s\n  arp_%s #("
-             % (tag, clause, note, tag), "%s/inst" % tag)
+    b = sub1(b, "  arp #(",
+             "  // MUTANT ae_%s -- violates %s\n  //   defect: %s\n  //   guard : fires only when %s\n"
+             "  arp_%s #(" % (tag, clause, note, guard, tag), "%s/inst" % tag)
     blocks.append(b)
 
-# ---------------------------------------------------------------------------
-# TIER-B 5c: the same eight defects re-derived on the POLICY-DIVERGENT engine,
-# which uses a fully associative round-robin cache and different timing inside
-# the windows. A verdict that differs between the two bases means the mutant
-# perturbs latitude rather than contract. The perturbation also serves as dut2.
-# ---------------------------------------------------------------------------
-CONF = os.path.join(TASK, "conformant", "conformant_perturbations.sv")
-conf = open(CONF, encoding="utf-8").read()
-
-ARPOK = """  wire arp_ok = rx_valid && rx_eth_type == 16'h0806
-                && rx_htype == 16'h0001 && rx_ptype == 16'h0800;   // clause A3"""
-LEARN = "      if (arp_ok && rx_ready) begin"
-
-POLICY = {
- "p1_one_retry_short":     [("  localparam int RETRIES  = 4;", "  localparam int RETRIES  = 3;")],
- "p2_retry_interval_long": [("  localparam int INTERVAL = 70;", "  localparam int INTERVAL = 96;")],
- "p3_timeout_short":       [("  localparam int TIMEOUT  = 270;", "  localparam int TIMEOUT  = 128;")],
- "p4_subnet_ignored":      [("  wire in_subnet = (req_ip_i & subnet_mask_i) == (local_ip_i & subnet_mask_i);",
-                             "  wire in_subnet = 1'b1;")],
- "p5_replies_not_learned": [(LEARN, "      if (arp_ok && rx_ready && rx_oper == 16'd1) begin")],
- "p6_answers_any_target":  [("        if (rx_oper == 16'd1 && rx_tpa == local_ip_i) begin",
-                             "        if (rx_oper == 16'd1) begin")],
- "p7_reply_target_is_us":  [("          pend_sha <= rx_sha; pend_spa <= rx_spa; st <= REPLY;",
-                             "          pend_sha <= rx_sha; pend_spa <= local_ip_i; st <= REPLY;")],
- "p8_ethtype_ignored":     [(ARPOK, """  wire arp_ok = rx_valid
-                && rx_htype == 16'h0001 && rx_ptype == 16'h0800;""")],
-}
-os.makedirs(os.path.join(TASK, "mutants", "policy"), exist_ok=True)
-for tag, edits in POLICY.items():
-    txt = conf
-    for old, new in edits:
-        txt = sub1(txt, old, new, "policy/%s" % tag)
-    txt = sub1(txt, "module ae_c1_assoc_cache_rr", "module arp_engine", "policy/%s rename" % tag)
-    open(os.path.join(TASK, "mutants", "policy", "ae_%s.sv" % tag), "w",
-         encoding="utf-8").write(txt)
-
-os.makedirs(os.path.join(TASK, "dut2"), exist_ok=True)
-alt = sub1(conf, "module ae_c1_assoc_cache_rr", "module arp_engine_alt", "dut2/rename")
-open(os.path.join(TASK, "dut2", "arp_engine_alt.sv"), "w", encoding="utf-8").write(
-    "// GENERATED from conformant/conformant_perturbations.sv by mutants/gen_mutants.py.\n"
-    "// Same artefact, two roles: the policy-divergent perturbation that must be\n"
-    "// ACCEPTED, and the independent second implementation. Do not edit by hand.\n" + alt)
-
-HEAD = """// v_nw01 mutant set -- these MUST BE CAUGHT. Scoring only, never shipped.
-//
-// GENERATED by mutants/gen_mutants.py. Do not edit by hand; edit the generator
-// so that every defect stays a named, single, auditable change.
-"""
-open(os.path.join(HERE, "mutants.sv"), "w", encoding="utf-8").write(HEAD + "\n" + "\n".join(blocks))
-print("wrote mutants.sv with %d mutants (%d shim-level, %d internal)"
-      % (len(blocks), len(SHIMLEVEL), len(INTERNAL)))
+HDR = ("// GENERATED by mutants/gen_mutants.py -- do not edit by hand.\n"
+       "// The v_nw01 mutant set: every defect GUARDED by a rare predicate over\n"
+       "// contract-level state. Scoring only, never shipped to a submission.\n\n")
+open(os.path.join(HERE, "mutants.sv"), "w", encoding="utf-8").write(HDR + "\n".join(blocks))
+print("wrote mutants.sv: %d mutants" % len(blocks))

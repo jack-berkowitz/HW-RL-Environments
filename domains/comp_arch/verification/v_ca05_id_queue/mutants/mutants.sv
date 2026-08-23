@@ -42,6 +42,46 @@ module tt_m1_capacity_off_by_one #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     int unsigned occ;
     logic inner_push_gnt, block;
     always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -51,7 +91,8 @@ module tt_m1_capacity_off_by_one #(
             if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) occ <= occ - 1;
         end
     end
-    assign block = (occ >= SLOTS - 1);          // INJECTED: one too early
+    // GUARD: the store has already been filled and drained once.
+    assign block = (occ >= SLOTS - 1) && (g_pop_q >= SLOTS);
 
     tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
         .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
@@ -85,6 +126,46 @@ module tt_m2_lifo_within_tag #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     payload_t inner_data;
     payload_t newest [(1<<TAG_W)];
     always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -100,7 +181,9 @@ module tt_m2_lifo_within_tag #(
         .pop_data_o(inner_data), .pop_data_valid_o, .pop_gnt_o, .full_o, .empty_o);
 
     // INJECTED: newest rather than oldest
-    assign pop_data_o = pop_data_valid_o ? newest[pop_tag_i] : inner_data;
+    // GUARD: the tag being popped holds three or more entries.
+    assign pop_data_o = (pop_data_valid_o && (g_tcnt[pop_tag_i] >= 3))
+                        ? newest[pop_tag_i] : inner_data;
 endmodule
 
 
@@ -122,6 +205,46 @@ module tt_m3_half_capacity #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     int unsigned occ;
     logic inner_push_gnt, block;
     always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -131,7 +254,8 @@ module tt_m3_half_capacity #(
             if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) occ <= occ - 1;
         end
     end
-    assign block = (occ >= (SLOTS / 2));         // INJECTED: half the capacity
+    // GUARD: three or more distinct tags are present.
+    assign block = (occ >= (SLOTS / 2)) && (g_ntags() >= 3);
 
     tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
         .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
@@ -166,8 +290,49 @@ module tt_m4_tag0_starved #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     logic starve, inner_push_gnt;
-    assign starve = (push_tag_i == '0);          // INJECTED
+    // GUARD: the store is at least half full.
+    assign starve = (push_tag_i == '0) && (g_occ >= (SLOTS / 2));
 
     tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
         .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
@@ -197,10 +362,53 @@ module tt_m5_match_ignores_high_byte #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     payload_t [N_MATCH-1:0] masked;
     always_comb
         for (int k = 0; k < N_MATCH; k++)
-            masked[k] = match_mask_i[k] & ~(payload_t'(32'hFF00_0000));  // INJECTED
+            // GUARD: the eighth completed search onward.
+            masked[k] = (g_match_q >= 8)
+                        ? (match_mask_i[k] & ~(payload_t'(32'hFF00_0000)))
+                        : match_mask_i[k];
 
     tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
         .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
@@ -231,6 +439,46 @@ module tt_m6_empty_wrong_at_one #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     int unsigned occ;
     logic inner_empty;
     always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -248,7 +496,8 @@ module tt_m6_empty_wrong_at_one #(
         .pop_tag_i, .pop_en_i, .pop_req_i, .pop_data_o, .pop_data_valid_o,
         .pop_gnt_o, .full_o, .empty_o(inner_empty));
 
-    assign empty_o = (occ == 1) ? 1'b1 : inner_empty;   // INJECTED
+    // GUARD: the store has been full at some point since reset.
+    assign empty_o = ((occ == 1) && g_everfull_q) ? 1'b1 : inner_empty;
 endmodule
 
 
@@ -281,6 +530,46 @@ module tt_m7_per_tag_cap #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     int unsigned tcnt [(1<<TAG_W)];
     logic inner_push_gnt, block;
 
@@ -291,7 +580,8 @@ module tt_m7_per_tag_cap #(
             if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o)  tcnt[pop_tag_i]  <= tcnt[pop_tag_i]  - 1;
         end
     end
-    assign block = (tcnt[push_tag_i] >= (SLOTS / 2));   // INJECTED: per-tag cap
+    // GUARD: two or more distinct tags are present.
+    assign block = (tcnt[push_tag_i] >= (SLOTS / 2)) && (g_ntags() >= 2);
 
     tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
         .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
@@ -324,10 +614,52 @@ module tt_m8_peek_removes_last #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     int unsigned tcnt [(1<<TAG_W)];
     logic force_en, eff_en;
 
-    assign force_en = pop_req_i && !pop_en_i && (tcnt[pop_tag_i] == 1);  // INJECTED
+    // GUARD: the store holds four or more entries.
+    assign force_en = pop_req_i && !pop_en_i && (tcnt[pop_tag_i] == 1)
+                      && (g_occ >= 4);
     assign eff_en   = pop_en_i | force_en;
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -368,10 +700,52 @@ module tt_m9_zero_mask_no_hit #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     logic [N_MATCH-1:0] inner_hit;
     always_comb
         for (int k = 0; k < N_MATCH; k++)
-            match_hit_o[k] = (match_mask_i[k] == '0) ? 1'b0 : inner_hit[k];  // INJECTED
+            // GUARD: the store holds four or more entries.
+            match_hit_o[k] = ((match_mask_i[k] == '0) && (g_occ >= 4))
+                             ? 1'b0 : inner_hit[k];
 
     tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
         .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (
@@ -404,12 +778,53 @@ module tt_m10_full_asserts_late #(
   output payload_t pop_data_o, output logic pop_data_valid_o, pop_gnt_o,
   output logic full_o, empty_o);
 
+    // ---- mutant guard state: contract-level only -------------------------
+    // Counted from the PORT handshakes alone -- occupancy, per-tag occupancy,
+    // completed pushes, pops and searches, and how many times the store has
+    // filled. Nothing inside the golden is read, so every guard can be
+    // restated against an independent implementation of the same contract.
+    int unsigned g_occ, g_push_q, g_pop_q, g_match_q, g_fullage_q, g_fullcnt_q;
+    int unsigned g_tcnt [(1<<TAG_W)];
+    logic        g_wasfull_q, g_everfull_q;
+    function automatic int unsigned g_ntags();
+        g_ntags = 0;
+        for (int i = 0; i < (1<<TAG_W); i++) if (g_tcnt[i] != 0) g_ntags++;
+    endfunction
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            g_occ <= 0; g_push_q <= 0; g_pop_q <= 0; g_match_q <= 0;
+            g_fullage_q <= 0; g_fullcnt_q <= 0;
+            g_wasfull_q <= 1'b0; g_everfull_q <= 1'b0;
+            for (int i = 0; i < (1<<TAG_W); i++) g_tcnt[i] <= 0;
+        end else begin
+            if (push_req_i && push_gnt_o) begin
+                g_occ <= g_occ + 1; g_push_q <= g_push_q + 1;
+                g_tcnt[push_tag_i] <= g_tcnt[push_tag_i] + 1;
+            end
+            if (pop_req_i && pop_gnt_o && pop_en_i && pop_data_valid_o) begin
+                g_occ <= g_occ - 1; g_pop_q <= g_pop_q + 1;
+                g_tcnt[pop_tag_i] <= g_tcnt[pop_tag_i] - 1;
+            end
+            for (int k = 0; k < N_MATCH; k++)
+                if (match_req_i[k] && match_gnt_o[k]) g_match_q <= g_match_q + 1;
+            if (g_occ >= SLOTS) begin
+                g_fullage_q <= g_fullage_q + 1;
+                g_everfull_q <= 1'b1;
+                if (!g_wasfull_q) g_fullcnt_q <= g_fullcnt_q + 1;
+                g_wasfull_q <= 1'b1;
+            end else begin
+                g_fullage_q <= 0; g_wasfull_q <= 1'b0;
+            end
+        end
+    end
+
     logic inner_full, full_q;
     always_ff @(posedge clk_i or negedge rst_ni)
         if (!rst_ni) full_q <= 1'b0;
         else         full_q <= inner_full;
 
-    assign full_o = inner_full & full_q;      // INJECTED: rises a cycle late
+    // GUARD: the SECOND time the store becomes full, and every time after.
+    assign full_o = (g_fullcnt_q >= 2) ? (inner_full & full_q) : inner_full;
 
     tag_tracker_golden #(.TAG_W(TAG_W), .SLOTS(SLOTS), .FULL_RATE(FULL_RATE),
         .CUT_POP_PATH(CUT_POP_PATH), .N_MATCH(N_MATCH), .payload_t(payload_t)) u (

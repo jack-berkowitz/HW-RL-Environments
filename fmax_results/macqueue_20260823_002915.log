@@ -1,0 +1,23 @@
+00:29:15 === MAC QUEUE START ===
+00:29:15 --- d_ca04 ---
+00:29:15 SWEEP d_ca04 reference (seed 4.5ns)
+00:29:15 SWEEP d_ca04_cand_chat_v2 (seed 4.5ns)
+00:29:15 SWEEP d_ca04_cand_claude_v2 (seed 4.5ns)
+00:29:15 d_ca04: no periods, no builds
+00:29:15 --- d_nw03 ---
+00:29:15 SWEEP d_nw03 reference (seed 4.0ns)
+00:29:16 SWEEP d_nw03_cand_chat_v2 (seed 4.0ns)
+00:29:16 SWEEP d_nw03_cand_claude_v2 (seed 4.0ns)
+00:29:16 SWEEP d_nw03_cand_gemini_v2 (seed 4.0ns)
+00:29:16 d_nw03: no periods, no builds
+00:29:16 --- d_dsp03 ---
+00:29:16 SWEEP d_dsp03 reference (seed 12.0ns)
+00:29:16 SWEEP d_dsp03_cand_chat_v2 (seed 12.0ns)
+00:29:16 SWEEP d_dsp03_cand_claude_v2 (seed 12.0ns)
+00:29:16 d_dsp03: no periods, no builds
+00:29:16 --- d_dsp02 ---
+00:29:16 SWEEP d_dsp02 reference (seed 20.25ns)
+00:29:16 SWEEP d_dsp02_cand_chat_v2 (seed 20.25ns)
+00:29:16 SWEEP d_dsp02_cand_claude_v2 (seed 20.25ns)
+00:29:16 d_dsp02: no periods, no builds
+00:29:16 === MAC QUEUE DONE ===

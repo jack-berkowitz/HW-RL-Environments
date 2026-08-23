@@ -1,124 +1,66 @@
 # v_nw03 mutant set — these MUST BE CAUGHT
 
-The discriminating measure for a submitted testbench. Opposite sign to
-`conformant/`: those satisfy the spec and must survive; these violate it and
-must be caught.
+Each mutant wraps the unmodified golden and injects exactly one defect.
 
-Five wrap the unmodified golden. `fm_m2` instantiates the same vendored anchor
-the golden wraps, with one parameter changed. None reimplements the design — a
-hand-written faulty mux fails for incidental reasons and isolates nothing.
+## Every defect in this set is GUARDED
+
+    defect := wrong_behaviour AND rare_predicate over contract-level state
+
+The guards name which frame it is, how deep into that frame, how many inputs are
+contending in the same cycle, and how many resets have completed — all counted
+from the port handshakes, so each can be restated against an independent design.
+
+`fm_m2` is the clearest change of shape. It used to be the anchor rebuilt with
+fixed priority, which starves the low inputs on *every* contended cycle. It now
+leaves the anchor round-robin and imposes priority **only while three or more
+inputs are offering at once** — under two-way contention the rotation is
+untouched and every fairness check passes.
 
 ## The set
 
-| id | class | defect | violates |
+| id | clause | guard — fires only when… | defect |
 |---|---|---|---|
-| `fm_m1` | **capability** | tdata above bit 15 silently dropped — behaves as though `DATA_WIDTH` were 16 | S4 |
-| `fm_m2` | starvation | fixed priority instead of rotation; low-priority inputs never served | S10 |
-| `fm_m3` | atomicity | two half-muxes with a beat-level mux between them; frames interleave | S3 |
-| `fm_m4` | sideband | tuser taken from the neighbouring input | S4 |
-| `fm_m5` | boundary | tlast also asserted on the first beat of every multi-beat frame | S4 |
-| `fm_m6` | reset | golden never sees `rst_i`; beats held at reset survive it | S12 |
+| `fm_m1_drops_high_payload` | **S4** | the fifth frame forwarded, and every one after it | the top half of tdata is zeroed |
+| `fm_m2_priority_arbitration` | **S10** | three or more inputs are offering in the same cycle | fixed priority replaces the rotation -- two-way contention is still fair |
+| `fm_m3_frame_interleaved` | **S3** | the fifth frame onward, at its third beat or later | an in-progress frame is re-aimed at the other half of the inputs |
+| `fm_m4_tuser_crossed` | **S4** | the fifth frame onward | tuser is taken from the next input along |
+| `fm_m5_early_tlast` | **S4** | the third frame onward | tlast is also asserted on a frame's FIRST beat |
+| `fm_m6_reset_ignored` | **S12** | the SECOND reset, and every one after it | rst_i does not reach the design |
+| `fm_m7_tuser_wrong_on_last` | **S4** | the final beat of a frame four beats or longer | tuser is inverted there |
+| `fm_m8_tkeep_full_on_last` | **S4** | the final beat of a frame four beats or longer | tkeep is forced to all ones |
+| `fm_m9_marginal_starvation` | **S10** | a 300-cycle window out of every 320 | the last input is not admitted -- it is served in the remaining 20 |
+| `fm_m10_deep_beat_corruption` | **S4** | the fourth beat onward of a frame, from the fifth frame | one payload bit is flipped |
 
-`fm_m1` is the CAPABILITY-class member: correct on every handshake, every frame
-boundary and every arbitration decision, while silently supporting half the
-declared width. It is the class that motivated the benchmark, and the one a
-testbench misses by comparing only the bits it used to identify the beat.
+## Witnesses — rule 21
 
-`fm_m2` is the fault S13 exists for. A testbench that waits for a beat from
-input 3 with no watchdog does not detect it — it hangs, and `HUNG` is its own
-verdict, not a catch.
-
-## Non-equivalence witnesses
-
-`nonequiv_tb.sv` drives the golden and the mutant from identical input streams
-and reports the first output beat at which the full record
-`{tdata, tkeep, tuser, tlast}`, or the cycle of transfer, differs.
-
-| id | witness (first differing beat) |
+| id | first clause failure |
 |---|---|
-| `fm_m1` | beat 0: golden `1443000036`, mutant `0000000036` — high payload gone |
-| `fm_m2` | beat 5: golden `1d9c80004e`, mutant `3c46801418` — a different input served |
-| `fm_m3` | beat 0: golden `1443000036`, mutant `07fc0000a6` |
-| `fm_m4` | beat 4: golden `3c33001031`, mutant `3c33001033` — tuser bit only |
-| `fm_m5` | beat 0: golden `1443000036`, mutant `1443000037` — tlast bit only |
-| `fm_m6` | beat 101, immediately after the mid-stream reset |
+| `fm_m1_drops_high_payload` | FAIL [S4] input 0 tdata: expected ab750060 got 00000060 (t=225000) |
+| `fm_m2_priority_arbitration` | FAIL [S10] input 1 has started no frame in 109 completed output frames (window 16) (t=2835000) |
+| `fm_m3_frame_interleaved` | FAIL [S3] mid-frame switch: frame from input 3 interrupted by input 1 (t=395000) |
+| `fm_m4_tuser_crossed` | FAIL [S4] input 1 tuser: expected 1 got 0 (t=265000) |
+| `fm_m5_early_tlast` | FAIL [S4] input 2 tlast: expected 0 got 1 (t=135000) |
+| `fm_m6_reset_ignored` | FAIL [S12] m_tvalid_o high on the first cycle after reset release (t=20175000) |
+| `fm_m7_tuser_wrong_on_last` | FAIL [S4] input 0 tuser: expected 0 got 1 (t=105000) |
+| `fm_m8_tkeep_full_on_last` | FAIL [S4] input 2 tkeep: expected c got f (t=165000) |
+| `fm_m9_marginal_starvation` | FAIL [S10] input 3 has started no frame in 113 completed output frames (window 16) (t=2695000) |
+| `fm_m10_deep_beat_corruption` | FAIL [S4] input 0 tdata: expected d5ca0090 got e9ba0060 (t=285000) |
 
-**The witness harness needed two fixes before it could witness anything, and
-both were its own defects rather than the wrappers'.** It originally compared
-only tdata and tlast, so `fm_m4` — which changes nothing but tuser — reported
-*"NO DIFFERENCE OBSERVED, this wrapper may be a no-op"*. And it never asserted
-reset mid-stream, so `fm_m6` had nothing to violate and its witness was an
-incidental one-cycle artefact. A control that cannot see the thing it is
-controlling for reports the reassuring answer.
+## A guard that was measured before it was kept
 
-## Isolation — which clause each mutant trips
+`fm_m3` was first keyed on the **fifth beat of a frame**: an in-progress frame
+could be re-aimed only that deep in. It survived, and the obvious reading —
+"the reference's frames are too short" — was wrong.
 
-Measured by running the reference testbench against each mutant and collecting
-every clause that failed, with no print cap.
+Instrumenting the mutant under the reference showed the fifth beat was reached
+**112 times**, with both halves of the inputs valid on 1827 beats, and **zero
+mid-frame switches**. The depth was reachable; the switch was not. The guard was
+re-keyed onto frame ordinal plus beat depth, which the reference provably
+reaches.
 
-| id | first failure | all clauses tripped |
-|---|---|---|
-| `fm_m1` | S4 | S4 |
-| `fm_m2` | S10 | S10 |
-| `fm_m3` | **S3** | **S3, then S10 later** |
-| `fm_m4` | S4 | S4 |
-| `fm_m5` | S4 | S4 |
-| `fm_m6` | S12 | S12 |
+Guessing at why a mutant survives is cheap and usually wrong. Two builds of
+instrumentation settled it.
 
-Five of six trip exactly one clause. **`fm_m3` trips S3 first and S10 later**,
-and that is one defect with two symptoms rather than a second defect: sustained
-interleaving changes which inputs start frames and when, so the fairness counter
-eventually runs out too. Recorded rather than described as clean isolation.
-
-`fm_m6` required a change to the reference testbench to attribute correctly. It
-first reported as S3/S4/S5 — a stale beat surviving reset misaligns the whole
-stream, so the payload comparison fires before anything reset-specific does. The
-checker now retains the beats it discarded at reset and recognises one when it
-reappears, so the diagnosis names S12, which is the clause actually violated.
-Attribution matters: a scorer reading "payload mismatch" would look for a data
-defect and never reach the reset.
-
-## Reference testbench ceiling
-
-**6 of 6.** Report a submission's kills against that ceiling, never as a bare
-fraction.
-
-**The ceiling is weaker evidence here than the same number was on `v_ca05`.**
-There, the mutant set found two genuine holes in the reference testbench on
-first use, and the 6/6 was earned by fixing them. Here the reference testbench
-killed all six on its first run — the mutants did *not* do their job on the
-reference, because the same author wrote the spec, the checker and the mutants
-in one sitting and every mutant targets a clause the checker was already built
-around. What the two testbenches actually did find were defects in the witness
-harness and in the checker's clause attribution, both recorded above.
-
-The honest statement is: 6/6 is the ceiling, and the set has not yet been
-challenged by anything its author did not anticipate. The first submission is
-the real test of the set.
-
----
-
-## The harder set, and the first gradation in the project
-
-Four mutants were added after the first blind run. The six originals were kept.
-
-| id | violates | why a competent testbench misses it |
-|---|---|---|
-| `fm_m7_tuser_wrong_on_last` | S4 | sideband corrupted only on the final beat of a frame |
-| `fm_m8_tkeep_full_on_last` | S4 | tkeep normalised only on the final beat — the very place a partial keep belongs |
-| `fm_m9_marginal_starvation` | S10 | input 3 **is** eventually served, just far more than 16 frames apart |
-| `fm_m10_deep_beat_corruption` | S4 | payload corrupted only from the 4th beat of a frame onward |
-
-**Measured, and the set now discriminates:**
-
-| testbench | catches |
-|---|---|
-| our reference | **10 of 10** |
-| an independent submission (chat, with its one-line reset race repaired) | **9 of 10** |
-
-**The one it misses is `fm_m9`** — and that is the point. It checked that every
-input is eventually served; it did not implement S10's *window*. That mutant
-exists because S10 is stated as a bound rather than as a liveness claim, and it
-is now the first thing in this project to separate a working testbench from the
-ceiling. Before it, reference and independent author both scored 6/6 and nothing
-had ever landed in between.
+The reference's frames were also all one to five beats, so S3 atomicity was only
+ever checked on short frames. It now drives six-to-ten-beat frames under full
+contention with mid-frame backpressure.

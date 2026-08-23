@@ -106,9 +106,22 @@ module route_xbar_tb;
           else if (pair_q[s][j].size() == 0)
             fail("R1/R4", $sformatf("cycle %0d: output %0d delivered payload %08x from input %0d, which was never accepted bound for this output. Either it was routed to the wrong output, or it was delivered ahead of -- or more times than -- it was accepted.",
                                  cyc, j, d, s));
-          else if (pair_q[s][j][0] !== d)
-            fail("R5", $sformatf("cycle %0d: output %0d delivered %08x from input %0d out of order; %08x was accepted first",
-                                 cyc, j, d, s, pair_q[s][j][0]));
+          else if (pair_q[s][j][0] !== d) begin
+            // Is this beat further down the queue? If so the beats ahead of it
+            // were never delivered -- that is loss, not reordering, and naming
+            // the wrong one sends a reader looking for the wrong defect.
+            automatic int at = -1;
+            for (int q = 0; q < pair_q[s][j].size(); q++)
+              if (pair_q[s][j][q] === d) begin at = q; break; end
+            if (at > 0)
+              fail("R4", $sformatf("cycle %0d: output %0d delivered %08x from input %0d, skipping %0d earlier beat(s) that were accepted and never delivered -- the first was %08x",
+                                   cyc, j, d, s, at, pair_q[s][j][0]));
+            else
+              fail("R5", $sformatf("cycle %0d: output %0d delivered %08x from input %0d out of order; %08x was accepted first",
+                                   cyc, j, d, s, pair_q[s][j][0]));
+            // consume up to and including it, so one defect does not cascade
+            if (at >= 0) for (int q = 0; q <= at; q++) void'(pair_q[s][j].pop_front());
+          end
           else
             void'(pair_q[s][j].pop_front());
         end
@@ -238,6 +251,23 @@ module route_xbar_tb;
     end
     out_ready = '1;
     repeat (20) @(posedge clk);
+    drain();
+
+    // -- 3b. EVERY output stalled at once. Nothing may be accepted that cannot
+    //        eventually be delivered, and nothing may be delivered at all.
+    for (int k = 0; k < N_IN; k++) begin sel_of[k] = k; offer[k] = 1'b1; end
+    arm_fairness();
+    repeat (6) @(posedge clk);
+    out_ready = 4'b0000;
+    begin int base_del; base_del = n_del;
+      repeat (24) @(posedge clk);
+      if (n_del != base_del)
+        fail("H1", $sformatf("cycle %0d: %0d beat(s) were delivered while every output was stalled",
+                             cyc, n_del - base_del));
+    end
+    out_ready = '1;
+    repeat (24) @(posedge clk);
+    clear_contenders();
     drain();
 
     // -- 4. three inputs contending for output 3, a HIGH selector ------------
