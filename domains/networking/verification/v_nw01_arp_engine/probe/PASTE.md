@@ -167,6 +167,10 @@ handshake, ahead of the payload stream.
 
 - **X1.** `rst_i` is **synchronous** and **active high**. While it is high no
   output valid is asserted.
+  **This applies from the first rising clock edge onward.** Before any clock
+  edge has occurred the design's registers hold no defined value, so its
+  outputs are unknown rather than low. Sampling them at time zero, before
+  the first edge, tests nothing this contract promises.
 - **X2.** After reset the cache is empty and no lookup is outstanding.
 - **X3 (liveness bound).** The engine makes forward progress in both
   directions, with the response channel held ready:
@@ -198,7 +202,6 @@ It says nothing about frames whose payload is shorter or longer than 28 bytes,
 nor about `s_payload_user_i`, nor about what happens if a second lookup is
 offered while one is outstanding. It places no requirement on the transmitted
 payload beyond the fields F names.
-
 
 ---
 
@@ -270,6 +273,14 @@ testbench to be rejected with none of its checking ever running:
 
 - **Identify a result by bookkeeping, not by matching on its value.** Values
   repeat, so content matching is ambiguous and will mis-attribute.
+
+- **`checker` / `endchecker` is not supported.** Nor are `bind`, `program`
+  blocks, or SVA sequence/property declarations. Write your checks as
+  ordinary `always` blocks and tasks.
+
+- **`automatic` belongs on declarations inside a task, function or
+  procedural block — never at module scope.** `automatic int x;` written
+  among the module's signals is a syntax error, not a lifetime hint.
 
 - Do not use `#` delays for anything except the clock generator and the watchdog.
 - No UVM, no `randsequence`, no DPI. Queues and associative arrays are fine.

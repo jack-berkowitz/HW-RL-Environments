@@ -92,6 +92,10 @@ handshake, ahead of the payload stream.
 
 - **X1.** `rst_i` is **synchronous** and **active high**. While it is high no
   output valid is asserted.
+  **This applies from the first rising clock edge onward.** Before any clock
+  edge has occurred the design's registers hold no defined value, so its
+  outputs are unknown rather than low. Sampling them at time zero, before
+  the first edge, tests nothing this contract promises.
 - **X2.** After reset the cache is empty and no lookup is outstanding.
 - **X3 (liveness bound).** The engine makes forward progress in both
   directions, with the response channel held ready:

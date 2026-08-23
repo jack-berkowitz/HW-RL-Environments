@@ -206,6 +206,14 @@ submitted testbench to be rejected with none of its checking ever running:
 - **Identify a result by bookkeeping, not by matching on its value.** Values
   repeat, so content matching is ambiguous and will mis-attribute.
 
+- **`checker` / `endchecker` is not supported.** Nor are `bind`, `program`
+  blocks, or SVA sequence/property declarations. Write your checks as
+  ordinary `always` blocks and tasks.
+
+- **`automatic` belongs on declarations inside a task, function or
+  procedural block — never at module scope.** `automatic int x;` written
+  among the module's signals is a syntax error, not a lifetime hint.
+
 - Do not use `#` delays for anything except the clock generator and the watchdog.
 - No UVM, no `randsequence`, no DPI. Queues and associative arrays are fine.
 
