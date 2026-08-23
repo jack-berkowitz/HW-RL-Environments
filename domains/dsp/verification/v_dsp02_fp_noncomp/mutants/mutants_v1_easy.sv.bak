@@ -40,20 +40,9 @@ module fn_m1_classify_subnormal_as_zero (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the EIGHTH subnormal classify since reset, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd3) && f_sub(operand_a_i);
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 7);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = g_fire ? {operand_a_i[31], 31'b0} : operand_a_i;
+  wire [31:0] a_mut = (op_i == 2'd3 && f_sub(operand_a_i))
+                    ? {operand_a_i[31], 31'b0} : operand_a_i;
   fp_noncomp #(
   ) i_g (
       .clk_i        (clk_i),
@@ -94,21 +83,10 @@ module fn_m2_ieee2019_minmax (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the SIXTH minmax with exactly one NaN operand, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd1) && (f_nan(operand_a_i) ^ f_nan(operand_b_i));
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 5);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = (g_fire && !f_nan(operand_a_i)) ? 32'h7FC0_0000 : operand_a_i;
-  wire [31:0] b_mut = (g_fire && !f_nan(operand_b_i)) ? 32'h7FC0_0000 : operand_b_i;
+  wire one_nan = (op_i == 2'd1) && (f_nan(operand_a_i) ^ f_nan(operand_b_i));
+  wire [31:0] a_mut = (one_nan && !f_nan(operand_a_i)) ? 32'h7FC0_0000 : operand_a_i;
+  wire [31:0] b_mut = (one_nan && !f_nan(operand_b_i)) ? 32'h7FC0_0000 : operand_b_i;
   fp_noncomp #(
   ) i_g (
       .clk_i        (clk_i),
@@ -147,21 +125,10 @@ module fn_m3_minmax_ignores_zero_sign (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the FOURTH minmax of two zeros, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd1) && f_zero(operand_a_i) && f_zero(operand_b_i);
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 3);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = g_fire ? 32'h0000_0000 : operand_a_i;
-  wire [31:0] b_mut = g_fire ? 32'h0000_0000 : operand_b_i;
+  wire both_zero = (op_i == 2'd1) && f_zero(operand_a_i) && f_zero(operand_b_i);
+  wire [31:0] a_mut = both_zero ? 32'h0000_0000 : operand_a_i;
+  wire [31:0] b_mut = both_zero ? 32'h0000_0000 : operand_b_i;
   fp_noncomp #(
   ) i_g (
       .clk_i        (clk_i),
@@ -201,20 +168,10 @@ module fn_m4_feq_is_signalling (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the FOURTH quiet comparison with a NaN operand, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd2) && (op_mode_i == 3'd2) && (f_nan(operand_a_i) || f_nan(operand_b_i));
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 3);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [2:0] mode_mut = g_fire ? 3'd1 : op_mode_i;
+  wire hit = (op_i == 2'd2) && (op_mode_i == 3'd2)
+           && (f_nan(operand_a_i) || f_nan(operand_b_i));
+  wire [2:0] mode_mut = hit ? 3'd1 : op_mode_i;
   fp_noncomp #(
   ) i_g (
       .clk_i        (clk_i),
@@ -253,20 +210,8 @@ module fn_m5_sgnjx_becomes_sgnj (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the TENTH sign-injection XOR since reset, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd0) && (op_mode_i == 3'd2);
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 9);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [2:0] mode_mut = g_fire ? 3'd0 : op_mode_i;
+  wire [2:0] mode_mut = (op_i == 2'd0 && op_mode_i == 3'd2) ? 3'd0 : op_mode_i;
   fp_noncomp #(
   ) i_g (
       .clk_i        (clk_i),
@@ -305,20 +250,8 @@ module fn_m6_sgnj_canonicalises_nan (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the SIXTH sign-injection on a NaN, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd0) && f_nan(operand_a_i);
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 5);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = g_fire ? 32'h7FC0_0000 : operand_a_i;
+  wire [31:0] a_mut = (op_i == 2'd0 && f_nan(operand_a_i)) ? 32'h7FC0_0000 : operand_a_i;
   fp_noncomp #(
   ) i_g (
       .clk_i        (clk_i),
@@ -370,20 +303,10 @@ module fn_m7_sgnj_quiets_snan (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the SIXTH sign-injection on a signalling NaN, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd0) && ((operand_a_i[30:23] == 8'hFF) && (operand_a_i[22:0] != 0) && !operand_a_i[22]);
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 5);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = g_fire
+  wire is_snan_a = (operand_a_i[30:23] == 8'hFF) && (operand_a_i[22:0] != 0)
+                && !operand_a_i[22];
+  wire [31:0] a_mut = (op_i == 2'd0 && is_snan_a)
                     ? {operand_a_i[31], operand_a_i[30:23], 1'b1, operand_a_i[21:0]}
                     : operand_a_i;
   fp_noncomp #(
@@ -425,20 +348,9 @@ module fn_m8_max_subnormal_is_normal (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the FOURTH classify of the largest subnormal, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd3) && (operand_a_i[30:23] == 8'h00) && (operand_a_i[22:0] == 23'h7FFFFF);
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 3);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = g_fire
+  wire is_maxsub = (operand_a_i[30:23] == 8'h00) && (operand_a_i[22:0] == 23'h7FFFFF);
+  wire [31:0] a_mut = (op_i == 2'd3 && is_maxsub)
                     ? {operand_a_i[31], 8'h01, 23'h000000}   // smallest normal
                     : operand_a_i;
   fp_noncomp #(
@@ -479,21 +391,13 @@ module fn_m9_feq_distinguishes_zeros (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the FOURTH equality comparison of +0 against -0, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd2) && (op_mode_i == 3'd2) && (operand_a_i[30:0] == 31'd0) && (operand_b_i[30:0] == 31'd0) && (operand_a_i[31] != operand_b_i[31]);
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 3);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = g_fire ? 32'h3F80_0000 : operand_a_i;   // 1.0
-  wire [31:0] b_mut = g_fire ? 32'h4000_0000 : operand_b_i;   // 2.0  -> not equal
+  wire a_zero = (operand_a_i[30:0] == 31'd0);
+  wire b_zero = (operand_b_i[30:0] == 31'd0);
+  wire hit    = (op_i == 2'd2) && (op_mode_i == 3'd2)
+             && a_zero && b_zero && (operand_a_i[31] != operand_b_i[31]);
+  wire [31:0] a_mut = hit ? 32'h3F80_0000 : operand_a_i;   // 1.0
+  wire [31:0] b_mut = hit ? 32'h4000_0000 : operand_b_i;   // 2.0  -> not equal
   fp_noncomp #(
   ) i_g (
       .clk_i        (clk_i),
@@ -534,22 +438,12 @@ module fn_m10_minmax_snan_not_invalid (
     output logic        out_valid_o,
     input  logic        out_ready_i
 );
-  // ---- mutant guard state: contract-level only -------------------------
-  // GUARD: the EIGHTH minmax with a signalling NaN operand, and every one after it.
-  // Counted from the PORT handshake alone -- how many operations of THIS
-  // defect's class have been accepted since reset. Nothing inside the golden
-  // is read, so the guard can be restated against any implementation.
-  wire g_class = (op_i == 2'd1) && (((operand_a_i[30:23] == 8'hFF) && (operand_a_i[22:0] != 0) && !operand_a_i[22]) || ((operand_b_i[30:23] == 8'hFF) && (operand_b_i[22:0] != 0) && !operand_b_i[22]));
-  int unsigned g_hit_q = 0;
-  wire g_fire = g_class && (g_hit_q >= 7);
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni)                                  g_hit_q <= 0;
-    else if (in_valid_i && in_ready_o && g_class) g_hit_q <= g_hit_q + 1;
 
-
-  wire [31:0] a_mut = (g_fire && ((operand_a_i[30:23] == 8'hFF) && (operand_a_i[22:0] != 0) && !operand_a_i[22]))
+  wire is_snan_a = (operand_a_i[30:23] == 8'hFF) && (operand_a_i[22:0] != 0) && !operand_a_i[22];
+  wire is_snan_b = (operand_b_i[30:23] == 8'hFF) && (operand_b_i[22:0] != 0) && !operand_b_i[22];
+  wire [31:0] a_mut = (op_i == 2'd1 && is_snan_a)
                     ? {operand_a_i[31], operand_a_i[30:23], 1'b1, operand_a_i[21:0]} : operand_a_i;
-  wire [31:0] b_mut = (g_fire && ((operand_b_i[30:23] == 8'hFF) && (operand_b_i[22:0] != 0) && !operand_b_i[22]))
+  wire [31:0] b_mut = (op_i == 2'd1 && is_snan_b)
                     ? {operand_b_i[31], operand_b_i[30:23], 1'b1, operand_b_i[21:0]} : operand_b_i;
   fp_noncomp #(
   ) i_g (
