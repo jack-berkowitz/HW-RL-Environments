@@ -17,6 +17,17 @@ TASK="$1"          # e.g. d_nw01
 PER="$2"           # e.g. 9.0   -- MUST match the candidates' string exactly
 LABEL="$3"         # e.g. reference_fx9.0
 
+# ORFS_FLOW_DIR is resolved HERE, before the build, not at extraction time.
+# It used to be read after run_orfs_build.sh returned, with a `:?` guard. On a
+# host that had not exported it that guard fired AFTER a completed place-and-route
+# -- three references built to 6_report and none produced a record. Every other
+# script in this repo defaults it (run_orfs_build.sh:65); only this one demanded
+# it, because it was written on a host whose profile exported it. Same default
+# here, checked up front, so a misconfigured host costs a second and not an hour.
+FLOW="${ORFS_FLOW_DIR:-$HOME/tools/OpenROAD-flow-scripts/flow}"
+[ -d "$FLOW" ] || { echo "ORFS_FLOW_DIR does not resolve to a directory: $FLOW" >&2; exit 2; }
+export ORFS_FLOW_DIR="$FLOW"
+
 TASK_DIR="$(dirname "$(dirname "$(find domains -path "*${TASK}_*/orfs/config.mk" | head -1)")")"
 CFG="$TASK_DIR/orfs/config.mk"
 TASK_NAME="$(basename "$TASK_DIR")"
@@ -31,7 +42,6 @@ echo "task=$TASK_NAME  ref=$REF  nick=$NICK  clk=${PER}ns  label=$LABEL"
 CLK_PERIOD_NS="$PER" bash scripts/run_orfs_build.sh "/work/${CFG#$REPO/}" || {
   echo "BUILD FAILED"; exit 1; }
 
-FLOW="${ORFS_FLOW_DIR:?ORFS_FLOW_DIR must be set}"
 RPT="$FLOW/reports/sky130hd/$NICK/base"
 FLOG="$FLOW/logs/sky130hd/$NICK/base"
 
