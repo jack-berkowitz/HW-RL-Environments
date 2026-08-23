@@ -1,3 +1,4 @@
+title: FP32 fused multiply-add
 id: d_dsp02
 module: fp32_fma_ii1
 domain: dsp
@@ -55,8 +56,8 @@ scored_metrics:
   # mismatch here -- the MAX_TRANS shape, where the parameter existed and
   # nothing bound it. The checker does NOT enforce this: S1 is a spec
   # requirement, and correctness is checked separately (rule 18).
-  - {metric: latency_cycles,  label: "lat(cyc)", expect: 3}
-  - {metric: init_interval,   label: "II",       expect: 1}
+  - {metric: latency_cycles,  label: "lat(cyc)", expect: 3, role: fixed}
+  - {metric: init_interval,   label: "II",       expect: 1, role: fixed}
 
 configs:
   # CORRECTNESS SWEEP -- UNCHANGED by rule 18. Rule 18 pins the SCORED

@@ -1,116 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1408 300" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect width="1408" height="300" fill="none"/>
-<line x1="52" y1="210.0" x2="1388" y2="210.0" stroke="#3a3a3a" stroke-width="1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="900" height="300" fill="none"/>
+<line x1="52" y1="210.0" x2="880" y2="210.0" stroke="#3a3a3a" stroke-width="1"/>
 <text x="44" y="214.0" fill="#9a9a9a" font-size="11" text-anchor="end">0</text>
-<line x1="52" y1="180.0" x2="1388" y2="180.0" stroke="#3a3a3a" stroke-width="1"/>
+<line x1="52" y1="180.0" x2="880" y2="180.0" stroke="#3a3a3a" stroke-width="1"/>
 <text x="44" y="184.0" fill="#9a9a9a" font-size="11" text-anchor="end">2</text>
-<line x1="52" y1="150.0" x2="1388" y2="150.0" stroke="#3a3a3a" stroke-width="1"/>
+<line x1="52" y1="150.0" x2="880" y2="150.0" stroke="#3a3a3a" stroke-width="1"/>
 <text x="44" y="154.0" fill="#9a9a9a" font-size="11" text-anchor="end">4</text>
-<line x1="52" y1="120.0" x2="1388" y2="120.0" stroke="#3a3a3a" stroke-width="1"/>
+<line x1="52" y1="120.0" x2="880" y2="120.0" stroke="#3a3a3a" stroke-width="1"/>
 <text x="44" y="124.0" fill="#9a9a9a" font-size="11" text-anchor="end">6</text>
-<line x1="52" y1="90.0" x2="1388" y2="90.0" stroke="#3a3a3a" stroke-width="1"/>
+<line x1="52" y1="90.0" x2="880" y2="90.0" stroke="#3a3a3a" stroke-width="1"/>
 <text x="44" y="94.0" fill="#9a9a9a" font-size="11" text-anchor="end">8</text>
-<line x1="52" y1="60.0" x2="1388" y2="60.0" stroke="#3a3a3a" stroke-width="1"/>
+<line x1="52" y1="60.0" x2="880" y2="60.0" stroke="#3a3a3a" stroke-width="1"/>
 <text x="44" y="64.0" fill="#9a9a9a" font-size="11" text-anchor="end">10</text>
-<rect x="60" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="73.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 73.0 198)">invalid</text>
+<rect x="60" y="165" width="26" height="45" rx="2" fill="#5b8dfb"/>
+<text x="73.0" y="159" fill="#e8e8e8" font-size="11" text-anchor="middle">3</text>
 <text x="73.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 73.0 224)">ChatGPT</text>
-<rect x="94" y="150" width="26" height="60" rx="2" fill="#5b8dfb"/>
-<text x="107.0" y="144" fill="#e8e8e8" font-size="11" text-anchor="middle">4</text>
-<text x="107.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 107.0 224)">claude</text>
+<rect x="94" y="105" width="26" height="105" rx="2" fill="#5b8dfb"/>
+<text x="107.0" y="99" fill="#e8e8e8" font-size="11" text-anchor="middle">7</text>
+<text x="107.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 107.0 224)">Claude</text>
 <rect x="128" y="204" width="26" height="6" rx="2" fill="#333"/>
 <text x="141.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 141.0 198)">invalid</text>
 <text x="141.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 141.0 224)">Gemini</text>
-<line x1="56" y1="135.0" x2="158" y2="135.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
-<text x="107.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca03</text>
-<rect x="208" y="105" width="26" height="105" rx="2" fill="#5b8dfb"/>
-<text x="221.0" y="99" fill="#e8e8e8" font-size="11" text-anchor="middle">7</text>
-<text x="221.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 221.0 224)">ChatGPT</text>
-<rect x="242" y="90" width="26" height="120" rx="2" fill="#5b8dfb"/>
-<text x="255.0" y="84" fill="#e8e8e8" font-size="11" text-anchor="middle">8</text>
-<text x="255.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 255.0 224)">claude</text>
-<rect x="276" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="289.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 289.0 198)">invalid</text>
-<text x="289.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 289.0 224)">Gemini</text>
-<line x1="204" y1="90.0" x2="306" y2="90.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
-<text x="255.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca04</text>
-<rect x="356" y="75" width="26" height="135" rx="2" fill="#5b8dfb"/>
-<text x="369.0" y="69" fill="#e8e8e8" font-size="11" text-anchor="middle">9</text>
-<text x="369.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 369.0 224)">ChatGPT</text>
+<line x1="56" y1="60.0" x2="158" y2="60.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
+<text x="107.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca04</text>
+<rect x="208" y="204" width="26" height="6" rx="2" fill="#333"/>
+<text x="221.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 221.0 198)"></text>
+<text x="221.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 221.0 224)">_negctl_null</text>
+<line x1="204" y1="90.0" x2="238" y2="90.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
+<text x="221.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw02</text>
+<rect x="288" y="204" width="26" height="6" rx="2" fill="#333"/>
+<text x="301.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 301.0 198)">invalid</text>
+<text x="301.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 301.0 224)">_negctl_null</text>
+<rect x="322" y="204" width="26" height="6" rx="2" fill="#333"/>
+<text x="335.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 335.0 198)">invalid</text>
+<text x="335.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 335.0 224)">ChatGPT</text>
+<rect x="356" y="204" width="26" height="6" rx="2" fill="#333"/>
+<text x="369.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 369.0 198)">invalid</text>
+<text x="369.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 369.0 224)">Claude</text>
 <rect x="390" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="403.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 403.0 198)">gate</text>
-<text x="403.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 403.0 224)">claude</text>
-<rect x="424" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="437.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 437.0 198)">no build</text>
-<text x="437.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 437.0 224)">DeepSeek</text>
-<rect x="458" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="471.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 471.0 198)">gate</text>
-<text x="471.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 471.0 224)">Gemini</text>
-<rect x="492" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="505.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 505.0 198)">no build</text>
-<text x="505.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 505.0 224)">Qwen</text>
-<line x1="352" y1="60.0" x2="522" y2="60.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
-<text x="437.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca05</text>
-<rect x="572" y="75" width="26" height="135" rx="2" fill="#5b8dfb"/>
-<text x="585.0" y="69" fill="#e8e8e8" font-size="11" text-anchor="middle">9</text>
-<text x="585.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 585.0 224)">ChatGPT</text>
-<rect x="606" y="60" width="26" height="150" rx="2" fill="#5b8dfb"/>
-<text x="619.0" y="54" fill="#e8e8e8" font-size="11" text-anchor="middle">10</text>
-<text x="619.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 619.0 224)">claude</text>
-<rect x="640" y="90" width="26" height="120" rx="2" fill="#5b8dfb"/>
-<text x="653.0" y="84" fill="#e8e8e8" font-size="11" text-anchor="middle">8</text>
-<text x="653.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 653.0 224)">DeepSeek</text>
-<rect x="674" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="687.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 687.0 198)">invalid</text>
-<text x="687.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 687.0 224)">Gemini</text>
-<rect x="708" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="721.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 721.0 198)">no build</text>
-<text x="721.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 721.0 224)">Qwen</text>
-<line x1="568" y1="60.0" x2="738" y2="60.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
-<text x="653.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_dsp02</text>
-<rect x="788" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="801.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 801.0 198)">invalid</text>
-<text x="801.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 801.0 224)">_negctl_null</text>
-<rect x="822" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="835.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 835.0 198)">invalid</text>
-<text x="835.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 835.0 224)">ChatGPT</text>
-<rect x="856" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="869.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 869.0 198)">invalid</text>
-<text x="869.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 869.0 224)">claude</text>
-<rect x="890" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="903.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 903.0 198)">invalid</text>
-<text x="903.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 903.0 224)">Gemini</text>
-<text x="852.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw02</text>
-<rect x="970" y="75" width="26" height="135" rx="2" fill="#5b8dfb"/>
-<text x="983.0" y="69" fill="#e8e8e8" font-size="11" text-anchor="middle">9</text>
-<text x="983.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 983.0 224)">ChatGPT</text>
-<rect x="1004" y="75" width="26" height="135" rx="2" fill="#5b8dfb"/>
-<text x="1017.0" y="69" fill="#e8e8e8" font-size="11" text-anchor="middle">9</text>
-<text x="1017.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1017.0 224)">claude</text>
-<rect x="1038" y="120" width="26" height="90" rx="2" fill="#5b8dfb"/>
-<text x="1051.0" y="114" fill="#e8e8e8" font-size="11" text-anchor="middle">6</text>
-<text x="1051.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1051.0 224)">DeepSeek</text>
-<rect x="1072" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="1085.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 1085.0 198)">gate</text>
-<text x="1085.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1085.0 224)">Gemini</text>
-<rect x="1106" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="1119.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 1119.0 198)">invalid</text>
-<text x="1119.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1119.0 224)">Qwen</text>
-<line x1="966" y1="60.0" x2="1136" y2="60.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
-<text x="1051.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw03</text>
-<rect x="1186" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="1199.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 1199.0 198)">invalid</text>
-<text x="1199.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1199.0 224)">_negctl_null</text>
-<rect x="1220" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="1233.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 1233.0 198)">invalid</text>
-<text x="1233.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1233.0 224)">ChatGPT</text>
-<rect x="1254" y="90" width="26" height="120" rx="2" fill="#5b8dfb"/>
-<text x="1267.0" y="84" fill="#e8e8e8" font-size="11" text-anchor="middle">8</text>
-<text x="1267.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1267.0 224)">claude</text>
-<rect x="1288" y="204" width="26" height="6" rx="2" fill="#333"/>
-<text x="1301.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 1301.0 198)">invalid</text>
-<text x="1301.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 1301.0 224)">Gemini</text>
-<line x1="1182" y1="90.0" x2="1318" y2="90.0" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
-<text x="1250.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw04</text>
+<text x="403.0" y="198" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-90 403.0 198)">no build</text>
+<text x="403.0" y="224" fill="#9a9a9a" font-size="9" text-anchor="middle" transform="rotate(-40 403.0 224)">Gemini</text>
+<text x="352.0" y="272" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw04</text>
 <text x="20" y="20" fill="#e8e8e8" font-size="14" font-weight="600">Seeded faults detected (dashed line = ceiling the reference achieves)</text>
 </svg>

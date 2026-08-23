@@ -1,3 +1,4 @@
+title: multi-format FMA
 id: d_dsp03
 module: fp_multifmt_fma
 domain: dsp
@@ -325,3 +326,17 @@ ppa_note: >
   place-and-route number exists yet.
 
 skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
+
+scored_metrics:
+  # DECLARED FROM THE EMITTED KEYS, verified against a run record -- a name no
+  # checker produces renders ABSENT, which is how three of d_ca01's four were
+  # found to be fictional. 26 keys are emitted here; these are the ones that
+  # describe a DESIGN CHOICE rather than coverage bookkeeping.
+  #
+  # The spec fixes neither latency nor throughput for this unit, so both are
+  # free choices that move PPA: a deeper pipeline costs area and buys frequency,
+  # and at a common clock it buys nothing. An area comparison against a design
+  # that chose a different latency is not like-for-like.
+  - {metric: latency_min,                 label: "lat.min", role: choice}
+  - {metric: latency_max,                 label: "lat.max"}  # worst case, not a choice
+  - {metric: throughput_ops_per_1000cyc,  label: "ops/1k",  role: capability}

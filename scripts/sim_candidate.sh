@@ -276,12 +276,19 @@ slang_check() {   # $1 = design file (host path); echoes a reason on failure
   case "$f" in "$REPO"/*) rel="/work/${f#$REPO/}" ;; *) rel="/hostfile/$(basename "$f")" ;; esac
   local mnt=""
   [ "${rel#/hostfile/}" != "$rel" ] && mnt="-v $(dirname "$f"):/hostfile"
+  # A NON-ZERO EXIT IS NOT THE SAME AS A REJECTION. slang reporting N>0 errors
+  # is a verdict about the design; slang exiting non-zero with ZERO errors is
+  # the TOOL failing, and under Rosetta that happens -- d_nw01/claude recorded
+  # "0 error(s); first: exit 133", and 133 is 128+5, SIGTRAP, the same
+  # emulation fault class that forces LEC_CHECK=0 at clock-tree synthesis.
+  # Reporting it as a rejection blames the submission for the host (F56).
   docker run --rm --platform linux/amd64 -v "$REPO:/work" $mnt "$SLANG_IMG" \
     bash -c "yosys -p 'read_slang --top $DUT_MOD$pkgs $rel' >/tmp/slang.log 2>&1; \
              rc=\$?; if [ \$rc -ne 0 ]; then \
                n=\$(grep -cE ': error:' /tmp/slang.log); \
                first=\$(grep -m1 -E ': error:' /tmp/slang.log | sed 's|.*/||'); \
-               echo \"\$n error(s); first: \${first:-exit \$rc}\"; fi" 2>/dev/null
+               if [ \"\$n\" -eq 0 ]; then echo \"TOOLFAIL exit \$rc\"; \
+               else echo \"\$n error(s); first: \$first\"; fi; fi" 2>/dev/null
 }
 if [ "$SLANG" = "1" ] && ! docker info >/dev/null 2>&1; then
   echo "note: docker unavailable -- SKIPPING the slang synthesis-frontend gate."
@@ -390,6 +397,22 @@ for cand in "${CANDS[@]}"; do
     "$TASK_DIR"/ref/*|"$TASK_DIR"/mutants/*|"$TASK_DIR"/conformant/*) ;;
     *) if [ "$SLANG" = "1" ]; then
          slang_why="$(slang_check "$runfile")"
+         # A TOOL FAILURE IS RETRIED ONCE before being believed. If it
+         # persists it is recorded as a TOOL failure and the submission gets
+         # NO VERDICT -- it is not reported as failing to build.
+         case "$slang_why" in
+           TOOLFAIL*) slang_why="$(slang_check "$runfile")" ;;
+         esac
+         case "$slang_why" in
+           TOOLFAIL*)
+             printf '%-26s %-9s %s\n' "$name" "TOOLFAIL" "slang did not run: $slang_why"
+             tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+             python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+               "$(basename "$cand" .sv)" "task_text_hash=$tt" \
+               "build_status=slang_tool_error" \
+               "build_error=$slang_why -- host/tool failure, NOT a verdict" >/dev/null || true
+             NSLANG=$((NSLANG+1)); continue ;;
+         esac
          if [ -n "$slang_why" ]; then
            printf '%-26s %-9s %s\n' "$name" "SLANG" "$(echo "$slang_why" | cut -c1-72)"
            # A FRONTEND REJECTION IS A RESULT, AND IT MUST LEAVE A RECORD.

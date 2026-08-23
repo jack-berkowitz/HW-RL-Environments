@@ -12,12 +12,17 @@
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
-# LEC_CHECK=0 is a ROSETTA workaround, not a design choice: under
-# --platform linux/amd64 on Apple Silicon, CTS dies with "child killed: illegal
-# instruction" unless logical-equivalence checking is off. On a native x86 host
-# there is no such fault and the check should be ON, so this defers to an
-# inherited value instead of overriding it. Hardcoding 0 here silently disabled
-# a real check on any machine that did not need the workaround.
+# LEC_CHECK=0 works around an ILLEGAL-INSTRUCTION fault in the equivalence
+# checker, and it is NOT specific to Rosetta. An earlier version of this comment
+# claimed "on a native x86 host there is no such fault and the check should be
+# ON". That was asserted without testing and is FALSE: the bundled
+# `kepler-formal` binary carries 1262 AVX-512 instructions, and a native Alder
+# Lake i5 -- which has AVX-512 fused off -- SIGILLs on it exactly as Apple
+# Silicon under emulation does. Measured on the second machine, not inferred.
+#
+# So the default stays 0 everywhere, and this defers to an inherited value only
+# so a host KNOWN to have AVX-512 can turn the check back on. Do not assume
+# native x86 is such a host; check the CPU flags first.
 export LEC_CHECK="${LEC_CHECK:-0}"
 LOG="$REPO/fmax_results/overnight2_$(date +%Y%m%d_%H%M%S).log"
 PLAN=0; [ "${1:-}" = "--plan" ] && PLAN=1

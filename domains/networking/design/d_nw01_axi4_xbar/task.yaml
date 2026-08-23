@@ -1,3 +1,4 @@
+title: AXI4 crossbar
 id: d_nw01
 module: axi4_xbar
 domain: networking
@@ -205,10 +206,10 @@ scored_metrics:
   # named `outstanding_master`, which the checker never emits -- it emits one
   # key PER MASTER. A metric named here that no run produces reports ABSENT,
   # which is how that draft was caught.
-  - {metric: outstanding_master0,           label: "outstd0"}
-  - {metric: disjoint_one_pair,             label: "1pair"}
-  - {metric: disjoint_two_pairs,            label: "2pair"}
-  - {metric: aggregate_bursts_per_1000cyc,  label: "agg/1k"}
+  - {metric: outstanding_master0,           label: "outstd0", role: capability}
+  - {metric: disjoint_one_pair,             label: "1pair", role: capability}
+  - {metric: disjoint_two_pairs,            label: "2pair", role: capability}
+  - {metric: aggregate_bursts_per_1000cyc,  label: "agg/1k", role: capability}
   - {metric: scored_beats_per_1000cyc,      label: "beat/1k"}
 
 scored_metrics_gap: >

@@ -55,6 +55,7 @@ def evidence_note(task_dir):
 # released. One map so the two never drift apart.
 DISPLAY_NAME = {
     "chat":     "ChatGPT 5.6 Sol",
+    "claude":   "Claude Opus 5",
     "gemini":   "Gemini 3.1 Pro",
     "qwen":     "Qwen 3.7 Plus",
     "deepseek": "DeepSeek V4 Pro",
@@ -99,11 +100,22 @@ READABLE = {
     "init_interval":                ("init interval", "clocks between accepts"),
 }
 
-TASK_TITLE = {
-    "d_ca04_async_fifo_cdc": "d_ca04 — asynchronous CDC FIFO",
-    "d_nw01_axi4_xbar":      "d_nw01 — AXI4 crossbar",
-    "d_dsp02_fp32_fma_ii1":  "d_dsp02 — FP32 fused multiply-add",
-}
+# EVERY DESIGN TASK, DERIVED FROM DISK. This was a hand-written map of three,
+# so d_ca01, d_dsp03 and d_nw03 were absent from the report entirely -- not
+# marked pending, not listed as unmeasured, simply not there. Fourth allowlist
+# of this shape in this file, after SUBMISSIONS (dropped claude.sv), VTASK_DIR
+# (disabled the stale-prompt guard on 12 of 15 tasks) and VTASKS/VREF (covered
+# 3 of 8 verification tasks). Every "what counts" list here is now derived.
+TASK_TITLE = {}
+for _td in sorted(glob.glob(os.path.join(REPO, "domains", "*", "design", "d_*"))):
+    _tk = os.path.basename(_td)
+    if not os.path.isfile(os.path.join(_td, "task.yaml")):
+        continue
+    _y = open(os.path.join(_td, "task.yaml"), encoding="utf-8", errors="replace").read()
+    _m = re.search(r"^[ \t]*title:[ \t]*(.+)$", _y, re.M)
+    _t = (_m.group(1).strip().strip('"\'') if _m
+          else " ".join(_tk.split("_")[2:]).replace("_", " ") or _tk)
+    TASK_TITLE[_tk] = f"{_tk.split('_')[0]}_{_tk.split('_')[1]} — {_t}"
 
 # Submissions that failed to build. Rule 19: score zero on every PPA axis,
 # annotated, never omitted.
@@ -181,8 +193,38 @@ def scored_metrics(task_dir):
             m = re.search(r"metric:\s*([A-Za-z0-9_]+)", line)
             if m:
                 e = re.search(r"expect:\s*([A-Za-z0-9_.]+)", line)
-                out.append((m.group(1), e.group(1) if e else None))
+                r = re.search(r"role:\s*([a-z]+)", line)
+                lab = re.search(r'label:\s*"([^"]*)"', line)
+                if lab:
+                    # The task's own label wins over the global READABLE map:
+                    # a metric declared by a task the map has never heard of
+                    # otherwise renders its raw key as a column heading.
+                    READABLE.setdefault(m.group(1), (lab.group(1), ""))
+                out.append((m.group(1), e.group(1) if e else None,
+                            r.group(1) if r else None))
     return out
+
+
+def metric_roles(task_dir):
+    """metric -> role, for the roles a task declares.
+
+    THREE ROLES, and they are not interchangeable:
+
+      fixed       the specification requires the value in `expect`. Deviating is
+                  a spec violation, not a design choice.
+      choice      the specification leaves it free AND it moves PPA. Pipeline
+                  depth is the type case: deeper costs area, buys frequency, and
+                  at a COMMON CLOCK buys nothing -- so an area comparison against
+                  a design that chose differently is not like-for-like.
+      capability  more is better and area buys it. Reported raw AND per unit,
+                  because the raw figure alone credits a design for being small
+                  when it was merely doing less.
+
+    Measured, not hypothetical: d_ca04's submissions are 26-29% smaller than the
+    reference at the same clock, and 9-11% smaller per beat of FIFO capacity.
+    Most of that headline gap is two spill registers the reference has and they
+    do not. The raw number is true and answers a different question."""
+    return {k: r for k, _e, r in scored_metrics(task_dir) if r}
 
 
 def task_dirs():
@@ -233,11 +275,38 @@ def fmax_for(task, sub):
 # The configuration each task's metrics are read at (rule 18). Named
 # explicitly; a metric averaged or last-written across configs is not a
 # measurement at the scored configuration.
-SCORED_CFG = {
-    "d_ca04_async_fifo_cdc": "DATA_W_32_LOG_DEPTH_3_SYNC_STAGES_2",
-    "d_nw01_axi4_xbar":      "NUM_MST_2_NUM_SLV_2_MAX_TRANS_8_MAX_BURST_LEN_255",
-    "d_dsp02_fp32_fma_ii1":  None,   # single config, no parameters
-}
+def _derive_scored_cfg(task_dir):
+    """The scored configuration key, built from task.yaml's own declaration.
+
+    Rule 18 requires ONE scored configuration, and every task already names it
+    in `scored_configuration:`. This was a hand-written map of three tasks, so
+    d_ca01, d_dsp03 and d_nw03 fell through to "multiple configurations
+    present; no single scored configuration named" and their metric columns
+    rendered empty on every row -- the tasks looked instrumented and reported
+    nothing. Fifth allowlist of this shape in this file.
+
+    Derived and then CHECKED against the emitted keys by the caller: a key this
+    builds that no run produced renders absent, which is how a wrong derivation
+    announces itself rather than silently selecting nothing."""
+    y = os.path.join(task_dir, "task.yaml")
+    if not os.path.isfile(y):
+        return None
+    src = open(y, encoding="utf-8", errors="replace").read()
+    m = re.search(r"^scored_configuration:\s*\n((?:[ \t]+.*\n)+)", src, re.M)
+    if not m:
+        return None
+    pairs = []
+    for line in m.group(1).splitlines():
+        mm = re.match(r"\s+([A-Za-z_][A-Za-z0-9_]*):\s*([0-9]+)\s*(?:#.*)?$", line)
+        if mm:
+            pairs.append(f"{mm.group(1)}_{mm.group(2)}")
+    return "_".join(pairs) or None
+
+
+SCORED_CFG = {}
+for _td in sorted(glob.glob(os.path.join(REPO, "domains", "*", "design", "d_*"))):
+    SCORED_CFG[os.path.basename(_td)] = _derive_scored_cfg(_td)
+SCORED_CFG["d_dsp02_fp32_fma_ii1"] = None   # single config, no parameters
 
 
 def main():
@@ -268,6 +337,16 @@ def main():
     recs = load_records()
     tds = task_dirs()
 
+    # A PPA RECORD BELONGS TO A FILE, NOT TO A PATH. Joining sim and ppa by
+    # (task, submission path) pairs whatever was last built with whatever was
+    # last simulated, and a re-solicited candidate reuses the path. d_ca01/chat
+    # was published at 753,209 um2 from file cf95eab393791aa7 beside a
+    # correctness verdict for 0acf79073ae3fa2e -- a real area, correctly
+    # measured, attributed to a submission that no longer exists.
+    #
+    # The sim record defines the submission; a ppa record whose
+    # submission_sha256_16 disagrees is DROPPED, so the row renders with no
+    # area rather than someone else's.
     joined = {}
     for r in recs:
         key = (r.get("task"), os.path.basename(r.get("submission", "?")))
@@ -278,7 +357,7 @@ def main():
                 slot[k] = r
 
     print("# Cross-model results\n")
-    print("Three design tasks. Every design that was run appears, including the")
+    print(f"{len(TASK_TITLE)} design tasks. Every design that was run appears, including the")
     print("reference implementation each task is anchored on.\n")
     print("**Per-axis only — there is deliberately no combined score.** A single")
     print("figure of merit would have to weight area against frequency against")
@@ -313,11 +392,31 @@ def main():
         print(f"\n## {TASK_TITLE[task]}\n")
 
         hdr = ["design", "correctness", "area (µm²)", "power (mW)", "Fmax (MHz)"]
-        for k, _ in mets:
+        for k, _e, _r in mets:
             hdr.append(READABLE.get(k, (k, ""))[0])
         hdr.append("notes")
         print("| " + " | ".join(hdr) + " |")
         print("|" + "|".join("---" for _ in hdr) + "|")
+
+        # REFERENCE DESIGN POINT for this task, so a choice can be compared
+        # against it. Without this an area ratio is printed as a quality gap
+        # when it may be a different design point measured honestly.
+        _ref_allm, _ref_area = {}, None
+        for _k2 in rows:
+            _v2 = joined.get(_k2) or {}
+            _s2 = _v2.get("sim") or {}
+            if "/ref/" in (_k2[1] or "") or (_k2[1] or "").endswith("_ref.sv"):
+                # KEEP THE PER-CONFIGURATION MAP, do not merge it. Merging
+                # every configuration into one dict leaves whichever was written
+                # last, so a row at DEPTH=8 was compared against the reference's
+                # DEPTH=4 numbers and every design, including the reference
+                # itself, was reported as sitting at a different design point.
+                _ref_allm = _s2.get("metrics") or {}
+                _p2 = _v2.get("ppa") or {}
+                if _p2.get("design_area_um2"):
+                    try: _ref_area = float(_p2["design_area_um2"])
+                    except (TypeError, ValueError): pass
+        _roles = metric_roles(tds.get(task, ""))
 
         _cur_tt = CUR_TT.get(task)
         _stale_design = []
@@ -334,6 +433,10 @@ def main():
         for key in rows:
             sub = key[1]
             v = joined.get(key, {"sim": None, "ppa": None})
+            _s_sha = ((v.get("sim") or {}).get("submission_sha256_16"))
+            _p_sha = ((v.get("ppa") or {}).get("submission_sha256_16"))
+            if v.get("ppa") and _s_sha and _p_sha and _s_sha != _p_sha:
+                v = dict(v); v["ppa"] = None      # stale build, not this file
             sim, ppa = v["sim"], v["ppa"]
             notes = []
 
@@ -349,7 +452,25 @@ def main():
                                            f"contract is not a result"]) + " |")
                 continue
 
+            # THE RECORD OUTRANKS THE MAP. BUILD_FAILURES is a hand-written
+            # table of who failed to build, and it goes stale the moment a
+            # candidate is re-solicited: d_nw01/gemini was listed here as
+            # "rejected by slang (13 errors)" while its current submission
+            # builds and fails 0/16, and d_nw01/claude -- which IS now slang
+            # rejected -- was absent and rendered as a bare FAIL. Sixth
+            # hand-written list in this file to go stale the same way.
+            #
+            # Records carry build_status since slang rejections started writing
+            # one; the map is kept only for submissions that predate that.
             bf = BUILD_FAILURES.get(key)
+            _bs = (sim or {}).get("build_status")
+            if _bs == "slang_rejected":
+                bf = ((sim or {}).get("build_error")
+                      or "rejected by slang, the synthesis frontend")
+            elif _bs:
+                bf = f"{_bs.replace('_', ' ')}: " + str((sim or {}).get("build_error") or "")
+            elif sim is not None and (sim or {}).get("configs_total"):
+                bf = None      # it built; whatever the map says is out of date
             if bf:
                 # Rule 19: zero on the PPA axes, because a design that does not
                 # build cannot be operated. But the METRIC cells are not zero --
@@ -435,7 +556,28 @@ def main():
                 merged = allm.get(want, {})
                 if allm and want not in allm:
                     notes.append(f"scored configuration {want} not present in this run")
-            for k, expect in mets:
+            # Compare against the reference AT THE SAME CONFIGURATION, and
+            # never compare the reference against itself.
+            _is_ref = ("/ref/" in (sub or "")) or (sub or "").endswith("_ref.sv")
+            _ref_m = {}
+            if not _is_ref:
+                _rv = _ref_allm.get(want) if want else None
+                if isinstance(_rv, dict):
+                    _ref_m = _rv
+                elif len(_ref_allm) == 1:
+                    _only = list(_ref_allm.values())[0]
+                    _ref_m = _only if isinstance(_only, dict) else {}
+                if not _ref_m:
+                    _ref_m = {a: b for a, b in _ref_allm.items()
+                              if not isinstance(b, dict)}
+            _choice_differs = []
+            for k, expect, _role in mets:
+                # A CHOICE THAT DIFFERS FROM THE REFERENCE'S makes the area
+                # ratio not like-for-like. Recorded here and reported in the
+                # notes rather than silently folded into the number.
+                if (_role == "choice" and k in merged and k in _ref_m
+                        and str(merged[k]) != str(_ref_m[k])):
+                    _choice_differs.append(f"{k} {merged[k]} vs reference {_ref_m[k]}")
                 if k not in merged:
                     cells.append("—")
                 elif expect is not None and str(merged[k]) != str(expect):
@@ -452,6 +594,34 @@ def main():
                                      f"specification requires {expect}")
                 else:
                     cells.append(str(merged[k]))
+            # NOT LIKE-FOR-LIKE, said plainly. The area is real and correctly
+            # measured; what it is not is a comparison of two designs at the
+            # same operating point.
+            if _choice_differs and any(c not in ("n/a", "—", "**0**") for c in cells[2:4]):
+                notes.append("**different design point** (" +
+                             "; ".join(_choice_differs) +
+                             "): area is correct but not like-for-like")
+            # AREA PER UNIT OF CAPABILITY. Raw area credits a design for being
+            # small when it was doing less; per-unit says how much it paid for
+            # what it delivers. Both, never the normalised figure alone --
+            # control logic is roughly fixed, so per-unit mildly flatters the
+            # larger design.
+            for k, _e2, r2 in mets:
+                if r2 != "capability" or k not in merged:
+                    continue
+                try:
+                    a_um = float((v.get("ppa") or {}).get("design_area_um2"))
+                    cap = float(merged[k])
+                    if cap > 0 and a_um > 0:
+                        per = a_um / cap
+                        extra = ""
+                        if _ref_area and _ref_m.get(k) and not _is_ref:
+                            rp = _ref_area / float(_ref_m[k])
+                            if rp > 0:
+                                extra = f", {per/rp:.2f}x the reference per unit"
+                        notes.append(f"{per:,.0f} um2 per unit of {k}{extra}")
+                except (TypeError, ValueError, ZeroDivisionError):
+                    pass
             cells.append("; ".join(notes) if notes else "")
             print("| " + " | ".join(cells) + " |")
 
@@ -466,7 +636,7 @@ def main():
                     f"`{_cur_tt}` |")
 
         if mets:
-            for k, _ in mets:
+            for k, _e, _r in mets:
                 lbl, desc = READABLE.get(k, (k, ""))
                 if desc:
                     print(f"- **{lbl}** — {desc}")

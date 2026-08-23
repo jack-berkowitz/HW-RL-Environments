@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 22, compiled 16, correct 14, PPA measured 7. Verification: submitted 30, compiled 24, tells correct from broken 14, fault count 11." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 22, compiled 14, correct 12, PPA measured 7. Verification: submitted 30, compiled 5, tells correct from broken 2, fault count 2." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** Of 22 design
@@ -37,7 +37,7 @@ area and slower.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); claude 4 of 5; Gemini 3.1 Pro not scoreable (invalid). v_ca04: ChatGPT 5.6 Sol 7 of 8; claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid). v_ca05: ChatGPT 5.6 Sol 9 of 10; claude not scoreable (gate); DeepSeek V4 Pro not scoreable (nobuild); Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (nobuild). v_dsp02: ChatGPT 5.6 Sol 9 of 10; claude 10 of 10; DeepSeek V4 Pro 8 of 10; Gemini 3.1 Pro not scoreable (invalid); Qwen 3.7 Plus not scoreable (nobuild). v_nw02: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 9 of 10; claude 9 of 10; DeepSeek V4 Pro 6 of 10; Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (invalid). v_nw04: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); claude 8 of 8; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ca04: ChatGPT 5.6 Sol 3 of 10; Claude Opus 5 7 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw02: _negctl_null 0 of 8. v_nw04: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (nobuild)." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---
@@ -58,18 +58,21 @@ re-run.*
 
 Built at **4.5 ns**, the slowest own-Fmax among the measured designs, so all close there.
 
-| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
-|---|---|---|---|---|
-| reference | 18/18 | 19,887 | 12.90 | 380.9 |
-| ChatGPT 5.6 Sol | 18/18 | 14,685 | 7.30 | 222.2 |
-| DeepSeek V4 Pro | 18/18 | 14,589 | 7.45 | 273.5 |
-| Gemini 3.1 Pro | 18/18 | 14,515 | 7.12 | 273.5 |
-| Qwen 3.7 Plus | 18/18 | **14,176** | 7.85 | 273.5 |
-| Claude | 18/18 | | | |
+| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) | Capacity (beats) | Area per beat |
+|---|---|---|---|---|---|---|
+| reference | 18/18 | 19,887 | 12.90 | 380.9 | **10** | 1,989 |
+| ChatGPT 5.6 Sol | 18/18 | 14,685 | 7.30 | 222.2 | 8 | 1,836 |
+| DeepSeek V4 Pro | 18/18 | 14,589 | 7.45 | 273.5 | 8 | 1,824 |
+| Gemini 3.1 Pro | 18/18 | 14,515 | 7.12 | 273.5 | 8 | 1,814 |
+| Qwen 3.7 Plus | 18/18 | **14,176** | 7.85 | 273.5 | 8 | **1,772** |
+| Claude Opus 5 | 18/18 | | | | 8 | |
 
-Five of five correct, within 3.6 % of each other on area and 26 to 29 % below the
-reference, which buys its size back as frequency. Cell-count evidence for reading
-that as a library-versus-point-solution trade rather than a win is in
+Five of five correct and 26 to 29 % below the reference on raw area, **but 9 to
+11 % below it per beat of FIFO capacity**: the reference accepts 10 beats where
+every submission accepts 8, and most of the headline gap is those two extra
+beats rather than a better implementation. Both columns are shown because
+neither alone is honest, and per-beat mildly flatters the larger design since
+control logic is roughly fixed. Cell-count evidence is in
 [NOTES.md](domains/comp_arch/design/d_ca04_async_fifo_cdc/NOTES.md).
 
 ### d_nw01: AXI4 crossbar
@@ -80,26 +83,37 @@ Built at **9.0 ns**, the submission's own maximum and the slower of the two.
 |---|---|---|---|---|
 | reference | 16/16 | 146,932 | 48.60 | 190.5 |
 | ChatGPT 5.6 Sol | 16/16 | 2,086,235 | 448.00 | 111.1 |
-| Claude | 16/16 | | | |
+| Claude Opus 5 | 16/16 | | | |
 | DeepSeek V4 Pro | rejected by slang | | | |
 | Gemini 3.1 Pro | rejected by slang | | | |
 | Qwen 3.7 Plus | rejected by slang | | | |
 
-Three of five never reach measurement. The measured submission is 14.2× the area
-and 9.2× the power of the reference, and slower. Outstanding-transaction capacity
-is in [NOTES.md](domains/networking/design/d_nw01_axi4_xbar/NOTES.md); the
-reference never saturates within the stimulus, so it has a lower bound, not a figure.
+Three of five never reach measurement. **The 14.2× area gap has a single cause
+and it is not implementation quality:** the submission buffers a full 256-beat
+burst per master, about 20,480 bits of flip-flops, where the reference holds two
+beats in a spill register. It was a conforming answer, because the specification
+bounded what the crossbar must achieve and never bounded what it could spend
+achieving it. Clause C3 now caps in-crossbar storage at 4 beats per master port,
+and these submissions predate it.
+
+Outstanding-transaction capacity is in
+[NOTES.md](domains/networking/design/d_nw01_axi4_xbar/NOTES.md); the reference
+never saturates within the stimulus, so it has a lower bound, not a figure.
 
 ### d_ca01: non-blocking data cache
 
 Reference closes at **10.0 ns (100.0 MHz)**, WNS +0.04 ns. It misses 9.375 ns by 0.07 ns.
 
-| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
-|---|---|---|---|---|
-| reference | 16/16 | | | 100.0 |
-| ChatGPT 5.6 Sol | 16/16 | | | |
-| Claude | 16/16 | | | |
-| Gemini 3.1 Pro | 8/16, a load returns the wrong value | | | |
+| Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) | Outstanding misses |
+|---|---|---|---|---|---|
+| reference | 16/16 | | | 100.0 | |
+| ChatGPT 5.6 Sol | 16/16 | 753,209 | 440.0 | | 9 |
+| Claude Opus 5 | 16/16 | | | | **16** |
+| Gemini 3.1 Pro | 8/16, a load returns the wrong value | | | | 9 |
+
+**Claude Opus 5 tracks 16 outstanding misses where ChatGPT tracks 9.** That is a
+design choice the specification leaves free, and it should cost area, so the
+area comparison between those two is not like-for-like until both are built.
 
 The largest design here, and the only task whose mutants carry bounded formal
 counterexamples rather than simulation witnesses.
@@ -109,7 +123,7 @@ counterexamples rather than simulation witnesses.
 | Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
 |---|---|---|---|---|
 | ChatGPT 5.6 Sol | 8/8 | | | |
-| Claude | 8/8 | | | |
+| Claude Opus 5 | 8/8 | | | |
 | Gemini 3.1 Pro | 8/8 | | | |
 
 All three pass everything. **This task does not discriminate on correctness** and
@@ -122,7 +136,7 @@ currently separate anything.
 | Submission | Correctness | Area (µm²) | Power (mW) | Own Fmax (MHz) |
 |---|---|---|---|---|
 | ChatGPT 5.6 Sol | 2/2 | | | |
-| Claude | 0/2, wrong flags at vector 6300 | | | |
+| Claude Opus 5 | 0/2, wrong flags at vector 6300 | | | |
 | Gemini 3.1 Pro | rejected by slang | | | |
 
 ### d_dsp02: FP32 fused multiply-add
@@ -134,6 +148,23 @@ none is currently reportable. They are being re-run.
 
 Previously measured at 20.25 ns: reference 59,890 µm², ChatGPT 360,899 µm², a 6.0×
 ratio at the same clock. Those numbers are correct for the text they answered.
+
+---
+
+### How design choices are separated from implementation quality
+
+Area is only comparable at a shared clock, and only between designs that made the
+same free choices. Each design task declares its metrics with a role:
+
+- **fixed** the specification requires a value; deviating is a spec violation.
+- **choice** the specification leaves it free and it moves PPA. Where a
+  submission chose differently from the reference, the report marks the area
+  ratio **not like-for-like** rather than presenting it as a quality gap.
+- **capability** more is better and area buys it. Reported raw and per unit,
+  because raw area credits a design for being small when it was doing less.
+
+There is deliberately no combined score. Nothing here establishes what a beat of
+FIFO capacity is worth in µm².
 
 ---
 
@@ -152,7 +183,7 @@ every seeded fault is findable.
 
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
-| Claude | yes | **10/10** |
+| Claude Opus 5 | yes | **10/10** |
 | ChatGPT 5.6 Sol | yes | **9/10** |
 | DeepSeek V4 Pro | yes | 8/10 |
 | Gemini 3.1 Pro | **no** | *withheld* |
@@ -163,7 +194,7 @@ every seeded fault is findable.
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
 | ChatGPT 5.6 Sol | yes | **9/10** |
-| Claude | yes | **9/10** |
+| Claude Opus 5 | yes | **9/10** |
 | DeepSeek V4 Pro | yes | 6/10 |
 | Gemini 3.1 Pro | rejects a legal variant | *withheld* |
 | Qwen 3.7 Plus | **no** | *withheld* |
@@ -173,7 +204,7 @@ every seeded fault is findable.
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
 | ChatGPT 5.6 Sol | yes | **9/10** |
-| Claude | rejects a legal variant | *withheld* |
+| Claude Opus 5 | rejects a legal variant | *withheld* |
 | Gemini 3.1 Pro | rejects a legal variant | *withheld* |
 | DeepSeek V4 Pro | did not compile | |
 | Qwen 3.7 Plus | did not compile | |
@@ -182,7 +213,7 @@ every seeded fault is findable.
 
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
-| Claude | yes | **8/8** |
+| Claude Opus 5 | yes | **8/8** |
 | ChatGPT 5.6 Sol | **no** | *withheld* |
 | Gemini 3.1 Pro | **no** | *withheld* |
 
@@ -190,7 +221,7 @@ every seeded fault is findable.
 
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
-| Claude | yes | **8/8** |
+| Claude Opus 5 | yes | **8/8** |
 | ChatGPT 5.6 Sol | yes | **7/8** |
 | Gemini 3.1 Pro | **no** | *withheld* |
 
@@ -198,7 +229,7 @@ every seeded fault is findable.
 
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
-| Claude | yes | **4/5** |
+| Claude Opus 5 | yes | **4/5** |
 | ChatGPT 5.6 Sol | **no** | *withheld* |
 | Gemini 3.1 Pro | **no** | *withheld* |
 
@@ -207,23 +238,30 @@ every seeded fault is findable.
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
 | ChatGPT 5.6 Sol | **no** | *withheld* |
-| Claude | **no** | *withheld* |
+| Claude Opus 5 | **no** | *withheld* |
 | Gemini 3.1 Pro | **no** | *withheld* |
 
 ### v_ai02: byte-stream realignment (ceiling 8/8)
 
 | Submission | Tells correct from broken | Faults caught |
 |---|---|---|
-| ChatGPT 5.6 Sol | **no** | *withheld* |
-| Claude | **no** | *withheld* |
+| Claude Opus 5 | yes | **8/8** |
+| ChatGPT 5.6 Sol | yes | **8/8** |
 | Gemini 3.1 Pro | **no** | *withheld* |
+
+Re-solicited after a specification defect was found and fixed. The earlier round
+had all three submissions rejecting the golden DUT on clause P1, which claimed
+the output strobe passes through in transparent mode; the anchor never does that,
+and an independently written implementation always does, so the behaviour is now
+recorded as latitude (L3) rather than required either way. Two of the three
+submissions reach the ceiling against the corrected contract.
 
 **The gate, not fault detection, is the binding constraint.** Roughly half of all
 testbenches return the same verdict on correct and broken hardware, and every one
 of those rejects the correct design as well: they reject everything. Three tasks,
 v_nw02, v_ai02 and v_nw04 for two of three models, are failed by every submission
 or nearly so. Where a testbench does clear the gate, it usually scores near the
-ceiling, and Claude reaches it on three tasks.
+ceiling, and Claude Opus 5 reaches it on three tasks.
 
 ---
 

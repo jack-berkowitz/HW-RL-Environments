@@ -1,3 +1,4 @@
+title: output-queued AXI-Stream switch
 id: d_nw03
 module: axis_switch_oq
 domain: networking
@@ -157,3 +158,12 @@ ppa_note: >
   will not die on a config error, but no place-and-route number exists yet.
 
 skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
+
+scored_metrics:
+  # As d_dsp03: names are the EMITTED keys, checked against a run record.
+  # beats_delivered against beats_cycles is the throughput this switch achieves;
+  # liveness_worst_wait is the longest any input waited, which a design can trade
+  # buffering against. Neither is fixed by the specification.
+  - {metric: beats_delivered,       label: "beats",    role: capability}
+  - {metric: beats_cycles,          label: "cycles"}   # denominator of throughput
+  - {metric: liveness_worst_wait,   label: "wait.max"} # stimulus-driven

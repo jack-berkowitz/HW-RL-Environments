@@ -1,3 +1,4 @@
+title: non-blocking data cache
 id: d_ca01
 module: nonblocking_dcache
 domain: comp_arch
@@ -47,10 +48,22 @@ scored_configuration:
 
 scored_metrics:
   # Reported, NOT gated. A slower correct design is not a failing design.
-  - {metric: hit_latency_cycles,  label: "hit(cyc)"}
-  - {metric: fill_latency_cycles, label: "fill(cyc)"}
-  - {metric: accept_rate_per_1k,  label: "acc/1k"}
-  - {metric: max_outstanding,     label: "outstd"}
+  # NAMES ARE THE EMITTED KEYS. Three of the four here previously named metrics
+  # no checker produces -- hit_latency_cycles, fill_latency_cycles and
+  # accept_rate_per_1k -- so those columns rendered ABSENT on every row and the
+  # fourth, max_outstanding, resolved to a structured metric whose scalar lives
+  # in max_outstanding_n. The task looked instrumented and reported nothing.
+  #
+  # role: choice     a free design decision the spec does not fix; it moves PPA,
+  #                  so an area comparison against a design that chose
+  #                  differently is not like-for-like
+  # role: capability more is better; area buys it, so PPA should be read per
+  #                  unit of it as well as raw
+  # role: fixed      the spec requires the value in `expect`
+  - {metric: latency_min,         label: "lat.min",  role: choice}
+  - {metric: latency_max,         label: "lat.max"}   # worst case; stimulus-driven
+  - {metric: max_outstanding_n,   label: "outstd",   role: capability}
+  - {metric: mem_txns_fills,      label: "fills"}     # stimulus-driven
 
 configs:
   # CORRECTNESS SWEEP -- multi-configuration, unchanged by rule 18. Full cross of

@@ -1,3 +1,4 @@
+title: asynchronous CDC FIFO
 id: d_ca04
 module: async_fifo_cdc
 domain: comp_arch
@@ -93,14 +94,14 @@ capability_discrimination:
   measured: 2026-08-19, unmodified checker, DATA_W=32 LOG_DEPTH=3
 
 scored_metrics:
-  - {metric: capacity_beats_accepted, label: "cap"}
+  - {metric: capacity_beats_accepted, label: "cap", role: capability}
   # The MINIMUM crossing latency is the capability -- it is what the design can
   # achieve, where the average is dragged around by stimulus. Named with the
   # `_min` suffix because the checker emits this metric as a NAMED line with
   # min/max/n fields, and the record writer now preserves that structure; it
   # previously dropped the name and filed the fields under bare min/max/n.
-  - {metric: crossing_latency_rdclk_min, label: "lat.min"}
-  - {metric: crossing_latency_rdclk_max, label: "lat.max"}
+  - {metric: crossing_latency_rdclk_min, label: "lat.min", role: choice}
+  - {metric: crossing_latency_rdclk_max, label: "lat.max"}   # consequence of capacity, not an independent choice
   - {metric: wr_stall_cycles,         label: "wrstall"}
 
 scored_point_status: >
