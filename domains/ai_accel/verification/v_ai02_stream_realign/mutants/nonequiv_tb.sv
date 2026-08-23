@@ -66,6 +66,19 @@ module nonequiv_tb;
     repeat (4) @(posedge clk);
   endtask
 
+  // A line whose strobe CHANGES after its first beat. R4 fixes the rotation at
+  // the first beat, so this is the only shape that separates a fixed rotation
+  // from one recaptured later.
+  task automatic line_rs(input logic [3:0] s0, input logic [3:0] s1,
+                         input int n, input logic [31:0] base);
+    @(negedge clk); strb = s0;
+    for (int i = 0; i < n; i++) begin
+      if (i == 1) begin @(negedge clk); strb = s1; end
+      beat(base + 32'(i * 32'h04040404), i == 0, i == n - 1);
+    end
+    repeat (4) @(posedge clk);
+  endtask
+
   initial begin
     repeat (4) @(posedge clk); @(negedge clk) rst_n = 1'b1; repeat (2) @(posedge clk);
 
@@ -111,6 +124,89 @@ module nonequiv_tb;
     beat(32'h67666564, 0, 0);
     beat(32'h6B6A6968, 0, 1);
     repeat (8) @(posedge clk);
+
+    // ---- phases the GUARDED set needs -----------------------------------
+    // Everything above is short and clears between lines. Against guarded
+    // defects that reaches almost nothing: no third line in a run, no strobe
+    // change inside a line, no stall long enough to throttle admission, no
+    // long line ending empty, no mid-line empty strobe, no pass-through after
+    // realigning, and nowhere near thirty-two delivered beats.
+
+    // 5. THREE lines back to back, no clear between them
+    @(negedge clk) qready = 1'b1; ra = 1'b1;
+    line(4'b1111, 4, 32'hD3D2D1D0);
+    line(4'b1110, 4, 32'hD7D6D5D4);
+    line(4'b1100, 4, 32'hDBDAD9D8);
+
+    // 6. a seven-beat line whose strobe changes to a different popcount
+    @(negedge clk) clr = 1'b1; @(negedge clk) clr = 1'b0;
+    line_rs(4'b1100, 4'b1110, 7, 32'hE3E2E1E0);
+
+    // 7. a long stall taken WITH AN OUTPUT PENDING, then beats accepted
+    //    straight out of it.
+    //
+    //    Stalling before the line has produced anything does not work: the
+    //    first beat of a line is retained and owes no output, so pop_valid_o
+    //    stays low and the sink is not holding anything off. The stall has to
+    //    start once a beat is being offered at the output.
+    @(negedge clk) clr = 1'b1; @(negedge clk) clr = 1'b0;
+    @(negedge clk) qready = 1'b1; strb = 4'b1110;
+    fork
+      begin
+        beat(32'hF3F2F1F0, 1, 0);   // retained; no output owed
+        beat(32'hF7F6F5F4, 0, 0);   // offered, then held off by the sink
+        beat(32'hFBFAF9F8, 0, 0);   // accepted straight out of the stall
+        // Several more beats AFTER the stall. A beat that is wrongly not
+        // retained only shows up in the output of the beat that follows it, so
+        // the line has to keep running past the stall -- ending it there hides
+        // the defect entirely.
+        beat(32'h0B0A0908, 0, 0);
+        beat(32'h0F0E0D0C, 0, 0);
+        beat(32'h13121110, 0, 0);
+        beat(32'h17161514, 0, 1);
+      end
+      begin
+        repeat (4) @(posedge clk);
+        @(negedge clk) qready = 1'b0;
+        repeat (10) @(posedge clk);
+        @(negedge clk) qready = 1'b1;
+      end
+    join
+    repeat (6) @(posedge clk);
+
+    // 8. a SIX-beat line ending on an empty strobe
+    @(negedge clk) clr = 1'b1; @(negedge clk) clr = 1'b0;
+    @(negedge clk) strb = 4'b1110;
+    beat(32'h10111213, 1, 0);
+    beat(32'h14151617, 0, 0);
+    beat(32'h18191A1B, 0, 0);
+    beat(32'h1C1D1E1F, 0, 0);
+    beat(32'h20212223, 0, 0);
+    @(negedge clk) strb = 4'b0000;
+    beat(32'h24252627, 0, 1);
+    repeat (6) @(posedge clk);
+
+    // 9. an empty strobe DEEP INSIDE a line -- R2 owes no output there
+    @(negedge clk) clr = 1'b1; @(negedge clk) clr = 1'b0;
+    @(negedge clk) strb = 4'b1110;
+    beat(32'h30313233, 1, 0);
+    beat(32'h34353637, 0, 0);
+    beat(32'h38393A3B, 0, 0);
+    @(negedge clk) strb = 4'b0000;
+    beat(32'h3C3D3E3F, 0, 0);
+    @(negedge clk) strb = 4'b1110;
+    beat(32'h40414243, 0, 1);
+    repeat (6) @(posedge clk);
+
+    // 10. pass-through AFTER realigning
+    @(negedge clk) clr = 1'b1; @(negedge clk) clr = 1'b0;
+    @(negedge clk) ra = 1'b0;
+    line(4'hF, 5, 32'h55545352);
+    @(negedge clk) ra = 1'b1;
+
+    // 11. enough traffic to pass the thirty-second delivered beat
+    for (int k = 0; k < 12 && diff_cyc < 0; k++)
+      line(4'b1110, 4, 32'h80000000 + 32'(k * 32'h01010101));
 
     if (diff_cyc >= 0)
       $display("WITNESS %s: first difference at cycle %0d -- %s", `"`MUT_MOD`", diff_cyc, diff_what);

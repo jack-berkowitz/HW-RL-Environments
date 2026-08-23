@@ -116,6 +116,9 @@ from 0 to 4 and is *not* taken modulo the beat width — a fully set strobe give
   are worth stating plainly: at *R* = 0 the second term vanishes and the output
   is the **current** beat; at *R* = 4 the first term vanishes and the output is
   the **retained** one, so the stream is delayed by a whole beat.
+  A beat whose output is suppressed this way is still **consumed**. Whether it
+  also becomes the retained beat that the next output joins against is **not
+  specified** — see L4.
 - **R3.** `pop_strb_o` is **all ones** on every output beat produced while
   realigning, whatever `push_strb_i` carried.
 - **R4.** The rotation *R* is fixed for a line: it is taken from `strb_i` at
@@ -131,8 +134,17 @@ from 0 to 4 and is *not* taken modulo the beat width — a fully set strobe give
 
 ## X. Reset and liveness
 
-- **X1.** `rst_ni` is asynchronous and active low. While it is low
-  `pop_valid_o` is not asserted.
+- **X1.** `rst_ni` is asynchronous and active low. While it is low the unit
+  retains nothing and completes nothing.
+
+  Reset governs what the unit **originates**, not what it merely passes
+  through. A purely combinational path from an input to an output is not
+  gated by reset, so driving that input while reset is asserted will drive
+  the output too. To observe reset behaviour, hold the inputs quiet.
+  **This applies from the first rising clock edge onward.** Before any clock
+  edge has occurred the design's registers hold no defined value, so its
+  outputs are unknown rather than low. Sampling them at time zero, before
+  the first edge, tests nothing this contract promises.
 - **X2.** `clear_i` returns the unit to its starting condition: no beat is
   retained and no line is in progress.
 - **X3 (liveness bound).** With `pop_ready_i` held high, a beat offered on the
@@ -147,6 +159,14 @@ from 0 to 4 and is *not* taken modulo the beat width — a fully set strobe give
   it may equally hold it until the sink is ready. Do not require either.
 - **L2.** `pop_data_o` and `pop_strb_o` in any cycle where `pop_valid_o` is
   low. A payload nothing can observe carries no requirement.
+- **L4.** Whether a beat that is **silently consumed** — one after the first
+  whose `strb_i` is clear and whose `last_i` is low, so R2 owes no output for it
+  — replaces the retained beat. The unit this task is anchored on retains it, so
+  the next output joins against that beat; an implementation that leaves the
+  previous retained beat in place is equally conforming. R5 already withholds
+  its byte-preservation claim from any line containing such a beat, for the same
+  reason. What is NOT free is the **count**: R2 is an "if and only if", and no
+  output beat is produced for a silently consumed beat under either reading.
 - **L3.** `pop_strb_o` on an output beat produced while `realign_i` is **low**.
   Conforming implementations differ here and both readings are defensible: the
   unit this task is anchored on drives the output strobe to all ones in every
@@ -157,15 +177,37 @@ from 0 to 4 and is *not* taken modulo the beat width — a fully set strobe give
 
 These three are the whole of the latitude in this contract.
 
+> **On L3, and why the transparent-mode strobe is latitude rather than a
+> requirement.** An earlier revision of P1 said `pop_strb_o` equals
+> `push_strb_i` while `realign_i` is low. That was **wrong about the anchor**,
+> which drives the output strobe to all ones from one unconditional assignment
+> and never reflects `push_strb_i` in any mode. Three independent submissions
+> read that clause correctly, drove a partial strobe with `realign_i` low,
+> observed all ones, and reported a violation. Every one of them was right, and
+> every one was scored as rejecting correct hardware.
+>
+> The error survived because the reference testbench drove a partial strobe only
+> while realigning; in transparent mode its strobe was always all ones, so
+> expected and observed agreed for a reason unrelated to the clause being true.
+> A check that cannot fail is not a check.
+>
+> Correcting the clause to *require* all ones would have been the mirror of the
+> same error. The second implementation of this contract **does** pass
+> `push_strb_i` through, so a requirement either way makes one of two correct
+> designs non-conforming, and a submission diligent enough to test the clause
+> would have been failed for correctly rejecting the other. Where two correct
+> implementations disagree and the contract never chose between them, the honest
+> record is that it does not specify the behaviour.
+
 ---
 
 ## What this contract does not say
 
-It says nothing about what `push_strb_i` means while realigning — R3 fixes the
-output strobe regardless. It places no requirement on the unit's behaviour if a
+It says nothing about what `push_strb_i` means in **any** mode — P2 and R3
+together fix the output strobe to all ones unconditionally, so `push_strb_i` is
+accepted and never observed on the output. It places no requirement on the unit's behaviour if a
 line's first beat never arrives, nor on `strb_i` in any cycle other than a
 line's first beat, which R4 makes the only one that matters.
-
 
 ---
 
@@ -236,6 +278,14 @@ testbench to be rejected with none of its checking ever running:
 
 - **Identify a result by bookkeeping, not by matching on its value.** Values
   repeat, so content matching is ambiguous and will mis-attribute.
+
+- **`checker` / `endchecker` is not supported.** Nor are `bind`, `program`
+  blocks, or SVA sequence/property declarations. Write your checks as
+  ordinary `always` blocks and tasks.
+
+- **`automatic` belongs on declarations inside a task, function or
+  procedural block — never at module scope.** `automatic int x;` written
+  among the module's signals is a syntax error, not a lifetime hint.
 
 - Do not use `#` delays for anything except the clock generator and the watchdog.
 - No UVM, no `randsequence`, no DPI. Queues and associative arrays are fine.

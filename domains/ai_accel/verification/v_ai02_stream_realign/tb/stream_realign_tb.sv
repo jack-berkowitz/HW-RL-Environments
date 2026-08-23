@@ -49,6 +49,9 @@ module stream_realign_tb;
   logic [7:0]  line_out [$];
   int          line_start = 0;   // byte index the line begins at
   bit          line_bytes_valid = 1'b1;
+  // L4: content checking is withheld for the rest of a line once a beat has
+  // been silently consumed. The COUNT of output beats stays checked.
+  bit          line_data_valid  = 1'b1;
 
   // The rotation is the LITERAL popcount, 0 through 4 -- not taken modulo the
   // beat width. A full strobe gives 4, which shifts by a whole beat: the output
@@ -85,6 +88,7 @@ module stream_realign_tb;
         m_rot  = rot_of(b.lstrb);
         line_start = 4 - int'(m_rot);   // 0 for a full strobe, 4 for an empty one
         line_in.delete(); line_out.delete(); line_bytes_valid = 1'b1;
+        line_data_valid = 1'b1;
         for (int i = 0; i < 4; i++) line_in.push_back(b.data[8*i +: 8]);
       end else if (!b.realign || b.last || (|b.lstrb)) begin
         // R2: an output beat is owed only when last_i is high or strb_i is
@@ -92,9 +96,14 @@ module stream_realign_tb;
         inflight.push_back(b);
         if (b.realign) for (int i = 0; i < 4; i++) line_in.push_back(b.data[8*i +: 8]);
       end else begin
-        // consumed with no output owed; its bytes do not reach the sink, so the
-        // byte-preservation check does not apply to this line.
+        // Consumed with no output owed. Its bytes do not reach the sink, so
+        // byte preservation does not apply to this line -- and clause L4 leaves
+        // it free whether this beat replaces the retained one, so the CONTENT
+        // of every later output beat in the line is unconstrained too. The
+        // COUNT is not: R2 is an "if and only if", so no output is owed here,
+        // and an output beat with nothing owed is still caught below.
         line_bytes_valid = 1'b0;
+        line_data_valid  = 1'b0;
       end
     end
 
@@ -113,7 +122,7 @@ module stream_realign_tb;
         // requirement makes one of two correct designs non-conforming, so the
         // check is confined to the mode where the contract is definite.
         automatic logic [3:0]  wstrb = 4'hF;
-        if (qdata !== want)
+        if (line_data_valid && qdata !== want)
           fail(b.realign ? "R2" : "P1",
                $sformatf("cycle %0d: output beat is %08x, expected %08x -- input %08x joined with the held beat %08x at rotation %0d",
                          cyc, qdata, want, b.data, m_held, m_rot));
@@ -166,6 +175,9 @@ module stream_realign_tb;
   int cov_beats = 0, cov_lines = 0, cov_partial_strb = 0, cov_stalls = 0;
   bit cov_rot [5];
   bit cov_passthrough = 0, cov_empty_last = 0, cov_clear = 0, cov_reset = 0;
+  int cov_run_of_lines = 0, cov_strb_changes = 0;
+  bit cov_long_stall = 0, cov_long_empty_last = 0, cov_mid_empty = 0;
+  bit cov_partial_last = 0, cov_passthrough_after = 0;
 
   task automatic push_line(input bit do_realign, input logic [3:0] lstrb, input int n,
                            input logic [31:0] base, input logic [3:0] dstrb = 4'hF,
@@ -279,6 +291,109 @@ module stream_realign_tb;
     push_line(1'b1, 4'b1110, 5, 32'hB3B2B1B0);
     drain("after a mid-stream reset");
 
+    // -- 8. THREE lines run back to back, with no clear between them ------
+    // X2 restarts the count of lines, so a sequence that clears between every
+    // line never has a third one to run.
+    push_line(1'b1, 4'b1111, 4, 32'hD3D2D1D0);
+    push_line(1'b1, 4'b1110, 4, 32'hD7D6D5D4);
+    push_line(1'b1, 4'b1100, 4, 32'hDBDAD9D8);
+    cov_run_of_lines = 3;
+    drain("three lines back to back, no clear");
+    do_clear();
+
+    // -- 9. a long line whose strobe CHANGES after the first beat ---------
+    // R4 fixes the rotation at the line's first beat. To tell that apart from a
+    // rotation recaptured later, the strobe has to change to a DIFFERENT
+    // popcount and the line has to run long enough to reach the recapture.
+    push_line(1'b1, 4'b1100, 7, 32'hE3E2E1E0, 4'hF, 4'b1110);
+    cov_strb_changes = 1;
+    drain("seven-beat line, strobe changes after the first beat");
+    do_clear();
+
+    // -- 10. a beat accepted straight out of a LONG stall -----------------
+    // Phase 5 stalls after the input has already run ahead, so nothing is
+    // accepted immediately after the release. Stalling the sink from the start
+    // throttles admission, so the beats that follow the stall are fresh ones
+    // and R5 covers the join across the boundary.
+    cov_stalls++;
+    push_line(1'b1, 4'b1110, 10, 32'hF3F2F1F0);
+    begin
+      // Let the line start producing BEFORE stalling. Clause L1 leaves it free
+      // whether a beat waits for the sink, and on an implementation that makes
+      // every beat wait, stalling before the first output beat means nothing is
+      // being offered and so nothing is being held off -- the stall does not
+      // exist from the unit's point of view. Waiting for output beats makes the
+      // stall real on either reading.
+      automatic int n0 = n_out;
+      for (int t = 0; t < 200; t++) begin
+        @(posedge clk);
+        if (n_out >= n0 + 2) break;
+      end
+    end
+    @(negedge clk) qready = 1'b0;
+    repeat (12) @(posedge clk);
+    cov_long_stall = 1;
+    @(negedge clk) qready = 1'b1;
+    drain("beats accepted straight out of a twelve-cycle stall");
+    do_clear();
+
+    // -- 11. a SIX-beat line ending on an empty strobe --------------------
+    // R6 binds at every line length. Phase 4 ends a three-beat line this way;
+    // a defect that only drops the final beat of a longer line survives it.
+    begin
+      beat_t b;
+      b.data = 32'h10111213; b.strb = 4'hF; b.first = 1'b1; b.last = 1'b0;
+      b.realign = 1'b1; b.lstrb = 4'b1110; txq.push_back(b); cov_beats++;
+      for (int i = 1; i < 5; i++) begin
+        b.data = 32'h10111213 + 32'(i * 32'h04040404); b.first = 1'b0;
+        txq.push_back(b); cov_beats++;
+      end
+      b.data = 32'h30313233; b.last = 1'b1; b.lstrb = 4'b0000;
+      txq.push_back(b); cov_beats++;
+      cov_lines++; cov_long_empty_last = 1;
+    end
+    drain("six-beat line ending on an empty strobe");
+    do_clear();
+
+    // -- 12. an empty strobe DEEP INSIDE a line ---------------------------
+    // R2 is an "if and only if": a mid-line beat with a clear strobe that is
+    // not the last produces NO output. Checking only that beats are not lost
+    // misses a unit that produces one too many here.
+    begin
+      beat_t b;
+      b.data = 32'h20212223; b.strb = 4'hF; b.first = 1'b1; b.last = 1'b0;
+      b.realign = 1'b1; b.lstrb = 4'b1110; txq.push_back(b); cov_beats++;
+      for (int i = 1; i < 3; i++) begin
+        b.data = 32'h20212223 + 32'(i * 32'h04040404); b.first = 1'b0;
+        txq.push_back(b); cov_beats++;
+      end
+      b.data = 32'h2C2D2E2F; b.first = 1'b0; b.last = 1'b0; b.lstrb = 4'b0000;
+      txq.push_back(b); cov_beats++;                       // no output owed
+      b.data = 32'h30313235; b.last = 1'b1; b.lstrb = 4'b1110;
+      txq.push_back(b); cov_beats++;
+      cov_lines++; cov_mid_empty = 1;
+    end
+    drain("empty strobe on the fourth beat of a line");
+    do_clear();
+
+    // -- 13. a PARTIAL strobe on a line's LAST beat -----------------------
+    // R3 binds on every output beat produced while realigning, the final one
+    // included. A line whose last beat carries a full strobe cannot separate a
+    // unit that honours R3 there from one that passes push_strb_i through.
+    push_line(1'b1, 4'b1110, 4, 32'h44454647, 4'b0011);
+    cov_partial_strb++; cov_partial_last = 1;
+    drain("partial input strobe, last beat included");
+    do_clear();
+
+    // -- 14. pass-through AFTER realigning --------------------------------
+    // Phase 1 runs pass-through before anything has realigned. P1 binds in both
+    // orders; a unit that only stops being transparent once it has realigned
+    // once passes phase 1 and fails here.
+    push_line(1'b0, 4'hF, 5, 32'h55545352);
+    cov_passthrough_after = 1;
+    drain("pass-through after realigning");
+    do_clear();
+
     // -- rule 4 floors, on STIMULUS only ----------------------------------
     if (cov_beats < 45)      fail("COVERAGE", $sformatf("only %0d beats offered", cov_beats));
     if (cov_lines < 6)       fail("COVERAGE", $sformatf("only %0d realigned lines driven", cov_lines));
@@ -288,6 +403,13 @@ module stream_realign_tb;
     if (!cov_empty_last)     fail("COVERAGE", "no line ended with an empty strobe -- R6 is untested");
     if (!cov_clear)          fail("COVERAGE", "clear_i was never asserted");
     if (!cov_reset)          fail("COVERAGE", "reset was never asserted mid-stream");
+    if (cov_run_of_lines < 3)fail("COVERAGE", "no run of three lines without a clear between them");
+    if (cov_strb_changes < 1)fail("COVERAGE", "strb_i never changed within a line -- R4 is untested");
+    if (!cov_long_stall)     fail("COVERAGE", "the sink never held off long enough to throttle admission");
+    if (!cov_long_empty_last)fail("COVERAGE", "no LONG line ended with an empty strobe");
+    if (!cov_mid_empty)      fail("COVERAGE", "no line carried an empty strobe on a middle beat -- R2's \"only if\" is untested");
+    if (!cov_partial_last)   fail("COVERAGE", "no line carried a partial strobe on its LAST beat");
+    if (!cov_passthrough_after) fail("COVERAGE", "pass-through was never exercised AFTER realigning");
     for (int i = 0; i < 5; i++)
       if (!cov_rot[i]) fail("COVERAGE", $sformatf("rotation %0d was never driven", i));
 

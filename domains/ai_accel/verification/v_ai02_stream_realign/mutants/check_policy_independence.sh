@@ -1,7 +1,7 @@
 #!/bin/bash
 # TIER-B 5c: no mutant may be killed by the POLICY difference alone.
 #
-# The eight defects of mutants.sv are re-derived on the policy-divergent
+# The ten defects of mutants.sv are re-derived on the policy-divergent
 # implementation (mutants/policy/), which makes every beat wait for the sink and
 # drives a fixed pattern while pop_valid_o is low -- the opposite choice on both
 # named latitude clauses. A verdict that differs from the same defect on the
@@ -30,7 +30,7 @@ run_one() {   # $1 label, $2 expected, $3.. files
   else printf '  %-34s %-4s BUT EXPECTED %s\n' "$label" "$got" "$expect"; fails=$((fails+1)); fi
 }
 
-echo "reference testbench vs the GOLDEN base and its eight defects"
+echo "reference testbench vs the GOLDEN base and its ten defects"
 run_one "golden (clean)" PASS "${BASE[@]}" "$D/stream_realign.sv"
 for M in $(grep -oE "^module sr_m[A-Za-z0-9_]+" "$T/mutants/mutants.sv" | awk '{print $2}'); do
   python3 -c "
@@ -42,7 +42,7 @@ open('$W/$M.sv','w').write(b.replace('module $M','module stream_realign',1))"
 done
 
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and the same eight defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same ten defects"
 sed 's/module sr_c1_first_beat_waits/module stream_realign/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean_policy.sv"
 run_one "policy base (clean)" PASS "$W/clean_policy.sv"

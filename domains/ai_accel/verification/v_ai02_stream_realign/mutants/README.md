@@ -10,48 +10,84 @@ anchor. Each edit is an exact `old -> new` pair asserted to match **exactly
 once**, so a silent no-op cannot produce a mutant identical to the golden that
 every testbench "kills" by doing nothing.
 
+## Every defect in this set is GUARDED
+
+    defect := wrong_behaviour AND rare_predicate over contract-level state
+
+A **total** defect fires on the first transaction of its class, so any testbench
+that exercises the class catches it whether or not it is checking the clause —
+it measures coverage, not checking. A **guarded** defect is caught only by a
+testbench that constructs the named configuration and is still checking when it
+arrives. The guards here name a rotation value, a beat's index within its line,
+how many lines have run without a clear, how long the sink has held off, an
+ordinal delivery, and whether the unit has ever realigned.
+
+Two constraints bound them:
+
+- **Fairness.** Every guard names a condition the spec states as a checkable
+  bound at a named boundary. No mutant punishes an unstated expectation.
+- **Reference reachability.** The reference kills all ten. It reached **three**
+  when this set was first generated; seven phases were added to it rather than
+  loosening the guards. A mutant the reference cannot reach is unverified, not
+  difficult.
+
+Guards read contract-level state only. The policy base in `policy/` has no
+barrel shifter, no strobe FIFO and no `int_first`; a guard written over any of
+those could not be restated there.
+
 ## The set
 
-| id | clause | defect | why one beat through the unit misses it |
+| id | clause | guard — fires only when… | defect |
 |---|---|---|---|
-| `sr_m1_rotation_off_by_one` | **R2/R5** | the rotation is one byte more than the strobe calls for | needs the rotation exercised at a value where one byte matters, and the output compared byte-exactly |
-| `sr_m2_first_beat_emitted` | **R1** | a line's first beat produces an output instead of being retained | needs the first beat of a line distinguished from the rest |
-| `sr_m3_first_beat_not_retained` | **R2/R5** | the first beat is not retained, so the next beat joins stale data | the *count* of output beats is right; only their contents are wrong |
-| `sr_m4_rotation_reversed` | **R2** | the two halves are joined the wrong way round | at rotation 0 and rotation 4 this is invisible — only the intermediate rotations expose it |
-| `sr_m5_strobe_passed_through` | **R3** | the output strobe carries the input strobe | invisible until the source drives something other than a full strobe |
-| `sr_m6_rotation_recaptured` | **R4** | the rotation is recaptured every cycle, not just at a line's first beat | needs `strb_i` to *change* mid-line, which a testbench holding it constant never does |
-| `sr_m7_always_realigns` | **P1** | the unit realigns even when `realign_i` is low | needs pass-through exercised at all |
-| `sr_m8_last_ignored` | **R6** | a final beat with an empty strobe produces no output | needs a line deliberately ended on an empty strobe |
+| `sr_m1_rotation_four_when_three` | **R2/R4/R5** | the line's rotation is exactly 3 | realigned at rotation 4 instead |
+| `sr_m2_first_beat_emitted_from_third_line` | **R1** | the third line of a run, and every line after | a line's first beat produces an output instead of being retained |
+| `sr_m3_rotation_recaptured_deep_in_line` | **R4** | the fifth beat of a line onward | the rotation is recaptured from the current beat's strobe |
+| `sr_m4_retain_skipped_after_stall` | **R5** | a beat accepted just after the sink held off four or more cycles | it is not retained, so the next output joins stale data |
+| `sr_m5_last_dropped_on_long_line` | **R6** | the line is five beats or longer | a final beat with a clear strobe produces no output |
+| `sr_m6_strb_from_input_on_last_beat` | **R3** | the output beat of a line's LAST beat | pop_strb_o carries push_strb_i instead of all ones |
+| `sr_m7_drop_every_thirty_second` | **R2/R5** | the thirty-second output beat, and every thirty-second after | consumed internally, never shown to the sink |
+| `sr_m8_passthrough_rotates_after_realign` | **P1** | realign_i has been high at least once since reset | pass-through is not transparent -- rotated one byte |
+| `sr_m9_extra_beat_on_late_empty_strobe` | **R2** | the empty-strobe beat is the fourth or later in its line | it produces an output beat anyway |
+| `sr_m10_admission_withheld_after_long_stall` | **X3** | the sink has just held off eight or more cycles | admission withheld twenty cycles although pop_ready_i is high |
 
 ## Non-equivalence witnesses — rule 16
 
 `nonequiv_tb.sv` drives the golden and one mutant from a shared input sequence
-and compares their observable outputs every cycle, with the payload masked by
-`pop_valid_o` and `push_ready_o` by `push_valid_i` — clause L2 leaves the
-payload free while valid is low, and H3 says a ready bit means nothing while
-nothing is offered.
+and compares their observable outputs every cycle, payload masked by its own
+valid and `push_ready_o` by `push_valid_i`. Run the set with `./witness.sh`.
 
 | id | first observable difference |
 |---|---|
-| `sr_m1_rotation_off_by_one` | cycle 19 — output `00000000` against `13121110` |
-| `sr_m2_first_beat_emitted` | cycle 17 — `pop_valid_o` 0 against 1 |
-| `sr_m3_first_beat_not_retained` | cycle 19 — output `0f0e0d0c` against `13121110` |
-| `sr_m4_rotation_reversed` | cycle 33 — output `22212027` against `24232221` |
-| `sr_m5_strobe_passed_through` | cycle 80 — output strobe `0011` against `1111` |
-| `sr_m6_rotation_recaptured` | cycle 98 — output `5b5a5958` against `59585756` |
-| `sr_m7_always_realigns` | cycle 4 — `pop_valid_o` 1 against 0 |
-| `sr_m8_last_ignored` | cycle 98 — `pop_valid_o` 1 against 0 |
+| `sr_m1_rotation_four_when_three` | cycle 33 -- output: golden data=24232221 / mutant data=00000000 |
+| `sr_m2_first_beat_emitted_from_third_line` | cycle 142 -- pop_valid_o: golden 0 / mutant 1 |
+| `sr_m3_rotation_recaptured_deep_in_line` | cycle 177 -- output: golden data=f1f0efee / mutant data=f0efeeed |
+| `sr_m4_retain_skipped_after_stall` | cycle 206 -- output: golden data=0c0b0a09 / mutant data=0cfbfaf9 |
+| `sr_m5_last_dropped_on_long_line` | cycle 231 -- pop_valid_o: golden 1 / mutant 0 |
+| `sr_m6_strb_from_input_on_last_beat` | cycle 84 -- output strb: golden 1111 / mutant 0011 |
+| `sr_m7_drop_every_thirty_second` | cycle 156 -- pop_valid_o: golden 1 / mutant 0 |
+| `sr_m8_passthrough_rotates_after_realign` | cycle 262 -- output: golden data=55545352 / mutant data=54535255 |
+| `sr_m9_extra_beat_on_late_empty_strobe` | cycle 248 -- pop_valid_o: golden 0 / mutant 1 |
+| `sr_m10_admission_withheld_after_long_stall` | cycle 204 -- push_ready_o while offering: golden 1 / mutant 0 |
 
-**`sr_m5` reported NO DIFFERENCE OBSERVED on the first run.** The harness drove
-a full `push_strb_i` on every beat, and a design that forwards the input strobe
-is indistinguishable from one that forces all ones until the source drives
-something else. A phase with a partial input strobe was added. *"No difference
-observed" is a claim about the harness until the harness has been shown able to
-see the difference.*
+## Three things this rebuild found
 
-## Reference testbench ceiling
+**An equivalent mutant.** The first draft included a defect that ignored
+`clear_i` from the second clear onward. At this configuration that is
+*unobservable*: the only clear-sensitive state is the rotation and the retained
+beat, and R1 makes the next line's first beat overwrite both. It was replaced by
+`sr_m9`, a live R2 violation. A mutant nothing can detect is not a hard mutant.
 
-**8 of 8**, checked against a second, independent base: all eight defects
-re-derived on the policy-divergent implementation and re-run, 18 of 18 verdicts
-matching, both clean implementations passing. See
-`check_policy_independence.sh` and NOTES.md.
+**An under-specified clause.** Driving an empty strobe deep inside a line made
+the reference fail the *golden*. The anchor retains a silently consumed beat;
+the reference assumed it does not. R5 already withheld its byte-preservation
+claim from such lines, but nothing said what the retained beat becomes — so the
+spec now carries **L4**, and the reference checks the count of output beats
+there while leaving their content free.
+
+**A guard that the policy base could not reach.** `sr_m4` fires on a beat
+accepted just after a long stall, and step 5c had it PASS on the divergent base.
+That base makes every beat wait for the sink (its opposite choice on L1), so
+stalling *before* the line produced anything left `pop_valid_o` low — nothing
+was being offered, so nothing was being held off, and the stall did not exist
+from the unit's point of view. The reference now waits for output beats before
+stalling, which makes the stall real on either reading of L1.

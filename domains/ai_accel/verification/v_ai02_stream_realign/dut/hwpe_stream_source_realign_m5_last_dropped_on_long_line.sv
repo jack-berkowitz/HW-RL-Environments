@@ -1,5 +1,5 @@
 /*
- * hwpe_stream_source_realign_m2_first_beat_emitted.sv
+ * hwpe_stream_source_realign_m5_last_dropped_on_long_line.sv
  * Francesco Conti <f.conti@unibo.it>
  *
  * Copyright (C) 2014-2018 ETH Zurich, University of Bologna
@@ -14,14 +14,14 @@
  */
 
 /**
- * The **hwpe_stream_source_realign_m2_first_beat_emitted** module realigns HWPE-Streams loaded
+ * The **hwpe_stream_source_realign_m5_last_dropped_on_long_line** module realigns HWPE-Streams loaded
  * in a misaligned fashion from memory. Specifically, it rotates `strb` signals
  * according to its control interface, produced along with addresses in the
  * address generator.
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_params:
- * .. table:: **hwpe_stream_source_realign_m2_first_beat_emitted** design-time parameters.
+ * .. table:: **hwpe_stream_source_realign_m5_last_dropped_on_long_line** design-time parameters.
  *
  *   +-------------------+-------------+------------------------------------------------------------------------------------------------------------------------+
  *   | **Name**          | **Default** | **Description**                                                                                                        |
@@ -35,7 +35,7 @@
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_ctrl:
- * .. table:: **hwpe_stream_source_realign_m2_first_beat_emitted** input control signals.
+ * .. table:: **hwpe_stream_source_realign_m5_last_dropped_on_long_line** input control signals.
  *
  *   +---------------+---------------+----------------------------------------------------------------------------------------------------+
  *   | **Name**      | **Type**      | **Description**                                                                                    |
@@ -57,7 +57,7 @@
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_flags:
- * .. table:: **hwpe_stream_source_realign_m2_first_beat_emitted** output flags.
+ * .. table:: **hwpe_stream_source_realign_m5_last_dropped_on_long_line** output flags.
  *
  *   +-------------------+---------------+-----------------+
  *   | **Name**          | **Type**      | **Description** |
@@ -69,7 +69,7 @@
 
 import hwpe_stream_package::*;
 
-module hwpe_stream_source_realign_m2_first_beat_emitted #(
+module hwpe_stream_source_realign_m5_last_dropped_on_long_line #(
   parameter int unsigned DECOUPLED  = 0, // set to 1 if used with a TCDM stream that does not respect the zero-latency assumption,
                                          // e.g. it passes through a TCDM load FIFO.
   parameter int unsigned DATA_WIDTH = 32,
@@ -110,6 +110,28 @@ module hwpe_stream_source_realign_m2_first_beat_emitted #(
   logic int_first;
   logic int_last;
   logic int_last_packet;
+
+  // ---- mutant guard state (contract-level only) ----
+  logic [7:0] g_line_q;   // lines started since reset or clear
+  logic [7:0] g_beat_q;   // beats accepted so far in the current line
+  logic [7:0] g_stall_q;  // consecutive cycles the sink has held off
+  logic [1:0] g_rel_q;    // counts down over the cycles just after a long stall
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+    end else if (clear_i) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+    end else begin
+      if ((g_stall_q >= 8'd4) && !(pop_o.valid & ~pop_o.ready)) g_rel_q <= 2'd3;
+      else if (g_rel_q != 2'd0)                                 g_rel_q <= g_rel_q - 2'd1;
+      if (pop_o.valid & ~pop_o.ready) g_stall_q <= g_stall_q + 8'd1;
+      else                            g_stall_q <= '0;
+      if (push_i.valid & push_i.ready) begin
+        if (int_first) begin g_line_q <= g_line_q + 8'd1; g_beat_q <= 8'd1; end
+        else                 g_beat_q <= g_beat_q + 8'd1;
+      end
+    end
+  end
 
   /* clock gating */
   tc_clk_gating i_realign_gating (
@@ -326,7 +348,7 @@ module hwpe_stream_source_realign_m2_first_beat_emitted #(
   end
   assign pop_o.valid = (~ctrl_i.realign) ? push_i.valid :
                        (int_last_packet) ? push_i.valid :
-                                           push_i.valid & (int_last | (|int_strb));
+                                           push_i.valid & ~int_first & ((int_last & (g_beat_q < 8'd5)) | (|int_strb));
   assign push_i.ready = (~ctrl_i.realign) ? pop_o.ready :
                         (int_last_packet) ? pop_o.ready :
                                             pop_o.ready | int_first;
@@ -335,4 +357,4 @@ module hwpe_stream_source_realign_m2_first_beat_emitted #(
 
   assign flags_o.decoupled_stall = ($signed(strb_first_cnt) >= $signed(STRB_FIFO_DEPTH-4)) ? '1 : '0;
 
-endmodule // hwpe_stream_source_realign_m2_first_beat_emitted
+endmodule // hwpe_stream_source_realign_m5_last_dropped_on_long_line

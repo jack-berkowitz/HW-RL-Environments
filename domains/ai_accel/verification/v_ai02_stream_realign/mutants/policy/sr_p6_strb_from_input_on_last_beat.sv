@@ -58,12 +58,44 @@ module stream_realign (
   wire produce = realign_i ? (push_valid_i && !first_i && (last_i || (|strb_i)))
                            : push_valid_i;
 
+  // ---- mutant guard state: the SAME contract-level quantities as the golden
+  // base, recomputed from this implementation's own ports.
+  logic [7:0] g_line_q, g_beat_q, g_stall_q, g_out_q, g_hold_q;
+  logic [1:0] g_rel_q;
+  logic       g_realigned_q;
+  wire        g_deliver = produce && push_ready_o;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_out_q <= '0;
+      g_hold_q <= '0; g_rel_q <= 2'd0; g_realigned_q <= 1'b0;
+    end else begin
+      if (realign_i) g_realigned_q <= 1'b1;
+      if ((g_stall_q >= 8'd8) && !(pop_valid_o && !pop_ready_i)) g_hold_q <= 8'd20;
+      else if (g_hold_q != 8'd0)                                 g_hold_q <= g_hold_q - 8'd1;
+      if (clear_i) begin
+        g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+      end else begin
+        if (pop_valid_o && !pop_ready_i) g_stall_q <= g_stall_q + 8'd1;
+        else                             g_stall_q <= '0;
+        if ((g_stall_q >= 8'd4) && !(pop_valid_o && !pop_ready_i)) g_rel_q <= 2'd3;
+        else if (g_rel_q != 2'd0)                                  g_rel_q <= g_rel_q - 2'd1;
+        if (g_deliver) g_out_q <= g_out_q + 8'd1;
+        if (push_valid_i && push_ready_o) begin
+          if (first_i) begin g_line_q <= g_line_q + 8'd1; g_beat_q <= 8'd1; end
+          else                g_beat_q <= g_beat_q + 8'd1;
+        end
+      end
+    end
+  end
+
   assign pop_valid_o = produce;
   // clause L2 -- the golden drives the computed value here regardless
   assign pop_data_o  = !produce ? 32'hDEAD_BEEF
                      : realign_i ? joined(push_data_i, held_q, rot_q)
                                  : push_data_i;
-  assign pop_strb_o  = !produce ? 4'h0 : push_strb_i;
+  assign pop_strb_o  = !produce ? 4'h0
+                     : (realign_i && last_i && push_valid_i) ? push_strb_i
+                     : (realign_i ? 4'hF : push_strb_i);
 
   // clause L1 -- every beat waits for the sink, the first one included
   assign push_ready_o = pop_ready_i;

@@ -1,5 +1,5 @@
 /*
- * hwpe_stream_source_realign_m6_rotation_recaptured.sv
+ * hwpe_stream_source_realign_m3_rotation_recaptured_deep_in_line.sv
  * Francesco Conti <f.conti@unibo.it>
  *
  * Copyright (C) 2014-2018 ETH Zurich, University of Bologna
@@ -14,14 +14,14 @@
  */
 
 /**
- * The **hwpe_stream_source_realign_m6_rotation_recaptured** module realigns HWPE-Streams loaded
+ * The **hwpe_stream_source_realign_m3_rotation_recaptured_deep_in_line** module realigns HWPE-Streams loaded
  * in a misaligned fashion from memory. Specifically, it rotates `strb` signals
  * according to its control interface, produced along with addresses in the
  * address generator.
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_params:
- * .. table:: **hwpe_stream_source_realign_m6_rotation_recaptured** design-time parameters.
+ * .. table:: **hwpe_stream_source_realign_m3_rotation_recaptured_deep_in_line** design-time parameters.
  *
  *   +-------------------+-------------+------------------------------------------------------------------------------------------------------------------------+
  *   | **Name**          | **Default** | **Description**                                                                                                        |
@@ -35,7 +35,7 @@
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_ctrl:
- * .. table:: **hwpe_stream_source_realign_m6_rotation_recaptured** input control signals.
+ * .. table:: **hwpe_stream_source_realign_m3_rotation_recaptured_deep_in_line** input control signals.
  *
  *   +---------------+---------------+----------------------------------------------------------------------------------------------------+
  *   | **Name**      | **Type**      | **Description**                                                                                    |
@@ -57,7 +57,7 @@
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_flags:
- * .. table:: **hwpe_stream_source_realign_m6_rotation_recaptured** output flags.
+ * .. table:: **hwpe_stream_source_realign_m3_rotation_recaptured_deep_in_line** output flags.
  *
  *   +-------------------+---------------+-----------------+
  *   | **Name**          | **Type**      | **Description** |
@@ -69,7 +69,7 @@
 
 import hwpe_stream_package::*;
 
-module hwpe_stream_source_realign_m6_rotation_recaptured #(
+module hwpe_stream_source_realign_m3_rotation_recaptured_deep_in_line #(
   parameter int unsigned DECOUPLED  = 0, // set to 1 if used with a TCDM stream that does not respect the zero-latency assumption,
                                          // e.g. it passes through a TCDM load FIFO.
   parameter int unsigned DATA_WIDTH = 32,
@@ -110,6 +110,28 @@ module hwpe_stream_source_realign_m6_rotation_recaptured #(
   logic int_first;
   logic int_last;
   logic int_last_packet;
+
+  // ---- mutant guard state (contract-level only) ----
+  logic [7:0] g_line_q;   // lines started since reset or clear
+  logic [7:0] g_beat_q;   // beats accepted so far in the current line
+  logic [7:0] g_stall_q;  // consecutive cycles the sink has held off
+  logic [1:0] g_rel_q;    // counts down over the cycles just after a long stall
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+    end else if (clear_i) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+    end else begin
+      if ((g_stall_q >= 8'd4) && !(pop_o.valid & ~pop_o.ready)) g_rel_q <= 2'd3;
+      else if (g_rel_q != 2'd0)                                 g_rel_q <= g_rel_q - 2'd1;
+      if (pop_o.valid & ~pop_o.ready) g_stall_q <= g_stall_q + 8'd1;
+      else                            g_stall_q <= '0;
+      if (push_i.valid & push_i.ready) begin
+        if (int_first) begin g_line_q <= g_line_q + 8'd1; g_beat_q <= 8'd1; end
+        else                 g_beat_q <= g_beat_q + 8'd1;
+      end
+    end
+  end
 
   /* clock gating */
   tc_clk_gating i_realign_gating (
@@ -298,7 +320,7 @@ module hwpe_stream_source_realign_m6_rotation_recaptured #(
       strb_rotate_q <= '0;
       strb_rotate_inv_q <= '0;
     end
-    else if (~int_last_packet) begin
+    else if (~int_last_packet & (int_first | (g_beat_q >= 8'd4))) begin
       strb_rotate_q <= strb_rotate_d;
       strb_rotate_inv_q <= strb_rotate_inv_d;
     end
@@ -335,4 +357,4 @@ module hwpe_stream_source_realign_m6_rotation_recaptured #(
 
   assign flags_o.decoupled_stall = ($signed(strb_first_cnt) >= $signed(STRB_FIFO_DEPTH-4)) ? '1 : '0;
 
-endmodule // hwpe_stream_source_realign_m6_rotation_recaptured
+endmodule // hwpe_stream_source_realign_m3_rotation_recaptured_deep_in_line

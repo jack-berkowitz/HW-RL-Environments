@@ -1,5 +1,5 @@
 /*
- * hwpe_stream_source_realign_m1_rotation_off_by_one.sv
+ * hwpe_stream_source_realign_m4_retain_skipped_after_stall.sv
  * Francesco Conti <f.conti@unibo.it>
  *
  * Copyright (C) 2014-2018 ETH Zurich, University of Bologna
@@ -14,14 +14,14 @@
  */
 
 /**
- * The **hwpe_stream_source_realign_m1_rotation_off_by_one** module realigns HWPE-Streams loaded
+ * The **hwpe_stream_source_realign_m4_retain_skipped_after_stall** module realigns HWPE-Streams loaded
  * in a misaligned fashion from memory. Specifically, it rotates `strb` signals
  * according to its control interface, produced along with addresses in the
  * address generator.
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_params:
- * .. table:: **hwpe_stream_source_realign_m1_rotation_off_by_one** design-time parameters.
+ * .. table:: **hwpe_stream_source_realign_m4_retain_skipped_after_stall** design-time parameters.
  *
  *   +-------------------+-------------+------------------------------------------------------------------------------------------------------------------------+
  *   | **Name**          | **Default** | **Description**                                                                                                        |
@@ -35,7 +35,7 @@
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_ctrl:
- * .. table:: **hwpe_stream_source_realign_m1_rotation_off_by_one** input control signals.
+ * .. table:: **hwpe_stream_source_realign_m4_retain_skipped_after_stall** input control signals.
  *
  *   +---------------+---------------+----------------------------------------------------------------------------------------------------+
  *   | **Name**      | **Type**      | **Description**                                                                                    |
@@ -57,7 +57,7 @@
  *
  * .. tabularcolumns:: |l|l|J|
  * .. _hwpe_stream_source_realign_flags:
- * .. table:: **hwpe_stream_source_realign_m1_rotation_off_by_one** output flags.
+ * .. table:: **hwpe_stream_source_realign_m4_retain_skipped_after_stall** output flags.
  *
  *   +-------------------+---------------+-----------------+
  *   | **Name**          | **Type**      | **Description** |
@@ -69,7 +69,7 @@
 
 import hwpe_stream_package::*;
 
-module hwpe_stream_source_realign_m1_rotation_off_by_one #(
+module hwpe_stream_source_realign_m4_retain_skipped_after_stall #(
   parameter int unsigned DECOUPLED  = 0, // set to 1 if used with a TCDM stream that does not respect the zero-latency assumption,
                                          // e.g. it passes through a TCDM load FIFO.
   parameter int unsigned DATA_WIDTH = 32,
@@ -110,6 +110,28 @@ module hwpe_stream_source_realign_m1_rotation_off_by_one #(
   logic int_first;
   logic int_last;
   logic int_last_packet;
+
+  // ---- mutant guard state (contract-level only) ----
+  logic [7:0] g_line_q;   // lines started since reset or clear
+  logic [7:0] g_beat_q;   // beats accepted so far in the current line
+  logic [7:0] g_stall_q;  // consecutive cycles the sink has held off
+  logic [1:0] g_rel_q;    // counts down over the cycles just after a long stall
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+    end else if (clear_i) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+    end else begin
+      if ((g_stall_q >= 8'd4) && !(pop_o.valid & ~pop_o.ready)) g_rel_q <= 2'd3;
+      else if (g_rel_q != 2'd0)                                 g_rel_q <= g_rel_q - 2'd1;
+      if (pop_o.valid & ~pop_o.ready) g_stall_q <= g_stall_q + 8'd1;
+      else                            g_stall_q <= '0;
+      if (push_i.valid & push_i.ready) begin
+        if (int_first) begin g_line_q <= g_line_q + 8'd1; g_beat_q <= 8'd1; end
+        else                 g_beat_q <= g_beat_q + 8'd1;
+      end
+    end
+  end
 
   /* clock gating */
   tc_clk_gating i_realign_gating (
@@ -282,7 +304,7 @@ module hwpe_stream_source_realign_m1_rotation_off_by_one #(
   // must be thus!!
   always_comb
   begin
-    strb_rotate_d = 1;
+    strb_rotate_d = '0;
     for (int i=0; i<DATA_WIDTH/8; i++)
       strb_rotate_d += ($clog2(DATA_WIDTH/8))'(int_strb[i]);
   end
@@ -313,7 +335,7 @@ module hwpe_stream_source_realign_m1_rotation_off_by_one #(
     else if (clear_i)
       stream_data_q <= '0;
     // last packet is kept "forever"
-    else if (~int_last_packet & push_i.valid & push_i.ready)
+    else if (~int_last_packet & push_i.valid & push_i.ready & (g_rel_q == 2'd0))
       stream_data_q <= push_i.data;
   end
   always_comb
@@ -335,4 +357,4 @@ module hwpe_stream_source_realign_m1_rotation_off_by_one #(
 
   assign flags_o.decoupled_stall = ($signed(strb_first_cnt) >= $signed(STRB_FIFO_DEPTH-4)) ? '1 : '0;
 
-endmodule // hwpe_stream_source_realign_m1_rotation_off_by_one
+endmodule // hwpe_stream_source_realign_m4_retain_skipped_after_stall

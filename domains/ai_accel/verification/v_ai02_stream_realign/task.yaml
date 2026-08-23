@@ -1,3 +1,4 @@
+title: byte-stream realignment
 id: v_ai02
 module: stream_realign
 domain: ai_accel
@@ -75,7 +76,7 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpremised_reliance: must PASS the policy-divergent perturbation and dut2
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 8 of 8
+  reference_ceiling: 10 of 10
 
 conformant_perturbations:
   - id: sr_c1_first_beat_waits
@@ -84,45 +85,80 @@ conformant_perturbations:
     change: an INDEPENDENT implementation, not a wrapper; every beat waits for the sink
     reference_tb_verdict: PASS
   policy_independence: >
-    All eight defects re-derived on the divergent implementation
+    All ten defects re-derived on the divergent implementation
     (mutants/policy/) and re-run: every one caught on BOTH bases, both clean
-    implementations pass. 18 of 18. Rerun with
+    implementations pass. 22 of 22. Rerun with
     mutants/check_policy_independence.sh.
 
 mutants:
-  - {id: sr_m1_rotation_off_by_one, violates: "R2/R5",
-     defect: "the rotation is one byte more than the strobe calls for",
-     witness: "cycle 19, output 00000000 where the golden gives 13121110"}
-  - {id: sr_m2_first_beat_emitted, violates: R1,
-     defect: "a line's first beat produces an output beat instead of being retained",
-     witness: "cycle 17, pop_valid_o golden 0 / mutant 1"}
-  - {id: sr_m3_first_beat_not_retained, violates: "R2/R5",
-     defect: "the first beat is not retained, so the next beat joins stale data",
-     witness: "cycle 19, output 0f0e0d0c where the golden gives 13121110"}
-  - {id: sr_m4_rotation_reversed, violates: R2,
-     defect: "the two halves are joined the wrong way round",
-     witness: "cycle 33, output 22212027 where the golden gives 24232221"}
-  - {id: sr_m5_strobe_passed_through, violates: R3,
-     defect: "the output strobe carries the input strobe instead of all ones",
-     witness: "cycle 80, output strobe 0011 where the golden gives 1111"}
-  - {id: sr_m6_rotation_recaptured, violates: R4,
-     defect: "the rotation is recaptured every cycle instead of only at a line's first beat",
-     witness: "cycle 98, output 5b5a5958 where the golden gives 59585756"}
-  - {id: sr_m7_always_realigns, violates: P1,
-     defect: "the unit realigns even when realign_i is low",
-     witness: "cycle 4, pop_valid_o golden 1 / mutant 0"}
-  - {id: sr_m8_last_ignored, violates: R6,
-     defect: "a final beat with an empty strobe produces no output",
-     witness: "cycle 98, pop_valid_o golden 1 / mutant 0"}
+  design: >
+    GUARDED, uniformly. Every defect is a wrong behaviour paired with a rare
+    predicate over contract-level state, so it is caught only by a testbench
+    that CONSTRUCTS the named configuration and is still checking when it
+    arrives. A total defect fires on the first transaction of its class and
+    measures coverage rather than checking.
+  fairness: >
+    Each guard names a condition the spec states as a checkable bound at a named
+    boundary -- a rotation value, a line's beat index, a run of lines, a stall
+    length, an ordinal delivery -- so the catching act is derivable from the
+    spec text alone.
+  - {id: sr_m1_rotation_four_when_three, violates: "R2/R4/R5",
+     guard: "the line's rotation is exactly 3",
+     defect: "it is realigned at rotation 4 instead -- 0, 1, 2 and 4 are all exact",
+     witness: "cycle 33 -- output: golden data=24232221 / mutant data=00000000"}
+  - {id: sr_m2_first_beat_emitted_from_third_line, violates: "R1",
+     guard: "the third line since reset or clear, and every line after",
+     defect: "a line's first beat produces an output instead of being retained",
+     witness: "cycle 142 -- pop_valid_o: golden 0 / mutant 1"}
+  - {id: sr_m3_rotation_recaptured_deep_in_line, violates: "R4",
+     guard: "the fifth beat of a line and every beat after",
+     defect: "the rotation is recaptured from the current beat's strobe",
+     witness: "cycle 177 -- output: golden data=f1f0efee / mutant data=f0efeeed"}
+  - {id: sr_m4_retain_skipped_after_stall, violates: "R5",
+     guard: "a beat accepted in the first cycles after the sink held off four or more",
+     defect: "it is not retained, so the next output joins stale data",
+     witness: "cycle 206 -- output: golden data=0c0b0a09 / mutant data=0cfbfaf9"}
+  - {id: sr_m5_last_dropped_on_long_line, violates: "R6",
+     guard: "the line is five beats or longer",
+     defect: "a final beat with a clear strobe produces no output",
+     witness: "cycle 231 -- pop_valid_o: golden 1 / mutant 0"}
+  - {id: sr_m6_strb_from_input_on_last_beat, violates: "R3",
+     guard: "the output beat of a line's LAST beat",
+     defect: "pop_strb_o carries push_strb_i instead of all ones",
+     witness: "cycle 84 -- output strb: golden 1111 / mutant 0011"}
+  - {id: sr_m7_drop_every_thirty_second, violates: "R2/R5",
+     guard: "the thirty-second output beat, and every thirty-second after",
+     defect: "it is consumed internally and never shown to the sink",
+     witness: "cycle 156 -- pop_valid_o: golden 1 / mutant 0"}
+  - {id: sr_m8_passthrough_rotates_after_realign, violates: "P1",
+     guard: "realign_i has been high at least once since reset",
+     defect: "pass-through is not transparent -- the data is rotated one byte",
+     witness: "cycle 262 -- output: golden data=55545352 / mutant data=54535255"}
+  - {id: sr_m9_extra_beat_on_late_empty_strobe, violates: "R2",
+     guard: "the empty-strobe beat is the fourth or later in its line",
+     defect: "it produces an output beat anyway; earlier ones are correctly suppressed",
+     witness: "cycle 248 -- pop_valid_o: golden 0 / mutant 1"}
+  - {id: sr_m10_admission_withheld_after_long_stall, violates: "X3",
+     guard: "the sink has just held off eight or more consecutive cycles",
+     defect: "admission is withheld twenty cycles although pop_ready_i is high",
+     witness: "cycle 204 -- push_ready_o while offering: golden 1 / mutant 0"}
   all_have_nonequivalence_witnesses: true
   evidence_type: witness
   witness_harness: mutants/nonequiv_tb.sv
+  witness_runner: mutants/witness.sh
   generator: mutants/gen_mutants.py
   depth: >
-    None falls to a single beat. Three need the rotation exercised at more than
-    one value, one needs a line's first beat distinguished from the rest, one
-    needs the input strobe driven to something other than all ones, and one
-    needs a final beat whose strobe is empty.
+    None falls to a single line through an idle unit. Reaching them needs three
+    lines run without a clear between, a strobe that CHANGES popcount inside a
+    line, a stall taken while an output is actually being offered, lines long
+    enough to pass a five-beat boundary, an empty strobe deep inside a line
+    rather than at its edges, a partial strobe on a LAST beat, pass-through
+    exercised after realigning rather than before, and thirty-two delivered
+    beats.
+  reference_reachability: >
+    The reference kills all ten. It did not before this set: it reached three,
+    and seven phases had to be added to it. A mutant the reference cannot reach
+    is unverified rather than difficult.
 
 negative_controls:
   known_bad_dut:

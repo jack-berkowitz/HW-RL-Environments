@@ -93,6 +93,55 @@ the input strobe was ever partial, whether the sink was ever stalled, whether
 pass-through was exercised, whether a line ended on an empty strobe, and whether
 each of the five rotations was driven. None counts a DUT response.
 
+## The difficulty pivot — the mutant set was rebuilt
+
+The previous set was **total**: every defect held on every transaction of its
+class, so it fired on the first one a testbench happened to drive. Catching it
+required exercising the class, not checking the clause, and a submission that
+passed the validity gate collected most of the set for free. The set was
+measuring coverage and reporting it as verification.
+
+The set is now **uniformly guarded** — ten defects, each a wrong behaviour
+paired with a rare predicate over contract-level state. `mutants/README.md`
+carries the guard for each.
+
+The reference reached **three of ten** when the guarded set was first generated.
+Seven phases were added to it rather than loosening the guards, because a mutant
+the reference cannot reach is unverified rather than difficult: three lines run
+without a clear between them, a strobe that changes popcount inside a line, a
+stall taken while an output is actually being offered, a six-beat line ending on
+an empty strobe, an empty strobe on a middle beat, a partial strobe on a last
+beat, and pass-through exercised after realigning rather than before.
+
+### L4, and the beat that is silently consumed
+
+Driving an empty strobe deep inside a line made the reference fail the GOLDEN.
+The anchor **retains** a silently consumed beat, so the next output joins
+against it; the reference had assumed the previous retained beat stays. R5
+already withheld byte-preservation from any line containing such a beat, but
+nothing said what the retained beat becomes. That is now **L4**, and both
+readings are conforming — the independently written implementation in
+`conformant/` takes the other one. What L4 does not free is the COUNT: R2 is an
+"if and only if", so no output beat is owed there under either reading, which is
+exactly what `sr_m9` violates.
+
+### An equivalent mutant, caught before it shipped
+
+A defect that ignored `clear_i` from the second clear onward turned out to be
+unobservable at this configuration: the only clear-sensitive state is the
+rotation and the retained beat, and R1 makes the next line's first beat
+overwrite both. It was replaced. A mutant nothing can detect is not difficult,
+and it would have been scored against submissions as though it were.
+
+### Step 5c earned its place again
+
+`sr_m4` passed on the policy-divergent base. That base makes every beat wait for
+the sink — the opposite choice on L1 — so the reference's stall, taken before
+the line had produced anything, left `pop_valid_o` low: nothing was offered, so
+nothing was being held off. The stall was real on the golden and imaginary on
+the other implementation. The reference now waits for output beats before
+stalling. 22 of 22.
+
 ## Watchdogs
 
 | | |

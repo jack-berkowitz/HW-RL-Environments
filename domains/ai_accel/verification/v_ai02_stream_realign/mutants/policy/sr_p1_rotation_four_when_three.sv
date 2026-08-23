@@ -47,16 +47,46 @@ module stream_realign (
                                          input logic [31:0] prev,
                                          input logic [2:0]  r);
     unique case (r)
-      3'd0:    joined = prev;
-      3'd1:    joined = {prev[23:0], cur[31:24]};
-      3'd2:    joined = {prev[15:0], cur[31:16]};
-      3'd3:    joined = {prev[7:0],  cur[31:8]};
-      default: joined = cur;
+      3'd0:    joined = cur;
+      3'd1:    joined = {cur[23:0], prev[31:24]};
+      3'd2:    joined = {cur[15:0], prev[31:16]};
+      3'd3:    joined = {cur[7:0],  prev[31:8]};
+      default: joined = prev;                     // r == 4: a whole beat
     endcase
   endfunction
 
   wire produce = realign_i ? (push_valid_i && !first_i && (last_i || (|strb_i)))
                            : push_valid_i;
+
+  // ---- mutant guard state: the SAME contract-level quantities as the golden
+  // base, recomputed from this implementation's own ports.
+  logic [7:0] g_line_q, g_beat_q, g_stall_q, g_out_q, g_hold_q;
+  logic [1:0] g_rel_q;
+  logic       g_realigned_q;
+  wire        g_deliver = produce && push_ready_o;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_out_q <= '0;
+      g_hold_q <= '0; g_rel_q <= 2'd0; g_realigned_q <= 1'b0;
+    end else begin
+      if (realign_i) g_realigned_q <= 1'b1;
+      if ((g_stall_q >= 8'd8) && !(pop_valid_o && !pop_ready_i)) g_hold_q <= 8'd20;
+      else if (g_hold_q != 8'd0)                                 g_hold_q <= g_hold_q - 8'd1;
+      if (clear_i) begin
+        g_line_q <= '0; g_beat_q <= '0; g_stall_q <= '0; g_rel_q <= 2'd0;
+      end else begin
+        if (pop_valid_o && !pop_ready_i) g_stall_q <= g_stall_q + 8'd1;
+        else                             g_stall_q <= '0;
+        if ((g_stall_q >= 8'd4) && !(pop_valid_o && !pop_ready_i)) g_rel_q <= 2'd3;
+        else if (g_rel_q != 2'd0)                                  g_rel_q <= g_rel_q - 2'd1;
+        if (g_deliver) g_out_q <= g_out_q + 8'd1;
+        if (push_valid_i && push_ready_o) begin
+          if (first_i) begin g_line_q <= g_line_q + 8'd1; g_beat_q <= 8'd1; end
+          else                g_beat_q <= g_beat_q + 8'd1;
+        end
+      end
+    end
+  end
 
   assign pop_valid_o = produce;
   // clause L2 -- the golden drives the computed value here regardless
@@ -75,7 +105,7 @@ module stream_realign (
       held_q <= '0; rot_q <= '0;
     end else if (push_valid_i && push_ready_o && realign_i) begin
       held_q <= push_data_i;                       // R2: retained for the next join
-      if (first_i) rot_q <= popcnt(strb_i);        // R4: captured at the first beat only
+      if (first_i) rot_q <= (popcnt(strb_i) == 3'd3) ? 3'd4 : popcnt(strb_i);
     end
   end
 endmodule
