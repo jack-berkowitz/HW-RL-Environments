@@ -1,0 +1,21 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "8/8",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "7aed2d85624df2afcda3e1018684086ef2b69bad-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "reference",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "candidates/v_nw04/reference.sv",
+  "submission_sha256_16": "afa528f75b637d37",
+  "task": "v_nw04_ptp_clock",
+  "task_text_hash": "2710760e901b956e",
+  "timestamp_utc": "2026-08-22T00:04:52Z"
+}

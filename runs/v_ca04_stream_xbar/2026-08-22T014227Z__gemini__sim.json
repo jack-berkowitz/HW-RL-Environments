@@ -1,0 +1,12 @@
+{
+  "build_error": "does not declare module route_xbar_tb",
+  "build_status": "wrong_module_name",
+  "git_sha": "9f427b895c5f911b23ee83b8657b1c6e192f891a-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/v_ca04/gemini.sv",
+  "submission_sha256_16": "e3b0c44298fc1c14",
+  "task": "v_ca04_stream_xbar",
+  "task_text_hash": "dfb3e3cc5ede6b62",
+  "timestamp_utc": "2026-08-22T01:42:27Z"
+}

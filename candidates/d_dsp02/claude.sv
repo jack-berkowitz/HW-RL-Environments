@@ -35,6 +35,15 @@
 // is what `esc` does. Dropping that compensation gives the right mantissa with
 // the wrong exponent on roughly a quarter of random vectors.
 //
+// A9, the datapath bound. The widest significand signal in this module is the
+// 80-bit alignment accumulator (ACC_W): the 48-bit exact product placed with 4
+// guard positions below it, the addend aligned above it with saturation, and
+// one carry bit -- 3*p + 8, which is the "3p plus guard, round and sticky"
+// shape A9 sanctions and well inside its 4*p = 96 ceiling. Alignment shifts
+// SATURATE rather than widening the accumulator: everything below the window
+// collapses into the sticky bit, which is exactly what A9 permits. Nothing
+// here scales with the operand exponents, so no input can widen the datapath.
+//
 // A6 is implemented as written, not as IEEE 7.5 states it: underflow is
 // inexactness AND a delivered biased exponent field of zero. That is read off
 // the packed result, after rounding and after the overflow substitution, so the
@@ -75,7 +84,6 @@ module fp32_fma_ii1 (
   localparam int PW2   = 48;          // exact product
   localparam int ACC_W = 80;          // alignment accumulator
   localparam int L_MAX = 55;          // left-align saturation
-  localparam int NORMW = 88;          // padded, for variable extracts
   localparam int BIAS  = 127;
 
   localparam logic [31:0] QNAN   = 32'h7FC00000;
@@ -376,14 +384,13 @@ module fp32_fma_ii1 (
   // Stage 4 : round once, pack, flags  (combinational from the stage-3 registers)
   // ---------------------------------------------------------------------------
   always_comb begin
-    logic [NORMW-1:0]   normw, shf, mask;
+    logic [ACC_W-1:0]   mask;
     logic [31:0]        sig_r, sigp, res_n;
     logic               gbit, stk, ru, carry, res_sub, want_inf;
     logic signed [15:0] shr_full, qexp, qf, bexp;
     int                 shr, ts;
     logic               ovf, nxf;
 
-    normw    = {{(NORMW-ACC_W){1'b0}}, r3_norm};
     shr_full = 16'sd1 - 16'sd127 - r3_exp;           // emin - exp
 
     if (shr_full <= 16'sd0)              shr = 0;
@@ -391,12 +398,14 @@ module fp32_fma_ii1 (
     else                                 shr = int'(shr_full);
     qexp = (shr_full > 16'sd0) ? (16'sd1 - 16'sd127) : r3_exp;
 
-    ts   = (ACC_W - PW) + shr;           // 56 .. 82
-    shf  = normw >> ts;
-    sig_r = shf[31:0];
-    gbit  = normw[ts-1];
-    mask  = {NORMW{1'b1}} << (ts-1);
-    stk   = (|(normw & ~mask)) | r3_stky;
+    // ts runs 56..82 against an 80-bit accumulator. A shift past the top
+    // yields zero on its own; only the round-bit select needs a guard, and
+    // above the MSB that bit is zero because r3_norm is normalised.
+    ts    = (ACC_W - PW) + shr;
+    sig_r = 32'(r3_norm >> ts);
+    gbit  = ((ts-1) < ACC_W) ? r3_norm[ts-1] : 1'b0;
+    mask  = {ACC_W{1'b1}} << (ts-1);
+    stk   = (|(r3_norm & ~mask)) | r3_stky;
 
     ru    = rup_f(r3_rnd, r3_sr, sig_r[0], gbit, stk);
     sigp  = sig_r + {31'b0, ru};

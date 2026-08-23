@@ -142,6 +142,21 @@ is normative.
 // -----------------------------------------------------------------------------
 // CAPABILITY AND LIVENESS -- what this task measures
 // -----------------------------------------------------------------------------
+//   B1. OUTPUT BUFFERING IS BOUNDED. A design may hold **at most 2 frames
+//       per output**, that is 16 beats given R6's 8-beat frame cap. Storage
+//       beyond that is NON-CONFORMING.
+//
+//       WHY 2 FRAMES. L2 deliberately permits store-and-forward, which needs
+//       one frame arriving while another drains -- two frames in flight per
+//       output is the architectural requirement of the design style the spec
+//       allows. It is derived from that, not from any implementation.
+//
+//       WHY THE CEILING IS NEEDED AT ALL. L2 leaves buffering free, and
+//       throughput is reported. Deeper queues absorb more burstiness and read
+//       as better throughput, with the area charged to nothing -- a benefit
+//       with no stated cost. A switch SWITCHES; anything needing deeper
+//       queueing belongs on the other side of the port.
+//
 //   C1. DISJOINT PAIRS PROCEED IN PARALLEL. With every input backlogged to a
 //       DIFFERENT output and every output continuously ready, the switch
 //       sustains an aggregate delivery rate of at least 2 beats per cycle.

@@ -1,0 +1,212 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 8,
+  "configs_total": 8,
+  "coverage": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "1076 1130"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "1076 1130"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "1209 1254"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "1209 1254"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "701 758 724 693"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "701 758 724 693"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "1012 1058 1000 996"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "1012 1058 1000 996"
+    }
+  },
+  "git_sha": "af92c787e7a3094da6af9830f5b1072dd188d619-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "metrics": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "9925",
+      "beats_cycles": "7624",
+      "beats_delivered": "9925",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "986",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "16",
+      "frames": "see fields",
+      "frames_total": "2206",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "9925",
+      "beats_cycles": "7624",
+      "beats_delivered": "9925",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "986",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "16",
+      "frames": "see fields",
+      "frames_total": "2206",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "11090",
+      "beats_cycles": "7893",
+      "beats_delivered": "11090",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "986",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2463",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "11090",
+      "beats_cycles": "7893",
+      "beats_delivered": "11090",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "986",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2463",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "12944",
+      "beats_cycles": "7686",
+      "beats_delivered": "12944",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1202",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2876",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "12944",
+      "beats_cycles": "7686",
+      "beats_delivered": "12944",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1202",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "24",
+      "frames": "see fields",
+      "frames_total": "2876",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "beats": "see fields",
+      "beats_accepted": "18302",
+      "beats_cycles": "7958",
+      "beats_delivered": "18302",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1967",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "41",
+      "frames": "see fields",
+      "frames_total": "4066",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "beats": "see fields",
+      "beats_accepted": "18302",
+      "beats_cycles": "7958",
+      "beats_delivered": "18302",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1967",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "41",
+      "frames": "see fields",
+      "frames_total": "4066",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "54"
+    }
+  },
+  "per_config": [
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "candidates/d_nw03/gemini.sv",
+  "submission_sha256_16": "ba2097774949a816",
+  "task": "d_nw03_axis_switch_oq",
+  "task_text_hash": "b02da2223907630b",
+  "timestamp_utc": "2026-08-23T05:29:00Z"
+}

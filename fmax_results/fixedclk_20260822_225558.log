@@ -1,0 +1,10 @@
+22:55:58 === FIXED-CLOCK PPA START ===
+22:55:58 BUILD d_ca01/reference at 10.0 ns
+22:55:58 SKIP d_ca01/chat at 10.0 (already built)
+22:55:59 SKIP d_ca01/claude at 10.0 (already built)
+22:55:59 BUILD d_ca01/gemini at 10.0 ns
+22:55:59 BUILD d_nw01/reference at 9.0 ns
+22:56:00 BUILD d_nw01/chat at 9.0 ns
+22:56:00 BUILD d_nw01/claude at 9.0 ns
+22:56:00 SKIP d_ca04/claude -- correctness gate: stale
+22:56:00 === FIXED-CLOCK PPA DONE ===

@@ -1,0 +1,12 @@
+23:08:34 === PART 2 START ===
+23:08:34 SWEEP d_nw03 reference (seed 4.0ns)
+23:08:34 SWEEP d_nw03_cand_chat (seed 4.0ns)
+23:08:34 SWEEP d_nw03_cand_gemini (seed 4.0ns)
+23:08:34 SWEEP d_dsp03 reference (seed 12.0ns)
+23:08:34 SKIP sweep d_dsp03_cand_chat -- correctness gate: stale
+23:08:34 SKIP sweep d_nw01_cand_claude -- correctness gate: no
+23:08:34 --- common-clock builds ---
+23:08:34 SKIP build d_nw01/reference at 9.0000 (already measured)
+23:08:34 SKIP build d_nw01/chat at 9.0000 (already measured)
+23:08:34 SKIP build d_nw01/claude -- correctness gate: no
+23:08:34 === PART 2 DONE ===

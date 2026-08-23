@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/1",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "1d3b69b0fde0c3e877b2ac199ac0be094032bbde-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "ref_after_p2fix",
+  "second_dut_accepted": "FAIL",
+  "status": "rejected",
+  "submission": "domains/ai_accel/verification/v_ai02_stream_realign/tb/stream_realign_tb.sv",
+  "submission_sha256_16": "fa75fd7933d4f8a5",
+  "task": "v_ai02_stream_realign",
+  "task_text_hash": "62897da2fb4acd4d",
+  "timestamp_utc": "2026-08-22T19:46:02Z"
+}

@@ -1,5 +1,5 @@
 // =============================================================================
-// async_fifo_cdc.sv  --  Asynchronous CDC FIFO Implementation
+// async_fifo_cdc_iface.sv  --  IMPLEMENTATION
 // =============================================================================
 
 module async_fifo_cdc #(
@@ -23,65 +23,40 @@ module async_fifo_cdc #(
 );
 
     // -------------------------------------------------------------------------
-    // Memory Storage
+    // LOCAL PARAMETERS & STORAGE
     // -------------------------------------------------------------------------
-    logic [DATA_W-1:0] mem [0:(1<<LOG_DEPTH)-1];
+    localparam int DEPTH = 1 << LOG_DEPTH;
+    localparam int PTR_W = LOG_DEPTH + 1;
+
+    // Dual-port memory (infers as distributed LUTRAM for these depths)
+    logic [DATA_W-1:0] mem [DEPTH];
 
     // -------------------------------------------------------------------------
-    // Internal Signals
+    // WRITE DOMAIN
     // -------------------------------------------------------------------------
-    // Write domain
-    logic [LOG_DEPTH:0] wr_ptr_bin;
-    logic [LOG_DEPTH:0] wr_ptr_gray;
-    logic [LOG_DEPTH:0] wr_ptr_bin_next;
-    logic [LOG_DEPTH:0] wr_ptr_gray_next;
-    logic               wr_en;
-    logic               wr_full;
+    logic [PTR_W-1:0] wr_ptr_bin;
+    logic [PTR_W-1:0] wr_ptr_gray;
+    logic [PTR_W-1:0] rd_ptr_gray_sync [SYNC_STAGES];
 
-    // Read domain
-    logic [LOG_DEPTH:0] rd_ptr_bin;
-    logic [LOG_DEPTH:0] rd_ptr_gray;
-    logic [LOG_DEPTH:0] rd_ptr_bin_next;
-    logic [LOG_DEPTH:0] rd_ptr_gray_next;
-    logic               rd_en;
-    logic               rd_empty;
-
-    // Synchronizer chains (configurable depth SYNC_STAGES)
-    logic [LOG_DEPTH:0] rd_ptr_gray_sync [0:SYNC_STAGES-1];
-    logic [LOG_DEPTH:0] wr_ptr_gray_sync [0:SYNC_STAGES-1];
-
-    // -------------------------------------------------------------------------
-    // Write Domain Logic
-    // -------------------------------------------------------------------------
-    assign wr_en = wr_valid && wr_ready;
-
-    assign wr_ptr_bin_next  = wr_ptr_bin + (wr_en ? 1'b1 : 1'b0);
-    assign wr_ptr_gray_next = (wr_ptr_bin_next >> 1) ^ wr_ptr_bin_next;
+    // Advance write pointer on successful handshake
+    wire [PTR_W-1:0] wr_ptr_bin_next  = wr_ptr_bin + (wr_valid & wr_ready);
+    
+    // Binary to Gray conversion
+    wire [PTR_W-1:0] wr_ptr_gray_next = wr_ptr_bin_next ^ (wr_ptr_bin_next >> 1);
 
     always_ff @(posedge wr_clk or negedge wr_rst_n) begin
         if (!wr_rst_n) begin
             wr_ptr_bin  <= '0;
             wr_ptr_gray <= '0;
-        end else begin
-            wr_ptr_bin  <= wr_ptr_bin_next;
-            wr_ptr_gray <= wr_ptr_gray_next;
-        end
-    end
-
-    // Memory write
-    always_ff @(posedge wr_clk) begin
-        if (wr_en) begin
-            mem[wr_ptr_bin[LOG_DEPTH-1:0]] <= wr_data;
-        end
-    end
-
-    // Synchronize read pointer (Gray code) into write clock domain
-    always_ff @(posedge wr_clk or negedge wr_rst_n) begin
-        if (!wr_rst_n) begin
             for (int i = 0; i < SYNC_STAGES; i++) begin
                 rd_ptr_gray_sync[i] <= '0;
             end
         end else begin
+            // Update pointers
+            wr_ptr_bin  <= wr_ptr_bin_next;
+            wr_ptr_gray <= wr_ptr_gray_next;
+            
+            // Synchronize read pointer into write domain
             rd_ptr_gray_sync[0] <= rd_ptr_gray;
             for (int i = 1; i < SYNC_STAGES; i++) begin
                 rd_ptr_gray_sync[i] <= rd_ptr_gray_sync[i-1];
@@ -89,38 +64,48 @@ module async_fifo_cdc #(
         end
     end
 
-    // Full condition: Top 2 MSBs inverted, remaining bits identical
-    assign wr_full  = (wr_ptr_gray == {~rd_ptr_gray_sync[SYNC_STAGES-1][LOG_DEPTH:LOG_DEPTH-1],
-                                        rd_ptr_gray_sync[SYNC_STAGES-1][LOG_DEPTH-2:0]});
+    // Full condition: 
+    // True when the write Gray pointer has caught up to the read Gray pointer from behind.
+    // In Gray code, this means the top two bits are inverted, and the remaining bits match.
+    wire [PTR_W-1:0] synced_rd_ptr_gray = rd_ptr_gray_sync[SYNC_STAGES-1];
+    wire wr_full = (wr_ptr_gray == {~synced_rd_ptr_gray[PTR_W-1:PTR_W-2], 
+                                     synced_rd_ptr_gray[PTR_W-3:0]});
     
-    // H1: wr_ready has no combinational dependency on wr_valid
-    assign wr_ready = !wr_full && wr_rst_n;
+    // Satisfies H1: wr_ready only combinationally depends on synced pointers
+    assign wr_ready = ~wr_full;
+
+    always_ff @(posedge wr_clk) begin
+        if (wr_valid & wr_ready) begin
+            mem[wr_ptr_bin[LOG_DEPTH-1:0]] <= wr_data;
+        end
+    end
 
     // -------------------------------------------------------------------------
-    // Read Domain Logic
+    // READ DOMAIN
     // -------------------------------------------------------------------------
-    assign rd_en = rd_valid && rd_ready;
+    logic [PTR_W-1:0] rd_ptr_bin;
+    logic [PTR_W-1:0] rd_ptr_gray;
+    logic [PTR_W-1:0] wr_ptr_gray_sync [SYNC_STAGES];
 
-    assign rd_ptr_bin_next  = rd_ptr_bin + (rd_en ? 1'b1 : 1'b0);
-    assign rd_ptr_gray_next = (rd_ptr_bin_next >> 1) ^ rd_ptr_bin_next;
+    // Advance read pointer on successful handshake
+    wire [PTR_W-1:0] rd_ptr_bin_next  = rd_ptr_bin + (rd_valid & rd_ready);
+    
+    // Binary to Gray conversion
+    wire [PTR_W-1:0] rd_ptr_gray_next = rd_ptr_bin_next ^ (rd_ptr_bin_next >> 1);
 
     always_ff @(posedge rd_clk or negedge rd_rst_n) begin
         if (!rd_rst_n) begin
             rd_ptr_bin  <= '0;
             rd_ptr_gray <= '0;
-        end else begin
-            rd_ptr_bin  <= rd_ptr_bin_next;
-            rd_ptr_gray <= rd_ptr_gray_next;
-        end
-    end
-
-    // Synchronize write pointer (Gray code) into read clock domain
-    always_ff @(posedge rd_clk or negedge rd_rst_n) begin
-        if (!rd_rst_n) begin
             for (int i = 0; i < SYNC_STAGES; i++) begin
                 wr_ptr_gray_sync[i] <= '0;
             end
         end else begin
+            // Update pointers
+            rd_ptr_bin  <= rd_ptr_bin_next;
+            rd_ptr_gray <= rd_ptr_gray_next;
+            
+            // Synchronize write pointer into read domain
             wr_ptr_gray_sync[0] <= wr_ptr_gray;
             for (int i = 1; i < SYNC_STAGES; i++) begin
                 wr_ptr_gray_sync[i] <= wr_ptr_gray_sync[i-1];
@@ -128,12 +113,17 @@ module async_fifo_cdc #(
         end
     end
 
-    assign rd_empty = (rd_ptr_gray == wr_ptr_gray_sync[SYNC_STAGES-1]);
+    // Empty condition:
+    // True when the read Gray pointer exactly matches the synchronized write Gray pointer.
+    wire [PTR_W-1:0] synced_wr_ptr_gray = wr_ptr_gray_sync[SYNC_STAGES-1];
+    wire rd_empty = (rd_ptr_gray == synced_wr_ptr_gray);
+    
+    // Satisfies H1: rd_valid only combinationally depends on synced pointers
+    assign rd_valid = ~rd_empty;
 
-    // H1 & R5: rd_valid has no combinational dependency on rd_ready and forces 0 during reset
-    assign rd_valid = !rd_empty && rd_rst_n;
-
-    // Direct asynchronous read output (H3: remains stable while backpressured since rd_ptr_bin holds)
-    assign rd_data  = mem[rd_ptr_bin[LOG_DEPTH-1:0]];
+    // Asynchronous read assignment mapping out from dual-port memory.
+    // Satisfies H3: rd_ptr_bin won't increment unless read is accepted (rd_valid & rd_ready),
+    // therefore rd_data guarantees stability across cycles while waiting for rd_ready.
+    assign rd_data = mem[rd_ptr_bin[LOG_DEPTH-1:0]];
 
 endmodule

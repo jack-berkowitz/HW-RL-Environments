@@ -259,6 +259,32 @@
 // -----------------------------------------------------------------------------
 // HANDSHAKE
 // -----------------------------------------------------------------------------
+//   A9. "AS IF UNBOUNDED" IS A STATEMENT ABOUT THE RESULT, NOT A DATAPATH
+//       WIDTH. The exact value of a*b + c must be rounded ONCE; it does NOT
+//       have to be CARRIED in hardware.
+//
+//       BOUND: the internal significand datapath **shall not exceed 96 bits**
+//       (4*p, where p = 24 is binary32's significand precision including the
+//       implicit bit). Information below that window is collapsed into a
+//       sticky bit. A wider datapath is NON-CONFORMING.
+//
+//       WHY 4*p AND NOT TIGHTER. Correct single rounding needs the 48-bit
+//       product, the addend aligned against it, and room below for full
+//       cancellation; roughly 3*p plus guard, round and sticky suffices. 4*p
+//       is deliberately GENEROUS so no correct implementation is excluded by a
+//       bound chosen to be clever, and it was set from that argument rather
+//       than from any implementation. For reference only, and consulted AFTER
+//       the number was fixed: the three submissions to this task use 32, 48
+//       and 76 bits, so none is affected.
+//
+//       WHY THE CLAUSE EXISTS. On the sibling multi-format task a submission
+//       read the same IEEE phrase as an instruction to build an unbounded
+//       datapath -- 448 bits, five registers of that width, and a 448-iteration
+//       linear leading-one search. Arithmetically correct, passed every vector,
+//       and measured about 14,700,000 um2. A specification that names an
+//       exactness requirement and bounds none of the resources delivering it
+//       makes unlimited spending conforming.
+//
 //   H1. `in_ready` MUST NOT depend combinationally on `in_valid`.
 //   H2. Once `in_valid` is asserted the producer holds it, and holds the
 //       operands stable, until accepted. The checker honours this.

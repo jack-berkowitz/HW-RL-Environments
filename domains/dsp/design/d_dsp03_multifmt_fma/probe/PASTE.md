@@ -260,6 +260,37 @@ exact port list below. No package, no include, nothing outside the file.
 // -----------------------------------------------------------------------------
 // HANDSHAKE AND PROGRESS -- normative
 // -----------------------------------------------------------------------------
+//   A8. "AS IF UNBOUNDED" IS A STATEMENT ABOUT THE RESULT, NOT A DATAPATH
+//       WIDTH. A1 requires the exact value of a*b + c rounded ONCE. It does
+//       NOT require that the exact value be carried in hardware.
+//
+//       BOUND: the internal significand datapath **shall not exceed 4*p bits**
+//       for the format in use, where p is that format's significand precision
+//       INCLUDING the implicit bit -- 96 bits at FP32 (p=24), 44 at FP16
+//       (p=11), 32 at BF16 (p=8). Information below that window is collapsed
+//       into a sticky bit. A wider datapath is NON-CONFORMING.
+//
+//       WHY 4*p AND NOT TIGHTER. Correct single-rounding needs the 2*p-bit
+//       product, the addend aligned against it, and enough room below for
+//       full cancellation; the classical result is that roughly 3*p bits plus
+//       guard, round and sticky suffice. 4*p is deliberately GENEROUS so that
+//       no correct implementation is excluded by a bound chosen to be clever.
+//       It is not fitted to any implementation, and no reference was consulted
+//       to set it.
+//
+//       WHY THE CLAUSE EXISTS. A submission read "as if with unbounded range
+//       and precision" as an instruction to build an unbounded datapath: 448
+//       bits wide, five registers of that width, and a 448-iteration linear
+//       leading-one search over the sum. It is ARITHMETICALLY CORRECT and
+//       passes every vector. It measures about 14,700,000 um2, some 245x the
+//       area of a single-format FMA of the same arithmetic. The specification
+//       named an exactness requirement and bounded none of the resources that
+//       deliver it, so an answer that spent without limit was conforming.
+//
+//       The sentence quoted in A1 is IEEE 754's description of the VALUE the
+//       operation must produce. A datapath is not required to hold that value;
+//       it is required to round as though it had.
+//
 //   H1. An operation transfers on a rising edge where `in_valid_i` and
 //       `in_ready_o` are both high. Once `in_valid_i` is asserted it stays
 //       asserted with the payload stable until the transfer completes. A result

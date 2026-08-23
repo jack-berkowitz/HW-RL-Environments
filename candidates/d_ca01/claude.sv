@@ -1,52 +1,35 @@
 // =============================================================================
-// nonblocking_dcache
+// nonblocking_dcache.sv
 //
 // Set-associative, write-back, write-allocate data cache that keeps accepting
 // requests while misses are outstanding.
 //
-// STRUCTURE (L2 leaves this free; this is one choice, not a required one)
+// Structure
+// ---------
+//   * One in-order lookup stage (S1) owns every access to the tag and data
+//     arrays.  Because all array traffic is serialised there in acceptance
+//     order, R5 (same-address ordering) holds by construction.
+//   * A miss file of MAX_MISSES entries records misses whose data has not yet
+//     arrived: line address, id, op, word index, and one word of merged store
+//     data with its byte mask (C4).  S1 keeps accepting -- and answering --
+//     hits underneath them (C1, C2).
+//   * One memory engine services the miss file in round-robin order, one
+//     transaction at a time (M3): optional writeback of the victim, then the
+//     fill.  Writeback beats stream straight out of the data array and fill
+//     beats stream straight into it, so NO block-data buffer exists anywhere
+//     outside the arrays -- comfortably inside the two-line ceiling of C4.
+//   * Two response slots (one for hits, one for the completing fill) with an
+//     alternating arbiter, so a ready response is never held behind one that
+//     is not (R4) and neither source can starve the other (C3).
 //
-//   * MSHR file, MAX_MISSES entries. Each entry owns one block address, a
-//     BLOCK_WORDS fill buffer, a dirty flag, and a count of pending requests
-//     bound to it. A miss to a line already covered by an entry MERGES into it,
-//     so at most one entry per line exists at any time.
-//
-//   * Pending request FIFO, 2*MAX_MISSES entries, drained in order. Each entry
-//     names the MSHR it waits on. The head drains when its MSHR has its data.
-//
-//   * FILL DATA LANDS IN THE MSHR BUFFER, NOT THE ARRAY. Pending requests are
-//     served out of that buffer; the line is installed into the array only once
-//     the MSHR's pending count reaches zero. No way is reserved at allocation
-//     time, so MAX_MISSES misses can be outstanding no matter how they map onto
-//     sets -- capacity is bounded by C1's parameter and by nothing else.
-//
-//   * Hits bypass the FIFO entirely and are answered from the array (C2).
-//
-// KEY INVARIANTS
-//
-//   R5 (same-address order). A line covered by a live MSHR NEVER reports a hit,
-//   so every request to such a line enters the FIFO behind the earlier ones and
-//   the FIFO's in-order drain orders them. Conversely a hit implies no queued
-//   request to that word exists. The two paths therefore cannot race.
-//
-//   Writeback-before-refill. The victim is chosen at install time, its data is
-//   captured into a single global writeback slot, and the way is overwritten in
-//   the same cycle -- so the evicted line reads as absent from that instant on.
-//   Only one writeback may be in flight (an install needing a second one waits),
-//   and a pending writeback takes strict priority over every fill in the memory
-//   arbiter. An MSHR for the evicted line can only be allocated after the
-//   install, hence strictly after the writeback was already pending, hence its
-//   fill is ordered behind that writeback. Stale refill is therefore impossible.
-//
-//   Forward progress (C3). req_ready_o is withheld only while the response slot
-//   is occupied, the FIFO is full, or the MSHR file is full. All three clear
-//   without any further requests being accepted: memory eventually responds, the
-//   FIFO drains one entry per cycle, and drained entries free their MSHRs.
-//   Fill arbitration is rotating, so no MSHR is starved by a busier neighbour.
-//
-// L1 replacement: invalid way first, else per-set round robin.
-// L4 store misses allocate. L3 fills are strictly ascending (M1).
-// P1 valid bits are cleared on reset -- conformant, though not required.
+// Ordering hazards are handled by three rules:
+//   1. S1 does not allocate a second miss for a line that already has one; it
+//      waits instead, so a line can never be resident twice.
+//   2. The victim is invalidated when its service starts, so a fill in
+//      progress can never be hit, and the request that lost the line simply
+//      misses and allocates.
+//   3. The memory engine has priority over an S1 store that is hitting the
+//      exact way it is about to evict; S1 retries the next cycle.
 // =============================================================================
 
 module nonblocking_dcache #(
@@ -90,396 +73,349 @@ module nonblocking_dcache #(
   output logic [DATA_W-1:0]        mem_wr_data_o
 );
 
-  // ---------------------------------------------------------------- geometry
+  // ---------------------------------------------------------------------------
+  // Geometry.  BLOCK_WORDS is fixed at 4 by the contract.
+  // ---------------------------------------------------------------------------
   localparam int unsigned BLOCK_WORDS = 4;
 
-  localparam int unsigned WBYTES = DATA_W / 8;          // 4 or 8
-  localparam int unsigned BOFF_W = $clog2(WBYTES);      // byte offset in word
-  localparam int unsigned WOFF_W = $clog2(BLOCK_WORDS); // word offset in block
-  localparam int unsigned SET_W  = $clog2(SETS);
-  localparam int unsigned LOFF_W = BOFF_W + WOFF_W;     // byte offset in block
-  localparam int unsigned TAG_W  = 32 - LOFF_W - SET_W;
-  localparam int unsigned WAY_W  = $clog2(WAYS);
+  localparam int unsigned BW_LOG  = 2;                  // $clog2(BLOCK_WORDS)
+  localparam int unsigned BYTES_W = DATA_W / 8;
+  localparam int unsigned BOFF_W  = (DATA_W == 32) ? 2 : 3;
+  localparam int unsigned IDX_W   = (SETS == 8) ? 3 : 4;
+  localparam int unsigned WAY_W   = (WAYS == 2) ? 1 : 2;
+  localparam int unsigned MSH_W   = (MAX_MISSES == 2) ? 1 : 3;
 
-  localparam int unsigned NMS   = MAX_MISSES;
-  localparam int unsigned MS_W  = $clog2(NMS);
-  localparam int unsigned PN    = 2 * MAX_MISSES;       // pending FIFO depth
-  localparam int unsigned PW    = $clog2(PN);
-  localparam int unsigned CNT_W = PW + 1;
+  localparam int unsigned OFF_LSB = BOFF_W;             // word-in-block field
+  localparam int unsigned IDX_LSB = BOFF_W + BW_LOG;    // set field
+  localparam int unsigned TAG_LSB = IDX_LSB + IDX_W;    // tag field
+  localparam int unsigned TAG_W   = 32 - TAG_LSB;
+  localparam int unsigned LAD_W   = 32 - IDX_LSB;       // {tag, set} = line addr
 
-  // MSHR state
-  localparam logic [1:0] S_FILLW   = 2'd0;  // waiting for its turn at memory
-  localparam logic [1:0] S_FILLING = 2'd1;  // fill beats arriving
-  localparam logic [1:0] S_SERVE   = 2'd2;  // data resident in the MSHR buffer
+  // unit increments, sized to their counters
+  localparam logic [WAY_W-1:0]  WAY_ONE  = {{(WAY_W-1){1'b0}}, 1'b1};
+  localparam logic [MSH_W-1:0]  MSH_ONE  = {{(MSH_W-1){1'b0}}, 1'b1};
+  localparam logic [BW_LOG-1:0] BEAT_ONE = {{(BW_LOG-1){1'b0}}, 1'b1};
+  localparam logic [BW_LOG-1:0] BEAT_LAST= BW_LOG'(BLOCK_WORDS - 1);
 
-  // memory port state
-  localparam logic [2:0] M_IDLE = 3'd0;
-  localparam logic [2:0] M_FREQ = 3'd1;
-  localparam logic [2:0] M_FDAT = 3'd2;
-  localparam logic [2:0] M_WREQ = 3'd3;
-  localparam logic [2:0] M_WDAT = 3'd4;
+  // memory engine states
+  localparam logic [2:0] ST_IDLE  = 3'd0;
+  localparam logic [2:0] ST_WBREQ = 3'd1;
+  localparam logic [2:0] ST_WBDAT = 3'd2;
+  localparam logic [2:0] ST_FLREQ = 3'd3;
+  localparam logic [2:0] ST_FLDAT = 3'd4;
+  localparam logic [2:0] ST_DONE  = 3'd5;
 
-  // ------------------------------------------------------------- byte merge
-  function automatic logic [DATA_W-1:0] merge_bytes(
-      input logic [DATA_W-1:0] old_w,
-      input logic [DATA_W-1:0] new_w,
-      input logic [WBYTES-1:0] be
-  );
-    logic [DATA_W-1:0] r;
-    r = old_w;
-    for (int unsigned b = 0; b < WBYTES; b++) begin
-      if (be[b]) r[b*8 +: 8] = new_w[b*8 +: 8];
-    end
-    return r;
-  endfunction
-
-  // ---------------------------------------------------------------- storage
+  // ---------------------------------------------------------------------------
+  // Arrays
+  // ---------------------------------------------------------------------------
   logic [TAG_W-1:0]  tag_q [SETS][WAYS];
-  logic              vld_q [SETS][WAYS];
+  logic              val_q [SETS][WAYS];
   logic              drt_q [SETS][WAYS];
   logic [DATA_W-1:0] dat_q [SETS][WAYS][BLOCK_WORDS];
-  logic [WAY_W-1:0]  rrw_q [SETS];
+  logic [WAY_W-1:0]  vic_q [SETS];                      // round-robin victim (L1)
 
-  // ------------------------------------------------------------------ MSHRs
-  logic              ms_vld  [NMS];
-  logic [1:0]        ms_st   [NMS];
-  logic [31:0]       ms_line [NMS];
-  logic              ms_drt  [NMS];
-  logic [DATA_W-1:0] ms_buf  [NMS][BLOCK_WORDS];
-  logic [CNT_W-1:0]  ms_cnt  [NMS];
+  // ---------------------------------------------------------------------------
+  // Miss file (L2 leaves the structure free; this is a small register file)
+  // ---------------------------------------------------------------------------
+  logic               m_val  [MAX_MISSES];
+  logic [LAD_W-1:0]   m_lad  [MAX_MISSES];
+  logic [3:0]         m_id   [MAX_MISSES];
+  logic               m_op   [MAX_MISSES];
+  logic [BW_LOG-1:0]  m_woff [MAX_MISSES];
+  logic [DATA_W-1:0]  m_data [MAX_MISSES];              // one word only (C4)
+  logic [BYTES_W-1:0] m_mask [MAX_MISSES];
 
-  // ---------------------------------------------------------- pending FIFO
-  logic [3:0]        pq_id   [PN];
-  logic              pq_op   [PN];
-  logic [WOFF_W-1:0] pq_word [PN];
-  logic [DATA_W-1:0] pq_data [PN];
-  logic [WBYTES-1:0] pq_mask [PN];
-  logic [MS_W-1:0]   pq_ms   [PN];
-  logic [PW-1:0]     pq_head;
-  logic [PW-1:0]     pq_tail;
-  logic [CNT_W-1:0]  pq_cnt;
+  // ---------------------------------------------------------------------------
+  // Lookup stage
+  // ---------------------------------------------------------------------------
+  logic               s1_v;
+  logic [3:0]         s1_id;
+  logic               s1_op;
+  logic [31:0]        s1_addr;
+  logic [DATA_W-1:0]  s1_data;
+  logic [BYTES_W-1:0] s1_mask;
 
-  // ------------------------------------------------------------ memory port
-  logic [2:0]        mst;
-  logic [MS_W-1:0]   msel;
-  logic [WOFF_W-1:0] beat;
-  logic [31:0]       mreq_addr;
-  logic              mreq_we;
-  logic [MS_W-1:0]   rr_ms;
-  logic              wb_pend;
-  logic [31:0]       wb_addr;
-  logic [DATA_W-1:0] wb_buf [BLOCK_WORDS];
+  logic [IDX_W-1:0]   s1_set;
+  logic [TAG_W-1:0]   s1_tag;
+  logic [BW_LOG-1:0]  s1_woff;
+  logic [LAD_W-1:0]   s1_lad;
 
-  // ------------------------------------------------------- request decoding
-  logic [SET_W-1:0]  rq_set;
-  logic [TAG_W-1:0]  rq_tag;
-  logic [WOFF_W-1:0] rq_word;
-  logic [31:0]       rq_line;
+  assign s1_set  = s1_addr[IDX_LSB +: IDX_W];
+  assign s1_tag  = s1_addr[TAG_LSB +: TAG_W];
+  assign s1_woff = s1_addr[OFF_LSB +: BW_LOG];
+  assign s1_lad  = s1_addr[IDX_LSB +: LAD_W];
 
-  assign rq_set  = req_addr_i[LOFF_W +: SET_W];
-  assign rq_tag  = req_addr_i[LOFF_W + SET_W +: TAG_W];
-  assign rq_word = req_addr_i[BOFF_W +: WOFF_W];
-  assign rq_line = {req_addr_i[31:LOFF_W], {LOFF_W{1'b0}}};
-
-  logic             hit_v;
-  logic [WAY_W-1:0] hit_w;
+  logic             s1_hit;
+  logic [WAY_W-1:0] s1_way;
 
   always_comb begin
-    hit_v = 1'b0;
-    hit_w = '0;
-    for (int unsigned w = 0; w < WAYS; w++) begin
-      if (vld_q[rq_set][w] && (tag_q[rq_set][w] == rq_tag)) begin
-        hit_v = 1'b1;
-        hit_w = WAY_W'(w);
+    int w;
+    s1_hit = 1'b0;
+    s1_way = '0;
+    for (w = 0; w < int'(WAYS); w++) begin
+      if (val_q[s1_set][w] && (tag_q[s1_set][w] == s1_tag)) begin
+        s1_hit = 1'b1;
+        s1_way = WAY_W'(unsigned'(w));
       end
     end
   end
 
-  logic            ms_match;
-  logic [MS_W-1:0] ms_match_i;
-  logic            ms_freev;
-  logic [MS_W-1:0] ms_free_i;
+  // miss-file occupancy as seen by the lookup stage
+  logic             ms_conflict;   // this line already has a miss in flight
+  logic             ms_free;
+  logic [MSH_W-1:0] ms_free_idx;
 
   always_comb begin
-    ms_match   = 1'b0;
-    ms_match_i = '0;
-    ms_freev   = 1'b0;
-    ms_free_i  = '0;
-    for (int unsigned m = 0; m < NMS; m++) begin
-      if (ms_vld[m] && (ms_line[m] == rq_line)) begin
-        ms_match   = 1'b1;
-        ms_match_i = MS_W'(m);
-      end
-      if (!ms_vld[m] && !ms_freev) begin
-        ms_freev  = 1'b1;
-        ms_free_i = MS_W'(m);
+    int i;
+    ms_conflict = 1'b0;
+    ms_free     = 1'b0;
+    ms_free_idx = '0;
+    for (i = int'(MAX_MISSES) - 1; i >= 0; i--) begin
+      if (m_val[i] && (m_lad[i] == s1_lad)) ms_conflict = 1'b1;
+      if (!m_val[i]) begin
+        ms_free     = 1'b1;
+        ms_free_idx = MSH_W'(unsigned'(i));
       end
     end
   end
 
-  // ------------------------------------------------- install / victim select
-  logic            inst_v;
-  logic [MS_W-1:0] inst_i;
+  // ---------------------------------------------------------------------------
+  // Response slots and arbitration.  Alternating priority: neither a stream of
+  // hits nor a stream of fills can lock the other out (C3).
+  // ---------------------------------------------------------------------------
+  logic              hrsp_v, frsp_v, pri_f;
+  logic [3:0]        hrsp_id, frsp_id;
+  logic [DATA_W-1:0] hrsp_data, frsp_data;
+  logic              grant_f, grant_h, rsp_fire, hrsp_free;
 
-  always_comb begin
-    inst_v = 1'b0;
-    inst_i = '0;
-    for (int unsigned m = 0; m < NMS; m++) begin
-      if (!inst_v && ms_vld[m] && (ms_st[m] == S_SERVE) && (ms_cnt[m] == '0)) begin
-        inst_v = 1'b1;
-        inst_i = MS_W'(m);
-      end
-    end
-  end
+  assign grant_f     = frsp_v & (~hrsp_v | pri_f);
+  assign grant_h     = hrsp_v & ~grant_f;
+  assign rsp_valid_o = hrsp_v | frsp_v;
+  assign rsp_id_o    = grant_f ? frsp_id   : hrsp_id;
+  assign rsp_data_o  = grant_f ? frsp_data : hrsp_data;
+  assign rsp_fire    = rsp_valid_o & rsp_ready_i;
+  assign hrsp_free   = ~hrsp_v | (grant_h & rsp_ready_i);
 
-  logic [SET_W-1:0] inst_set;
+  // ---------------------------------------------------------------------------
+  // Memory engine selection: round-robin over the miss file
+  // ---------------------------------------------------------------------------
+  logic [2:0]        st_q;
+  logic [MSH_W-1:0]  svc_ptr_q;
+  logic [MSH_W-1:0]  sv_idx_q;
+  logic [IDX_W-1:0]  sv_set_q;
+  logic [WAY_W-1:0]  sv_way_q;
+  logic [TAG_W-1:0]  sv_tag_q;
+  logic [31:0]       sv_faddr_q, sv_waddr_q;
+  logic [BW_LOG-1:0] beat_q;
+  logic [DATA_W-1:0] rsp_word_q;
+
+  logic             svc_any, svc_start, svc_wb;
+  logic [MSH_W-1:0] svc_idx;
+  logic [LAD_W-1:0] svc_lad;
+  logic [IDX_W-1:0] svc_set;
+  logic [TAG_W-1:0] svc_tag;
   logic [WAY_W-1:0] vic_way;
-  logic             vic_inv;
-  logic             vic_drt;
-  logic             inst_fire;
-
-  assign inst_set = ms_line[inst_i][LOFF_W +: SET_W];
 
   always_comb begin
-    vic_inv = 1'b0;
-    vic_way = rrw_q[inst_set];
-    for (int unsigned w = 0; w < WAYS; w++) begin
-      if (!vic_inv && !vld_q[inst_set][w]) begin
-        vic_inv = 1'b1;
-        vic_way = WAY_W'(w);
+    int k, idx;
+    svc_any = 1'b0;
+    svc_idx = '0;
+    for (k = int'(MAX_MISSES) - 1; k >= 0; k--) begin
+      idx = (int'(svc_ptr_q) + k) % int'(MAX_MISSES);
+      if (m_val[idx]) begin
+        svc_any = 1'b1;
+        svc_idx = MSH_W'(unsigned'(idx));
       end
     end
   end
 
-  assign vic_drt   = !vic_inv && vld_q[inst_set][vic_way] && drt_q[inst_set][vic_way];
-  assign inst_fire = inst_v && (!vic_drt || !wb_pend);
+  assign svc_lad = m_lad[svc_idx];
+  assign svc_set = svc_lad[IDX_W-1:0];
+  assign svc_tag = svc_lad[LAD_W-1:IDX_W];
 
-  // ------------------------------------------------------ fill arbitration
-  // Rotating priority so that no MSHR is starved of the memory port.
-  logic            fill_v;
-  logic [MS_W-1:0] fill_i;
-
+  // victim: an invalid way if there is one, else the round-robin pointer (L1)
   always_comb begin
-    int unsigned idx;
-    fill_v = 1'b0;
-    fill_i = '0;
-    for (int unsigned k = 0; k < NMS; k++) begin
-      idx = k + 32'(rr_ms);
-      if (idx >= NMS) idx = idx - NMS;
-      if (!fill_v && ms_vld[idx] && (ms_st[idx] == S_FILLW)) begin
-        fill_v = 1'b1;
-        fill_i = MS_W'(idx);
-      end
+    int w;
+    vic_way = vic_q[svc_set];
+    for (w = int'(WAYS) - 1; w >= 0; w--) begin
+      if (!val_q[svc_set][w]) vic_way = WAY_W'(unsigned'(w));
     end
   end
 
-  // ------------------------------------------------- response arbitration
-  logic [MS_W-1:0] dr_ms;
-  logic            rsp_slot;
-  logic            drain_fire;
+  assign svc_start = (st_q == ST_IDLE) & svc_any;
+  assign svc_wb    = val_q[svc_set][vic_way] & drt_q[svc_set][vic_way];
 
-  assign dr_ms      = pq_ms[pq_head];
-  assign rsp_slot   = !rsp_valid_o || rsp_ready_i;
-  assign drain_fire = (pq_cnt != '0) && ms_vld[dr_ms] &&
-                      (ms_st[dr_ms] == S_SERVE) && rsp_slot;
+  // A store hitting the very way that is about to be evicted would race the
+  // invalidate; the engine wins and the store retries next cycle.
+  logic s1_blocked;
+  assign s1_blocked = svc_start & s1_hit & s1_op &
+                      (s1_set == svc_set) & (s1_way == vic_way);
 
-  // ------------------------------------------------------ request acceptance
-  // L5: req_ready_o may depend combinationally on req_valid_i, and does.
-  logic acc_hit;
-  logic acc_merge;
-  logic acc_alloc;
-  logic enq_fire;
-  logic [MS_W-1:0] enq_ms;
+  // ---------------------------------------------------------------------------
+  // Lookup-stage completion and the request handshake
+  // ---------------------------------------------------------------------------
+  logic s1_hit_done, s1_miss_done, s1_done;
 
-  assign acc_hit   = req_valid_i && !inst_fire && !ms_match &&  hit_v &&
-                     rsp_slot && !drain_fire;
-  assign acc_merge = req_valid_i && !inst_fire &&  ms_match && (pq_cnt != CNT_W'(PN));
-  assign acc_alloc = req_valid_i && !inst_fire && !ms_match && !hit_v &&
-                     ms_freev && (pq_cnt != CNT_W'(PN));
+  assign s1_hit_done  = s1_v &  s1_hit & hrsp_free & ~s1_blocked;
+  assign s1_miss_done = s1_v & ~s1_hit & ~ms_conflict & ms_free;
+  assign s1_done      = s1_hit_done | s1_miss_done;
 
-  assign req_ready_o = acc_hit || acc_merge || acc_alloc;
-  assign enq_fire    = acc_merge || acc_alloc;
-  assign enq_ms      = acc_alloc ? ms_free_i : ms_match_i;
+  assign req_ready_o  = ~s1_v | s1_done;
 
-  // ----------------------------------------------------------- memory drive
-  assign mem_req_valid_o = (mst == M_FREQ) || (mst == M_WREQ);
-  assign mem_req_we_o    = mreq_we;
-  assign mem_req_addr_o  = mreq_addr;
-  assign mem_rd_ready_o  = (mst == M_FDAT);
-  assign mem_wr_valid_o  = (mst == M_WDAT);
-  assign mem_wr_data_o   = wb_buf[beat];
+  // ---------------------------------------------------------------------------
+  // Memory port
+  // ---------------------------------------------------------------------------
+  assign mem_req_valid_o = (st_q == ST_WBREQ) | (st_q == ST_FLREQ);
+  assign mem_req_we_o    = (st_q == ST_WBREQ);
+  assign mem_req_addr_o  = (st_q == ST_WBREQ) ? sv_waddr_q : sv_faddr_q;
+  assign mem_wr_valid_o  = (st_q == ST_WBDAT);
+  assign mem_wr_data_o   = dat_q[sv_set_q][sv_way_q][beat_q];
+  assign mem_rd_ready_o  = (st_q == ST_FLDAT);
 
-  // =========================================================================
-  // sequential state
-  // =========================================================================
+  // ---------------------------------------------------------------------------
+  // Sequential
+  // ---------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin
+    int i, w, b;
+    logic [DATA_W-1:0] sword;
+    logic [DATA_W-1:0] fword;
+
     if (!rst_ni) begin
-      for (int unsigned s = 0; s < SETS; s++) begin
-        rrw_q[s] <= '0;
-        for (int unsigned w = 0; w < WAYS; w++) begin
-          vld_q[s][w] <= 1'b0;
-          drt_q[s][w] <= 1'b0;
+      s1_v      <= 1'b0;
+      hrsp_v    <= 1'b0;
+      frsp_v    <= 1'b0;
+      pri_f     <= 1'b0;
+      st_q      <= ST_IDLE;
+      beat_q    <= '0;
+      svc_ptr_q <= '0;
+      for (i = 0; i < int'(MAX_MISSES); i++) m_val[i] <= 1'b0;
+      // P1 is a precondition, but clearing the tags costs almost nothing and
+      // makes the design conformant on its own terms as well.
+      for (i = 0; i < int'(SETS); i++) begin
+        vic_q[i] <= '0;
+        for (w = 0; w < int'(WAYS); w++) begin
+          val_q[i][w] <= 1'b0;
+          drt_q[i][w] <= 1'b0;
         end
       end
-      for (int unsigned m = 0; m < NMS; m++) begin
-        ms_vld[m] <= 1'b0;
-        ms_st[m]  <= S_FILLW;
-        ms_drt[m] <= 1'b0;
-        ms_cnt[m] <= '0;
-      end
-      pq_head     <= '0;
-      pq_tail     <= '0;
-      pq_cnt      <= '0;
-      mst         <= M_IDLE;
-      msel        <= '0;
-      beat        <= '0;
-      mreq_addr   <= '0;
-      mreq_we     <= 1'b0;
-      rr_ms       <= '0;
-      wb_pend     <= 1'b0;
-      wb_addr     <= '0;
-      rsp_valid_o <= 1'b0;
-      rsp_id_o    <= '0;
-      rsp_data_o  <= '0;
     end else begin
-
-      // ---- response register: drained miss first, then hit ----------------
-      if (rsp_slot) begin
-        if (drain_fire) begin
-          rsp_valid_o <= 1'b1;
-          rsp_id_o    <= pq_id[pq_head];
-          rsp_data_o  <= ms_buf[dr_ms][pq_word[pq_head]];
-        end else if (acc_hit) begin
-          rsp_valid_o <= 1'b1;
-          rsp_id_o    <= req_id_i;
-          rsp_data_o  <= dat_q[rq_set][hit_w][rq_word];
-        end else begin
-          rsp_valid_o <= 1'b0;
-        end
+      // ---- response drain ---------------------------------------------------
+      if (rsp_fire) begin
+        pri_f <= ~pri_f;
+        if (grant_f) frsp_v <= 1'b0;
+        else         hrsp_v <= 1'b0;
       end
 
-      // ---- hit-side store: byte merge into the array ----------------------
-      if (acc_hit && req_op_i) begin
-        dat_q[rq_set][hit_w][rq_word] <=
-            merge_bytes(dat_q[rq_set][hit_w][rq_word], req_data_i, req_mask_i);
-        drt_q[rq_set][hit_w] <= 1'b1;
+      // ---- lookup stage: retire, then accept --------------------------------
+      if (s1_done) s1_v <= 1'b0;
+      if (req_valid_i && req_ready_o) begin
+        s1_v    <= 1'b1;
+        s1_id   <= req_id_i;
+        s1_op   <= req_op_i;
+        s1_addr <= req_addr_i;
+        s1_data <= req_data_i;
+        s1_mask <= req_mask_i;
       end
 
-      // ---- pending FIFO ---------------------------------------------------
-      if (enq_fire) begin
-        pq_id[pq_tail]   <= req_id_i;
-        pq_op[pq_tail]   <= req_op_i;
-        pq_word[pq_tail] <= rq_word;
-        pq_data[pq_tail] <= req_data_i;
-        pq_mask[pq_tail] <= req_mask_i;
-        pq_ms[pq_tail]   <= enq_ms;
-        pq_tail          <= pq_tail + 1'b1;
-      end
-      if (drain_fire) begin
-        pq_head <= pq_head + 1'b1;
-      end
-      if (enq_fire && !drain_fire)      pq_cnt <= pq_cnt + 1'b1;
-      else if (!enq_fire && drain_fire) pq_cnt <= pq_cnt - 1'b1;
-
-      // ---- drained store: byte merge into the MSHR buffer ------------------
-      if (drain_fire && pq_op[pq_head]) begin
-        ms_buf[dr_ms][pq_word[pq_head]] <=
-            merge_bytes(ms_buf[dr_ms][pq_word[pq_head]],
-                        pq_data[pq_head], pq_mask[pq_head]);
-        ms_drt[dr_ms] <= 1'b1;
-      end
-
-      // ---- MSHR allocate, and pending-count maintenance -------------------
-      if (acc_alloc) begin
-        ms_vld[ms_free_i]  <= 1'b1;
-        ms_st[ms_free_i]   <= S_FILLW;
-        ms_line[ms_free_i] <= rq_line;
-        ms_drt[ms_free_i]  <= 1'b0;
-        ms_cnt[ms_free_i]  <= CNT_W'(1);
-      end
-      if (acc_merge && !(drain_fire && (dr_ms == ms_match_i))) begin
-        ms_cnt[ms_match_i] <= ms_cnt[ms_match_i] + 1'b1;
-      end
-      if (drain_fire && !(acc_merge && (ms_match_i == dr_ms))) begin
-        ms_cnt[dr_ms] <= ms_cnt[dr_ms] - 1'b1;
-      end
-
-      // ---- install: MSHR retires its line into the array -------------------
-      // The victim is captured and overwritten in the same cycle, so it reads
-      // as absent from here on. req_ready_o is low this cycle, so no request
-      // can race the array update.
-      if (inst_fire) begin
-        if (vic_drt) begin
-          wb_pend <= 1'b1;
-          wb_addr <= {tag_q[inst_set][vic_way], inst_set, {LOFF_W{1'b0}}};
-          for (int unsigned k = 0; k < BLOCK_WORDS; k++) begin
-            wb_buf[k] <= dat_q[inst_set][vic_way][k];
+      // ---- hit: answer, and for a store merge into the line ------------------
+      if (s1_hit_done) begin
+        sword = dat_q[s1_set][s1_way][s1_woff];
+        hrsp_v    <= 1'b1;
+        hrsp_id   <= s1_id;
+        hrsp_data <= sword;                       // store data is free (R3)
+        if (s1_op) begin
+          for (b = 0; b < int'(BYTES_W); b++) begin
+            if (s1_mask[b]) sword[b*8 +: 8] = s1_data[b*8 +: 8];
           end
+          dat_q[s1_set][s1_way][s1_woff] <= sword;
+          drt_q[s1_set][s1_way]          <= 1'b1;
         end
-        for (int unsigned k = 0; k < BLOCK_WORDS; k++) begin
-          dat_q[inst_set][vic_way][k] <= ms_buf[inst_i][k];
-        end
-        tag_q[inst_set][vic_way] <= ms_line[inst_i][LOFF_W + SET_W +: TAG_W];
-        vld_q[inst_set][vic_way] <= 1'b1;
-        drt_q[inst_set][vic_way] <= ms_drt[inst_i];
-        ms_vld[inst_i]           <= 1'b0;
-        rrw_q[inst_set]          <= (rrw_q[inst_set] == WAY_W'(WAYS-1)) ?
-                                    '0 : rrw_q[inst_set] + 1'b1;
       end
 
-      // ---- memory port: one transaction outstanding (M3) -------------------
-      case (mst)
-        M_IDLE: begin
-          if (wb_pend) begin
-            // strict priority over fills: this is what keeps a refill from
-            // overtaking the writeback of the line it is refilling.
-            mst       <= M_WREQ;
-            mreq_we   <= 1'b1;
-            mreq_addr <= wb_addr;
-            beat      <= '0;
-          end else if (fill_v) begin
-            mst        <= M_FREQ;
-            mreq_we    <= 1'b0;
-            mreq_addr  <= ms_line[fill_i];
-            msel       <= fill_i;
-            beat       <= '0;
-            ms_st[fill_i] <= S_FILLING;
-            rr_ms      <= (fill_i == MS_W'(NMS-1)) ? '0 : fill_i + 1'b1;
+      // ---- miss: record it and carry on -------------------------------------
+      if (s1_miss_done) begin
+        m_val [ms_free_idx] <= 1'b1;
+        m_lad [ms_free_idx] <= s1_lad;
+        m_id  [ms_free_idx] <= s1_id;
+        m_op  [ms_free_idx] <= s1_op;
+        m_woff[ms_free_idx] <= s1_woff;
+        m_data[ms_free_idx] <= s1_data;
+        m_mask[ms_free_idx] <= s1_mask;
+      end
+
+      // ---- memory engine -----------------------------------------------------
+      case (st_q)
+        ST_IDLE: begin
+          if (svc_start) begin
+            sv_idx_q   <= svc_idx;
+            sv_set_q   <= svc_set;
+            sv_way_q   <= vic_way;
+            sv_tag_q   <= svc_tag;
+            sv_faddr_q <= {svc_lad, {IDX_LSB{1'b0}}};
+            sv_waddr_q <= {tag_q[svc_set][vic_way], svc_set, {IDX_LSB{1'b0}}};
+            // the victim leaves the cache now, so nothing can hit the line
+            // being replaced while its fill is in flight
+            val_q[svc_set][vic_way] <= 1'b0;
+            drt_q[svc_set][vic_way] <= 1'b0;
+            vic_q[svc_set]          <= vic_way + WAY_ONE;
+            svc_ptr_q               <= svc_idx + MSH_ONE;
+            beat_q                  <= '0;
+            st_q                    <= svc_wb ? ST_WBREQ : ST_FLREQ;
           end
         end
 
-        M_FREQ: begin
-          if (mem_req_ready_i) mst <= M_FDAT;
-        end
-
-        M_FDAT: begin
-          if (mem_rd_valid_i) begin
-            ms_buf[msel][beat] <= mem_rd_data_i;
-            if (beat == WOFF_W'(BLOCK_WORDS-1)) begin
-              ms_st[msel] <= S_SERVE;
-              mst         <= M_IDLE;
-            end else begin
-              beat <= beat + 1'b1;
-            end
+        ST_WBREQ: begin
+          if (mem_req_ready_i) begin
+            beat_q <= '0;
+            st_q   <= ST_WBDAT;
           end
         end
 
-        M_WREQ: begin
-          if (mem_req_ready_i) mst <= M_WDAT;
-        end
-
-        M_WDAT: begin
+        ST_WBDAT: begin
           if (mem_wr_ready_i) begin
-            if (beat == WOFF_W'(BLOCK_WORDS-1)) begin
-              wb_pend <= 1'b0;
-              mst     <= M_IDLE;
-            end else begin
-              beat <= beat + 1'b1;
+            beat_q <= beat_q + BEAT_ONE;
+            if (beat_q == BEAT_LAST) st_q <= ST_FLREQ;
+          end
+        end
+
+        ST_FLREQ: begin
+          if (mem_req_ready_i) begin
+            beat_q <= '0;
+            st_q   <= ST_FLDAT;
+          end
+        end
+
+        ST_FLDAT: begin
+          if (mem_rd_valid_i) begin
+            fword = mem_rd_data_i;
+            if (m_op[sv_idx_q] && (m_woff[sv_idx_q] == beat_q)) begin
+              for (b = 0; b < int'(BYTES_W); b++) begin
+                if (m_mask[sv_idx_q][b]) fword[b*8 +: 8] = m_data[sv_idx_q][b*8 +: 8];
+              end
+            end
+            dat_q[sv_set_q][sv_way_q][beat_q] <= fword;
+            if (m_woff[sv_idx_q] == beat_q) rsp_word_q <= fword;
+            beat_q <= beat_q + BEAT_ONE;
+            if (beat_q == BEAT_LAST) begin
+              tag_q[sv_set_q][sv_way_q] <= sv_tag_q;
+              val_q[sv_set_q][sv_way_q] <= 1'b1;
+              drt_q[sv_set_q][sv_way_q] <= m_op[sv_idx_q];
+              st_q                      <= ST_DONE;
             end
           end
         end
 
-        default: mst <= M_IDLE;
+        ST_DONE: begin
+          if (!frsp_v || (grant_f && rsp_ready_i)) begin
+            frsp_v            <= 1'b1;
+            frsp_id           <= m_id[sv_idx_q];
+            frsp_data         <= rsp_word_q;
+            m_val[sv_idx_q]   <= 1'b0;
+            st_q              <= ST_IDLE;
+          end
+        end
+
+        default: st_q <= ST_IDLE;
       endcase
     end
   end

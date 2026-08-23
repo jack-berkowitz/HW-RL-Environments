@@ -1,7 +1,22 @@
+// =============================================================================
+// async_fifo_cdc.sv
+// =============================================================================
+// Asynchronous FIFO with Gray-coded CDC pointers.
+//
+// - FIFO depth is exactly 2**LOG_DEPTH.
+// - Write and read clocks are completely unrelated.
+// - Binary pointers are used locally for RAM addressing.
+// - Gray-coded pointers cross clock domains.
+// - Crossing pointers pass through exactly SYNC_STAGES synchronizer flops.
+// - Payload RAM itself is not synchronized; the synchronized pointer guarantees
+//   that a location is stable before the read side considers it available.
+// - No additional beat storage is used beyond the FIFO memory.
+// =============================================================================
+
 module async_fifo_cdc #(
-    parameter int DATA_W      = 32,   // 8 / 32 / 64
-    parameter int LOG_DEPTH   = 3,    // 2 / 3 / 4  -> depth 4 / 8 / 16
-    parameter int SYNC_STAGES = 2     // 2 / 3
+    parameter int DATA_W      = 32,
+    parameter int LOG_DEPTH   = 3,
+    parameter int SYNC_STAGES = 2
 ) (
     // ---- write domain ----
     input  logic              wr_clk,
@@ -18,254 +33,201 @@ module async_fifo_cdc #(
     output logic [DATA_W-1:0] rd_data
 );
 
+    // -------------------------------------------------------------------------
+    // Geometry
+    // -------------------------------------------------------------------------
+
     localparam int DEPTH = (1 << LOG_DEPTH);
 
-    // One extra pointer bit is required to distinguish full from empty.
+    // One extra pointer bit is required to distinguish full from empty after
+    // the address portion wraps.
     localparam int PTR_W = LOG_DEPTH + 1;
 
-
     // -------------------------------------------------------------------------
-    // Payload storage
-    //
-    // Written only in wr_clk domain.
-    // Read using the current read pointer in rd_clk domain.
-    //
-    // The data itself does not pass through synchronizers. The synchronized
-    // write pointer guarantees that an entry has been stable before rd_valid
-    // can assert for it.
+    // Storage
     // -------------------------------------------------------------------------
 
     logic [DATA_W-1:0] mem [0:DEPTH-1];
 
-
     // -------------------------------------------------------------------------
-    // Write-domain pointers
-    // -------------------------------------------------------------------------
-
-    logic [PTR_W-1:0] wr_bin;
-    logic [PTR_W-1:0] wr_bin_next;
-
-    logic [PTR_W-1:0] wr_gray;
-    logic [PTR_W-1:0] wr_gray_next;
-
-    logic             wr_full;
-    logic             wr_full_next;
-
-    logic             wr_fire;
-
-
-    // -------------------------------------------------------------------------
-    // Read-domain pointers
+    // Local binary and Gray pointers
     // -------------------------------------------------------------------------
 
-    logic [PTR_W-1:0] rd_bin;
-    logic [PTR_W-1:0] rd_bin_next;
+    logic [PTR_W-1:0] wr_bin_q;
+    logic [PTR_W-1:0] wr_gray_q;
 
-    logic [PTR_W-1:0] rd_gray;
-    logic [PTR_W-1:0] rd_gray_next;
-
-    logic             rd_empty;
-    logic             rd_empty_next;
-
-    logic             rd_fire;
-
+    logic [PTR_W-1:0] rd_bin_q;
+    logic [PTR_W-1:0] rd_gray_q;
 
     // -------------------------------------------------------------------------
-    // CDC synchronizers
+    // Pointer synchronizers
     //
-    // wr_gray crosses into rd_clk domain.
-    // rd_gray crosses into wr_clk domain.
-    //
-    // Only the final synchronizer stage is used by FIFO control logic.
+    // Only Gray-coded pointers cross clock domains.
     // -------------------------------------------------------------------------
 
-    (* ASYNC_REG = "TRUE" *)
-    logic [PTR_W-1:0] wr_gray_sync [0:SYNC_STAGES-1];
-
-    (* ASYNC_REG = "TRUE" *)
-    logic [PTR_W-1:0] rd_gray_sync [0:SYNC_STAGES-1];
-
-    integer k;
-
+    logic [PTR_W-1:0] rd_gray_sync_q [0:SYNC_STAGES-1];
+    logic [PTR_W-1:0] wr_gray_sync_q [0:SYNC_STAGES-1];
 
     // -------------------------------------------------------------------------
-    // Write pointer -> read domain synchronizer
+    // Miscellaneous signals
     // -------------------------------------------------------------------------
 
-    always_ff @(posedge rd_clk or negedge rd_rst_n) begin
-        if (!rd_rst_n) begin
-            for (k = 0; k < SYNC_STAGES; k = k + 1)
-                wr_gray_sync[k] <= '0;
-        end
-        else begin
-            wr_gray_sync[0] <= wr_gray;
+    logic [PTR_W-1:0] rd_gray_full_cmp;
 
-            for (k = 1; k < SYNC_STAGES; k = k + 1)
-                wr_gray_sync[k] <= wr_gray_sync[k-1];
-        end
-    end
+    logic wr_full;
+    logic rd_empty;
 
+    logic wr_fire;
+    logic rd_fire;
+
+    integer i;
 
     // -------------------------------------------------------------------------
-    // Read pointer -> write domain synchronizer
+    // Binary -> Gray conversion
+    // -------------------------------------------------------------------------
+
+    function automatic logic [PTR_W-1:0] bin_to_gray(
+        input logic [PTR_W-1:0] bin
+    );
+        bin_to_gray = (bin >> 1) ^ bin;
+    endfunction
+
+    // -------------------------------------------------------------------------
+    // Synchronize read pointer into write clock domain
     // -------------------------------------------------------------------------
 
     always_ff @(posedge wr_clk or negedge wr_rst_n) begin
         if (!wr_rst_n) begin
-            for (k = 0; k < SYNC_STAGES; k = k + 1)
-                rd_gray_sync[k] <= '0;
-        end
-        else begin
-            rd_gray_sync[0] <= rd_gray;
+            for (i = 0; i < SYNC_STAGES; i = i + 1) begin
+                rd_gray_sync_q[i] <= '0;
+            end
+        end else begin
+            rd_gray_sync_q[0] <= rd_gray_q;
 
-            for (k = 1; k < SYNC_STAGES; k = k + 1)
-                rd_gray_sync[k] <= rd_gray_sync[k-1];
+            for (i = 1; i < SYNC_STAGES; i = i + 1) begin
+                rd_gray_sync_q[i] <= rd_gray_sync_q[i-1];
+            end
         end
     end
 
-
     // -------------------------------------------------------------------------
-    // Handshake outputs
-    //
-    // wr_ready depends only on registered write-domain state.
-    // rd_valid depends only on registered read-domain state.
-    //
-    // Therefore:
-    //   wr_ready does not depend combinationally on wr_valid
-    //   rd_valid does not depend combinationally on rd_ready
+    // Synchronize write pointer into read clock domain
     // -------------------------------------------------------------------------
 
-    assign wr_ready = wr_rst_n && !wr_full;
-    assign rd_valid = rd_rst_n && !rd_empty;
+    always_ff @(posedge rd_clk or negedge rd_rst_n) begin
+        if (!rd_rst_n) begin
+            for (i = 0; i < SYNC_STAGES; i = i + 1) begin
+                wr_gray_sync_q[i] <= '0;
+            end
+        end else begin
+            wr_gray_sync_q[0] <= wr_gray_q;
 
-    assign wr_fire = wr_valid && wr_ready;
-    assign rd_fire = rd_valid && rd_ready;
-
-
-    // -------------------------------------------------------------------------
-    // Write-domain next pointer
-    // -------------------------------------------------------------------------
-
-    always_comb begin
-        wr_bin_next = wr_bin;
-
-        if (wr_fire)
-            wr_bin_next = wr_bin + {{(PTR_W-1){1'b0}}, 1'b1};
-
-        // Binary -> reflected Gray:
-        //
-        //     gray = binary ^ (binary >> 1)
-        //
-        wr_gray_next = (wr_bin_next >> 1) ^ wr_bin_next;
+            for (i = 1; i < SYNC_STAGES; i = i + 1) begin
+                wr_gray_sync_q[i] <= wr_gray_sync_q[i-1];
+            end
+        end
     end
-
 
     // -------------------------------------------------------------------------
     // Full detection
     //
-    // For a power-of-two asynchronous FIFO, the FIFO is full when the NEXT
-    // write Gray pointer equals the synchronized read Gray pointer with its
-    // upper two bits inverted.
+    // For an asynchronous FIFO with an extra wrap bit, the write pointer is
+    // exactly one FIFO-length ahead of the read pointer when the FIFO is full.
     //
-    // Example for PTR_W == 4:
-    //
-    //     wr_gray_next ==
-    //         { ~rd_gray_sync[3:2],
-    //            rd_gray_sync[1:0] }
-    //
-    // This is the standard Gray-pointer full test.
+    // In Gray code this condition is detected by complementing the upper two
+    // bits of the synchronized read pointer and comparing all remaining bits
+    // directly.
     // -------------------------------------------------------------------------
 
     always_comb begin
-        wr_full_next =
-            (wr_gray_next ==
-                {
-                    ~rd_gray_sync[SYNC_STAGES-1][PTR_W-1:PTR_W-2],
-                     rd_gray_sync[SYNC_STAGES-1][PTR_W-3:0]
-                });
+        rd_gray_full_cmp = rd_gray_sync_q[SYNC_STAGES-1];
+
+        rd_gray_full_cmp[PTR_W-1] = ~rd_gray_sync_q[SYNC_STAGES-1][PTR_W-1];
+        rd_gray_full_cmp[PTR_W-2] = ~rd_gray_sync_q[SYNC_STAGES-1][PTR_W-2];
+
+        wr_full = (wr_gray_q == rd_gray_full_cmp);
     end
-
-
-    // -------------------------------------------------------------------------
-    // Write-domain state and memory write
-    // -------------------------------------------------------------------------
-
-    always_ff @(posedge wr_clk or negedge wr_rst_n) begin
-        if (!wr_rst_n) begin
-            wr_bin  <= '0;
-            wr_gray <= '0;
-            wr_full <= 1'b0;
-        end
-        else begin
-            wr_bin  <= wr_bin_next;
-            wr_gray <= wr_gray_next;
-            wr_full <= wr_full_next;
-
-            if (wr_fire)
-                mem[wr_bin[LOG_DEPTH-1:0]] <= wr_data;
-        end
-    end
-
-
-    // -------------------------------------------------------------------------
-    // Read-domain next pointer
-    // -------------------------------------------------------------------------
-
-    always_comb begin
-        rd_bin_next = rd_bin;
-
-        if (rd_fire)
-            rd_bin_next = rd_bin + {{(PTR_W-1){1'b0}}, 1'b1};
-
-        rd_gray_next = (rd_bin_next >> 1) ^ rd_bin_next;
-    end
-
 
     // -------------------------------------------------------------------------
     // Empty detection
     //
-    // Empty when the NEXT read pointer equals the synchronized write pointer.
-    //
-    // Notice that only wr_gray_sync[SYNC_STAGES-1] is used here. An
-    // unsynchronized or partially synchronized write pointer is never used to
-    // assert availability.
+    // Once the synchronized write pointer equals the local read pointer there
+    // are no architecturally visible entries remaining.
     // -------------------------------------------------------------------------
 
     always_comb begin
-        rd_empty_next =
-            (rd_gray_next == wr_gray_sync[SYNC_STAGES-1]);
+        rd_empty = (rd_gray_q == wr_gray_sync_q[SYNC_STAGES-1]);
     end
 
+    // -------------------------------------------------------------------------
+    // Handshake outputs
+    //
+    // wr_ready depends only on FIFO state, never combinationally on wr_valid.
+    // rd_valid depends only on FIFO state, never combinationally on rd_ready.
+    // -------------------------------------------------------------------------
+
+    always_comb begin
+        wr_ready = wr_rst_n && !wr_full;
+        rd_valid = rd_rst_n && !rd_empty;
+
+        wr_fire = wr_valid && wr_ready;
+        rd_fire = rd_valid && rd_ready;
+    end
 
     // -------------------------------------------------------------------------
-    // Read-domain pointer / empty state
+    // Write-side pointer and RAM write
+    // -------------------------------------------------------------------------
+
+    always_ff @(posedge wr_clk or negedge wr_rst_n) begin
+        if (!wr_rst_n) begin
+            wr_bin_q  <= '0;
+            wr_gray_q <= '0;
+        end else begin
+            if (wr_fire) begin
+                mem[wr_bin_q[LOG_DEPTH-1:0]] <= wr_data;
+
+                wr_bin_q  <= wr_bin_q + {{(PTR_W-1){1'b0}}, 1'b1};
+                wr_gray_q <= bin_to_gray(
+                    wr_bin_q + {{(PTR_W-1){1'b0}}, 1'b1}
+                );
+            end
+        end
+    end
+
+    // -------------------------------------------------------------------------
+    // Read-side pointer
     // -------------------------------------------------------------------------
 
     always_ff @(posedge rd_clk or negedge rd_rst_n) begin
         if (!rd_rst_n) begin
-            rd_bin   <= '0;
-            rd_gray  <= '0;
-            rd_empty <= 1'b1;
-        end
-        else begin
-            rd_bin   <= rd_bin_next;
-            rd_gray  <= rd_gray_next;
-            rd_empty <= rd_empty_next;
+            rd_bin_q  <= '0;
+            rd_gray_q <= '0;
+        end else begin
+            if (rd_fire) begin
+                rd_bin_q  <= rd_bin_q + {{(PTR_W-1){1'b0}}, 1'b1};
+                rd_gray_q <= bin_to_gray(
+                    rd_bin_q + {{(PTR_W-1){1'b0}}, 1'b1}
+                );
+            end
         end
     end
 
-
     // -------------------------------------------------------------------------
-    // Payload read
+    // Read data
     //
-    // rd_bin does not advance while rd_valid && !rd_ready, so the addressed
-    // memory location remains unchanged.
+    // The payload is intentionally not passed through synchronizer flops.
     //
-    // The write side cannot overwrite this unread location because wr_full is
-    // calculated using the safely synchronized read pointer. Consequently
-    // rd_data is stable for the entire duration of read-side backpressure.
+    // A memory location is written before its corresponding Gray pointer can
+    // propagate through SYNC_STAGES rd_clk synchronizer stages. By the time
+    // rd_valid can assert for that entry, the payload is already stable.
+    //
+    // While rd_valid && !rd_ready, rd_bin_q cannot advance. The location being
+    // presented therefore remains unchanged. Full detection on the write side
+    // prevents that unread location from being overwritten.
     // -------------------------------------------------------------------------
 
-    assign rd_data = mem[rd_bin[LOG_DEPTH-1:0]];
+    always_comb begin
+        rd_data = mem[rd_bin_q[LOG_DEPTH-1:0]];
+    end
 
 endmodule

@@ -1,0 +1,12 @@
+{
+  "build_error": "2 error(s); first: sanitised_qwen.sv:124:13: error: declaration must come before all statements in the block ",
+  "build_status": "slang_rejected",
+  "git_sha": "9f427b895c5f911b23ee83b8657b1c6e192f891a-dirty",
+  "kind": "sim",
+  "label": "qwen",
+  "submission": "candidates/d_dsp02/qwen.sv",
+  "submission_sha256_16": "f20425b287b0dcca",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "5ad30593403b4ae2",
+  "timestamp_utc": "2026-08-22T01:40:58Z"
+}

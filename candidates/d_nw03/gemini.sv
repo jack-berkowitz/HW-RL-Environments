@@ -1,3 +1,7 @@
+// =============================================================================
+// axis_switch_oq  --  IMPLEMENTATION
+// =============================================================================
+
 module axis_switch_oq #(
   parameter int unsigned S_COUNT = 4,   // {2, 4}
   parameter int unsigned M_COUNT = 4,   // {2, 4}
@@ -24,185 +28,182 @@ module axis_switch_oq #(
 
   localparam int unsigned KEEP_W = DATA_W/8;
   localparam int unsigned DEST_W = $clog2(M_COUNT);
-  localparam int unsigned PAYLOAD_W = 1 + KEEP_W + DATA_W;
 
-  // Flattened input array extraction
-  logic [DEST_W-1:0] s_dest_arr [S_COUNT];
-  logic [KEEP_W-1:0] s_keep_arr [S_COUNT];
-  logic [DATA_W-1:0] s_data_arr [S_COUNT];
+  // Depth of 16 beats precisely provides storage for up to 2 frames of 8 beats
+  // per output, bounded as per B1 requirement.
+  localparam int unsigned FIFO_DEPTH = 16;
+  localparam int unsigned FIFO_ADDR_W = 4;
 
-  // Interconnect FIFOs mapping
-  logic fifo_write [S_COUNT][M_COUNT];
-  logic fifo_read  [S_COUNT][M_COUNT];
-  logic fifo_empty [S_COUNT][M_COUNT];
-  logic fifo_full  [S_COUNT][M_COUNT];
-  logic [PAYLOAD_W-1:0] fifo_data_in [S_COUNT][M_COUNT];
-  logic [PAYLOAD_W-1:0] fifo_data_out [S_COUNT][M_COUNT];
+  typedef enum logic { IDLE, LOCKED } state_t;
+  state_t state_q [M_COUNT];
+  state_t state_d [M_COUNT];
 
-  // ===========================================================================
-  // Input Routing Stage
-  // ===========================================================================
+  logic [$clog2(S_COUNT)-1:0] locked_sel_q [M_COUNT];
+  logic [$clog2(S_COUNT)-1:0] locked_sel_d [M_COUNT];
+
+  logic [$clog2(S_COUNT)-1:0] rr_ptr_q [M_COUNT];
+  logic [$clog2(S_COUNT)-1:0] rr_ptr_d [M_COUNT];
+
+  logic [M_COUNT-1:0] grant_valid;
+  logic [$clog2(S_COUNT)-1:0] grant_sel [M_COUNT];
+
+  // Output FIFO storage and pointers
+  logic [DATA_W-1:0]   fifo_data [M_COUNT][FIFO_DEPTH];
+  logic [KEEP_W-1:0]   fifo_keep [M_COUNT][FIFO_DEPTH];
+  logic                fifo_last [M_COUNT][FIFO_DEPTH];
+
+  logic [FIFO_ADDR_W:0] fifo_wr_ptr [M_COUNT];
+  logic [FIFO_ADDR_W:0] fifo_rd_ptr [M_COUNT];
+
+  logic [M_COUNT-1:0] fifo_full;
+  logic [M_COUNT-1:0] fifo_empty;
+  logic [M_COUNT-1:0] fifo_ready;
+  logic [M_COUNT-1:0] fifo_wr;
+  
+  logic [DATA_W-1:0]  fifo_din_data [M_COUNT];
+  logic [KEEP_W-1:0]  fifo_din_keep [M_COUNT];
+  logic               fifo_din_last [M_COUNT];
+
+  // 1. FIFO Status Logic
   always_comb begin
-    logic [DEST_W-1:0] dest;
-    int i, j;
-
-    for (i = 0; i < S_COUNT; i = i + 1) begin
-      s_dest_arr[i] = s_dest_i[i * DEST_W +: DEST_W];
-      s_keep_arr[i] = s_keep_i[i * KEEP_W +: KEEP_W];
-      s_data_arr[i] = s_data_i[i * DATA_W +: DATA_W];
-    end
-
-    // Default driver assignments
-    for (i = 0; i < S_COUNT; i = i + 1) begin
-      s_ready_o[i] = 1'b0;
-      for (j = 0; j < M_COUNT; j = j + 1) begin
-        fifo_write[i][j] = 1'b0;
-        fifo_data_in[i][j] = {s_last_i[i], s_keep_arr[i], s_data_arr[i]};
-      end
-    end
-
-    // Route each input to its target FIFO
-    for (i = 0; i < S_COUNT; i = i + 1) begin
-      dest = s_dest_arr[i];
-      s_ready_o[i] = ~fifo_full[i][dest];
-      if (s_valid_i[i] && !fifo_full[i][dest]) begin
-        fifo_write[i][dest] = 1'b1;
-      end
+    int m;
+    for (m = 0; m < M_COUNT; m++) begin
+        fifo_full[m] = (fifo_wr_ptr[m][FIFO_ADDR_W] != fifo_rd_ptr[m][FIFO_ADDR_W]) &&
+                       (fifo_wr_ptr[m][FIFO_ADDR_W-1:0] == fifo_rd_ptr[m][FIFO_ADDR_W-1:0]);
+        fifo_empty[m] = (fifo_wr_ptr[m] == fifo_rd_ptr[m]);
+        fifo_ready[m] = ~fifo_full[m];
     end
   end
 
-  // ===========================================================================
-  // S_COUNT * M_COUNT FIFOs
-  // ===========================================================================
-  genvar s, m;
-  generate
-    for (s = 0; s < S_COUNT; s = s + 1) begin : g_s
-      for (m = 0; m < M_COUNT; m = m + 1) begin : g_m
-        // Depth 16 easily accommodates frames up to 8 beats
-        logic [PAYLOAD_W-1:0] mem [16];
-        logic [4:0] wr_ptr;
-        logic [4:0] rd_ptr;
-
-        assign fifo_empty[s][m] = (wr_ptr == rd_ptr);
-        assign fifo_full[s][m]  = (wr_ptr[4] != rd_ptr[4]) && (wr_ptr[3:0] == rd_ptr[3:0]);
-        assign fifo_data_out[s][m] = mem[rd_ptr[3:0]];
-
-        always_ff @(posedge clk_i) begin
-          if (!rst_ni) begin
-            wr_ptr <= 5'd0;
-            rd_ptr <= 5'd0;
-          end else begin
-            if (fifo_write[s][m]) begin
-              mem[wr_ptr[3:0]] <= fifo_data_in[s][m];
-              wr_ptr <= wr_ptr + 1'b1;
-            end
-            if (fifo_read[s][m]) begin
-              rd_ptr <= rd_ptr + 1'b1;
-            end
-          end
-        end
-      end
-    end
-  endgenerate
-
-  // ===========================================================================
-  // Output Arbitration Stage
-  // ===========================================================================
-  logic [M_COUNT-1:0]         out_locked;
-  logic [$clog2(S_COUNT)-1:0] out_sel [M_COUNT];
-  logic [$clog2(S_COUNT)-1:0] rr_ptr [M_COUNT];
-
-  logic [M_COUNT-1:0]         out_valid;
-  logic [$clog2(S_COUNT)-1:0] out_grant_idx [M_COUNT];
-
+  // 2. Round-Robin Output Arbiters
   always_comb begin
-    logic [S_COUNT-1:0] req;
-    logic granted;
-    logic [$clog2(S_COUNT)-1:0] grant_idx;
-    logic [$clog2(S_COUNT)-1:0] idx;
-    logic [$clog2(S_COUNT)-1:0] i_cast;
-    int i, j;
-
-    for (j = 0; j < M_COUNT; j = j + 1) begin
-      out_valid[j] = 1'b0;
-      out_grant_idx[j] = '0;
-      for (i = 0; i < S_COUNT; i = i + 1) begin
-        fifo_read[i][j] = 1'b0;
-      end
-    end
-
-    for (j = 0; j < M_COUNT; j = j + 1) begin
-      req = '0;
-      granted = 1'b0;
-      grant_idx = '0;
-
-      for (i = 0; i < S_COUNT; i = i + 1) begin
-        req[i] = ~fifo_empty[i][j];
-      end
-
-      if (out_locked[j]) begin
-        // Retain lock to finish the current frame
-        granted = 1'b1;
-        grant_idx = out_sel[j];
-      end else begin
-        // Round Robin when not locked
-        for (i = 0; i < S_COUNT; i = i + 1) begin
-          i_cast = i[$clog2(S_COUNT)-1:0];
-          idx = rr_ptr[j] + i_cast;
-          if (req[idx] && !granted) begin
-            granted = 1'b1;
-            grant_idx = idx;
-          end
+    int m;
+    int i;
+    int idx;
+    logic any_req;
+    logic [$clog2(S_COUNT)-1:0] first_req;
+    
+    for (m = 0; m < M_COUNT; m++) begin
+        state_d[m] = state_q[m];
+        locked_sel_d[m] = locked_sel_q[m];
+        rr_ptr_d[m] = rr_ptr_q[m];
+        
+        grant_valid[m] = 1'b0;
+        grant_sel[m] = '0;
+        
+        if (state_q[m] == IDLE) begin
+            any_req = 1'b0;
+            first_req = '0;
+            
+            // Search for highest-priority valid request directed to this output
+            for (i = 0; i < S_COUNT; i++) begin
+                idx = (rr_ptr_q[m] + i) % S_COUNT;
+                if (s_valid_i[idx] && (s_dest_i[idx * DEST_W +: DEST_W] == m)) begin
+                    any_req = 1'b1;
+                    first_req = idx[$clog2(S_COUNT)-1:0];
+                    break;
+                end
+            end
+            
+            if (any_req) begin
+                grant_valid[m] = 1'b1;
+                grant_sel[m] = first_req;
+                
+                // Advance pointer and stay IDLE if it's the last beat; else lock.
+                if (fifo_ready[m] && s_valid_i[first_req] && s_last_i[first_req]) begin
+                    state_d[m] = IDLE;
+                    rr_ptr_d[m] = (first_req + 1) % S_COUNT;
+                end else begin
+                    state_d[m] = LOCKED;
+                    locked_sel_d[m] = first_req;
+                end
+            end
+        end else begin
+            grant_valid[m] = 1'b1;
+            grant_sel[m] = locked_sel_q[m];
+            
+            // Unlock only when the final beat of the frame is successfully transferred
+            if (fifo_ready[m] && s_valid_i[locked_sel_q[m]] && s_last_i[locked_sel_q[m]]) begin
+                state_d[m] = IDLE;
+                rr_ptr_d[m] = (locked_sel_q[m] + 1) % S_COUNT;
+            end
         end
-      end
-
-      if (granted && req[grant_idx]) begin
-        out_valid[j] = 1'b1;
-        out_grant_idx[j] = grant_idx;
-        if (m_ready_i[j]) begin
-          fifo_read[grant_idx][j] = 1'b1;
-        end
-      end
     end
   end
 
-  always_ff @(posedge clk_i) begin
-    int j;
+  // 3. FIFO Write Generation & Routing
+  always_comb begin
+    int m;
+    for (m = 0; m < M_COUNT; m++) begin
+        fifo_wr[m] = 1'b0;
+        fifo_din_data[m] = '0;
+        fifo_din_keep[m] = '0;
+        fifo_din_last[m] = 1'b0;
+        
+        if (grant_valid[m]) begin
+            fifo_wr[m] = s_valid_i[grant_sel[m]] && fifo_ready[m];
+            fifo_din_data[m] = s_data_i[grant_sel[m] * DATA_W +: DATA_W];
+            fifo_din_keep[m] = s_keep_i[grant_sel[m] * KEEP_W +: KEEP_W];
+            fifo_din_last[m] = s_last_i[grant_sel[m]];
+        end
+    end
+  end
+
+  // 4. Input Ready Backpressure
+  always_comb begin
+    int s;
+    int m;
+    for (s = 0; s < S_COUNT; s++) begin
+        s_ready_o[s] = 1'b0;
+        for (m = 0; m < M_COUNT; m++) begin
+            if (grant_valid[m] && (grant_sel[m] == s) && (s_dest_i[s * DEST_W +: DEST_W] == m)) begin
+                s_ready_o[s] = fifo_ready[m];
+            end
+        end
+    end
+  end
+
+  // 5. FIFO Read Out
+  always_comb begin
+    int m;
+    logic [FIFO_ADDR_W-1:0] rd_idx;
+    for (m = 0; m < M_COUNT; m++) begin
+        rd_idx = fifo_rd_ptr[m][FIFO_ADDR_W-1:0];
+        m_valid_o[m] = ~fifo_empty[m];
+        m_data_o[m * DATA_W +: DATA_W] = fifo_data[m][rd_idx];
+        m_keep_o[m * KEEP_W +: KEEP_W] = fifo_keep[m][rd_idx];
+        m_last_o[m] = fifo_last[m][rd_idx];
+    end
+  end
+
+  // 6. Sequential State Updates
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    int m;
     if (!rst_ni) begin
-      out_locked <= '0;
-      for (j = 0; j < M_COUNT; j = j + 1) begin
-        out_sel[j] <= '0;
-        rr_ptr[j] <= '0;
-      end
-    end else begin
-      for (j = 0; j < M_COUNT; j = j + 1) begin
-        if (out_valid[j] && m_ready_i[j]) begin
-          if (fifo_data_out[out_grant_idx[j]][j][PAYLOAD_W-1]) begin // MSB is last
-            out_locked[j] <= 1'b0;
-            rr_ptr[j] <= out_grant_idx[j] + 1'b1; // Shift fairness
-          end else begin
-            out_locked[j] <= 1'b1;
-            out_sel[j] <= out_grant_idx[j];
-          end
+        for (m = 0; m < M_COUNT; m++) begin
+            state_q[m] <= IDLE;
+            locked_sel_q[m] <= '0;
+            rr_ptr_q[m] <= '0;
+            fifo_wr_ptr[m] <= '0;
+            fifo_rd_ptr[m] <= '0;
         end
-      end
-    end
-  end
-
-  // ===========================================================================
-  // Output Mapping
-  // ===========================================================================
-  always_comb begin
-    logic [PAYLOAD_W-1:0] pld;
-    int j;
-
-    for (j = 0; j < M_COUNT; j = j + 1) begin
-      m_valid_o[j] = out_valid[j];
-      pld = fifo_data_out[out_grant_idx[j]][j];
-      
-      m_last_o[j] = pld[PAYLOAD_W-1];
-      m_keep_o[j * KEEP_W +: KEEP_W] = pld[DATA_W + KEEP_W - 1 : DATA_W];
-      m_data_o[j * DATA_W +: DATA_W] = pld[DATA_W - 1 : 0];
+    end else begin
+        for (m = 0; m < M_COUNT; m++) begin
+            state_q[m] <= state_d[m];
+            locked_sel_q[m] <= locked_sel_d[m];
+            rr_ptr_q[m] <= rr_ptr_d[m];
+            
+            if (fifo_wr[m]) begin
+                fifo_data[m][fifo_wr_ptr[m][FIFO_ADDR_W-1:0]] <= fifo_din_data[m];
+                fifo_keep[m][fifo_wr_ptr[m][FIFO_ADDR_W-1:0]] <= fifo_din_keep[m];
+                fifo_last[m][fifo_wr_ptr[m][FIFO_ADDR_W-1:0]] <= fifo_din_last[m];
+                fifo_wr_ptr[m] <= fifo_wr_ptr[m] + 1;
+            end
+            
+            if (m_valid_o[m] && m_ready_i[m]) begin
+                fifo_rd_ptr[m] <= fifo_rd_ptr[m] + 1;
+            end
+        end
     end
   end
 

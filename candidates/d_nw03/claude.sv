@@ -1,44 +1,46 @@
 // =============================================================================
-// axis_switch_oq.sv -- S_COUNT x M_COUNT output-queued stream switch
-// -----------------------------------------------------------------------------
-// Structure: ONE QUEUE PER OUTPUT, with the arbitration on the WRITE side of
-// each queue and independent per output.
+// axis_switch_oq.sv
 //
-//   input s ---\                    +-----------+
-//   input s'----> arb(out 0) -----> | queue  0  | ---> output 0
-//              /                    +-----------+
-//   input s ---\                    +-----------+
-//   input s'----> arb(out 1) -----> | queue  1  | ---> output 1
-//                                   +-----------+
+// Output-queued stream switch: S_COUNT inputs, M_COUNT outputs, routed by the
+// destination field carried on each input.
 //
-// Why this shape rather than the two obvious alternatives:
+// SHAPE
+// -----
+// One queue per OUTPUT, and one arbiter per output, and that is the whole of
+// the concurrency story: output m decides for itself, every cycle, which input
+// it pulls a beat from. Nothing is shared between outputs -- no common
+// datapath, no common grant, no common queue -- so four inputs addressing four
+// different outputs move four beats per cycle rather than taking turns (C1).
+// An input can be selected by at most one output in a cycle because its `dest`
+// names exactly one, so the per-output decisions never need reconciling.
 //
-//  * A single shared datapath with one arbiter is correct on every frame and
-//    delivers one beat per cycle whatever the port counts say. C1 is an
-//    absolute rate, so that design cannot clear it at 4x4 -- there are
-//    M_COUNT independent write ports and M_COUNT independent read ports here,
-//    so disjoint pairs cost each other nothing and the rate is M_COUNT.
+// FRAME ATOMICITY (R4)
+// --------------------
+// The lock is on the ENQUEUE side, not the output side. When an output takes
+// the first beat of a frame it latches which input that frame came from and
+// keeps taking beats from that input until `last`, so beats of two frames can
+// never be adjacent in one queue. The output then simply drains its queue in
+// order, and atomicity at the port follows from atomicity in the queue rather
+// than from anything the output side has to enforce. A frame may begin draining
+// while it is still arriving -- cut-through is free (L3) and costs nothing here,
+// because the lock already guarantees no other frame can slip in behind it.
 //
-//  * A full S_COUNT x M_COUNT mesh of per-pair queues also works, but costs
-//    S_COUNT times the storage for no behaviour this contract can observe.
-//    One queue per output is enough because the thing that would otherwise
-//    make a shared queue block -- a frame at its head bound for a stalled
-//    output -- cannot arise when the queue serves exactly one output.
+// HEAD-OF-LINE (C2) AND FAIRNESS (C3)
+// -----------------------------------
+// `s_ready_o[s]` is asserted only by the one output that `dest` names, so an
+// input backlogged to a full or stalled output holds nothing but itself: a
+// different input reaching a different output is on entirely separate logic.
+// Each output arbitrates round-robin at FRAME granularity, advancing past the
+// input it just served when that frame ends, so no input is starved.
 //
-// Frame atomicity (R4) is enforced where frames ENTER the queue, not where
-// they leave it: an input that wins an output's write port holds it until it
-// writes `last`. The queue therefore only ever contains whole frames back to
-// back, and the read side needs no frame tracking at all -- it just drains.
-// That also gives R5 for free, since one queue is one order.
-//
-// No head-of-line blocking (C2): an input whose output is backpressured fills
-// only that output's queue and then stalls itself. It holds no resource any
-// other input needs, so a different input reaches a free output unimpeded.
-//
-// Forward progress (C3): each output's write port arbitrates round-robin, with
-// the pointer advanced past the winner when its frame completes. An input can
-// therefore be delayed by at most the other inputs' current frames, which R6
-// bounds at 8 beats each.
+// BUFFERING (B1)
+// --------------
+// Per output: 16 beats of queue, and a new frame is only started when fewer
+// than two complete frames are already queued. Both halves of the bound hold
+// at once -- never more than 2 frames and never more than 16 beats resident
+// for any output -- so a stream of one-beat frames cannot quietly turn the
+// beat budget into a sixteen-frame buffer. The frame limit costs nothing at
+// rate: a queue that drains every cycle sits at one complete frame.
 // =============================================================================
 
 module axis_switch_oq #(
@@ -69,161 +71,141 @@ module axis_switch_oq #(
   localparam int unsigned KEEP_W = DATA_W/8;
   localparam int unsigned DEST_W = $clog2(M_COUNT);
 
-  // Depth 4 holds a partial frame without stalling a full-rate producer while
-  // the reader drains at one beat per cycle; R6's 8-beat bound is not a storage
-  // requirement here because this is not a store-and-forward design.
-  localparam int unsigned QD    = 4;
-  localparam int unsigned PW    = $clog2(QD);
-  localparam int unsigned CW    = $clog2(QD + 1);
-  localparam int unsigned EW    = DATA_W + KEEP_W + 1;   // {last, keep, data}
-  localparam int unsigned SIW   = (S_COUNT <= 2) ? 1 : $clog2(S_COUNT);
+  localparam int unsigned SRC_W  = (S_COUNT == 2) ? 1 : 2;
+  localparam int unsigned MAX_FRAME = 8;                  // R6
+  localparam int unsigned QD     = 2 * MAX_FRAME;         // 16 beats per output
+  localparam int unsigned QAW    = 4;                     // $clog2(QD)
+  localparam int unsigned BW     = DATA_W + KEEP_W + 1;   // {data, keep, last}
 
-  // ---------------------------------------------------------------------------
-  // Rotating-priority pick. `p` has the highest priority and priority wraps
-  // upward from it; returns `p` when nothing requests, which is harmless since
-  // the caller also tests the winner's request bit.
-  // ---------------------------------------------------------------------------
-  function automatic int unsigned rr_pick(input logic [3:0]  req,
-                                          input int unsigned n,
-                                          input int unsigned p);
-    int unsigned i, j;
-    logic        found;
-    rr_pick = p;
-    found   = 1'b0;
-    for (i = 0; i < 4; i = i + 1) begin
-      if (i < n) begin
-        j = p + i;
-        if (j >= n) j = j - n;
-        if (req[j] && !found) begin
-          rr_pick = j;
-          found   = 1'b1;
-        end
-      end
-    end
-  endfunction
+  localparam logic [QAW-1:0] QD_LAST = QAW'(QD - 1);
+  localparam logic [QAW:0]   QD_FULL = (QAW+1)'(QD);
+  localparam logic [QAW:0]   Q_ONE   = (QAW+1)'(1);
+  localparam logic [QAW-1:0] P_ONE   = QAW'(1);
+  localparam logic [SRC_W-1:0] S_ONE = {{(SRC_W-1){1'b0}}, 1'b1};
+  localparam logic [1:0]     F_ONE   = 2'd1;
+  localparam logic [1:0]     F_MAX   = 2'd2;
 
-  // ---------------------------------------------------------------------------
-  // Unpack the port-major input vectors
-  // ---------------------------------------------------------------------------
-  logic [DATA_W-1:0] sdata [S_COUNT];
-  logic [KEEP_W-1:0] skeep [S_COUNT];
-  logic [DEST_W-1:0] sdest [S_COUNT];
+  // ---------------------------------------------------------------- inputs --
+  logic [DATA_W-1:0] sd   [S_COUNT];
+  logic [KEEP_W-1:0] sk   [S_COUNT];
+  logic [DEST_W-1:0] sdst [S_COUNT];
 
-  // ---------------------------------------------------------------------------
-  // Per-output queue and write-port arbitration state
-  // ---------------------------------------------------------------------------
-  logic [EW-1:0]  qmem  [M_COUNT][QD];
-  logic [PW-1:0]  qrp   [M_COUNT];
-  logic [PW-1:0]  qwp   [M_COUNT];
-  logic [CW-1:0]  qcnt  [M_COUNT];
-
-  logic           lockd [M_COUNT];      // a frame is part-written into this queue
-  logic [SIW-1:0] lsrc  [M_COUNT];      // and this input owns the write port
-  logic [SIW-1:0] rptr  [M_COUNT];      // round-robin pointer
-
-  int unsigned    osel  [M_COUNT];      // input currently owning the write port
-  logic           ofull [M_COUNT];
-  logic           opush [M_COUNT];
-  logic           opop  [M_COUNT];
-  logic [EW-1:0]  owdat [M_COUNT];
-  logic           olast [M_COUNT];      // `last` of the beat being written
-
-  genvar gs, gm;
-
-  generate
-    for (gs = 0; gs < S_COUNT; gs = gs + 1) begin : g_unpack
-      assign sdata[gs] = s_data_i[gs*DATA_W +: DATA_W];
-      assign skeep[gs] = s_keep_i[gs*KEEP_W +: KEEP_W];
-      assign sdest[gs] = s_dest_i[gs*DEST_W +: DEST_W];
-    end
-  endgenerate
-
-  // ---------------------------------------------------------------------------
-  // Per-output write port: select an input, then push its beat
-  // ---------------------------------------------------------------------------
-  generate
-    for (gm = 0; gm < M_COUNT; gm = gm + 1) begin : g_out
-      localparam int unsigned GM = gm;
-
-      // ---- arbitrate ------------------------------------------------------
-      always_comb begin
-        logic [3:0]  req;
-        int unsigned s;
-        req = 4'b0000;
-        for (s = 0; s < S_COUNT; s = s + 1)
-          if (s_valid_i[s] && (32'(sdest[s]) == GM)) req[s] = 1'b1;
-
-        // A part-written frame keeps the port; `dest` is stable for a frame
-        // (R2), so the locked owner can only ever be requesting this output.
-        osel[gm] = lockd[gm] ? 32'(lsrc[gm]) : rr_pick(req, S_COUNT, 32'(rptr[gm]));
-
-        owdat[gm] = '0;
-        olast[gm] = 1'b0;
-        for (s = 0; s < S_COUNT; s = s + 1) if (osel[gm] == s) begin
-          owdat[gm] = {s_last_i[s], skeep[s], sdata[s]};
-          olast[gm] = s_last_i[s];
-        end
-
-        ofull[gm] = (qcnt[gm] == QD[CW-1:0]);
-        opush[gm] = req[osel[gm]] && !ofull[gm];
-        opop [gm] = m_valid_o[gm] && m_ready_i[gm];
-      end
-
-      // ---- queue ----------------------------------------------------------
-      always_ff @(posedge clk_i) begin
-        int unsigned onext;
-        onext = (osel[gm] + 1 >= S_COUNT) ? 0 : (osel[gm] + 1);
-        if (!rst_ni) begin
-          qrp[gm]   <= '0;
-          qwp[gm]   <= '0;
-          qcnt[gm]  <= '0;
-          lockd[gm] <= 1'b0;
-          lsrc[gm]  <= '0;
-          rptr[gm]  <= '0;
-        end else begin
-          if (opush[gm]) begin
-            qmem[gm][qwp[gm]] <= owdat[gm];
-            qwp[gm] <= (32'(qwp[gm]) == QD-1) ? '0 : (qwp[gm] + 1'b1);
-            // hold the port for the rest of the frame; release it on `last`
-            // and step the pointer past the winner so it cannot re-win
-            // immediately while another input is waiting (C3).
-            if (olast[gm]) begin
-              lockd[gm] <= 1'b0;
-              rptr[gm]  <= onext[SIW-1:0];
-            end else begin
-              lockd[gm] <= 1'b1;
-              lsrc[gm]  <= osel[gm][SIW-1:0];
-            end
-          end
-          if (opop[gm])
-            qrp[gm] <= (32'(qrp[gm]) == QD-1) ? '0 : (qrp[gm] + 1'b1);
-
-          case ({opush[gm], opop[gm]})
-            2'b10:   qcnt[gm] <= qcnt[gm] + 1'b1;
-            2'b01:   qcnt[gm] <= qcnt[gm] - 1'b1;
-            default: ;
-          endcase
-        end
-      end
-
-      // ---- read side: the queue holds whole frames, so just drain ---------
-      assign m_valid_o[gm]                = (qcnt[gm] != '0);
-      assign m_data_o[gm*DATA_W +: DATA_W] = qmem[gm][qrp[gm]][DATA_W-1:0];
-      assign m_keep_o[gm*KEEP_W +: KEEP_W] = qmem[gm][qrp[gm]][DATA_W +: KEEP_W];
-      assign m_last_o[gm]                  = qmem[gm][qrp[gm]][EW-1];
-    end
-  endgenerate
-
-  // ---------------------------------------------------------------------------
-  // An input is ready exactly when it owns its destination's write port and
-  // that queue has room. Only its own destination is consulted, so a stalled
-  // output cannot reach across and hold up an unrelated input (C2).
-  // ---------------------------------------------------------------------------
   always_comb begin
-    int unsigned s, d;
-    for (s = 0; s < S_COUNT; s = s + 1) begin
-      d = 32'(sdest[s]);
-      s_ready_o[s] = (osel[d] == s) && !ofull[d];
+    int unsigned s;
+    for (s = 0; s < S_COUNT; s++) begin
+      sd[s]   = s_data_i[s*DATA_W +: DATA_W];
+      sk[s]   = s_keep_i[s*KEEP_W +: KEEP_W];
+      sdst[s] = s_dest_i[s*DEST_W +: DEST_W];
+    end
+  end
+
+  // ---------------------------------------------------------- output state --
+  logic [BW-1:0]     q     [M_COUNT][QD];
+  logic [QAW-1:0]    q_wp  [M_COUNT], q_rp [M_COUNT];
+  logic [QAW:0]      q_cnt [M_COUNT];
+  logic [1:0]        f_cnt [M_COUNT];   // complete frames resident
+  logic              lk_v  [M_COUNT];   // mid-frame, locked to one input
+  logic [SRC_W-1:0]  lk_s  [M_COUNT];
+  logic [SRC_W-1:0]  rr    [M_COUNT];   // round-robin pointer (L1, C3)
+
+  logic              gv   [M_COUNT];    // this output wants a beat
+  logic [SRC_W-1:0]  gs   [M_COUNT];    // from this input
+  logic              acc  [M_COUNT];    // and can take it
+  logic              deq  [M_COUNT];
+  logic              h_last [M_COUNT];
+
+  // --------------------------------------------------------- arbitration ----
+  always_comb begin
+    int m, k, i, ls;
+    i  = 0;
+    ls = 0;
+    for (m = 0; m < int'(M_COUNT); m++) begin
+      gv[m] = 1'b0;
+      gs[m] = '0;
+      if (lk_v[m]) begin
+        // committed to this frame until its last beat (R4)
+        ls = int'(lk_s[m]);
+        if (s_valid_i[ls]) begin
+          gv[m] = 1'b1;
+          gs[m] = lk_s[m];
+        end
+      end else if (f_cnt[m] != F_MAX) begin
+        // frame-granular round robin, starting past whoever was served last
+        for (k = int'(S_COUNT) - 1; k >= 0; k--) begin
+          i = (int'(rr[m]) + k) % int'(S_COUNT);
+          if (s_valid_i[i] && (sdst[i] == DEST_W'(unsigned'(m)))) begin
+            gv[m] = 1'b1;
+            gs[m] = SRC_W'(unsigned'(i));
+          end
+        end
+      end
+      acc[m] = gv[m] && (q_cnt[m] != QD_FULL);
+    end
+  end
+
+  // An input is only ever selected by the single output its dest names, so
+  // these assignments can never collide.
+  always_comb begin
+    int m;
+    s_ready_o = '0;
+    for (m = 0; m < int'(M_COUNT); m++) begin
+      if (acc[m]) s_ready_o[gs[m]] = 1'b1;
+    end
+  end
+
+  // ------------------------------------------------------------- outputs ----
+  always_comb begin
+    int unsigned m;
+    logic [BW-1:0] h;
+    m_valid_o = '0;
+    m_data_o  = '0;
+    m_keep_o  = '0;
+    m_last_o  = '0;
+    for (m = 0; m < M_COUNT; m++) begin
+      h = q[m][q_rp[m]];
+      m_valid_o[m]                 = (q_cnt[m] != '0);
+      m_data_o[m*DATA_W +: DATA_W] = h[KEEP_W+1 +: DATA_W];
+      m_keep_o[m*KEEP_W +: KEEP_W] = h[1 +: KEEP_W];
+      m_last_o[m]                  = h[0];
+      h_last[m]                    = h[0];
+      deq[m]                       = (q_cnt[m] != '0) && m_ready_i[m];
+    end
+  end
+
+  // ----------------------------------------------------------- sequential ---
+  always_ff @(posedge clk_i) begin
+    int m, g;
+    if (!rst_ni) begin
+      for (m = 0; m < int'(M_COUNT); m++) begin
+        q_wp[m]  <= '0;
+        q_rp[m]  <= '0;
+        q_cnt[m] <= '0;
+        f_cnt[m] <= '0;
+        lk_v[m]  <= 1'b0;
+        lk_s[m]  <= '0;
+        rr[m]    <= '0;
+      end
+    end else begin
+      for (m = 0; m < int'(M_COUNT); m++) begin
+        g = int'(gs[m]);
+        if (acc[m]) begin
+          q[m][q_wp[m]] <= {sd[g], sk[g], s_last_i[g]};
+          q_wp[m]       <= (q_wp[m] == QD_LAST) ? '0 : q_wp[m] + P_ONE;
+          if (s_last_i[g]) begin
+            lk_v[m] <= 1'b0;
+            // hand the next frame to the following input (C3)
+            rr[m]   <= (int'(gs[m]) == int'(S_COUNT) - 1) ? '0 : gs[m] + S_ONE;
+          end else begin
+            lk_v[m] <= 1'b1;
+            lk_s[m] <= gs[m];
+          end
+        end
+        if (deq[m]) q_rp[m] <= (q_rp[m] == QD_LAST) ? '0 : q_rp[m] + P_ONE;
+
+        q_cnt[m] <= q_cnt[m] + (acc[m] ? Q_ONE : '0) - (deq[m] ? Q_ONE : '0);
+        f_cnt[m] <= f_cnt[m] + ((acc[m] && s_last_i[g]) ? F_ONE : 2'd0)
+                             - ((deq[m] && h_last[m])   ? F_ONE : 2'd0);
+      end
     end
   end
 

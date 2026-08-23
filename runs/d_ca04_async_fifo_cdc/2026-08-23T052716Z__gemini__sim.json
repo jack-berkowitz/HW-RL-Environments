@@ -1,0 +1,12 @@
+{
+  "build_error": "1 error(s); first: sanitised_gemini.sv:60:36: error: identifier 'rd_ptr_gray' used before its declaration ",
+  "build_status": "slang_rejected",
+  "git_sha": "af92c787e7a3094da6af9830f5b1072dd188d619-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_ca04/gemini.sv",
+  "submission_sha256_16": "16a21181bc94d4fe",
+  "task": "d_ca04_async_fifo_cdc",
+  "task_text_hash": "5c9a12842b8b0c7d",
+  "timestamp_utc": "2026-08-23T05:27:16Z"
+}

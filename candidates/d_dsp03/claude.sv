@@ -1,33 +1,26 @@
 // =============================================================================
-// fp_multifmt_fma.sv
-// -----------------------------------------------------------------------------
-// Multi-format (FP32 / FP16 / BF16) vectorial FUSED multiply-add.
-//
-// Structure
-//   * WIDTH/16 lane slots.  Slot k always covers result bits [16k +: 16].
-//     - 16-bit formats: slot k is lane k.
-//     - FP32:           slot k (k even) is lane k/2 and covers [16k +: 32];
-//                       odd slots are unused, so their cores are built with
-//                       en32 tied low and collapse to the 16-bit datapath.
-//   * One shared core.  Every operand is widened to a common internal form
-//         value = sig * 2^(exp - 23),  sig 24 bits, left-aligned mantissa,
-//     so the three formats differ only in unpack, in the rounding precision
-//     (24 / 11 / 8) and in the exponent bias.  BF16 is 8/7, FP16 is 5/10.
-//   * The product is formed exactly (48b) and the addend is aligned into an
-//     80-bit fixed-point accumulator with 4 guard positions below the product
-//     LSB.  There is exactly ONE rounding, of the exact product-plus-addend.
-//   * Alignment shifts saturate.  Past saturation the smaller term can only
-//     reach the sticky region, which is why saturation is safe; the left
-//     saturation additionally compensates the result exponent (esc).
-//   * Subnormals are pre-normalised on the way in and re-materialised on the
-//     way out.  Nothing is flushed.
-//   * Tininess is detected AFTER rounding, by rounding a second time with an
-//     unbounded exponent range and testing that result against 2^emin.
-//
-// All procedural loop bounds are compile-time constants (T5); the runtime lane
-// count is applied as a guard inside the loop, never as a bound.
+// fp_multifmt_fma.sv -- fused multiply-add, three formats, SIMD lanes
 // =============================================================================
-
+// One lane datapath, written once and instantiated per format by a generate
+// loop whose localparams carry that format's geometry.  Each instance is
+// therefore sized for the format it serves: the significand field is
+// WF = 3*p+5 bits, which is 77 at FP32 (p=24), 38 at FP16 (p=11) and 29 at
+// BF16 (p=8) -- inside A8's 4*p bound of 96 / 44 / 32 in every case.  The
+// widest thing in the lane is the WF+1 bit sum, still inside the bound.
+//
+// The addition is fused: the exact 2p-bit product is placed in that field, the
+// addend is aligned into it with everything below collapsed to one sticky bit,
+// and the sum is rounded exactly once.
+//
+// Alignment, worked once so the constants below are checkable.  Bit i of the
+// field has weight 2**(e_p + i - 3), so the product's LSB sits at bit 3 and its
+// MSB at bit 2p+2, leaving p+2 bits above it for the addend and a carry, and
+// three bits below it: two guard bits and, at bit 0, the sticky.  The addend's
+// LSB lands at bit WF-p-s, so s = 2p+2-d with d = e_c-e_p.  s<0 means the
+// addend sits so far above the product that the whole product is at least four
+// bits below the addend's LSB and can only ever be sticky, so the product
+// collapses to one bit and s clamps to zero.
+// =============================================================================
 module fp_multifmt_fma #(
   parameter int unsigned WIDTH = 64        // {32, 64}
 ) (
@@ -51,346 +44,311 @@ module fp_multifmt_fma #(
   output logic [4:0]       flags_o         // {NV, DZ, OF, UF, NX}
 );
 
-  // ---------------------------------------------------------------------------
-  // Geometry of the shared datapath
-  // ---------------------------------------------------------------------------
-  localparam int PW    = 24;               // internal significand width
-  localparam int PW2   = 2*PW;             // exact product width
-  localparam int ACC_W = 3*PW + 8;         // 80 : alignment accumulator
-  localparam int L_MAX = 2*PW + 7;         // 55 : left-align saturation
-  localparam int NORMW = ACC_W + 8;        // 88 : padded, for variable extracts
-  localparam int NSLOT = WIDTH/16;         // lane slots (2 or 4)
+  localparam int NL16 = WIDTH / 16;        // 2 or 4
+  localparam int NL32 = WIDTH / 32;        // 1 or 2
 
   // ---------------------------------------------------------------------------
-  // Round-up decision, all five modes
+  // input register: one operation in flight, results in order (H1, H2, C1)
   // ---------------------------------------------------------------------------
-  function automatic logic rup_f(input logic [2:0] rm,
-                                 input logic       sgn,
-                                 input logic       lsb,
-                                 input logic       gb,
-                                 input logic       sb);
-    case (rm)
-      3'd0:    rup_f = gb & (sb | lsb);      // RNE
-      3'd1:    rup_f = 1'b0;                 // RTZ
-      3'd2:    rup_f = sgn & (gb | sb);      // RDN
-      3'd3:    rup_f = (~sgn) & (gb | sb);   // RUP
-      3'd4:    rup_f = gb;                   // RMM
-      default: rup_f = 1'b0;
-    endcase
-  endfunction
+  logic             valid_q;
+  logic [1:0]       fmt_q;
+  logic             vec_q;
+  logic [2:0]       rnd_q;
+  logic [WIDTH-1:0] a_q, b_q, c_q;
 
-  // ---------------------------------------------------------------------------
-  // One scalar fused multiply-add.  Returns {flags[4:0], result[31:0]}.
-  // 16-bit formats are returned right-aligned with a zeroed upper half.
-  // ---------------------------------------------------------------------------
-  function automatic logic [36:0] fma_core(input logic       en32,
-                                           input logic [1:0] fmt,
-                                           input logic [31:0] a,
-                                           input logic [31:0] b,
-                                           input logic [31:0] c,
-                                           input logic [2:0]  rm);
-    // ---- declarations (all before the first statement, T2) ------------------
-    integer            i;
-    logic              sa, sb, sc;
-    logic [7:0]        fa, fb, fc;
-    logic [22:0]       mua, mub, muc;
-    logic [7:0]        expall;
-    int                expall_i, bias, prec, emin;
-    logic [31:0]       qnan_v, infp_v, sgn_v, maxn_v;
-    logic              za, zb, zc, ina, inb, inc;
-    logic              nna, nnb, nnc, sna, snb, snc;
-    logic [PW-1:0]     siga, sigb, sigc, sigan, sigbn, sigcn;
-    int                ea, eb, ec, ep, ecl, tsh, esc;
-    int                lza, lzb, lzc, lzs;
-    logic [PW2-1:0]    mp, tmp2;
-    logic [ACC_W-1:0]  acc_p, acc_c, accsum, norm;
-    int                tt, ss;
-    logic              stky_c, stky_lo, sp, sr, eff_sub, prod_zero;
-    int                exp_n, shr_full, shr, qexp, qf, bexp, ts, ts_unb, q_unb;
-    logic [NORMW-1:0]  normw, sh_r, sh_u;
-    logic [31:0]       sig_r, sig_u, sigp, sigu;
-    logic              gbit, stk, gbit_u, stk_u, ru, ru_u, carry, carry_u;
-    logic              tiny, ovf, nxf, uff, res_sub, want_inf, zsign;
-    logic [31:0]       res;
-    logic [4:0]        fl;
+  assign in_ready_o  = !valid_q || out_ready_i;
+  assign out_valid_o = valid_q;
 
-    // ---- unpack: one 24-bit left-aligned form for all three formats ---------
-    if (en32 && (fmt == 2'd0)) begin              // FP32  1 / 8 / 23
-      sa = a[31]; fa = a[30:23]; mua = a[22:0];
-      sb = b[31]; fb = b[30:23]; mub = b[22:0];
-      sc = c[31]; fc = c[30:23]; muc = c[22:0];
-      expall = 8'hFF; expall_i = 255; bias = 127; prec = 24;
-      qnan_v = 32'h7FC00000; infp_v = 32'h7F800000;
-      sgn_v  = 32'h80000000; maxn_v = 32'h7F7FFFFF;
-    end else if (fmt == 2'd1) begin               // FP16  1 / 5 / 10
-      sa = a[15]; fa = {3'b000, a[14:10]}; mua = {a[9:0], 13'b0};
-      sb = b[15]; fb = {3'b000, b[14:10]}; mub = {b[9:0], 13'b0};
-      sc = c[15]; fc = {3'b000, c[14:10]}; muc = {c[9:0], 13'b0};
-      expall = 8'd31; expall_i = 31; bias = 15; prec = 11;
-      qnan_v = 32'h00007E00; infp_v = 32'h00007C00;
-      sgn_v  = 32'h00008000; maxn_v = 32'h00007BFF;
-    end else begin                                // BF16  1 / 8 / 7
-      sa = a[15]; fa = a[14:7]; mua = {a[6:0], 16'b0};
-      sb = b[15]; fb = b[14:7]; mub = {b[6:0], 16'b0};
-      sc = c[15]; fc = c[14:7]; muc = {c[6:0], 16'b0};
-      expall = 8'hFF; expall_i = 255; bias = 127; prec = 8;
-      qnan_v = 32'h00007FC0; infp_v = 32'h00007F80;
-      sgn_v  = 32'h00008000; maxn_v = 32'h00007F7F;
-    end
-    emin = 1 - bias;
-
-    // ---- classify -----------------------------------------------------------
-    za  = (fa == 8'd0) && (mua == 23'd0);
-    zb  = (fb == 8'd0) && (mub == 23'd0);
-    zc  = (fc == 8'd0) && (muc == 23'd0);
-    ina = (fa == expall) && (mua == 23'd0);
-    inb = (fb == expall) && (mub == 23'd0);
-    inc = (fc == expall) && (muc == 23'd0);
-    nna = (fa == expall) && (mua != 23'd0);
-    nnb = (fb == expall) && (mub != 23'd0);
-    nnc = (fc == expall) && (muc != 23'd0);
-    sna = nna && !mua[22];
-    snb = nnb && !mub[22];
-    snc = nnc && !muc[22];
-
-    // ---- significands and unbiased exponents; subnormals get their true value
-    siga = {(fa != 8'd0), mua};
-    sigb = {(fb != 8'd0), mub};
-    sigc = {(fc != 8'd0), muc};
-    ea = (fa == 8'd0) ? (1 - bias) : ($signed({24'b0, fa}) - bias);
-    eb = (fb == 8'd0) ? (1 - bias) : ($signed({24'b0, fb}) - bias);
-    ec = (fc == 8'd0) ? (1 - bias) : ($signed({24'b0, fc}) - bias);
-
-    // ---- pre-normalise (this is what keeps subnormals at full precision) ----
-    lza = PW; lzb = PW; lzc = PW;
-    for (i = 0; i < PW; i = i + 1) begin
-      if (siga[i]) lza = PW - 1 - i;
-      if (sigb[i]) lzb = PW - 1 - i;
-      if (sigc[i]) lzc = PW - 1 - i;
-    end
-    sigan = siga << lza;
-    sigbn = sigb << lzb;
-    sigcn = sigc << lzc;
-    ea = ea - lza;
-    eb = eb - lzb;
-    ec = ec - lzc;
-
-    // ---- exact product, and the addend's alignment target -------------------
-    mp  = {{PW{1'b0}}, sigan} * {{PW{1'b0}}, sigbn};
-    ep  = ea + eb - 2*(PW-1);        // weight of mp's LSB
-    ecl = ec - (PW-1);               // weight of sigcn's LSB
-    tsh = ecl - ep + 4;              // addend LSB position in the accumulator
-    sp  = sa ^ sb;
-    prod_zero = za | zb;
-
-    // ---- align -------------------------------------------------------------
-    acc_p = prod_zero ? {ACC_W{1'b0}} : ({{(ACC_W-PW2){1'b0}}, mp} << 4);
-    esc   = 0;
-    tt    = 0;
-    ss    = 0;
-    tmp2  = {PW2{1'b0}};
-    if (zc || prod_zero) begin
-      acc_c  = {ACC_W{1'b0}};
-      stky_c = 1'b0;
-    end else if (tsh >= 0) begin
-      tt     = (tsh > L_MAX) ? L_MAX : tsh;
-      esc    = tsh - tt;             // saturated: rescale the whole accumulator
-      acc_c  = {{(ACC_W-PW){1'b0}}, sigcn} << tt;
-      stky_c = 1'b0;
+  always_ff @(posedge clk_i) begin
+    if (!rst_ni) begin
+      valid_q <= 1'b0;
+      fmt_q   <= 2'd0;
+      vec_q   <= 1'b0;
+      rnd_q   <= 3'd0;
+      a_q     <= '0;
+      b_q     <= '0;
+      c_q     <= '0;
     end else begin
-      ss     = ((0 - tsh) > PW) ? PW : (0 - tsh);
-      tmp2   = {sigcn, {PW{1'b0}}} >> ss;
-      acc_c  = {{(ACC_W-PW){1'b0}}, tmp2[PW2-1:PW]};
-      stky_c = |tmp2[PW-1:0];
-    end
-
-    // ---- the single add ----------------------------------------------------
-    eff_sub = sp ^ sc;
-    if (!eff_sub) begin
-      accsum = acc_p + acc_c;   stky_lo = stky_c; sr = sp;
-    end else if (stky_c) begin
-      // acc_p strictly dominates here, and the discarded addend tail is a
-      // borrow: subtract one ulp and leave a residual sticky.
-      accsum = acc_p - acc_c - 1; stky_lo = 1'b1;  sr = sp;
-    end else if (acc_p >= acc_c) begin
-      accsum = acc_p - acc_c;   stky_lo = 1'b0;   sr = sp;
-    end else begin
-      accsum = acc_c - acc_p;   stky_lo = 1'b0;   sr = sc;
-    end
-
-    // ---- normalise ---------------------------------------------------------
-    lzs = ACC_W;
-    for (i = 0; i < ACC_W; i = i + 1) if (accsum[i]) lzs = ACC_W - 1 - i;
-    norm  = accsum << lzs;
-    exp_n = ep - 4 + esc + (ACC_W - 1 - lzs);
-
-    // ---- rounding position: normal, or clamped to the subnormal grid -------
-    shr_full = emin - exp_n;
-    if (shr_full <= 0)                 shr = 0;
-    else if (shr_full > (prec + 2))    shr = prec + 2;
-    else                               shr = shr_full;
-    qexp   = (shr_full > 0) ? emin : exp_n;
-    ts_unb = ACC_W - prec;
-    ts     = ts_unb + shr;
-    normw  = {{(NORMW-ACC_W){1'b0}}, norm};
-
-    sh_r  = normw >> ts;
-    sig_r = sh_r[31:0];
-    gbit  = normw[ts-1];
-    stk   = (|(normw & ~({NORMW{1'b1}} << (ts-1)))) | stky_lo;
-
-    // the same value rounded with an unbounded exponent range: this, and only
-    // this, is what tininess-after-rounding is defined against
-    sh_u   = normw >> ts_unb;
-    sig_u  = sh_u[31:0];
-    gbit_u = normw[ts_unb-1];
-    stk_u  = (|(normw & ~({NORMW{1'b1}} << (ts_unb-1)))) | stky_lo;
-
-    ru      = rup_f(rm, sr, sig_r[0], gbit, stk);
-    sigp    = sig_r + {31'b0, ru};
-    carry   = sigp[prec];
-    ru_u    = rup_f(rm, sr, sig_u[0], gbit_u, stk_u);
-    sigu    = sig_u + {31'b0, ru_u};
-    carry_u = sigu[prec];
-    q_unb   = exp_n + (carry_u ? 1 : 0);
-    tiny    = (q_unb < emin);
-
-    res_sub = (!carry) && (!sigp[prec-1]);
-    qf      = qexp + (carry ? 1 : 0);
-    bexp    = qf + bias;
-    ovf     = (bexp >= expall_i);
-    nxf     = gbit | stk | ovf;
-    uff     = tiny & (gbit | stk);
-    want_inf = (rm == 3'd0) || (rm == 3'd4) ||
-               ((rm == 3'd3) && !sr) || ((rm == 3'd2) && sr);
-
-    // ---- pack the numeric result -------------------------------------------
-    if (ovf) begin
-      res = (want_inf ? infp_v : maxn_v) | (sr ? sgn_v : 32'b0);
-    end else if (en32 && (fmt == 2'd0)) begin
-      res = {sr, (res_sub ? 8'd0 : bexp[7:0]),  sigp[22:0]};
-    end else if (fmt == 2'd1) begin
-      res = {16'b0, sr, (res_sub ? 5'd0 : bexp[4:0]), sigp[9:0]};
-    end else begin
-      res = {16'b0, sr, (res_sub ? 8'd0 : bexp[7:0]), sigp[6:0]};
-    end
-    fl = {1'b0, 1'b0, ovf, uff, nxf};
-
-    // ---- special cases override, in IEEE / task priority order -------------
-    zsign = 1'b0;
-    if (sna | snb | snc) begin                       // signalling NaN operand
-      res = qnan_v; fl = 5'b10000;
-    end else if ((za & inb) | (ina & zb)) begin      // 0 * inf, beats a qNaN c
-      res = qnan_v; fl = 5'b10000;
-    end else if (nna | nnb | nnc) begin              // quiet NaN operand
-      res = qnan_v; fl = 5'b00000;
-    end else if (ina | inb) begin                    // infinite product
-      if (inc && (sc != sp)) begin
-        res = qnan_v; fl = 5'b10000;                 // inf - inf
-      end else begin
-        res = infp_v | (sp ? sgn_v : 32'b0); fl = 5'b00000;
-      end
-    end else if (inc) begin                          // infinite addend
-      res = infp_v | (sc ? sgn_v : 32'b0); fl = 5'b00000;
-    end else if (prod_zero) begin                    // 0 + c is exactly c
-      if (zc) begin
-        zsign = (sp == sc) ? sc : ((rm == 3'd2) ? 1'b1 : 1'b0);
-        res = zsign ? sgn_v : 32'b0;
-      end else begin
-        res = c;
-      end
-      fl = 5'b00000;
-    end else if (accsum == {ACC_W{1'b0}}) begin      // exact cancellation
-      res = (rm == 3'd2) ? sgn_v : 32'b0;
-      fl = 5'b00000;
-    end
-
-    fma_core = {fl, res};
-  endfunction
-
-  // ---------------------------------------------------------------------------
-  // Lane slots
-  // ---------------------------------------------------------------------------
-  logic [36:0] lane_out [NSLOT];
-  logic [15:0] chunk    [NSLOT];
-  logic [WIDTH-1:0] res_c;
-  logic [4:0]       fl_c;
-  integer           kk;
-
-  genvar g;
-  generate
-    for (g = 0; g < NSLOT; g = g + 1) begin : g_lane
-      // even slots may carry an FP32 lane; for odd slots this base is legal but
-      // unreachable, so the FP32 datapath constant-folds away there.
-      localparam int B32 = ((g % 2) == 0) ? 16*g : 16*(g-1);
-      logic [31:0] la, lb, lc;
-
-      always_comb begin
-        if (((g % 2) == 0) && (fmt_i == 2'd0)) begin
-          la = a_i[B32 +: 32];
-          lb = b_i[B32 +: 32];
-          lc = c_i[B32 +: 32];
-        end else begin
-          // narrow formats: the slot's 16 bits only. Operand bits outside the
-          // lanes in use never reach the datapath.
-          la = {16'b0, a_i[16*g +: 16]};
-          lb = {16'b0, b_i[16*g +: 16]};
-          lc = {16'b0, c_i[16*g +: 16]};
-        end
-      end
-
-      assign lane_out[g] = fma_core(((g % 2) == 0) ? 1'b1 : 1'b0,
-                                    fmt_i, la, lb, lc, rnd_i);
-    end
-
-    // Result assembly. Slots not in use read back all ones (NaN-boxing).
-    for (g = 0; g < NSLOT; g = g + 1) begin : g_asm
-      always_comb begin
-        chunk[g] = 16'hFFFF;
-        if (fmt_i == 2'd0) begin
-          // FP32 lane (g/2): lane 0 always live, higher lanes only when vector
-          if ((g < 2) || vec_i)
-            chunk[g] = ((g % 2) == 0) ? lane_out[(g/2)*2][15:0]
-                                      : lane_out[(g/2)*2][31:16];
-        end else begin
-          if ((g == 0) || vec_i)
-            chunk[g] = lane_out[g][15:0];
-        end
-      end
-      assign res_c[16*g +: 16] = chunk[g];
-    end
-  endgenerate
-
-  // flags are the bitwise OR across the lanes in use
-  always_comb begin
-    fl_c = 5'b00000;
-    for (kk = 0; kk < NSLOT; kk = kk + 1) begin
-      if (fmt_i == 2'd0) begin
-        if (((kk % 2) == 0) && ((kk == 0) || vec_i)) fl_c = fl_c | lane_out[kk][36:32];
-      end else begin
-        if ((kk == 0) || vec_i)                      fl_c = fl_c | lane_out[kk][36:32];
+      if (in_valid_i && in_ready_o) begin
+        valid_q <= 1'b1;
+        fmt_q   <= fmt_i;
+        vec_q   <= vec_i;
+        rnd_q   <= rnd_i;
+        a_q     <= a_i;
+        b_q     <= b_i;
+        c_q     <= c_i;
+      end else if (out_ready_i) begin
+        valid_q <= 1'b0;
       end
     end
   end
 
   // ---------------------------------------------------------------------------
-  // Handshake: one output register. in_ready_o does not depend on in_valid_i
-  // and out_valid_o does not depend on out_ready_i, so neither side can wedge.
-  // Results leave in the order they arrived.
+  // per-format, per-lane results
   // ---------------------------------------------------------------------------
-  assign in_ready_o = (!out_valid_o) | out_ready_i;
+  logic [31:0] lane_res [3][NL16];
+  logic [4:0]  lane_flg [3][NL16];
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      out_valid_o <= 1'b0;
-      result_o    <= {WIDTH{1'b0}};
-      flags_o     <= 5'b00000;
-    end else if (in_valid_i && in_ready_o) begin
-      out_valid_o <= 1'b1;
-      result_o    <= res_c;
-      flags_o     <= fl_c;
-    end else if (out_ready_i) begin
-      out_valid_o <= 1'b0;
+  for (genvar f = 0; f < 3; f++) begin : g_fmt
+    localparam int EW    = (f == 1) ? 5 : 8;
+    localparam int MW    = (f == 0) ? 23 : (f == 1) ? 10 : 7;
+    localparam int FW    = 1 + EW + MW;                 // 32 / 16 / 16
+    localparam int PP    = MW + 1;                      // significand precision
+    localparam int BIAS  = (1 << (EW - 1)) - 1;
+    localparam int EMIN  = 1 - BIAS;                    // unbiased subnormal exponent
+    localparam int WF    = 3 * PP + 5;                  // significand field, <= 4*PP
+    localparam int NLANE = int'(WIDTH) / FW;
+
+    for (genvar l = 0; l < NL16; l++) begin : g_lane
+      if (l < NLANE) begin : g_live
+        always_comb begin
+          // ---- declarations first (T2) --------------------------------------
+          logic [FW-1:0]   av, bv, cv;
+          logic            sa, sb, sc;
+          logic [EW-1:0]   ea, eb, ec;
+          logic [MW-1:0]   ma, mb, mc;
+          logic            a_z, b_z, c_z;
+          logic            a_i2, b_i2, c_i2;
+          logic            a_n, b_n, c_n;
+          logic            a_sn, b_sn, c_sn;
+          logic [PP-1:0]   siga, sigb, sigc;
+          logic signed [15:0] expa, expb, expc;
+          logic signed [15:0] e_p, e_c, dd, s_raw, sh, ex, rsh, ebo, ebias, e_base;
+          logic            sgn_p, eff_sub, rsgn;
+          logic            prod_inf, invalid, nan_out, inf_out;
+          logic [2*PP-1:0] prod;
+          logic [WF-2:0]   c_pad, c_shr;
+          logic            c_stk, far_above;
+          logic [WF-1:0]   c_fld, p_fld;
+          logic [WF:0]     msum, mnrm, mshf;
+          logic            r_stk;
+          integer          lz, shi, rshi;
+          logic            fnd;
+          logic [PP-1:0]   mant;
+          logic            rbit, stky, incr;
+          logic [PP:0]     qrnd;
+          logic [EW-1:0]   eout;
+          logic [MW-1:0]   mout;
+          logic            nx, of, uf;
+          logic            to_inf;
+
+          to_inf = 1'b0;
+          uf     = 1'b0;
+          lane_res[f][l] = 32'd0;
+          lane_flg[f][l] = 5'd0;
+
+          av = a_q[l*FW +: FW];
+          bv = b_q[l*FW +: FW];
+          cv = c_q[l*FW +: FW];
+
+          // ---- decode -------------------------------------------------------
+          sa = av[FW-1];  ea = av[FW-2 -: EW];  ma = av[MW-1:0];
+          sb = bv[FW-1];  eb = bv[FW-2 -: EW];  mb = bv[MW-1:0];
+          sc = cv[FW-1];  ec = cv[FW-2 -: EW];  mc = cv[MW-1:0];
+
+          a_z  = (ea == '0) && (ma == '0);
+          b_z  = (eb == '0) && (mb == '0);
+          c_z  = (ec == '0) && (mc == '0);
+          a_i2 = (&ea) && (ma == '0);
+          b_i2 = (&eb) && (mb == '0);
+          c_i2 = (&ec) && (mc == '0);
+          a_n  = (&ea) && (ma != '0);
+          b_n  = (&eb) && (mb != '0);
+          c_n  = (&ec) && (mc != '0);
+          a_sn = a_n && !ma[MW-1];
+          b_sn = b_n && !mb[MW-1];
+          c_sn = c_n && !mc[MW-1];
+
+          siga = {(ea != '0), ma};
+          sigb = {(eb != '0), mb};
+          sigc = {(ec != '0), mc};
+          expa = (ea == '0) ? (16'sd1 - $signed(16'(BIAS))) : ($signed(16'(ea)) - $signed(16'(BIAS)));
+          expb = (eb == '0) ? (16'sd1 - $signed(16'(BIAS))) : ($signed(16'(eb)) - $signed(16'(BIAS)));
+          expc = (ec == '0) ? (16'sd1 - $signed(16'(BIAS))) : ($signed(16'(ec)) - $signed(16'(BIAS)));
+
+          sgn_p    = sa ^ sb;
+          prod_inf = a_i2 || b_i2;
+
+          // ---- A5: the invalid cases ----------------------------------------
+          invalid = a_sn || b_sn || c_sn
+                 || (a_z && b_i2) || (a_i2 && b_z)
+                 || (prod_inf && c_i2 && (sgn_p != sc));
+          nan_out = invalid || a_n || b_n || c_n;
+          inf_out = !nan_out && (prod_inf || c_i2);
+
+          // defaults
+          prod  = siga * sigb;
+          e_p   = expa + expb - $signed(16'(2*MW));
+          e_c   = expc - $signed(16'(MW));
+          dd    = e_c - e_p;
+          s_raw = $signed(16'(2*PP + 2)) - dd;
+          far_above = (s_raw < 16'sd0);
+          sh    = far_above ? 16'sd0 : ((s_raw > $signed(16'(WF))) ? $signed(16'(WF)) : s_raw);
+
+          c_pad = {sigc, {(WF-1-PP){1'b0}}};
+          shi   = int'(sh);
+          if (shi >= (WF-1)) begin
+            c_shr = '0;
+            c_stk = |c_pad;
+          end else begin
+            c_shr = c_pad >> shi;
+            c_stk = |(c_pad << ((WF-1) - shi));
+          end
+          c_fld = {c_shr, c_stk};
+          p_fld = far_above ? {{(WF-1){1'b0}}, |prod}
+                            : {{(PP+2){1'b0}}, prod, 3'b000};
+          // Clamping the shift to zero re-anchors the field on the addend, so
+          // the weight of bit 3 is no longer e_p: it is whatever e_p would have
+          // put the addend at shift zero.
+          e_base = far_above ? (e_c - $signed(16'(2*PP + 2))) : e_p;
+
+          eff_sub = sgn_p ^ sc;
+          if (!eff_sub) begin
+            msum = {1'b0, p_fld} + {1'b0, c_fld};
+            rsgn = sgn_p;
+          end else if (p_fld >= c_fld) begin
+            msum = {1'b0, p_fld - c_fld};
+            rsgn = sgn_p;
+          end else begin
+            msum = {1'b0, c_fld - p_fld};
+            rsgn = sc;
+          end
+
+          // ---- normalise ----------------------------------------------------
+          lz  = 0;
+          fnd = 1'b0;
+          for (int i = WF; i >= 0; i--)
+            if (!fnd && msum[i]) begin
+              lz  = i;
+              fnd = 1'b1;
+            end
+          mnrm = msum << (WF - lz);
+          ex   = $signed(16'(lz)) + e_base - 16'sd3;
+          if (ex < $signed(16'(EMIN))) begin
+            rsh = $signed(16'(EMIN)) - ex;
+            ebo = $signed(16'(EMIN));
+          end else begin
+            rsh = 16'sd0;
+            ebo = ex;
+          end
+
+          rshi = int'(rsh);
+          if (rshi >= (WF+1)) begin
+            mshf  = '0;
+            r_stk = |mnrm;
+          end else if (rshi == 0) begin
+            mshf  = mnrm;
+            r_stk = 1'b0;
+          end else begin
+            mshf  = mnrm >> rshi;
+            r_stk = |(mnrm << ((WF+1) - rshi));
+          end
+
+          mant = mshf[WF -: PP];
+          rbit = mshf[WF-PP];
+          stky = (|mshf[WF-PP-1:0]) | r_stk;
+
+          // ---- round (A2) ---------------------------------------------------
+          incr = 1'b0;
+          case (rnd_q)
+            3'd0: incr = rbit && (stky || mant[0]);   // RNE
+            3'd1: incr = 1'b0;                        // RTZ
+            3'd2: incr = rsgn && (rbit || stky);      // RDN
+            3'd3: incr = !rsgn && (rbit || stky);     // RUP
+            3'd4: incr = rbit;                        // RMM
+            default: incr = 1'b0;
+          endcase
+          qrnd = {1'b0, mant} + {{PP{1'b0}}, incr};
+
+          nx = rbit || stky;
+          if (qrnd[PP]) ebo = ebo + 16'sd1;
+          ebias = ebo + $signed(16'(BIAS));
+          if (qrnd[PP]) begin
+            eout = ebias[EW-1:0];
+            mout = '0;
+          end else if (qrnd[PP-1]) begin
+            eout = ebias[EW-1:0];
+            mout = qrnd[MW-1:0];
+          end else begin
+            eout = '0;
+            mout = qrnd[MW-1:0];
+          end
+
+          // ---- overflow (A7) ------------------------------------------------
+          of = 1'b0;
+          if ((qrnd[PP] || qrnd[PP-1]) &&
+              (ebias >= $signed(16'((1 << EW) - 1)))) begin
+            of = 1'b1;
+            nx = 1'b1;
+            to_inf = (rnd_q == 3'd0) || (rnd_q == 3'd4)
+                  || (rnd_q == 3'd3 && !rsgn) || (rnd_q == 3'd2 && rsgn);
+            if (to_inf) begin
+              eout = {EW{1'b1}};
+              mout = '0;
+            end else begin
+              eout = {{(EW-1){1'b1}}, 1'b0};
+              mout = {MW{1'b1}};
+            end
+          end
+
+          // ---- assemble -----------------------------------------------------
+          if (nan_out) begin
+            lane_res[f][l] = 32'({1'b0, {EW{1'b1}}, 1'b1, {(MW-1){1'b0}}});
+            lane_flg[f][l] = {invalid, 4'b0000};
+          end else if (inf_out) begin
+            lane_res[f][l] = 32'({prod_inf ? sgn_p : sc, {EW{1'b1}}, {MW{1'b0}}});
+            lane_flg[f][l] = 5'b00000;
+          end else if (a_z || b_z) begin
+            // the product is an exact zero: the result is the addend, except
+            // that two zeros of opposite sign give +0 (-0 under RDN) -- A6
+            if (c_z) begin
+              lane_res[f][l] = 32'({(sgn_p == sc) ? sc : (rnd_q == 3'd2),
+                                    {EW{1'b0}}, {MW{1'b0}}});
+            end else begin
+              lane_res[f][l] = 32'(cv);
+            end
+            lane_flg[f][l] = 5'b00000;
+          end else if (msum == '0) begin
+            // exact cancellation -- A6
+            lane_res[f][l] = 32'({eff_sub ? (rnd_q == 3'd2) : sgn_p,
+                                  {EW{1'b0}}, {MW{1'b0}}});
+            lane_flg[f][l] = 5'b00000;
+          end else begin
+            uf = nx && (eout == '0);
+            lane_res[f][l] = 32'({rsgn, eout, mout});
+            lane_flg[f][l] = {1'b0, 1'b0, of, uf, nx};
+          end
+        end
+      end else begin : g_dead
+        assign lane_res[f][l] = 32'd0;
+        assign lane_flg[f][l] = 5'd0;
+      end
+    end
+  end
+
+  // ---------------------------------------------------------------------------
+  // lane assembly: V1 lane count, V3 high bits all ones, V4 flags OR'd
+  // ---------------------------------------------------------------------------
+  always_comb begin
+    int unsigned nlane;
+    result_o = {WIDTH{1'b1}};
+    flags_o  = 5'b00000;
+    if (fmt_q == 2'd0) begin
+      nlane = vec_q ? NL32 : 1;
+      for (int k = 0; k < NL32; k++)
+        if (k < nlane) begin
+          result_o[k*32 +: 32] = lane_res[0][k];
+          flags_o              = flags_o | lane_flg[0][k];
+        end
+    end else begin
+      nlane = vec_q ? NL16 : 1;
+      for (int k = 0; k < NL16; k++)
+        if (k < nlane) begin
+          result_o[k*16 +: 16] = (fmt_q == 2'd1) ? lane_res[1][k][15:0]
+                                                 : lane_res[2][k][15:0];
+          flags_o              = flags_o | ((fmt_q == 2'd1) ? lane_flg[1][k]
+                                                            : lane_flg[2][k]);
+        end
     end
   end
 

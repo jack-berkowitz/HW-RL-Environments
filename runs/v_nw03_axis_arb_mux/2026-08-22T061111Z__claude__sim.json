@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "9/10",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "409f4a1cd800ffd7be1afcd2ac7d9586b0f61608-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "claude",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "candidates/v_nw03/claude.sv",
+  "submission_sha256_16": "cffa519f10b6982b",
+  "task": "v_nw03_axis_arb_mux",
+  "task_text_hash": "fe8126ce163812aa",
+  "timestamp_utc": "2026-08-22T06:11:11Z"
+}

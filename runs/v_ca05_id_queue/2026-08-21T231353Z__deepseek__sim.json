@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/0",
+  "did_not_compile": "1",
+  "discriminates": "false",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "not-run",
+  "git_sha": "8efe898ec2fdd1a2a0d045a3344371ac6cd5daf4-dirty",
+  "golden_accepted": "unknown",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "deepseek",
+  "second_dut_accepted": "not-run",
+  "status": "rejected",
+  "submission": "candidates/v_ca05/deepseek.sv",
+  "submission_sha256_16": "6c3465cb013a3d2d",
+  "task": "v_ca05_id_queue",
+  "task_text_hash": "7e7f9d22bce28ef5",
+  "timestamp_utc": "2026-08-21T23:13:53Z"
+}

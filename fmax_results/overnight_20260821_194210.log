@@ -1,0 +1,24 @@
+19:42:10 === OVERNIGHT QUEUE START (log: /Users/jackberkowitz/Desktop/hw_rl_benchmark/fmax_results/overnight_20260821_194210.log) ===
+19:42:10 --- phase 1: Fmax sweeps ---
+19:42:10 generating config for d_ca01_cand_chat
+19:42:10 SWEEP d_ca01_cand_chat (seed 10ns)
+19:42:10 generating config for d_ca01_cand_claude
+19:42:10 SWEEP d_ca01_cand_claude (seed 10ns)
+19:42:10 generating config for d_ca04_cand_claude
+19:42:10 SWEEP d_ca04_cand_claude (seed 4.5ns)
+19:42:10 generating config for d_dsp02_cand_claude
+19:42:10 SWEEP d_dsp02_cand_claude (seed 20.25ns)
+19:42:10 --- phase 2: common-clock PPA builds ---
+19:42:10 BUILD d_ca01/reference at 10.0000ns
+19:42:10 BUILD d_ca01/chat at 10.0000ns
+19:42:10 BUILD d_ca01/claude at 10.0000ns
+19:42:10 BUILD d_ca04/reference at 4.5000ns
+19:42:10 BUILD d_ca04/chat at 4.5000ns
+19:42:10 BUILD d_ca04/deepseek at 4.5000ns
+19:42:10 BUILD d_ca04/gemini at 4.5000ns
+19:42:10 BUILD d_ca04/qwen at 4.5000ns
+19:42:10 BUILD d_ca04/claude at 4.5000ns
+19:42:10 BUILD d_dsp02/reference at 20.2500ns
+19:42:10 BUILD d_dsp02/chat at 20.2500ns
+19:42:10 BUILD d_dsp02/claude at 20.2500ns
+19:42:10 === OVERNIGHT QUEUE DONE ===

@@ -1,0 +1,83 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 2,
+  "configs_total": 2,
+  "coverage": {},
+  "git_sha": "047759550ffa2bc284280db0c4562be1855f66db-dirty",
+  "kind": "sim",
+  "label": "claude",
+  "metrics": {
+    "WIDTH_32": {
+      "a7a_band": "see fields",
+      "a7a_band_bf16": "12",
+      "a7a_band_combos": "111111",
+      "a7a_band_fp16": "12",
+      "a7a_band_fp32": "6",
+      "checks": "6470",
+      "coverage": "see fields",
+      "coverage_bf16": "2580",
+      "coverage_fp16": "2580",
+      "coverage_fp32": "1310",
+      "coverage_vecdistinct": "0",
+      "cycles": "14071",
+      "flags": "see fields",
+      "flags_nv": "310",
+      "flags_nx": "5187",
+      "flags_of": "928",
+      "flags_subn": "184",
+      "flags_uf": "531",
+      "latency": "see fields",
+      "latency_max": "11",
+      "latency_mean": "1.34",
+      "latency_min": "1",
+      "throughput": "see fields",
+      "throughput_ops_per_1000cyc": "459",
+      "vectors": "6470",
+      "width": "32"
+    },
+    "WIDTH_64": {
+      "a7a_band": "see fields",
+      "a7a_band_bf16": "18",
+      "a7a_band_combos": "111111",
+      "a7a_band_fp16": "18",
+      "a7a_band_fp32": "12",
+      "checks": "7760",
+      "coverage": "see fields",
+      "coverage_bf16": "2590",
+      "coverage_fp16": "2590",
+      "coverage_fp32": "2580",
+      "coverage_vecdistinct": "1267",
+      "cycles": "16866",
+      "flags": "see fields",
+      "flags_nv": "802",
+      "flags_nx": "6480",
+      "flags_of": "1694",
+      "flags_subn": "314",
+      "flags_uf": "660",
+      "latency": "see fields",
+      "latency_max": "14",
+      "latency_mean": "1.33",
+      "latency_min": "1",
+      "throughput": "see fields",
+      "throughput_ops_per_1000cyc": "460",
+      "vectors": "7760",
+      "width": "64"
+    }
+  },
+  "per_config": [
+    {
+      "config": "WIDTH_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "WIDTH_64",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "candidates/d_dsp03/claude.sv",
+  "submission_sha256_16": "c0eed45610023254",
+  "task": "d_dsp03_multifmt_fma",
+  "task_text_hash": "8eb2ae18667fe22a",
+  "timestamp_utc": "2026-08-23T05:55:48Z"
+}

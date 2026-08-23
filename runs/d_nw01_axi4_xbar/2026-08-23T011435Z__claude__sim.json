@@ -1,0 +1,12 @@
+{
+  "build_error": "0 error(s); first: exit 133 ",
+  "build_status": "slang_rejected",
+  "git_sha": "4748d2bc03e714e25a91a0107d419474f35f4439-dirty",
+  "kind": "sim",
+  "label": "claude",
+  "submission": "candidates/d_nw01/claude.sv",
+  "submission_sha256_16": "79f8e5bb3cc9d3f4",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "96c1a3ad5854776a",
+  "timestamp_utc": "2026-08-23T01:14:35Z"
+}

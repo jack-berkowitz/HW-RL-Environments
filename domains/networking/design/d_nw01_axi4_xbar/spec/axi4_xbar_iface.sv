@@ -39,7 +39,9 @@
 //   MAX_TRANS : REQUIRED outstanding transactions per master port. Legal: 2, 8.
 //             This is a MINIMUM CAPACITY the design must provide, not a limit
 //             it may ignore -- see C1. Exceeding it is fine; a design that
-//             accepts the parameter and never uses it fails.
+//             accepts the parameter and never uses it fails. Note that
+//             TRACKING more transactions is cheap and permitted, while BUFFERING
+//             their data is bounded by C3 -- the two are different resources.
 //   Any other value is ILLEGAL and need not be handled.
 //
 // -----------------------------------------------------------------------------
@@ -171,6 +173,31 @@
 //       IDs while filling, so a design that holds MAX_TRANS of a single ID but
 //       refuses a second ID fails here. O2 grants you the right to RETURN
 //       different IDs out of order; it does not grant the right to REFUSE them.
+//
+//   C3. RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
+//       and 4 W beats per master port** in flight inside the crossbar. Storage
+//       beyond that is NON-CONFORMING, not a design choice.
+//
+//       WHY A CEILING AND NOT A FLOOR. C1 says how much the design must be able
+//       to do at once; this says how much it may SPEND doing it. Without a
+//       ceiling, buffering is an unpriced axis: a submission may absorb a whole
+//       maximum-length burst per master and report better throughput for it,
+//       and the area that bought is charged to nothing. One did exactly that --
+//       a 256-entry per-master read buffer, 2 x 256 x ~40 bits of flip-flops,
+//       which is 14x the reference's total area on a design that is otherwise
+//       correct on every axis. It was not a bad answer to this specification.
+//       It was an answer this specification failed to constrain.
+//
+//       4 beats is the smallest depth that lets a design register both the
+//       request and the response path without stalling, which is what the
+//       reference does with a pair of two-entry spill registers. A crossbar
+//       ROUTES; it is not a reorder buffer and it is not a cache. Anything that
+//       needs deeper storage belongs on the other side of the master port.
+//
+//       This bound is on STORAGE, not on outstanding transactions. C1's
+//       MAX_TRANS capacity is tracked with counters and IDs, which cost almost
+//       nothing; holding the DATA is what costs area. A conforming design
+//       tracks many transactions and buffers few beats.
 //
 //   C2. CONCURRENT DISJOINT PAIRS. Traffic between disjoint master/slave pairs
 //       must proceed in parallel. With master i addressing only slave i and

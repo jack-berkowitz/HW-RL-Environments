@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "6/10",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "047759550ffa2bc284280db0c4562be1855f66db-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "ref",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "domains/networking/verification/v_nw01_arp_engine/tb/arp_engine_tb.sv",
+  "submission_sha256_16": "8de5d607d7f50077",
+  "task": "v_nw01_arp_engine",
+  "task_text_hash": "63dbe82fceded681",
+  "timestamp_utc": "2026-08-23T06:07:34Z"
+}

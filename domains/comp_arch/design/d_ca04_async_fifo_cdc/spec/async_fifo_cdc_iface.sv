@@ -51,6 +51,28 @@
 // -----------------------------------------------------------------------------
 // WHAT THE FIFO MUST DO
 // -----------------------------------------------------------------------------
+//   B1. STORAGE BEYOND THE FIFO IS BOUNDED. The FIFO holds 2**LOG_DEPTH
+//       entries. A design may add **at most 4 further beats of storage in
+//       total** across both clock domains -- pipeline or output registers on
+//       the read side, input registration on the write side. Storage beyond
+//       that is NON-CONFORMING.
+//
+//       WHY THIS IS NOT A FLOOR. `capacity_beats_accepted` is REPORTED, and
+//       more of it looks better: a design that adds prefetch stages accepts
+//       more beats before backpressure and is credited for it, while the area
+//       those stages cost is charged to nothing. Without a ceiling the metric
+//       rewards spending rather than design.
+//
+//       WHY 4. Crossing a clock boundary needs registration on each side, and
+//       an output register to break the read path; two stages per domain is
+//       the architectural need, and 4 is that with room to spare. It is not
+//       fitted to any implementation. Checked AFTER the number was chosen: the
+//       vendored reference accepts 10 beats at depth 8, so it uses 2, and
+//       every submission uses 0.
+//
+//       THE FIFO ITSELF IS NOT BOUNDED HERE -- LOG_DEPTH fixes it, and a
+//       design must provide exactly that depth.
+//
 //   C1. NO LOSS. Every beat accepted on the write side is eventually delivered
 //       on the read side.
 //   C2. NO DUPLICATION. Delivered exactly once.

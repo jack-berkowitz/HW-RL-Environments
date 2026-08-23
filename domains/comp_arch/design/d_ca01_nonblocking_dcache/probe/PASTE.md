@@ -279,6 +279,37 @@ checks them. Everything else is normative.
 //       and no id is starved while others are being served.
 //       AUTHORITY: stated task intent.
 //
+//   C4. BLOCK-DATA BUFFERING IS BOUNDED. Outside the tag and data arrays, a
+//       design may hold at most TWO cache lines of block data at any time --
+//       one for the fill in flight and one for the writeback in flight -- plus,
+//       per pending miss, at most ONE WORD of merged store data and its byte
+//       mask. Deeper block-data buffering is NON-CONFORMING, not a design
+//       choice.
+//
+//       WHY TWO IS ENOUGH, AND WHY THIS IS NOT FITTED TO THE REFERENCE. M3
+//       already permits only ONE memory transaction outstanding, so at most one
+//       fill and one writeback can ever be in flight. There is no state in
+//       which a third line of block data is in motion. The bound follows from
+//       M3 rather than from what any implementation happens to do, which is the
+//       trap C1's own note warns about: a floor fitted to the reference's
+//       buffering is how an implementation detail becomes a requirement, and a
+//       ceiling fitted that way would be the same error pointing down.
+//
+//       BUFFERING IS NOT TRACKING. MAX_MISSES is a count of misses whose data
+//       has NOT yet arrived; their addresses, ids, word indices and masks cost
+//       registers and are not bounded here. Holding the block DATA is what
+//       costs area. A conforming design tracks many misses and buffers few
+//       lines.
+//
+//       WHY THIS CLAUSE EXISTS. A specification that names a capability and
+//       says nothing about the resources delivering it leaves an axis with a
+//       benefit and no stated cost, and a submission that spends without limit
+//       is conforming while the area comparison measures the specification
+//       rather than the design. That is not hypothetical: on the AXI crossbar
+//       task a submission buffered a full 256-beat burst per master, about
+//       20,480 bits of flip-flops, and measured 14.2x the reference's area
+//       while being correct on every axis that task checked.
+//
 //   ACCEPTANCE RATE IS REPORTED, NOT GATED. Requests accepted per cycle and
 //   response latency are emitted as METRIC: lines at the scored configuration.
 //   They do not gate the verdict. A slower correct design is not a failing

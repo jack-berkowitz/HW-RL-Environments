@@ -1,1260 +1,1298 @@
 module axi4_xbar
-  import axi4_xbar_pkg::*;
+  import axi4_xbar_pkg::*;
 #(
-    parameter int NUM_MST   = 2,
-    parameter int NUM_SLV   = 2,
-    parameter int MAX_TRANS = 8
+    parameter int NUM_MST   = 2,
+    parameter int NUM_SLV   = 2,
+    parameter int MAX_TRANS = 8,
+    parameter int MAX_BURST_LEN = 3
 ) (
-    input  logic clk,
-    input  logic rst_n,
+    input  logic clk,
+    input  logic rst_n,
 
-    input  slv_req_t  [NUM_MST-1:0] mst_req,
-    output slv_resp_t [NUM_MST-1:0] mst_resp,
+    input  slv_req_t  [NUM_MST-1:0] mst_req,
+    output slv_resp_t [NUM_MST-1:0] mst_resp,
 
-    output mst_req_t  [NUM_SLV-1:0] slv_req,
-    input  mst_resp_t [NUM_SLV-1:0] slv_resp,
+    output mst_req_t  [NUM_SLV-1:0] slv_req,
+    input  mst_resp_t [NUM_SLV-1:0] slv_resp,
 
-    input  xbar_rule_t [NUM_SLV-1:0] addr_map
+    input  xbar_rule_t [NUM_SLV-1:0] addr_map
 );
 
-    localparam int QPTR_W    = $clog2(MAX_TRANS);
-    localparam int QCNT_W    = $clog2(MAX_TRANS + 1);
-    localparam int SLV_SEL_W = $clog2(NUM_SLV);
-
-    // A read burst may contain up to 256 beats.  One full-burst buffer per
-    // master lets the crossbar absorb a mapped R burst even if the originating
-    // master applies backpressure, so that master cannot wedge a shared slave
-    // response channel.
-    localparam int RBUF_DEPTH = 256;
-    localparam int RBUF_PTR_W = 8;
-    localparam int RBUF_CNT_W = 9;
-
-
-    // =========================================================================
-    // Helpers
-    // =========================================================================
-
-    function automatic mst_id_t widen_id(
-        input logic [MST_IDX_W-1:0] master_idx,
-        input slv_id_t              id
-    );
-        mst_id_t x;
-        begin
-            x = '0;
-            x[SLV_ID_W-1:0] = id;
-            x[MST_ID_W-1 -: MST_IDX_W] = master_idx;
-            widen_id = x;
-        end
-    endfunction
-
-
-    function automatic mst_aw_t widen_aw(
-        input slv_aw_t              a,
-        input logic [MST_IDX_W-1:0] master_idx
-    );
-        mst_aw_t x;
-        begin
-            x = '0;
-
-            x.id     = widen_id(master_idx, a.id);
-            x.addr   = a.addr;
-            x.len    = a.len;
-            x.size   = a.size;
-            x.burst  = a.burst;
-            x.lock   = a.lock;
-            x.cache  = a.cache;
-            x.prot   = a.prot;
-            x.qos    = a.qos;
-            x.region = a.region;
-            x.atop   = a.atop;
-            x.user   = a.user;
-
-            widen_aw = x;
-        end
-    endfunction
-
+    localparam int ID_COUNT  = (1 << SLV_ID_W);
+    localparam int MSEL_W    = $clog2(NUM_MST);
+    localparam int SSEL_W    = $clog2(NUM_SLV);
+    localparam int ROUTE_W   = $clog2(NUM_SLV + 1);
+    localparam int ERR_ROUTE = NUM_SLV;
+
+    localparam int QPTR_W = $clog2(MAX_TRANS);
+    localparam int QCNT_W = $clog2(MAX_TRANS + 1);
+
+    localparam int OWN_DEPTH = NUM_MST * MAX_TRANS;
+    localparam int OWN_PTR_W = $clog2(OWN_DEPTH);
+    localparam int OWN_CNT_W = $clog2(OWN_DEPTH + 1);
+
+    // B/R arbitration has NUM_SLV real slave sources plus one local DECERR
+    // source.
+    localparam int SRC_N = NUM_SLV + 1;
+    localparam int SRC_W = $clog2(SRC_N);
+
+    // =========================================================================
+    // Helper functions
+    // =========================================================================
+
+    function automatic mst_id_t widen_id(
+        input int unsigned m,
+        input slv_id_t     id
+    );
+        mst_id_t t;
+        begin
+            t = '0;
+            t[SLV_ID_W-1:0] = id;
+            t[MST_ID_W-1:SLV_ID_W] = m;
+            widen_id = t;
+        end
+    endfunction
+
+
+    function automatic mst_aw_t widen_aw(
+        input slv_aw_t     a,
+        input int unsigned m
+    );
+        mst_aw_t t;
+        begin
+            t.id     = widen_id(m, a.id);
+            t.addr   = a.addr;
+            t.len    = a.len;
+            t.size   = a.size;
+            t.burst  = a.burst;
+            t.lock   = a.lock;
+            t.cache  = a.cache;
+            t.prot   = a.prot;
+            t.qos    = a.qos;
+            t.region = a.region;
+            t.atop   = a.atop;
+            t.user   = a.user;
+            widen_aw = t;
+        end
+    endfunction
+
+
+    function automatic mst_ar_t widen_ar(
+        input slv_ar_t     a,
+        input int unsigned m
+    );
+        mst_ar_t t;
+        begin
+            t.id     = widen_id(m, a.id);
+            t.addr   = a.addr;
+            t.len    = a.len;
+            t.size   = a.size;
+            t.burst  = a.burst;
+            t.lock   = a.lock;
+            t.cache  = a.cache;
+            t.prot   = a.prot;
+            t.qos    = a.qos;
+            t.region = a.region;
+            t.user   = a.user;
+            widen_ar = t;
+        end
+    endfunction
+
+
+    function automatic slv_b_t narrow_b(input mst_b_t b);
+        slv_b_t t;
+        begin
+            t.id   = b.id[SLV_ID_W-1:0];
+            t.resp = b.resp;
+            t.user = b.user;
+            narrow_b = t;
+        end
+    endfunction
+
+
+    function automatic slv_r_t narrow_r(input mst_r_t r);
+        slv_r_t t;
+        begin
+            t.id   = r.id[SLV_ID_W-1:0];
+            t.data = r.data;
+            t.resp = r.resp;
+            t.last = r.last;
+            t.user = r.user;
+            narrow_r = t;
+        end
+    endfunction
 
-    function automatic mst_ar_t widen_ar(
-        input slv_ar_t              a,
-        input logic [MST_IDX_W-1:0] master_idx
-    );
-        mst_ar_t x;
-        begin
-            x = '0;
-
-            x.id     = widen_id(master_idx, a.id);
-            x.addr   = a.addr;
-            x.len    = a.len;
-            x.size   = a.size;
-            x.burst  = a.burst;
-            x.lock   = a.lock;
-            x.cache  = a.cache;
-            x.prot   = a.prot;
-            x.qos    = a.qos;
-            x.region = a.region;
-            x.user   = a.user;
-
-            widen_ar = x;
-        end
-    endfunction
-
-
-    // =========================================================================
-    // Per-master address admission FIFOs
-    //
-    // These FIFOs are the C1 capacity.
-    // =========================================================================
-
-    slv_aw_t wr_aw_q
-        [NUM_MST-1:0][MAX_TRANS-1:0];
-
-    logic wr_mapped_q
-        [NUM_MST-1:0][MAX_TRANS-1:0];
-
-    logic [SLV_SEL_W-1:0] wr_target_q
-        [NUM_MST-1:0][MAX_TRANS-1:0];
-
-
-    slv_ar_t rd_ar_q
-        [NUM_MST-1:0][MAX_TRANS-1:0];
-
-    logic rd_mapped_q
-        [NUM_MST-1:0][MAX_TRANS-1:0];
 
-    logic [SLV_SEL_W-1:0] rd_target_q
-        [NUM_MST-1:0][MAX_TRANS-1:0];
+    // =========================================================================
+    // Address decode
+    // =========================================================================
 
+    logic [NUM_MST-1:0] aw_mapped;
+    logic [NUM_MST-1:0] ar_mapped;
 
-    logic [QPTR_W-1:0] wr_head [NUM_MST-1:0];
-    logic [QPTR_W-1:0] wr_tail [NUM_MST-1:0];
-    logic [QCNT_W-1:0] wr_count[NUM_MST-1:0];
+    logic [SSEL_W-1:0] aw_tgt [NUM_MST-1:0];
+    logic [SSEL_W-1:0] ar_tgt [NUM_MST-1:0];
 
-    logic [QPTR_W-1:0] rd_head [NUM_MST-1:0];
-    logic [QPTR_W-1:0] rd_tail [NUM_MST-1:0];
-    logic [QCNT_W-1:0] rd_count[NUM_MST-1:0];
+    integer dm;
+    integer dr;
 
+    always_comb begin
+        aw_mapped = '0;
+        ar_mapped = '0;
 
-    // =========================================================================
-    // Decode incoming AW/AR
-    // =========================================================================
+        for (dm = 0; dm < NUM_MST; dm = dm + 1) begin
+            aw_tgt[dm] = '0;
+            ar_tgt[dm] = '0;
 
-    logic aw_dec_mapped [NUM_MST-1:0];
-    logic ar_dec_mapped [NUM_MST-1:0];
+            for (dr = 0; dr < NUM_SLV; dr = dr + 1) begin
 
-    logic [SLV_SEL_W-1:0]
-        aw_dec_target [NUM_MST-1:0];
+                if (!aw_mapped[dm] &&
+                    (mst_req[dm].aw.addr >= addr_map[dr].start_addr) &&
+                    (mst_req[dm].aw.addr <  addr_map[dr].end_addr) &&
+                    (addr_map[dr].mst_port < NUM_SLV)) begin
 
-    logic [SLV_SEL_W-1:0]
-        ar_dec_target [NUM_MST-1:0];
+                    aw_mapped[dm] = 1'b1;
+                    aw_tgt[dm] =
+                        addr_map[dr].mst_port[SSEL_W-1:0];
+                end
 
+                if (!ar_mapped[dm] &&
+                    (mst_req[dm].ar.addr >= addr_map[dr].start_addr) &&
+                    (mst_req[dm].ar.addr <  addr_map[dr].end_addr) &&
+                    (addr_map[dr].mst_port < NUM_SLV)) begin
 
-    always_comb begin
-        for (int m = 0; m < NUM_MST; m++) begin
+                    ar_mapped[dm] = 1'b1;
+                    ar_tgt[dm] =
+                        addr_map[dr].mst_port[SSEL_W-1:0];
+                end
+            end
+        end
+    end
 
-            aw_dec_mapped[m] = 1'b0;
-            aw_dec_target[m] = '0;
 
-            ar_dec_mapped[m] = 1'b0;
-            ar_dec_target[m] = '0;
+    // =========================================================================
+    // Outstanding-ID tracking
+    //
+    // Only one transaction of a particular ID is allowed outstanding in a
+    // given direction for a given master.  Different IDs remain fully
+    // concurrent.  This is sufficient to enforce per-ID response ordering
+    // across different slaves without a data reorder buffer.
+    // =========================================================================
 
-            for (int r = 0; r < NUM_SLV; r++) begin
+    logic [ID_COUNT-1:0] wr_id_busy [NUM_MST-1:0];
+    logic [ID_COUNT-1:0] rd_id_busy [NUM_MST-1:0];
 
-                if ((mst_req[m].aw.addr >= addr_map[r].start_addr) &&
-                    (mst_req[m].aw.addr <  addr_map[r].end_addr)   &&
-                    (addr_map[r].mst_port < NUM_SLV)) begin
+    logic [QCNT_W-1:0] wr_outstanding [NUM_MST-1:0];
+    logic [QCNT_W-1:0] rd_outstanding [NUM_MST-1:0];
 
-                    aw_dec_mapped[m] = 1'b1;
-                    aw_dec_target[m] =
-                        addr_map[r].mst_port[SLV_SEL_W-1:0];
-                end
 
+    // =========================================================================
+    // Per-master AW routing FIFO
+    //
+    // AXI W has no transaction ID.  Therefore W follows accepted AWs in
+    // acceptance order.  Only route/ID metadata is stored; W data itself is
+    // never buffered.
+    // =========================================================================
 
-                if ((mst_req[m].ar.addr >= addr_map[r].start_addr) &&
-                    (mst_req[m].ar.addr <  addr_map[r].end_addr)   &&
-                    (addr_map[r].mst_port < NUM_SLV)) begin
+    logic [ROUTE_W-1:0]
+        wr_route_q [NUM_MST-1:0][MAX_TRANS-1:0];
 
-                    ar_dec_mapped[m] = 1'b1;
-                    ar_dec_target[m] =
-                        addr_map[r].mst_port[SLV_SEL_W-1:0];
-                end
-            end
-        end
-    end
+    slv_id_t
+        wr_id_q [NUM_MST-1:0][MAX_TRANS-1:0];
 
+    logic [QPTR_W-1:0] wrq_wptr  [NUM_MST-1:0];
+    logic [QPTR_W-1:0] wrq_rptr  [NUM_MST-1:0];
+    logic [QCNT_W-1:0] wrq_count [NUM_MST-1:0];
 
-    // =========================================================================
-    // Master write state
-    //
-    // Only the HEAD write is active downstream.  Later AWs still occupy FIFO
-    // entries, satisfying C1.
-    //
-    // Stronger-than-required ordering is used: one active write response per
-    // master. Hence same-ID ordering is automatic.
-    // =========================================================================
 
-    typedef enum logic [2:0] {
-        WM_IDLE,
-        WM_WAIT_AW,
-        WM_SEND_W,
-        WM_WAIT_B,
-        WM_RESP,
-        WM_LOCAL_W
-    } wm_state_t;
+    // =========================================================================
+    // Per-slave AW-owner FIFO
+    //
+    // This records the global AW acceptance order at each slave.  The W
+    // channel to that slave is allowed to come only from the master at the
+    // head of this FIFO.
+    // =========================================================================
 
-    wm_state_t wm_state [NUM_MST-1:0];
+    logic [MSEL_W-1:0]
+        owner_q [NUM_SLV-1:0][OWN_DEPTH-1:0];
 
+    logic [OWN_PTR_W-1:0] owner_wptr  [NUM_SLV-1:0];
+    logic [OWN_PTR_W-1:0] owner_rptr  [NUM_SLV-1:0];
+    logic [OWN_CNT_W-1:0] owner_count [NUM_SLV-1:0];
 
-    // One B response register per master.
-    //
-    // It lets the crossbar accept the slave's B independently of the master's
-    // BREADY. Once a master backpressures its B output, that master stops
-    // issuing further writes, so depth one is sufficient.
-    logic   b_buf_valid [NUM_MST-1:0];
-    slv_b_t b_buf       [NUM_MST-1:0];
 
+    // =========================================================================
+    // Local DECERR write-response FIFO
+    // =========================================================================
 
-    // =========================================================================
-    // Master read state
-    // =========================================================================
+    slv_id_t
+        berr_q [NUM_MST-1:0][MAX_TRANS-1:0];
 
-    typedef enum logic [1:0] {
-        RM_IDLE,
-        RM_WAIT_AR,
-        RM_RECV,
-        RM_LOCAL
-    } rm_state_t;
+    logic [QPTR_W-1:0] berr_wptr  [NUM_MST-1:0];
+    logic [QPTR_W-1:0] berr_rptr  [NUM_MST-1:0];
+    logic [QCNT_W-1:0] berr_count [NUM_MST-1:0];
 
-    rm_state_t rm_state [NUM_MST-1:0];
 
-    logic [8:0] local_r_left [NUM_MST-1:0];
+    // =========================================================================
+    // Local DECERR read FIFO
+    //
+    // Only metadata is stored.  Error R data is generated directly when the
+    // response is selected.
+    // =========================================================================
 
+    slv_id_t
+        rerr_id_q [NUM_MST-1:0][MAX_TRANS-1:0];
 
-    // =========================================================================
-    // Full-burst mapped-read buffers
-    // =========================================================================
+    logic [7:0]
+        rerr_len_q [NUM_MST-1:0][MAX_TRANS-1:0];
 
-    slv_r_t rbuf_mem
-        [NUM_MST-1:0][RBUF_DEPTH-1:0];
+    logic [QPTR_W-1:0] rerr_wptr  [NUM_MST-1:0];
+    logic [QPTR_W-1:0] rerr_rptr  [NUM_MST-1:0];
+    logic [QCNT_W-1:0] rerr_count [NUM_MST-1:0];
 
-    logic [RBUF_PTR_W-1:0]
-        rbuf_head [NUM_MST-1:0];
+    logic [7:0] rerr_beat [NUM_MST-1:0];
 
-    logic [RBUF_PTR_W-1:0]
-        rbuf_tail [NUM_MST-1:0];
 
-    logic [RBUF_CNT_W-1:0]
-        rbuf_count [NUM_MST-1:0];
+    // =========================================================================
+    // Registered round-robin request grants
+    //
+    // Grants are registered deliberately.  Therefore READY is determined from
+    // previously selected state rather than combinationally from the current
+    // corresponding VALID.
+    // =========================================================================
 
+    logic aw_gnt_v [NUM_SLV-1:0];
+    logic [MSEL_W-1:0] aw_gnt_m [NUM_SLV-1:0];
+    logic [MSEL_W-1:0] aw_rr    [NUM_SLV-1:0];
 
-    // =========================================================================
-    // Per-slave write engine
-    //
-    // A downstream slave accepts only one AW whose W stream has not yet
-    // completed. The slot is released at WLAST, NOT at B.
-    //
-    // This guarantees downstream W ordering without allowing B backpressure
-    // to monopolize the slave's AW/W path.
-    // =========================================================================
+    logic aw_pick_v [NUM_SLV-1:0];
+    logic [MSEL_W-1:0] aw_pick_m [NUM_SLV-1:0];
 
-    typedef enum logic [1:0] {
-        WS_IDLE,
-        WS_AW,
-        WS_W
-    } ws_state_t;
 
-    ws_state_t ws_state [NUM_SLV-1:0];
+    logic ar_gnt_v [NUM_SLV-1:0];
+    logic [MSEL_W-1:0] ar_gnt_m [NUM_SLV-1:0];
+    logic [MSEL_W-1:0] ar_rr    [NUM_SLV-1:0];
 
-    logic [MST_IDX_W-1:0]
-        ws_owner [NUM_SLV-1:0];
+    logic ar_pick_v [NUM_SLV-1:0];
+    logic [MSEL_W-1:0] ar_pick_m [NUM_SLV-1:0];
 
-    logic [MST_IDX_W-1:0]
-        aw_rr [NUM_SLV-1:0];
 
-    mst_aw_t aw_hold [NUM_SLV-1:0];
+    // =========================================================================
+    // Registered B/R response grants
+    //
+    // Source NUM_SLV is the local DECERR generator.
+    // =========================================================================
 
+    logic b_gnt_v [NUM_MST-1:0];
+    logic [SRC_W-1:0] b_gnt_src [NUM_MST-1:0];
+    logic [SRC_W-1:0] b_rr      [NUM_MST-1:0];
 
-    // =========================================================================
-    // Per-slave read-address engine
-    //
-    // Reservation ends as soon as AR is accepted. Responses are tagged, so
-    // multiple masters may have read bursts outstanding to the same slave.
-    // =========================================================================
+    logic b_pick_v [NUM_MST-1:0];
+    logic [SRC_W-1:0] b_pick_src [NUM_MST-1:0];
 
-    typedef enum logic {
-        RS_IDLE,
-        RS_AR
-    } rs_state_t;
 
-    rs_state_t rs_state [NUM_SLV-1:0];
+    logic r_gnt_v [NUM_MST-1:0];
+    logic [SRC_W-1:0] r_gnt_src [NUM_MST-1:0];
+    logic [SRC_W-1:0] r_rr      [NUM_MST-1:0];
 
-    logic [MST_IDX_W-1:0]
-        rs_owner [NUM_SLV-1:0];
+    logic r_pick_v [NUM_MST-1:0];
+    logic [SRC_W-1:0] r_pick_src [NUM_MST-1:0];
 
-    logic [MST_IDX_W-1:0]
-        ar_rr [NUM_SLV-1:0];
 
-    mst_ar_t ar_hold [NUM_SLV-1:0];
+    logic b_src_valid [NUM_MST-1:0][SRC_N-1:0];
+    logic r_src_valid [NUM_MST-1:0][SRC_N-1:0];
 
 
-    // =========================================================================
-    // Fair arbitration candidates
-    // =========================================================================
+    // =========================================================================
+    // Round-robin candidate selection
+    // =========================================================================
 
-    logic aw_pick_valid [NUM_SLV-1:0];
-    logic ar_pick_valid [NUM_SLV-1:0];
+    integer ps;
+    integer po;
+    integer pm;
+    integer pidx;
 
-    logic [MST_IDX_W-1:0]
-        aw_pick_m [NUM_SLV-1:0];
+    always_comb begin
 
-    logic [MST_IDX_W-1:0]
-        ar_pick_m [NUM_SLV-1:0];
+        // ---------------------------------------------------------------------
+        // AW / AR candidates for each slave
+        // ---------------------------------------------------------------------
 
+        for (ps = 0; ps < NUM_SLV; ps = ps + 1) begin
 
-    always_comb begin
-        for (int s = 0; s < NUM_SLV; s++) begin
+            aw_pick_v[ps] = 1'b0;
+            aw_pick_m[ps] = aw_rr[ps];
 
-            aw_pick_valid[s] = 1'b0;
-            aw_pick_m[s]     = '0;
+            ar_pick_v[ps] = 1'b0;
+            ar_pick_m[ps] = ar_rr[ps];
 
-            ar_pick_valid[s] = 1'b0;
-            ar_pick_m[s]     = '0;
 
+            for (po = 0; po < NUM_MST; po = po + 1) begin
 
-            for (int k = 0; k < NUM_MST; k++) begin
-                int idx;
+                pidx = (aw_rr[ps] + po) % NUM_MST;
 
-                // -------------------------------------------------------------
-                // AW round-robin scan
-                // -------------------------------------------------------------
-                idx = (aw_rr[s] + k) % NUM_MST;
+                if (!aw_pick_v[ps] &&
+                    mst_req[pidx].aw_valid &&
+                    aw_mapped[pidx] &&
+                    (aw_tgt[pidx] == ps) &&
+                    (wr_outstanding[pidx] < MAX_TRANS) &&
+                    (wrq_count[pidx] < MAX_TRANS) &&
+                    (owner_count[ps] < OWN_DEPTH) &&
+                    !wr_id_busy[pidx][mst_req[pidx].aw.id]) begin
 
-                if (!aw_pick_valid[s] &&
-                    (wm_state[idx] == WM_WAIT_AW) &&
-                    wr_mapped_q[idx][wr_head[idx]] &&
-                    (wr_target_q[idx][wr_head[idx]] == s)) begin
+                    aw_pick_v[ps] = 1'b1;
+                    aw_pick_m[ps] = pidx[MSEL_W-1:0];
+                end
+            end
 
-                    aw_pick_valid[s] = 1'b1;
-                    aw_pick_m[s]     = idx;
-                end
 
+            for (po = 0; po < NUM_MST; po = po + 1) begin
 
-                // -------------------------------------------------------------
-                // AR round-robin scan
-                // -------------------------------------------------------------
-                idx = (ar_rr[s] + k) % NUM_MST;
+                pidx = (ar_rr[ps] + po) % NUM_MST;
 
-                if (!ar_pick_valid[s] &&
-                    (rm_state[idx] == RM_WAIT_AR) &&
-                    rd_mapped_q[idx][rd_head[idx]] &&
-                    (rd_target_q[idx][rd_head[idx]] == s)) begin
+                if (!ar_pick_v[ps] &&
+                    mst_req[pidx].ar_valid &&
+                    ar_mapped[pidx] &&
+                    (ar_tgt[pidx] == ps) &&
+                    (rd_outstanding[pidx] < MAX_TRANS) &&
+                    !rd_id_busy[pidx][mst_req[pidx].ar.id]) begin
 
-                    ar_pick_valid[s] = 1'b1;
-                    ar_pick_m[s]     = idx;
-                end
-            end
-        end
-    end
+                    ar_pick_v[ps] = 1'b1;
+                    ar_pick_m[ps] = pidx[MSEL_W-1:0];
+                end
+            end
+        end
 
 
-    // =========================================================================
-    // Handshake/event signals
-    // =========================================================================
+        // ---------------------------------------------------------------------
+        // B / R response-source candidates for each master
+        // ---------------------------------------------------------------------
 
-    logic aw_accept [NUM_MST-1:0];
-    logic ar_accept [NUM_MST-1:0];
+        for (pm = 0; pm < NUM_MST; pm = pm + 1) begin
 
-    logic aw_down_fire [NUM_SLV-1:0];
-    logic ar_down_fire [NUM_SLV-1:0];
-    logic wlast_down_fire [NUM_SLV-1:0];
+            for (ps = 0; ps < NUM_SLV; ps = ps + 1) begin
 
-    logic mapped_aw_fire_m [NUM_MST-1:0];
-    logic mapped_ar_fire_m [NUM_MST-1:0];
-    logic mapped_wlast_m   [NUM_MST-1:0];
+                b_src_valid[pm][ps] =
+                    slv_resp[ps].b_valid &&
+                    (slv_resp[ps].b.id[MST_ID_W-1:SLV_ID_W] == pm) &&
+                    wr_id_busy[pm]
+                        [slv_resp[ps].b.id[SLV_ID_W-1:0]];
 
-    logic b_load [NUM_MST-1:0];
-    slv_b_t b_load_data [NUM_MST-1:0];
+                r_src_valid[pm][ps] =
+                    slv_resp[ps].r_valid &&
+                    (slv_resp[ps].r.id[MST_ID_W-1:SLV_ID_W] == pm) &&
+                    rd_id_busy[pm]
+                        [slv_resp[ps].r.id[SLV_ID_W-1:0]];
+            end
 
-    logic b_out_fire [NUM_MST-1:0];
+            // Local decode-error response source.
+            b_src_valid[pm][NUM_SLV] = (berr_count[pm] != 0);
+            r_src_valid[pm][NUM_SLV] = (rerr_count[pm] != 0);
 
-    logic local_wlast_m [NUM_MST-1:0];
 
+            b_pick_v[pm]   = 1'b0;
+            b_pick_src[pm] = b_rr[pm];
 
-    logic rbuf_push [NUM_MST-1:0];
-    slv_r_t rbuf_push_data [NUM_MST-1:0];
+            r_pick_v[pm]   = 1'b0;
+            r_pick_src[pm] = r_rr[pm];
 
-    logic rbuf_pop [NUM_MST-1:0];
 
-    logic mapped_r_last_out [NUM_MST-1:0];
+            for (po = 0; po < SRC_N; po = po + 1) begin
 
-    logic local_r_fire [NUM_MST-1:0];
-    logic local_r_last [NUM_MST-1:0];
+                pidx = (b_rr[pm] + po) % SRC_N;
 
-    logic wr_complete [NUM_MST-1:0];
-    logic rd_complete [NUM_MST-1:0];
+                if (!b_pick_v[pm] &&
+                    b_src_valid[pm][pidx]) begin
 
+                    b_pick_v[pm] = 1'b1;
+                    b_pick_src[pm] = pidx[SRC_W-1:0];
+                end
+            end
 
-    // =========================================================================
-    // Combinational datapath
-    // =========================================================================
 
-    always_comb begin
+            for (po = 0; po < SRC_N; po = po + 1) begin
 
-        // ---------------------------------------------------------------------
-        // Global defaults
-        // ---------------------------------------------------------------------
+                pidx = (r_rr[pm] + po) % SRC_N;
 
-        for (int m = 0; m < NUM_MST; m++) begin
+                if (!r_pick_v[pm] &&
+                    r_src_valid[pm][pidx]) begin
 
-            mst_resp[m] = '0;
+                    r_pick_v[pm] = 1'b1;
+                    r_pick_src[pm] = pidx[SRC_W-1:0];
+                end
+            end
+        end
+    end
 
-            aw_accept[m] = 1'b0;
-            ar_accept[m] = 1'b0;
 
-            mapped_aw_fire_m[m] = 1'b0;
-            mapped_ar_fire_m[m] = 1'b0;
-            mapped_wlast_m[m]   = 1'b0;
+    // =========================================================================
+    // Handshake/event signals
+    // =========================================================================
 
-            local_wlast_m[m] = 1'b0;
+    logic aw_accept [NUM_MST-1:0];
+    logic [ROUTE_W-1:0] aw_accept_route [NUM_MST-1:0];
 
-            b_load[m]      = 1'b0;
-            b_load_data[m] = '0;
+    logic ar_accept     [NUM_MST-1:0];
+    logic ar_accept_err [NUM_MST-1:0];
 
-            b_out_fire[m] = 1'b0;
+    logic aw_fire_s [NUM_SLV-1:0];
+    logic ar_fire_s [NUM_SLV-1:0];
 
-            rbuf_push[m]      = 1'b0;
-            rbuf_push_data[m] = '0;
+    logic owner_pop [NUM_SLV-1:0];
+    logic [MSEL_W-1:0] owner_enq_m [NUM_SLV-1:0];
 
-            rbuf_pop[m] = 1'b0;
+    logic wrq_pop  [NUM_MST-1:0];
+    logic berr_enq [NUM_MST-1:0];
 
-            mapped_r_last_out[m] = 1'b0;
+    logic b_fire       [NUM_MST-1:0];
+    logic b_fire_local [NUM_MST-1:0];
 
-            local_r_fire[m] = 1'b0;
-            local_r_last[m] = 1'b0;
+    logic r_fire       [NUM_MST-1:0];
+    logic r_fire_local [NUM_MST-1:0];
+    logic r_fire_last  [NUM_MST-1:0];
 
-            wr_complete[m] = 1'b0;
-            rd_complete[m] = 1'b0;
 
+    // =========================================================================
+    // Main combinational datapath
+    // =========================================================================
 
-            // -------------------------------------------------------------
-            // C1 admission.
-            //
-            // READY depends only on queue capacity, not corresponding VALID.
-            // -------------------------------------------------------------
+    integer cm;
+    integer cs;
 
-            mst_resp[m].aw_ready =
-                rst_n && (wr_count[m] < MAX_TRANS);
+    always_comb begin
 
-            mst_resp[m].ar_ready =
-                rst_n && (rd_count[m] < MAX_TRANS);
+        // ---------------------------------------------------------------------
+        // Defaults
+        // ---------------------------------------------------------------------
 
-            aw_accept[m] =
-                mst_resp[m].aw_ready &&
-                mst_req[m].aw_valid;
+        for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
-            ar_accept[m] =
-                mst_resp[m].ar_ready &&
-                mst_req[m].ar_valid;
+            mst_resp[cm] = '0;
 
+            aw_accept[cm]       = 1'b0;
+            aw_accept_route[cm] =
+                ERR_ROUTE[ROUTE_W-1:0];
 
-            // -------------------------------------------------------------
-            // Buffered B output
-            // -------------------------------------------------------------
+            ar_accept[cm]     = 1'b0;
+            ar_accept_err[cm] = 1'b0;
 
-            if (rst_n && b_buf_valid[m]) begin
-                mst_resp[m].b_valid = 1'b1;
-                mst_resp[m].b       = b_buf[m];
+            wrq_pop[cm]  = 1'b0;
+            berr_enq[cm] = 1'b0;
 
-                if (mst_req[m].b_ready)
-                    b_out_fire[m] = 1'b1;
-            end
+            b_fire[cm]       = 1'b0;
+            b_fire_local[cm] = 1'b0;
 
+            r_fire[cm]       = 1'b0;
+            r_fire_local[cm] = 1'b0;
+            r_fire_last[cm]  = 1'b0;
+        end
 
-            // -------------------------------------------------------------
-            // Mapped R output from per-master burst FIFO
-            // -------------------------------------------------------------
 
-            if (rst_n &&
-                (rm_state[m] == RM_RECV) &&
-                (rbuf_count[m] != 0)) begin
+        for (cs = 0; cs < NUM_SLV; cs = cs + 1) begin
 
-                mst_resp[m].r_valid =
-                    1'b1;
+            slv_req[cs] = '0;
 
-                mst_resp[m].r =
-                    rbuf_mem[m][rbuf_head[m]];
+            aw_fire_s[cs] = 1'b0;
+            ar_fire_s[cs] = 1'b0;
 
-                if (mst_req[m].r_ready) begin
+            owner_pop[cs]   = 1'b0;
+            owner_enq_m[cs] = '0;
+        end
 
-                    rbuf_pop[m] =
-                        1'b1;
 
-                    if (rbuf_mem[m][rbuf_head[m]].last)
-                        mapped_r_last_out[m] = 1'b1;
-                end
-            end
+        // All output VALIDs remain zero during synchronous active-low reset.
+        if (rst_n) begin
 
+            // =================================================================
+            // Local acceptance for unmapped addresses
+            //
+            // READY depends on address/space/ID state, but not on current VALID.
+            // =================================================================
 
-            // -------------------------------------------------------------
-            // Local DECERR read
-            // -------------------------------------------------------------
+            for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
-            if (rst_n &&
-                (rm_state[m] == RM_LOCAL)) begin
+                if (!aw_mapped[cm] &&
+                    (wr_outstanding[cm] < MAX_TRANS) &&
+                    (wrq_count[cm] < MAX_TRANS) &&
+                    !wr_id_busy[cm][mst_req[cm].aw.id]) begin
 
-                mst_resp[m].r_valid = 1'b1;
+                    mst_resp[cm].aw_ready = 1'b1;
+                end
 
-                mst_resp[m].r.id =
-                    rd_ar_q[m][rd_head[m]].id;
 
-                mst_resp[m].r.data =
-                    '0;
+                if (!ar_mapped[cm] &&
+                    (rd_outstanding[cm] < MAX_TRANS) &&
+                    (rerr_count[cm] < MAX_TRANS) &&
+                    !rd_id_busy[cm][mst_req[cm].ar.id]) begin
 
-                mst_resp[m].r.resp =
-                    RESP_DECERR;
+                    mst_resp[cm].ar_ready = 1'b1;
+                end
+            end
 
-                mst_resp[m].r.last =
-                    (local_r_left[m] == 9'd1);
 
-                mst_resp[m].r.user =
-                    rd_ar_q[m][rd_head[m]].user;
+            // =================================================================
+            // Mapped AW / AR forwarding
+            // =================================================================
 
+            for (cs = 0; cs < NUM_SLV; cs = cs + 1) begin
 
-                if (mst_req[m].r_ready) begin
+                if (aw_gnt_v[cs]) begin
 
-                    local_r_fire[m] =
-                        1'b1;
+                    slv_req[cs].aw =
+                        widen_aw(
+                            mst_req[aw_gnt_m[cs]].aw,
+                            aw_gnt_m[cs]
+                        );
 
-                    if (local_r_left[m] == 9'd1)
-                        local_r_last[m] = 1'b1;
-                end
-            end
-        end
+                    slv_req[cs].aw_valid =
+                        mst_req[aw_gnt_m[cs]].aw_valid;
 
+                    mst_resp[aw_gnt_m[cs]].aw_ready =
+                        slv_resp[cs].aw_ready;
+                end
 
-        // ---------------------------------------------------------------------
-        // Slave-side defaults
-        //
-        // Unexpected/stale B/R responses are drained after reset rather than
-        // being exposed at a master port.
-        // ---------------------------------------------------------------------
 
-        for (int s = 0; s < NUM_SLV; s++) begin
+                if (ar_gnt_v[cs]) begin
 
-            slv_req[s] = '0;
+                    slv_req[cs].ar =
+                        widen_ar(
+                            mst_req[ar_gnt_m[cs]].ar,
+                            ar_gnt_m[cs]
+                        );
 
-            aw_down_fire[s]    = 1'b0;
-            ar_down_fire[s]    = 1'b0;
-            wlast_down_fire[s] = 1'b0;
+                    slv_req[cs].ar_valid =
+                        mst_req[ar_gnt_m[cs]].ar_valid;
 
-            slv_req[s].b_ready = rst_n;
-            slv_req[s].r_ready = rst_n;
+                    mst_resp[ar_gnt_m[cs]].ar_ready =
+                        slv_resp[cs].ar_ready;
+                end
+            end
 
 
-            // -------------------------------------------------------------
-            // Stable AW holding register
-            // -------------------------------------------------------------
+            // =================================================================
+            // W channel
+            //
+            // A master's current W transaction is the head of its accepted-AW
+            // FIFO.  For a mapped transaction the corresponding slave owner
+            // FIFO must also name this master.
+            // =================================================================
 
-            if (rst_n && (ws_state[s] == WS_AW)) begin
+            for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
-                slv_req[s].aw =
-                    aw_hold[s];
+                if (wrq_count[cm] != 0) begin
 
-                slv_req[s].aw_valid =
-                    1'b1;
+                    if (wr_route_q[cm][wrq_rptr[cm]]
+                        == ERR_ROUTE) begin
 
-                if (slv_resp[s].aw_ready) begin
+                        // Consume all W beats locally.  B DECERR is generated
+                        // only after the final W beat.
+                        mst_resp[cm].w_ready = 1'b1;
 
-                    aw_down_fire[s] =
-                        1'b1;
+                    end else begin
 
-                    if (ws_owner[s] < NUM_MST)
-                        mapped_aw_fire_m[ws_owner[s]] =
-                            1'b1;
-                end
-            end
+                        cs =
+                            wr_route_q[cm][wrq_rptr[cm]];
 
+                        if ((owner_count[cs] != 0) &&
+                            (owner_q[cs][owner_rptr[cs]]
+                                == cm)) begin
 
-            // -------------------------------------------------------------
-            // W routing
-            //
-            // Slave is reserved for this owner from AW acceptance through
-            // WLAST, so W ordering is unambiguous.
-            // -------------------------------------------------------------
+                            slv_req[cs].w =
+                                mst_req[cm].w;
 
-            if (rst_n && (ws_state[s] == WS_W)) begin
+                            slv_req[cs].w_valid =
+                                mst_req[cm].w_valid;
 
-                int m;
+                            mst_resp[cm].w_ready =
+                                slv_resp[cs].w_ready;
+                        end
+                    end
+                end
+            end
 
-                m = ws_owner[s];
 
-                if (m < NUM_MST) begin
+            // =================================================================
+            // B response routing
+            // =================================================================
 
-                    slv_req[s].w =
-                        mst_req[m].w;
+            for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
-                    slv_req[s].w_valid =
-                        mst_req[m].w_valid;
+                if (b_gnt_v[cm]) begin
 
-                    // Corresponding READY does not depend on WVALID.
-                    mst_resp[m].w_ready =
-                        slv_resp[s].w_ready;
+                    if (b_gnt_src[cm] == NUM_SLV) begin
 
+                        mst_resp[cm].b_valid =
+                            (berr_count[cm] != 0);
 
-                    if (mst_req[m].w_valid &&
-                        slv_resp[s].w_ready &&
-                        mst_req[m].w.last) begin
+                        mst_resp[cm].b.id =
+                            berr_q[cm][berr_rptr[cm]];
 
-                        wlast_down_fire[s] =
-                            1'b1;
+                        mst_resp[cm].b.resp =
+                            RESP_DECERR;
 
-                        mapped_wlast_m[m] =
-                            1'b1;
-                    end
-                end
-            end
+                        mst_resp[cm].b.user = '0;
 
+                    end else begin
 
-            // -------------------------------------------------------------
-            // Stable AR holding register
-            // -------------------------------------------------------------
+                        cs = b_gnt_src[cm];
 
-            if (rst_n && (rs_state[s] == RS_AR)) begin
+                        mst_resp[cm].b_valid =
+                            slv_resp[cs].b_valid;
 
-                slv_req[s].ar =
-                    ar_hold[s];
+                        mst_resp[cm].b =
+                            narrow_b(slv_resp[cs].b);
 
-                slv_req[s].ar_valid =
-                    1'b1;
+                        slv_req[cs].b_ready =
+                            mst_req[cm].b_ready;
+                    end
+                end
+            end
 
-                if (slv_resp[s].ar_ready) begin
 
-                    ar_down_fire[s] =
-                        1'b1;
+            // =================================================================
+            // R response routing
+            // =================================================================
 
-                    if (rs_owner[s] < NUM_MST)
-                        mapped_ar_fire_m[rs_owner[s]] =
-                            1'b1;
-                end
-            end
-        end
+            for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
+                if (r_gnt_v[cm]) begin
 
-        // ---------------------------------------------------------------------
-        // Local decode-error W streams
-        // ---------------------------------------------------------------------
+                    if (r_gnt_src[cm] == NUM_SLV) begin
 
-        for (int m = 0; m < NUM_MST; m++) begin
+                        mst_resp[cm].r_valid =
+                            (rerr_count[cm] != 0);
 
-            if (rst_n &&
-                (wm_state[m] == WM_LOCAL_W)) begin
+                        mst_resp[cm].r.id =
+                            rerr_id_q[cm][rerr_rptr[cm]];
 
-                // No slave is involved; simply consume the complete W burst.
-                mst_resp[m].w_ready =
-                    1'b1;
+                        mst_resp[cm].r.data = '0;
+                        mst_resp[cm].r.resp = RESP_DECERR;
 
-                if (mst_req[m].w_valid &&
-                    mst_req[m].w.last) begin
+                        mst_resp[cm].r.last =
+                            (rerr_beat[cm] ==
+                             rerr_len_q[cm][rerr_rptr[cm]]);
 
-                    local_wlast_m[m] =
-                        1'b1;
+                        mst_resp[cm].r.user = '0;
 
-                    b_load[m] =
-                        1'b1;
+                    end else begin
 
-                    b_load_data[m].id =
-                        wr_aw_q[m][wr_head[m]].id;
+                        cs = r_gnt_src[cm];
 
-                    b_load_data[m].resp =
-                        RESP_DECERR;
+                        mst_resp[cm].r_valid =
+                            slv_resp[cs].r_valid;
 
-                    b_load_data[m].user =
-                        wr_aw_q[m][wr_head[m]].user;
-                end
-            end
-        end
+                        mst_resp[cm].r =
+                            narrow_r(slv_resp[cs].r);
 
+                        slv_req[cs].r_ready =
+                            mst_req[cm].r_ready;
+                    end
+                end
+            end
 
-        // ---------------------------------------------------------------------
-        // Downstream B routing/capture
-        //
-        // B is captured into the originating master's one-entry buffer.
-        // Slave BREADY therefore does NOT depend on the originating master's
-        // BREADY.
-        // ---------------------------------------------------------------------
 
-        for (int s = 0; s < NUM_SLV; s++) begin
-            int m;
+            // =================================================================
+            // Request acceptance events
+            // =================================================================
 
-            m =
-                slv_resp[s].b.id[
-                    MST_ID_W-1 -: MST_IDX_W
-                ];
+            for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
-            if (rst_n &&
-                (m < NUM_MST) &&
-                (wm_state[m] == WM_WAIT_B) &&
-                wr_mapped_q[m][wr_head[m]] &&
-                (wr_target_q[m][wr_head[m]] == s) &&
-                (slv_resp[s].b.id[SLV_ID_W-1:0] ==
-                    wr_aw_q[m][wr_head[m]].id)) begin
+                if (mst_req[cm].aw_valid &&
+                    mst_resp[cm].aw_ready) begin
 
-                // Buffer must be empty in WM_WAIT_B.
-                slv_req[s].b_ready =
-                    !b_buf_valid[m];
+                    aw_accept[cm] = 1'b1;
 
-                if (slv_resp[s].b_valid &&
-                    slv_req[s].b_ready) begin
+                    if (aw_mapped[cm])
+                        aw_accept_route[cm] = aw_tgt[cm];
+                    else
+                        aw_accept_route[cm] =
+                            ERR_ROUTE[ROUTE_W-1:0];
+                end
 
-                    b_load[m] =
-                        1'b1;
 
-                    b_load_data[m].id =
-                        slv_resp[s].b.id[SLV_ID_W-1:0];
+                if (mst_req[cm].ar_valid &&
+                    mst_resp[cm].ar_ready) begin
 
-                    b_load_data[m].resp =
-                        slv_resp[s].b.resp;
+                    ar_accept[cm] = 1'b1;
+                    ar_accept_err[cm] = !ar_mapped[cm];
+                end
+            end
 
-                    b_load_data[m].user =
-                        slv_resp[s].b.user;
-                end
-            end
-        end
 
+            for (cs = 0; cs < NUM_SLV; cs = cs + 1) begin
 
-        // ---------------------------------------------------------------------
-        // Downstream R routing into full-burst per-master FIFOs
-        //
-        // The slave sees ready whenever storage remains, independent of the
-        // originating master's RREADY.
-        // ---------------------------------------------------------------------
+                aw_fire_s[cs] =
+                    slv_req[cs].aw_valid &&
+                    slv_resp[cs].aw_ready;
 
-        for (int s = 0; s < NUM_SLV; s++) begin
-            int m;
+                ar_fire_s[cs] =
+                    slv_req[cs].ar_valid &&
+                    slv_resp[cs].ar_ready;
 
-            m =
-                slv_resp[s].r.id[
-                    MST_ID_W-1 -: MST_IDX_W
-                ];
+                if (aw_fire_s[cs])
+                    owner_enq_m[cs] = aw_gnt_m[cs];
+            end
 
-            if (rst_n &&
-                (m < NUM_MST) &&
-                (rm_state[m] == RM_RECV) &&
-                rd_mapped_q[m][rd_head[m]] &&
-                (rd_target_q[m][rd_head[m]] == s) &&
-                (slv_resp[s].r.id[SLV_ID_W-1:0] ==
-                    rd_ar_q[m][rd_head[m]].id)) begin
 
-                slv_req[s].r_ready =
-                    (rbuf_count[m] < RBUF_DEPTH);
+            // =================================================================
+            // W transaction completion
+            // =================================================================
 
-                if (slv_resp[s].r_valid &&
-                    slv_req[s].r_ready) begin
+            for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
-                    rbuf_push[m] =
-                        1'b1;
+                if ((wrq_count[cm] != 0) &&
+                    mst_req[cm].w_valid &&
+                    mst_resp[cm].w_ready &&
+                    mst_req[cm].w.last) begin
 
-                    rbuf_push_data[m].id =
-                        slv_resp[s].r.id[SLV_ID_W-1:0];
+                    wrq_pop[cm] = 1'b1;
 
-                    rbuf_push_data[m].data =
-                        slv_resp[s].r.data;
+                    if (wr_route_q[cm][wrq_rptr[cm]]
+                        == ERR_ROUTE) begin
 
-                    rbuf_push_data[m].resp =
-                        slv_resp[s].r.resp;
+                        berr_enq[cm] = 1'b1;
 
-                    rbuf_push_data[m].last =
-                        slv_resp[s].r.last;
+                    end else begin
 
-                    rbuf_push_data[m].user =
-                        slv_resp[s].r.user;
-                end
-            end
-        end
+                        cs =
+                            wr_route_q[cm][wrq_rptr[cm]];
 
+                        owner_pop[cs] = 1'b1;
+                    end
+                end
+            end
 
-        // ---------------------------------------------------------------------
-        // Completion means the RESPONSE has actually been accepted by the
-        // originating master.
-        //
-        // Therefore wr_count/rd_count exactly model outstanding master-side
-        // transactions for C1.
-        // ---------------------------------------------------------------------
 
-        for (int m = 0; m < NUM_MST; m++) begin
+            // =================================================================
+            // Response completion
+            // =================================================================
 
-            if ((wm_state[m] == WM_RESP) &&
-                b_out_fire[m]) begin
+            for (cm = 0; cm < NUM_MST; cm = cm + 1) begin
 
-                wr_complete[m] =
-                    1'b1;
-            end
+                b_fire[cm] =
+                    mst_resp[cm].b_valid &&
+                    mst_req[cm].b_ready;
 
+                b_fire_local[cm] =
+                    b_fire[cm] &&
+                    b_gnt_v[cm] &&
+                    (b_gnt_src[cm] == NUM_SLV);
 
-            if ((rm_state[m] == RM_RECV) &&
-                mapped_r_last_out[m]) begin
 
-                rd_complete[m] =
-                    1'b1;
-            end
+                r_fire[cm] =
+                    mst_resp[cm].r_valid &&
+                    mst_req[cm].r_ready;
 
+                r_fire_local[cm] =
+                    r_fire[cm] &&
+                    r_gnt_v[cm] &&
+                    (r_gnt_src[cm] == NUM_SLV);
 
-            if ((rm_state[m] == RM_LOCAL) &&
-                local_r_last[m]) begin
+                r_fire_last[cm] =
+                    r_fire[cm] &&
+                    mst_resp[cm].r.last;
+            end
+        end
+    end
 
-                rd_complete[m] =
-                    1'b1;
-            end
-        end
-    end
 
+    // =========================================================================
+    // Sequential state
+    // =========================================================================
 
-    // =========================================================================
-    // Sequential state
-    // =========================================================================
+    integer i;
+    integer j;
 
-    always_ff @(posedge clk) begin
+    always_ff @(posedge clk) begin
 
-        if (!rst_n) begin
+        if (!rst_n) begin
 
-            // -----------------------------------------------------------------
-            // Master-side state
-            // -----------------------------------------------------------------
+            // -----------------------------------------------------------------
+            // Master state
+            // -----------------------------------------------------------------
 
-            for (int m = 0; m < NUM_MST; m++) begin
+            for (i = 0; i < NUM_MST; i = i + 1) begin
 
-                wr_head[m]  <= '0;
-                wr_tail[m]  <= '0;
-                wr_count[m] <= '0;
+                wr_id_busy[i] <= '0;
+                rd_id_busy[i] <= '0;
 
-                rd_head[m]  <= '0;
-                rd_tail[m]  <= '0;
-                rd_count[m] <= '0;
+                wr_outstanding[i] <= '0;
+                rd_outstanding[i] <= '0;
 
-                wm_state[m] <= WM_IDLE;
-                rm_state[m] <= RM_IDLE;
+                wrq_wptr[i]  <= '0;
+                wrq_rptr[i]  <= '0;
+                wrq_count[i] <= '0;
 
-                b_buf_valid[m] <= 1'b0;
-                b_buf[m]       <= '0;
+                berr_wptr[i]  <= '0;
+                berr_rptr[i]  <= '0;
+                berr_count[i] <= '0;
 
-                local_r_left[m] <= '0;
+                rerr_wptr[i]  <= '0;
+                rerr_rptr[i]  <= '0;
+                rerr_count[i] <= '0;
+                rerr_beat[i]  <= '0;
 
-                rbuf_head[m]  <= '0;
-                rbuf_tail[m]  <= '0;
-                rbuf_count[m] <= '0;
-            end
+                b_gnt_v[i]   <= 1'b0;
+                b_gnt_src[i] <= '0;
+                b_rr[i]      <= '0;
 
+                r_gnt_v[i]   <= 1'b0;
+                r_gnt_src[i] <= '0;
+                r_rr[i]      <= '0;
+            end
 
-            // -----------------------------------------------------------------
-            // Slave-side state
-            // -----------------------------------------------------------------
 
-            for (int s = 0; s < NUM_SLV; s++) begin
+            // -----------------------------------------------------------------
+            // Slave state
+            // -----------------------------------------------------------------
 
-                ws_state[s] <= WS_IDLE;
-                ws_owner[s] <= '0;
-                aw_rr[s]    <= '0;
-                aw_hold[s]  <= '0;
+            for (j = 0; j < NUM_SLV; j = j + 1) begin
 
-                rs_state[s] <= RS_IDLE;
-                rs_owner[s] <= '0;
-                ar_rr[s]    <= '0;
-                ar_hold[s]  <= '0;
-            end
-        end
+                owner_wptr[j]  <= '0;
+                owner_rptr[j]  <= '0;
+                owner_count[j] <= '0;
 
-        else begin
+                aw_gnt_v[j] <= 1'b0;
+                aw_gnt_m[j] <= '0;
+                aw_rr[j]    <= '0;
 
-            // =================================================================
-            // Per-master state
-            // =================================================================
+                ar_gnt_v[j] <= 1'b0;
+                ar_gnt_m[j] <= '0;
+                ar_rr[j]    <= '0;
+            end
 
-            for (int m = 0; m < NUM_MST; m++) begin
+        end else begin
 
-                // -------------------------------------------------------------
-                // AW FIFO insertion
-                // -------------------------------------------------------------
+            // =================================================================
+            // AW / AR arbitration state
+            // =================================================================
 
-                if (aw_accept[m]) begin
+            for (j = 0; j < NUM_SLV; j = j + 1) begin
 
-                    wr_aw_q[m][wr_tail[m]] <=
-                        mst_req[m].aw;
+                // -------------------------------------------------------------
+                // AW
+                // -------------------------------------------------------------
 
-                    wr_mapped_q[m][wr_tail[m]] <=
-                        aw_dec_mapped[m];
+                if (aw_gnt_v[j]) begin
 
-                    wr_target_q[m][wr_tail[m]] <=
-                        aw_dec_target[m];
+                    if (aw_fire_s[j]) begin
 
-                    wr_tail[m] <=
-                        wr_tail[m] + 1'b1;
-                end
+                        aw_gnt_v[j] <= 1'b0;
 
+                        if (aw_gnt_m[j] == NUM_MST-1)
+                            aw_rr[j] <= '0;
+                        else
+                            aw_rr[j] <= aw_gnt_m[j] + 1'b1;
+                    end
 
-                // -------------------------------------------------------------
-                // AW FIFO removal only when B has reached the master.
-                // -------------------------------------------------------------
+                end else if (aw_pick_v[j]) begin
 
-                if (wr_complete[m]) begin
-                    wr_head[m] <=
-                        wr_head[m] + 1'b1;
-                end
+                    aw_gnt_v[j] <= 1'b1;
+                    aw_gnt_m[j] <= aw_pick_m[j];
+                end
 
 
-                case ({aw_accept[m], wr_complete[m]})
+                // -------------------------------------------------------------
+                // AR
+                // -------------------------------------------------------------
 
-                    2'b10:
-                        wr_count[m] <=
-                            wr_count[m] + 1'b1;
+                if (ar_gnt_v[j]) begin
 
-                    2'b01:
-                        wr_count[m] <=
-                            wr_count[m] - 1'b1;
+                    if (ar_fire_s[j]) begin
 
-                    default:
-                        wr_count[m] <=
-                            wr_count[m];
-                endcase
+                        ar_gnt_v[j] <= 1'b0;
 
+                        if (ar_gnt_m[j] == NUM_MST-1)
+                            ar_rr[j] <= '0;
+                        else
+                            ar_rr[j] <= ar_gnt_m[j] + 1'b1;
+                    end
 
-                // -------------------------------------------------------------
-                // AR FIFO insertion
-                // -------------------------------------------------------------
+                end else if (ar_pick_v[j]) begin
 
-                if (ar_accept[m]) begin
+                    ar_gnt_v[j] <= 1'b1;
+                    ar_gnt_m[j] <= ar_pick_m[j];
+                end
+            end
 
-                    rd_ar_q[m][rd_tail[m]] <=
-                        mst_req[m].ar;
 
-                    rd_mapped_q[m][rd_tail[m]] <=
-                        ar_dec_mapped[m];
+            // =================================================================
+            // B / R arbitration state
+            // =================================================================
 
-                    rd_target_q[m][rd_tail[m]] <=
-                        ar_dec_target[m];
+            for (i = 0; i < NUM_MST; i = i + 1) begin
 
-                    rd_tail[m] <=
-                        rd_tail[m] + 1'b1;
-                end
+                // -------------------------------------------------------------
+                // B
+                // -------------------------------------------------------------
 
+                if (b_gnt_v[i]) begin
 
-                // -------------------------------------------------------------
-                // AR FIFO removal only after final R reaches the master.
-                // -------------------------------------------------------------
+                    if (b_fire[i]) begin
 
-                if (rd_complete[m]) begin
-                    rd_head[m] <=
-                        rd_head[m] + 1'b1;
-                end
+                        b_gnt_v[i] <= 1'b0;
 
+                        if (b_gnt_src[i] == SRC_N-1)
+                            b_rr[i] <= '0;
+                        else
+                            b_rr[i] <= b_gnt_src[i] + 1'b1;
+                    end
 
-                case ({ar_accept[m], rd_complete[m]})
+                end else if (b_pick_v[i]) begin
 
-                    2'b10:
-                        rd_count[m] <=
-                            rd_count[m] + 1'b1;
+                    b_gnt_v[i]   <= 1'b1;
+                    b_gnt_src[i] <= b_pick_src[i];
+                end
 
-                    2'b01:
-                        rd_count[m] <=
-                            rd_count[m] - 1'b1;
 
-                    default:
-                        rd_count[m] <=
-                            rd_count[m];
-                endcase
+                // -------------------------------------------------------------
+                // R
+                // -------------------------------------------------------------
 
+                if (r_gnt_v[i]) begin
 
-                // -------------------------------------------------------------
-                // Write transaction state machine
-                // -------------------------------------------------------------
+                    if (r_fire[i]) begin
 
-                case (wm_state[m])
+                        r_gnt_v[i] <= 1'b0;
 
-                    WM_IDLE: begin
+                        if (r_gnt_src[i] == SRC_N-1)
+                            r_rr[i] <= '0;
+                        else
+                            r_rr[i] <= r_gnt_src[i] + 1'b1;
+                    end
 
-                        if (wr_count[m] != 0) begin
+                end else if (r_pick_v[i]) begin
 
-                            if (wr_mapped_q[m][wr_head[m]])
-                                wm_state[m] <= WM_WAIT_AW;
-                            else
-                                wm_state[m] <= WM_LOCAL_W;
-                        end
-                    end
+                    r_gnt_v[i]   <= 1'b1;
+                    r_gnt_src[i] <= r_pick_src[i];
+                end
+            end
 
 
-                    WM_WAIT_AW: begin
+            // =================================================================
+            // Per-master queues/counters
+            // =================================================================
 
-                        if (mapped_aw_fire_m[m])
-                            wm_state[m] <= WM_SEND_W;
-                    end
+            for (i = 0; i < NUM_MST; i = i + 1) begin
 
+                // -------------------------------------------------------------
+                // Busy write IDs
+                // -------------------------------------------------------------
 
-                    WM_SEND_W: begin
+                if (aw_accept[i])
+                    wr_id_busy[i]
+                        [mst_req[i].aw.id] <= 1'b1;
 
-                        if (mapped_wlast_m[m])
-                            wm_state[m] <= WM_WAIT_B;
-                    end
+                if (b_fire[i])
+                    wr_id_busy[i]
+                        [mst_resp[i].b.id] <= 1'b0;
 
 
-                    WM_WAIT_B: begin
+                // -------------------------------------------------------------
+                // Busy read IDs
+                // -------------------------------------------------------------
 
-                        if (b_load[m])
-                            wm_state[m] <= WM_RESP;
-                    end
+                if (ar_accept[i])
+                    rd_id_busy[i]
+                        [mst_req[i].ar.id] <= 1'b1;
 
+                if (r_fire_last[i])
+                    rd_id_busy[i]
+                        [mst_resp[i].r.id] <= 1'b0;
 
-                    WM_LOCAL_W: begin
 
-                        if (local_wlast_m[m])
-                            wm_state[m] <= WM_RESP;
-                    end
+                // -------------------------------------------------------------
+                // Outstanding write transaction count
+                // -------------------------------------------------------------
 
+                case ({aw_accept[i], b_fire[i]})
 
-                    WM_RESP: begin
+                    2'b10:
+                        wr_outstanding[i] <=
+                            wr_outstanding[i] + 1'b1;
 
-                        if (b_out_fire[m])
-                            wm_state[m] <= WM_IDLE;
-                    end
+                    2'b01:
+                        wr_outstanding[i] <=
+                            wr_outstanding[i] - 1'b1;
 
+                    default:
+                        wr_outstanding[i] <=
+                            wr_outstanding[i];
 
-                    default:
-                        wm_state[m] <= WM_IDLE;
+                endcase
 
-                endcase
 
+                // -------------------------------------------------------------
+                // Outstanding read transaction count
+                // -------------------------------------------------------------
 
-                // -------------------------------------------------------------
-                // B response buffer
-                // -------------------------------------------------------------
+                case ({ar_accept[i], r_fire_last[i]})
 
-                if (b_load[m]) begin
+                    2'b10:
+                        rd_outstanding[i] <=
+                            rd_outstanding[i] + 1'b1;
 
-                    b_buf_valid[m] <=
-                        1'b1;
+                    2'b01:
+                        rd_outstanding[i] <=
+                            rd_outstanding[i] - 1'b1;
 
-                    b_buf[m] <=
-                        b_load_data[m];
-                end
-                else if (b_out_fire[m]) begin
+                    default:
+                        rd_outstanding[i] <=
+                            rd_outstanding[i];
 
-                    b_buf_valid[m] <=
-                        1'b0;
-                end
+                endcase
 
 
-                // -------------------------------------------------------------
-                // Read transaction state
-                // -------------------------------------------------------------
+                // -------------------------------------------------------------
+                // Per-master AW route FIFO enqueue
+                // -------------------------------------------------------------
 
-                case (rm_state[m])
+                if (aw_accept[i]) begin
 
-                    RM_IDLE: begin
+                    wr_route_q[i][wrq_wptr[i]] <=
+                        aw_accept_route[i];
 
-                        if (rd_count[m] != 0) begin
+                    wr_id_q[i][wrq_wptr[i]] <=
+                        mst_req[i].aw.id;
 
-                            if (rd_mapped_q[m][rd_head[m]]) begin
-                                rm_state[m] <= RM_WAIT_AR;
-                            end
-                            else begin
-                                rm_state[m] <= RM_LOCAL;
+                    if (wrq_wptr[i] == MAX_TRANS-1)
+                        wrq_wptr[i] <= '0;
+                    else
+                        wrq_wptr[i] <=
+                            wrq_wptr[i] + 1'b1;
+                end
 
-                                local_r_left[m] <=
-                                    {1'b0,
-                                     rd_ar_q[m][rd_head[m]].len}
-                                    + 9'd1;
-                            end
-                        end
-                    end
 
+                // -------------------------------------------------------------
+                // AW route FIFO pop at WLAST
+                // -------------------------------------------------------------
 
-                    RM_WAIT_AR: begin
+                if (wrq_pop[i]) begin
 
-                        if (mapped_ar_fire_m[m])
-                            rm_state[m] <= RM_RECV;
-                    end
+                    if (wrq_rptr[i] == MAX_TRANS-1)
+                        wrq_rptr[i] <= '0;
+                    else
+                        wrq_rptr[i] <=
+                            wrq_rptr[i] + 1'b1;
+                end
 
 
-                    RM_RECV: begin
+                case ({aw_accept[i], wrq_pop[i]})
 
-                        if (mapped_r_last_out[m])
-                            rm_state[m] <= RM_IDLE;
-                    end
+                    2'b10:
+                        wrq_count[i] <=
+                            wrq_count[i] + 1'b1;
 
+                    2'b01:
+                        wrq_count[i] <=
+                            wrq_count[i] - 1'b1;
 
-                    RM_LOCAL: begin
+                    default:
+                        wrq_count[i] <=
+                            wrq_count[i];
 
-                        if (local_r_fire[m]) begin
+                endcase
 
-                            if (local_r_left[m] == 9'd1) begin
 
-                                local_r_left[m] <= '0;
-                                rm_state[m]     <= RM_IDLE;
+                // -------------------------------------------------------------
+                // Local DECERR B FIFO enqueue
+                //
+                // The ID is the ID of the AW entry whose WLAST is being
+                // consumed this cycle.
+                // -------------------------------------------------------------
 
-                            end
-                            else begin
+                if (berr_enq[i]) begin
 
-                                local_r_left[m] <=
-                                    local_r_left[m] - 9'd1;
-                            end
-                        end
-                    end
+                    berr_q[i][berr_wptr[i]] <=
+                        wr_id_q[i][wrq_rptr[i]];
 
+                    if (berr_wptr[i] == MAX_TRANS-1)
+                        berr_wptr[i] <= '0;
+                    else
+                        berr_wptr[i] <=
+                            berr_wptr[i] + 1'b1;
+                end
 
-                    default:
-                        rm_state[m] <= RM_IDLE;
 
-                endcase
+                if (b_fire_local[i]) begin
 
+                    if (berr_rptr[i] == MAX_TRANS-1)
+                        berr_rptr[i] <= '0;
+                    else
+                        berr_rptr[i] <=
+                            berr_rptr[i] + 1'b1;
+                end
 
-                // -------------------------------------------------------------
-                // Mapped read burst FIFO
-                // -------------------------------------------------------------
 
-                if (rbuf_push[m]) begin
+                case ({
+                    berr_enq[i],
+                    b_fire_local[i]
+                })
 
-                    rbuf_mem[m][rbuf_tail[m]] <=
-                        rbuf_push_data[m];
+                    2'b10:
+                        berr_count[i] <=
+                            berr_count[i] + 1'b1;
 
-                    rbuf_tail[m] <=
-                        rbuf_tail[m] + 1'b1;
-                end
+                    2'b01:
+                        berr_count[i] <=
+                            berr_count[i] - 1'b1;
 
+                    default:
+                        berr_count[i] <=
+                            berr_count[i];
 
-                if (rbuf_pop[m]) begin
+                endcase
 
-                    rbuf_head[m] <=
-                        rbuf_head[m] + 1'b1;
-                end
 
+                // -------------------------------------------------------------
+                // Local DECERR read FIFO enqueue
+                // -------------------------------------------------------------
 
-                case ({rbuf_push[m], rbuf_pop[m]})
+                if (ar_accept[i] &&
+                    ar_accept_err[i]) begin
 
-                    2'b10:
-                        rbuf_count[m] <=
-                            rbuf_count[m] + 1'b1;
+                    rerr_id_q[i][rerr_wptr[i]] <=
+                        mst_req[i].ar.id;
 
-                    2'b01:
-                        rbuf_count[m] <=
-                            rbuf_count[m] - 1'b1;
+                    rerr_len_q[i][rerr_wptr[i]] <=
+                        mst_req[i].ar.len;
 
-                    default:
-                        rbuf_count[m] <=
-                            rbuf_count[m];
-                endcase
-            end
+                    if (rerr_wptr[i] == MAX_TRANS-1)
+                        rerr_wptr[i] <= '0;
+                    else
+                        rerr_wptr[i] <=
+                            rerr_wptr[i] + 1'b1;
+                end
 
 
-            // =================================================================
-            // Per-slave write engines
-            // =================================================================
+                // -------------------------------------------------------------
+                // Local DECERR read beat advancement
+                // -------------------------------------------------------------
 
-            for (int s = 0; s < NUM_SLV; s++) begin
+                if (r_fire_local[i]) begin
 
-                case (ws_state[s])
+                    if (mst_resp[i].r.last) begin
 
-                    WS_IDLE: begin
+                        if (rerr_rptr[i] == MAX_TRANS-1)
+                            rerr_rptr[i] <= '0;
+                        else
+                            rerr_rptr[i] <=
+                                rerr_rptr[i] + 1'b1;
 
-                        if (aw_pick_valid[s]) begin
+                        rerr_beat[i] <= '0;
 
-                            int m;
+                    end else begin
 
-                            m = aw_pick_m[s];
+                        rerr_beat[i] <=
+                            rerr_beat[i] + 1'b1;
+                    end
+                end
 
-                            ws_owner[s] <=
-                                aw_pick_m[s];
 
-                            aw_hold[s] <=
-                                widen_aw(
-                                    wr_aw_q[m][wr_head[m]],
-                                    aw_pick_m[s]
-                                );
+                case ({
+                    (ar_accept[i] && ar_accept_err[i]),
+                    (r_fire_local[i] &&
+                     mst_resp[i].r.last)
+                })
 
-                            ws_state[s] <=
-                                WS_AW;
-                        end
-                    end
+                    2'b10:
+                        rerr_count[i] <=
+                            rerr_count[i] + 1'b1;
 
+                    2'b01:
+                        rerr_count[i] <=
+                            rerr_count[i] - 1'b1;
 
-                    WS_AW: begin
+                    default:
+                        rerr_count[i] <=
+                            rerr_count[i];
 
-                        if (aw_down_fire[s])
-                            ws_state[s] <= WS_W;
-                    end
+                endcase
+            end
 
 
-                    WS_W: begin
+            // =================================================================
+            // Per-slave AW owner queues
+            // =================================================================
 
-                        if (wlast_down_fire[s]) begin
+            for (j = 0; j < NUM_SLV; j = j + 1) begin
 
-                            ws_state[s] <=
-                                WS_IDLE;
+                if (aw_fire_s[j]) begin
 
-                            // Fair next starting point.
-                            if (ws_owner[s] == NUM_MST-1)
-                                aw_rr[s] <= '0;
-                            else
-                                aw_rr[s] <= ws_owner[s] + 1'b1;
-                        end
-                    end
+                    owner_q[j][owner_wptr[j]] <=
+                        owner_enq_m[j];
 
+                    if (owner_wptr[j] == OWN_DEPTH-1)
+                        owner_wptr[j] <= '0;
+                    else
+                        owner_wptr[j] <=
+                            owner_wptr[j] + 1'b1;
+                end
 
-                    default:
-                        ws_state[s] <= WS_IDLE;
 
-                endcase
-            end
+                if (owner_pop[j]) begin
 
+                    if (owner_rptr[j] == OWN_DEPTH-1)
+                        owner_rptr[j] <= '0;
+                    else
+                        owner_rptr[j] <=
+                            owner_rptr[j] + 1'b1;
+                end
 
-            // =================================================================
-            // Per-slave AR engines
-            // =================================================================
 
-            for (int s = 0; s < NUM_SLV; s++) begin
+                case ({aw_fire_s[j], owner_pop[j]})
 
-                case (rs_state[s])
+                    2'b10:
+                        owner_count[j] <=
+                            owner_count[j] + 1'b1;
 
-                    RS_IDLE: begin
+                    2'b01:
+                        owner_count[j] <=
+                            owner_count[j] - 1'b1;
 
-                        if (ar_pick_valid[s]) begin
+                    default:
+                        owner_count[j] <=
+                            owner_count[j];
 
-                            int m;
+                endcase
+            end
+        end
+    end
 
-                            m = ar_pick_m[s];
 
-                            rs_owner[s] <=
-                                ar_pick_m[s];
+    // =========================================================================
+    // Parameter legality
+    // =========================================================================
 
-                            ar_hold[s] <=
-                                widen_ar(
-                                    rd_ar_q[m][rd_head[m]],
-                                    ar_pick_m[s]
-                                );
+    initial begin
 
-                            rs_state[s] <=
-                                RS_AR;
-                        end
-                    end
+        if (!((NUM_MST == 2) ||
+              (NUM_MST == 4)))
+            $fatal(
+                1,
+                "axi4_xbar: NUM_MST must be 2 or 4"
+            );
 
+        if (!((NUM_SLV == 2) ||
+              (NUM_SLV == 4)))
+            $fatal(
+                1,
+                "axi4_xbar: NUM_SLV must be 2 or 4"
+            );
 
-                    RS_AR: begin
+        if (!((MAX_TRANS == 2) ||
+              (MAX_TRANS == 8)))
+            $fatal(
+                1,
+                "axi4_xbar: MAX_TRANS must be 2 or 8"
+            );
 
-                        if (ar_down_fire[s]) begin
-
-                            rs_state[s] <=
-                                RS_IDLE;
-
-                            if (rs_owner[s] == NUM_MST-1)
-                                ar_rr[s] <= '0;
-                            else
-                                ar_rr[s] <= rs_owner[s] + 1'b1;
-                        end
-                    end
-
-
-                    default:
-                        rs_state[s] <= RS_IDLE;
-
-                endcase
-            end
-        end
-    end
+        if (!((MAX_BURST_LEN == 3) ||
+              (MAX_BURST_LEN == 255)))
+            $fatal(
+                1,
+                "axi4_xbar: MAX_BURST_LEN must be 3 or 255"
+            );
+    end
 
 endmodule

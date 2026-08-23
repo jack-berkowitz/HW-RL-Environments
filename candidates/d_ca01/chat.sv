@@ -35,493 +35,743 @@ module nonblocking_dcache #(
 );
 
   localparam int unsigned BLOCK_WORDS = 4;
-  localparam int unsigned BYTE_LANES  = DATA_W / 8;
-  localparam int unsigned BYTE_OFF_W  = $clog2(BYTE_LANES);
-  localparam int unsigned WORD_IDX_W  = $clog2(BLOCK_WORDS);
-  localparam int unsigned BLOCK_OFF_W = BYTE_OFF_W + WORD_IDX_W;
+  localparam int unsigned BYTE_W      = DATA_W / 8;
+  localparam int unsigned BYTE_OFF_W  = $clog2(BYTE_W);
+  localparam int unsigned WORD_OFF_W  = $clog2(BLOCK_WORDS);
+  localparam int unsigned BLOCK_OFF_W = BYTE_OFF_W + WORD_OFF_W;
   localparam int unsigned SET_W       = $clog2(SETS);
   localparam int unsigned TAG_W       = 32 - BLOCK_OFF_W - SET_W;
-  localparam int unsigned WAY_IDX_W   = (WAYS <= 1) ? 1 : $clog2(WAYS);
-  localparam int unsigned MSHR_IDX_W  =
-    (MAX_MISSES <= 1) ? 1 : $clog2(MAX_MISSES);
+  localparam int unsigned WAY_W       = (WAYS <= 1) ? 1 : $clog2(WAYS);
+  localparam int unsigned MISS_W      =
+      (MAX_MISSES <= 1) ? 1 : $clog2(MAX_MISSES);
 
   typedef enum logic [2:0] {
-    MEM_IDLE,
-    MEM_WB_REQ,
-    MEM_WB_DATA,
-    MEM_RD_REQ,
-    MEM_RD_DATA
+    S_IDLE,
+    S_WB_REQ,
+    S_WB_DATA,
+    S_FILL_REQ,
+    S_FILL_DATA
   } mem_state_t;
 
-  logic [DATA_W-1:0] data_mem
-    [0:SETS-1][0:WAYS-1][0:BLOCK_WORDS-1];
-  logic [TAG_W-1:0] tag_mem [0:SETS-1][0:WAYS-1];
-  logic valid_mem [0:SETS-1][0:WAYS-1];
-  logic dirty_mem [0:SETS-1][0:WAYS-1];
-  logic [WAY_IDX_W-1:0] replace_way [0:SETS-1];
+  logic                      valid_array
+                                 [0:SETS-1][0:WAYS-1];
+  logic                      dirty_array
+                                 [0:SETS-1][0:WAYS-1];
+  logic [TAG_W-1:0]          tag_array
+                                 [0:SETS-1][0:WAYS-1];
+  logic [DATA_W-1:0]         data_array
+                                 [0:SETS-1][0:WAYS-1]
+                                 [0:BLOCK_WORDS-1];
 
-  logic miss_valid [0:MAX_MISSES-1];
-  logic [31:0] miss_line [0:MAX_MISSES-1];
-  logic [3:0] miss_id [0:MAX_MISSES-1];
-  logic miss_op [0:MAX_MISSES-1];
-  logic [WORD_IDX_W-1:0] miss_word [0:MAX_MISSES-1];
-  logic [DATA_W-1:0] miss_data [0:MAX_MISSES-1];
-  logic [BYTE_LANES-1:0] miss_mask [0:MAX_MISSES-1];
+  logic [WAY_W-1:0]          repl_ptr [0:SETS-1];
 
-  mem_state_t mem_state_q;
-  logic [MSHR_IDX_W-1:0] active_miss_q;
-  logic [MSHR_IDX_W-1:0] schedule_ptr_q;
-  logic [SET_W-1:0] active_set_q;
-  logic [WAY_IDX_W-1:0] active_way_q;
-  logic [TAG_W-1:0] active_tag_q;
-  logic [31:0] victim_addr_q;
-  logic [DATA_W-1:0] wb_data_q [0:BLOCK_WORDS-1];
-  logic [WORD_IDX_W-1:0] beat_q;
-  logic [DATA_W-1:0] load_data_q;
+  /*
+   * Outstanding-miss records.
+   *
+   * No full cache block is kept per miss.  A miss record contains only
+   * metadata, plus at most one store word and byte mask.
+   */
+  logic                      miss_valid
+                                 [0:MAX_MISSES-1];
+  logic [31:0]               miss_line_addr
+                                 [0:MAX_MISSES-1];
+  logic [1:0]                miss_word_idx
+                                 [0:MAX_MISSES-1];
+  logic [3:0]                miss_id
+                                 [0:MAX_MISSES-1];
+  logic                      miss_op
+                                 [0:MAX_MISSES-1];
+  logic [DATA_W-1:0]         miss_store_data
+                                 [0:MAX_MISSES-1];
+  logic [BYTE_W-1:0]         miss_store_mask
+                                 [0:MAX_MISSES-1];
 
-  logic [31:0] req_line_comb;
-  logic [SET_W-1:0] req_set_comb;
-  logic [TAG_W-1:0] req_tag_comb;
-  logic [WORD_IDX_W-1:0] req_word_comb;
-  logic req_hit_comb;
-  logic [WAY_IDX_W-1:0] req_hit_way_comb;
-  logic same_miss_comb;
-  logic free_miss_comb;
-  logic [MSHR_IDX_W-1:0] free_miss_idx_comb;
+  /*
+   * The only complete block buffered outside the cache data array.
+   */
+  logic [DATA_W-1:0]         fill_buf
+                                 [0:BLOCK_WORDS-1];
 
-  logic any_miss_comb;
-  logic schedule_valid_comb;
-  logic [MSHR_IDX_W-1:0] schedule_idx_comb;
-  logic [SET_W-1:0] schedule_set_comb;
-  logic [TAG_W-1:0] schedule_tag_comb;
-  logic [WAY_IDX_W-1:0] victim_way_comb;
-  logic invalid_way_comb;
-  logic response_space_comb;
-  logic fill_finishing_comb;
+  mem_state_t                mem_state;
 
-  function automatic logic [DATA_W-1:0] masked_word(
-    input logic [DATA_W-1:0]     old_word,
-    input logic [DATA_W-1:0]     new_word,
-    input logic [BYTE_LANES-1:0] byte_mask
+  logic [MISS_W-1:0]         active_miss_idx;
+  logic [31:0]               active_line_addr;
+  logic [SET_W-1:0]          active_set;
+  logic [TAG_W-1:0]          active_tag;
+  logic [WAY_W-1:0]          active_way;
+  logic [31:0]               victim_line_addr;
+
+  logic [1:0]                mem_beat_count;
+  logic [MISS_W-1:0]         miss_sched_ptr;
+
+  logic [31:0]               req_line_addr;
+  logic [SET_W-1:0]          req_set;
+  logic [TAG_W-1:0]          req_tag;
+  logic [1:0]                req_word_idx;
+
+  logic                      req_hit;
+  logic [WAY_W-1:0]          req_hit_way;
+
+  logic                      duplicate_miss;
+  logic                      free_miss_found;
+  logic [MISS_W-1:0]         free_miss_idx;
+  logic                      any_miss;
+
+  logic                      sched_found;
+  logic [MISS_W-1:0]         sched_idx;
+  logic [SET_W-1:0]          sched_set;
+  logic [TAG_W-1:0]          sched_tag;
+  logic [WAY_W-1:0]          sched_way;
+  logic                      sched_victim_valid;
+  logic                      sched_victim_dirty;
+  logic [31:0]               sched_victim_addr;
+
+  logic                      rsp_slot_available;
+  logic                      fill_final_present;
+  logic                      fill_complete_now;
+
+  function automatic logic [31:0] block_align(
+    input logic [31:0] addr
   );
-    integer byte_num;
+    block_align = {
+      addr[31:BLOCK_OFF_W],
+      {BLOCK_OFF_W{1'b0}}
+    };
+  endfunction
+
+  function automatic logic [SET_W-1:0] addr_set(
+    input logic [31:0] addr
+  );
+    addr_set = addr[BLOCK_OFF_W +: SET_W];
+  endfunction
+
+  function automatic logic [TAG_W-1:0] addr_tag(
+    input logic [31:0] addr
+  );
+    addr_tag = addr[31 -: TAG_W];
+  endfunction
+
+  function automatic logic [1:0] addr_word(
+    input logic [31:0] addr
+  );
+    addr_word = addr[BYTE_OFF_W +: WORD_OFF_W];
+  endfunction
+
+  function automatic logic [DATA_W-1:0] merge_word(
+    input logic [DATA_W-1:0] old_word,
+    input logic [DATA_W-1:0] new_word,
+    input logic [BYTE_W-1:0] byte_mask
+  );
+    integer b;
     begin
-      masked_word = old_word;
-      for (
-        byte_num = 0;
-        byte_num < BYTE_LANES;
-        byte_num = byte_num + 1
-      ) begin
-        if (byte_mask[byte_num]) begin
-          masked_word[byte_num*8 +: 8] =
-            new_word[byte_num*8 +: 8];
+      merge_word = old_word;
+
+      for (b = 0; b < BYTE_W; b = b + 1) begin
+        if (byte_mask[b]) begin
+          merge_word[(8*b) +: 8] =
+              new_word[(8*b) +: 8];
         end
       end
     end
   endfunction
 
+  /*
+   * Current-request lookup plus free miss-entry search.
+   */
   always_comb begin : request_lookup
-    integer way_num;
-    integer miss_num;
+    integer i;
+    integer w;
 
-    req_line_comb =
-      {req_addr_i[31:BLOCK_OFF_W], {BLOCK_OFF_W{1'b0}}};
-    req_set_comb       = req_addr_i[BLOCK_OFF_W +: SET_W];
-    req_tag_comb       = req_addr_i[31 -: TAG_W];
-    req_word_comb      = req_addr_i[BYTE_OFF_W +: WORD_IDX_W];
-    req_hit_comb       = 1'b0;
-    req_hit_way_comb   = '0;
-    same_miss_comb     = 1'b0;
-    free_miss_comb     = 1'b0;
-    free_miss_idx_comb = '0;
+    req_line_addr = block_align(req_addr_i);
+    req_set       = addr_set(req_addr_i);
+    req_tag       = addr_tag(req_addr_i);
+    req_word_idx  = addr_word(req_addr_i);
 
-    for (
-      way_num = 0;
-      way_num < WAYS;
-      way_num = way_num + 1
-    ) begin
-      if (!req_hit_comb &&
-          valid_mem[req_set_comb][way_num] &&
-          (tag_mem[req_set_comb][way_num] == req_tag_comb)) begin
-        req_hit_comb     = 1'b1;
-        req_hit_way_comb = way_num[WAY_IDX_W-1:0];
+    req_hit     = 1'b0;
+    req_hit_way = '0;
+
+    for (w = 0; w < WAYS; w = w + 1) begin
+      if ((!req_hit) &&
+          valid_array[req_set][w] &&
+          (tag_array[req_set][w] == req_tag)) begin
+        req_hit     = 1'b1;
+        req_hit_way = w;
       end
     end
 
-    for (
-      miss_num = 0;
-      miss_num < MAX_MISSES;
-      miss_num = miss_num + 1
-    ) begin
-      if (miss_valid[miss_num] &&
-          (miss_line[miss_num] == req_line_comb)) begin
-        same_miss_comb = 1'b1;
-      end
+    duplicate_miss  = 1'b0;
+    free_miss_found = 1'b0;
+    free_miss_idx   = '0;
+    any_miss        = 1'b0;
 
-      if (!free_miss_comb && !miss_valid[miss_num]) begin
-        free_miss_comb     = 1'b1;
-        free_miss_idx_comb = miss_num[MSHR_IDX_W-1:0];
+    for (i = 0; i < MAX_MISSES; i = i + 1) begin
+      if (miss_valid[i]) begin
+        any_miss = 1'b1;
+
+        if (miss_line_addr[i] == req_line_addr) begin
+          duplicate_miss = 1'b1;
+        end
+      end else if (!free_miss_found) begin
+        free_miss_found = 1'b1;
+        free_miss_idx   = i;
       end
     end
   end
 
+  /*
+   * Select the next outstanding miss using a round-robin starting
+   * point.  Victim selection prefers an invalid way, otherwise it
+   * uses a per-set round-robin replacement pointer.
+   */
   always_comb begin : scheduler_lookup
-    integer miss_num;
-    integer candidate;
-    integer way_num;
+    integer k;
+    integer idx;
+    integer w;
+    logic invalid_found;
 
-    any_miss_comb       = 1'b0;
-    schedule_valid_comb = 1'b0;
-    schedule_idx_comb   = '0;
-    schedule_set_comb   = '0;
-    schedule_tag_comb   = '0;
-    victim_way_comb     = '0;
-    invalid_way_comb    = 1'b0;
+    sched_found        = 1'b0;
+    sched_idx          = '0;
+    sched_set          = '0;
+    sched_tag          = '0;
+    sched_way          = '0;
+    sched_victim_valid = 1'b0;
+    sched_victim_dirty = 1'b0;
+    sched_victim_addr  = '0;
+    invalid_found      = 1'b0;
 
-    for (
-      miss_num = 0;
-      miss_num < MAX_MISSES;
-      miss_num = miss_num + 1
-    ) begin
-      if (miss_valid[miss_num]) begin
-        any_miss_comb = 1'b1;
+    for (k = 0; k < MAX_MISSES; k = k + 1) begin
+      idx = miss_sched_ptr + k;
+
+      if (idx >= MAX_MISSES) begin
+        idx = idx - MAX_MISSES;
       end
 
-      candidate = (schedule_ptr_q + miss_num) % MAX_MISSES;
-
-      if (!schedule_valid_comb && miss_valid[candidate]) begin
-        schedule_valid_comb = 1'b1;
-        schedule_idx_comb   = candidate[MSHR_IDX_W-1:0];
+      if ((!sched_found) && miss_valid[idx]) begin
+        sched_found = 1'b1;
+        sched_idx   = idx;
       end
     end
 
-    if (schedule_valid_comb) begin
-      schedule_set_comb =
-        miss_line[schedule_idx_comb][BLOCK_OFF_W +: SET_W];
-      schedule_tag_comb =
-        miss_line[schedule_idx_comb][31 -: TAG_W];
-      victim_way_comb =
-        replace_way[schedule_set_comb];
+    if (sched_found) begin
+      sched_set = addr_set(miss_line_addr[sched_idx]);
+      sched_tag = addr_tag(miss_line_addr[sched_idx]);
+      sched_way = repl_ptr[sched_set];
 
-      for (
-        way_num = 0;
-        way_num < WAYS;
-        way_num = way_num + 1
-      ) begin
-        if (!invalid_way_comb &&
-            !valid_mem[schedule_set_comb][way_num]) begin
-          invalid_way_comb = 1'b1;
-          victim_way_comb  = way_num[WAY_IDX_W-1:0];
+      for (w = 0; w < WAYS; w = w + 1) begin
+        if ((!invalid_found) &&
+            (!valid_array[sched_set][w])) begin
+          invalid_found = 1'b1;
+          sched_way     = w;
         end
       end
+
+      sched_victim_valid =
+          valid_array[sched_set][sched_way];
+
+      sched_victim_dirty =
+          valid_array[sched_set][sched_way] &&
+          dirty_array[sched_set][sched_way];
+
+      sched_victim_addr = {
+        tag_array[sched_set][sched_way],
+        sched_set,
+        {BLOCK_OFF_W{1'b0}}
+      };
     end
   end
 
-  always_comb begin : interface_outputs
-    response_space_comb = !rsp_valid_o || rsp_ready_i;
+  /*
+   * External ready/valid controls.
+   *
+   * The final fill beat is accepted only when a response slot is
+   * available, since completing the fill necessarily creates the
+   * response for its originating request.
+   */
+  always_comb begin : interface_control
+    rsp_slot_available =
+        (!rsp_valid_o) || rsp_ready_i;
 
-    fill_finishing_comb =
-      (mem_state_q == MEM_RD_DATA) &&
-      (beat_q == BLOCK_WORDS-1) &&
-      mem_rd_valid_i &&
-      response_space_comb;
+    fill_final_present =
+        (mem_state == S_FILL_DATA) &&
+        (mem_beat_count == (BLOCK_WORDS-1)) &&
+        mem_rd_valid_i;
 
-    req_ready_o     = 1'b0;
     mem_req_valid_o = 1'b0;
     mem_req_we_o    = 1'b0;
-    mem_req_addr_o  = 32'b0;
+    mem_req_addr_o  = '0;
+
     mem_rd_ready_o  = 1'b0;
+
     mem_wr_valid_o  = 1'b0;
     mem_wr_data_o   = '0;
 
-    if (rst_ni &&
-        req_valid_i &&
-        !((mem_state_q == MEM_IDLE) && any_miss_comb) &&
-        !fill_finishing_comb) begin
-      if (req_hit_comb) begin
-        req_ready_o = response_space_comb;
-      end else if (!same_miss_comb && free_miss_comb) begin
-        req_ready_o = 1'b1;
-      end
-    end
+    case (mem_state)
 
-    case (mem_state_q)
-      MEM_WB_REQ: begin
+      S_WB_REQ: begin
         mem_req_valid_o = 1'b1;
         mem_req_we_o    = 1'b1;
-        mem_req_addr_o  = victim_addr_q;
+        mem_req_addr_o  = victim_line_addr;
       end
 
-      MEM_WB_DATA: begin
+      S_WB_DATA: begin
         mem_wr_valid_o = 1'b1;
-        mem_wr_data_o  = wb_data_q[beat_q];
+        mem_wr_data_o =
+            data_array
+              [active_set]
+              [active_way]
+              [mem_beat_count];
       end
 
-      MEM_RD_REQ: begin
+      S_FILL_REQ: begin
         mem_req_valid_o = 1'b1;
         mem_req_we_o    = 1'b0;
-        mem_req_addr_o  = miss_line[active_miss_q];
+        mem_req_addr_o  = active_line_addr;
       end
 
-      MEM_RD_DATA: begin
-        if (beat_q == BLOCK_WORDS-1) begin
-          mem_rd_ready_o = response_space_comb;
+      S_FILL_DATA: begin
+        if (mem_beat_count == (BLOCK_WORDS-1)) begin
+          mem_rd_ready_o = rsp_slot_available;
         end else begin
           mem_rd_ready_o = 1'b1;
         end
       end
 
       default: begin
+        mem_req_valid_o = 1'b0;
       end
+
     endcase
+
+    fill_complete_now =
+        fill_final_present && mem_rd_ready_o;
+
+    /*
+     * Starting a pending miss from S_IDLE takes priority for one
+     * cycle.  This removes an eviction-vs-hit race and guarantees
+     * pending misses continue to make progress even under a stream
+     * of hits.
+     *
+     * Otherwise:
+     *   - an access to a line already missing waits for that miss;
+     *   - a hit requires response-buffer capacity;
+     *   - a new miss requires a free miss record.
+     */
+    req_ready_o = 1'b0;
+
+    if (!fill_complete_now) begin
+      if ((mem_state == S_IDLE) && any_miss) begin
+        req_ready_o = 1'b0;
+      end else if (duplicate_miss) begin
+        req_ready_o = 1'b0;
+      end else if (req_hit) begin
+        req_ready_o = rsp_slot_available;
+      end else begin
+        req_ready_o = free_miss_found;
+      end
+    end
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : cache_state
-    integer set_num;
-    integer way_num;
-    integer miss_num;
-    integer word_num;
+  /*
+   * Main sequential state.
+   */
+  always_ff @(posedge clk_i or negedge rst_ni)
+  begin : state_update
+    integer s;
+    integer w;
+    integer i;
+    integer b;
 
     if (!rst_ni) begin
-      rsp_valid_o    <= 1'b0;
-      rsp_id_o       <= 4'b0;
-      rsp_data_o     <= '0;
-      mem_state_q    <= MEM_IDLE;
-      active_miss_q  <= '0;
-      schedule_ptr_q <= '0;
-      active_set_q   <= '0;
-      active_way_q   <= '0;
-      active_tag_q   <= '0;
-      victim_addr_q  <= 32'b0;
-      beat_q         <= '0;
-      load_data_q    <= '0;
 
-      for (
-        set_num = 0;
-        set_num < SETS;
-        set_num = set_num + 1
-      ) begin
-        replace_way[set_num] <= '0;
+      rsp_valid_o <= 1'b0;
+      rsp_id_o    <= '0;
+      rsp_data_o  <= '0;
 
-        for (
-          way_num = 0;
-          way_num < WAYS;
-          way_num = way_num + 1
-        ) begin
-          valid_mem[set_num][way_num] <= 1'b0;
-          dirty_mem[set_num][way_num] <= 1'b0;
+      mem_state        <= S_IDLE;
+      active_miss_idx  <= '0;
+      active_line_addr <= '0;
+      active_set       <= '0;
+      active_tag       <= '0;
+      active_way       <= '0;
+      victim_line_addr <= '0;
+      mem_beat_count   <= '0;
+      miss_sched_ptr   <= '0;
+
+      for (s = 0; s < SETS; s = s + 1) begin
+        repl_ptr[s] <= '0;
+
+        for (w = 0; w < WAYS; w = w + 1) begin
+          valid_array[s][w] <= 1'b0;
+          dirty_array[s][w] <= 1'b0;
         end
       end
 
-      for (
-        miss_num = 0;
-        miss_num < MAX_MISSES;
-        miss_num = miss_num + 1
-      ) begin
-        miss_valid[miss_num] <= 1'b0;
+      for (i = 0; i < MAX_MISSES; i = i + 1) begin
+        miss_valid[i]      <= 1'b0;
+        miss_line_addr[i]  <= '0;
+        miss_word_idx[i]   <= '0;
+        miss_id[i]         <= '0;
+        miss_op[i]         <= 1'b0;
+        miss_store_data[i] <= '0;
+        miss_store_mask[i] <= '0;
       end
 
-      for (
-        word_num = 0;
-        word_num < BLOCK_WORDS;
-        word_num = word_num + 1
-      ) begin
-        wb_data_q[word_num] <= '0;
+      for (b = 0; b < BLOCK_WORDS; b = b + 1) begin
+        fill_buf[b] <= '0;
       end
+
     end else begin
+
+      /*
+       * Retire an existing response when accepted.  A newly
+       * generated response later in this same clock cycle replaces
+       * it, allowing one response per cycle.
+       */
       if (rsp_valid_o && rsp_ready_i) begin
         rsp_valid_o <= 1'b0;
       end
 
+      /*
+       * CPU request acceptance.
+       */
       if (req_valid_i && req_ready_o) begin
-        if (req_hit_comb) begin
+
+        if (req_hit) begin
+
           rsp_valid_o <= 1'b1;
           rsp_id_o    <= req_id_i;
 
           if (req_op_i) begin
-            data_mem
-              [req_set_comb]
-              [req_hit_way_comb]
-              [req_word_comb] <=
-                masked_word(
-                  data_mem
-                    [req_set_comb]
-                    [req_hit_way_comb]
-                    [req_word_comb],
-                  req_data_i,
-                  req_mask_i
-                );
 
-            dirty_mem
-              [req_set_comb]
-              [req_hit_way_comb] <= 1'b1;
+            /*
+             * STORE hit.
+             */
+            data_array
+              [req_set]
+              [req_hit_way]
+              [req_word_idx]
+            <= merge_word(
+                 data_array
+                   [req_set]
+                   [req_hit_way]
+                   [req_word_idx],
+                 req_data_i,
+                 req_mask_i
+               );
 
+            dirty_array
+              [req_set]
+              [req_hit_way]
+            <= 1'b1;
+
+            /*
+             * Store response data is unconstrained.
+             */
             rsp_data_o <= '0;
+
           end else begin
+
+            /*
+             * LOAD hit.
+             */
             rsp_data_o <=
-              data_mem
-                [req_set_comb]
-                [req_hit_way_comb]
-                [req_word_comb];
+                data_array
+                  [req_set]
+                  [req_hit_way]
+                  [req_word_idx];
+
           end
+
         end else begin
-          miss_valid[free_miss_idx_comb] <= 1'b1;
-          miss_line[free_miss_idx_comb]  <= req_line_comb;
-          miss_id[free_miss_idx_comb]    <= req_id_i;
-          miss_op[free_miss_idx_comb]    <= req_op_i;
-          miss_word[free_miss_idx_comb]  <= req_word_comb;
-          miss_data[free_miss_idx_comb]  <= req_data_i;
-          miss_mask[free_miss_idx_comb]  <= req_mask_i;
+
+          /*
+           * New distinct-line miss.  Merely allocate its metadata
+           * here; no cache victim is reserved yet.  This is what
+           * permits MAX_MISSES outstanding misses without requiring
+           * MAX_MISSES blocks of data buffering.
+           */
+          miss_valid[free_miss_idx]
+              <= 1'b1;
+
+          miss_line_addr[free_miss_idx]
+              <= req_line_addr;
+
+          miss_word_idx[free_miss_idx]
+              <= req_word_idx;
+
+          miss_id[free_miss_idx]
+              <= req_id_i;
+
+          miss_op[free_miss_idx]
+              <= req_op_i;
+
+          miss_store_data[free_miss_idx]
+              <= req_data_i;
+
+          miss_store_mask[free_miss_idx]
+              <= req_mask_i;
+
         end
       end
 
-      case (mem_state_q)
-        MEM_IDLE: begin
-          beat_q <= '0;
+      case (mem_state)
 
-          if (schedule_valid_comb) begin
-            active_miss_q <= schedule_idx_comb;
-            active_set_q  <= schedule_set_comb;
-            active_way_q  <= victim_way_comb;
-            active_tag_q  <= schedule_tag_comb;
+        /*
+         * Pick one tracked miss for memory service.
+         */
+        S_IDLE: begin
 
-            victim_addr_q <= {
-              tag_mem[schedule_set_comb][victim_way_comb],
-              schedule_set_comb,
-              {BLOCK_OFF_W{1'b0}}
-            };
+          if (sched_found) begin
 
-            for (
-              word_num = 0;
-              word_num < BLOCK_WORDS;
-              word_num = word_num + 1
-            ) begin
-              wb_data_q[word_num] <=
-                data_mem
-                  [schedule_set_comb]
-                  [victim_way_comb]
-                  [word_num];
+            active_miss_idx
+                <= sched_idx;
+
+            active_line_addr
+                <= miss_line_addr[sched_idx];
+
+            active_set
+                <= sched_set;
+
+            active_tag
+                <= sched_tag;
+
+            active_way
+                <= sched_way;
+
+            victim_line_addr
+                <= sched_victim_addr;
+
+            mem_beat_count
+                <= '0;
+
+            miss_sched_ptr
+                <= sched_idx + 1'b1;
+
+            repl_ptr[sched_set]
+                <= sched_way + 1'b1;
+
+            /*
+             * Once a way is chosen for eviction it is no longer
+             * CPU-visible.  Its data remain physically in the array
+             * until any required writeback has consumed all four
+             * words.
+             */
+            if (sched_victim_valid) begin
+              valid_array
+                [sched_set]
+                [sched_way]
+              <= 1'b0;
             end
 
-            valid_mem
-              [schedule_set_comb]
-              [victim_way_comb] <= 1'b0;
-
-            dirty_mem
-              [schedule_set_comb]
-              [victim_way_comb] <= 1'b0;
-
-            if (victim_way_comb == WAYS-1) begin
-              replace_way[schedule_set_comb] <= '0;
+            if (sched_victim_dirty) begin
+              mem_state <= S_WB_REQ;
             end else begin
-              replace_way[schedule_set_comb] <=
-                victim_way_comb + 1'b1;
+              mem_state <= S_FILL_REQ;
             end
 
-            if (schedule_idx_comb == MAX_MISSES-1) begin
-              schedule_ptr_q <= '0;
-            end else begin
-              schedule_ptr_q <= schedule_idx_comb + 1'b1;
-            end
+          end
+        end
 
-            if (valid_mem[schedule_set_comb][victim_way_comb] &&
-                dirty_mem[schedule_set_comb][victim_way_comb]) begin
-              mem_state_q <= MEM_WB_REQ;
+        /*
+         * Send a block writeback request for a dirty victim.
+         */
+        S_WB_REQ: begin
+
+          if (mem_req_valid_o &&
+              mem_req_ready_i) begin
+
+            mem_beat_count <= '0;
+            mem_state      <= S_WB_DATA;
+
+          end
+        end
+
+        /*
+         * Send exactly four writeback words, lowest word first.
+         */
+        S_WB_DATA: begin
+
+          if (mem_wr_valid_o &&
+              mem_wr_ready_i) begin
+
+            if (mem_beat_count ==
+                (BLOCK_WORDS-1)) begin
+
+              mem_beat_count <= '0;
+              mem_state      <= S_FILL_REQ;
+
             end else begin
-              mem_state_q <= MEM_RD_REQ;
+
+              mem_beat_count
+                  <= mem_beat_count + 1'b1;
+
             end
           end
         end
 
-        MEM_WB_REQ: begin
-          if (mem_req_valid_o && mem_req_ready_i) begin
-            beat_q      <= '0;
-            mem_state_q <= MEM_WB_DATA;
+        /*
+         * Request the missing block.
+         */
+        S_FILL_REQ: begin
+
+          if (mem_req_valid_o &&
+              mem_req_ready_i) begin
+
+            mem_beat_count <= '0;
+            mem_state      <= S_FILL_DATA;
+
           end
         end
 
-        MEM_WB_DATA: begin
-          if (mem_wr_valid_o && mem_wr_ready_i) begin
-            if (beat_q == BLOCK_WORDS-1) begin
-              beat_q      <= '0;
-              mem_state_q <= MEM_RD_REQ;
-            end else begin
-              beat_q <= beat_q + 1'b1;
-            end
-          end
-        end
+        /*
+         * Receive exactly four fill words in ascending order.
+         */
+        S_FILL_DATA: begin
 
-        MEM_RD_REQ: begin
-          if (mem_req_valid_o && mem_req_ready_i) begin
-            beat_q      <= '0;
-            load_data_q <= '0;
-            mem_state_q <= MEM_RD_DATA;
-          end
-        end
+          if (mem_rd_valid_i &&
+              mem_rd_ready_o) begin
 
-        MEM_RD_DATA: begin
-          if (mem_rd_valid_i && mem_rd_ready_o) begin
-            if (miss_op[active_miss_q] &&
-                (miss_word[active_miss_q] == beat_q)) begin
-              data_mem
-                [active_set_q]
-                [active_way_q]
-                [beat_q] <=
-                  masked_word(
-                    mem_rd_data_i,
-                    miss_data[active_miss_q],
-                    miss_mask[active_miss_q]
-                  );
-            end else begin
-              data_mem
-                [active_set_q]
-                [active_way_q]
-                [beat_q] <= mem_rd_data_i;
-            end
+            fill_buf[mem_beat_count]
+                <= mem_rd_data_i;
 
-            if (!miss_op[active_miss_q] &&
-                (miss_word[active_miss_q] == beat_q)) begin
-              load_data_q <= mem_rd_data_i;
-            end
+            if (mem_beat_count ==
+                (BLOCK_WORDS-1)) begin
 
-            if (beat_q == BLOCK_WORDS-1) begin
-              tag_mem
-                [active_set_q]
-                [active_way_q] <= active_tag_q;
+              /*
+               * The fill has completed.
+               *
+               * Install all four words atomically from the CPU's
+               * point of view.  For a STORE miss, merge its byte
+               * enables into the addressed fill word.
+               *
+               * fill_buf contains beats 0..2.  Beat 3 is the
+               * currently transferring mem_rd_data_i value.
+               */
+              for (b = 0;
+                   b < BLOCK_WORDS;
+                   b = b + 1) begin
 
-              valid_mem
-                [active_set_q]
-                [active_way_q] <= 1'b1;
+                if (miss_op[active_miss_idx] &&
+                    (miss_word_idx[active_miss_idx] == b)) begin
 
-              dirty_mem
-                [active_set_q]
-                [active_way_q] <= miss_op[active_miss_q];
+                  if (b == (BLOCK_WORDS-1)) begin
 
-              rsp_valid_o <= 1'b1;
-              rsp_id_o    <= miss_id[active_miss_q];
+                    data_array
+                      [active_set]
+                      [active_way]
+                      [b]
+                    <= merge_word(
+                         mem_rd_data_i,
+                         miss_store_data[active_miss_idx],
+                         miss_store_mask[active_miss_idx]
+                       );
 
-              if (miss_op[active_miss_q]) begin
-                rsp_data_o <= '0;
-              end else if (
-                miss_word[active_miss_q] == beat_q
-              ) begin
-                rsp_data_o <= mem_rd_data_i;
-              end else begin
-                rsp_data_o <= load_data_q;
+                  end else begin
+
+                    data_array
+                      [active_set]
+                      [active_way]
+                      [b]
+                    <= merge_word(
+                         fill_buf[b],
+                         miss_store_data[active_miss_idx],
+                         miss_store_mask[active_miss_idx]
+                       );
+
+                  end
+
+                end else begin
+
+                  if (b == (BLOCK_WORDS-1)) begin
+
+                    data_array
+                      [active_set]
+                      [active_way]
+                      [b]
+                    <= mem_rd_data_i;
+
+                  end else begin
+
+                    data_array
+                      [active_set]
+                      [active_way]
+                      [b]
+                    <= fill_buf[b];
+
+                  end
+                end
               end
 
-              miss_valid[active_miss_q] <= 1'b0;
-              beat_q      <= '0;
-              mem_state_q <= MEM_IDLE;
+              tag_array
+                [active_set]
+                [active_way]
+              <= active_tag;
+
+              valid_array
+                [active_set]
+                [active_way]
+              <= 1'b1;
+
+              dirty_array
+                [active_set]
+                [active_way]
+              <= miss_op[active_miss_idx];
+
+              /*
+               * Produce exactly one response for the miss.
+               */
+              rsp_valid_o
+                  <= 1'b1;
+
+              rsp_id_o
+                  <= miss_id[active_miss_idx];
+
+              if (miss_op[active_miss_idx]) begin
+
+                rsp_data_o <= '0;
+
+              end else if (
+                miss_word_idx[active_miss_idx] ==
+                (BLOCK_WORDS-1)
+              ) begin
+
+                rsp_data_o <= mem_rd_data_i;
+
+              end else begin
+
+                rsp_data_o <=
+                    fill_buf[
+                      miss_word_idx[active_miss_idx]
+                    ];
+
+              end
+
+              /*
+               * Release the miss record only after its line has
+               * landed and its response has been generated.
+               */
+              miss_valid[active_miss_idx]
+                  <= 1'b0;
+
+              mem_beat_count
+                  <= '0;
+
+              mem_state
+                  <= S_IDLE;
+
             end else begin
-              beat_q <= beat_q + 1'b1;
+
+              mem_beat_count
+                  <= mem_beat_count + 1'b1;
+
             end
           end
         end
 
         default: begin
-          mem_state_q <= MEM_IDLE;
+          mem_state <= S_IDLE;
         end
+
       endcase
     end
   end

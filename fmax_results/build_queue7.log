@@ -1,0 +1,39 @@
+13:56:38  === d_ca01 reference Fmax sweep (seed 10.0 ns) ===
+design d_ca01 (comp_arch, sky130hd)
+config domains/comp_arch/design/d_ca01_nonblocking_dcache/orfs/config.mk
+orfs output directory: d_ca01_nonblocking_dcache
+
+=== phase 1: bracketing from 10.0 ns ===
+
+==============================================================
+FMAX SEARCH ABORTED for d_ca01
+  reason : seed run failed as a tool error: run_orfs_build.sh exited 2; see fmax_results/d_ca01_logs/d_ca01_iter01_10.0000ns.log
+  P&R runs         : 1 (1 bracketing, 0 bisection)
+  total wall time  : 0.1 min
+  written to       : fmax_results/d_ca01_fmax.json
+==============================================================
+13:56:45  exit=1
+__QUEUE7_DONE__
+13:58:29  === d_ca01 reference Fmax sweep (seed 10.0 ns) ===
+design d_ca01 (comp_arch, sky130hd)
+config domains/comp_arch/design/d_ca01_nonblocking_dcache/orfs/config.mk
+orfs output directory: d_ca01_nonblocking_dcache
+
+=== phase 1: bracketing from 10.0 ns ===
+
+=== phase 2: bisecting (fail 5.0000, pass 10.0000] ns ===
+
+=== phase 3: confirming 10.0000 ns from a clean build ===
+
+==============================================================
+FMAX for d_ca01 (comp_arch, sky130hd)
+  converged period : 10.0000 ns
+  achieved Fmax    : 100.00 MHz
+  WNS at that period: 0.04 ns
+  confirming re-run: passed
+  P&R runs         : 7 (2 bracketing, 4 bisection, 1 confirming)
+  total wall time  : 260.5 min
+  written to       : fmax_results/d_ca01_fmax.json
+==============================================================
+18:18:58  exit=0
+__QUEUE7_DONE__

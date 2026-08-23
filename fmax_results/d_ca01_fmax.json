@@ -1,0 +1,131 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_ca01",
+  "tier": "comp_arch",
+  "pdk": "sky130hd",
+  "converged_period_ns": 10.0,
+  "achieved_fmax_mhz": 100.0,
+  "wns_at_converged_ns": 0.04,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 10.0,
+    "period_pass": 10.0,
+    "period_fail": 5.0,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 10.0,
+    "period_fail": 9.6875
+  },
+  "search_iterations": 4,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 10.0,
+      "wns_ns": 0.04,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 1891.6,
+      "log": "fmax_results/d_ca01_logs/d_ca01_iter01_10.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 578032,
+      "provisional_power_mw": 0.115137
+    },
+    {
+      "iteration": 2,
+      "period_ns": 5.0,
+      "wns_ns": -3.25,
+      "tns_ns": -14923.32,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 1880.7,
+      "log": "fmax_results/d_ca01_logs/d_ca01_iter02_5.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 618842,
+      "provisional_power_mw": 0.239102
+    },
+    {
+      "iteration": 3,
+      "period_ns": 7.5,
+      "wns_ns": -1.16,
+      "tns_ns": -30.63,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 3017.6,
+      "log": "fmax_results/d_ca01_logs/d_ca01_iter03_7.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 598330,
+      "provisional_power_mw": 0.1544
+    },
+    {
+      "iteration": 4,
+      "period_ns": 8.75,
+      "wns_ns": -0.71,
+      "tns_ns": -10.91,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 2212.3,
+      "log": "fmax_results/d_ca01_logs/d_ca01_iter04_8.7500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 583143,
+      "provisional_power_mw": 0.132117
+    },
+    {
+      "iteration": 5,
+      "period_ns": 9.375,
+      "wns_ns": -0.07,
+      "tns_ns": -0.08,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 2240.3,
+      "log": "fmax_results/d_ca01_logs/d_ca01_iter05_9.3750ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 583383,
+      "provisional_power_mw": 0.123338
+    },
+    {
+      "iteration": 6,
+      "period_ns": 9.6875,
+      "wns_ns": -0.12,
+      "tns_ns": -0.12,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 1961.7,
+      "log": "fmax_results/d_ca01_logs/d_ca01_iter06_9.6875ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 579069,
+      "provisional_power_mw": 0.119244
+    },
+    {
+      "iteration": 7,
+      "period_ns": 10.0,
+      "wns_ns": 0.04,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 2423.5,
+      "log": "fmax_results/d_ca01_logs/d_ca01_iter07_10.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 578032,
+      "provisional_power_mw": 0.115137
+    }
+  ],
+  "total_wall_time_s": 15629.0,
+  "total_pnr_runs": 7,
+  "rtl_git_commit": "31220b179a2222c9cb3a5ce943dd479ba2efaae5-dirty",
+  "timestamp": "2026-08-22T01:18:58.143588+00:00",
+  "aborted_reason": null
+}
