@@ -1,0 +1,4 @@
+wiped sky130hd/rob (results, logs, objects, reports)
+constraining to CLK_PERIOD_NS=10.0000 (SDC + synthesis)
+OPENROAD: /OpenROAD-flow-scripts/tools/OpenROAD
+make: *** No targets specified and no makefile found.  Stop.

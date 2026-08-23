@@ -1,0 +1,131 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_nw03_cand_gemini",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": 6.5,
+  "achieved_fmax_mhz": 153.85,
+  "wns_at_converged_ns": 0.1,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 4.0,
+    "period_pass": 8.0,
+    "period_fail": 4.0,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 6.5,
+    "period_fail": 6.25
+  },
+  "search_iterations": 4,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 4.0,
+      "wns_ns": -2.07,
+      "tns_ns": -256.92,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 792.5,
+      "log": "fmax_results/d_nw03_cand_gemini_logs/d_nw03_cand_gemini_iter01_4.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 508544,
+      "provisional_power_mw": 0.22382
+    },
+    {
+      "iteration": 2,
+      "period_ns": 8.0,
+      "wns_ns": 0.16,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 569.8,
+      "log": "fmax_results/d_nw03_cand_gemini_logs/d_nw03_cand_gemini_iter02_8.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 474135,
+      "provisional_power_mw": 0.106684
+    },
+    {
+      "iteration": 3,
+      "period_ns": 6.0,
+      "wns_ns": -0.32,
+      "tns_ns": -17.8,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 646.0,
+      "log": "fmax_results/d_nw03_cand_gemini_logs/d_nw03_cand_gemini_iter03_6.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 489464,
+      "provisional_power_mw": 0.144955
+    },
+    {
+      "iteration": 4,
+      "period_ns": 7.0,
+      "wns_ns": 0.11,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 553.5,
+      "log": "fmax_results/d_nw03_cand_gemini_logs/d_nw03_cand_gemini_iter04_7.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 478224,
+      "provisional_power_mw": 0.12333
+    },
+    {
+      "iteration": 5,
+      "period_ns": 6.5,
+      "wns_ns": 0.1,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 515.2,
+      "log": "fmax_results/d_nw03_cand_gemini_logs/d_nw03_cand_gemini_iter05_6.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 481927,
+      "provisional_power_mw": 0.134342
+    },
+    {
+      "iteration": 6,
+      "period_ns": 6.25,
+      "wns_ns": -0.28,
+      "tns_ns": -5.7,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 616.5,
+      "log": "fmax_results/d_nw03_cand_gemini_logs/d_nw03_cand_gemini_iter06_6.2500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 487461,
+      "provisional_power_mw": 0.139335
+    },
+    {
+      "iteration": 7,
+      "period_ns": 6.5,
+      "wns_ns": 0.1,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 516.9,
+      "log": "fmax_results/d_nw03_cand_gemini_logs/d_nw03_cand_gemini_iter07_6.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 481927,
+      "provisional_power_mw": 0.134342
+    }
+  ],
+  "total_wall_time_s": 4210.6,
+  "total_pnr_runs": 7,
+  "rtl_git_commit": "1d3b69b0fde0c3e877b2ac199ac0be094032bbde-dirty",
+  "timestamp": "2026-08-22T19:22:31.498776+00:00",
+  "aborted_reason": null
+}

@@ -1,0 +1,44 @@
+{
+  "design": "rob",
+  "tier": "TierTwo",
+  "pdk": "sky130hd",
+  "converged_period_ns": null,
+  "achieved_fmax_mhz": null,
+  "wns_at_converged_ns": null,
+  "confirming_rerun": {
+    "ran": false,
+    "passed": false,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 10.0,
+    "period_pass": null,
+    "period_fail": null,
+    "bracket_iterations": 1
+  },
+  "final_interval": {
+    "period_pass": null,
+    "period_fail": null
+  },
+  "search_iterations": 0,
+  "resolution_ns": 0.05,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 10.0,
+      "wns_ns": null,
+      "tns_ns": null,
+      "drc": null,
+      "pass": false,
+      "status": "tool_error",
+      "wall_time_s": 0.5,
+      "log": "fmax_results/rob_logs/rob_iter01_10.0000ns.log",
+      "note": "run_orfs_build.sh exited 2; see fmax_results/rob_logs/rob_iter01_10.0000ns.log"
+    }
+  ],
+  "total_wall_time_s": 0.5,
+  "total_pnr_runs": 1,
+  "rtl_git_commit": "c860f510561a089346380014498c1a54c5b77006-dirty",
+  "timestamp": "2026-08-11T19:51:15.974341+00:00",
+  "aborted_reason": "seed run failed as a tool error: run_orfs_build.sh exited 2; see fmax_results/rob_logs/rob_iter01_10.0000ns.log"
+}

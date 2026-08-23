@@ -1,0 +1,19 @@
+19:08:07 === PART 2 START ===
+19:08:07 SKIP sweep d_nw03 ref (done)
+19:08:07 SKIP sweep d_nw03_cand_chat (done)
+19:08:07 SKIP sweep d_nw03_cand_claude (done)
+19:08:07 SKIP sweep d_nw03_cand_gemini (done)
+19:08:07 SKIP sweep d_dsp03 ref (done)
+19:08:07 SWEEP d_dsp03_cand_chat (seed 48.0ns)
+19:08:07 SWEEP d_nw01_cand_claude (seed 9.0ns)
+19:08:07 --- common-clock builds ---
+19:08:07 BUILD d_nw03/reference at 6.5000ns
+19:08:07 BUILD d_nw03/chat at 6.5000ns
+19:08:07 BUILD d_nw03/claude at 6.5000ns
+19:08:07 BUILD d_nw03/gemini at 6.5000ns
+19:08:07 BUILD d_dsp03/reference at 46.8750ns
+19:08:07 BUILD d_dsp03/chat at 46.8750ns
+19:08:07 SKIP build d_nw01/reference at 9.0000 (already measured)
+19:08:07 SKIP build d_nw01/chat at 9.0000 (already measured)
+19:08:07 BUILD d_nw01/claude at 9.0000ns
+19:08:07 === PART 2 DONE ===

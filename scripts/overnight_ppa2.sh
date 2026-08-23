@@ -71,7 +71,33 @@ sweep () {   # task, model, seed
   if [ -f "$REPO/fmax_results/${nick}_fmax.json" ]; then say "SKIP sweep $nick (done)"; return 0; fi
   say "SWEEP $nick (seed ${seed}ns)"
   [ "$PLAN" = "1" ] && return 0
-  [ -f "orfs_runs/$nick/config.mk" ] || bash scripts/ppa_candidate.sh "$task" "$cand" "$model" >>"$LOG" 2>&1 || true
+  # STALE SNAPSHOT GUARD -- COMPARE CONTENT, NOT PRESENCE.
+  # ppa_candidate.sh copies the candidate into orfs_runs/<nick>/<dut>.sv. Keying
+  # regeneration on config.mk's mere existence meant that after a candidate was
+  # re-solicited, the sweep silently rebuilt the PREVIOUS copy -- the RTL on disk
+  # and the RTL being measured were different files, with nothing in the log to
+  # say so. Caught on d_nw01/claude: snapshot 0f35254446decbc2 against candidate
+  # 79f8e5bb3cc9d3f4. This trap has cost work four times; the Mac's
+  # mac_sweep_queue.sh now carries the same check.
+  # Compare against the TRANSFORMED candidate, not the raw file: ppa_candidate.sh
+  # writes the snapshot as `sed 's/\xc2\xa0/ /g'` (NBSP -> space) plus a trailing
+  # newline, so a raw sha never matches and a naive check would regenerate on
+  # every sweep -- and regeneration runs a full ORFS build, so that is expensive,
+  # not merely redundant. Reproduce the transform instead of stamping a marker
+  # file, so the check stays correct even if orfs_runs/ is populated by hand.
+  local want have="" f
+  want="$( { LC_ALL=C sed $'s/\xc2\xa0/ /g' "$cand"; printf '\n'; } | sha256sum | cut -d' ' -f1 )"
+  if [ -f "orfs_runs/$nick/config.mk" ]; then
+    for f in "orfs_runs/$nick"/*.sv; do
+      [ -f "$f" ] || continue
+      [ "$(sha256sum "$f" | cut -d' ' -f1)" = "$want" ] && { have=1; break; }
+    done
+  fi
+  if [ -z "$have" ]; then
+    say "REGEN orfs_runs/$nick -- snapshot missing or stale (candidate ${want:0:16})"
+    rm -rf "orfs_runs/$nick"
+    bash scripts/ppa_candidate.sh "$task" "$cand" "$model" >>"$LOG" 2>&1 || true
+  fi
   python3 scripts/find_fmax.py --design "$nick" --seed-period-ns "$seed" \
       --resolution-ns 0.5 --skip-sim-check >>"$LOG" 2>&1
 }
@@ -139,16 +165,21 @@ PY2
 }
 
 say "=== PART 2 START ==="
-refsweep d_nw03 4.0
-sweep d_nw03 chat 4.0 ; sweep d_nw03 claude 4.0 ; sweep d_nw03 gemini 4.0
-refsweep d_dsp03 12.0 ; sweep d_dsp03 chat 12.0
+# d_nw03 AND d_dsp03 DROPPED ON THIS MACHINE (PC, branch ppa/pc-part2).
+# NOT because they are unwanted -- because the Mac owns them. Its queue
+# (scripts/mac_sweep_queue.sh) covers d_ca04, d_nw03, d_dsp03 and d_dsp02, and is
+# written and chained. Running them here as well is a DATA-LOSS hazard, not a
+# bookkeeping one: run_orfs_build.sh wipes
+# $ORFS_FLOW_DIR/{results,logs,objects,reports}/<platform>/<design> before every
+# build, so whichever machine started second would delete the other's in-flight
+# results mid-run. Restore these lines only when the Mac's queue is not running.
+#
+# This PC runs d_nw01 alone.
 sweep d_nw01 claude 9.0
 
 say "--- common-clock builds ---"
-P="$(period_for d_nw03 d_nw03_cand_chat d_nw03_cand_claude d_nw03_cand_gemini)"
-[ -n "$P" ] && for m in reference chat claude gemini; do build_at d_nw03 "$m" "$P"; done
-P="$(period_for d_dsp03 d_dsp03_cand_chat)"
-[ -n "$P" ] && for m in reference chat; do build_at d_dsp03 "$m" "$P"; done
+# d_nw03 and d_dsp03 build groups dropped with their sweeps -- see above. Both
+# must stay out while the Mac's queue is running, for the same wipe hazard.
 P="$(period_for d_nw01 d_nw01_cand_chat_scored d_nw01_cand_claude)"
 [ -n "$P" ] && for m in reference chat claude; do build_at d_nw01 "$m" "$P"; done
 say "=== PART 2 DONE ==="

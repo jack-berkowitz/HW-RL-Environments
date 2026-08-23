@@ -1,0 +1,131 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_nw03_cand_chat",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": 5.0,
+  "achieved_fmax_mhz": 200.0,
+  "wns_at_converged_ns": 0.04,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 4.0,
+    "period_pass": 8.0,
+    "period_fail": 4.0,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 5.0,
+    "period_fail": 4.75
+  },
+  "search_iterations": 4,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 4.0,
+      "wns_ns": -0.57,
+      "tns_ns": -58.11,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 183.1,
+      "log": "fmax_results/d_nw03_cand_chat_logs/d_nw03_cand_chat_iter01_4.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 21192.8,
+      "provisional_power_mw": 0.024712
+    },
+    {
+      "iteration": 2,
+      "period_ns": 8.0,
+      "wns_ns": 0.36,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 87.5,
+      "log": "fmax_results/d_nw03_cand_chat_logs/d_nw03_cand_chat_iter02_8.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 13434.1,
+      "provisional_power_mw": 0.0070901
+    },
+    {
+      "iteration": 3,
+      "period_ns": 6.0,
+      "wns_ns": 0.09,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 67.4,
+      "log": "fmax_results/d_nw03_cand_chat_logs/d_nw03_cand_chat_iter03_6.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 14511.4,
+      "provisional_power_mw": 0.0104944
+    },
+    {
+      "iteration": 4,
+      "period_ns": 5.0,
+      "wns_ns": 0.04,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 106.0,
+      "log": "fmax_results/d_nw03_cand_chat_logs/d_nw03_cand_chat_iter04_5.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 16734.8,
+      "provisional_power_mw": 0.0145969
+    },
+    {
+      "iteration": 5,
+      "period_ns": 4.5,
+      "wns_ns": -0.24,
+      "tns_ns": -13.18,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 154.4,
+      "log": "fmax_results/d_nw03_cand_chat_logs/d_nw03_cand_chat_iter05_4.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 19561.3,
+      "provisional_power_mw": 0.0200817
+    },
+    {
+      "iteration": 6,
+      "period_ns": 4.75,
+      "wns_ns": -0.14,
+      "tns_ns": -2.05,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 132.2,
+      "log": "fmax_results/d_nw03_cand_chat_logs/d_nw03_cand_chat_iter06_4.7500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 18358.9,
+      "provisional_power_mw": 0.0173465
+    },
+    {
+      "iteration": 7,
+      "period_ns": 5.0,
+      "wns_ns": 0.04,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 104.1,
+      "log": "fmax_results/d_nw03_cand_chat_logs/d_nw03_cand_chat_iter07_5.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 16734.8,
+      "provisional_power_mw": 0.0145969
+    }
+  ],
+  "total_wall_time_s": 834.9,
+  "total_pnr_runs": 7,
+  "rtl_git_commit": "1d3b69b0fde0c3e877b2ac199ac0be094032bbde-dirty",
+  "timestamp": "2026-08-22T17:24:46.115847+00:00",
+  "aborted_reason": null
+}

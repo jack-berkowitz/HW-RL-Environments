@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=axi4_xbar; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=20000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=20.0; override.CLK_PERIOD_NS=9.0000;",
+  "build_config_hash": "d0a75612c6e3be79",
+  "clk_period_ns": "9.0000",
+  "correctness_gate": "passed:2026-08-23T013348Z__claude__sim.json",
+  "design_area_um2": "110645",
+  "git_sha": "fb63f55b35a1b392ce8f99176589f4cb7f9fee80-dirty",
+  "kind": "ppa",
+  "label": "claude_at_9.0000",
+  "orfs_nickname": "d_nw01_cand_claude_at_9.0000",
+  "pdk": "sky130hd",
+  "power_w": "1.56e-02",
+  "status": "completed",
+  "submission": "candidates/d_nw01/claude.sv",
+  "submission_sha256_16": "79f8e5bb3cc9d3f4",
+  "synth_area_um2": "82036.179200",
+  "task": "d_nw01_axi4_xbar",
+  "timestamp_utc": "2026-08-23T07:11:22Z",
+  "wns_ns": "0.213807"
+}
