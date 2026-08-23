@@ -69,3 +69,35 @@ oldest task in the project.
 The module is renamed, and the 10/10 recorded above was measured through
 `sim_verification.sh`. Any future statement of a v_ca05 score must be against
 that number, not the historical one.
+## The difficulty pivot — every defect is now guarded
+
+The previous set was boundary-shaped but **total**: each defect held on every
+transaction of its class, so it fired on the first one any testbench drove. That
+measures coverage, not checking, and it is why a submission that passed the
+validity gate collected most of the set for free.
+
+Each defect is now paired with a rare predicate over contract-level state —
+occupancy, per-tag occupancy, how many distinct tags are present, an ordinal
+search, how many times the store has filled. All are counted from the port
+handshakes, never from inside the golden, so each guard can be restated against
+an independent implementation.
+
+### The reference was the weaker half, again
+
+It killed **five of ten**. Not because it missed clauses — it checks all
+fifteen — but because it checked each one **once, in the easiest configuration
+available**: an empty store, one tag, a first fill, a handful of searches.
+
+The phases added do not test anything new. They re-test clauses already covered,
+in configurations the earlier ones never construct: a half-full store, more than
+`SLOTS/2` entries on one tag while another tag is present, a single-entry peek
+in a busy store, a second fill to capacity, and the discriminating search run
+after ten others. 10/10.
+
+### A runner that reported silence as a result
+
+`witness.sh` matched `^FAIL`; this testbench prints `[FAIL] R14 : …`. All ten
+witnesses came back "no failure observed" for mutants the harness kills. Same
+shape as the `sed`/`\b` fault in v_ca03 — a check whose stated scope exceeds its
+reach, and whose failure looks identical to success.
+

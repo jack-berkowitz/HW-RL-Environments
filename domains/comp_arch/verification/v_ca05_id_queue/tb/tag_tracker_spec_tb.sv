@@ -310,6 +310,61 @@ module tag_tracker_tb;   // name required by the scoring path
       check_status("random");
     end
 
+    // ---- the SAME clauses, at occupancies and repetitions the phases above
+    // never construct -----------------------------------------------------
+    // Every check here duplicates a clause already checked. What differs is
+    // the configuration it is checked in: a half-full store rather than an
+    // empty one, more than SLOTS/2 entries on one tag, a single-entry tag
+    // peeked while the store is busy, a SECOND fill to capacity, and the
+    // discriminating search run after the store has been searched many times.
+    // A design that is correct in the easy configuration and wrong in these is
+    // invisible to everything above.
+    begin
+      for (int t = 0; t < NTAG; t++)
+        while (ref_q[t].size() != 0) do_pop(TAG_W'(t), 1'b1, 50);
+      check_status("drained before the busy-store phase");
+
+      // R1: entries are SHARED, not reserved per tag. More than SLOTS/2 on one
+      // tag, with another tag present, is the case that separates a shared
+      // pool from a per-tag quota.
+      do_push(3'd7, 32'hC000_0000, 50, granted);
+      if (!granted) fail("R1", "push refused into an empty store"); else ok();
+      for (int i = 0; i < 6; i++) begin
+        d = payload_t'(32'hC100_0000 + i);
+        do_push(3'd0, d, 50, granted);
+        if (!granted)
+          fail("R1", $sformatf("entry %0d on tag 0 refused with %0d of %0d slots free -- entries are shared between tags, not reserved",
+                               i+1, SLOTS - ref_count, SLOTS));
+        else ok();
+      end
+      check_status("seven entries, six of them on one tag");
+
+      // R9: a peek of a tag holding EXACTLY ONE entry, in a BUSY store. The
+      // earlier boundary phase does this in a nearly empty one.
+      do_pop(3'd7, 1'b0, 50);
+      do_pop(3'd7, 1'b0, 50);
+      check_status("after peeking a single-entry tag in a busy store");
+
+      // R14: full_o on a SECOND fill to capacity. The first fill is the only
+      // one anything above reaches.
+      d = payload_t'(32'hC200_0000);
+      do_push(3'd3, d, 50, granted);
+      if (!granted) fail("R1", "the eighth entry was refused with the store not yet full");
+      else ok();
+      check_status("full for the SECOND time");
+
+      // R12/R13: the discriminating high-byte search, run once the store has
+      // already been searched many times.
+      for (int k = 0; k < 10; k++)
+        do_match(payload_t'(32'hC100_0000 + k), 32'h0000_00FF, 50);
+      do_match(32'h71B2_C3D4, 32'hFF00_0000, 50);   // differs only in [31:24]
+      do_match(32'hC100_0000, 32'hFF00_0000, 50);   // agrees in [31:24]
+
+      for (int t = 0; t < NTAG; t++)
+        while (ref_q[t].size() != 0) do_pop(TAG_W'(t), 1'b1, 50);
+      check_status("drained after the busy-store phase");
+    end
+
     // ---- drain everything -------------------------------------------------
     for (int t = 0; t < NTAG; t++)
       while (ref_q[t].size() != 0) do_pop(TAG_W'(t), 1'b1, 50);
