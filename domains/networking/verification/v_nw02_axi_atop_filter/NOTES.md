@@ -138,6 +138,52 @@ DISCRIMINATE` and `EXCLUDED FROM SCORING`, and the footer counts discriminating
 submissions rather than gate-passing ones. Re-verified against this task after
 the fix; negative control (a) now passes.
 
+## The difficulty pivot — the mutant set was rebuilt
+
+Measured on the previous set: a submission that passed the validity gate
+collected most of the mutants for free. The reason was structural, not a matter
+of calibration. Every defect in that set was **total** — it held on every
+transaction of its class — so it fired on the first one a testbench happened to
+drive. Catching it required exercising the class, not checking the clause. The
+set was measuring coverage and reporting it as verification.
+
+The set is now **uniformly guarded**. Each defect is
+
+    wrong_behaviour AND rare_predicate over contract-level state
+
+so it is caught only by a testbench that constructs the named configuration and
+is still checking when it arrives. `mutants/README.md` carries the guard for
+each one.
+
+Three things constrain the guards, and each cost something to learn:
+
+1. **Fairness.** Every guard names a condition the spec states as a checkable
+   bound at a named boundary. A defect that punishes an unstated expectation
+   measures the submission's luck at guessing my intent.
+2. **Reference reachability.** The reference kills all ten. This is the real
+   ceiling on narrowing: a guard the reference cannot reach produces a mutant
+   that is unverified rather than hard, and scoring a submission against it
+   would be scoring it on evidence the task cannot produce.
+3. **Contract-level state only.** No guard reads a register private to the
+   anchor. Step 5c re-derives every defect on an independent implementation
+   that does not have those registers; a guard written over one could not be
+   restated there, and the defect would be untestable on the divergent base.
+
+Uniform hardening was chosen over a graded set deliberately. A graded set
+reports an average that is really a statement about where the easy half sits.
+
+### Reaching these
+
+The guards need burst lengths driven to particular values rather than left at
+one, a second and third filtered write at both close and distant spacing, the
+outstanding-write debt driven to its bound *and held there*, and the injected R
+burst checked beat by beat. Attribution is by `s_rid_o`: clause F4 lets an R
+beat precede both the manufactured B and the write's own W burst, so a monitor
+that pairs positionally fails the golden.
+
+All ten have witnesses (`mutants/witness.sh`); **22 of 22** on the divergent
+base.
+
 ## Watchdogs
 
 | | |

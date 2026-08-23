@@ -1,3 +1,4 @@
+title: PTP time base
 id: v_nw04
 module: ptp_time_base
 domain: networking
@@ -92,7 +93,7 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpremised_reliance: must PASS the policy-divergent perturbation and dut2
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 8 of 8
+  reference_ceiling: 10 of 10
 
 conformant_perturbations:
   - id: pt_c1_zero_latency
@@ -103,46 +104,81 @@ conformant_perturbations:
       both time bases driven by the same increment on the same cycle.
     reference_tb_verdict: PASS
   policy_independence: >
-    All eight defects re-derived on the divergent implementation
+    All ten defects re-derived on the divergent implementation
     (mutants/policy/) and re-run: every one is caught on BOTH bases, and both
-    clean implementations pass. 18 of 18. Rerun with
+    clean implementations pass. 22 of 22. Rerun with
     mutants/check_policy_independence.sh.
 
 mutants:
-  - {id: pt_m1_drift_period_off_by_one, violates: D2,
-     defect: "the drift lands every drift_rate+1 increments",
-     witness: "cycle 7, ts64 short by 2 fns -- one drift application missed"}
-  - {id: pt_m2_adjust_one_short, violates: A2,
-     defect: "the offset adjustment is applied adj_count-1 times",
-     witness: "cycle 48, adj_active_o golden 1 / mutant 0"}
-  - {id: pt_m3_adj_active_one_long, violates: A3,
-     defect: "adj_active_o is high for adj_count+1 cycles while adj_count increments are adjusted",
-     witness: "cycle 42, adj_active_o golden 0 / mutant 1"}
-  - {id: pt_m4_wrap_one_ns_early, violates: W1,
-     defect: "the one-second wrap happens one nanosecond early",
-     witness: "cycle 162, ts96 ns golden 1 / mutant 2"}
-  - {id: pt_m5_pps_two_cycles, violates: W3,
-     defect: "pps_o is asserted for two cycles per wrap",
-     witness: "cycle 163, pps_o golden 0 / mutant 1"}
-  - {id: pt_m6_fns_truncated_in_ts96, violates: "I1/F3",
-     defect: "the 96-bit base drops the bottom four fractional bits of every increment",
-     witness: "cycle 2, ts96 fns short by 8"}
-  - {id: pt_m7_adjust_unsigned, violates: A5,
-     defect: "the offset adjustment is treated as unsigned, so a negative one advances the clock",
-     witness: "cycle 66, ts64 ahead by 1048576 fns = exactly 2^20"}
-  - {id: pt_m8_reset_keeps_period, violates: R2,
-     defect: "reset leaves the last programmed period in place",
-     witness: "cycle 204, ts64 advancing at the programmed rate, not the default"}
-  all_have_nonequivalence_witnesses: true
-  evidence_type: witness            # Tier-B: simulation witness only, no bmc_cex
-  witness_harness: mutants/nonequiv_tb.sv
-  generator: mutants/gen_mutants.py
+  design: >
+    GUARDED, uniformly. Every defect is a pair -- a wrong behaviour AND a rare
+    predicate over contract-level state that has to hold before it fires. A
+    total defect shows up on the first transaction of its class, so any
+    testbench that exercises the class at all catches it; what such a mutant
+    measures is coverage, not checking. A guarded defect is caught only by a
+    testbench that CONSTRUCTS the named configuration and is still checking when
+    it arrives.
+  fairness: >
+    Each guard names a condition the spec states as a checkable bound at a named
+    boundary, so the catching act is derivable from the spec text alone. No
+    mutant violates an unstated expectation.
+  - {id: pt_m1_drift_skipped_one_in_eight, violates: "D2",
+     guard: "one drift window in every eight",
+     defect: "that application is skipped; the other seven are exact",
+     witness: "cycle 37, ts64: golden 17153238 / mutant 17153236 (delta -2 fns)"}
+  - {id: pt_m2_adjust_short_when_long, violates: "A2",
+     guard: "the adjustment is eight increments or longer",
+     defect: "it is applied one short; shorter adjustments are exact",
+     witness: "cycle 209, adj_active_o: golden 1 / mutant 0"}
+  - {id: pt_m3_adj_active_long_from_second, violates: "A3",
+     guard: "the second adjustment onward",
+     defect: "adj_active_o runs one cycle past the adjustment",
+     witness: "cycle 63, adj_active_o: golden 0 / mutant 1"}
+  - {id: pt_m4_wrap_early_when_fraction_carried, violates: "W1",
+     guard: "the boundary is crossed mid-nanosecond",
+     defect: "the wrap happens one nanosecond early",
+     witness: "cycle 162, ts96 ns: golden 1 / mutant 2"}
+  - {id: pt_m5_pps_two_cycles_on_later_wraps, violates: "W3",
+     guard: "the third wrap onward",
+     defect: "pps_o lasts two cycles",
+     witness: "cycle 255, pps_o: golden 0 / mutant 1"}
+  - {id: pt_m6_fns_truncated_on_drift_cycles, violates: "I1/F3",
+     guard: "the increments that carry the drift",
+     defect: "the 96-bit base drops four fractional bits",
+     witness: "cycle 2, ts96 fns: golden 26216 / mutant 26208 (delta -8 fns)"}
+  - {id: pt_m7_adjust_unsigned_for_small_magnitudes, violates: "A5",
+     guard: "a negative adjustment under one nanosecond",
+     defect: "it is treated as unsigned",
+     witness: "cycle 66, ts64: golden 32478584 / mutant 33527160 (delta 1048576 fns)"}
+  - {id: pt_m8_reset_keeps_reprogrammed_period, violates: "R2",
+     guard: "a period has been programmed twice",
+     defect: "reset no longer restores the default period -- the FIRST reset is correct",
+     witness: "cycle 357, ts64: golden 419432 / mutant 598018 (delta 178586 fns)"}
+  - {id: pt_m9_fourth_window_after_rate_change, violates: "D2",
+     guard: "the fourth drift window after a rate change",
+     defect: "that window is one cycle long; the windows around it are exact",
+     witness: "cycle 22, ts64: golden 9227472 / mutant 9227470 (delta -2 fns)"}
+  - {id: pt_m10_drift_dropped_when_adjustment_active, violates: "I1",
+     guard: "an adjustment and a drift fall on the SAME increment",
+     defect: "only the adjustment is applied",
+     witness: "cycle 47, ts64: golden 22439182 / mutant 22439180 (delta -2 fns)"}
   depth: >
-    None is reachable by simply running the clock and watching time increase.
-    Four need a counted or periodic obligation measured exactly, two need the
-    one-second boundary, which at 6.4 ns per cycle is over 150 million cycles
-    away and reachable only by SETTING the base close to it, one needs a
-    negative adjustment, and one needs a reset after programming.
+    None falls to a short run at the default configuration. Reaching them needs
+    adjustments on both sides of the eight-increment boundary, a second and
+    third adjustment, three one-second wraps rather than one, two resets with a
+    reprogrammed period between them, and a drift window counted across a rate
+    change. The witness harness itself had to be extended twice to reach the
+    last two.
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness
+  witness_harness: mutants/nonequiv_tb.sv
+  witness_runner: mutants/witness.sh
+  generator: mutants/gen_mutants.py
+  reference_reachability: >
+    The reference testbench kills all ten. That is the binding constraint on how
+    far a guard can be narrowed: a mutant the reference does not reach is not
+    difficult, it is unverified, and it would be scored against submissions on
+    evidence the task itself cannot produce.
 
 negative_controls:
   known_bad_dut:

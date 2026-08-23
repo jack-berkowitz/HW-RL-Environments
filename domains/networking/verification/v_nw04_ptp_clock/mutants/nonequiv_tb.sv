@@ -108,6 +108,23 @@ module nonequiv_tb;
     @(negedge clk) set96_v = 1'b0;
     step(60);
 
+    // a LONG counted offset adjustment. The guarded set distinguishes long
+    // adjustments from short ones at adj_count_i >= 8; every adjustment above
+    // is shorter than that, so a defect conditioned on length stays invisible.
+    @(negedge clk); adj_ns = 4'h0; adj_fns = 16'd400; adj_cnt = 16'd12; adj_v = 1'b1;
+    @(negedge clk) adj_v = 1'b0;
+    step(30);
+
+    // TWO FURTHER one-second wraps. One wrap does not discriminate a defect
+    // that only appears on later wraps -- pps_o stretching on the third wrap
+    // looks exactly like correct behaviour if only the first is ever reached.
+    @(negedge clk); set96 = {48'd12, 2'b00, 30'd999_999_800, 16'd0}; set96_v = 1'b1;
+    @(negedge clk) set96_v = 1'b0;
+    step(60);
+    @(negedge clk); set96 = {48'd13, 2'b00, 30'd999_999_800, 16'd0}; set96_v = 1'b1;
+    @(negedge clk) set96_v = 1'b0;
+    step(60);
+
     // reset after programming a non-default period
     @(negedge clk); per_ns = 4'd9; per_fns = 16'h2000; per_v = 1'b1;
     @(negedge clk) per_v = 1'b0;

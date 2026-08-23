@@ -5,58 +5,90 @@ The discriminating measure for a submitted testbench. Opposite sign to
 and must be caught.
 
 Every mutant is **generated**, by `gen_mutants.py`, as a mechanical edit of the
-golden shim, with each edit asserted to match **exactly once**. Three are pure
-parameter changes on the arbiter — that is the honest way to build an
-arbitration defect, because a hand-written faulty crossbar fails for incidental
-reasons and isolates nothing.
+golden shim and — where the defect is internal — of a renamed copy of the
+anchor. Each edit is an exact `old -> new` pair asserted to match **exactly
+once**, so a silent no-op cannot produce a mutant identical to the golden that
+every testbench "kills" by doing nothing.
+
+## Every defect in this set is GUARDED
+
+The set was rebuilt for difficulty. Each mutant is now a pair:
+
+    defect := wrong_behaviour AND rare_predicate over contract-level state
+
+A **total** defect — fixed priority, a dropped selector bit, an off-by-one that
+holds always — fires on the first transaction of its class. Any testbench that
+exercises the class at all catches it, whether or not it is checking the clause.
+Such a mutant measures **coverage, not checking**, which is why a submission
+that passed the validity gate used to collect most of the old set for free.
+
+A **guarded** defect is caught only by a testbench that constructs the named
+configuration and is still checking when it arrives. The guards here name
+counts, run lengths, occupancies, repetitions and ordinal positions — how many inputs contend, how long an output has stalled or idled, how many beats it has delivered.
+
+Two constraints bound how far this can go, and both are load-bearing:
+
+- **Fairness.** Every guard names a condition the spec states as a checkable
+  bound at a named boundary, so the catching act is derivable from the spec text
+  alone. No mutant punishes an unstated expectation.
+- **Reference reachability.** The reference testbench kills all ten. A mutant
+  the reference cannot reach is not difficult, it is *unverified* — it would be
+  scored against submissions on evidence the task itself cannot produce.
+
+Guards are written over **contract-level** state only, never over a register
+private to the anchor. That is what makes step 5c possible: each defect is
+re-derived on the policy-divergent implementation in `policy/`, which has no
+such registers to read.
 
 ## The set
 
-| id | clause | defect | why a beat through an idle crossbar misses it |
+| id | clause | guard — fires only when… | defect |
 |---|---|---|---|
-| `xb_m1_fixed_priority` | **A2** | fixed priority instead of round robin | needs several inputs contending at once; with one input offering it is perfect |
-| `xb_m2_marginal_starvation` | **A2** | every input *is* eventually served — the rotation just advances every 64 cycles | a testbench that checks "each input is served eventually" passes it. Only the **window** catches it |
-| `xb_m3_idx_off_by_one` | **R3** | `out_idx_o` names the input one place along | only catchable if the true source is known independently of what the design claims |
-| `xb_m4_sel_top_bit_dropped` | **R1** | the top selector bit is ignored | outputs 0 and 1 behave perfectly. Only traffic bound for 2 or 3 exposes it |
-| `xb_m5_lockin_off` | **A3** | an offered beat can be re-aimed before it moves | needs an output **stalled**, *and* the input already being offered to outrank the one that arrives. Get that order wrong and nothing happens |
-| `xb_m6_duplicate_delivery` | **R1/R4** | the core advances on every second acceptance, so each beat is delivered twice | needs the input side monitored, not just the output side |
-| `xb_m7_payload_from_neighbour` | **R2** | each input's payload comes from the next input along | `out_idx_o` is right and the beat count is right; only the payload is wrong |
-| `xb_m8_head_of_line` | **I2** | no input is accepted unless *every* output is ready | invisible while all outputs are ready. Needs one stalled and traffic bound elsewhere |
+| `xb_m1_fairness_freeze_at_three` | **A2** | exactly three inputs contend for one output | the rotation freezes |
+| `xb_m2_rotation_skips_on_fourth_wrap` | **A2** | the fourth complete wrap of the rotation | it lands one place past input 0, skipping its turn |
+| `xb_m3_lock_released_after_long_stall` | **A3** | the output has stalled eight consecutive cycles | an already-offered beat is re-aimed |
+| `xb_m4_starves_input_two_every_eleventh_turn` | **A2** | one rotation in every eleven | input 2 loses its turn |
+| `xb_m5_idx_stale_after_long_idle` | **R3** | the output has been idle eight cycles | out_idx_o names the previous source; the payload is right |
+| `xb_m6_swap_pair_under_backpressure` | **R5** | two beats, one input to one output, separated by a stall | they arrive in the opposite order |
+| `xb_m7_drop_every_sixty_fourth` | **R4** | the sixty-fourth beat delivered on an output | it is silently dropped |
+| `xb_m8_duplicate_on_stall_release` | **R4** | the beat released after a stall of four or more cycles | it is delivered twice |
+| `xb_m9_misroute_under_full_collision` | **R1** | all four inputs target one output at once | a beat lands on the next output along |
+| `xb_m10_ready_glitch_when_all_stalled` | **I2** | every output stalled at once | input 0 is accepted although nothing can take its beat |
 
 ## Non-equivalence witnesses — rule 16
 
 `nonequiv_tb.sv` drives the golden and one mutant from a shared input sequence
-and compares their observable outputs every cycle. Payload is masked by its own
-`valid`, and `in_ready_o` by `in_valid_i`, because clause H3 says a ready bit
-carries no meaning while its input is not offering.
+and compares their observable outputs every cycle, each channel's payload masked
+by its own `valid`. Run the whole set with `./witness.sh`.
 
 | id | first observable difference |
 |---|---|
-| `xb_m1_fixed_priority` | cycle 2 — output 0 serves input 0 again where the golden serves input 1 |
-| `xb_m2_marginal_starvation` | cycle 2 — same first symptom; the two differ from each other only later |
-| `xb_m3_idx_off_by_one` | cycle 1 — same payload, `idx` 0 against 1 |
-| `xb_m4_sel_top_bit_dropped` | cycle 42 — `out_valid_o` 1111 against 0011 |
-| `xb_m5_lockin_off` | cycle 185 — the golden holds input 3's beat, the mutant re-aims to input 1 |
-| `xb_m6_duplicate_delivery` | cycle 1 — `in_ready_o` 0001 against 0000 |
-| `xb_m7_payload_from_neighbour` | cycle 1 — `idx` identical, payload `5a000000` against `5a100000` |
-| `xb_m8_head_of_line` | cycle 43 — `in_ready_o` 1110 against 0000 |
+| `xb_m1_fairness_freeze_at_three` | cycle 186 -- output 0: golden data=5a10003d idx=1 / mutant data=5a00003d idx=0 |
+| `xb_m2_rotation_skips_on_fourth_wrap` | cycle 5 -- output 0: golden data=5a000000 idx=0 / mutant data=5a100001 idx=1 |
+| `xb_m3_lock_released_after_long_stall` | cycle 185 -- output 0: golden data=5a00003d idx=0 / mutant data=5a10003d idx=1 |
+| `xb_m4_starves_input_two_every_eleventh_turn` | cycle 23 -- output 0: golden data=5a200005 idx=2 / mutant data=5a300005 idx=3 |
+| `xb_m5_idx_stale_after_long_idle` | cycle 42 -- output 3: golden idx=3 / mutant idx=0, same data |
+| `xb_m6_swap_pair_under_backpressure` | cycle 46 -- output 0: golden data=5a00000b / mutant data=5a00000a |
+| `xb_m7_drop_every_sixty_fourth` | cycle 72 -- out_valid_o: golden 1111 / mutant 1110 |
+| `xb_m8_duplicate_on_stall_release` | cycle 185 -- in_ready_o (masked): golden 0001 / mutant 0000 |
+| `xb_m9_misroute_under_full_collision` | cycle 1 -- out_valid_o: golden 0001 / mutant 0010 |
+| `xb_m10_ready_glitch_when_all_stalled` | cycle 492 -- in_ready_o (masked): golden 0000 / mutant 0001 |
 
-**`xb_m5` reported NO DIFFERENCE OBSERVED on the first run**, and the harness was
-the thing at fault. Nothing in the stimulus varied the set of contenders while
-an output was stalled, and that is the only situation in which an unlocked
-decision can be seen to change. A phase that brings a new contender in mid-stall
-was added; the mutant differs at cycle 185. *"No difference observed" is a claim
-about the harness until the harness has been shown able to see the difference.*
+## The witness harness had to be rewritten
 
-## Reference testbench ceiling
+Against the previous set, `nonequiv_tb.sv` ran three fixed forty-cycle phases.
+That is enough to expose a total defect and **not** enough to expose any of
+these: it never drove the contender count to exactly three, never held a stall
+past eight cycles, never left an output idle, and never delivered sixty-four
+beats on one output. A fifth phase now soaks the crossbar for 4000 cycles,
+cycling through four request modes — random, four-way collision, three-way
+collision, identity — against a backpressure pattern that periodically stalls
+every output for twelve consecutive cycles.
 
-**8 of 8**, and `xb_m5` was earned twice over: after the witness harness was
-fixed, the **reference testbench still passed it**. Instrumenting rather than
-guessing showed why — an unlocked arbiter only re-aims when the input already
-being offered outranks the one arriving, so a probe that brings contenders in
-from the lowest index up watches the right signals and sees nothing. The probe
-now brings them in from the highest index **down**, on every output in turn.
+The PRNG is a fixed xorshift, not `$urandom`, so the cycle numbers above are
+reproducible.
 
-The set was checked against a **second, independent base**: all eight defects
-re-derived on the policy-divergent implementation and re-run, 18 of 18 verdicts
-matching. See `check_policy_independence.sh` and NOTES.md §5c.
+`in_valid_i` is never withdrawn: an input that has made an offer holds it, with
+the same payload, until both sides accept. Idles are entered from an accepted
+beat. Clause H2 states that obligation on the source, and the harness is a
+source.

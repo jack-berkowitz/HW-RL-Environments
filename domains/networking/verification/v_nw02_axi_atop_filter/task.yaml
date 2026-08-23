@@ -1,3 +1,4 @@
+title: AXI atomic-op filter
 id: v_nw02
 module: atop_filter
 domain: networking
@@ -92,7 +93,7 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpremised_reliance: must PASS the policy-divergent perturbation and dut2
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 8 of 8
+  reference_ceiling: 10 of 10
 
 conformant_perturbations:
   - id: af_c1_b_before_r
@@ -111,36 +112,82 @@ conformant_perturbations:
       the ordering is free rather than forced.
     reference_tb_verdict: PASS
   policy_independence: >
-    All eight defects were re-derived on top of this divergent implementation
+    All ten defects were re-derived on top of this divergent implementation
     (mutants/policy/) and re-run: every one is caught on BOTH bases, and the
     clean divergent implementation still passes. No mutant is killed by the
     latitude choice. Rerun with mutants/check_policy_independence.sh.
 
 mutants:
-  - {id: af_m1_budget_off_by_one,    violates: W2,     defect: "admits a fifth outstanding downstream write",
-     witness: "cycle 146, s_awready: admits a write the bound forbids"}
-  - {id: af_m2_debt_frees_on_b,      violates: W4,     defect: "debt falls on a B arriving, not on a W burst completing",
-     witness: "cycle 5, s_wready: debt still held against a completed burst"}
-  - {id: af_m3_rresp_class_on_bit4,  violates: "C2/F5", defect: "read-response obligation read from atop[4], not atop[5]",
-     witness: "cycle 11, R beat for id=2 -- an atomic STORE, which owes none"}
-  - {id: af_m4_rbeats_short_by_one,  violates: F4,     defect: "multi-beat atomic write gets awlen R beats, not awlen+1",
-     witness: "cycle 59, R burst for id=4 ends a beat early"}
-  - {id: af_m5_rlast_also_on_first,  violates: F4,     defect: "rlast on the first injected beat as well as the last",
-     witness: "cycle 57, golden last=0 mutant last=1 on the first beat"}
-  - {id: af_m6_rinject_okay,         violates: F4,     defect: "manufactured R beats carry OKAY; the B still carries SLVERR",
-     witness: "cycle 34, R beat id=3: golden resp=10, mutant resp=00"}
-  - {id: af_m7_absorbed_w_forwarded, violates: F2,     defect: "W beats of a filtered write also reach the master port",
-     witness: "cycle 11, master W valid=1 where the golden has 0"}
-  - {id: af_m8_stale_response_id,    violates: "F3/F4", defect: "manufactured responses carry the previous atomic write's id",
-     witness: "cycle 12, B id=0 where the golden gives id=2"}
-  all_have_nonequivalence_witnesses: true
-  evidence_type: witness            # Tier-B: simulation witness only, no bmc_cex
-  witness_harness: mutants/nonequiv_tb.sv
-  generator: mutants/gen_mutants.py
+  design: >
+    GUARDED, uniformly. Every defect is a pair -- a wrong behaviour AND a rare
+    predicate over contract-level state that has to hold before it fires. A
+    total defect shows up on the first transaction of its class, so any
+    testbench that exercises the class at all catches it; what such a mutant
+    measures is coverage, not checking. A guarded defect is caught only by a
+    testbench that CONSTRUCTS the named configuration and is still checking when
+    it arrives.
+  fairness: >
+    Each guard names a condition the spec states as a checkable bound at a named
+    boundary, so the catching act is derivable from the spec text alone. No
+    mutant violates an unstated expectation.
+  - {id: af_m1_admits_fifth_once_full_has_aged, violates: "W2",
+     guard: "the debt has sat at its bound for eight cycles",
+     defect: "a fifth outstanding write is admitted",
+     witness: "cycle 154, s_awready (the write-admission bound)"}
+  - {id: af_m2_debt_frees_on_b_when_deep, violates: "W4",
+     guard: "three or more writes are outstanding",
+     defect: "the debt falls on a B arriving rather than on a W burst completing",
+     witness: "cycle 152, s_awready (the write-admission bound)"}
+  - {id: af_m3_rresp_class_on_bit4_multibeat, violates: "C2/F5",
+     guard: "the filtered write is multi-beat",
+     defect: "the read-response obligation is read from atop[4] instead of atop[5]",
+     witness: "cycle 57, slave R: golden valid=1 id=4 resp=10 last=0 / mutant valid=0"}
+  - {id: af_m4_rbeats_short_on_long_bursts, violates: "F4",
+     guard: "the burst is four beats or longer",
+     defect: "it receives one beat too few; shorter bursts are exact",
+     witness: "cycle 59, slave R: golden last=0 / mutant last=1, same id and resp"}
+  - {id: af_m5_rlast_early_from_second_atomic, violates: "F4",
+     guard: "the second filtered write onward",
+     defect: "rlast is also asserted on the first injected beat",
+     witness: "cycle 57, slave R: golden last=0 / mutant last=1, same id and resp"}
+  - {id: af_m6_rresp_okay_on_final_beat, violates: "F4",
+     guard: "the final beat of an injected burst",
+     defect: "it carries OKAY; every earlier beat of the same burst is correct",
+     witness: "cycle 34, slave R: golden resp=10 / mutant resp=00, both last=1"}
+  - {id: af_m7_last_absorbed_w_leaks, violates: "F2",
+     guard: "the final W beat of a filtered write",
+     defect: "it reaches the master port; the rest are absorbed correctly",
+     witness: "cycle 11, master W: golden valid=0 / mutant valid=1, data=d0000000 last=1"}
+  - {id: af_m8_stale_id_when_atomics_close, violates: "F3/F4",
+     guard: "a filtered write follows the previous one within twelve cycles",
+     defect: "the id is not captured, so the response carries a stale one",
+     witness: "cycle 12, slave B: golden id=2 / mutant id=0, both resp=10"}
+  - {id: af_m9_b_okay_on_first_atomic, violates: "F3",
+     guard: "the first filtered write after reset",
+     defect: "the manufactured B carries OKAY",
+     witness: "cycle 12, slave B: golden resp=10 / mutant resp=00, both id=2"}
+  - {id: af_m10_extra_rbeat_on_two_beat_burst, violates: "F4",
+     guard: "the burst is exactly two beats",
+     defect: "it receives three beats; every other length is exact",
+     witness: "cycle 92, slave R: golden last=1 / mutant last=0, same id and resp"}
   depth: >
-    Seven of the eight require state to be built before the defect is reachable.
-    af_m6 is the one a single directed atomic load would catch; kept as the
-    anchor of the set rather than removed.
+    None falls to a single atomic through an idle filter. Reaching them needs
+    burst lengths driven to specific values rather than left at one; a second
+    and third filtered write, close together and far apart; the outstanding-write
+    debt driven to its bound AND held there; and the injected R burst checked
+    beat by beat rather than at its last beat. Attribution is by s_rid_o, never
+    by arrival order -- clause F4 lets R beats precede both the B and the
+    write's own W burst.
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness
+  witness_harness: mutants/nonequiv_tb.sv
+  witness_runner: mutants/witness.sh
+  generator: mutants/gen_mutants.py
+  reference_reachability: >
+    The reference testbench kills all ten. That is the binding constraint on how
+    far a guard can be narrowed: a mutant the reference does not reach is not
+    difficult, it is unverified, and it would be scored against submissions on
+    evidence the task itself cannot produce.
 
 negative_controls:
   known_bad_dut:
@@ -174,7 +221,7 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpremised_reliance: must PASS the policy-divergent perturbation and dut2
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 8 of 8
+  reference_ceiling: 10 of 10
 
 conformant_perturbations:
   - id: af_c1_b_before_r
@@ -193,7 +240,7 @@ conformant_perturbations:
       the ordering is free rather than forced.
     reference_tb_verdict: PASS
   policy_independence: >
-    All eight defects were re-derived on top of this divergent implementation
+    All ten defects were re-derived on top of this divergent implementation
     (mutants/policy/) and re-run: every one is caught on BOTH bases, and the
     clean divergent implementation still passes. No mutant is killed by the
     latitude choice. Rerun with mutants/check_policy_independence.sh.

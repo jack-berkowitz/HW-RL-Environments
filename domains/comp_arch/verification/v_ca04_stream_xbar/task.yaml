@@ -1,3 +1,4 @@
+title: stream crossbar
 id: v_ca04
 module: route_xbar
 domain: comp_arch
@@ -98,7 +99,7 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpremised_reliance: must PASS the policy-divergent perturbation and dut2
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 8 of 8
+  reference_ceiling: 10 of 10
 
 conformant_perturbations:
   - id: xb_c1_registered_down_rotation
@@ -107,47 +108,87 @@ conformant_perturbations:
     change: an INDEPENDENT crossbar, not a wrapper; downward rotation and registered outputs
     reference_tb_verdict: PASS
   policy_independence: >
-    All eight defects re-derived on the divergent implementation
+    All ten defects re-derived on the divergent implementation
     (mutants/policy/) and re-run: every one caught on BOTH bases, both clean
-    implementations pass. 18 of 18. Rerun with
-    mutants/check_policy_independence.sh.
+    implementations pass. 22 of 22. Rerun with
+    mutants/check_policy_independence.sh. Every guard is expressed over
+    CONTRACT-LEVEL state -- how many inputs contend, how long an output has
+    stalled, how many beats it has delivered -- and never over a register
+    private to the anchor. That is what makes the re-derivation possible at
+    all: a guard reading the anchor's lock register could not be restated on an
+    implementation that has no such register.
 
 mutants:
-  - {id: xb_m1_fixed_priority, violates: A2,
-     defect: "fixed priority instead of round robin",
-     witness: "cycle 2, output 0: golden serves input 1, mutant serves input 0 again"}
-  - {id: xb_m2_marginal_starvation, violates: A2,
-     defect: "every input eventually served, but the rotation advances only every 64 cycles",
-     witness: "cycle 2, output 0: golden serves input 1, mutant serves input 0 again"}
-  - {id: xb_m3_idx_off_by_one, violates: R3,
-     defect: "out_idx_o names the input one place along from the true source",
-     witness: "cycle 1, output 0: golden idx 0, mutant idx 1, same payload"}
-  - {id: xb_m4_sel_top_bit_dropped, violates: R1,
-     defect: "the top selector bit is ignored, so outputs 2 and 3 are unreachable",
-     witness: "cycle 42, out_valid_o golden 1111 mutant 0011"}
-  - {id: xb_m5_lockin_off, violates: A3,
-     defect: "an arbitration decision is not locked in; an offered beat can be re-aimed",
-     witness: "cycle 185, output 0: golden holds input 3's beat, mutant re-aims to input 1"}
-  - {id: xb_m6_duplicate_delivery, violates: "R1/R4",
-     defect: "the core advances on every second acceptance, so each beat is delivered twice",
-     witness: "cycle 1, in_ready_o golden 0001 mutant 0000"}
-  - {id: xb_m7_payload_from_neighbour, violates: R2,
-     defect: "each input's payload is taken from the next input along",
-     witness: "cycle 1, output 0: golden data 5a000000, mutant 5a100000, both idx 0"}
-  - {id: xb_m8_head_of_line, violates: I2,
-     defect: "no input is accepted unless every output is ready",
-     witness: "cycle 43, in_ready_o golden 1110 mutant 0000"}
+  design: >
+    GUARDED, uniformly. Every defect is a pair -- a wrong behaviour AND a rare
+    predicate over contract-level state that has to hold before it fires. A
+    total defect (fixed priority, a dropped selector bit) shows up on the first
+    transaction of its class, so any testbench that exercises the class at all
+    catches it; what such a mutant measures is coverage, not checking. A guarded
+    defect is caught only by a testbench that CONSTRUCTS the named configuration
+    and is still checking when it arrives.
+  fairness: >
+    Each guard names a condition the spec states as a checkable bound at a named
+    boundary, so the catching act is derivable from the spec text alone. No
+    mutant violates an unstated expectation.
+  - {id: xb_m1_fairness_freeze_at_three, violates: A2,
+     guard: "exactly three inputs contend for one output",
+     defect: "the rotation freezes; four-way contention is perfect, and so is two-way",
+     witness: "cycle 186, output 0: golden data=5a10003d idx=1 / mutant data=5a00003d idx=0"}
+  - {id: xb_m2_rotation_skips_on_fourth_wrap, violates: A2,
+     guard: "the fourth complete wrap of the rotation",
+     defect: "the rotation lands one place past input 0, skipping its turn",
+     witness: "cycle 5, output 0: golden data=5a000000 idx=0 / mutant data=5a100001 idx=1"}
+  - {id: xb_m3_lock_released_after_long_stall, violates: A3,
+     guard: "the output has been stalled eight consecutive cycles",
+     defect: "an already-offered beat is re-aimed at a different input",
+     witness: "cycle 185, output 0: golden data=5a00003d idx=0 / mutant data=5a10003d idx=1"}
+  - {id: xb_m4_starves_input_two_every_eleventh_turn, violates: A2,
+     guard: "one rotation in every eleven",
+     defect: "input 2 loses its turn -- inside any short window the service order is correct",
+     witness: "cycle 23, output 0: golden data=5a200005 idx=2 / mutant data=5a300005 idx=3"}
+  - {id: xb_m5_idx_stale_after_long_idle, violates: R3,
+     guard: "the output has been idle eight cycles",
+     defect: "out_idx_o names the PREVIOUS source while the payload is correct",
+     witness: "cycle 42, output 3: golden data=5a30000a idx=3 / mutant data=5a30000a idx=0"}
+  - {id: xb_m6_swap_pair_under_backpressure, violates: R5,
+     guard: "two beats from one input to one output separated by a stall",
+     defect: "they are delivered in the opposite order",
+     witness: "cycle 46, output 0: golden data=5a00000b / mutant data=5a00000a, same idx"}
+  - {id: xb_m7_drop_every_sixty_fourth, violates: R4,
+     guard: "the sixty-fourth beat delivered on an output",
+     defect: "it is silently dropped -- a count defect, not a payload defect",
+     witness: "cycle 72, out_valid_o: golden 1111 / mutant 1110"}
+  - {id: xb_m8_duplicate_on_stall_release, violates: R4,
+     guard: "the beat released after a stall of four or more cycles",
+     defect: "it is delivered twice",
+     witness: "cycle 185, in_ready_o (masked by in_valid_i): golden 0001 / mutant 0000"}
+  - {id: xb_m9_misroute_under_full_collision, violates: R1,
+     guard: "all four inputs target one output simultaneously",
+     defect: "a beat lands on the next output along",
+     witness: "cycle 1, out_valid_o: golden 0001 / mutant 0010"}
+  - {id: xb_m10_ready_glitch_when_all_stalled, violates: I2,
+     guard: "every output stalled at once",
+     defect: "input 0 is accepted for one cycle although nothing can take its beat",
+     witness: "cycle 492, in_ready_o (masked by in_valid_i): golden 0000 / mutant 0001"}
   all_have_nonequivalence_witnesses: true
   evidence_type: witness
   witness_harness: mutants/nonequiv_tb.sv
+  witness_runner: mutants/witness.sh
   generator: mutants/gen_mutants.py
   depth: >
-    None falls to a single beat through an idle crossbar. Two need a tied set
-    measured against a window rather than against "eventually served", one needs
-    the contender set changed while an output is stalled AND the already-offered
-    input to outrank the arriving one, one needs an output that is only
-    reachable through the high selector bit, and two need a monitor on the input
-    side rather than the output side.
+    None falls to a single beat through an idle crossbar, and none falls to
+    short fixed stimulus either. Reaching them needs the contender count driven
+    to a specific value rather than left at whatever the driver happens to
+    offer; stalls held long enough to cross a threshold; an output left idle
+    rather than kept busy; and enough traffic to pass a count in the dozens. The
+    witness harness itself had to be rewritten to reach them -- its three
+    forty-cycle phases found only the total defects of the previous set.
+  reference_reachability: >
+    The reference testbench kills all ten. That is the binding constraint on how
+    far a guard can be narrowed: a mutant the reference does not reach is not
+    difficult, it is unverified, and it would be scored against submissions on
+    evidence the task itself cannot produce.
 
 negative_controls:
   known_bad_dut:

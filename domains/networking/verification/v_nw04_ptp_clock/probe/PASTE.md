@@ -105,6 +105,16 @@ rely on them:
   1. the current period, plus
   2. the offset adjustment, on the cycles §A says it is applied, plus
   3. the drift, on the cycles §D says it is applied.
+
+  **Do not begin measuring before cycle 9.** Clause X2b makes cycles 1 through
+  8 after any reset unconstrained, for the increment value and the drift
+  spacing alike. A count that starts at cycle 1, or an average taken over a
+  window that includes those cycles, is measuring the warm-up.
+
+  **Check each base on its own.** The two bases do not have to receive a given
+  increment on the same cycle, and in general they will not; clause L2 leaves
+  the phase between them free. Deriving one base's expected advance from the
+  other's, on the same cycle, is a comparison this contract does not support.
 - **I2.** The period is `4'h6`/`16'h6666` from reset, and is replaced by
   `{period_ns_i, period_fns_i}` when `period_valid_i` is asserted.
 
@@ -128,7 +138,11 @@ rely on them:
 - **D1.** Asserting `drift_valid_i` latches `{drift_ns_i, drift_fns_i}` and
   `drift_rate_i`.
 - **D2.** The drift is added to **exactly one increment out of every
-  `drift_rate_i` consecutive increments**.
+  `drift_rate_i` consecutive increments**, counted **separately on each base**.
+  The two bases are not in phase with one another (L2), so the drift lands on
+  different cycles in each, and measuring the spacing on one base against the
+  other's cycles will not give `drift_rate_i`. Begin counting at cycle 9 or
+  later: clause X2b leaves the spacing unconstrained before then.
 - **D3.** `{drift_ns_i, drift_fns_i}` is a **signed** 20-bit quantity.
 
 ## S. Setting the time base
@@ -162,11 +176,38 @@ practical way to reach one.
 
 ---
 
+## X. What is excluded from measurement
+
+- **X1.** While `rst_i` is asserted this contract requires nothing of any
+  output. It governs what the module *originates* once reset is released, and
+  what reset leaves behind.
+- **X2a.** Number the cycles after reset so that **cycle 1 is the first rising
+  edge at which `rst_i` is low**.
+- **X2b (warm-up after reset).** **Cycles 1 through 8 after any reset are
+  unconstrained, for the increment value and the drift spacing alike.** The
+  pipeline is refilling; neither §I nor §D applies to those cycles, and this
+  holds after *every* reset, not only the first. Measurement resumes at cycle
+  9.
+- **X2c (warm-up after a set).** A set is a discontinuity, and it carries the
+  same allowance: for up to **4 cycles** after `set_ts96_valid_i` or
+  `set_ts64_valid_i` is accepted, **that base's** advance need not follow §I or
+  §D. The value written by S1 or S2 is visible immediately — it is the
+  *increment following it* that is unconstrained, and only on the base that was
+  set. Measurement of that base resumes from the fifth cycle.
+
+  This matters most at a wrap. §W is reached in practice only by setting the
+  base close to one second (§W's own note says so), which puts the wrap a few
+  cycles after a set. Sample the wrap **after** this window has elapsed: a
+  `ts96_o` compared one or two cycles early will show the pre-wrap value and
+  read as a missing wrap, and `pps_o` will not yet have fired.
+
 ## L. Latitude — named, and deliberately unconstrained
 
 - **L1.** The number of cycles between a control input's `valid` and the first
-  increment that reflects it is **unconstrained**, up to a bound of **4
-  cycles**. An implementation may act on it immediately or register it first.
+  increment that reflects it is **unconstrained**, up to a bound of **8
+  cycles**, **measured separately on each base**. The two bases do not adopt a
+  control change on the same cycle, so a change visible on one may be two or
+  more cycles later on the other; the bound is per base, not shared. An implementation may act on it immediately or register it first.
   This applies to `period_valid_i`, `adj_valid_i` and `drift_valid_i`.
   It does **not** relax A2, A3 or D2: whenever the adjustment begins, it is
   applied exactly the stated number of times, and `adj_active_o` marks exactly
@@ -193,7 +234,6 @@ bits — that is over three days away and out of scope. It places no requirement
 on the outputs while `rst_i` is asserted, only on what reset leaves behind. It
 does not say whether a control input asserted in the same cycle as `rst_i` is
 honoured.
-
 
 ---
 
@@ -263,6 +303,14 @@ testbench to be rejected with none of its checking ever running:
 
 - **Identify a result by bookkeeping, not by matching on its value.** Values
   repeat, so content matching is ambiguous and will mis-attribute.
+
+- **`checker` / `endchecker` is not supported.** Nor are `bind`, `program`
+  blocks, or SVA sequence/property declarations. Write your checks as
+  ordinary `always` blocks and tasks.
+
+- **`automatic` belongs on declarations inside a task, function or
+  procedural block — never at module scope.** `automatic int x;` written
+  among the module's signals is a syntax error, not a lifetime hint.
 
 - Do not use `#` delays for anything except the clock generator and the watchdog.
 - No UVM, no `randsequence`, no DPI. Queues and associative arrays are fine.
