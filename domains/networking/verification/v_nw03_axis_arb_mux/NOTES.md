@@ -325,3 +325,31 @@ The third is the instructive one. The submission read the constraint, acted on
 it, and failed anyway because the example anchored the reader on the wrong edge.
 **A constraint is only as good as the case its example shows**, and one line
 moved off the edge made that submission pass.
+## The difficulty pivot — every defect is now guarded
+
+Eight of the ten defects were total: each held on every frame or every beat of
+its class, so it fired on the first one driven. They are now paired with a rare
+predicate over contract-level state -- which frame it is, how deep into it, how
+many inputs contend at once, how many resets have completed.
+
+`fm_m2` changed shape rather than gaining a condition. It was the anchor rebuilt
+with fixed priority, which starves the low inputs on EVERY contended cycle. It
+now leaves the anchor round-robin and imposes priority only while three or more
+inputs offer at once, so two-way contention stays perfectly fair.
+
+### A guard measured before it was kept
+
+`fm_m3` was first keyed on the fifth beat of a frame, and it survived. The
+obvious explanation -- the reference's frames are too short -- was wrong.
+Instrumenting the mutant under the reference showed the fifth beat reached 112
+times, both halves valid on 1827 beats, and ZERO mid-frame switches. The depth
+was reachable and the switch was not.
+
+Re-keyed onto frame ordinal plus beat depth, it is caught. Two builds of
+instrumentation were cheaper than the three guesses that would otherwise have
+gone in ahead of them.
+
+The reference's frames were also all one to five beats, so S3 atomicity had only
+ever been checked on short frames. It now drives six-to-ten-beat frames under
+full contention with mid-frame backpressure.
+

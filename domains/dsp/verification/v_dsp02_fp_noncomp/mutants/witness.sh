@@ -32,4 +32,7 @@ PY
   w=$(timeout 300 "$OUT/$m/run" 2>&1 | grep -m1 -E "^\[?FAIL")
   if [ -z "$w" ]; then echo "  $m : NO FAILURE OBSERVED -- treat the REFERENCE as suspect"
   else echo "  $m : $w"; fi
+  # A Verilator object directory per mutant is hundreds of megabytes on the
+  # larger designs. Keeping ten of them filled this machine's disk mid-run.
+  rm -rf "$OUT/$m"
 done

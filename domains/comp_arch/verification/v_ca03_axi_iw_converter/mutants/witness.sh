@@ -34,7 +34,10 @@ PY
     +incdir+dut/include $OTHER "$OUT/golden_renamed.sv" "$OUT/$m.sv" \
     tb/id_width_conv_spec_tb.sv > "$OUT/$m.build" 2>&1
   if [ $? -ne 0 ]; then echo "  $m : BUILD FAILED (see $OUT/$m.build)"; continue; fi
-  w=$(timeout 300 "$OUT/$m/run" 2>&1 | grep -m1 "^FAIL")
+  w=$(timeout 300 "$OUT/$m/run" 2>&1 | grep -m1 -E "^\[?FAIL")
   if [ -z "$w" ]; then echo "  $m : NO FAILURE OBSERVED -- treat the REFERENCE as suspect"
   else echo "  $m : $w"; fi
+  # A Verilator object directory per mutant is hundreds of megabytes on the
+  # larger designs. Keeping ten of them filled this machine's disk mid-run.
+  rm -rf "$OUT/$m"
 done

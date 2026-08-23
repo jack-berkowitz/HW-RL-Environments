@@ -10,4 +10,7 @@ for m in $MUTS; do
     dut/*.sv mutants/mutants.sv mutants/nonequiv_tb.sv > "$OUT/$m.build" 2>&1
   if [ $? -ne 0 ]; then echo "  $m : BUILD FAILED (see $OUT/$m.build)"; continue; fi
   timeout 300 "$OUT/$m/run" 2>&1 | grep "^WITNESS" | sed 's/^WITNESS /  /'
+  # A Verilator object directory per mutant is hundreds of megabytes on the
+  # larger designs. Keeping ten of them filled this machine's disk mid-run.
+  rm -rf "$OUT/$m"
 done
