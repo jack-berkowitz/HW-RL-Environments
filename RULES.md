@@ -119,12 +119,21 @@ defects. It runs with the regression.
 
     **From:** P4, F20, F27
 
-9. **Area and power are reported at own Fmax and at a common binding period**,
-   and every area comparison splits three ways: off-spec configuration,
-   capability gap, genuine optimisation. A headline ratio without that split is
-   not a result. Composite metrics (area × delay) are not scoring axes and are
-   only meaningful where area is elastic under constraint — which must be tested
-   per design, not assumed.
+9. **Area and power are reported at one common binding period**, and every area
+   comparison splits three ways: off-spec configuration, capability gap, genuine
+   optimisation. A headline ratio without that split is not a result. Composite
+   metrics (area × delay) are not scoring axes and are only meaningful where area
+   is elastic under constraint — which must be tested per design, not assumed.
+
+   **Amended.** This rule used to require reporting "at own Fmax and at a common
+   binding period". The own-Fmax half never followed from F8, which is entirely
+   about decomposing an area ratio, and as of 91c63bb it contradicts every design
+   specification: the pinned period is derived from one reference sweep, stated
+   before solicitation, and submissions are not swept at all. A per-design Fmax
+   cannot be reported beside area and power in any case, because those come from
+   a build at the pinned period and an Fmax comes from a different build at a
+   different one. Dropping the clause leaves the rule saying what F8 actually
+   established.
 
     **From:** F8
 
@@ -713,6 +722,22 @@ defects. It runs with the regression.
     asserted `fetch_req`, so two pinned fault causes and half the pinned TLB
     budget went unexercised across 118 requests.
 
+    **The backwards direction is VARIATION, not assignment.** This is the part
+    that is easy to get wrong and cheap to get right. The obvious check — "assert
+    every scored port was driven at least once" — catches ONE of `d_ca03`'s three
+    instances. `fetch_req` was never assigned, so it is caught. `asid_i` is
+    assigned every single cycle, at the constant zero, and sails through while the
+    whole ASID and global-page clause goes untested; five further inputs sail
+    through with it, taking three pinned fault causes and an entire
+    memory-protection path with them. An input that never changes value has not
+    been tested, however continuously it was assigned.
+
+    An input may legitimately be constant. The only thing separating a deliberate
+    constant from an overlooked one is a written reason, so a constant must be
+    **declared with the citation that permits it**, and an undeclared constant
+    must FAIL rather than warn. Three of `d_ca03`'s eight constants were
+    legitimate and five were defects; nothing in the source distinguished them.
+
     **What finds it.** A second source, and essentially nothing else. Both
     directions were invisible to seven negative controls and to my own review of
     the specification, because a control is built from the reference and inherits
@@ -780,5 +805,63 @@ defects. It runs with the regression.
 
     **From:** F67
 
+31. **An impossibility claim must name its instrument, that instrument's
+    assumption, and what a different instrument would have to see.** "X cannot be
+    measured" is itself a measurement, and it inherits every assumption of the
+    experiment behind it — but unlike a false negative it does not get retested,
+    because it converts into a specification clause and clauses get read and
+    believed rather than re-run.
+
+    Three things, or it is an untested hypothesis and must be labelled one:
+    **the instrument** actually run; **what that instrument assumes**, which is
+    usually the thing nobody chose and so is invisible; and **what a different
+    instrument would have to observe** for the claim to fail. The third is
+    load-bearing — if you cannot state it, one experiment has failed and nothing
+    has been established.
+
+    `d_ca03` came two steps from shipping a pinned 16-entry instruction TLB as
+    permanently unenforceable, on the strength of a probe that filled the TLB
+    COLD. The anchor's replacement tree advances only on a lookup hit, so the
+    probe was measuring the replacement policy and not the capacity. Re-touching
+    each page after installing it makes the reference retain all 16, and a
+    one-entry control then fails on that check alone. Naming the assumption —
+    "this fill produces no hits, and the policy may need one" — would have found
+    it in the same sentence that made the claim.
+
+    **The family.** Same error as rules on level-versus-event and on ad-hoc
+    queries as apparatus: an instrument measuring a different observable than the
+    claim is about, returning a plausible number. What makes this member the
+    expensive one is that its output is a clause rather than a result.
+
+    **From:** F74
+
+32. **A counter or flag that feeds a verdict must be shown to reach both states
+    against a known input, and a coverage flag must derive from a recorded
+    outcome rather than from the schedule.** A check that cannot fire and a check
+    that passes print the same thing, so nothing about a green run distinguishes
+    them.
+
+    `d_ca03`'s testbench declared `wr_attempts`, compared it, incremented `errs`
+    on it and printed a message — and nothing anywhere assigned it. The clause
+    forbidding the unit from ever writing a page table entry had been reporting
+    PASS on a property it never tested, across every run, for the reference, a
+    second source and seven negative controls. The check was shaped exactly like
+    a real one, which is why confirming "is this property checked?" found four
+    pieces of evidence and stopped.
+
+    Four of its coverage floors were set from `seq[i].ev` — the schedule the
+    testbench had just built — so they asserted that an array the rig constructed
+    contains what the rig put in it. **If a flag can be evaluated without running
+    the design, it is not coverage.** The other eight derived from recorded
+    reference outcomes and were genuine; all twelve printed in the same block,
+    indistinguishable at a glance.
+
+    **For an absence-shaped property** — "never writes", "no deadlock", "issues
+    no read", "no false assertion" — constructing the presence and watching the
+    check fire is PART OF THE CHECK, not an optional extra. This is the
+    write-side of the rules on instruments reporting the wrong observable: there
+    the instrument answers a different question, here it cannot answer at all.
+
+    **From:** F75
 
 ---
