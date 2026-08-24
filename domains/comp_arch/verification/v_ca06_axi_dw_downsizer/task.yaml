@@ -228,11 +228,31 @@ unscored_clauses:
     - id: D6
       text: downstream read error precedence -- an error on any downstream R beat
             must make the upstream response an error too
-      status: EXERCISED by the reference, NOT SCORED by any mutant
+      status: EXERCISED by the reference (phase M), NOT SCORED by any mutant
     - id: E6
       text: the same on the write side -- an error on the downstream B must make
             the upstream B an error
-      status: EXERCISED by the reference, NOT SCORED by any mutant
+      status: EXERCISED by the reference (phase M), NOT SCORED by any mutant
+    - id: D7
+      text: the error CODE is preserved -- SLVERR stays SLVERR, DECERR stays
+            DECERR, neither normalised to the other
+      status: NEW, added when D6 was measured. EXERCISED, NOT SCORED
+  rebaseline: >
+    The full set was re-run against the extended reference, all ten, because
+    the mutants are untouched but the environment they run in is not.
+    NEWLY KILLED: none -- all ten were killed before and after, so the new
+    stimulus revealed no mutant that had been in the set but unscoreable.
+    REDUNDANT: none. A signature scan flagged dw_m6 as a subset of dw_m5,
+    but at clause-and-phase granularity only: dw_m5 also fires in phase H,
+    the refused WRITES, where dw_m6 cannot because it is a read-only defect.
+    They separate a real submission -- one checking only the LAST beat's resp
+    kills dw_m5, whose refused burst is served so every beat is OKAY, and
+    misses dw_m6, whose last beat IS SLVERR. Neither is removable.
+    WHAT THE EXTENSION DID CATCH was a defect in dut2, a LEGAL
+    implementation: it forced SLVERR for any downstream error rather than
+    preserving the code, so it violated D7 the moment D7 could be observed.
+    The analogue of an unscoreable clause on this side turned out to be a
+    wrong second source, not a hidden mutant.
   history: >
     Found by Agent 3, who noticed m_rresp and m_bresp were pinned to OKAY in the
     reference and raised it as a candidate rather than a finding. The pinning was
@@ -261,6 +281,18 @@ unscored_clauses:
       so rather than copying the shape.
 
 negative_controls:
+  over_outstanding_dut:
+    status: PASS -- caught, and it fails on A4 ALONE
+    detail: >
+      negctl/over_outstanding_dut.sv is the same design with room for SIX
+      outstanding reads where A4 allows four, ports at full width and every other
+      clause untouched. It produces 26 failures, every one of them A4, and zero
+      on any other clause. That is what makes it a control rather than a mutant:
+      it demonstrates the A4 check DISCRIMINATES rather than merely passes.
+      Capability-INCREASED, because A4 is an upper bound whose permissive half
+      makes a design accepting fewer conforming -- dut2 accepts one and passes.
+      The golden reaches a peak of exactly 4 outstanding under the same stimulus,
+      so the check is pressured to the bound and not beyond it.
   null_testbench:
     status: PASS -- rejected
     detail: >

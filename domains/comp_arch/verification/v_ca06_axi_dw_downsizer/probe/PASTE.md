@@ -243,10 +243,19 @@ Let `size` and `len` be the upstream request's, and let
   and low on every other.
 - **D5 — response.** Absent a refusal (§3) and absent a downstream error, every
   upstream `R` beat carries `OKAY`.
-- **D6 — downstream error precedence.** If any downstream `R` beat of a
-  transaction carries an error response, the upstream response for that
-  transaction carries an error too. A transaction whose downstream beats are all
-  `OKAY` is answered `OKAY`.
+- **D6 — downstream error precedence, and it is STICKY.** Number the upstream
+  beats 0, 1, 2, … Each is built from a group of downstream beats. An upstream
+  beat carries an error response if any downstream beat in **its own group, or in
+  any earlier group**, carried one. Equivalently: once an error occurs it
+  persists to the end of the transaction, and beats before it are unaffected.
+
+  *Measured, on a two-beat upstream read of eight downstream beats: an error on
+  downstream beat 0 or 3 gives `SLVERR SLVERR`; an error on the LAST downstream
+  beat gives `OKAY SLVERR`. It is not "all beats error", and a testbench that
+  requires that rejects correct hardware.*
+- **D7 — the error code is preserved.** `SLVERR` upstream for a downstream
+  `SLVERR`, `DECERR` for a `DECERR`. Neither is normalised to the other.
+  *Measured: `DECERR` on a downstream beat produces `DECERR` upstream.*
 
 ---
 
@@ -269,8 +278,12 @@ Let `size` and `len` be the upstream request's, and let
   low on every other.
 - **E5 — one response.** The downstream burst's `B` produces exactly one upstream
   `B`, carrying the transaction's `id`.
-- **E6 — error precedence.** If the downstream `B` carries an error, the upstream
-  `B` carries an error. Otherwise it carries `OKAY`.
+- **E6 — error precedence, and the code is preserved.** If the downstream `B`
+  carries an error, the upstream `B` carries **the same code**. Otherwise it
+  carries `OKAY`. There is no stickiness question here: a write has exactly one
+  response.
+  *Measured: downstream `OKAY` gives upstream `OKAY`, downstream `SLVERR` gives
+  upstream `SLVERR`.*
 
 ---
 

@@ -102,6 +102,16 @@ module dw_downsizer_tb;
   // move, so each transaction timed out at exactly the wait budget and its
   // beats surfaced during the NEXT one. Driving the response from registers
   // removes the question.
+  // Downstream errors are STEERED BY ADDRESS so the checker can predict them
+  // without sharing state with the responder: bit 12 of a transaction's address
+  // asks for an error, and bits 11:8 select which downstream beat carries it.
+  // Bit 13 selects DECERR over SLVERR.
+  function automatic bit want_err(input logic [ADDR_W-1:0] a); return a[20]; endfunction
+  function automatic int  err_beat_of(input logic [ADDR_W-1:0] a); return int'(a[19:16]); endfunction
+  function automatic logic [1:0] err_code_of(input logic [ADDR_W-1:0] a);
+    return a[21] ? 2'b11 : 2'b10;
+  endfunction
+
   logic            m_rvalid_q = 0, m_rlast_q = 0;
   logic [MW-1:0]   m_rdata_q = '0;
   logic [ID_W-1:0] m_rid_q = '0;
@@ -109,7 +119,8 @@ module dw_downsizer_tb;
   assign m_rlast  = m_rlast_q;
   assign m_rid    = m_rid_q;
   assign m_rdata  = m_rdata_q;
-  assign m_rresp  = 2'b00;
+  logic [1:0] m_rresp_q = 2'b00;
+  assign m_rresp  = m_rresp_q;
 
   function automatic logic [MW-1:0] ds_beat_data(input logic [ADDR_W-1:0] a,
                                                  input int unsigned sz, input int unsigned j);
@@ -136,32 +147,38 @@ module dw_downsizer_tb;
           m_rdata_q  <= ds_beat_data(rq_addr[0], rq_size[0], rbeat + 1);
           m_rlast_q  <= ((rbeat + 1) == rq_len[0]);
           m_rid_q    <= rq_id[0];
+          m_rresp_q  <= (want_err(rq_addr[0]) && ((rbeat + 1) == err_beat_of(rq_addr[0])))
+                        ? err_code_of(rq_addr[0]) : 2'b00;
         end
       end else if (!m_rvalid_q && rq_addr.size() > 0) begin
         m_rvalid_q <= 1'b1;
         m_rdata_q  <= ds_beat_data(rq_addr[0], rq_size[0], rbeat);
         m_rlast_q  <= (rbeat == rq_len[0]);
         m_rid_q    <= rq_id[0];
+        m_rresp_q  <= (want_err(rq_addr[0]) && (rbeat == err_beat_of(rq_addr[0])))
+                      ? err_code_of(rq_addr[0]) : 2'b00;
       end
     end
   end
 
   // ---- downstream slave: writes, and the W-beat log -----------------------
-  logic [ID_W-1:0] wq_id [$]; int n_pend_b = 0;
+  logic [ID_W-1:0] wq_id [$]; logic [ADDR_W-1:0] wq_addr [$]; int n_pend_b = 0;
   logic [MW-1:0]   wl_data [$]; logic [MBY-1:0] wl_strb [$]; logic wl_last [$];
   // ONE ordered block: a counter written here and read by a separate block is a
   // race, and for a len=0 burst the AW and the final W beat land in one cycle.
   always @(posedge clk) if (rst_n) begin
-    if (m_awvalid && m_awready) begin wq_id.push_back(m_awid); n_ds_aw++; end
+    if (m_awvalid && m_awready) begin wq_id.push_back(m_awid);
+                                      wq_addr.push_back(m_awaddr); n_ds_aw++; end
     if (m_wvalid && m_wready) begin
       wl_data.push_back(m_wdata); wl_strb.push_back(m_wstrb); wl_last.push_back(m_wlast);
       if (m_wlast) n_pend_b++;
     end
     if (m_bvalid && m_bready) begin
       m_bvalid <= 1'b0;
-      if (wq_id.size() > 0) void'(wq_id.pop_front());
+      if (wq_id.size() > 0) begin void'(wq_id.pop_front()); void'(wq_addr.pop_front()); end
     end else if (!m_bvalid && n_pend_b > 0) begin
-      m_bvalid <= 1'b1; m_bresp <= 2'b00;
+      m_bvalid <= 1'b1;
+      m_bresp  <= (wq_addr.size() > 0 && want_err(wq_addr[0])) ? err_code_of(wq_addr[0]) : 2'b00;
       m_bid <= (wq_id.size() > 0) ? wq_id[0] : '0;
       n_pend_b--;
     end
@@ -169,6 +186,7 @@ module dw_downsizer_tb;
 
   // ---- coverage, counted on STIMULUS only (rule 4) ------------------------
   int cov_reads=0, cov_writes=0, cov_refused=0, cov_unaligned=0, cov_narrow=0;
+  int cov_rd_err=0, cov_wr_err=0, cov_decerr=0, cov_err_last=0, cov_a4_offered=0;
   int cov_size0=0, cov_partial_strb=0, cov_zero_strb_beat=0, cov_fixed1=0;
   int cov_long=0, cov_conc_offered=0, cov_conc_taken=0, cov_rbeats=0, cov_wbeats=0;
   string phase = "init";
@@ -186,6 +204,11 @@ module dw_downsizer_tb;
     if (sz == 0) cov_size0++;
     if (burst == 2'b00 && len == 0) cov_fixed1++;
     if (len >= 7) cov_long++;
+    if (want_err(a)) begin
+      cov_rd_err++;
+      if (err_code_of(a) == 2'b11) cov_decerr++;
+      if (err_beat_of(a) >= dslen(a, len, sz)) cov_err_last++;
+    end
     cov_rbeats += exp_beats;
 
     @(negedge clk); s_arid=id; s_araddr=a; s_arlen=8'(len); s_arsize=3'(sz);
@@ -215,8 +238,20 @@ module dw_downsizer_tb;
             if (ba >= beat_lo(a, sz, j) && ba < beat_hi(a, sz, j))
               want[8*(ba % SBY) +: 8] = memb(ba);
           end
-          if (s_rresp !== 2'b00)
-            fail("D5", $sformatf("%s: R beat %0d carries resp %0b, expected OKAY", phase, j, s_rresp));
+          begin
+            // D6 is STICKY: this upstream beat carries the error if the erroring
+            // downstream beat lies in its own group or any earlier one. D7: the
+            // code is preserved, not normalised.
+            automatic logic [1:0] want_r = 2'b00;
+            if (want_err(a)
+                && (beat_lo(a, dsz(sz), err_beat_of(a)) < beat_hi(a, sz, j)))
+              want_r = err_code_of(a);
+            if (s_rresp !== want_r)
+              fail(want_r == 2'b00 ? "D5" : "D6",
+                   $sformatf("%s: R beat %0d carries resp %0b, expected %0b%s",
+                             phase, j, s_rresp, want_r,
+                             (want_r != 2'b00) ? " -- an error is STICKY from the beat it occurs on" : ""));
+          end
           if ((s_rdata & lane_mask(a, sz, j)) !== (want & lane_mask(a, sz, j)))
             fail("D1", $sformatf("%s: R beat %0d data %016x, expected %016x on the lanes it covers",
                                  phase, j, s_rdata & lane_mask(a,sz,j), want & lane_mask(a,sz,j)));
@@ -261,6 +296,7 @@ module dw_downsizer_tb;
     if (sz < MSIZE) cov_narrow++;
     if (burst == 2'b00 && len == 0) cov_fixed1++;
     if (sparse) cov_partial_strb++;
+    if (want_err(a)) cov_wr_err++;
     cov_wbeats += len + 1;
 
     @(negedge clk); s_awid=id; s_awaddr=a; s_awlen=8'(len); s_awsize=3'(sz);
@@ -308,8 +344,12 @@ module dw_downsizer_tb;
                              phase, wl_data.size()));
       return;
     end
-    if (s_bresp !== 2'b00)
-      fail("E6", $sformatf("%s: write answered %0b, expected OKAY", phase, s_bresp));
+    begin
+      automatic logic [1:0] want_b = want_err(a) ? err_code_of(a) : 2'b00;
+      if (s_bresp !== want_b)
+        fail("E6", $sformatf("%s: write answered %0b, expected %0b -- the downstream code passes through",
+                             phase, s_bresp, want_b));
+    end
     if (n_ds_aw != aw0 + 1)
       fail("A2", $sformatf("%s: write issued %0d downstream addresses, expected exactly 1",
                            phase, n_ds_aw - aw0));
@@ -378,6 +418,23 @@ module dw_downsizer_tb;
   task automatic arm(input logic [ADDR_W-1:0] a, input int unsigned l, input int unsigned sz);
     chk_a = a; chk_len = l; chk_sz = sz; chk_arm = 1'b1;
   endtask
+
+  // ---- A4: at most MAX_READS reads outstanding ---------------------------
+  // A4 is an UPPER bound whose permissive half says a further address "need not
+  // be accepted until one retires", so accepting FEWER conforms -- dut2 accepts
+  // one and passes. The only violation is accepting MORE, so this counts and
+  // bounds rather than requiring.
+  int a4_live = 0, a4_peak = 0;
+  always @(posedge clk) if (rst_n) begin
+    automatic int nxt = a4_live
+                      + ((s_arvalid && s_arready) ? 1 : 0)
+                      - ((s_rvalid && s_rready && s_rlast) ? 1 : 0);
+    a4_live <= nxt;
+    if (nxt > a4_peak) a4_peak <= nxt;
+    if (nxt > MAXR)
+      fail("A4", $sformatf("%s: %0d reads outstanding at once, the bound is %0d",
+                           phase, nxt, MAXR));
+  end
 
   // ---- X1: nothing originated while reset is low -------------------------
   bit seen_edge = 0;
@@ -469,6 +526,21 @@ module dw_downsizer_tb;
       cov_conc_offered++;
       if (took) begin
         int t2; bit took2;
+        // offer SIX concurrent reads. A4 permits the design to accept as few as
+        // it likes, so none of this is required -- it is offered so that a
+        // design which accepts MORE than the bound has somewhere to reveal it.
+        for (int e = 0; e < 6; e++) begin
+          @(negedge clk); s_arid = 4'(e); s_araddr = 32'hC000 + ADDR_W'(e*64);
+                          s_arlen = 8'd1; s_arsize = 3'd3; s_arburst = 2'b01;
+                          s_arvalid = 1;
+          for (int t3 = 0; t3 < 24; t3++) begin @(posedge clk); if (s_arready) break; end
+          @(negedge clk) s_arvalid = 0;
+        end
+        cov_a4_offered++;
+        for (int t3 = 0; t3 < 4000; t3++) begin
+          @(posedge clk);
+          if (rq_addr.size() == 0 && !s_rvalid && a4_live == 0) break;
+        end
         @(negedge clk); s_arid=4'hF; s_araddr=32'h9000; s_arlen=8'd1; s_arsize=3'd3;
                         s_arburst=2'b01; s_arvalid=1;
         for (t2=0; t2<64; t2++) begin @(posedge clk); if (s_arready) break; end
@@ -488,6 +560,19 @@ module dw_downsizer_tb;
       end
     end
     repeat (40) @(posedge clk);
+
+    phase = "M:DOWNSTREAM ERRORS -- D6 is sticky, D7 preserves the code";
+    // bit 20 asks the downstream slave for an error, bits 19:16 pick which
+    // downstream beat carries it, bit 21 selects DECERR over SLVERR.
+    arm(32'h10_0000, 1, 3); do_read(4'h1, 32'h10_0000, 1, 3, 2'b01);   // beat 0
+    arm(32'h13_0000, 1, 3); do_read(4'h2, 32'h13_0000, 1, 3, 2'b01);   // beat 3
+    arm(32'h17_0000, 1, 3); do_read(4'h3, 32'h17_0000, 1, 3, 2'b01);   // LAST beat
+    arm(32'h33_0000, 1, 3); do_read(4'h4, 32'h33_0000, 1, 3, 2'b01);   // DECERR
+    arm(32'h11_0000, 3, 3); do_read(4'h5, 32'h11_0000, 3, 3, 2'b01);   // long, beat 1
+    arm(32'h1F_0000, 3, 3); do_read(4'h6, 32'h1F_0000, 3, 3, 2'b01);   // beat 15 of 16
+    arm(32'h10_0000, 0, 3); do_write(4'h7, 32'h10_0000, 0, 3, 2'b01, 1'b0);
+    arm(32'h30_0000, 1, 3); do_write(4'h8, 32'h30_0000, 1, 3, 2'b01, 1'b0);
+    arm(32'h10_0000, 2, 3); do_write(4'h9, 32'h10_0000, 2, 3, 2'b01, 1'b1);
 
     phase = "L:reset mid-stream";
     arm(32'hA000, 7, 3);
@@ -513,6 +598,12 @@ module dw_downsizer_tb;
     if (cov_zero_strb_beat < 2) fail("FLOOR", "no downstream beat with an ALL-ZERO strobe was ever produced -- E3 untested");
     if (cov_long < 2)    fail("FLOOR", "no long burst was driven");
     if (cov_conc_offered < 1) fail("FLOOR", "concurrency was never even offered");
+    if (cov_a4_offered < 1)
+      fail("FLOOR", "more reads than the MAX_READS bound were never OFFERED, so A4 has no stimulus that could reveal a design accepting too many");
+    if (cov_rd_err < 4) fail("FLOOR", $sformatf("only %0d reads asked for a downstream error -- D6 undertested", cov_rd_err));
+    if (cov_wr_err < 2) fail("FLOOR", $sformatf("only %0d writes asked for a downstream error -- E6 undertested", cov_wr_err));
+    if (cov_decerr < 1)  fail("FLOOR", "DECERR was never driven -- D7 untested");
+    if (cov_err_last < 1) fail("FLOOR", "no error was placed on the LAST downstream beat, which is the case that shows D6 is sticky rather than whole-transaction");
     if (cov_rbeats < 120) fail("FLOOR", $sformatf("only %0d upstream R beats were asked for", cov_rbeats));
     if (cov_wbeats < 70)  fail("FLOOR", $sformatf("only %0d upstream W beats were driven", cov_wbeats));
 
@@ -525,6 +616,9 @@ module dw_downsizer_tb;
              cov_conc_offered, cov_conc_taken);
     $display("  [coverage] R beats asked=%0d  W beats driven=%0d  ds AR=%0d ds AW=%0d",
              cov_rbeats, cov_wbeats, n_ds_ar, n_ds_aw);
+    $display("  [coverage] downstream errors: reads=%0d writes=%0d decerr=%0d on-last-beat=%0d",
+             cov_rd_err, cov_wr_err, cov_decerr, cov_err_last);
+    $display("  [coverage] A4: peak reads outstanding = %0d against a bound of %0d", a4_peak, MAXR);
     $finish;
   end
 

@@ -130,6 +130,7 @@ module dw_downsizer_alt #(
   logic [7:0]      r_len, r_dslen, r_errbeat;
   logic [2:0]      r_size, r_dssize;
   logic            r_err_seen;
+  logic [1:0]      r_err_code;
   logic [SLV_DATA_W-1:0] r_buf;
   logic [31:0]     r_upnext;               // first byte address of the NEXT upstream beat
 
@@ -158,7 +159,8 @@ module dw_downsizer_alt #(
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      r_st <= R_IDLE; s_rvalid_q <= 1'b0; r_err_seen <= 1'b0; r_buf <= '0;
+      r_st <= R_IDLE; s_rvalid_q <= 1'b0; r_err_seen <= 1'b0; r_err_code <= 2'b00;
+      r_buf <= '0;
       r_id <= '0; r_addr <= '0; r_ptr <= '0; r_end <= '0; r_len <= '0;
       r_dslen <= '0; r_size <= '0; r_dssize <= '0; r_errbeat <= '0;
       s_rlast_q <= 1'b0; s_rresp_q <= '0; s_rdata_q <= '0; s_rid_q <= '0;
@@ -168,7 +170,7 @@ module dw_downsizer_alt #(
       case (r_st)
         R_IDLE: if (s_arvalid) begin
           r_id <= s_arid; r_addr <= s_araddr; r_len <= s_arlen; r_size <= s_arsize;
-          r_err_seen <= 1'b0; r_buf <= '0;
+          r_err_seen <= 1'b0; r_err_code <= 2'b00; r_buf <= '0;
           if (bad_burst(s_arburst, s_arlen)) begin
             r_errbeat <= s_arlen; r_st <= R_ERR;            // clause C4
           end else begin
@@ -195,13 +197,15 @@ module dw_downsizer_alt #(
               nb[8*(a % SBYTES) +: 8] = m_rdata[8*(a % MBYTES) +: 8];
           end
           nby = int'(algn(p, r_dssize)) + bbytes(r_dssize) - int'(p);
-          if (m_rresp != 2'b00) r_err_seen <= 1'b1;
+          if (m_rresp != 2'b00) begin r_err_seen <= 1'b1; r_err_code <= m_rresp; end
           r_buf <= nb;
           r_ptr <= p + 32'(nby);
           // an upstream beat completes when the pointer reaches its end (D1/D4)
           if ((p + 32'(nby) >= r_upnext) || (p + 32'(nby) >= r_end)) begin
             s_rvalid_q <= 1'b1; s_rdata_q <= nb; s_rid_q <= r_id;
-            s_rresp_q  <= (r_err_seen || m_rresp != 2'b00) ? 2'b10 : 2'b00;  // D6
+            // D6 sticky, D7 the code is preserved rather than forced to SLVERR
+            s_rresp_q  <= (m_rresp != 2'b00) ? m_rresp
+                          : (r_err_seen ? r_err_code : 2'b00);
             s_rlast_q  <= (p + 32'(nby) >= r_end);
             r_buf      <= '0;
             r_upnext   <= r_upnext + 32'(bbytes(r_size));
@@ -308,7 +312,7 @@ module dw_downsizer_alt #(
         end
         W_RESP: if (m_bvalid) begin
           s_bvalid_q <= 1'b1; s_bid_q <= w_id;
-          s_bresp_q  <= (m_bresp != 2'b00) ? 2'b10 : 2'b00;      // E6
+          s_bresp_q  <= m_bresp;                                  // E6: code preserved
           w_st <= W_IDLE;
         end
         W_ABSORB: if (s_wvalid) begin
