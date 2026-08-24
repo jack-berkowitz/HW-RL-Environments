@@ -1,5 +1,15 @@
 // STEP 1 -- semantic confirmation, MEASURED not read.
 //
+// SUPERSEDED FOR DUTY CYCLE. This probe divides each edge timestamp by the clock
+// period before subtracting, which truncates a half-cycle to nothing: it reports
+// divisor 3 as high 1 / low 2 where the true split is 1.5 / 1.5. The period
+// figures it reports are correct; the duty figures are not. probe/measure_gating.sv
+// and the raw-time measurement in NOTES.md carry the corrected values.
+//
+// Kept rather than fixed, because it is the evidence for the finding staged in
+// inbox/FINDINGS.agent2.md -- two instruments sharing one conversion agreed with
+// each other, and this is one of the two.
+//
 // Correctness here is about INTERVALS BETWEEN EDGES, not sampled values, so the
 // probe measures in units of clk_i cycles: it samples clk_o at the negedge of
 // clk_i (a stable point) and records the cycle number of every transition.

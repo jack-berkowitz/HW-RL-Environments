@@ -47,6 +47,21 @@ was chosen rather than derived it is named as such.
   *Measured in raw time at divisors 2 through 8: high equals low equals half the
   period in every case.*
 
+- **P4 — an obligation on YOU, the measurer.** Measure the period and the duty
+  **in time**, not in whole `clk_i` cycles.
+
+  At every odd divisor the high and low phases are half-integer numbers of
+  `clk_i` cycles. Any check that quantises to whole cycles — counting `clk_i`
+  rising edges between a rise and a fall of `clk_o`, for instance — truncates the
+  half and reports divisor 3 as 33% duty. Such a check **rejects conforming
+  hardware at all seven odd divisors** in the range.
+
+  This is stated as an obligation, in the same form as H2's obligation on the
+  source, because it is not inferable from P2 and because getting it wrong does
+  not look like a mistake: it produces a clean, self-consistent, wrong answer
+  that agrees with itself across every odd divisor. If your stimulus happens to
+  use only even divisors you will pass the golden and fail legal submissions.
+
 - **P3 — 0 and 1 are a DEGENERATE PAIR, and the distinction is UNSCORED.** Both
   mean pass-through: `clk_o` has the same period as `clk_i`, one input cycle.
   *Measured for both.*

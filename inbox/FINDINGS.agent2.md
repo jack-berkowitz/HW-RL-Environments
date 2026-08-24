@@ -4,6 +4,90 @@ Staged here rather than written into `FINDINGS.md` directly, which is not this
 agent's to edit. Each entry is ready to land as-is or to be merged into an
 existing finding by whoever owns the file.
 
+
+---
+
+## Candidate — two instruments sharing a conversion are one instrument, and a mechanism that explains a wrong number removes the motive to recheck it
+
+**The headline finding of v_ca07.** Two parts, both general, and the second is
+the sharper one.
+
+### The instance
+
+`clk_int_div`'s header says it "always generates clean 50% duty cycle output
+clock". I measured the duty at every divisor and concluded the header was wrong:
+`high = floor(div/2)`, `low = ceil(div/2)`, so 33% at divisor 3. That went into
+the specification as clause P2, into the second source, and into the reference
+testbench's own check.
+
+**It was wrong. The duty is exactly 50% at every divisor.** At odd divisors the
+split is a **half-integer** — divisor 3 is 1.5 high and 1.5 low — because the
+transitions use the input clock's falling edges as well as its rising ones. That
+is what a 50%-duty odd divider is.
+
+### Part one — independent measurements are only independent if their DEFECTS are
+
+Two measurements produced the wrong answer: the step-1 probe, and, later and
+separately, the reference testbench's P2 check. They were written days apart, in
+different files, for different purposes, and they **agreed**.
+
+They agreed because both **divided each endpoint by the clock period before
+subtracting**. `1.5` truncates to `1`, and the low phase then appears to be `2`.
+The same conversion, written twice, is not two measurements — it is one
+measurement with two copies, and the agreement between them carries no
+information at all.
+
+The trap is that agreement is exactly what corroboration looks like. Two
+instruments concurring is the ordinary reason to believe a number, and here it
+was the reason the number survived.
+
+**Rule:** before treating agreement between two measurements as confirmation, ask
+what conversion, assumption or library they share. Independence is a property of
+the failure modes, not of the source files. Two implementations of the same
+wrong conversion corroborate; they do not check.
+
+### Part two — a plausible mechanism ratifying a measurement is a reason to recheck it, not evidence for it
+
+Having measured 33% at divisor 3, I wrote that this was *"arithmetically
+necessary, since an odd number of input cycles cannot be split evenly"*.
+
+That is true only if the split must land on whole cycles. It need not. But the
+argument was clean, it was short, and it explained the observation exactly — and
+so it **removed the motive to look again**. A number that looks odd invites a
+second measurement. A number with a proof attached does not: the proof is read as
+having already done the checking.
+
+This is the same shape as the distinction between a suppressed and an inverted
+measurement — the failure that looks like data is worse than the one that looks
+like a bug. An **explained** failure looks most like data of all, because the
+explanation is doing work that resembles verification while being downstream of
+the very number it justifies.
+
+**Rule:** when a mechanism is constructed to explain a measurement, it is not
+support for the measurement — it is a reason to re-measure. The order matters: an
+argument derived after an observation cannot test that observation, and its
+persuasiveness is uncorrelated with the observation being right.
+
+### The count, which is the least interesting part
+
+Three claims that the anchor's documentation was wrong were made about this one
+module. All three were defects in my own instruments: a sampling phase that
+aliased the pass-through case, an interval measured from the wrong origin, and
+this truncation. **Zero defects were found in the anchor.**
+
+The count is worth recording only because it calibrates a prior: on this module,
+every disagreement between the documentation and my measurement was mine.
+
+### What it cost, concretely
+
+The wrong rule reached the specification, the second source (which had to be
+rebuilt to use both clock edges), and the reference testbench's own checker. It
+was caught only because the corrected checker failed against the anchor while
+printing "high phase 1, expected 1" — two numbers that were equal as printed and
+unequal underneath, because the printing truncated the same way the comparison
+had. A submission measuring the way I did would reject conforming hardware at
+every odd divisor.
+
 ---
 
 ## Candidate — a control whose two arms produce identical observables measures nothing, and reports cleanly while doing it

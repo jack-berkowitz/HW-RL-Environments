@@ -302,3 +302,53 @@ copy. The testbench's own P2 check had the same defect and now compares in time
 units. Both are in the spec as an explicit warning, because measuring in whole
 `clk_i` cycles rejects correct hardware at every odd divisor and it is the trap I
 fell into twice.
+
+## The guarded mutant set — 10/10, and what it took
+
+Seven of the ten are ordinal or depth conditions, on the same evidence as
+v_ca06: the Nth reconfiguration, the Nth same-value request, the Nth reset, the
+Nth enable toggle, divisors above a size, odd divisors only.
+
+`cd_m2` is the wrong duty rule this task's own specification carried until the
+reference caught it — the same provenance as v_ca06's `dw_m1`.
+
+**Five of the ten survived the first run, and not one was hard.** Every case was
+a defect in the mutant or a gap in the reference:
+
+| mutant | why it survived | fix |
+|---|---|---|
+| `cd_m3` | the ladder walks 0..15 in order, so pass-through is only ever reached from 0 | a phase dropping from large divisors to 1 and 0 |
+| `cd_m5` | **not a defect at all** — gating valid and ready together DEFERS the offer, which H4 permits | rewritten to latch a refusal and hold ready low until the requester gives up |
+| `cd_m6` | its countdown expired one negedge early, so the golden's first edge slipped through | lengthened by one |
+| `cd_m8` | a two-cycle disable delay hides inside a four-cycle period | the enable phase moved to divisor 2, the shortest real period |
+| `cd_m10` | one mid-run reset, and the guard wants the second | a second reset phase |
+
+Two of the five were guards that could never fire, one was a mutant equivalent
+to legal behaviour, and two were reference gaps. **None was a difficult mutant.**
+A survivor is a question, not a result — the first assumption should be that the
+apparatus is wrong, because on this task it was, five times out of five.
+
+`cd_m5` is worth its own line. It gated `div_valid_i` and `div_ready_o` together,
+which is the correct discipline for a *perturbation*, and applied to a *mutant*
+it produced exactly the legal deferral H4 describes. The discipline that keeps a
+conformant variant conformant also neuters a defect. Same class as v_ai02's
+ignored-`clear_cache` mutant, which was unobservable at its configuration.
+
+## The reference caught two artefacts built to be legal
+
+`cdc_c1` and `cdc_c3` both violated H3 by throttling or gating a same-value
+request. They were written to exercise L3, L4 and L2 and overreached into a
+clause that is pinned.
+
+**This is the discrimination demonstration the gate-mutant control exists to
+provide, obtained for free.** A control shows a check can fail; these showed it
+failing against artefacts constructed to pass, which is stronger — nobody chose
+their defects to be catchable.
+
+## Full enumeration is the standing pattern where the space is small
+
+`dut2`'s divisor-15 overflow — `(div_q + 1)` wrapping to zero in four bits, high
+phase zero, clock dead — was found only because the ladder sweeps all sixteen
+divisors rather than a sample. A sampled ladder ships a second source with a dead
+clock at one setting and nothing catches it before scoring. Sixteen values is
+small enough to enumerate, so it is enumerated, and the floor requires it.

@@ -134,7 +134,7 @@ module clk_ratio_div_tb;
   endtask
 
   int cov_div = 0, cov_change = 0, cov_same = 0, cov_defer = 0, cov_en = 0;
-  int cov_reset = 0, cov_g1 = 0, cov_pass = 0, cov_odd = 0;
+  int cov_reset = 0, cov_g1 = 0, cov_pass = 0, cov_odd = 0, cov_bigdrop = 0;
 
   // G1: the gap from ACCEPTANCE to the first rising edge, bounded by 3x the new
   // period. L2 leaves the actual duration free, so only the bound is checked --
@@ -278,6 +278,51 @@ module clk_ratio_div_tb;
       end
     end
 
+    phase = "H:LARGE divisor down to pass-through";
+    // The ladder walks 0..15 in order, so pass-through is only ever reached from
+    // 0. A defect conditioned on arriving at pass-through FROM a large divisor
+    // has no stimulus in an ordered sweep.
+    check_change(8,1);  check_change(15,0); check_change(12,1); check_change(9,0);
+    cov_change += 4; cov_bigdrop = 4;
+
+    phase = "I:REPEATED deferrals";
+    // One deferral does not reach a defect conditioned on the second or third.
+    begin
+      int t;
+      for (int r = 0; r < 4; r++) begin
+        settle(2);
+        @(negedge clk); div = 4'd9; div_valid = 1;
+        for (t = 0; t < 400; t++) begin @(posedge clk); if (div_ready) break; end
+        @(negedge clk) div_valid = 0;
+        @(negedge clk); div = 4'd5; div_valid = 1;
+        for (t = 0; t < 600; t++) begin @(posedge clk); if (div_ready) break; end
+        if (t >= 600)
+          fail("H4", $sformatf("deferral %0d: a second request was never accepted", r));
+        @(negedge clk) div_valid = 0;
+        cov_defer++;
+        repeat (80) @(posedge clk);
+      end
+      check_ratio(5);
+    end
+
+    phase = "J:REPEATED enable toggles";
+    // Two toggles is one down and one up. A defect that waits for the fourth
+    // needs the enable exercised as a repeated operation, not as one event.
+    begin
+      settle(2);        // the shortest real period, so a late disable shows
+      for (int r = 0; r < 4; r++) begin
+        @(negedge clk) en = 0;
+        @(posedge clk); clear_edges(); repeat (30) @(posedge clk);
+        if (rise.size() != 0)
+          fail("E1", $sformatf("toggle %0d: %0d rising edge(s) while en_i is low", r, rise.size()));
+        @(negedge clk) en = 1;
+        clear_edges(); repeat (30) @(posedge clk);
+        if (rise.size() == 0)
+          fail("E2", $sformatf("toggle %0d: the output did not resume", r));
+        cov_en++;
+      end
+    end
+
     phase = "G:reset";
     begin
       settle(6);
@@ -296,6 +341,26 @@ module clk_ratio_div_tb;
       cov_reset++;
     end
 
+    phase = "G2:a SECOND reset";
+    // R2 must hold on every reset, not only the first. A defect that restores
+    // the last divisor from the second reset onward is invisible to one.
+    begin
+      settle(7);
+      @(negedge clk) rst_n = 0;
+      clear_edges(); repeat (30) @(posedge clk);
+      if (rise.size() != 0)
+        fail("R1", $sformatf("second reset: %0d rising edge(s) while rst_ni is low", rise.size()));
+      @(negedge clk) rst_n = 1;
+      repeat (20) @(posedge clk);
+      clear_edges(); repeat (40) @(posedge clk);
+      if (rise.size() < 4) fail("R2", "no output after the second reset");
+      else for (int i = 1; i < rise.size(); i++)
+        if ((rise[i] - rise[i-1]) != 1*CP)
+          fail("R2", $sformatf("after the SECOND reset the period is %0d, expected 1 -- reset restores the DEFAULT divisor every time, not only the first",
+                               (rise[i]-rise[i-1])/CP));
+      cov_reset++;
+    end
+
     // ---- stimulus floors, counted at the point of stimulus ---------------
     if (cov_div < 16)    fail("FLOOR", $sformatf("only %0d divisors driven of 16", cov_div));
     if (cov_odd < 6)     fail("FLOOR", $sformatf("only %0d odd divisors driven -- P2's own case", cov_odd));
@@ -305,7 +370,10 @@ module clk_ratio_div_tb;
     if (cov_same < 1)    fail("FLOOR", "a same-value request was never driven -- H3 untested");
     if (cov_defer < 1)   fail("FLOOR", "a second request during a transition was never driven -- H4 untested");
     if (cov_en < 1)      fail("FLOOR", "en_i was never exercised");
-    if (cov_reset < 1)   fail("FLOOR", "reset was never asserted mid-run");
+    if (cov_reset < 2)   fail("FLOOR", $sformatf("reset was asserted %0d time(s) mid-run; R2 must hold on every one", cov_reset));
+    if (cov_bigdrop < 3) fail("FLOOR", "pass-through was never reached FROM a large divisor -- an ordered ladder only ever arrives there from 0");
+    if (cov_defer < 4)   fail("FLOOR", $sformatf("only %0d deferral(s) driven -- a defect conditioned on the second is unreachable", cov_defer));
+    if (cov_en < 4)      fail("FLOOR", $sformatf("en_i was toggled %0d time(s); a repeated-operation defect needs more", cov_en));
 
     // ---- the input-variation verdict -------------------------------------
     if ($test$plusargs("declare_all")) begin
