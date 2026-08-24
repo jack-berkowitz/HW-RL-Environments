@@ -54,6 +54,30 @@ if [ ! -f "$FLOW/Makefile" ] || [ ! -d "$FLOW/platforms" ]; then
 fi
 export ORFS_FLOW_DIR="$FLOW"   # so run_orfs_build.sh cannot resolve it differently
 
+# THE REFERENCE MUST BUILD UNDER THE CANDIDATES' CONFIG, NOT THE TASK'S.
+# ppa_candidate.sh generates its config by copying the task's and adding
+# SYNTH_MEMORY_MAX_BITS=65536 (its own comment explains why: ORFS aborts above
+# 4096 bits, and a candidate writing a plain array has asked for registers).
+# reference_ppa.sh handed the task config straight to the build, so every
+# reference in the corpus carried SYNTH_MEMORY_MAX_BITS=<unset> and every design
+# row -- all six -- had a reference whose build_config_hash disagreed with its
+# own candidates.
+#
+# ppa_candidate.sh's comment says the setting "changes nothing for them and the
+# comparison stays like-for-like". That is almost certainly true; the references
+# declare no arrays. But rule 17 exists so comparability is a matching digest
+# rather than an argument, and this converts the argument into a measurement: if
+# the rebuilt area is unchanged, the claim is demonstrated; if it moves, the
+# claim was wrong and the old numbers were confounded.
+#
+# Config paths are absolute /work/... so relocating the file is safe, and
+# orfs_runs/ is gitignored. DESIGN_NICKNAME is copied verbatim, so the flow
+# output directory is unchanged.
+GEN_CFG="orfs_runs/${TASK_NAME}_reference/config.mk"
+mkdir -p "$(dirname "$GEN_CFG")"
+{ cat "$CFG"; printf '\nexport SYNTH_MEMORY_MAX_BITS = 65536\n'; } > "$GEN_CFG"
+CFG="$GEN_CFG"
+
 echo "task=$TASK_NAME  ref=$REF  nick=$NICK  clk=${PER}ns  label=$LABEL  flow=$FLOW"
 
 CLK_PERIOD_NS="$PER" bash scripts/run_orfs_build.sh "/work/${CFG#$REPO/}" || {
