@@ -427,6 +427,40 @@
 //       scores better. Meeting it comfortably buys nothing extra: there is no
 //       credit for slack beyond zero, because the period is fixed for everyone.
 //
+//   G5. THERE IS NO SINGLE COMBINED SCORE, and that is deliberate rather than
+//       unfinished. Nothing in this project establishes what a unit of
+//       capability is worth in square micrometres, so no weighted sum of area,
+//       power and capability is computed, and none should be inferred from the
+//       phrase "scores better" above. Each axis is reported separately, and a
+//       submission that wins on one and loses on another is reported as exactly
+//       that.
+//
+//       WHAT A SUBMISSION IS COMPARED AGAINST. The reference implementation,
+//       built from the same contract at the same pinned period and the same
+//       scored configuration, and the other submissions to this task on the
+//       same axes. The reference is an ANCHOR, not a target: beating it is not
+//       required and losing to it is not disqualifying. It exists so that a
+//       number has something to be a ratio of.
+//
+//       EVERY REPORTED METRIC CARRIES A ROLE, and the role decides how a
+//       difference from the reference is read:
+//
+//         * FIXED -- the contract requires a value. Deviating is a specification
+//         violation, not a design choice, and it fails correctness.
+//         * CHOICE -- the contract leaves it free and it moves PPA. Where a
+//         submission chose differently from the reference, the area ratio is
+//         marked NOT LIKE-FOR-LIKE rather than presented as a quality gap.
+//         Choosing differently from the reference is not penalised; it is
+//         disclosed.
+//         * CAPABILITY -- more is better and area buys it. Reported both raw and
+//         per unit of area, because raw area credits a design for being small
+//         when it was actually doing less.
+//
+//       So the honest summary of the whole scheme: correctness gates, timing
+//       closure gates, and what survives both is described on several axes at one
+//       operating point, with the free choices named so that a difference in area
+//       can be read as the trade it is rather than as a verdict.
+//
 // =============================================================================
 
 module nonblocking_dcache #(

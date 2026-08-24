@@ -496,6 +496,15 @@ Everything normative is in the interface below.
 //     the pinned period; and worst negative slack against it. A build that
 //     misses timing yields no comparable area or power figure.
 //
+//     Fmax is NOT a scored axis. It is measured once per task, on the REFERENCE
+//     ONLY, and its sole job is to set the pinned period above. Submissions are
+//     not swept. A design that could run faster than the pinned period earns
+//     nothing for it, exactly as a design handed a frequency target in practice
+//     earns nothing for exceeding it; and a per-design Fmax could not be combined
+//     with the area and power above in any case, because those come from a build
+//     at the pinned period and an Fmax comes from a different build at a
+//     different one.
+//
 // G3. WHAT IS NOT AVAILABLE TO OPTIMISE.
 //       * THE TRANSLATION ITSELF. Every delivered address and every fault cause
 //         is pinned by F1-F3 and A1-A10. There is no accuracy trade.
@@ -531,6 +540,40 @@ Everything normative is in the interface below.
 //
 //     A submission that meets the pinned period with less area and less power
 //     scores better. There is no credit for slack beyond zero.
+// G5. THERE IS NO SINGLE COMBINED SCORE, and that is deliberate rather than
+//     unfinished. Nothing in this project establishes what a unit of
+//     capability is worth in square micrometres, so no weighted sum of area,
+//     power and capability is computed, and none should be inferred from the
+//     phrase "scores better" above. Each axis is reported separately, and a
+//     submission that wins on one and loses on another is reported as exactly
+//     that.
+//
+//     WHAT A SUBMISSION IS COMPARED AGAINST. The reference implementation,
+//     built from the same contract at the same pinned period and the same
+//     scored configuration, and the other submissions to this task on the
+//     same axes. The reference is an ANCHOR, not a target: beating it is not
+//     required and losing to it is not disqualifying. It exists so that a
+//     number has something to be a ratio of.
+//
+//     EVERY REPORTED METRIC CARRIES A ROLE, and the role decides how a
+//     difference from the reference is read:
+//
+//       * FIXED -- the contract requires a value. Deviating is a specification
+//       violation, not a design choice, and it fails correctness.
+//       * CHOICE -- the contract leaves it free and it moves PPA. Where a
+//       submission chose differently from the reference, the area ratio is
+//       marked NOT LIKE-FOR-LIKE rather than presented as a quality gap.
+//       Choosing differently from the reference is not penalised; it is
+//       disclosed.
+//       * CAPABILITY -- more is better and area buys it. Reported both raw and
+//       per unit of area, because raw area credits a design for being small
+//       when it was actually doing less.
+//
+//     So the honest summary of the whole scheme: correctness gates, timing
+//     closure gates, and what survives both is described on several axes at one
+//     operating point, with the free choices named so that a difference in area
+//     can be read as the trade it is rather than as a verdict.
+//
 // =============================================================================
 module sv39_mmu (
   input  logic        clk_i,
