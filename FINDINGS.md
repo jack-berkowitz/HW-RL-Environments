@@ -3986,31 +3986,62 @@ same shape at A10, where status timing was scored and unpinned.
 
 ---
 
-## F72. A surface declared scored, that no stimulus reaches
+## F72. A surface declared scored, that no stimulus reaches — and the check is VARIATION, not assignment
 
-The same task's harness initialised `fetch_req` to zero and never assigned it.
-Across all 118 requests of the scored sequence, the entire instruction port went
-undriven while T1 declared it scored and the fault-cause clause pinned causes 12
-and 1 longhand. The capacity check said "for each TLB independently" and only
-ever reached the data TLB.
+Three instances in `d_ca03` alone, and the third was found only because the
+check built for the first two was written correctly.
 
-The consequence was not cosmetic. A submission could tie `fetch_valid_o` low and
-provide a one-entry instruction TLB and pass every check -- reopening, on half of
-the pinned storage budget, precisely the incentive the capacity check was written
-to close. Nothing had to be built to close the gap either: the page table already
-planted executable, user-accessible leaves, so the missing phases were seven
-functional requests and a replay over a table that was already there. That is
-part of why it survived review. There was no missing work to notice.
+**Instance 1 — never assigned.** The harness initialised `fetch_req` to zero and
+never assigned it. Across all 118 requests of the scored sequence the entire
+instruction port went undriven while the scoring clause declared it scored and
+the fault-cause clause pinned causes 12 and 1 longhand. The exploit: tie
+`fetch_valid_o` low, ship a one-entry instruction TLB, pass everything — which
+reopens on half the pinned storage budget precisely the incentive the capacity
+check was written to close.
 
-**The check, and it is cheap.** Every clause that pins a value needs a coverage
-witness that the value was reached, and the witness has to be reported next to
-the verdict rather than assumed from the clause's existence. A coverage floor
-that lists conditions is only worth what its stimulus reaches; add the ports
-themselves to the floor, not just the conditions.
+**Instance 2 — assigned every cycle, at a constant.** `asid_i` is driven
+continuously at zero, and `mk_pte` has no `G` argument at all, hardcoding PTE
+bit 5 to `1'b0` so no planted entry is ever global. The clause requiring a
+non-global leaf to match only its installing ASID, and a global leaf to match
+every ASID, is therefore unexercised in both halves. A design ignoring `asid_i`
+entirely passes.
 
-**Where this recurs.** Any task whose contract has more than one request port,
-more than one operating mode, or a fault class reachable only from a port the
-sequence does not drive.
+**Instance 3 — five more, found by the check.** `priv_lvl_i`,
+`ld_st_priv_lvl_i`, `sum_i`, `mxr_i`, `pmpcfg_i` and `pmpaddr_i` are all frozen,
+so the supervisor-mode, SUM and MXR permission rules go untested and — larger —
+the whole physical-memory-protection path does: three access-fault causes pinned
+longhand and never reached, and a clause describing behaviour "with no PMP
+region matching" against a configuration the sequence never visits.
+
+### The load-bearing part: variation, not assignment
+
+The obvious check is "assert every scored port was DRIVEN at least once". **It
+catches one instance in three.** `fetch_req` was never driven, so it is caught;
+`asid_i` is driven every single cycle and sails through; the five frozen inputs
+sail through with it. An input that never changes value has not been tested,
+however continuously it was assigned. The observable is variation.
+
+The allowlist matters as much as the assertion. An input may legitimately be
+constant — a task pinning one root page table, or an input a clause explicitly
+declares non-load-bearing — and the only thing separating a deliberate constant
+from an overlooked one is that somebody wrote the reason down. So a constant
+must be **declared with its citation**, and an undeclared constant must FAIL
+rather than warn. In `d_ca03` three of eight constants were legitimate and five
+were defects, and nothing in the source distinguished them.
+
+### Why review does not catch it
+
+Nothing had to be built to close instance 1. The page table already planted
+executable, user-accessible leaves, so the missing phases were seven functional
+requests over a table that was already there. **There was no missing artifact to
+notice** — no empty file, no TODO, no unwired port. The rig looked complete
+because everything it did, it did correctly.
+
+**Where this recurs.** Any task with more than one request port, more than one
+operating mode, or a fault class reachable only from stimulus the sequence does
+not produce. A scan for the signature — a testbench variable initialised to a
+literal and never re-assigned — found it in three other tasks in this
+repository.
 
 **Rules:** 28
 
@@ -4048,11 +4079,267 @@ grants, validate it against something that exercises the freedom **differently**
 instance of the same structure driven differently. Here a second instance of the
 same TLB, driven cold, was enough.
 
-**The residue matters too.** Once the claim fell, no residency test could
-establish the instruction TLB's capacity at all, because a one-entry design is
-behaviourally indistinguishable from the reference. The budget is now priced on
-the cycle axis and stated as unenforced pending a structural flip-flop count.
-Recording an open hole in the specification beats leaving a false claim closed.
+**The residue, and its correction.** The first conclusion drawn from this was
+that no residency test could establish the instruction TLB's capacity at all,
+since a one-entry design would be indistinguishable from the reference. That was
+itself wrong, for the reason F74 records: the probe behind it filled the
+TLB cold and so measured the replacement policy, not the capacity. A
+hit-interleaved fill makes the reference retain all 16, and a one-entry control
+then fails on that check alone. The capacity is enforced behaviourally and the
+structural flip-flop count was dropped -- a check requiring synthesis cannot gate
+correctness without inverting the grading order, which is disqualifying on its
+own.
+
+### Does the pipeline-transition rule cover this? No, and it must not be extended to
+
+Asked directly, because extending the wrong rule is how two defects end up with
+one unusable instruction. The pipeline-transition rule is about SILENCE: a
+control input whose behaviour at a transition nobody wrote down, and its fix is
+to NARROW the contract -- name the window in the tick the contract already counts
+in, and exclude it. This finding is about a CLAIM: a test asserting independence
+from a freedom the specification grants, and its fix is to WIDEN the validation
+-- run it against something that exercises the freedom differently.
+
+The fixes point in opposite directions. A single rule spanning both could only
+say "be careful about freedoms", which instructs nobody. They stay separate: the
+transition rule keeps its scope, and this finding's rule is the one that applies
+here.
 
 **Rules:** 29
+
+---
+
+## F74. An instrument that measures a different observable than the claim is about, and returns a plausible answer
+
+The class. Three shapes of it are already recorded separately; this is what they
+have in common, and why the family is worth a number of its own: **in every case
+the number was correct and the sentence built on it was not.** Nothing looks
+wrong at the point of measurement, so nothing prompts a re-measurement.
+
+### Instance 1 — a level read as an event (see F70, three incidents)
+
+A harness sampled a level once per cycle and reported on an event. It missed a
+narrow pulse, so a recorded reference vector was itself wrong; later, on another
+port, it caught a level asserted for the whole of an in-flight walk and called it
+retirement, recording every instruction fetch as an access fault at cycle 0. The
+instrument reported on "did this happen"; it measured "is this high now".
+
+### Instance 2 — an impossibility claim, which is the expensive member
+
+`d_ca03`'s T9 was written to say the instruction TLB's pinned capacity **could
+not be established behaviourally against this anchor**. The evidence was a probe
+filling n distinct pages and replaying them: the data TLB retained 16, the
+instruction TLB retained one. Since the replacement policy is explicitly free,
+that looked like proof no residency test could exist. It was accepted and written
+into the specification as a permanent limitation, and the storage budget it was
+meant to enforce was downgraded to "priced, not enforced".
+
+It was wrong. The probe filled COLD. The anchor's replacement tree advances only
+on `lu_hit & lu_access` (`cva6_tlb.sv:436`), so a cold fill puts every install in
+the same entry — the probe was measuring the replacement policy, not the
+capacity. Re-touch each page after installing it and the reference retains all
+16, with 17 pages thrashing it to 15:
+
+```
+              n:   1   2   4   8  16  17
+cold fill,  instr: 1   0   0   0   0   0
+hit-interleaved:   1   2   4   8  16  15
+```
+
+A control with a one-entry instruction TLB then fails the resulting check on that
+check alone, zero per-step failures. The capacity was enforceable all along.
+
+**Why this member is worse than a false negative.** A false negative gets
+retested — someone tries the case again, a second implementation disagrees, a
+control fires. **An impossibility claim closes the question.** It converts into a
+specification clause — "not behaviourally checkable", "priced rather than
+enforced" — and clauses do not get retested, they get read and believed. This one
+was two steps from shipping as a permanent hole in a pinned budget, and what
+reopened it was not a review of the claim but an unrelated question about what
+the anchor's replacement policy actually does.
+
+### Instance 3 — the gate caught itself, four times
+
+The static scanner written to find unvaried inputs across the repository was
+wrong four separate times, each time the same class, and **each time it
+under-reported** — the dangerous direction for a gate.
+
+1. It concluded `satp_ppn` was assigned because a COMMENT read
+   `// root @0x1000 (satp_ppn=1)`. Matching source text, reporting on
+   assignments.
+2. It skipped every line beginning with `assign`, an exclusion added on purpose
+   to keep `wire x = <expr>` out of the output. That silently reclassified every
+   REGISTERED RESPONDER as undriven, and produced a false accusation against
+   another agent's task: a read-response path driven by
+   `assign m_rvalid = m_rvalid_q;` off a clocked queue was reported as never
+   driven. Two other agents refuted it independently, one by reading the block
+   and one by pointing at three mutants on that path that are killed and could
+   not be reachable if no response ever returned.
+3. Repaired, it then asked "is this signal assigned" rather than "how many
+   DISTINCT values does it take" — so a ready signal assigned exactly once, and
+   always to 1, cleared the check. That is the variation-not-assignment defect
+   of F72, inside the instrument written to find it, after that finding was
+   written.
+4. Repaired again, it compared literals as TEXT: a declaration saying `1` and a
+   continuous assign saying `1'b1` are two strings and one value, and the signal
+   cleared a third time.
+
+Four defects, one class. That is the most direct evidence available that this is
+a default failure mode rather than a lapse: the tool was built by someone who had
+just written the finding, while writing it. What settled each one was
+cross-checking the static scan against a RUNTIME MONITOR that observes value
+changes rather than source text; the two now agree on 8 of 8 signals, and that
+agreement is the only reason either is quoted.
+
+### Instance 4 — an observer's sampling phase (contributed by the agent who hit it)
+
+Measuring a clock divider, a probe sampled the generated clock at the NEGEDGE of
+the input clock. That aliases the pass-through case TOTALLY, not partially: when
+`clk_o` is `clk_i` it is low at every negedge, so pass-through reports ZERO
+rising edges -- not fewer, zero. The probe said "no output clock" for exactly the
+two divisor settings that pass through.
+
+**It also inverted a measurement it did not suppress**, reporting odd-divisor
+duty as 66% where it is 33%, high and low swapped. That is the worse half, and
+the distinction is worth keeping: a suppressed measurement looks like a bug and
+invites a recheck, while an INVERTED one looks like data and gets used.
+
+**What caught it was that the number was implausible** -- a clock divider
+reporting no clock at its two most common settings -- and not any check. That is
+the honest answer to "what would have caught this", and it belongs in the record
+rather than a tidier one, because it means nothing in the apparatus was watching.
+
+Same class, different medium: the instrument reported on its own sampling phase
+and the claim was about the signal.
+
+### Instance 5 — a coverage map that measured its own labels
+
+Checking one of the claims above, an agent built a clause-coverage map by
+extracting clause IDs from the `fail()` strings in a reference model. It reported
+ten clauses as having neither stimulus nor a mutant. **Four of those were wrong.**
+Three clauses about burst types are driven -- one phase issues WRAP and multi-beat
+FIXED, then single-beat FIXED -- but their failures are attributed under a
+different clause's label, because that other clause is the one whose text spells
+out what the failing condition means. Another group runs under one phase and
+reports under an unrelated label.
+
+The map measured WHICH CLAUSE IDS APPEAR IN `fail()` STRINGS, and was read as
+WHICH CLAUSES ARE EXERCISED. The label names the clause the author chose to cite,
+not the clause the stimulus reaches. The real uncovered count was three, not ten
+-- and it under-reported coverage, which is the same direction as all four
+scanner defects above, though for a gate over-reporting a gap is the safer
+direction to be wrong in.
+
+**Generalise it:** a `fail()`-label scan is a LOWER BOUND on coverage and never a
+measurement of it.
+
+Worth recording alongside the outcome, because the hedge did work: the two
+response-code signals flagged from the corrected scan as "candidates, not
+findings" turned out to be real and worse than a stimulus gap -- two contract
+clauses on error PROPAGATION that the reference never drives and no mutant is
+keyed on, so a submission cannot be scored on them in either direction. Flagging
+them at low confidence rather than as a finding is what made them cheap to check
+instead of another thing to retract.
+
+### The required practice for impossibility claims
+
+Any claim that something CANNOT be measured must carry three things, and one
+missing them is an untested hypothesis rather than a finding:
+
+1. **The instrument.** What was actually run. "A cold fill of n pages, replayed."
+2. **What that instrument assumes.** Usually invisible, because it is the thing
+   nobody chose — here, that fill order does not matter, which is false for any
+   policy keyed on hits.
+3. **What a different instrument would have to see** for the claim to fail.
+
+Point 3 is load-bearing. Writing "a residency test would have to spread the
+installs across entries, which needs the policy to advance on something this fill
+never produces" makes the hit-interleaved fill obvious in the same sentence that
+states the claim.
+
+**Relation to the F64 family.** F64 is the same error on a query used as
+evidence: an ad-hoc view reported on as though it were the tree. F64 is about
+apparatus decaying; this is about apparatus that was never measuring the right
+thing to begin with.
+
+**Where this recurs.** Anywhere a specification records a limitation rather than
+a requirement — "not checkable", "cannot be isolated", "no way to distinguish".
+Each is a measurement claim wearing a clause's clothes.
+
+**Rules:** 31
+
+---
+
+## F75. A check that cannot fire, and a flag that cannot be false
+
+Two shapes of the same defect, both found in `d_ca03`'s own scoring testbench
+after it had been run hundreds of times and used to validate seven negative
+controls, a reference and a second source.
+
+### The counter nothing increments
+
+The contract forbids the unit from ever writing a page table entry, and states
+it twice -- once normatively, once as a measured result. The testbench appears to
+check it:
+
+```
+tb/sv39_mmu_harness.svh:63     int unsigned wr_attempts = 0;
+tb/sv39_mmu_tb.sv:123          if (wr_attempts != 0) begin ... errs++; end
+```
+
+Those are the only two occurrences in the task. **Nothing increments it.** The
+condition is permanently false, so the clause has been reporting PASS on a
+property it never tested, in every run, for every design. A submission that wrote
+page table entries on every walk would have been scored clean on that clause.
+
+The failure is not that the check is weak. It is that the check is *shaped
+exactly like a real one* -- a counter, a comparison, an error increment, a
+message -- and a reader confirming "is this property checked?" finds all four and
+stops.
+
+### The flags that are true by construction
+
+Four coverage floors are set from the SCHEDULE rather than from an outcome:
+
+```
+if (seq[i].ev == EV_BARE_ON)    cov_bare      = 1'b1;
+if (seq[i].ev == EV_FLUSH_TLB)  cov_flush_tlb = 1'b1;
+if (seq[i].ev == EV_FLUSH_MID)  cov_flush_mid = 1'b1;
+```
+
+`seq` is built by the testbench itself, so these assert that a step the rig just
+constructed exists in the array the rig just constructed. They cannot be false.
+The remaining eight floors are tallied from the RECORDED REFERENCE OUTCOME --
+`r.valid`, `r.exc_valid`, `last_acc` -- and are genuine evidence; the four
+schedule-derived ones are a tautology wearing a floor's clothes, and they sat in
+the same list, printed in the same block, indistinguishable at a glance.
+
+### Why this is the write-side of an existing family
+
+F63 and F64 are the read-side: an instrument that reports on
+something other than what it was asked about. This is the write-side and the
+construction-side -- an instrument that cannot report at all, or can only report
+one answer. All three share the property that makes them expensive: **the output
+is indistinguishable from success.** A dead check and a passing check print the
+same thing.
+
+It is also the mirror of F72. There, stimulus never reached a clause; here,
+a clause never reached its stimulus. Both end with a verdict asserting more than
+the run established.
+
+### The check
+
+Any counter or flag that feeds a verdict must be shown to reach **both** states
+against a known input -- the failing state as well as the passing one -- before
+the verdict it feeds is trusted. For an absence-shaped property, that means
+constructing the presence and watching the check fire; a control that makes it
+fire is part of the check, not an optional extra. And a coverage flag must derive
+from a recorded outcome, never from the schedule that produced the stimulus: if
+the flag can be evaluated without running the design, it is not coverage.
+
+**Where this recurs.** Every absence-shaped assertion -- "never writes", "no
+deadlock", "no false assertion", "issues no read" -- and every coverage floor
+computed from the stimulus description rather than the result.
+
+**Rules:** 32
 
