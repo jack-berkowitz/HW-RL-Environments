@@ -1,11 +1,36 @@
 // ===========================================================================
-//  atop_filter_tb -- specification-driven testbench for atop_filter
+// atop_filter_tb.sv -- specification-driven testbench for atop_filter
 //
-//  Checks C1, C2, P1-P4, F1-F5, W1-W5, X1-X4.  Deliberately blind to every
-//  item of section L: the order of a manufactured B against its R beats, the
-//  values on rdata/ruser/buser of a manufactured response, whether any ready
-//  is registered, whether a later AW is stalled behind a filtered write, and
-//  the latency of anything.
+// Everything is decided by a model driven from OBSERVED handshakes, never from
+// what the stimulus intended: the slave side is observed to build expectations,
+// the master side is checked against them, and manufactured responses are
+// attributed by id (F4) rather than by arrival order.
+//
+// Checks:  C1/C2 classification (bits [5:4] only; read response on bit [5])
+//          P1  non-atomic AW forwarded with every field unmodified
+//          P2  W beats forwarded unmodified and in order, wlast on same beat
+//          P3  AR forwarded unmodified, master R beats returned unmodified
+//          P4  master B returned unmodified (id, resp, user)
+//          F1  atomic AW never forwarded; m_awatop_o zero while m_awvalid_o
+//          F2  W beats of a filtered write consumed, never forwarded
+//          F3  exactly one B per filtered write, SLVERR, correct id
+//          F4  exactly awlen+1 R beats, SLVERR, correct id, rlast on the last
+//          F5  no R beats for a filtered write with awatop[5] == 0
+//          W2  downstream write debt never exceeds 4
+//          W3  debt below the bound does not stall a non-atomic AW
+//          W4  debt falls on a completed W burst, not on a B response
+//          W5  a filtered write does not consume bound capacity
+//          X1  no output valid asserted while rst_ni is low
+//          X2  nothing owed after reset
+//          X3  valid held with a stable payload until ready
+//          X4  the 64-cycle liveness bounds
+//
+// Deliberately NOT checked (latitude):
+//          L1  B before R, R before B, or interleaved -- attribution is by id
+//          L2  s_rdata_o / s_ruser_o / s_buser_o on a manufactured response
+//          L3  whether any ready is combinational or registered
+//          L4  whether a later AW is stalled behind a filtered write
+//          L5  the latency of a manufactured response
 // ===========================================================================
 module atop_filter_tb;
 
@@ -110,8 +135,8 @@ module atop_filter_tb;
   logic                m_arlock;
   logic [3:0]          m_arcache;
   logic [2:0]          m_arprot;
-  logic [3:0]          m_arqos;
   logic [3:0]          m_arregion;
+  logic [3:0]          m_arqos;
   logic    m_aruser;
   logic                m_arvalid;
   logic                m_arready;
@@ -217,6 +242,57 @@ module atop_filter_tb;
     .m_rvalid_i(m_rvalid),
     .m_rready_o(m_rready));
 
+  // ---- upstream: offering requests to the design ---------------------------
+  task automatic bfm_aw(input logic [3:0] id, input logic [31:0] addr,
+                        input logic [7:0] len, input logic [5:0] atop,
+                        input int timeout, output bit accepted);
+    int t;
+    @(negedge clk);
+    s_awid = id; s_awaddr = addr; s_awlen = len; s_awatop = atop;
+    s_awsize = 3'd2; s_awburst = 2'd1; s_awlock = 1'b0; s_awcache = 4'd0;
+    s_awprot = 3'd0; s_awqos = 4'd0; s_awregion = 4'd0; s_awuser = 1'b0;
+    s_awvalid = 1'b1;
+    accepted = 1'b0;
+    for (t = 0; t < timeout; t++) begin
+      @(posedge clk);
+      if (s_awready) begin accepted = 1'b1; break; end
+    end
+    @(negedge clk) s_awvalid = 1'b0;
+  endtask
+
+  task automatic bfm_w(input logic [31:0] data, input logic [3:0] strb,
+                       input bit last, input int timeout, output bit accepted);
+    int t;
+    @(negedge clk);
+    s_wdata = data; s_wstrb = strb; s_wlast = last; s_wuser = 1'b0;
+    s_wvalid = 1'b1;
+    accepted = 1'b0;
+    for (t = 0; t < timeout; t++) begin
+      @(posedge clk);
+      if (s_wready) begin accepted = 1'b1; break; end
+    end
+    @(negedge clk) s_wvalid = 1'b0;
+  endtask
+
+  task automatic bfm_ar(input logic [3:0] id, input logic [31:0] addr,
+                        input logic [7:0] len, input int timeout, output bit accepted);
+    int t;
+    @(negedge clk);
+    s_arid = id; s_araddr = addr; s_arlen = len;
+    s_arsize = 3'd2; s_arburst = 2'd1; s_arlock = 1'b0; s_arcache = 4'd0;
+    s_arprot = 3'd0; s_arqos = 4'd0; s_arregion = 4'd0; s_aruser = 1'b0;
+    s_arvalid = 1'b1;
+    accepted = 1'b0;
+    for (t = 0; t < timeout; t++) begin
+      @(posedge clk);
+      if (s_arready) begin accepted = 1'b1; break; end
+    end
+    @(negedge clk) s_arvalid = 1'b0;
+  endtask
+
+  task automatic bfm_b_ready(input bit v); @(negedge clk); s_bready = v; endtask
+  task automatic bfm_r_ready(input bit v); @(negedge clk); s_rready = v; endtask
+
   // ---- downstream: this plumbing is the SUBORDINATE ------------------------
   int bfm_b_lag = 0;
   task automatic bfm_dn_b_lag(input int cycles); bfm_b_lag = cycles; endtask
@@ -244,6 +320,7 @@ module atop_filter_tb;
       end
     end
   end
+  /* verilator lint_off WIDTHTRUNC */
   always_comb begin
     m_bvalid = (bfm_bq_id.size() > 0) && (bfm_cycle >= bfm_bq_t[0]);
     m_bid    = 4'(bfm_bq_id.size() ? bfm_bq_id[0] : 0);
@@ -256,6 +333,7 @@ module atop_filter_tb;
     m_ruser  = 1'b0;
     m_rlast  = (bfm_rq_id.size() > 0) && (bfm_rq_n[0] <= 1);
   end
+  /* verilator lint_on WIDTHTRUNC */
 
   // ---- idle the upstream request signals at time zero ----------------------
   initial begin
@@ -278,25 +356,39 @@ module atop_filter_tb;
   end
 
   // =========================================================================
-  //  MY CODE
+  // VERDICT
   // =========================================================================
-  //
-  //  Nothing here is identified by matching a payload against a payload.
-  //  Every transaction gets a unique address and, more importantly, the two
-  //  sources that can appear on the slave B and R channels are kept apart by
-  //  construction: ordinary writes and reads use IDs 0..7, filtered atomic
-  //  writes use IDs 8..15.  So a response is attributed by which bookkeeping
-  //  record is outstanding for its ID, never by inspecting whether its RESP
-  //  happens to look like SLVERR.
-  //
-  //  W beats are tied to their AW by AXI's own rule -- W bursts follow AW
-  //  order -- and the driver below never offers a W beat before the AW it
-  //  belongs to has been accepted, so that association is never ambiguous.
-  // -------------------------------------------------------------------------
+  bit    verdict_done = 1'b0;
+  string phase_name   = "startup";
+  int    phase_cnt    = 0;
 
-  localparam int MAX_WRITE_TXNS = 4;
-  localparam int MAX_ERR        = 30;
+  task automatic tb_fail(input string clause_id, input string detail);
+    if (!verdict_done) begin
+      verdict_done = 1'b1;
+      $display("------------------------------------------------------------");
+      $display("  time    : %0t  (cycle %0d)", $time, bfm_cycle);
+      $display("  phase   : %s", phase_name);
+      $display("  clause  : %s", clause_id);
+      $display("  detail  : %s", detail);
+      $display("------------------------------------------------------------");
+      $display("RESULT: FAIL");
+    end
+    $finish;
+  endtask
 
+  task automatic set_phase(input string nm);
+    phase_name = nm;
+    phase_cnt  = phase_cnt + 1;
+  endtask
+
+  // =========================================================================
+  // MODEL
+  // =========================================================================
+
+  // a write whose AW has been accepted upstream but whose W burst is unfinished
+  typedef struct packed { logic filt; logic [3:0] id; } wpend_t;
+
+  // the AW that must appear, unmodified, on the master port (P1)
   typedef struct packed {
     logic [3:0]  id;
     logic [31:0] addr;
@@ -308,753 +400,691 @@ module atop_filter_tb;
     logic [2:0]  prot;
     logic [3:0]  qos;
     logic [3:0]  region;
-    logic [5:0]  atop;
     logic        user;
-  } awr_t;
-
-  typedef struct packed {
-    logic [3:0]  id;
-    logic [31:0] addr;
-    logic [7:0]  len;
-    logic [2:0]  size;
-    logic [1:0]  burst;
-    logic        lock;
-    logic [3:0]  cache;
-    logic [2:0]  prot;
-    logic [3:0]  qos;
-    logic [3:0]  region;
-    logic        user;
-  } arr_t;
+  } awrec_t;
 
   typedef struct packed {
     logic [31:0] data;
     logic [3:0]  strb;
     logic        last;
     logic        user;
-    logic [15:0] seq_no;
-  } wbt_t;
+  } wrec_t;
 
-  // ---- what the stimulus asks the drivers to present ----------------------
-  awr_t awq [$];
-  wbt_t wq  [$];
-  arr_t arq [$];
+  typedef struct packed { logic [3:0] id; logic manuf; }                 brec_t;
+  typedef struct packed { logic [3:0] id; logic [8:0] remain; }          rrec_t;
+  typedef struct packed {
+    logic [3:0]  id;
+    logic [1:0]  resp;
+    logic        user;
+    logic [31:0] earliest;   // cycle before which the subordinate cannot answer
+  } mbrec_t;
+  typedef struct packed {
+    logic [3:0]  id;
+    logic [31:0] data;
+    logic [1:0]  resp;
+    logic        last;
+  } mrrec_t;
 
-  // ---- what the design is expected to produce -----------------------------
-  awr_t exp_maw [$];                 // forwarded AWs, in order
-  wbt_t exp_mw  [$];                 // forwarded W beats, in order
-  arr_t exp_mar [$];                 // forwarded ARs, in order
-  logic [6:0]  fb_q [$];             // {id,resp,user} seen on m_b, owed upstream
-  logic [39:0] fr_q [$];             // {id,data,resp,last,user} seen on m_r
+  wpend_t wpend_q  [$];   // writes in AW order, for W-beat routing
+  awrec_t exp_maw_q[$];   // AWs that must be forwarded, in order
+  wrec_t  exp_mw_q [$];   // W beats that must be forwarded, in order
+  awrec_t exp_mar_q[$];   // ARs that must be forwarded, in order
+  brec_t  exp_b_q  [$];   // B responses owed upstream
+  rrec_t  exp_r_q  [$];   // manufactured R bursts owed upstream, by id
+  mbrec_t mb_q     [$];   // B responses taken from the subordinate
+  mrrec_t mr_q     [$];   // R beats taken from the subordinate
 
-  // ---- writes accepted upstream, in AW order, W burst not yet finished ----
-  //      {atom, owes_r, id[3:0], len[7:0]}
-  logic [13:0] wo_q [$];
+  int debt = 0;           // W1, computed from master-port handshakes only
 
-  // ---- filtered writes awaiting their manufactured responses --------------
-  int pend_id    [$];
-  int pend_rleft [$];
-  int pend_bpend [$];
-  int pend_t0    [$];
-  int pend_clean [$];
-
-  // ---- counters -----------------------------------------------------------
-  int err_cnt    = 0;
-  int debt       = 0;      // W1: master-port AW handshakes - master-port WLAST
-  int aw_acc_cnt = 0;
-  int n_filtered = 0;
-  int n_forward  = 0;
-  int n_reads    = 0;
-  bit sb_en      = 1'b1;
-  bit x1_en      = 1'b0;
-  bit x2_en      = 1'b0;
-  int rst_hot    = 0;
-
-  // ---- registered handshake flags, for the drivers ------------------------
-  logic aw_acc, w_acc, ar_acc;
-
-  // ---- previous-cycle samples, for X3 -------------------------------------
-  bit          p_ok = 1'b0;
-  logic        p_sbv, p_sbr, p_srv, p_srr, p_mawv, p_mawr, p_mwv, p_mwr, p_marv, p_marr;
-  logic [6:0]  p_sb;
-  logic [39:0] p_sr;
-  awr_t        p_maw;
-  arr_t        p_mar;
-  logic [37:0] p_mw;
-
-
-  // -------------------------------------------------------------------------
-  //  Pre-edge snapshot.
-  //
-  //  A latch that is transparent while the clock is low and closed while it is
-  //  high, so every q_ below holds the value its signal had immediately before
-  //  the rising edge -- which is the value the design itself used.  The monitor
-  //  reads only these copies.
-  //
-  //  Reading the live signals at the rising edge instead is not safe here: a
-  //  clocked block that updates state with blocking assignments -- the
-  //  subordinate model above does exactly that with its queues -- feeds
-  //  combinational outputs that then change part-way through the same
-  //  timestep, and a monitor scheduled after it sees handshakes that never
-  //  happened.  A nonblocking capture at the falling edge does not fix it
-  //  either: a nonblocking assignment evaluates its right-hand side when the
-  //  statement runs, so it would race the drivers on that same edge.
-  // -------------------------------------------------------------------------
-  bit   q_rst;
-  logic q_sawv, q_sawr, q_swv, q_swr, q_sarv, q_sarr, q_sbv, q_sbr, q_srv, q_srr;
-  logic q_mawv, q_mawr, q_mwv, q_mwr, q_marv, q_marr, q_mbv, q_mbr, q_mrv, q_mrr;
-  awr_t q_saw, q_maw;
-  arr_t q_sar, q_mar;
-  logic [37:0] q_sw, q_mw;
-  logic [6:0]  q_sb, q_mb;
-  logic [39:0] q_sr, q_mr;
-
-  always_latch if (!clk) begin
-    q_rst   = rst_n;
-    q_sawv  = s_awvalid; q_sawr  = s_awready;
-    q_saw   = {s_awid, s_awaddr, s_awlen, s_awsize, s_awburst, s_awlock,
-               s_awcache, s_awprot, s_awqos, s_awregion, s_awatop, s_awuser};
-    q_swv   = s_wvalid;  q_swr  = s_wready;
-    q_sw    = {s_wdata, s_wstrb, s_wlast, s_wuser};
-    q_sarv  = s_arvalid; q_sarr  = s_arready;
-    q_sar   = {s_arid, s_araddr, s_arlen, s_arsize, s_arburst, s_arlock,
-               s_arcache, s_arprot, s_arqos, s_arregion, s_aruser};
-    q_sbv   = s_bvalid;  q_sbr  = s_bready;
-    q_sb    = {s_bid, s_bresp, s_buser};
-    q_srv   = s_rvalid;  q_srr  = s_rready;
-    q_sr    = {s_rid, s_rdata, s_rresp, s_rlast, s_ruser};
-    q_mawv  = m_awvalid; q_mawr  = m_awready;
-    q_maw   = {m_awid, m_awaddr, m_awlen, m_awsize, m_awburst, m_awlock,
-               m_awcache, m_awprot, m_awqos, m_awregion, m_awatop, m_awuser};
-    q_mwv   = m_wvalid;  q_mwr  = m_wready;
-    q_mw    = {m_wdata, m_wstrb, m_wlast, m_wuser};
-    q_marv  = m_arvalid; q_marr  = m_arready;
-    q_mar   = {m_arid, m_araddr, m_arlen, m_arsize, m_arburst, m_arlock,
-               m_arcache, m_arprot, m_arqos, m_arregion, m_aruser};
-    q_mbv   = m_bvalid;  q_mbr  = m_bready;
-    q_mb    = {m_bid, m_bresp, m_buser};
-    q_mrv   = m_rvalid;  q_mrr  = m_rready;
-    q_mr    = {m_rid, m_rdata, m_rresp, m_rlast, m_ruser};
-  end
-
-  // -------------------------------------------------------------------------
-  task automatic flag(input string cl, input string msg);
-    err_cnt = err_cnt + 1;
-    if (err_cnt <= MAX_ERR)
-      $display("[cycle %0d] VIOLATION of clause %s: %s", bfm_cycle, cl, msg);
-    if (err_cnt == MAX_ERR) begin
-      $display("(too many violations to be worth listing; stopping here)");
-      $display("RESULT: FAIL");
-      $finish;
-    end
-  endtask
-
-  // -------------------------------------------------------------------------
-  //  Upstream drivers.  Everything is presented at the falling edge and held
-  //  unchanged until the handshake is seen at a rising edge -- the source
-  //  obligation X3 places on me.
-  // -------------------------------------------------------------------------
-  always @(posedge clk) begin
-    aw_acc <= q_rst && q_sawv && q_sawr;
-    w_acc  <= q_rst && q_swv  && q_swr;
-    ar_acc <= q_rst && q_sarv && q_sarr;
-  end
-
-  always @(negedge clk) begin
-    if (!rst_n) begin
-      s_awvalid = 1'b0;
-      s_wvalid  = 1'b0;
-      s_arvalid = 1'b0;
-    end else begin
-      if (aw_acc) begin void'(awq.pop_front()); s_awvalid = 1'b0; end
-      if (!s_awvalid && (awq.size() > 0)) begin
-        s_awid     = awq[0].id;     s_awaddr = awq[0].addr;
-        s_awlen    = awq[0].len;    s_awsize = awq[0].size;
-        s_awburst  = awq[0].burst;  s_awlock = awq[0].lock;
-        s_awcache  = awq[0].cache;  s_awprot = awq[0].prot;
-        s_awqos    = awq[0].qos;    s_awregion = awq[0].region;
-        s_awatop   = awq[0].atop;   s_awuser = awq[0].user;
-        s_awvalid  = 1'b1;
-      end
-
-      if (w_acc) begin void'(wq.pop_front()); s_wvalid = 1'b0; end
-      // A W beat is never offered before the AW it belongs to has been taken,
-      // so the beat's owner is always the head of wo_q.
-      if (!s_wvalid && (wq.size() > 0) && (int'(wq[0].seq_no) < aw_acc_cnt)) begin
-        s_wdata = wq[0].data; s_wstrb = wq[0].strb;
-        s_wlast = wq[0].last; s_wuser = wq[0].user;
-        s_wvalid = 1'b1;
-      end
-
-      if (ar_acc) begin void'(arq.pop_front()); s_arvalid = 1'b0; end
-      if (!s_arvalid && (arq.size() > 0)) begin
-        s_arid    = arq[0].id;    s_araddr = arq[0].addr;
-        s_arlen   = arq[0].len;   s_arsize = arq[0].size;
-        s_arburst = arq[0].burst; s_arlock = arq[0].lock;
-        s_arcache = arq[0].cache; s_arprot = arq[0].prot;
-        s_arqos   = arq[0].qos;   s_arregion = arq[0].region;
-        s_aruser  = arq[0].user;
-        s_arvalid = 1'b1;
-      end
-    end
-  end
-
-  // ---- response readiness, driven from one process, at the falling edge ---
-  int rdy_mode = 0;
-  always @(negedge clk) begin
-    case (rdy_mode)
-      1: begin
-        s_bready = ($urandom_range(0, 2) != 0);
-        s_rready = ($urandom_range(0, 2) != 0);
-      end
-      2: begin
-        s_bready = ((bfm_cycle % 7) < 2);
-        s_rready = ((bfm_cycle % 5) < 2);
-      end
-      3: begin s_bready = 1'b0; s_rready = 1'b0; end
-      default: begin s_bready = 1'b1; s_rready = 1'b1; end
-    endcase
-  end
-
-  // -------------------------------------------------------------------------
-  //  Field comparisons
-  // -------------------------------------------------------------------------
-  task automatic cmp_maw(input awr_t e);
-    if      (m_awid     !== e.id)     flag("P1", $sformatf("forwarded AW addr %08h: awid %0d became %0d",     e.addr, e.id, m_awid));
-    else if (m_awaddr   !== e.addr)   flag("P1", $sformatf("forwarded AW addr %08h: awaddr became %08h",      e.addr, m_awaddr));
-    else if (m_awlen    !== e.len)    flag("P1", $sformatf("forwarded AW addr %08h: awlen %0d became %0d",    e.addr, e.len, m_awlen));
-    else if (m_awsize   !== e.size)   flag("P1", $sformatf("forwarded AW addr %08h: awsize changed",          e.addr));
-    else if (m_awburst  !== e.burst)  flag("P1", $sformatf("forwarded AW addr %08h: awburst changed",         e.addr));
-    else if (m_awlock   !== e.lock)   flag("P1", $sformatf("forwarded AW addr %08h: awlock changed",          e.addr));
-    else if (m_awcache  !== e.cache)  flag("P1", $sformatf("forwarded AW addr %08h: awcache changed",         e.addr));
-    else if (m_awprot   !== e.prot)   flag("P1", $sformatf("forwarded AW addr %08h: awprot changed",          e.addr));
-    else if (m_awqos    !== e.qos)    flag("P1", $sformatf("forwarded AW addr %08h: awqos changed",           e.addr));
-    else if (m_awregion !== e.region) flag("P1", $sformatf("forwarded AW addr %08h: awregion changed",        e.addr));
-    else if (m_awuser   !== e.user)   flag("P1", $sformatf("forwarded AW addr %08h: awuser changed",          e.addr));
-  endtask
-
-  task automatic cmp_mar(input arr_t e);
-    if      (m_arid     !== e.id)     flag("P3", $sformatf("forwarded AR addr %08h: arid %0d became %0d",  e.addr, e.id, m_arid));
-    else if (m_araddr   !== e.addr)   flag("P3", $sformatf("forwarded AR addr %08h: araddr became %08h",   e.addr, m_araddr));
-    else if (m_arlen    !== e.len)    flag("P3", $sformatf("forwarded AR addr %08h: arlen %0d became %0d", e.addr, e.len, m_arlen));
-    else if (m_arsize   !== e.size)   flag("P3", $sformatf("forwarded AR addr %08h: arsize changed",       e.addr));
-    else if (m_arburst  !== e.burst)  flag("P3", $sformatf("forwarded AR addr %08h: arburst changed",      e.addr));
-    else if (m_arlock   !== e.lock)   flag("P3", $sformatf("forwarded AR addr %08h: arlock changed",       e.addr));
-    else if (m_arcache  !== e.cache)  flag("P3", $sformatf("forwarded AR addr %08h: arcache changed",      e.addr));
-    else if (m_arprot   !== e.prot)   flag("P3", $sformatf("forwarded AR addr %08h: arprot changed",       e.addr));
-    else if (m_arqos    !== e.qos)    flag("P3", $sformatf("forwarded AR addr %08h: arqos changed",        e.addr));
-    else if (m_arregion !== e.region) flag("P3", $sformatf("forwarded AR addr %08h: arregion changed",     e.addr));
-    else if (m_aruser   !== e.user)   flag("P3", $sformatf("forwarded AR addr %08h: aruser changed",       e.addr));
-  endtask
-
-  // -------------------------------------------------------------------------
-  //  The monitor.  It reads only the pre-edge snapshot above, so what it sees
-  //  is exactly what the design saw on that rising edge.
-  // -------------------------------------------------------------------------
-  always @(posedge clk) begin
-    automatic awr_t eaw;
-    automatic arr_t ear;
-    automatic wbt_t ew;
-    automatic logic [13:0] wo;
-    automatic int nd, i, k, hit;
-    automatic logic [6:0]  fb;
-    automatic logic [39:0] fr;
-
-    if (!q_rst) begin
-      // ---- X1 -----------------------------------------------------------
-      // Counted rather than edge-triggered, so a single settling cycle at the
-      // instant reset is pulled is not mistaken for a design that ignores it.
-      if (q_mawv || q_mwv || q_marv || q_sbv || q_srv) rst_hot = rst_hot + 1;
-      else                                             rst_hot = 0;
-      if (x1_en && (rst_hot == 2))
-        flag("X1", "an output valid stays asserted while rst_ni is low");
-      p_ok = 1'b0;
-    end else begin
-      rst_hot = 0;
-
-      // ---- X3: no output valid may be withdrawn or altered before ready ---
-      if (p_ok) begin
-        if (p_sbv && !p_sbr) begin
-          if (!q_sbv)             flag("X3", "s_bvalid_o was withdrawn before s_bready_i was seen");
-          else if (q_sb !== p_sb) flag("X3", "the B payload changed while the response was still being offered");
-        end
-        if (p_srv && !p_srr) begin
-          if (!q_srv)             flag("X3", "s_rvalid_o was withdrawn before s_rready_i was seen");
-          else if (q_sr !== p_sr) flag("X3", "the R payload changed while the beat was still being offered");
-        end
-        if (p_mawv && !p_mawr) begin
-          if (!q_mawv)              flag("X3", "m_awvalid_o was withdrawn before m_awready_i was seen");
-          else if (q_maw !== p_maw) flag("X3", "the AW payload changed while the request was still being offered");
-        end
-        if (p_mwv && !p_mwr) begin
-          if (!q_mwv)             flag("X3", "m_wvalid_o was withdrawn before m_wready_i was seen");
-          else if (q_mw !== p_mw) flag("X3", "the W payload changed while the beat was still being offered");
-        end
-        if (p_marv && !p_marr) begin
-          if (!q_marv)              flag("X3", "m_arvalid_o was withdrawn before m_arready_i was seen");
-          else if (q_mar !== p_mar) flag("X3", "the AR payload changed while the request was still being offered");
-        end
-      end
-
-      // ---- X2: nothing owed after reset ----------------------------------
-      if (x2_en && (q_mawv || q_mwv || q_marv || q_sbv || q_srv))
-        flag("X2", "the unit drives a valid after reset although it was given nothing to do since");
-
-      // ---- F1: atop is cleared on everything that is forwarded -----------
-      if (q_mawv && (q_maw[6:1] !== 6'b000000))
-        flag("F1", $sformatf("m_awatop_o is %06b while m_awvalid_o is asserted; it must be zero", q_maw[6:1]));
-
-      // ---- W1/W2: the downstream write debt ------------------------------
-      nd = debt + ((q_mawv && q_mawr) ? 1 : 0) - ((q_mwv && q_mwr && q_mw[1]) ? 1 : 0);
-      if (nd > MAX_WRITE_TXNS)
-        flag("W2", $sformatf(
-          "downstream write debt reached %0d; MAX_WRITE_TXNS is %0d", nd, MAX_WRITE_TXNS));
-      debt = nd;
-
-      if (q_sawv && q_sawr) aw_acc_cnt = aw_acc_cnt + 1;
-
-      if (sb_en) begin
-        // ---- slave AW accepted -------------------------------------------
-        if (q_sawv && q_sawr) begin
-          wo = {(q_saw[6:5] != 2'b00), q_saw[6], q_saw[71:68], q_saw[35:28]};   // C1, C2
-          wo_q.push_back(wo);
-          if (q_saw[6:5] == 2'b00) begin
-            exp_maw.push_back(q_saw);
-            n_forward = n_forward + 1;
-          end else begin
-            n_filtered = n_filtered + 1;
-          end
-        end
-
-        // ---- slave W accepted --------------------------------------------
-        if (q_swv && q_swr) begin
-          if (wo_q.size() == 0) begin
-            flag("TB", "a W beat was accepted before its AW -- testbench bug, not a design fault");
-          end else begin
-            if (!wo_q[0][13]) begin           // forwarded write: expect it downstream
-              ew = {q_sw[37:6], q_sw[5:2], q_sw[1], q_sw[0], 16'd0};
-              exp_mw.push_back(ew);
-            end
-            if (q_sw[1]) begin                // WLAST
-              if (wo_q[0][13]) begin          // F3/F4: this write now owes responses
-                pend_id.push_back(int'(wo_q[0][11:8]));
-                pend_rleft.push_back(wo_q[0][12] ? (int'(wo_q[0][7:0]) + 1) : 0);
-                pend_bpend.push_back(1);
-                pend_t0.push_back(bfm_cycle);
-                pend_clean.push_back((q_sbr && q_srr) ? 1 : 0);
-              end
-              void'(wo_q.pop_front());
-            end
-          end
-        end
-
-        // ---- slave AR accepted -------------------------------------------
-        if (q_sarv && q_sarr) begin
-          exp_mar.push_back(q_sar);
-          n_reads = n_reads + 1;
-        end
-
-        // ---- master AW forwarded ------------------------------------------
-        if (q_mawv && q_mawr) begin
-          // Every AW carries a unique address, so an AW that arrives out of
-          // turn can be told from a corrupted one: if this AW is further down
-          // the expected queue, the ones ahead of it were dropped, and a write
-          // whose awatop[5:4] is 00 must never be dropped (C1).
-          hit = -1;
-          for (i = 0; i < exp_maw.size(); i++)
-            if ((hit < 0) && (exp_maw[i].addr === q_maw[67:36])) hit = i;
-          if (hit < 0) begin
-            flag("F1", $sformatf(
-              "an AW (addr %08h, id %0d) reached the subordinate that was not owed to it: an atomic write was forwarded",
-              q_maw[67:36], q_maw[71:68]));
-          end else if (hit > 0) begin
-            flag("C1", $sformatf(
-              "the AW at addr %08h with awatop %06b was never forwarded, though its awatop[5:4] is 00: only bits [5:4] may make a write atomic",
-              exp_maw[0].addr, exp_maw[0].atop));
-            for (i = 0; i < hit; i++) void'(exp_maw.pop_front());
-            eaw = exp_maw.pop_front();
-            cmp_maw(eaw);
-          end else begin
-            eaw = exp_maw.pop_front();
-            cmp_maw(eaw);
-          end
-        end
-
-        // ---- master W forwarded -------------------------------------------
-        if (q_mwv && q_mwr) begin
-          if (exp_mw.size() == 0)
-            flag("F2", "a W beat reached the subordinate with no forwarded write outstanding: the write data of a filtered write was not absorbed");
-          else begin
-            ew = exp_mw.pop_front();
-            if      (q_mw[37:6] !== ew.data) flag("P2", $sformatf("forwarded W beat: wdata %08h became %08h", ew.data, q_mw[37:6]));
-            else if (q_mw[5:2]  !== ew.strb) flag("P2", $sformatf("forwarded W beat: wstrb %04b became %04b", ew.strb, q_mw[5:2]));
-            else if (q_mw[1]    !== ew.last) flag("P2", $sformatf("forwarded W beat: wlast %0b became %0b, so the burst boundary moved", ew.last, q_mw[1]));
-            else if (q_mw[0]    !== ew.user) flag("P2", "forwarded W beat: wuser changed");
-          end
-        end
-
-        // ---- master AR forwarded ------------------------------------------
-        if (q_marv && q_marr) begin
-          if (exp_mar.size() == 0)
-            flag("P3", $sformatf("an AR (addr %08h) reached the subordinate with no read outstanding", q_mar[61:30]));
-          else begin
-            ear = exp_mar.pop_front();
-            cmp_mar(ear);
-          end
-        end
-
-        // ---- responses arriving from the subordinate ----------------------
-        if (q_mbv && q_mbr) fb_q.push_back(q_mb);
-        if (q_mrv && q_mrr) fr_q.push_back(q_mr);
-
-        // ---- B returned upstream ------------------------------------------
-        if (q_sbv && q_sbr) begin
-          hit = -1;
-          for (i = 0; i < pend_id.size(); i++)
-            if ((hit < 0) && (pend_bpend[i] == 1) && (pend_id[i] == int'(q_sb[6:3]))) hit = i;
-          if (hit >= 0) begin
-            if (q_sb[2:1] !== 2'b10)
-              flag("F3", $sformatf(
-                "the B for filtered write id %0d has bresp %02b; it must be SLVERR (2'b10)", q_sb[6:3], q_sb[2:1]));
-            pend_bpend[hit] = 0;
-          end else begin
-            hit = -1;
-            for (i = 0; i < fb_q.size(); i++)
-              if ((hit < 0) && (fb_q[i][6:3] === q_sb[6:3])) hit = i;
-            if (hit >= 0) begin
-              fb = fb_q[hit];
-              if (q_sb[2:1] !== fb[2:1])
-                flag("P4", $sformatf("B for id %0d: bresp %02b from the subordinate became %02b", q_sb[6:3], fb[2:1], q_sb[2:1]));
-              else if (q_sb[0] !== fb[0])
-                flag("P4", $sformatf("B for id %0d: buser changed", q_sb[6:3]));
-              fb_q.delete(hit);
-            end else begin
-              flag("F3", $sformatf(
-                "a B response with id %0d was returned that nothing was owed: either a filtered write answered more than once, or a response was invented",
-                q_sb[6:3]));
-            end
-          end
-        end
-
-        // ---- R returned upstream ------------------------------------------
-        if (q_srv && q_srr) begin
-          hit = -1;
-          for (i = 0; i < pend_id.size(); i++)
-            if ((hit < 0) && (pend_rleft[i] > 0) && (pend_id[i] == int'(q_sr[39:36]))) hit = i;
-          if (hit >= 0) begin
-            if (q_sr[3:2] !== 2'b10)
-              flag("F4", $sformatf(
-                "a manufactured R beat for filtered write id %0d has rresp %02b; it must be SLVERR (2'b10)", q_sr[39:36], q_sr[3:2]));
-            else if (q_sr[1] !== ((pend_rleft[hit] == 1) ? 1'b1 : 1'b0))
-              flag("F4", $sformatf(
-                "filtered write id %0d: rlast is %0b on the beat with %0d of the burst still to come",
-                q_sr[39:36], q_sr[1], pend_rleft[hit] - 1));
-            pend_rleft[hit] = pend_rleft[hit] - 1;
-          end else begin
-            hit = -1;
-            for (i = 0; i < fr_q.size(); i++)
-              if ((hit < 0) && (fr_q[i][39:36] === q_sr[39:36])) hit = i;
-            if (hit >= 0) begin
-              fr = fr_q[hit];
-              if      (q_sr[35:4] !== fr[35:4]) flag("P3", $sformatf("R beat for id %0d: rdata %08h became %08h", q_sr[39:36], fr[35:4], q_sr[35:4]));
-              else if (q_sr[3:2]  !== fr[3:2])  flag("P3", $sformatf("R beat for id %0d: rresp changed", q_sr[39:36]));
-              else if (q_sr[1]    !== fr[1])    flag("P3", $sformatf("R beat for id %0d: rlast changed, so the read burst boundary moved", q_sr[39:36]));
-              else if (q_sr[0]    !== fr[0])    flag("P3", $sformatf("R beat for id %0d: ruser changed", q_sr[39:36]));
-              fr_q.delete(hit);
-            end else begin
-              flag("F5", $sformatf(
-                "an R beat with id %0d was returned that nothing was owed: a filtered write that owes no read response produced one, or too many beats were produced",
-                q_sr[39:36]));
-            end
-          end
-        end
-
-        // ---- retire finished filtered writes, and time them (X4) ----------
-        for (i = 0; i < pend_id.size(); i++)
-          if (!(q_sbr && q_srr)) pend_clean[i] = 0;
-        k = 0;
-        while (k < pend_id.size()) begin
-          if ((pend_bpend[k] == 0) && (pend_rleft[k] == 0)) begin
-            if ((pend_clean[k] == 1) && ((bfm_cycle - pend_t0[k]) > 64))
-              flag("X4", $sformatf(
-                "the responses for the filtered write with id %0d took %0d cycles after its WLAST, with both readies held high; the bound is 64",
-                pend_id[k], bfm_cycle - pend_t0[k]));
-            pend_id.delete(k); pend_rleft.delete(k); pend_bpend.delete(k);
-            pend_t0.delete(k); pend_clean.delete(k);
-          end else begin
-            k = k + 1;
-          end
-        end
-      end
-
-      // ---- keep this cycle for the next X3 comparison --------------------
-      p_sbv = q_sbv;   p_sbr = q_sbr;   p_sb  = q_sb;
-      p_srv = q_srv;   p_srr = q_srr;   p_sr  = q_sr;
-      p_mawv = q_mawv; p_mawr = q_mawr; p_maw = q_maw;
-      p_mwv = q_mwv;   p_mwr = q_mwr;   p_mw  = q_mw;
-      p_marv = q_marv; p_marr = q_marr; p_mar = q_mar;
-      p_ok = 1'b1;
-    end
-  end
-
-  // =========================================================================
-  //  Stimulus
-  // =========================================================================
-  int next_seq = 0;
-  int next_ar  = 0;
-
-  task automatic gen_aw(input logic [3:0] id, input logic [7:0] len,
-                        input logic [5:0] atop, output int seq_no);
-    awr_t r;
-    r.id     = id;
-    r.addr   = 32'h1000_0000 + (32'(next_seq) << 6);
-    r.len    = len;
-    r.size   = 3'($urandom_range(0, 2));
-    r.burst  = 2'($urandom_range(0, 1));
-    r.lock   = 1'($urandom_range(0, 1));
-    r.cache  = 4'($urandom_range(0, 15));
-    r.prot   = 3'($urandom_range(0, 7));
-    r.qos    = 4'($urandom_range(0, 15));
-    r.region = 4'($urandom_range(0, 15));
-    r.atop   = atop;
-    r.user   = 1'($urandom_range(0, 1));
-    seq_no   = next_seq;
-    next_seq = next_seq + 1;
-    awq.push_back(r);
-  endtask
-
-  task automatic gen_w(input int seq_no, input logic [7:0] len);
-    wbt_t b;
-    int i;
-    for (i = 0; i <= int'(len); i++) begin
-      b.data   = $urandom();
-      b.strb   = 4'($urandom_range(0, 15));
-      b.last   = (i == int'(len));
-      b.user   = 1'($urandom_range(0, 1));
-      b.seq_no = 16'(seq_no);
-      wq.push_back(b);
-    end
-  endtask
-
-  task automatic gen_write(input logic [3:0] id, input logic [7:0] len, input logic [5:0] atop);
-    int seq_no;
-    gen_aw(id, len, atop, seq_no);
-    gen_w(seq_no, len);
-  endtask
-
-  task automatic gen_read(input logic [3:0] id, input logic [7:0] len);
-    arr_t r;
-    r.id     = id;
-    r.addr   = 32'h2000_0000 + (32'(next_ar) << 6);
-    r.len    = len;
-    r.size   = 3'($urandom_range(0, 2));
-    r.burst  = 2'($urandom_range(0, 1));
-    r.lock   = 1'($urandom_range(0, 1));
-    r.cache  = 4'($urandom_range(0, 15));
-    r.prot   = 3'($urandom_range(0, 7));
-    r.qos    = 4'($urandom_range(0, 15));
-    r.region = 4'($urandom_range(0, 15));
-    r.user   = 1'($urandom_range(0, 1));
-    next_ar  = next_ar + 1;
-    arq.push_back(r);
-  endtask
-
-  function automatic bit all_quiet();
-    return (awq.size() == 0) && (wq.size() == 0) && (arq.size() == 0) &&
-           (exp_maw.size() == 0) && (exp_mw.size() == 0) && (exp_mar.size() == 0) &&
-           (fb_q.size() == 0) && (fr_q.size() == 0) &&
-           (wo_q.size() == 0) && (pend_id.size() == 0) &&
-           (bfm_bq_id.size() == 0) && (bfm_rq_id.size() == 0) &&
-           !s_awvalid && !s_wvalid && !s_arvalid;
+  function automatic bit queues_idle();
+    return (wpend_q.size()  == 0) && (exp_maw_q.size() == 0) &&
+           (exp_mw_q.size() == 0) && (exp_mar_q.size() == 0) &&
+           (exp_b_q.size()  == 0) && (exp_r_q.size()   == 0) &&
+           (mb_q.size()     == 0) && (mr_q.size()      == 0);
   endfunction
 
-  task automatic settle(input int max_cycles, input string ctx_id);
-    int t;
-    t = 0;
-    while (t < max_cycles) begin
-      @(posedge clk);
-      t = t + 1;
-      if (all_quiet()) begin
-        repeat (3) @(posedge clk);
-        return;
+  task automatic model_clear();
+    wpend_q.delete(); exp_maw_q.delete(); exp_mw_q.delete(); exp_mar_q.delete();
+    exp_b_q.delete(); exp_r_q.delete(); mb_q.delete(); mr_q.delete();
+    debt = 0;
+  endtask
+
+  // =========================================================================
+  // MONITOR
+  //   order within the edge: slave requests observed, master requests checked,
+  //   master responses captured, slave responses checked -- so that a design
+  //   which is combinational in either direction is handled correctly.
+  // =========================================================================
+  always @(posedge clk) begin
+    automatic wpend_t wp;
+    automatic awrec_t aw, aw2;
+    automatic wrec_t  wr, wr2;
+    automatic brec_t  br;
+    automatic rrec_t  rr;
+    automatic mbrec_t mb;
+    automatic mrrec_t mr;
+    automatic int     idx;
+    automatic int     d_up, d_dn;
+
+    if (!rst_n) begin
+      model_clear();
+    end else begin
+
+      // ---- 1. slave-side requests: build the expectations ----------------
+      if (s_awvalid === 1'b1 && s_awready === 1'b1) begin
+        wp.filt = (s_awatop[5:4] != 2'b00);          // C1
+        wp.id   = s_awid;
+        wpend_q.push_back(wp);
+        br.id = s_awid; br.manuf = wp.filt;
+        exp_b_q.push_back(br);                        // F3 / P4
+        if (wp.filt && s_awatop[5] === 1'b1) begin    // C2 / F4
+          rr.id = s_awid; rr.remain = 9'(s_awlen) + 9'd1;
+          exp_r_q.push_back(rr);
+        end
+        if (!wp.filt) begin
+          aw.id = s_awid; aw.addr = s_awaddr; aw.len = s_awlen; aw.size = s_awsize;
+          aw.burst = s_awburst; aw.lock = s_awlock; aw.cache = s_awcache;
+          aw.prot = s_awprot; aw.qos = s_awqos; aw.region = s_awregion;
+          aw.user = s_awuser;
+          exp_maw_q.push_back(aw);
+        end
+      end
+
+      if (s_wvalid === 1'b1 && s_wready === 1'b1) begin
+        if (wpend_q.size() == 0) begin
+          tb_fail("P2/F2", "a W beat was accepted while no write address was outstanding");
+        end else begin
+          if (wpend_q[0].filt !== 1'b1) begin
+            wr.data = s_wdata; wr.strb = s_wstrb; wr.last = s_wlast; wr.user = s_wuser;
+            exp_mw_q.push_back(wr);
+          end
+          if (s_wlast === 1'b1) void'(wpend_q.pop_front());
+        end
+      end
+
+      if (s_arvalid === 1'b1 && s_arready === 1'b1) begin
+        aw.id = s_arid; aw.addr = s_araddr; aw.len = s_arlen; aw.size = s_arsize;
+        aw.burst = s_arburst; aw.lock = s_arlock; aw.cache = s_arcache;
+        aw.prot = s_arprot; aw.qos = s_arqos; aw.region = s_arregion;
+        aw.user = s_aruser;
+        exp_mar_q.push_back(aw);
+      end
+
+      // ---- 2. master-side requests: check them ---------------------------
+      if (m_awvalid === 1'b1 && m_awatop !== 6'b000000)
+        tb_fail("F1", $sformatf("m_awatop_o = %06b while m_awvalid_o is asserted; it must be zero",
+                                m_awatop));
+
+      d_up = 0; d_dn = 0;
+      if (m_awvalid === 1'b1 && m_awready === 1'b1) begin
+        if (exp_maw_q.size() == 0) begin
+          tb_fail("F1", $sformatf(
+            "an AW (id %0h) was forwarded that the design was not given to forward -- an atomic AW must never reach the master port",
+            m_awid));
+        end else begin
+          aw  = exp_maw_q.pop_front();
+          aw2.id = m_awid; aw2.addr = m_awaddr; aw2.len = m_awlen; aw2.size = m_awsize;
+          aw2.burst = m_awburst; aw2.lock = m_awlock; aw2.cache = m_awcache;
+          aw2.prot = m_awprot; aw2.qos = m_awqos; aw2.region = m_awregion;
+          aw2.user = m_awuser;
+          if (aw2 !== aw)
+            tb_fail("P1/F1", $sformatf(
+              "forwarded AW altered: got id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b ; expected id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b",
+              aw2.id, aw2.addr, aw2.len, aw2.size, aw2.burst, aw2.lock, aw2.cache,
+              aw2.prot, aw2.qos, aw2.region, aw2.user,
+              aw.id, aw.addr, aw.len, aw.size, aw.burst, aw.lock, aw.cache,
+              aw.prot, aw.qos, aw.region, aw.user));
+        end
+        // The subordinate on the master port is fully determined: it accepts
+        // every request and answers it.  Predicting its answers here, instead
+        // of sampling m_bvalid/m_rvalid, keeps the checker clear of the
+        // plumbing's same-timestep queue updates.
+        mb.id = m_awid; mb.resp = 2'b00; mb.user = 1'b0;
+        mb.earliest = 32'(bfm_cycle) + 32'(bfm_b_lag);
+        mb_q.push_back(mb);
+        d_up = 1;
+      end
+
+      if (m_wvalid === 1'b1 && m_wready === 1'b1) begin
+        if (exp_mw_q.size() == 0) begin
+          tb_fail("F2", $sformatf(
+            "a W beat (data %08h) was forwarded that belongs to a filtered write -- it must be consumed instead",
+            m_wdata));
+        end else begin
+          wr = exp_mw_q.pop_front();
+          wr2.data = m_wdata; wr2.strb = m_wstrb; wr2.last = m_wlast; wr2.user = m_wuser;
+          if (wr2 !== wr)
+            tb_fail("P2", $sformatf(
+              "forwarded W beat altered: got data=%08h strb=%04b last=%b user=%b ; expected data=%08h strb=%04b last=%b user=%b",
+              wr2.data, wr2.strb, wr2.last, wr2.user, wr.data, wr.strb, wr.last, wr.user));
+        end
+        if (m_wlast === 1'b1) d_dn = 1;
+      end
+
+      debt = debt + d_up - d_dn;                       // W1
+      if (debt > 4)
+        tb_fail("W2", $sformatf("downstream write debt reached %0d; MAX_WRITE_TXNS is 4", debt));
+
+      if (m_arvalid === 1'b1 && m_arready === 1'b1) begin
+        if (exp_mar_q.size() == 0) begin
+          tb_fail("P3", $sformatf("an AR (id %0h) appeared on the master port that was never offered upstream", m_arid));
+        end else begin
+          aw  = exp_mar_q.pop_front();
+          aw2.id = m_arid; aw2.addr = m_araddr; aw2.len = m_arlen; aw2.size = m_arsize;
+          aw2.burst = m_arburst; aw2.lock = m_arlock; aw2.cache = m_arcache;
+          aw2.prot = m_arprot; aw2.qos = m_arqos; aw2.region = m_arregion;
+          aw2.user = m_aruser;
+          if (aw2 !== aw)
+            tb_fail("P3", $sformatf(
+              "forwarded AR altered: got id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b ; expected id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b",
+              aw2.id, aw2.addr, aw2.len, aw2.size, aw2.burst, aw2.lock, aw2.cache,
+              aw2.prot, aw2.qos, aw2.region, aw2.user,
+              aw.id, aw.addr, aw.len, aw.size, aw.burst, aw.lock, aw.cache,
+              aw.prot, aw.qos, aw.region, aw.user));
+        end
+        for (int k = 0; k <= int'(m_arlen); k++) begin
+          mr.id   = m_arid;
+          mr.data = 32'hFEED_0000 + 32'(int'(m_arlen) + 1 - k);
+          mr.resp = 2'b00;
+          mr.last = (k == int'(m_arlen));
+          mr_q.push_back(mr);
+        end
+      end
+
+      // ---- 3. slave-side responses: check them ---------------------------
+      if (s_bvalid === 1'b1 && s_bready === 1'b1) begin
+        idx = -1;
+        for (int i = 0; i < exp_b_q.size(); i++)
+          if (exp_b_q[i].id === s_bid) begin idx = i; break; end
+        if (idx < 0) begin
+          tb_fail("F3/P4", $sformatf(
+            "B response with id %0h that no outstanding write owes -- a filtered write gets exactly one B, and a forwarded write exactly the subordinate's",
+            s_bid));
+        end else if (exp_b_q[idx].manuf === 1'b1) begin
+          if (s_bresp !== 2'b10)
+            tb_fail("F3", $sformatf("manufactured B for id %0h carries resp %02b; SLVERR (10) is required",
+                                    s_bid, s_bresp));
+          exp_b_q.delete(idx);
+        end else begin
+          idx = -1;
+          for (int i = 0; i < mb_q.size(); i++)
+            if (mb_q[i].id === s_bid) begin idx = i; break; end
+          if (idx < 0) begin
+            tb_fail("P4/F3", $sformatf(
+              "B with id %0h returned upstream although the subordinate has not answered that write -- a forwarded write's B may not be manufactured",
+              s_bid));
+          end else if (32'(bfm_cycle) < mb_q[idx].earliest) begin
+            tb_fail("P4", $sformatf(
+              "B with id %0h returned upstream at cycle %0d, before the subordinate answers that write (cycle %0d) -- a forwarded write's B may not be manufactured",
+              s_bid, bfm_cycle, mb_q[idx].earliest));
+          end else begin
+            if (s_bresp !== mb_q[idx].resp || s_buser !== mb_q[idx].user)
+              tb_fail("P4", $sformatf(
+                "B for id %0h altered: got resp=%02b user=%b ; the subordinate sent resp=%02b user=%b",
+                s_bid, s_bresp, s_buser, mb_q[idx].resp, mb_q[idx].user));
+            mb_q.delete(idx);
+            for (int i = 0; i < exp_b_q.size(); i++)
+              if (exp_b_q[i].id === s_bid) begin exp_b_q.delete(i); break; end
+          end
+        end
+      end
+
+      if (s_rvalid === 1'b1 && s_rready === 1'b1) begin
+        idx = -1;
+        for (int i = 0; i < exp_r_q.size(); i++)
+          if (exp_r_q[i].id === s_rid) begin idx = i; break; end
+        if (idx >= 0) begin
+          // a manufactured beat, attributed by id as F4 requires
+          if (s_rresp !== 2'b10)
+            tb_fail("F4", $sformatf("manufactured R beat for id %0h carries resp %02b; SLVERR (10) is required",
+                                    s_rid, s_rresp));
+          else if (s_rlast !== ((exp_r_q[idx].remain == 9'd1) ? 1'b1 : 1'b0))
+            tb_fail("F4", $sformatf(
+              "manufactured R beat for id %0h has rlast=%b with %0d beat(s) of the burst still owed; rlast belongs on the final beat and no other",
+              s_rid, s_rlast, exp_r_q[idx].remain));
+          else if (exp_r_q[idx].remain <= 9'd1) exp_r_q.delete(idx);
+          else exp_r_q[idx].remain = exp_r_q[idx].remain - 9'd1;
+        end else begin
+          idx = -1;
+          for (int i = 0; i < mr_q.size(); i++)
+            if (mr_q[i].id === s_rid) begin idx = i; break; end
+          if (idx < 0) begin
+            tb_fail("F4/F5/P3", $sformatf(
+              "R beat with id %0h that nothing owes -- either too many manufactured beats, beats for a write that owes none, or a read that was never made",
+              s_rid));
+          end else begin
+            if (s_rdata !== mr_q[idx].data || s_rresp !== mr_q[idx].resp ||
+                s_rlast !== mr_q[idx].last)
+              tb_fail("P3", $sformatf(
+                "R beat for id %0h altered: got data=%08h resp=%02b last=%b ; the subordinate sent data=%08h resp=%02b last=%b",
+                s_rid, s_rdata, s_rresp, s_rlast,
+                mr_q[idx].data, mr_q[idx].resp, mr_q[idx].last));
+            mr_q.delete(idx);
+          end
+        end
       end
     end
-    if ((n_forward + n_filtered + n_reads) == 0)
-      flag("X4", $sformatf(
-        "%s: the unit accepted nothing at all in %0d cycles; it makes no forward progress in either direction",
-        ctx_id, max_cycles));
-    else if (s_awvalid && (wo_q.size() == 0) && (debt < MAX_WRITE_TXNS) && (pend_id.size() == 0))
-      flag((n_filtered > 0) ? "W5" : "W3", $sformatf(
-        "%s: an AW has been offered with nothing in flight and a downstream write debt of only %0d, and it is still not accepted. %0d atomic writes have been filtered; a filtered write forwards neither an AW nor a W beat and so must not consume any of the outstanding-write bound",
-        ctx_id, debt, n_filtered));
-    else
-      flag("X4", $sformatf(
-        "%s: traffic had not drained after %0d cycles (aw=%0d w=%0d exp_aw=%0d exp_w=%0d pend=%0d b=%0d r=%0d debt=%0d)",
-        ctx_id, max_cycles, awq.size(), wq.size(), exp_maw.size(), exp_mw.size(),
-        pend_id.size(), fb_q.size(), fr_q.size(), debt));
-  endtask
+  end
 
-  task automatic wait_debt(input int want, input int max_cycles,
-                           input string cl, input string msg);
-    int t;
-    t = 0;
-    while (t < max_cycles) begin
-      @(posedge clk);
-      t = t + 1;
-      if (debt == want) return;
+  // ---- X1: no output valid while reset is low -------------------------------
+  // The subordinate in the plumbing only clears its own queues synchronously,
+  // so for the first edge of a reset it can still be offering a response that a
+  // pass-through design is merely relaying.  The check is taken once it is
+  // quiet, which is the state X1 is actually about.
+  // Sampled at the rising edge only: rst_ni changes on the falling edge, so by
+  // the rising edge an asynchronous reset has certainly propagated.
+  // X1 constrains what the unit ORIGINATES.  The pass-through B and R paths are
+  // combinational in their master-port inputs whatever rst_ni is doing, so those
+  // two are only judged while the subordinate is quiet -- which is the gate
+  // below on the plumbing's own response queues.  Nothing is judged before the
+  // first rising edge: until one has happened the design's registers hold no
+  // defined value and its outputs mean nothing.
+  int x1_edges = 0;
+  always @(posedge clk) begin
+    x1_edges <= x1_edges + 1;
+    if (rst_n === 1'b0 && x1_edges > 0) begin
+      if (m_awvalid === 1'b1 || m_wvalid === 1'b1)
+        tb_fail("X1", "the unit originates a request while rst_ni is low");
+      if (bfm_bq_id.size() == 0 && bfm_rq_id.size() == 0 &&
+          s_awvalid !== 1'b1 && s_wvalid !== 1'b1 && s_arvalid !== 1'b1) begin
+        if (m_arvalid === 1'b1 || s_bvalid === 1'b1 || s_rvalid === 1'b1)
+          tb_fail("X1", "a manufactured response is offered while rst_ni is low");
+      end
     end
-    flag(cl, msg);
+  end
+
+  // ---- X3: valid held with a stable payload until ready ---------------------
+  // Only the fields the contract fixes are compared: L2 leaves s_rdata_o,
+  // s_ruser_o and s_buser_o free on a manufactured response.
+  logic        hb, hr, haw, hw, har;
+  logic [3:0]  hb_id,  hr_id,  haw_id,  har_id;
+  logic [1:0]  hb_resp, hr_resp;
+  logic        hr_last;
+  logic [31:0] haw_addr, har_addr, hw_data;
+  logic [3:0]  hw_strb;
+  logic        hw_last;
+
+  always @(posedge clk) begin
+    if (!rst_n) begin
+      hb <= 1'b0; hr <= 1'b0; haw <= 1'b0; hw <= 1'b0; har <= 1'b0;
+    end else begin
+      if (hb === 1'b1) begin
+        if (s_bvalid !== 1'b1)
+          tb_fail("X3", "s_bvalid_o was deasserted before s_bready_i was seen");
+        else if (s_bid !== hb_id || s_bresp !== hb_resp)
+          tb_fail("X3", "the s_b payload changed while the response was waiting for s_bready_i");
+      end
+      if (hr === 1'b1) begin
+        if (s_rvalid !== 1'b1)
+          tb_fail("X3", "s_rvalid_o was deasserted before s_rready_i was seen");
+        else if (s_rid !== hr_id || s_rresp !== hr_resp || s_rlast !== hr_last)
+          tb_fail("X3", "the s_r payload changed while the beat was waiting for s_rready_i");
+      end
+      if (haw === 1'b1) begin
+        if (m_awvalid !== 1'b1)
+          tb_fail("X3", "m_awvalid_o was deasserted before m_awready_i was seen");
+        else if (m_awid !== haw_id || m_awaddr !== haw_addr)
+          tb_fail("X3", "the m_aw payload changed while the request was waiting for m_awready_i");
+      end
+      if (hw === 1'b1) begin
+        if (m_wvalid !== 1'b1)
+          tb_fail("X3", "m_wvalid_o was deasserted before m_wready_i was seen");
+        else if (m_wdata !== hw_data || m_wstrb !== hw_strb || m_wlast !== hw_last)
+          tb_fail("X3", "the m_w payload changed while the beat was waiting for m_wready_i");
+      end
+      if (har === 1'b1) begin
+        if (m_arvalid !== 1'b1)
+          tb_fail("X3", "m_arvalid_o was deasserted before m_arready_i was seen");
+        else if (m_arid !== har_id || m_araddr !== har_addr)
+          tb_fail("X3", "the m_ar payload changed while the request was waiting for m_arready_i");
+      end
+      hb  <= s_bvalid  && !s_bready;   hb_id <= s_bid; hb_resp <= s_bresp;
+      hr  <= s_rvalid  && !s_rready;   hr_id <= s_rid; hr_resp <= s_rresp; hr_last <= s_rlast;
+      haw <= m_awvalid && !m_awready;  haw_id <= m_awid; haw_addr <= m_awaddr;
+      hw  <= m_wvalid  && !m_wready;   hw_data <= m_wdata; hw_strb <= m_wstrb; hw_last <= m_wlast;
+      har <= m_arvalid && !m_arready;  har_id <= m_arid; har_addr <= m_araddr;
+    end
+  end
+
+  // =========================================================================
+  // STIMULUS HELPERS
+  // =========================================================================
+
+  // A full-field AW, so that P1's "every field unmodified" is actually tested.
+  task automatic tb_aw(input logic [3:0] id, input logic [31:0] addr,
+                       input logic [7:0] len, input logic [5:0] atop,
+                       input logic [2:0] size, input logic [1:0] burst,
+                       input logic lock, input logic [3:0] cache,
+                       input logic [2:0] prot, input logic [3:0] qos,
+                       input logic [3:0] region, input logic user,
+                       input int timeout, output bit accepted);
+    int t;
+    @(negedge clk);
+    s_awid = id; s_awaddr = addr; s_awlen = len; s_awatop = atop; s_awsize = size;
+    s_awburst = burst; s_awlock = lock; s_awcache = cache; s_awprot = prot;
+    s_awqos = qos; s_awregion = region; s_awuser = user;
+    s_awvalid = 1'b1;
+    accepted = 1'b0;
+    for (t = 0; t < timeout; t++) begin
+      @(posedge clk);
+      if (s_awready === 1'b1) begin accepted = 1'b1; break; end
+    end
+    @(negedge clk) s_awvalid = 1'b0;
   endtask
 
-  // -------------------------------------------------------------------------
-  //  The run
-  // -------------------------------------------------------------------------
+  task automatic tb_ar(input logic [3:0] id, input logic [31:0] addr,
+                       input logic [7:0] len, input logic [2:0] size,
+                       input logic [1:0] burst, input logic lock,
+                       input logic [3:0] cache, input logic [2:0] prot,
+                       input logic [3:0] qos, input logic [3:0] region,
+                       input logic user, input int timeout, output bit accepted);
+    int t;
+    @(negedge clk);
+    s_arid = id; s_araddr = addr; s_arlen = len; s_arsize = size; s_arburst = burst;
+    s_arlock = lock; s_arcache = cache; s_arprot = prot; s_arqos = qos;
+    s_arregion = region; s_aruser = user;
+    s_arvalid = 1'b1;
+    accepted = 1'b0;
+    for (t = 0; t < timeout; t++) begin
+      @(posedge clk);
+      if (s_arready === 1'b1) begin accepted = 1'b1; break; end
+    end
+    @(negedge clk) s_arvalid = 1'b0;
+  endtask
+
+  task automatic tb_w(input logic [31:0] data, input logic [3:0] strb,
+                      input bit last, input logic user,
+                      input int timeout, output bit accepted);
+    int t;
+    @(negedge clk);
+    s_wdata = data; s_wstrb = strb; s_wlast = last; s_wuser = user;
+    s_wvalid = 1'b1;
+    accepted = 1'b0;
+    for (t = 0; t < timeout; t++) begin
+      @(posedge clk);
+      if (s_wready === 1'b1) begin accepted = 1'b1; break; end
+    end
+    @(negedge clk) s_wvalid = 1'b0;
+  endtask
+
+  // Address phase only, with every field derived from the id so that a dropped
+  // or swapped field shows up.
+  task automatic send_aw(input logic [3:0] id, input logic [7:0] len,
+                         input logic [5:0] atop, input int timeout,
+                         input bit must, output bit accepted);
+    tb_aw(id, 32'h1000_0000 + (32'(id) << 8), len, atop, 3'd2, 2'd1, id[1],
+          4'(id ^ 4'h5), 3'(id), 4'(id ^ 4'hA), 4'(id ^ 4'h3), id[0],
+          timeout, accepted);
+    if (must && !accepted)
+      tb_fail("X4/W3", $sformatf(
+        "AW id %0h was not accepted within %0d cycles although the write bound permits it",
+        id, timeout));
+  endtask
+
+  task automatic send_wburst(input logic [3:0] id, input logic [7:0] len,
+                             input int timeout);
+    bit acc;
+    for (int i = 0; i <= int'(len); i++) begin
+      tb_w(32'hD000_0000 + (32'(id) << 16) + 32'(i), 4'(i + 1),
+           (i == int'(len)), id[0], timeout, acc);
+      if (!acc)
+        tb_fail("X4/F2", $sformatf(
+          "W beat %0d of write id %0h was not accepted within %0d cycles", i, id, timeout));
+    end
+  endtask
+
+  // X4's bound is conditional on the sink holding ready.  While responses are
+  // being left unconsumed the unit is entitled to refuse W beats, so this
+  // variant reports nothing when a beat is not taken.
+  task automatic send_wburst_soft(input logic [3:0] id, input logic [7:0] len,
+                                  input int timeout);
+    bit acc;
+    for (int i = 0; i <= int'(len); i++) begin
+      tb_w(32'hD000_0000 + (32'(id) << 16) + 32'(i), 4'(i + 1),
+           (i == int'(len)), id[0], timeout, acc);
+      if (!acc) return;
+    end
+  endtask
+
+  task automatic do_write(input logic [3:0] id, input logic [7:0] len,
+                          input logic [5:0] atop);
+    bit acc;
+    send_aw(id, len, atop, 80, 1'b1, acc);
+    send_wburst(id, len, 80);
+  endtask
+
+  // Everything owed must have been delivered within `budget` cycles.
+  task automatic settle(input int budget);
+    int t;
+    for (t = 0; t < budget; t++) begin
+      @(posedge clk);
+      if (queues_idle()) break;
+    end
+    @(negedge clk);
+    if (exp_r_q.size() != 0)
+      tb_fail("F4/X4", $sformatf(
+        "%0d manufactured R beat(s) still owed after %0d cycles (first: id %0h, %0d beat(s) missing)",
+        exp_r_q.size(), budget, exp_r_q[0].id, exp_r_q[0].remain));
+    if (exp_b_q.size() != 0)
+      tb_fail("F3/X4", $sformatf(
+        "%0d B response(s) still owed after %0d cycles (first: id %0h, %0s)",
+        exp_b_q.size(), budget, exp_b_q[0].id,
+        exp_b_q[0].manuf ? "manufactured" : "forwarded write"));
+    if (exp_mw_q.size() != 0)
+      tb_fail("P2/X4", $sformatf("%0d W beat(s) of a forwarded write never reached the master port",
+                                 exp_mw_q.size()));
+    if (exp_maw_q.size() != 0)
+      tb_fail("P1/X4", $sformatf("%0d accepted non-atomic AW(s) never reached the master port",
+                                 exp_maw_q.size()));
+    if (exp_mar_q.size() != 0)
+      tb_fail("P3/X4", $sformatf("%0d accepted AR(s) never reached the master port",
+                                 exp_mar_q.size()));
+    if (mb_q.size() != 0)
+      tb_fail("P4/X4", $sformatf("%0d B response(s) taken from the subordinate were never returned upstream",
+                                 mb_q.size()));
+    if (mr_q.size() != 0)
+      tb_fail("P3/X4", $sformatf("%0d R beat(s) taken from the subordinate were never returned upstream",
+                                 mr_q.size()));
+    if (wpend_q.size() != 0)
+      tb_fail("F2/X4", $sformatf("%0d write(s) have an unfinished W burst", wpend_q.size()));
+  endtask
+
+  // =========================================================================
+  // STIMULUS
+  // =========================================================================
+  //   write ids live in 1..7, read ids in 8..15, so that a manufactured R beat
+  //   and a pass-through R beat can never be confused for one another.
   initial begin
-    int i, j, seq_no;
-    logic [5:0] atv [6];
+    bit acc;
 
-    // atomic opcodes worth exercising: the low four bits must never matter (C1)
-    atv[0] = 6'b01_0000; atv[1] = 6'b01_1010; atv[2] = 6'b10_0000;
-    atv[3] = 6'b10_1111; atv[4] = 6'b11_0000; atv[5] = 6'b11_0101;
-
-    rdy_mode = 0;
-    bfm_dn_b_lag(0);
-    bfm_reset(6);
+    bfm_reset(5);
     repeat (5) @(posedge clk);
 
-    // ---- ordinary writes must be left completely alone (P1, P2, P4) ------
-    // atop[3:0] is deliberately non-zero on some of these: C1 says the low
-    // bits never make a write atomic.
-    for (i = 0; i < 8; i++)
-      gen_write(4'(i % 8), 8'(i % 4), (i % 2) ? 6'b00_0000 : 6'b00_1101);
-    settle(3000, "ordinary writes");
+    // ---------- pass-through ----------------------------------------------
+    set_phase("P1/P2/P4 single-beat non-atomic write");
+    do_write(4'h1, 8'd0, 6'b000000);
+    settle(80);
 
-    // ---- reads are never touched (P3) ------------------------------------
-    for (i = 0; i < 6; i++) gen_read(4'(i % 8), 8'(i % 4));
-    settle(3000, "reads");
+    set_phase("P2 four-beat non-atomic write");
+    do_write(4'h2, 8'd3, 6'b000000);
+    settle(80);
 
-    // ---- filtered writes, one at a time (C1, C2, F1..F5) -----------------
-    for (i = 0; i < 6; i++) begin
-      for (j = 0; j < 3; j++) begin
-        gen_write(4'(8 + (i % 8)), (j == 2) ? 8'd3 : 8'(j), atv[i]);
-        settle(3000, "single filtered write");
-      end
-    end
+    set_phase("C1 awatop[3:0] alone does not make a write atomic");
+    do_write(4'h3, 8'd1, 6'b001111);       // [5:4] == 00 -> must be forwarded
+    settle(80);
+    do_write(4'h3, 8'd0, 6'b000110);
+    settle(80);
 
-    // ---- several filtered writes back to back (F3: exactly one B each) ---
-    for (i = 0; i < 6; i++) gen_write(4'(8 + i), 8'(i % 4), atv[i]);
-    settle(4000, "back-to-back filtered writes");
+    set_phase("P3 read pass-through, three-beat burst");
+    tb_ar(4'h8, 32'h2000_0100, 8'd2, 3'd2, 2'd1, 1'b1, 4'hB, 3'd6, 4'h9, 4'h4, 1'b1, 80, acc);
+    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
+    settle(80);
 
-    // ---- filtered and ordinary writes interleaved, reads alongside -------
-    for (i = 0; i < 12; i++) begin
-      if (i % 3 == 0) gen_write(4'(8 + (i % 8)), 8'(i % 4), atv[i % 6]);
-      else            gen_write(4'(i % 8), 8'(i % 3), (i % 2) ? 6'b00_0000 : 6'b00_0111);
-      if (i % 4 == 0) gen_read(4'(i % 8), 8'(i % 3));
-    end
-    settle(6000, "mixed traffic");
+    // ---------- filtering --------------------------------------------------
+    set_phase("F1/F2/F3/F5 atomic write without a read response, one beat");
+    do_write(4'h4, 8'd0, 6'b010000);       // [5:4]=01 -> atomic, no R owed
+    settle(70);                            // X4: within 64 cycles of wlast
 
-    // ---- W2/W3: the bound is exactly four --------------------------------
-    // Four AWs with their write data held back.  Nothing downstream can
-    // retire, so the debt climbs to and must stop at MAX_WRITE_TXNS.
-    bfm_dn_b_lag(400);            // no B may arrive during this experiment
-    for (i = 0; i < 4; i++) gen_aw(4'(i), 8'd1, 6'b00_0000, seq_no);
-    wait_debt(4, 400, "W3",
-      "only reached a downstream write debt below 4 with four AWs offered and no write data supplied; the bound alone must not stall an AW while the debt is under MAX_WRITE_TXNS");
-    // A fifth. It may or may not be taken upstream (L4), but it must not
-    // reach the subordinate: the W2 monitor is watching the debt.
-    gen_aw(4'd5, 8'd1, 6'b00_0000, seq_no);
-    repeat (120) @(posedge clk);
-    // Now supply all five bursts.  As each completes downstream the debt
-    // falls, and the fifth AW must then go -- with no B having arrived yet,
-    // which is what separates W4 from a design that counts B responses.
-    for (i = 0; i < 5; i++) gen_w(next_seq - 5 + i, 8'd1);
-    wait_debt(0, 600, "W4",
-      "the downstream write debt never returned to zero even though every write burst completed on the master port and no B response had yet arrived; the debt must be retired by WLAST, not by B");
+    set_phase("F2/F5 atomic write without a read response, four beats");
+    do_write(4'h5, 8'd3, 6'b011010);
+    settle(70);
+
+    set_phase("F3/F4 atomic write owing a read response, one beat");
+    do_write(4'h6, 8'd0, 6'b100000);       // [5:4]=10 -> R owed
+    settle(70);
+
+    set_phase("F4 atomic write owing a four-beat read response");
+    do_write(4'h7, 8'd3, 6'b110001);       // [5:4]=11 -> R owed, len+1 = 4
+    settle(70);
+
+    set_phase("F4 atomic write owing an eight-beat read response");
+    do_write(4'h2, 8'd7, 6'b100011);
+    settle(70);
+
+    // ---------- one transaction after another ------------------------------
+    set_phase("F3/F4 three filtered writes back to back");
+    do_write(4'h1, 8'd1, 6'b100000);
+    do_write(4'h2, 8'd0, 6'b010000);
+    do_write(4'h3, 8'd2, 6'b110000);
+    settle(120);
+
+    set_phase("mixed traffic: forwarded, filtered, forwarded");
+    do_write(4'h4, 8'd1, 6'b000000);
+    do_write(4'h5, 8'd1, 6'b100100);
+    do_write(4'h6, 8'd2, 6'b000000);
+    tb_ar(4'h9, 32'h3000_0000, 8'd1, 3'd2, 2'd1, 1'b0, 4'h6, 3'd1, 4'hC, 4'h2, 1'b0, 80, acc);
+    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
+    do_write(4'h7, 8'd0, 6'b010001);
+    settle(160);
+
+    // ---------- back-pressure and X3 ---------------------------------------
+    set_phase("X3 pass-through B held while s_bready_i is low");
+    bfm_dn_b_lag(12);
+    do_write(4'h1, 8'd0, 6'b000000);
+    bfm_b_ready(1'b0);
+    repeat (25) @(posedge clk);            // the B waits here; X3 watches it
+    bfm_b_ready(1'b1);
+    settle(80);
     bfm_dn_b_lag(0);
-    settle(4000, "write-bound experiment");
 
-    // ---- W5: a filtered write must not consume any of the bound ----------
-    bfm_dn_b_lag(400);
-    gen_write(4'd9, 8'd1, 6'b10_0000);       // filtered, absorbed entirely
-    settle(2000, "filtered write before the bound test");
-    for (i = 0; i < 4; i++) gen_aw(4'(i), 8'd0, 6'b00_0000, seq_no);
-    wait_debt(4, 400, "W5",
-      "after a filtered write, four ordinary AWs could not all reach the subordinate: the filtered write was counted against the outstanding-write bound, but it forwards neither an AW nor any W beat");
-    for (i = 0; i < 4; i++) gen_w(next_seq - 4 + i, 8'd0);
+    set_phase("X3 pass-through R held while s_rready_i is low");
+    bfm_r_ready(1'b0);
+    tb_ar(4'hA, 32'h4000_0000, 8'd3, 3'd2, 2'd1, 1'b0, 4'h1, 3'd2, 4'h3, 4'h4, 1'b1, 80, acc);
+    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
+    repeat (20) @(posedge clk);
+    bfm_r_ready(1'b1);
+    settle(80);
+
+    set_phase("X3/L1/L5 manufactured responses held while both readies are low");
+    bfm_b_ready(1'b0);
+    bfm_r_ready(1'b0);
+    send_aw(4'h6, 8'd3, 6'b100000, 80, 1'b0, acc);
+    if (acc) begin
+      // R beats may already be waiting here, before the burst is finished, so
+      // release the readies from a second process rather than deadlocking.
+      fork
+        begin
+          repeat (18) @(posedge clk);
+          bfm_r_ready(1'b1);
+          repeat (4) @(posedge clk);
+          bfm_b_ready(1'b1);
+        end
+        send_wburst(4'h6, 8'd3, 400);
+      join
+    end else begin
+      bfm_r_ready(1'b1);
+      bfm_b_ready(1'b1);
+    end
+    settle(120);
+
+    // ---------- the write bound --------------------------------------------
+    set_phase("W2/W3 four AWs with no write data, then a fifth");
+    send_aw(4'h1, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 0 -> 1
+    send_aw(4'h2, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 1 -> 2
+    send_aw(4'h3, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 2 -> 3
+    send_aw(4'h4, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 3 -> 4  (W3)
+    send_aw(4'h5, 8'd0, 6'b000000, 40, 1'b0, acc);   // may be refused (W2)
+    send_aw(4'h6, 8'd0, 6'b000000, 40, 1'b0, acc);
+    // now let the four bursts finish; the monitor has been watching the debt
+    send_wburst(4'h1, 8'd0, 80);
+    send_wburst(4'h2, 8'd0, 80);
+    send_wburst(4'h3, 8'd0, 80);
+    send_wburst(4'h4, 8'd0, 80);
+    settle(200);
+    set_phase("W3 the bound releases once the bursts have finished");
+    do_write(4'h5, 8'd0, 6'b000000);
+    settle(120);
+
+    set_phase("W4 the debt falls on a completed W burst, not on a B response");
+    bfm_dn_b_lag(200);                     // the subordinate answers nothing yet
+    for (int i = 0; i < 7; i++) begin
+      send_aw(4'(i + 1), 8'd0, 6'b000000, 80, 1'b1, acc);
+      send_wburst(4'(i + 1), 8'd0, 80);
+    end
+    settle(400);
     bfm_dn_b_lag(0);
-    settle(4000, "W5 experiment");
 
-    // ---- backpressure on both response channels (X3, and F3/F4 again) ----
-    rdy_mode = 2;
-    for (i = 0; i < 14; i++) begin
-      if (i % 2 == 0) gen_write(4'(8 + (i % 8)), 8'(i % 4), atv[i % 6]);
-      else            gen_write(4'(i % 8), 8'(i % 3), 6'b00_0000);
-      if (i % 5 == 0) gen_read(4'(i % 8), 8'(i % 4));
-    end
-    settle(8000, "backpressured traffic");
+    set_phase("W5 filtered writes do not consume bound capacity");
+    do_write(4'h1, 8'd0, 6'b010000);
+    settle(70);
+    do_write(4'h2, 8'd0, 6'b100000);
+    settle(70);
+    do_write(4'h3, 8'd1, 6'b010000);
+    settle(70);
+    do_write(4'h4, 8'd0, 6'b110000);
+    settle(70);
+    do_write(4'h5, 8'd0, 6'b010000);
+    settle(70);
+    do_write(4'h6, 8'd1, 6'b000000);       // must still be forwarded
+    settle(120);
 
-    rdy_mode = 1;
-    for (i = 0; i < 14; i++) begin
-      if (i % 3 == 1) gen_write(4'(8 + (i % 8)), 8'(i % 4), atv[i % 6]);
-      else            gen_write(4'(i % 8), 8'(i % 4), 6'b00_1001);
-      if (i % 4 == 2) gen_read(4'(i % 8), 8'(i % 3));
-    end
-    settle(8000, "randomly backpressured traffic");
-    rdy_mode = 0;
-
-    // ---- X1 / X2: reset with work in flight ------------------------------
-    // A filtered write is left half-fed and ordinary writes are left owing
-    // responses, then reset lands on top of all of it.
-    sb_en = 1'b0;
-    bfm_dn_b_lag(400);
-    rdy_mode = 3;                       // both response channels shut
-    gen_write(4'd12, 8'd3, 6'b11_0000); // filtered: owes a B and four R beats
-    gen_write(4'd1,  8'd3, 6'b00_0000);
-    repeat (40) @(posedge clk);
-    // the manufactured responses are now up and stalled, which is the state a
-    // reset has to clear
-    if (!s_bvalid && !s_rvalid)
-      $display("[cycle %0d] note: no response was outstanding when reset was applied", bfm_cycle);
+    // ---------- X1: nothing originated while reset is low --------------------
+    // X2 says the unit's behaviour must not depend on anything presented while
+    // reset was low, so presenting something is fair game; X1 says that while
+    // it is low no request is originated on the master port.
+    set_phase("X1 requests offered while rst_ni is low originate nothing");
+    @(negedge clk) rst_n = 1'b0;
     @(negedge clk);
-    x1_en = 1'b1;
-    awq.delete(); wq.delete(); arq.delete();
-    bfm_reset(6);
+    s_awid = 4'h5; s_awaddr = 32'h1000_0000; s_awlen = 8'd1; s_awatop = 6'b000000;
+    s_awsize = 3'd2; s_awburst = 2'd1; s_awvalid = 1'b1;
+    s_wdata = 32'hAAAA_5555; s_wstrb = 4'hF; s_wlast = 1'b0; s_wvalid = 1'b1;
+    repeat (8) @(posedge clk);           // the X1 monitor is watching here
     @(negedge clk);
-    x1_en = 1'b0;
-    rdy_mode = 0;
-    x2_en = 1'b1;
-    repeat (40) @(posedge clk);
+    s_awvalid = 1'b0; s_wvalid = 1'b0;
+    repeat (3) @(posedge clk);
+    @(negedge clk) rst_n = 1'b1;
+    repeat (4) @(posedge clk);
+    set_phase("X2 service is clean after that reset");
+    do_write(4'h3, 8'd0, 6'b000000);
+    settle(80);
+
+    // ---------- reset in flight ---------------------------------------------
+    set_phase("X2 reset with a filtered write in flight");
+    bfm_b_ready(1'b0);
+    bfm_r_ready(1'b0);
+    send_aw(4'h7, 8'd2, 6'b100000, 60, 1'b0, acc);
+    if (acc) send_wburst_soft(4'h7, 8'd2, 60);
+    bfm_reset(4);
+    bfm_b_ready(1'b1);
+    bfm_r_ready(1'b1);
+    repeat (60) @(posedge clk);            // any response now is unowed
     @(negedge clk);
-    x2_en = 1'b0;
+    if (!queues_idle())
+      tb_fail("X2", "the unit still owed something after reset");
 
-    // scrub every model of the world; X2 says the unit holds nothing either
-    exp_maw.delete(); exp_mw.delete(); exp_mar.delete();
-    fb_q.delete(); fr_q.delete(); wo_q.delete();
-    pend_id.delete(); pend_rleft.delete(); pend_bpend.delete();
-    pend_t0.delete(); pend_clean.delete();
-    debt = 0; aw_acc_cnt = 0; next_seq = 0;
-    bfm_dn_b_lag(0);
-    sb_en = 1'b1;
+    set_phase("normal service after reset");
+    do_write(4'h1, 8'd1, 6'b000000);
+    settle(80);
+    do_write(4'h2, 8'd1, 6'b100000);
+    settle(70);
+    tb_ar(4'hB, 32'h5000_0000, 8'd0, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, 80, acc);
+    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
+    settle(80);
 
-    // ---- and it must still work afterwards -------------------------------
-    for (i = 0; i < 10; i++) begin
-      if (i % 2 == 0) gen_write(4'(8 + (i % 8)), 8'(i % 4), atv[i % 6]);
-      else            gen_write(4'(i % 8), 8'(i % 3), 6'b00_0000);
-      if (i % 3 == 0) gen_read(4'(i % 8), 8'(i % 3));
+    if (!verdict_done) begin
+      $display("all %0d phases clean", phase_cnt);
+      $display("RESULT: PASS");
     end
-    settle(6000, "traffic after reset");
-
-    // ---- verdict ----------------------------------------------------------
-    if (n_filtered < 20)
-      flag("F3", $sformatf("only %0d atomic writes were ever accepted", n_filtered));
-    if (n_forward < 20)
-      flag("P1", $sformatf("only %0d ordinary writes were ever accepted", n_forward));
-    if (n_reads < 5)
-      flag("P3", $sformatf("only %0d reads were ever accepted", n_reads));
-
-    $display("--- %0d ordinary writes, %0d atomic writes, %0d reads, %0d violations ---",
-             n_forward, n_filtered, n_reads, err_cnt);
-    if (err_cnt == 0) $display("RESULT: PASS");
-    else              $display("RESULT: FAIL");
     $finish;
   end
 

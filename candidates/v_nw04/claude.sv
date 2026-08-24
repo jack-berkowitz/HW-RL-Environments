@@ -1,57 +1,44 @@
-// =============================================================================
-// ptp_time_base_tb.sv
-// -----------------------------------------------------------------------------
-// Decides whether a ptp_time_base implementation obeys the specification.
+// ===========================================================================
+//  ptp_time_base_tb.sv
 //
-// Why there is no cycle-exact reference model
-// -------------------------------------------
-// L1 leaves the delay from a control valid to its first effect free (up to 4
-// cycles) and L2 leaves the relative phase of ts96_o and ts64_o free, along
-// with the alignment of adj_active_o against the increments it marks. A model
-// that predicted a value per cycle would be predicting things the contract does
-// not fix. So instead every check is on the SEQUENCE OF INCREMENTS each base
-// takes, measured as the difference between consecutive samples of that base:
+//  Self-checking testbench for ptp_time_base.
 //
-//   * every increment must be exactly period, or period+drift, or period+adj,
-//     or period+adj+drift -- computed in fns, with no tolerance (I1)
-//   * the increments carrying the drift must be exactly drift_rate apart (D2)
-//   * the increments carrying the offset must be exactly adj_count of them and
-//     consecutive (A2)
+//  Method
+//  ------
+//  A negedge monitor records, once per cycle, the full state of both time
+//  bases (ts96 flattened to a single linear fns count, ts64 raw) plus
+//  ts_step_o / adj_active_o / pps_o.  Nothing is decided while stimulus runs;
+//  every check is exact integer arithmetic on that log afterwards.
 //
-// Each base is analysed ON ITS OWN, so a design that hands ts64 the same
-// increment sequence a few cycles after ts96 is indistinguishable from one that
-// hands both the same cycle -- which is what L2 requires. The stimulus values
-// are chosen so the four possible increments are all distinct, which is what
-// makes a measured delta classifiable at all.
+//  Each base is examined ON ITS OWN (I1, D2, L2): the per-cycle difference of
+//  its own log must equal an exact legal increment, and the cycles carrying
+//  the drift and the offset adjustment are recovered from that base's own
+//  deltas.  Nothing compares ts96 against ts64, and nothing requires a
+//  particular latency behind a valid.
 //
-// Where the contract grants latitude, nothing is sampled
-// ------------------------------------------------------
-//   L1  Control changes are followed by a long settling wait before any window
-//       is recorded; for adj_valid, whose effect must land inside the window,
-//       the run of adjusted increments is SEARCHED for rather than expected at
-//       a fixed offset.
-//   L2  No check ever compares ts96_o against ts64_o, or compares the position
-//       of adj_active_o against the position of the adjusted increments. Only
-//       the LENGTH of the adj_active_o run is checked (A3), which the contract
-//       does fix.
-//
-// pps_o is checked by counting -- one pulse per wrap, each exactly one cycle
-// long -- rather than by requiring it in the same sampled cycle as the wrap,
-// since the contract does not pin that alignment either.
-//
-// Termination: every wait is a bounded loop and the watchdog fires regardless.
-// =============================================================================
+//  Excluded windows are honoured rather than worked around:
+//    X2b  cycles 1..8 after EVERY reset are skipped -- measurement of a base
+//         starts at cycle 9 at the earliest (WARM below is 10, so the first
+//         difference examined is the increment of cycle 11).
+//    X2c  the four cycles after a set are skipped ON THE BASE THAT WAS SET,
+//         and only on that base: the other base is checked straight through
+//         the set, which is what makes S4 testable.
+//    L1   every analysis window opens at least 24 cycles after any control
+//         change, comfortably past the 8-cycle per-base bound.
+// ===========================================================================
+`timescale 1ns/1ps
 
 module ptp_time_base_tb;
 
-// ---------------------------------------------------------------------------
-// PROVIDED PLUMBING -- drives the module, checks nothing.
-// ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // PROVIDED PLUMBING -- drives the module, checks nothing.
+  // -------------------------------------------------------------------------
 
   // ---- clock ---------------------------------------------------------------
   logic clk = 1'b0;
   always #5 clk = ~clk;
 
+  // A free-running cycle count, for your own bookkeeping and messages.
   int bfm_cycle = 0;
   always @(posedge clk) if (!rst) bfm_cycle <= bfm_cycle + 1;
 
@@ -133,420 +120,446 @@ module ptp_time_base_tb;
     $display("RESULT: FAIL (watchdog: no verdict reached)");
     $finish;
   end
-// ---------------------------------------------------------------------------
-// END OF PROVIDED PLUMBING -- everything below is the checker.
-// ---------------------------------------------------------------------------
 
-  // ---- pinned constants, all in fns ----------------------------------------
-  localparam longint ONE_SEC = 64'd65536000000000;   // 1e9 ns, in fns
-  localparam longint P_DEF   = 64'd419430;           // 4'h6 / 16'h6666
-  localparam longint D_DEF   = 64'd2;                // 4'h0 / 16'h0002
-  localparam int     R_DEF   = 5;
-  localparam longint P1      = 64'd528948;           // 4'h8 / 16'h1234
-  localparam longint DR_POS  = 64'd7;                // 4'h0 / 16'h0007
-  localparam longint DR_NEG  = -64'd7;               // 4'hF / 16'hFFF9
-  localparam longint ADJ_POS = 64'd256;              // 4'h0 / 16'h0100
-  localparam longint ADJ_NEG = -64'd4096;            // 4'hF / 16'hF000
+  // -------------------------------------------------------------------------
+  // END OF PROVIDED PLUMBING -- everything below is the testbench proper.
+  // -------------------------------------------------------------------------
 
-  int nerr = 0;
+  // ---- the numbers this testbench uses -------------------------------------
+  // Every increment is expressed in fns (2^-16 ns), exactly.  The four
+  // possible increments in any phase are kept mutually distinct so a delta
+  // identifies unambiguously which of drift / adjustment it carries.
+  localparam int     MAXC  = 8000;
 
-  task automatic err(input string cl, input string msg);
-    begin
-      nerr = nerr + 1;
-      if (nerr <= 40) $display("FAIL [%s] cycle %0d: %s", cl, bfm_cycle, msg);
+  localparam longint P_DEF = 64'sd419430;      // 4'h6 / 16'h6666, reset period
+  localparam longint D_DEF = 64'sd2;           // 4'h0 / 16'h0002, reset drift
+  localparam int     R_DEF = 5;                //                  reset rate
+
+  localparam longint P_ALT = 64'sd524289;      // 4'h8 / 16'h0001
+  localparam longint D_ALT = -64'sd100;        // 4'hF / 16'hFF9C  (signed, D3)
+  localparam int     R_ALT = 7;
+
+  localparam longint A_POS =  64'sd65536;      // 4'h1 / 16'h0000
+  localparam int     N_POS = 9;
+  localparam longint A_NEG = -64'sd65536;      // 4'hF / 16'h0000  (signed, A5)
+  localparam int     N_NEG = 13;
+
+  // Excluded windows, each at least the contract's allowance plus margin.
+  localparam int     WARM  = 10;               // X2b: cycles 1..8 unconstrained
+  localparam int     SETW  = 6;                // X2c: 4 cycles, on that base only
+  localparam int     SETTLE = 24;              // L1: 8 cycles, per base
+
+  // ---- verdict bookkeeping -------------------------------------------------
+  int err_count = 0;
+  int msg_count = 0;
+
+  task automatic note_fail(input string clause, input string msg);
+    err_count = err_count + 1;
+    if (msg_count < 30) begin
+      msg_count = msg_count + 1;
+      $display("VIOLATION [%s] %s", clause, msg);
     end
   endtask
 
-  // ---- monitor ---------------------------------------------------------------
-  longint      p64, p96;
-  logic [47:0] psec;
-  bit          have_prev  = 1'b0;
-  bit          rec_en     = 1'b0;
-  bit          step_eq_en = 1'b1;   // off only while a set is in flight
-  bit          jump_en    = 1'b0;   // off only while a set is in flight
-  bit          pps_prev   = 1'b0;
-  int          pps_cnt    = 0;
+  // ---- the log -------------------------------------------------------------
+  // Sample i holds the state left behind by rising edge i, captured on the
+  // following falling edge -- the edge opposite the one the design samples.
+  logic [127:0] s_lin  [0:MAXC-1];   // ts96 as one linear fns count
+  logic [63:0]  s_t64  [0:MAXC-1];
+  logic [47:0]  s_sec  [0:MAXC-1];
+  logic [29:0]  s_ns   [0:MAXC-1];
+  logic [1:0]   s_rsv  [0:MAXC-1];
+  logic         s_step [0:MAXC-1];
+  logic         s_act  [0:MAXC-1];
+  logic         s_pps  [0:MAXC-1];
+  logic         s_mask [0:MAXC-1];   // cycles excluded from the global sweep
+  int mon_n = 0;                     // read by the stimulus at posedge only
 
-  longint d64q [$];
-  longint d96q [$];
-  bit     aaq  [$];
-  bit     stq  [$];
-  bit     ppq  [$];
-  bit     wrq  [$];
+  initial begin : mask_init
+    int i;
+    for (i = 0; i < MAXC; i++) s_mask[i] = 1'b0;
+  end
 
-  always @(posedge clk) begin
-    longint      c64, c96, dd64, dd96;
-    logic [47:0] csec;
-    logic [29:0] cns;
-    bit          wrapped;
-
-    if (rst) begin
-      have_prev = 1'b0;
-      pps_prev  = 1'b0;
-    end else begin
-      csec    = ts96[95:48];
-      cns     = ts96[45:16];
-      c64     = longint'(ts64);
-      c96     = longint'(cns) * 64'd65536 + longint'(ts96[15:0]);
-      wrapped = 1'b0;
-      dd64    = 64'd0;
-      dd96    = 64'd0;
-
-      // W1: the ns field never reaches one second
-      if (cns >= 30'd1000000000)
-        err("W1", $sformatf("ts96_o ns field is %0d, which has reached 1e9", cns));
-
-      // W3: a pulse is exactly one cycle, wherever it falls
-      if (pps && pps_prev)
-        err("W3", "pps_o asserted for more than one consecutive cycle");
-
-      if (have_prev) begin
-        dd64 = c64 - p64;
-        if (c96 >= p96) dd96 = c96 - p96;
-        else begin
-          wrapped = 1'b1;
-          dd96    = c96 + ONE_SEC - p96;
-        end
-        if (jump_en) begin
-          if (wrapped && (csec !== (psec + 48'd1)))
-            err("W1", "the seconds field did not increase by exactly one on the wrap");
-          if (!wrapped && (csec !== psec))
-            err("W1", "the seconds field changed without a one-second wrap");
-        end
-        // A4: outside a set, ts_step_o marks exactly the adj_active_o cycles
-        if (step_eq_en && (ts_step !== adj_active))
-          err("A4", $sformatf("ts_step_o=%b but adj_active_o=%b with no set in flight",
-                              ts_step, adj_active));
-        if (rec_en) begin
-          d64q.push_back(dd64);
-          d96q.push_back(dd96);
-          aaq.push_back(adj_active);
-          stq.push_back(ts_step);
-          ppq.push_back(pps);
-          wrq.push_back(wrapped);
-        end
-      end
-
-      if (pps) pps_cnt = pps_cnt + 1;
-      pps_prev  = pps;
-      p64       = c64;
-      p96       = c96;
-      psec      = csec;
-      have_prev = 1'b1;
+  always @(negedge clk) begin : monitor
+    logic [127:0] vsec, vns;
+    if (mon_n < MAXC) begin
+      vsec = {80'd0, ts96[95:48]};
+      vns  = {98'd0, ts96[45:16]};
+      s_sec [mon_n] = ts96[95:48];
+      s_rsv [mon_n] = ts96[47:46];
+      s_ns  [mon_n] = ts96[45:16];
+      s_lin [mon_n] = vsec * 128'd65536000000000 + (vns << 16) + {112'd0, ts96[15:0]};
+      s_t64 [mon_n] = ts64;
+      s_step[mon_n] = ts_step;
+      s_act [mon_n] = adj_active;
+      s_pps [mon_n] = pps;
+      mon_n = mon_n + 1;
     end
   end
 
-  // ---- window control --------------------------------------------------------
-  task automatic rec_start();
-    begin
-      @(negedge clk);
-      d64q.delete(); d96q.delete(); aaq.delete();
-      stq.delete();  ppq.delete();  wrq.delete();
-      rec_en = 1'b1;
-    end
+  task automatic mask_range(input int lo, input int hi);
+    int i;
+    for (i = lo; i <= hi; i++) if (i >= 0 && i < MAXC) s_mask[i] = 1'b1;
   endtask
 
-  task automatic rec_stop();
-    begin
-      @(negedge clk);
-      rec_en = 1'b0;
+  // ---- one cycle's advance of one base, exactly ----------------------------
+  // base 0 = ts96 (linear), base 1 = ts64.  The subtraction is modular and the
+  // low 64 bits reinterpreted as signed, so a retarding increment reads back
+  // as the negative number it is.
+  function automatic longint get_delta(input int base, input int i);
+    logic [127:0] w;
+    logic [63:0]  n;
+    if (base == 0) begin
+      w = s_lin[i] - s_lin[i-1];
+      n = w[63:0];
+    end else begin
+      n = s_t64[i] - s_t64[i-1];
     end
-  endtask
-
-  // ---- analysis --------------------------------------------------------------
-  // Which of the four legal increments a measured delta is, or -1.
-  function automatic int classify(input longint d, input longint pp,
-                                  input longint aa, input longint dd);
-    begin
-      if      (d == pp)           classify = 0;
-      else if (d == (pp + dd))    classify = 1;
-      else if (d == (pp + aa))    classify = 2;
-      else if (d == (pp + aa + dd)) classify = 3;
-      else                        classify = -1;
-    end
+    return $signed(n);
   endfunction
 
-  // Checks one base's increment sequence over the recorded window.
-  //   which : 0 = ts64_o, 1 = ts96_o
-  //   bad_cl : clause to name when an increment is not legal at all. The
-  //            wrap-attribution below only applies to ts96_o, since wrq[] is a
-  //            property of that base and says nothing about ts64_o.
-  task automatic check_win(input string nm, input int which,
-                           input longint pp, input longint aa, input longint dd,
-                           input int rate, input int exp_adj, input string bad_cl);
-    int     i, n, cls, first_adj, last_adj, nadj, prev_dr, nbad;
-    longint d;
-    string  bn;
-    begin
-      bn        = (which == 0) ? "ts64_o" : "ts96_o";
-      n         = (which == 0) ? d64q.size() : d96q.size();
-      first_adj = -1;
-      last_adj  = -1;
-      nadj      = 0;
-      prev_dr   = -1;
-      nbad      = 0;
-
-      for (i = 0; i < n; i = i + 1) begin
-        d   = (which == 0) ? d64q[i] : d96q[i];
-        cls = classify(d, pp, aa, dd);
-        if (cls < 0) begin
-          nbad = nbad + 1;
-          if (nbad <= 3) begin
-            if ((which == 1) && wrq[i])
-              err("W1", $sformatf("%s %s: the wrapping increment is %0d fns, not a legal increment (period %0d)",
-                                  nm, bn, d, pp));
-            else
-              err(bad_cl, $sformatf("%s %s: increment %0d of the window is %0d fns; legal are %0d / %0d / %0d / %0d",
-                                  nm, bn, i, d, pp, pp+dd, pp+aa, pp+aa+dd));
-          end
-        end else begin
-          if ((cls == 2) || (cls == 3)) begin
-            nadj = nadj + 1;
-            if (first_adj < 0) first_adj = i;
-            last_adj = i;
-          end
-          if ((cls == 1) || (cls == 3)) begin
-            if (prev_dr >= 0) begin
-              if ((i - prev_dr) != rate)
-                err("D2", $sformatf("%s %s: drift applied %0d increments apart, drift_rate_i is %0d",
-                                    nm, bn, i - prev_dr, rate));
-            end
-            prev_dr = i;
-          end
-        end
-      end
-
-      if (nadj != exp_adj)
-        err("A2", $sformatf("%s %s: the offset reached %0d increments, adj_count_i was %0d",
-                            nm, bn, nadj, exp_adj));
-      else if ((nadj > 0) && ((last_adj - first_adj + 1) != nadj))
-        err("A2", $sformatf("%s %s: the %0d adjusted increments are not consecutive (span %0d)",
-                            nm, bn, nadj, last_adj - first_adj + 1));
+  // ---- the central check ---------------------------------------------------
+  // Over [lo,hi], for ONE base:
+  //   * every increment is exactly P, P+D, P+A or P+A+D          (I1, I2, F3)
+  //   * the increments carrying D are spaced exactly R apart, and no window of
+  //     R consecutive increments lacks one                            (D2)
+  //   * the increments carrying A number exactly acount and are consecutive
+  //                                                                (A2, A5)
+  task automatic check_region(input int base, input int lo, input int hi,
+                              input longint P, input longint D, input int R,
+                              input longint A, input int acount,
+                              input string tag);
+    longint dv;
+    int i;
+    int dpos [$];
+    int apos [$];
+    string bn;
+    bn = (base == 0) ? "ts96" : "ts64";
+    if (lo < 1 || hi >= mon_n || hi < lo) begin
+      note_fail("TB", $sformatf("%s: internal window error", tag));
+      return;
     end
-  endtask
-
-  // A3: adj_active_o is exactly exp_count cycles, and they are consecutive.
-  task automatic check_adj_active(input string nm, input int exp_count);
-    int i, n, runs, cur, mx;
-    begin
-      n = aaq.size(); runs = 0; cur = 0; mx = 0;
-      for (i = 0; i < n; i = i + 1) begin
-        if (aaq[i]) begin
-          if (cur == 0) runs = runs + 1;
-          cur = cur + 1;
-          if (cur > mx) mx = cur;
-        end else cur = 0;
-      end
-      if (exp_count == 0) begin
-        if (runs != 0)
-          err("A3", $sformatf("%s: adj_active_o asserted with no adjustment outstanding", nm));
+    for (i = lo; i <= hi; i++) begin
+      dv = get_delta(base, i);
+      if (dv == P) begin
+        // plain period
+      end else if (dv == P + D) begin
+        dpos.push_back(i);
+      end else if (acount > 0 && dv == P + A) begin
+        apos.push_back(i);
+      end else if (acount > 0 && dv == P + A + D) begin
+        dpos.push_back(i);
+        apos.push_back(i);
       end else begin
-        if (runs != 1)
-          err("A3", $sformatf("%s: adj_active_o formed %0d separate runs, expected one", nm, runs));
-        else if (mx != exp_count)
-          err("A3", $sformatf("%s: adj_active_o was high for %0d cycles, adj_count_i was %0d",
-                              nm, mx, exp_count));
+        note_fail("I1", $sformatf(
+          "%s: %s advanced by %0d fns at cycle %0d; the only legal increments there are %0d (period), %0d (period+drift)%s%s",
+          tag, bn, dv, i, P, P + D,
+          (acount > 0) ? $sformatf(", %0d (period+adj)", P + A) : "",
+          (acount > 0) ? $sformatf(", %0d (period+adj+drift)", P + A + D) : ""));
+        return;   // one message is enough; the verdict is already decided
+      end
+    end
+    // ---- drift cadence: exactly one in every R consecutive increments (D2)
+    if (dpos.size() == 0) begin
+      note_fail("D2", $sformatf(
+        "%s: %s took no drift-carrying increment in %0d cycles; one in every %0d is required",
+        tag, bn, hi - lo + 1, R));
+    end else begin
+      if (dpos[0] - lo >= R)
+        note_fail("D2", $sformatf(
+          "%s: %s went %0d increments (cycles %0d..%0d) with no drift; one in every %0d is required",
+          tag, bn, dpos[0] - lo, lo, dpos[0] - 1, R));
+      if (hi - dpos[dpos.size()-1] >= R)
+        note_fail("D2", $sformatf(
+          "%s: %s went %0d increments after cycle %0d with no drift; one in every %0d is required",
+          tag, bn, hi - dpos[dpos.size()-1], dpos[dpos.size()-1], R));
+      for (i = 1; i < dpos.size(); i++)
+        if (dpos[i] - dpos[i-1] != R) begin
+          note_fail("D2", $sformatf(
+            "%s: %s drift landed at cycles %0d and %0d, a spacing of %0d; drift_rate is %0d",
+            tag, bn, dpos[i-1], dpos[i], dpos[i] - dpos[i-1], R));
+          break;
+        end
+    end
+    // ---- offset adjustment: exactly acount consecutive increments (A2)
+    if (acount > 0) begin
+      if (apos.size() != acount)
+        note_fail("A2", $sformatf(
+          "%s: %s took the offset adjustment on %0d increments, adj_count_i was %0d",
+          tag, bn, apos.size(), acount));
+      for (i = 1; i < apos.size(); i++)
+        if (apos[i] != apos[i-1] + 1) begin
+          note_fail("A2", $sformatf(
+            "%s: %s adjusted increments are not consecutive (cycle %0d then %0d)",
+            tag, bn, apos[i-1], apos[i]));
+          break;
+        end
+    end
+  endtask
+
+  // ---- ts_step_o / adj_active_o must be idle here --------------------------
+  task automatic check_quiet(input int lo, input int hi, input string tag);
+    int i;
+    for (i = lo; i <= hi; i++) begin
+      if (s_step[i] !== 1'b0) begin
+        note_fail("A4", $sformatf(
+          "%s: ts_step_o asserted at cycle %0d with no adjustment and no set in progress", tag, i));
+        return;
+      end
+      if (s_act[i] !== 1'b0) begin
+        note_fail("A3", $sformatf(
+          "%s: adj_active_o asserted at cycle %0d with no adjustment in progress", tag, i));
+        return;
       end
     end
   endtask
 
-  // Counts ts_step_o cycles in the window (used where a set is in flight).
-  function automatic int count_step();
-    int i;
-    begin
-      count_step = 0;
-      for (i = 0; i < stq.size(); i = i + 1) if (stq[i]) count_step = count_step + 1;
+  // ---- exactly one run, of exactly want_len cycles -------------------------
+  // Length and contiguity only: where the run sits relative to the adjusted
+  // increments is left free by L2.
+  task automatic check_run(input int lo, input int hi, input int which,
+                           input int want_len, input string clause,
+                           input string sig, input string tag);
+    int i, runs, cur, start_i;
+    logic v;
+    runs = 0; cur = 0; start_i = 0;
+    for (i = lo; i <= hi; i++) begin
+      v = (which == 0) ? s_step[i] : s_act[i];
+      if (v === 1'b1) begin
+        if (cur == 0) start_i = i;
+        cur = cur + 1;
+      end else if (cur > 0) begin
+        runs = runs + 1;
+        if (cur != want_len)
+          note_fail(clause, $sformatf("%s: %s was asserted for %0d consecutive cycles from cycle %0d, expected exactly %0d",
+                                      tag, sig, cur, start_i, want_len));
+        cur = 0;
+      end
     end
-  endfunction
-
-  function automatic int count_wraps();
-    int i;
-    begin
-      count_wraps = 0;
-      for (i = 0; i < wrq.size(); i = i + 1) if (wrq[i]) count_wraps = count_wraps + 1;
+    if (cur > 0) begin
+      runs = runs + 1;
+      if (cur != want_len)
+        note_fail(clause, $sformatf("%s: %s was asserted for %0d consecutive cycles from cycle %0d, expected exactly %0d",
+                                    tag, sig, cur, start_i, want_len));
     end
-  endfunction
+    if (runs != 1)
+      note_fail(clause, $sformatf("%s: %s formed %0d separate assertion runs, expected exactly 1",
+                                  tag, sig, runs));
+  endtask
 
-  function automatic int count_pps();
-    int i;
-    begin
-      count_pps = 0;
-      for (i = 0; i < ppq.size(); i = i + 1) if (ppq[i]) count_pps = count_pps + 1;
+  // ---- exactly one ts_step cycle for a set (S3) ----------------------------
+  task automatic check_step_once(input int lo, input int hi, input string tag);
+    int i, c;
+    c = 0;
+    for (i = lo; i <= hi; i++) begin
+      if (s_step[i] === 1'b1) c = c + 1;
+      if (s_act[i] !== 1'b0)
+        note_fail("A3", $sformatf("%s: adj_active_o asserted at cycle %0d, no adjustment was ordered", tag, i));
     end
-  endfunction
+    if (c != 1)
+      note_fail("S3", $sformatf("%s: ts_step_o was asserted on %0d cycles, a set must raise it for exactly 1", tag, c));
+  endtask
 
-  // ---- test program ----------------------------------------------------------
-  initial begin
-    int p0, p1c, nst, nwr, npp, i;
+  // ---- the set landed, exactly (S1/S2) -------------------------------------
+  // X2c states the written value is visible immediately and only the increment
+  // FOLLOWING it is unconstrained, so the value itself must appear verbatim on
+  // some cycle of the window.
+  task automatic check_set(input int base, input int lo, input int hi,
+                           input logic [127:0] want96, input logic [63:0] want64,
+                           input string clause, input string tag);
+    int i;
+    int ok;
+    ok = 0;
+    for (i = lo; i <= hi && ok == 0; i++) begin
+      if (base == 0) begin
+        if (s_lin[i] == want96) ok = 1;
+      end else begin
+        if (s_t64[i] == want64) ok = 1;
+      end
+    end
+    if (ok == 0)
+      note_fail(clause, $sformatf("%s: the time base never took the value it was set to", tag));
+  endtask
 
-    // ================= defaults out of reset: I2, D2, R2 ====================
+  // ---- the one-second boundary, swept over the whole run -------------------
+  //   * the ns field of ts96 never reaches 1e9                        (W1)
+  //   * seconds only ever advance by one, and only on a wrap          (W1)
+  //   * pps_o is one cycle long, once per wrap, and never otherwise   (W3)
+  //   * the reserved bits of ts96 are zero                            (F1)
+  task automatic check_global();
+    int i, j, k, cur, hit;
+    int wraps [$];
+    int ppsr  [$];
+    for (i = 0; i < mon_n; i++) begin
+      if (!s_mask[i]) begin
+        if (s_ns[i] >= 30'd1000000000)
+          note_fail("W1", $sformatf("cycle %0d: the ns field of ts96_o reached %0d; it must never reach 1000000000",
+                                    i, s_ns[i]));
+        if (s_rsv[i] !== 2'b00)
+          note_fail("F1", $sformatf("cycle %0d: ts96_o[47:46] is not 2'b00", i));
+      end
+    end
+    for (i = 1; i < mon_n; i++)
+      if (!s_mask[i] && !s_mask[i-1] && (s_sec[i] !== s_sec[i-1])) begin
+        if (s_sec[i] !== s_sec[i-1] + 48'd1)
+          note_fail("W1", $sformatf("cycle %0d: the seconds field jumped from %0d to %0d", i, s_sec[i-1], s_sec[i]));
+        else
+          wraps.push_back(i);
+      end
+    cur = 0;
+    for (i = 0; i < mon_n; i++) begin
+      if (!s_mask[i] && s_pps[i] === 1'b1) cur = cur + 1;
+      else begin
+        if (cur > 0) begin
+          if (cur != 1)
+            note_fail("W3", $sformatf("pps_o was asserted for %0d consecutive cycles ending at cycle %0d, expected exactly 1",
+                                      cur, i - 1));
+          ppsr.push_back(i - cur);
+        end
+        cur = 0;
+      end
+    end
+    if (cur > 0) begin
+      if (cur != 1) note_fail("W3", $sformatf("pps_o was asserted for %0d consecutive cycles at the end of the run", cur));
+      ppsr.push_back(mon_n - cur);
+    end
+    if (wraps.size() != 1)
+      note_fail("W1", $sformatf("%0d one-second wraps observed, the stimulus produces exactly 1", wraps.size()));
+    if (ppsr.size() != wraps.size())
+      note_fail("W3", $sformatf("pps_o pulsed %0d times but %0d one-second wraps occurred",
+                                ppsr.size(), wraps.size()));
+    for (j = 0; j < wraps.size(); j++) begin
+      hit = 0;
+      for (k = 0; k < ppsr.size(); k++)
+        if (ppsr[k] >= wraps[j] - 3 && ppsr[k] <= wraps[j] + 3) hit = 1;
+      if (hit == 0)
+        note_fail("W3", $sformatf("the wrap at cycle %0d was not marked by pps_o", wraps[j]));
+    end
+  endtask
+
+  // -------------------------------------------------------------------------
+  // Stimulus.  Window bookkeeping is read at a RISING edge, where mon_n is
+  // stable; reading it at the falling edge would race the monitor.  Counters
+  // are armed BEFORE a valid is presented, never after (L1).
+  // -------------------------------------------------------------------------
+  initial begin : stimulus
+    int kr, ka, kb, kc;
+    logic [127:0] want96;
+    logic [63:0]  want64;
+
+    // ===================== reset, and the pinned defaults ==================
     bfm_reset(5);
-    bfm_wait(4);
-    p0 = pps_cnt;
-    rec_start();
-    bfm_wait(140);
-    rec_stop();
-    check_win("defaults", 0, P_DEF, 64'd0, D_DEF, R_DEF, 0, "I1");
-    check_win("defaults", 1, P_DEF, 64'd0, D_DEF, R_DEF, 0, "I1");
-    check_adj_active("defaults", 0);
-    if (pps_cnt != p0)
-      err("W3", "pps_o asserted with no one-second wrap anywhere near");
+    @(posedge clk); kr = mon_n;       // sample kr is cycle 1 after reset
+    mask_range(0, kr + WARM - 1);     // X2b: cycles 1..8 are not measurable
+    bfm_wait(WARM + 160);
+    @(posedge clk); ka = mon_n;
+    // R2: reset left both bases at zero, so by cycle 11 they have only had a
+    // handful of increments -- a base that was not cleared reads enormously
+    // larger than this.
+    if (s_lin[kr + WARM] > 128'd1000 * 128'd419430)
+      note_fail("R2", $sformatf("ts96_o reads %0d fns shortly after reset; reset must leave it at zero",
+                                s_lin[kr + WARM][63:0]));
+    if (s_t64[kr + WARM] > 64'd1000 * 64'd419430)
+      note_fail("R2", $sformatf("ts64_o reads %0d fns shortly after reset; reset must leave it at zero",
+                                s_t64[kr + WARM]));
+    // 6.4 ns per cycle exactly, 2 fns of drift on one increment in every 5.
+    check_region(0, kr + WARM, ka-1, P_DEF, D_DEF, R_DEF, 64'sd0, 0, "reset defaults");
+    check_region(1, kr + WARM, ka-1, P_DEF, D_DEF, R_DEF, 64'sd0, 0, "reset defaults");
+    check_quiet(kr + WARM, ka-1, "reset defaults");
 
-    // ================= a new nominal period: I2 =============================
-    bfm_period(4'h8, 16'h1234);
-    bfm_wait(40);
-    rec_start();
-    bfm_wait(140);
-    rec_stop();
-    check_win("new period", 0, P1, 64'd0, D_DEF, R_DEF, 0, "I1");
-    check_win("new period", 1, P1, 64'd0, D_DEF, R_DEF, 0, "I1");
+    // ===================== a new period and a negative drift ===============
+    bfm_period(4'h8, 16'h0001);              // 8 ns + 1 fns
+    bfm_drift (4'hF, 16'hFF9C, 16'd7);       // -100 fns, one in 7
+    bfm_wait(SETTLE);                        // clear of the L1 latency bound
+    @(posedge clk); ka = mon_n;
+    bfm_wait(180);
+    @(posedge clk); kb = mon_n;
+    check_region(0, ka, kb-1, P_ALT, D_ALT, R_ALT, 64'sd0, 0, "steered period/drift");
+    check_region(1, ka, kb-1, P_ALT, D_ALT, R_ALT, 64'sd0, 0, "steered period/drift");
+    check_quiet(ka, kb-1, "steered period/drift");
 
-    // ================= a new drift and rate: D1, D2 =========================
-    bfm_drift(4'h0, 16'h0007, 16'd7);
-    bfm_wait(40);
-    rec_start();
-    bfm_wait(140);
-    rec_stop();
-    check_win("drift +7 rate 7", 0, P1, 64'd0, DR_POS, 7, 0, "I1");
-    check_win("drift +7 rate 7", 1, P1, 64'd0, DR_POS, 7, 0, "I1");
-
-    // ================= a negative drift: D3 =================================
-    bfm_drift(4'hF, 16'hFFF9, 16'd3);
-    bfm_wait(40);
-    rec_start();
-    bfm_wait(140);
-    rec_stop();
-    check_win("drift -7 rate 3", 0, P1, 64'd0, DR_NEG, 3, 0, "I1");
-    check_win("drift -7 rate 3", 1, P1, 64'd0, DR_NEG, 3, 0, "I1");
-
-    // ================= a counted offset, positive: A1..A4 ===================
-    rec_start();                       // armed BEFORE the valid, per L1
-    bfm_wait(3);
-    bfm_adjust(4'h0, 16'h0100, 16'd20);
+    // ===================== counted offset adjustment, positive =============
+    @(posedge clk); ka = mon_n;              // armed BEFORE the valid
+    bfm_adjust(4'h1, 16'h0000, 16'(N_POS));  // +1 ns on 9 increments
     bfm_wait(90);
-    rec_stop();
-    check_win("offset +256 x20", 0, P1, ADJ_POS, DR_NEG, 3, 20, "I1");
-    check_win("offset +256 x20", 1, P1, ADJ_POS, DR_NEG, 3, 20, "I1");
-    check_adj_active("offset +256 x20", 20);
+    @(posedge clk); kb = mon_n;
+    check_region(0, ka+1, kb-1, P_ALT, D_ALT, R_ALT, A_POS, N_POS, "positive adjustment");
+    check_region(1, ka+1, kb-1, P_ALT, D_ALT, R_ALT, A_POS, N_POS, "positive adjustment");
+    check_run(ka, kb-1, 1, N_POS, "A3", "adj_active_o", "positive adjustment");
+    check_run(ka, kb-1, 0, N_POS, "A4", "ts_step_o",    "positive adjustment");
 
-    // ================= a counted offset, negative: A5 =======================
-    rec_start();
-    bfm_wait(3);
-    bfm_adjust(4'hF, 16'hF000, 16'd12);
+    // ===================== counted offset adjustment, negative =============
+    @(posedge clk); ka = mon_n;
+    bfm_adjust(4'hF, 16'h0000, 16'(N_NEG));  // -1 ns on 13 increments
     bfm_wait(90);
-    rec_stop();
-    check_win("offset -4096 x12", 0, P1, ADJ_NEG, DR_NEG, 3, 12, "I1");
-    check_win("offset -4096 x12", 1, P1, ADJ_NEG, DR_NEG, 3, 12, "I1");
-    check_adj_active("offset -4096 x12", 12);
+    @(posedge clk); kb = mon_n;
+    check_region(0, ka+1, kb-1, P_ALT, D_ALT, R_ALT, A_NEG, N_NEG, "negative adjustment");
+    check_region(1, ka+1, kb-1, P_ALT, D_ALT, R_ALT, A_NEG, N_NEG, "negative adjustment");
+    check_run(ka, kb-1, 1, N_NEG, "A3", "adj_active_o", "negative adjustment");
+    check_run(ka, kb-1, 0, N_NEG, "A4", "ts_step_o",    "negative adjustment");
 
-    // ================= a count of one: the A2/A3 boundary ===================
-    rec_start();
-    bfm_wait(3);
-    bfm_adjust(4'h0, 16'h0100, 16'd1);
-    bfm_wait(60);
-    rec_stop();
-    check_win("offset +256 x1", 0, P1, ADJ_POS, DR_NEG, 3, 1, "I1");
-    check_win("offset +256 x1", 1, P1, ADJ_POS, DR_NEG, 3, 1, "I1");
-    check_adj_active("offset +256 x1", 1);
+    // ===================== set ts64 across one second (S2, S4, W2) =========
+    @(posedge clk); ka = mon_n;
+    mask_range(ka, ka + SETW);
+    want64 = {48'd999_999_800, 16'd0};
+    bfm_set64(48'd999_999_800, 16'd0);
+    bfm_wait(90);                            // ~720 ns: well past the boundary
+    @(posedge clk); kb = mon_n;
+    check_set(1, ka+1, ka + SETW, 128'd0, want64, "S2", "set of ts64");
+    check_step_once(ka, ka + SETW, "set of ts64");
+    // X2c has elapsed: ts64 has no seconds field and must sail through 1e9 ns.
+    check_region(1, ka + SETW + 1, kb-1, P_ALT, D_ALT, R_ALT, 64'sd0, 0, "ts64 past one second");
+    if (!(s_t64[kb-1][63:16] > 48'd1_000_000_000))
+      note_fail("W2", $sformatf("ts64_o fell back to %0d ns instead of running past one second",
+                                s_t64[kb-1][63:16]));
+    // S4: the other base was NOT set, so X2c does not cover it -- check it
+    // straight through the window.
+    check_region(0, ka, kb-1, P_ALT, D_ALT, R_ALT, 64'sd0, 0, "ts96 while ts64 was set");
+    check_quiet(ka + SETW + 1, kb-1, "after set of ts64");
 
-    // ================= setting ts96 does not disturb ts64: S1, S3, S4 =======
-    // Repeated at every phase of the drift counter (rate is 3 here): a design
-    // that quietly re-phases the drift on a set disturbs the spacing on some
-    // phases and not others, so one set at one phase would not settle it.
-    for (i = 0; i < 3; i = i + 1) begin
-      step_eq_en = 1'b0;
-      jump_en    = 1'b0;
-      rec_start();
-      bfm_wait(3 + i);
-      bfm_set96(48'd0, 30'd100, 16'd0);
-      bfm_wait(50);
-      rec_stop();
-      check_win("set96", 0, P1, 64'd0, DR_NEG, 3, 0, "S4");   // ts64 must be untouched
-      check_adj_active("set96", 0);
-      nst = count_step();
-      if (nst != 1)
-        err("S3", $sformatf("set_ts96_valid_i raised ts_step_o on %0d cycles, expected exactly one", nst));
-      if (ts96[95:48] !== 48'd0)
-        err("S1", "the seconds field did not take the value written by set_ts96_i");
-      if (ts96[45:16] > 30'd2000)
-        err("S1", $sformatf("the ns field is %0d, which is not what set_ts96_i wrote", ts96[45:16]));
-      bfm_wait(4);
-      step_eq_en = 1'b1;
-      jump_en    = 1'b1;
-      bfm_wait(6);
-    end
+    // ===================== set ts96 up against the wrap (S1, W1, W3) =======
+    @(posedge clk); ka = mon_n;
+    mask_range(ka, ka + SETW);
+    want96 = 128'd3 * 128'd65536000000000 + (128'd999_999_800 << 16);
+    bfm_set96(48'd3, 30'd999_999_800, 16'd0);
+    bfm_wait(100);                           // the wrap lands ~25 cycles in,
+    @(posedge clk); kb = mon_n;              // well after the X2c window
+    check_set(0, ka+1, ka + SETW, want96, 64'd0, "S1", "set of ts96");
+    check_step_once(ka, ka + SETW, "set of ts96");
+    // Across the wrap the base must still advance by exactly one increment:
+    // the linear value ignores the field split, so a wrap that subtracts
+    // anything other than exactly 1e9 ns shows up as an illegal increment.
+    check_region(0, ka + SETW + 1, kb-1, P_ALT, D_ALT, R_ALT, 64'sd0, 0, "ts96 across the wrap");
+    check_region(1, ka, kb-1, P_ALT, D_ALT, R_ALT, 64'sd0, 0, "ts64 while ts96 was set");
+    check_quiet(ka + SETW + 1, kb-1, "across the wrap");
+    if (s_sec[kb-1] !== 48'd4)
+      note_fail("W1", $sformatf("the seconds field reads %0d after the one-second wrap, expected 4", s_sec[kb-1]));
 
-    // ================= setting ts64 does not disturb ts96: S2, S3, S4 =======
-    for (i = 0; i < 3; i = i + 1) begin
-      step_eq_en = 1'b0;
-      jump_en    = 1'b0;
-      rec_start();
-      bfm_wait(3 + i);
-      bfm_set64(48'd500, 16'd0);
-      bfm_wait(50);
-      rec_stop();
-      check_win("set64", 1, P1, 64'd0, DR_NEG, 3, 0, "S4");   // ts96 must be untouched
-      check_adj_active("set64", 0);
-      nst = count_step();
-      if (nst != 1)
-        err("S3", $sformatf("set_ts64_valid_i raised ts_step_o on %0d cycles, expected exactly one", nst));
-      if (ts64[63:16] > 48'd3000)
-        err("S2", $sformatf("the ts64_o ns field is %0d, which is not what set_ts64_i wrote", ts64[63:16]));
-      bfm_wait(4);
-      step_eq_en = 1'b1;
-      jump_en    = 1'b1;
-      bfm_wait(6);
-    end
-
-    // ================= the one-second wrap: W1, W2, W3 ======================
-    jump_en    = 1'b0;
-    step_eq_en = 1'b0;               // two sets in flight: A4's equality is off
-    bfm_set96(48'd7, 30'd999_999_000, 16'd0);
-    bfm_set64(48'd999_999_000, 16'd0);
+    // ===================== reset cancels what is still owed (R2) ===========
+    @(posedge clk); kc = mon_n;
+    bfm_adjust(4'h2, 16'h0000, 16'd400);     // 400 increments still owed...
     bfm_wait(12);
-    jump_en    = 1'b1;
-    step_eq_en = 1'b1;
-    p1c = pps_cnt;
-    rec_start();
-    bfm_wait(170);
-    rec_stop();
-    // the wrapping increment itself must be exactly a legal increment
-    check_win("one-second wrap", 1, P1, 64'd0, DR_NEG, 3, 0, "I1");
-    nwr = count_wraps();
-    npp = count_pps();
-    if (nwr != 1)
-      err("W1", $sformatf("%0d one-second wraps occurred in the window, expected exactly one", nwr));
-    if (npp != nwr)
-      err("W3", $sformatf("pps_o pulsed on %0d cycles for %0d wrap(s)", npp, nwr));
-    if (ts96[95:48] !== 48'd8)
-      err("W1", $sformatf("the seconds field is %0d after one wrap from 7", ts96[95:48]));
-    // W2: ts64_o has no seconds field and must sail past one second
-    if (ts64[63:16] < 48'd1_000_000_000)
-      err("W2", $sformatf("ts64_o ns field is %0d, so it wrapped at one second", ts64[63:16]));
+    bfm_reset(5);                            // ...and then reset lands
+    @(posedge clk); kr = mon_n;
+    mask_range(kc, kr + WARM - 1);
+    bfm_wait(WARM + 160);
+    @(posedge clk); ka = mon_n;
+    if (s_lin[kr + WARM] > 128'd1000 * 128'd419430)
+      note_fail("R2", $sformatf("ts96_o reads %0d fns after reset; reset must leave it at zero",
+                                s_lin[kr + WARM][63:0]));
+    if (s_t64[kr + WARM] > 64'd1000 * 64'd419430)
+      note_fail("R2", $sformatf("ts64_o reads %0d fns after reset; reset must leave it at zero",
+                                s_t64[kr + WARM]));
+    // Back to 6.4 ns, drift 2 fns, rate 5 -- and nothing owed from before.
+    check_region(0, kr + WARM, ka-1, P_DEF, D_DEF, R_DEF, 64'sd0, 0, "after reset");
+    check_region(1, kr + WARM, ka-1, P_DEF, D_DEF, R_DEF, 64'sd0, 0, "after reset");
+    check_quiet(kr + WARM, ka-1, "after reset");
 
-    // ================= reset cancels an outstanding offset: R2 ==============
-    bfm_adjust(4'h0, 16'h0100, 16'd400);
-    bfm_wait(10);
-    bfm_reset(4);
-    @(posedge clk);
-    if (ts64 > (5 * P_DEF))
-      err("R2", $sformatf("ts64_o reads %0d just after reset, expected to restart from zero", ts64));
-    if (ts96[95:48] !== 48'd0)
-      err("R2", "the seconds field is not zero after reset");
-    if (ts96[45:16] > 30'd2000)
-      err("R2", "the ns field did not restart from zero after reset");
-    bfm_wait(4);
-    rec_start();
-    bfm_wait(140);
-    rec_stop();
-    // defaults restored AND nothing left of the 400-count adjustment
-    check_win("after reset", 0, P_DEF, ADJ_POS, D_DEF, R_DEF, 0, "I1");
-    check_win("after reset", 1, P_DEF, ADJ_POS, D_DEF, R_DEF, 0, "I1");
-    check_adj_active("after reset", 0);
+    // ===================== verdict =========================================
+    check_global();
 
-    // ---- verdict --------------------------------------------------------------
-    if (nerr == 0) $display("RESULT: PASS");
-    else           $display("RESULT: FAIL");
+    if (err_count == 0) $display("RESULT: PASS");
+    else                $display("RESULT: FAIL (%0d violation%s)", err_count, (err_count == 1) ? "" : "s");
     $finish;
   end
 

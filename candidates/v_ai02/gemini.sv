@@ -1,29 +1,7 @@
 module stream_realign_tb;
-
 // ---------------------------------------------------------------------------
 // PROVIDED PLUMBING -- moves beats, checks nothing.
 // ---------------------------------------------------------------------------
-// This exists so you spend your effort on checking rather than on handshake
-// mechanics. It has been compiled and run against a correct design.
-//
-// What it does: generates the clock, sequences reset, connects the design, and
-// presents queued beats one at a time -- holding each offer unchanged until it
-// is taken, which is what clause H2 requires of a source.
-//
-// What it does NOT do: it computes no expected value, models no rotation, keeps
-// no byte stream, and draws no conclusion from any signal.
-//
-// TWO THINGS WORTH KNOWING, both of which cost real time to find:
-//
-//   * The driver is an ALWAYS BLOCK, not a loop you pump from your stimulus.
-//     A pumped loop only services the edges it happens to be waiting on, and
-//     every edge you wait on elsewhere is one where a beat can be accepted
-//     unnoticed -- after which you re-present a beat the design already took.
-//
-//   * Sample a handshake AT the rising edge. `push_ready_o` read at the falling
-//     edge is not necessarily the value the design used.
-// ---------------------------------------------------------------------------
-
   // ---- clock ---------------------------------------------------------------
   logic clk = 1'b0;
   always #5 clk = ~clk;
@@ -116,9 +94,6 @@ module stream_realign_tb;
   end
 
   // ---- watchdog --------------------------------------------------------------
-  // Yours to keep. It fires regardless of what the design does: one of the
-  // faulty designs never accepts anything, and without this your testbench
-  // hangs instead of reporting. A hang is not a verdict.
   initial begin
     #2_000_000;
     $display("RESULT: FAIL (watchdog: no verdict reached)");
@@ -126,189 +101,215 @@ module stream_realign_tb;
   end
 
 // ---------------------------------------------------------------------------
-// CHECKER LOGIC
+// TESTBENCH LOGIC
 // ---------------------------------------------------------------------------
 
-  bit failed = 0;
-  task automatic fail(string msg);
-    if (!failed) begin
-      $display("RESULT: FAIL (%0s)", msg);
-      failed = 1;
-      $finish;
-    end
-  endtask
-
-  // Expected transaction queue
   typedef struct {
     logic [31:0] data;
-    logic [3:0]  strb;
-    bit          is_realign;
-    bit          is_first; // just for bookkeeping/L1
-  } exp_t;
-  exp_t exp_q[$];
+    bit check_strb;
+    bit check_data;
+  } expected_beat_t;
 
-  // Monitor state for realign
-  logic [31:0] retained_beat = 0;
-  int rotation_r = 0;
-  bit in_line = 0;
+  expected_beat_t expected_q [$];
 
-  function automatic int count_ones(logic [3:0] val);
-    int c = 0;
-    for (int i = 0; i < 4; i++) if (val[i]) c++;
-    return c;
-  endfunction
+  task automatic send_pass(input logic [31:0] data, input logic [3:0] strb = 4'hF);
+    expected_beat_t exp;
+    exp.data = data;
+    exp.check_strb = 0; // L3: not specified
+    exp.check_data = 1;
+    expected_q.push_back(exp);
+    bfm_send(.data(data), .first(0), .last(0), .do_realign(0), .lstrb(0), .dstrb(strb));
+  endtask
 
-  function automatic logic [31:0] compute_realign(logic [31:0] cur, logic [31:0] ret, int r);
-    logic [63:0] shifted;
-    if (r == 0) return cur;
-    if (r == 4) return ret;
-    shifted = {cur, ret} >> (8 * (4 - r));
-    return shifted[31:0];
-  endfunction
+  logic [31:0] t_retained = 0;
+  int t_R = 0;
+  bit t_unknown = 0;
 
-  // Model the expected stream
-  always @(posedge clk) begin
-    if (!rst_n || clr) begin
-      in_line = 0;
-      retained_beat = 0;
-      rotation_r = 0;
-      exp_q.delete();
-    end else if (pvalid && pready) begin
-      if (!ra) begin
-        // P1: pass-through
-        exp_t e;
-        e.data = pdata;
-        e.strb = pstrb;
-        e.is_realign = 0;
-        e.is_first = 0;
-        exp_q.push_back(e);
-      end else begin
-        // R1: Realign mode
-        if (fst) begin
-          in_line = 1;
-          rotation_r = count_ones(strb);
-          retained_beat = pdata;
-          // No output expected for first beat
-          
-          // L1: Can be accepted without pop_ready_i. We won't check pop_ready here.
-        end else if (in_line) begin
-          // R2: after first, produces output iff last_i is high or strb_i != 0
-          if (lst || strb != 0) begin
-            exp_t e;
-            e.data = compute_realign(pdata, retained_beat, rotation_r);
-            e.strb = 4'hF; // R3: all ones
-            e.is_realign = 1;
-            e.is_first = 0;
-            exp_q.push_back(e);
-          end
-          retained_beat = pdata;
-          if (lst) begin
-            in_line = 0;
-          end
-        end
-      end
-    end
-  end
-
-  // Checking the output
-  always @(posedge clk) begin
-    if (!rst_n) begin
-      // X1: pop_valid_o must be low during reset
-      if (qvalid) fail("X1: pop_valid_o asserted while rst_ni is low");
+  task automatic send_realign(
+    input logic [31:0] data,
+    input bit first,
+    input bit last,
+    input logic [3:0] lstrb
+  );
+    if (first) begin
+      // R1: produces no output beat, consumed and retained
+      t_R = 0;
+      for (int i = 0; i < 4; i++) if (lstrb[i]) t_R++;
+      t_retained = data;
+      t_unknown = 0;
     end else begin
-      // When valid is asserted, check against expected queue if a handshake happens
+      // R2 & R6: an output is produced if last_i is high or strb_i is non-zero
+      if (last || lstrb != 0) begin
+        expected_beat_t exp;
+        
+        if (t_R == 0) exp.data = data;
+        else if (t_R == 4) exp.data = t_retained;
+        else exp.data = (data << (8 * t_R)) | (t_retained >> (8 * (4 - t_R)));
+        
+        exp.check_strb = 1;         // R3: strb must be all ones
+        exp.check_data = !t_unknown;// L4: data unknown if preceded by a silently consumed beat
+        expected_q.push_back(exp);
+        
+        t_retained = data;
+        t_unknown = 0;
+      end else begin
+        // Silently consumed beat
+        t_unknown = 1;
+      end
+    end
+    
+    bfm_send(.data(data), .first(first), .last(last), .do_realign(1), .lstrb(lstrb), .dstrb(4'hF));
+  endtask
+
+  always @(posedge clk) begin
+    if (rst_n && !clr) begin
+      
+      // P1 transparent mode checks
+      if (!ra) begin
+        if (qvalid !== pvalid) begin
+          $display("RESULT: FAIL (P1: pop_valid_o does not follow push_valid_i in pass-through)");
+          $finish;
+        end
+        // H3 allows pready to be undefined when pvalid is 0
+        if (pvalid && pready !== qready) begin
+          $display("RESULT: FAIL (P1: push_ready_o does not follow pop_ready_i in pass-through)");
+          $finish;
+        end
+        if (pvalid && qvalid && qdata !== pdata) begin
+          $display("RESULT: FAIL (P1: pop_data_o does not equal push_data_i in pass-through)");
+          $finish;
+        end
+      end
+
+      // Verify outputs and pops from queue
       if (qvalid && qready) begin
-        if (exp_q.size() == 0) begin
-          fail("Unexpected output handshake, queue empty");
-        end else begin
-          automatic exp_t e = exp_q.pop_front();
-          if (qdata !== e.data) begin
-            $display("Expected %x, got %x", e.data, qdata);
-            fail("Data mismatch");
+        if (expected_q.size() == 0) begin
+          $display("RESULT: FAIL (R1/R2: Extra output beat produced unexpectedly)");
+          $finish;
+        end
+        
+        begin
+          automatic expected_beat_t exp = expected_q.pop_front();
+          if (exp.check_data && qdata !== exp.data) begin
+            $display("RESULT: FAIL (R2: Data mismatch on realigned output, expected %08x got %08x)", exp.data, qdata);
+            $finish;
           end
-          if (e.is_realign) begin
-            if (qstrb !== 4'hF) fail("R3: pop_strb_o not all ones during realign");
-          end else begin
-            // P2/L3: pass-through strb is either push_strb_i or 4'hF
-            if (qstrb !== e.strb && qstrb !== 4'hF) fail("P2/L3: pop_strb_o invalid in pass-through");
+          if (exp.check_strb && qstrb !== 4'hF) begin
+            $display("RESULT: FAIL (R3: Output strobe is not all ones during realignment)");
+            $finish;
           end
         end
       end
     end
+    
+    // X1 Reset checks
+    if (!rst_n && !pvalid) begin
+      if (qvalid !== 1'b0) begin
+        $display("RESULT: FAIL (X1: qvalid is not 0 during reset)");
+        $finish;
+      end
+    end
   end
 
-  // X3: Liveness check
-  int wait_cycles = 0;
+  // X3 Liveness check
+  int liveness_count = 0;
   always @(posedge clk) begin
     if (rst_n && !clr) begin
       if (pvalid && qready && !pready) begin
-        wait_cycles++;
-        if (wait_cycles > 16) fail("X3: liveness bound exceeded, push_ready_o not asserted within 16 cycles");
-      end else if (pvalid && pready) begin
-        wait_cycles = 0;
-      end else if (!pvalid) begin
-        wait_cycles = 0;
+        liveness_count++;
+        if (liveness_count >= 16) begin
+          $display("RESULT: FAIL (X3: Liveness bound exceeded; beat not accepted within 16 cycles)");
+          $finish;
+        end
+      end else begin
+        liveness_count = 0;
       end
     end else begin
-      wait_cycles = 0;
+      liveness_count = 0;
     end
   end
 
-// ---------------------------------------------------------------------------
-// STIMULUS
-// ---------------------------------------------------------------------------
+  // Generate stimulus sequences covering all aspects
   initial begin
-    // Reset system
-    bfm_ready(1'b1);
+    bfm_ready(1);
     bfm_reset();
-    
-    // 1. Pass-through mode (P1, P2)
-    bfm_send(32'h11223344, 0, 0, 0, 4'h0, 4'hA);
-    bfm_send(32'h55667788, 0, 0, 0, 4'h0, 4'h5);
+
+    // 1. Pass-through mode (P1)
+    send_pass(32'h01020304, 4'hA);
+    send_pass(32'h05060708, 4'h0);
     bfm_idle();
 
-    // 2. Realign Mode R=1 (R1, R2, R3, R4, R5, R6)
-    bfm_send(32'hAABBCCDD, 1, 0, 1, 4'h1, 4'hF); // R=1
-    bfm_send(32'h11223344, 0, 0, 1, 4'h2, 4'hF); // Should produce output
-    bfm_send(32'h55667788, 0, 1, 1, 4'h0, 4'hF); // R6: last_i high with 0 strb
-    bfm_idle();
-    
-    // 3. Realign Mode R=4 (skip first beat output fully, 1 cycle delay basically)
-    bfm_send(32'h11111111, 1, 0, 1, 4'hF, 4'hF); // R=4
-    bfm_send(32'h22222222, 0, 0, 1, 4'hF, 4'hF); 
-    bfm_send(32'h33333333, 0, 1, 1, 4'hF, 4'hF); 
-    bfm_idle();
-    
-    // 4. Realign Mode R=0 (current beat only)
-    bfm_send(32'h44444444, 1, 0, 1, 4'h0, 4'hF); // R=0
-    bfm_send(32'h55555555, 0, 0, 1, 4'hF, 4'hF); 
-    bfm_send(32'h66666666, 0, 1, 1, 4'hF, 4'hF); 
+    // 2. Realignment, varying rotational configurations R=0, 1, 2, 3, 4
+    send_realign(32'h10111213, 1, 0, 4'h0); // R=0
+    send_realign(32'h14151617, 0, 0, 4'hF);
+    send_realign(32'h18191A1B, 0, 1, 4'hF);
     bfm_idle();
 
-    // 5. Test L1 (backpressure on first beat)
-    bfm_ready(1'b0);
-    bfm_send(32'h77777777, 1, 0, 1, 4'h3, 4'hF);
-    #100;
-    bfm_ready(1'b1);
-    bfm_send(32'h88888888, 0, 1, 1, 4'hF, 4'hF);
+    send_realign(32'h20212223, 1, 0, 4'h1); // R=1
+    send_realign(32'h24252627, 0, 0, 4'hF);
+    send_realign(32'h28292A2B, 0, 1, 4'hF);
     bfm_idle();
 
-    // 6. Test Clear (X2)
-    bfm_send(32'h99999999, 1, 0, 1, 4'h3, 4'hF);
+    send_realign(32'h30313233, 1, 0, 4'h3); // R=2
+    send_realign(32'h34353637, 0, 0, 4'hF);
+    send_realign(32'h38393A3B, 0, 1, 4'hF);
+    bfm_idle();
+
+    send_realign(32'h40414243, 1, 0, 4'h7); // R=3
+    send_realign(32'h44454647, 0, 0, 4'hF);
+    send_realign(32'h48494A4B, 0, 1, 4'hF);
+    bfm_idle();
+
+    send_realign(32'h50515253, 1, 0, 4'hF); // R=4
+    send_realign(32'h54555657, 0, 0, 4'hF);
+    send_realign(32'h58595A5B, 0, 1, 4'hF);
+    bfm_idle();
+
+    // 3. Test R6: last_i high with strb_i = 0 forces an output beat
+    send_realign(32'h60616263, 1, 0, 4'h3); // R=2
+    send_realign(32'h64656667, 0, 0, 4'hF);
+    send_realign(32'h68696A6B, 0, 1, 4'h0); // Output produced despite strb=0
+    bfm_idle();
+
+    // 4. Test silently consumed beat handling (L4)
+    send_realign(32'h70717273, 1, 0, 4'h3); // R=2
+    send_realign(32'h74757677, 0, 0, 4'hF); // middle beat
+    send_realign(32'h78797A7B, 0, 0, 4'h0); // Silent consume! No output produced.
+    send_realign(32'h7C7D7E7F, 0, 1, 4'hF); // output produced, data strictly unconstrained/unchecked.
+    bfm_idle();
+
+    // 5. Test L1 latitude allowance: First beat processing behavior when sink is not ready
+    bfm_ready(0);
+    send_realign(32'h80818283, 1, 0, 4'h3);
+    repeat(10) @(posedge clk);
+    bfm_ready(1);
+    send_realign(32'h84858687, 0, 1, 4'hF);
+    bfm_idle();
+
+    // 6. Test single-beat line (first and last asserted simultaneously)
+    send_realign(32'hB0B1B2B3, 1, 1, 4'h3); // Valid structurally, outputs nothing
+    bfm_idle();
+
+    // 7. Test X2: clear_i returning the unit to its starting condition correctly
+    send_realign(32'h90919293, 1, 0, 4'h3);
     bfm_idle();
     bfm_clear();
-    // After clear, state should be reset. 
-    // Sending a new pass-through should work immediately without finishing the old line
-    bfm_send(32'hAABBAABB, 0, 0, 0, 4'h0, 4'hF);
+    
+    send_realign(32'hA0A1A2A3, 1, 0, 4'h1);
+    send_realign(32'hA4A5A6A7, 0, 1, 4'hF);
+    bfm_idle();
+    
+    // Hold inputs quiet to test persistent reset assertions
+    bfm_reset();
     bfm_idle();
 
-    // 7. Verify we didn't leave anything in queue
-    if (exp_q.size() != 0) fail("Test finished but expected items remain in queue");
-
-    if (!failed) begin
-      $display("RESULT: PASS");
+    if (expected_q.size() != 0) begin
+      $display("RESULT: FAIL (R2: Missing expected output beats at end of test)");
       $finish;
     end
+    
+    $display("RESULT: PASS");
+    $finish;
   end
 
 endmodule

@@ -1,95 +1,23 @@
 module id_width_conv_tb;
 
-  parameter int unsigned SLV_ID_W        = 4;
-  parameter int unsigned MST_ID_W        = 2;
-  parameter int unsigned ADDR_W          = 32;
-  parameter int unsigned DATA_W          = 32;
-  parameter int unsigned MAX_UNIQ_IDS    = 4;
-  parameter int unsigned MAX_TXNS_PER_ID = 2;
+  localparam int SLV_ID_W        = 4;
+  localparam int MST_ID_W        = 2;
+  localparam int ADDR_W          = 32;
+  localparam int DATA_W          = 32;
+  localparam int MAX_UNIQ_IDS    = 4;
+  localparam int MAX_TXNS_PER_ID = 2;
 
-  // Ports
-  logic                    clk;
-  logic                    rst_n;
+// ---------------------------------------------------------------------------
+// PROVIDED PLUMBING -- moves transactions, checks nothing.
+// ---------------------------------------------------------------------------
 
-  logic [SLV_ID_W-1:0]     s_awid;
-  logic [ADDR_W-1:0]       s_awaddr;
-  logic [7:0]              s_awlen;
-  logic                    s_awvalid;
-  logic                    s_awready;
-  logic [DATA_W-1:0]       s_wdata;
-  logic [DATA_W/8-1:0]     s_wstrb;
-  logic                    s_wlast;
-  logic                    s_wvalid;
-  logic                    s_wready;
-  logic [SLV_ID_W-1:0]     s_bid;
-  logic [1:0]              s_bresp;
-  logic                    s_bvalid;
-  logic                    s_bready;
-  logic [SLV_ID_W-1:0]     s_arid;
-  logic [ADDR_W-1:0]       s_araddr;
-  logic [7:0]              s_arlen;
-  logic                    s_arvalid;
-  logic                    s_arready;
-  logic [SLV_ID_W-1:0]     s_rid;
-  logic [DATA_W-1:0]       s_rdata;
-  logic [1:0]              s_rresp;
-  logic                    s_rlast;
-  logic                    s_rvalid;
-  logic                    s_rready;
-
-  logic [MST_ID_W-1:0]     m_awid;
-  logic [ADDR_W-1:0]       m_awaddr;
-  logic [7:0]              m_awlen;
-  logic                    m_awvalid;
-  logic                    m_awready;
-  logic [DATA_W-1:0]       m_wdata;
-  logic [DATA_W/8-1:0]     m_wstrb;
-  logic                    m_wlast;
-  logic                    m_wvalid;
-  logic                    m_wready;
-  logic [MST_ID_W-1:0]     m_bid;
-  logic [1:0]              m_bresp;
-  logic                    m_bvalid;
-  logic                    m_bready;
-  logic [MST_ID_W-1:0]     m_arid;
-  logic [ADDR_W-1:0]       m_araddr;
-  logic [7:0]              m_arlen;
-  logic                    m_arvalid;
-  logic                    m_arready;
-  logic [MST_ID_W-1:0]     m_rid;
-  logic [DATA_W-1:0]       m_rdata;
-  logic [1:0]              m_rresp;
-  logic                    m_rlast;
-  logic                    m_rvalid;
-  logic                    m_rready;
-
-  id_width_conv #(
-      .SLV_ID_W(SLV_ID_W),
-      .MST_ID_W(MST_ID_W),
-      .ADDR_W(ADDR_W),
-      .DATA_W(DATA_W),
-      .MAX_UNIQ_IDS(MAX_UNIQ_IDS),
-      .MAX_TXNS_PER_ID(MAX_TXNS_PER_ID)
-  ) dut (
-      .clk_i(clk), .rst_ni(rst_n),
-      .s_awid(s_awid), .s_awaddr(s_awaddr), .s_awlen(s_awlen), .s_awvalid(s_awvalid), .s_awready(s_awready),
-      .s_wdata(s_wdata), .s_wstrb(s_wstrb), .s_wlast(s_wlast), .s_wvalid(s_wvalid), .s_wready(s_wready),
-      .s_bid(s_bid), .s_bresp(s_bresp), .s_bvalid(s_bvalid), .s_bready(s_bready),
-      .s_arid(s_arid), .s_araddr(s_araddr), .s_arlen(s_arlen), .s_arvalid(s_arvalid), .s_arready(s_arready),
-      .s_rid(s_rid), .s_rdata(s_rdata), .s_rresp(s_rresp), .s_rlast(s_rlast), .s_rvalid(s_rvalid), .s_rready(s_rready),
-      .m_awid(m_awid), .m_awaddr(m_awaddr), .m_awlen(m_awlen), .m_awvalid(m_awvalid), .m_awready(m_awready),
-      .m_wdata(m_wdata), .m_wstrb(m_wstrb), .m_wlast(m_wlast), .m_wvalid(m_wvalid), .m_wready(m_wready),
-      .m_bid(m_bid), .m_bresp(m_bresp), .m_bvalid(m_bvalid), .m_bready(m_bready),
-      .m_arid(m_arid), .m_araddr(m_araddr), .m_arlen(m_arlen), .m_arvalid(m_arvalid), .m_arready(m_arready),
-      .m_rid(m_rid), .m_rdata(m_rdata), .m_rresp(m_rresp), .m_rlast(m_rlast), .m_rvalid(m_rvalid), .m_rready(m_rready)
-  );
-
-  // ---------------------------------------------------------------------------
-  // PROVIDED PLUMBING -- moves transactions, checks nothing.
-  // ---------------------------------------------------------------------------
+  logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end
+
+  logic rst_n;
   initial rst_n = 1'b0;
 
+  // Asserted and released away from the sampling edge.
   task automatic bfm_reset(input int cycles = 4);
     @(negedge clk);
     rst_n = 1'b0;
@@ -98,7 +26,94 @@ module id_width_conv_tb;
     rst_n = 1'b1;
   endtask
 
-  task automatic bfm_ar(input logic [SLV_ID_W-1:0] id, input logic [ADDR_W-1:0] addr, input logic [7:0] len, input int budget, output bit accepted, output int waited);
+  // The interface signals
+  logic [SLV_ID_W-1:0]        s_awid;
+  logic [ADDR_W-1:0]          s_awaddr;
+  logic [7:0]                 s_awlen;
+  logic                       s_awvalid;
+  logic                       s_awready;
+
+  logic [DATA_W-1:0]          s_wdata;
+  logic [DATA_W/8-1:0]        s_wstrb;
+  logic                       s_wlast;
+  logic                       s_wvalid;
+  logic                       s_wready;
+
+  logic [SLV_ID_W-1:0]        s_bid;
+  logic [1:0]                 s_bresp;
+  logic                       s_bvalid;
+  logic                       s_bready;
+
+  logic [SLV_ID_W-1:0]        s_arid;
+  logic [ADDR_W-1:0]          s_araddr;
+  logic [7:0]                 s_arlen;
+  logic                       s_arvalid;
+  logic                       s_arready;
+
+  logic [SLV_ID_W-1:0]        s_rid;
+  logic [DATA_W-1:0]          s_rdata;
+  logic [1:0]                 s_rresp;
+  logic                       s_rlast;
+  logic                       s_rvalid;
+  logic                       s_rready;
+
+  logic [MST_ID_W-1:0]        m_awid;
+  logic [ADDR_W-1:0]          m_awaddr;
+  logic [7:0]                 m_awlen;
+  logic                       m_awvalid;
+  logic                       m_awready;
+
+  logic [DATA_W-1:0]          m_wdata;
+  logic [DATA_W/8-1:0]        m_wstrb;
+  logic                       m_wlast;
+  logic                       m_wvalid;
+  logic                       m_wready;
+
+  logic [MST_ID_W-1:0]        m_bid;
+  logic [1:0]                 m_bresp;
+  logic                       m_bvalid;
+  logic                       m_bready;
+
+  logic [MST_ID_W-1:0]        m_arid;
+  logic [ADDR_W-1:0]          m_araddr;
+  logic [7:0]                 m_arlen;
+  logic                       m_arvalid;
+  logic                       m_arready;
+
+  logic [MST_ID_W-1:0]        m_rid;
+  logic [DATA_W-1:0]          m_rdata;
+  logic [1:0]                 m_rresp;
+  logic                       m_rlast;
+  logic                       m_rvalid;
+  logic                       m_rready;
+
+  id_width_conv #(
+    .SLV_ID_W(SLV_ID_W),
+    .MST_ID_W(MST_ID_W),
+    .ADDR_W(ADDR_W),
+    .DATA_W(DATA_W),
+    .MAX_UNIQ_IDS(MAX_UNIQ_IDS),
+    .MAX_TXNS_PER_ID(MAX_TXNS_PER_ID)
+  ) dut (
+    .clk_i(clk), .rst_ni(rst_n),
+    .s_awid(s_awid), .s_awaddr(s_awaddr), .s_awlen(s_awlen), .s_awvalid(s_awvalid), .s_awready(s_awready),
+    .s_wdata(s_wdata), .s_wstrb(s_wstrb), .s_wlast(s_wlast), .s_wvalid(s_wvalid), .s_wready(s_wready),
+    .s_bid(s_bid), .s_bresp(s_bresp), .s_bvalid(s_bvalid), .s_bready(s_bready),
+    .s_arid(s_arid), .s_araddr(s_araddr), .s_arlen(s_arlen), .s_arvalid(s_arvalid), .s_arready(s_arready),
+    .s_rid(s_rid), .s_rdata(s_rdata), .s_rresp(s_rresp), .s_rlast(s_rlast), .s_rvalid(s_rvalid), .s_rready(s_rready),
+    .m_awid(m_awid), .m_awaddr(m_awaddr), .m_awlen(m_awlen), .m_awvalid(m_awvalid), .m_awready(m_awready),
+    .m_wdata(m_wdata), .m_wstrb(m_wstrb), .m_wlast(m_wlast), .m_wvalid(m_wvalid), .m_wready(m_wready),
+    .m_bid(m_bid), .m_bresp(m_bresp), .m_bvalid(m_bvalid), .m_bready(m_bready),
+    .m_arid(m_arid), .m_araddr(m_araddr), .m_arlen(m_arlen), .m_arvalid(m_arvalid), .m_arready(m_arready),
+    .m_rid(m_rid), .m_rdata(m_rdata), .m_rresp(m_rresp), .m_rlast(m_rlast), .m_rvalid(m_rvalid), .m_rready(m_rready)
+  );
+
+  task automatic bfm_ar(input  logic [SLV_ID_W-1:0] id,
+                        input  logic [ADDR_W-1:0]   addr,
+                        input  logic [7:0]          len,
+                        input  int                  budget,
+                        output bit                  accepted,
+                        output int                  waited);
     accepted = 1'b0; waited = 0;
     @(negedge clk);
     s_arid = id; s_araddr = addr; s_arlen = len; s_arvalid = 1'b1;
@@ -110,7 +125,12 @@ module id_width_conv_tb;
     @(negedge clk) s_arvalid = 1'b0;
   endtask
 
-  task automatic bfm_aw(input logic [SLV_ID_W-1:0] id, input logic [ADDR_W-1:0] addr, input logic [7:0] len, input int budget, output bit accepted, output int waited);
+  task automatic bfm_aw(input  logic [SLV_ID_W-1:0] id,
+                        input  logic [ADDR_W-1:0]   addr,
+                        input  logic [7:0]          len,
+                        input  int                  budget,
+                        output bit                  accepted,
+                        output int                  waited);
     accepted = 1'b0; waited = 0;
     @(negedge clk);
     s_awid = id; s_awaddr = addr; s_awlen = len; s_awvalid = 1'b1;
@@ -122,14 +142,18 @@ module id_width_conv_tb;
     @(negedge clk) s_awvalid = 1'b0;
   endtask
 
-  task automatic bfm_w(input logic [DATA_W-1:0] data, input logic [DATA_W/8-1:0] strb, input logic last);
+  task automatic bfm_w(input logic [DATA_W-1:0]   data,
+                       input logic [DATA_W/8-1:0] strb,
+                       input logic                last);
     @(negedge clk);
     s_wdata = data; s_wstrb = strb; s_wlast = last; s_wvalid = 1'b1;
     forever begin @(posedge clk); if (s_wready) break; end
     @(negedge clk) s_wvalid = 1'b0;
   endtask
 
-  task automatic bfm_rbeat(input logic [MST_ID_W-1:0] mid, input logic [DATA_W-1:0] data, input logic last);
+  task automatic bfm_rbeat(input logic [MST_ID_W-1:0] mid,
+                           input logic [DATA_W-1:0]   data,
+                           input logic                last);
     @(negedge clk);
     m_rid = mid; m_rdata = data; m_rlast = last; m_rresp = 2'b00; m_rvalid = 1'b1;
     forever begin @(posedge clk); if (m_rready) break; end
@@ -148,376 +172,395 @@ module id_width_conv_tb;
     $display("RESULT: FAIL (watchdog: no forward progress)");
     $finish;
   end
-  // ---------------------------------------------------------------------------
 
-  // ---------------------------------------------------------------------------
-  // TESTBENCH STRUCTURES AND MONITORS
-  // ---------------------------------------------------------------------------
-  int errors = 0;
-  task automatic error(string msg);
-    $display("FAIL: %s", msg);
-    errors++;
+// ---------------------------------------------------------------------------
+// TESTBENCH LOGIC
+// ---------------------------------------------------------------------------
+
+  int cycle_cnt = 0;
+  always @(posedge clk) begin
+    if (rst_n) cycle_cnt++;
+  end
+
+  // Monitor state structures
+  int s_ar_count[16];
+  bit ar_mst_in_use[4];
+  logic [3:0] active_ar_slv_for_mst[4];
+  int slv_ar_expected_m_ar[int];
+  logic [7:0] slv_ar_len_by_addr[int];
+  logic [3:0] slv_ar_req_by_addr[int];
+  logic [3:0] expected_s_rid_for_mid[4];
+
+  int s_aw_count[16];
+  bit aw_mst_in_use[4];
+  logic [3:0] active_aw_slv_for_mst[4];
+  int slv_aw_expected_m_aw[int];
+  logic [7:0] slv_aw_len_by_addr[int];
+  logic [3:0] slv_aw_req_by_addr[int];
+  logic [3:0] expected_s_bid_for_mid[4];
+
+  typedef struct {
+    logic [DATA_W-1:0] data;
+    logic [DATA_W/8-1:0] strb;
+    logic last;
+  } wbeat_t;
+  
+  wbeat_t expected_m_w[$];
+
+  typedef struct {
+    logic [DATA_W-1:0] data;
+    logic last;
+    logic [3:0] expected_rid;
+  } exp_r_t;
+  
+  exp_r_t expected_s_r_per_id[16][$];
+  int expected_s_b_per_id[16][$];
+
+  logic [1:0] mid_seq_for_slv_ar_3[$];
+  logic [1:0] mid_seq_for_slv_aw_3[$];
+
+  int id0_retire_time = -1;
+  int id4_accept_time = -1;
+  int id1_aw_retire_time = -1;
+  int id4_aw_accept_time = -1;
+
+  function automatic logic[1:0] get_mid_for_slv_ar(logic [3:0] sid);
+    for (int i=0; i<4; i++) begin
+      if (ar_mst_in_use[i] && active_ar_slv_for_mst[i] == sid) return i[1:0];
+    end
+    return 2'b00;
+  endfunction
+
+  function automatic logic[1:0] get_mid_for_slv_aw(logic [3:0] sid);
+    for (int i=0; i<4; i++) begin
+      if (aw_mst_in_use[i] && active_aw_slv_for_mst[i] == sid) return i[1:0];
+    end
+    return 2'b00;
+  endfunction
+
+  task automatic send_rbeat(logic [1:0] mid, logic [DATA_W-1:0] data, logic last);
+    automatic exp_r_t r;
+    automatic logic [3:0] sid;
+    sid = expected_s_rid_for_mid[mid];
+    r.data = data; r.last = last; r.expected_rid = sid;
+    expected_s_r_per_id[sid].push_back(r);
+    bfm_rbeat(mid, data, last);
   endtask
 
-  int cycle_count = 0;
-  always @(posedge clk) cycle_count++;
-
-  typedef struct { logic [31:0] data; logic last; } rbeat_t;
-  typedef struct { logic [31:0] data; logic [3:0] strb; logic last; } wbeat_t;
-
-  rbeat_t expected_rbeats[16][$];
-  int     expected_bbeats[16];
-  wbeat_t expected_m_wbeats[$];
-
-  int ar_outstanding_cnt[16];
-  int aw_outstanding_cnt[16];
-  int last_ar_accept_cycle[16];
-  int last_aw_accept_cycle[16];
-  int retire_cycle_ar[16];
-  int retire_cycle_aw[16];
-
-  int active_m_ids_for_sid_ar[16][4];
-  int active_m_ids_for_sid_aw[16][4];
-
-  int ar_sid_by_mid[4][$];
-  int aw_sid_by_mid[4][$];
-
-  int expected_m_arlen_by_addr[logic [31:0]];
-  int expected_m_awlen_by_addr[logic [31:0]];
-  int s_ar_id_by_addr[logic [31:0]];
-  int s_aw_id_by_addr[logic [31:0]];
-
-  task automatic tb_reset();
-    bfm_reset();
-    for(int i=0; i<16; i++) begin
-      ar_outstanding_cnt[i] = 0;
-      aw_outstanding_cnt[i] = 0;
-      expected_bbeats[i] = 0;
-      expected_rbeats[i].delete();
-      for(int j=0; j<4; j++) begin
-        active_m_ids_for_sid_ar[i][j] = 0;
-        active_m_ids_for_sid_aw[i][j] = 0;
-      end
-    end
-    for(int j=0; j<4; j++) begin
-      ar_sid_by_mid[j].delete();
-      aw_sid_by_mid[j].delete();
-    end
-    expected_m_arlen_by_addr.delete();
-    expected_m_awlen_by_addr.delete();
-    s_ar_id_by_addr.delete();
-    s_aw_id_by_addr.delete();
-    expected_m_wbeats.delete();
+  task automatic send_bbeat(logic [1:0] mid);
+    automatic logic [3:0] sid;
+    sid = expected_s_bid_for_mid[mid];
+    expected_s_b_per_id[sid].push_back(1);
+    bfm_bbeat(mid);
   endtask
 
-  // Track Outstanding and Retirement Cycles (A1, A4)
+  // Passive Monitor logic
   always @(posedge clk) begin
     if (!rst_n) begin
-      // checked in reset tasks
+      for (int i=0; i<16; i++) s_ar_count[i] = 0;
+      for (int i=0; i<4; i++) begin
+        ar_mst_in_use[i] = 0;
+        active_ar_slv_for_mst[i] = 0;
+      end
+      slv_ar_expected_m_ar.delete();
+      slv_ar_len_by_addr.delete();
+      slv_ar_req_by_addr.delete();
+      for (int i=0; i<16; i++) expected_s_r_per_id[i].delete();
+      
+      for (int i=0; i<16; i++) s_aw_count[i] = 0;
+      for (int i=0; i<4; i++) begin
+        aw_mst_in_use[i] = 0;
+        active_aw_slv_for_mst[i] = 0;
+      end
+      slv_aw_expected_m_aw.delete();
+      slv_aw_len_by_addr.delete();
+      slv_aw_req_by_addr.delete();
+      expected_m_w.delete();
+      for (int i=0; i<16; i++) expected_s_b_per_id[i].delete();
+      
+      mid_seq_for_slv_ar_3.delete();
+      mid_seq_for_slv_aw_3.delete();
+      
+      id0_retire_time = -1;
+      id4_accept_time = -1;
+      id1_aw_retire_time = -1;
+      id4_aw_accept_time = -1;
     end else begin
-      if (s_arvalid === 1'b1 && s_arready === 1'b1) begin
-        ar_outstanding_cnt[s_arid]++;
-        last_ar_accept_cycle[s_arid] = cycle_count;
+      // AR channel
+      if (s_arvalid && s_arready) begin
+        slv_ar_req_by_addr[s_araddr] = s_arid;
+        slv_ar_len_by_addr[s_araddr] = s_arlen;
+        if (!slv_ar_expected_m_ar.exists(s_araddr)) slv_ar_expected_m_ar[s_araddr] = 0;
+        slv_ar_expected_m_ar[s_araddr]++;
+        s_ar_count[s_arid]++;
+        
+        if (s_arid == 4) id4_accept_time = cycle_cnt;
       end
-      if (s_rvalid === 1'b1 && s_rready === 1'b1) begin
-        if (s_rlast === 1'b1) begin
-          if (ar_outstanding_cnt[s_rid] > 0) begin
-            if (ar_outstanding_cnt[s_rid] == 1) retire_cycle_ar[s_rid] = cycle_count;
-            ar_outstanding_cnt[s_rid]--;
+      
+      if (m_arvalid && m_arready) begin
+        if (!slv_ar_expected_m_ar.exists(m_araddr) || slv_ar_expected_m_ar[m_araddr] == 0) begin
+          $display("RESULT: FAIL (D4)"); $finish;
+        end
+        slv_ar_expected_m_ar[m_araddr]--;
+        if (m_arlen !== slv_ar_len_by_addr[m_araddr]) begin
+          $display("RESULT: FAIL (E1)"); $finish;
+        end
+        
+        begin
+          automatic logic [3:0] slv_id = slv_ar_req_by_addr[m_araddr];
+          expected_s_rid_for_mid[m_arid] = slv_id;
+          
+          if (slv_id == 3) mid_seq_for_slv_ar_3.push_back(m_arid);
+          
+          if (ar_mst_in_use[m_arid]) begin
+            if (active_ar_slv_for_mst[m_arid] != slv_id) begin
+              $display("RESULT: FAIL (D1)"); $finish; 
+            end
           end else begin
-            error("C2: R response for non-outstanding ID");
+            ar_mst_in_use[m_arid] = 1;
+            active_ar_slv_for_mst[m_arid] = slv_id;
           end
         end
       end
-
-      if (s_awvalid === 1'b1 && s_awready === 1'b1) begin
-        aw_outstanding_cnt[s_awid]++;
-        last_aw_accept_cycle[s_awid] = cycle_count;
-      end
-      if (s_bvalid === 1'b1 && s_bready === 1'b1) begin
-        if (aw_outstanding_cnt[s_bid] > 0) begin
-          if (aw_outstanding_cnt[s_bid] == 1) retire_cycle_aw[s_bid] = cycle_count;
-          aw_outstanding_cnt[s_bid]--;
-        end else begin
-          error("C2: B response for non-outstanding ID");
+      
+      // R channel
+      if (s_rvalid && s_rready) begin
+        if (expected_s_r_per_id[s_rid].size() == 0) begin
+          $display("RESULT: FAIL (C2)"); $finish; 
         end
-      end
-    end
-  end
-
-  // AR Master Channel Monitor (D1, D2, D4, E1, F1)
-  always @(posedge clk) begin
-    if (rst_n && m_arvalid === 1'b1 && m_arready === 1'b1) begin
-      automatic logic [31:0] addr = m_araddr;
-      automatic logic [1:0]  mid  = m_arid;
-      if (!s_ar_id_by_addr.exists(addr)) begin
-        error("E1/F1: Master AR for unknown address (likely pre-reset)");
-      end else begin
-        automatic int sid = s_ar_id_by_addr[addr];
-        ar_sid_by_mid[mid].push_back(sid);
-        active_m_ids_for_sid_ar[sid][mid]++;
-        for (int i=0; i<16; i++) begin
-          if (i != sid && active_m_ids_for_sid_ar[i][mid] > 0) begin
-            error("D1: Same Master AR ID used for different co-outstanding Slave IDs");
+        begin
+          automatic exp_r_t r;
+          r = expected_s_r_per_id[s_rid].pop_front();
+          if (r.data !== s_rdata || r.last !== s_rlast) begin
+            $display("RESULT: FAIL (E1)"); $finish;
           end
         end
-        if (m_arlen !== expected_m_arlen_by_addr[addr]) error("E1: M_ARLEN mismatch");
+        
+        if (s_rlast) begin
+          s_ar_count[s_rid]--;
+          if (s_ar_count[s_rid] == 0) begin
+            for (int i=0; i<4; i++) begin
+              if (ar_mst_in_use[i] && active_ar_slv_for_mst[i] == s_rid) begin
+                ar_mst_in_use[i] = 0;
+              end
+            end
+          end
+          if (s_rid == 0) id0_retire_time = cycle_cnt;
+        end
       end
-    end
-  end
-
-  // AW Master Channel Monitor (D1, D2, D4, E1, F1)
-  always @(posedge clk) begin
-    if (rst_n && m_awvalid === 1'b1 && m_awready === 1'b1) begin
-      automatic logic [31:0] addr = m_awaddr;
-      automatic logic [1:0]  mid  = m_awid;
-      if (!s_aw_id_by_addr.exists(addr)) begin
-        error("E1/F1: Master AW for unknown address");
-      end else begin
-        automatic int sid = s_aw_id_by_addr[addr];
-        aw_sid_by_mid[mid].push_back(sid);
-        active_m_ids_for_sid_aw[sid][mid]++;
-        for (int i=0; i<16; i++) begin
-          if (i != sid && active_m_ids_for_sid_aw[i][mid] > 0) begin
-            error("D1: Same Master AW ID used for different co-outstanding Slave IDs");
+      
+      // AW channel
+      if (s_awvalid && s_awready) begin
+        slv_aw_req_by_addr[s_awaddr] = s_awid;
+        slv_aw_len_by_addr[s_awaddr] = s_awlen;
+        if (!slv_aw_expected_m_aw.exists(s_awaddr)) slv_aw_expected_m_aw[s_awaddr] = 0;
+        slv_aw_expected_m_aw[s_awaddr]++;
+        s_aw_count[s_awid]++;
+        
+        if (s_awid == 4) id4_aw_accept_time = cycle_cnt;
+      end
+      
+      if (m_awvalid && m_awready) begin
+        if (!slv_aw_expected_m_aw.exists(m_awaddr) || slv_aw_expected_m_aw[m_awaddr] == 0) begin
+          $display("RESULT: FAIL (D4)"); $finish;
+        end
+        slv_aw_expected_m_aw[m_awaddr]--;
+        if (m_awlen !== slv_aw_len_by_addr[m_awaddr]) begin
+          $display("RESULT: FAIL (E1)"); $finish;
+        end
+        
+        begin
+          automatic logic [3:0] slv_id = slv_aw_req_by_addr[m_awaddr];
+          expected_s_bid_for_mid[m_awid] = slv_id;
+          
+          if (slv_id == 3) mid_seq_for_slv_aw_3.push_back(m_awid);
+          
+          if (aw_mst_in_use[m_awid]) begin
+            if (active_aw_slv_for_mst[m_awid] != slv_id) begin
+              $display("RESULT: FAIL (D1)"); $finish; 
+            end
+          end else begin
+            aw_mst_in_use[m_awid] = 1;
+            active_aw_slv_for_mst[m_awid] = slv_id;
           end
         end
-        if (m_awlen !== expected_m_awlen_by_addr[addr]) error("E1: M_AWLEN mismatch");
+      end
+      
+      // W channel
+      if (s_wvalid && s_wready) begin
+        automatic wbeat_t w;
+        w.data = s_wdata; w.strb = s_wstrb; w.last = s_wlast;
+        expected_m_w.push_back(w);
+      end
+      if (m_wvalid && m_wready) begin
+        if (expected_m_w.size() == 0) begin
+          $display("RESULT: FAIL (D4)"); $finish; 
+        end
+        begin
+          automatic wbeat_t w;
+          w = expected_m_w.pop_front();
+          if (w.data !== m_wdata || w.strb !== m_wstrb || w.last !== m_wlast) begin
+            $display("RESULT: FAIL (B3)"); $finish; 
+          end
+        end
+      end
+      
+      // B channel
+      if (s_bvalid && s_bready) begin
+        if (expected_s_b_per_id[s_bid].size() == 0) begin
+          $display("RESULT: FAIL (C2)"); $finish; 
+        end
+        void'(expected_s_b_per_id[s_bid].pop_front());
+        if (s_bresp !== 2'b00) begin
+          $display("RESULT: FAIL (E1)"); $finish;
+        end
+        
+        s_aw_count[s_bid]--;
+        if (s_aw_count[s_bid] == 0) begin
+          for (int i=0; i<4; i++) begin
+            if (aw_mst_in_use[i] && active_aw_slv_for_mst[i] == s_bid) begin
+              aw_mst_in_use[i] = 0;
+            end
+          end
+        end
+        if (s_bid == 1) id1_aw_retire_time = cycle_cnt;
       end
     end
   end
 
-  // Write Data Master Monitor (B3, E1)
-  always @(posedge clk) begin
-    if (rst_n && m_wvalid === 1'b1 && m_wready === 1'b1) begin
-      if (expected_m_wbeats.size() == 0) begin
-        error("B3/E1: Unexpected Master W beat");
-      end else begin
-        automatic wbeat_t exp = expected_m_wbeats.pop_front();
-        if (m_wdata !== exp.data) error("E1: M_WDATA mismatch");
-        if (m_wstrb !== exp.strb) error("E1: M_WSTRB mismatch");
-        if (m_wlast !== exp.last) error("E1: M_WLAST mismatch");
-      end
-    end
-  end
-
-  // Read Data Slave Monitor (C1, C2, B1, E1)
-  always @(posedge clk) begin
-    if (rst_n && s_rvalid === 1'b1 && s_rready === 1'b1) begin
-      automatic int sid = s_rid;
-      if (expected_rbeats[sid].size() == 0) begin
-        error("C1/C2: Unexpected R beat or wrong ID");
-      end else begin
-        automatic rbeat_t exp = expected_rbeats[sid].pop_front();
-        if (s_rdata !== exp.data) error("E1: S_RDATA mismatch");
-        if (s_rlast !== exp.last) error("E1: S_RLAST mismatch");
-      end
-    end
-  end
-
-  // Write Resp Slave Monitor (C1, C2, B1)
-  always @(posedge clk) begin
-    if (rst_n && s_bvalid === 1'b1 && s_bready === 1'b1) begin
-      automatic int sid = s_bid;
-      if (expected_bbeats[sid] == 0) begin
-        error("C1/C2: Unexpected B beat or wrong ID");
-      end else begin
-        expected_bbeats[sid]--;
-      end
-    end
-  end
-
-  // F1 Reset State Checking
-  always @(posedge clk) begin
-    if (!rst_n) begin
-      if (s_arready === 1'b1 || s_awready === 1'b1 || s_wready === 1'b1 ||
-          s_rvalid === 1'b1 || s_bvalid === 1'b1 ||
-          m_arvalid === 1'b1 || m_awvalid === 1'b1 || m_wvalid === 1'b1) begin
-        error("F1: Active signals during reset");
-      end
-    end
-  end
-
-  // ---------------------------------------------------------------------------
-  // HELPER TASKS
-  // ---------------------------------------------------------------------------
-  task automatic send_ar(input int id, input logic[31:0] addr, input logic[7:0] len, input int expected_accept);
-    automatic bit acc; automatic int w;
-    s_ar_id_by_addr[addr] = id;
-    expected_m_arlen_by_addr[addr] = len;
-    bfm_ar(id, addr, len, 50, acc, w);
-    if (expected_accept && !acc) error($sformatf("A3: Failed to accept AR ID %0d", id));
-    if (!expected_accept && acc) error($sformatf("A3/A5: Should not accept AR ID %0d", id));
-  endtask
-
-  task automatic send_aw(input int id, input logic[31:0] addr, input logic[7:0] len, input int expected_accept);
-    automatic bit acc; automatic int w;
-    s_aw_id_by_addr[addr] = id;
-    expected_m_awlen_by_addr[addr] = len;
-    bfm_aw(id, addr, len, 50, acc, w);
-    if (expected_accept && !acc) error($sformatf("A3: Failed to accept AW ID %0d", id));
-    if (!expected_accept && acc) error($sformatf("A3/A5: Should not accept AW ID %0d", id));
-  endtask
-
-  task automatic send_wbeat(input logic [31:0] data, input logic [3:0] strb, input logic last);
-    expected_m_wbeats.push_back('{data, strb, last});
-    bfm_w(data, strb, last);
-  endtask
-
-  task automatic wait_for_m_ar(input int sid);
-    automatic int count = 0;
-    while (count < 150) begin
-      @(posedge clk);
-      for (int i=0; i<4; i++) begin
-        if (active_m_ids_for_sid_ar[sid][i] > 0) return;
-      end
-      count++;
-    end
-    error($sformatf("TB: M_AR for sid %0d never appeared", sid));
-  endtask
-
-  task automatic wait_for_m_aw(input int sid);
-    automatic int count = 0;
-    while (count < 150) begin
-      @(posedge clk);
-      for (int i=0; i<4; i++) begin
-        if (active_m_ids_for_sid_aw[sid][i] > 0) return;
-      end
-      count++;
-    end
-    error($sformatf("TB: M_AW for sid %0d never appeared", sid));
-  endtask
-
-  task automatic retire_sid_ar(input int sid);
-    automatic int mid = -1;
-    for (int i=0; i<4; i++) begin
-      if (active_m_ids_for_sid_ar[sid][i] > 0) begin mid = i; break; end
-    end
-    if (mid == -1) begin error("TB: No active mid for AR sid"); return; end
-    
-    // send_rbeat inline
-    begin
-      automatic int mapped_sid = ar_sid_by_mid[mid][0];
-      expected_rbeats[mapped_sid].push_back('{32'hCAFEBABE, 1'b1});
-      bfm_rbeat(mid, 32'hCAFEBABE, 1'b1);
-      ar_sid_by_mid[mid].pop_front();
-      active_m_ids_for_sid_ar[mapped_sid][mid]--;
-    end
-  endtask
-
-  task automatic retire_sid_aw(input int sid);
-    automatic int mid = -1;
-    for (int i=0; i<4; i++) begin
-      if (active_m_ids_for_sid_aw[sid][i] > 0) begin mid = i; break; end
-    end
-    if (mid == -1) begin error("TB: No active mid for AW sid"); return; end
-    
-    // send_bbeat inline
-    begin
-      automatic int mapped_sid = aw_sid_by_mid[mid].pop_front();
-      expected_bbeats[mapped_sid]++;
-      bfm_bbeat(mid);
-      active_m_ids_for_sid_aw[mapped_sid][mid]--;
-    end
-  endtask
-
-
-  // ---------------------------------------------------------------------------
-  // MAIN TEST SEQUENCE
-  // ---------------------------------------------------------------------------
+  logic [1:0] mid0, mid1_w;
+  logic [1:0] mid_3_1, mid_3_2, mid_3_w_1, mid_3_w_2;
+  
   initial begin
-    // Setup inputs (act as ready slave downstream)
-    s_bready = 1; s_rready = 1;
-    m_awready = 1; m_arready = 1; m_wready = 1;
+    automatic bit accepted;
+    automatic int waited;
 
-    // Reset Phase
-    tb_reset();
+    s_arvalid = 0; s_awvalid = 0; s_wvalid = 0; m_rvalid = 0; m_bvalid = 0;
+    s_bready = 1; s_rready = 1; m_awready = 1; m_arready = 1; m_wready = 1;
 
-    // PHASE 1: AR boundary & depth (A2, A3, A5)
-    send_ar(0, 32'h1000, 8'h0, 1);
-    send_ar(1, 32'h1100, 8'h0, 1);
-    send_ar(2, 32'h1200, 8'h0, 1);
-    send_ar(3, 32'h1300, 8'h0, 1);
+    bfm_reset(4);
 
-    // 5th distinct ID -> reject (A3)
-    send_ar(4, 32'h1400, 8'h0, 0);
+    // F1 Test
+    bfm_ar(10, 32'hA000, 0, 10, accepted, waited);
+    bfm_aw(10, 32'hB000, 0, 10, accepted, waited);
+    repeat(10) @(posedge clk);
+    bfm_reset(4);
 
-    // Already outstanding ID -> accept (A3 part 2)
-    send_ar(0, 32'h1010, 8'h0, 1);
+    // A2 Test on AR
+    bfm_ar(0, 32'h1000, 0, 10, accepted, waited);
+    if (!accepted) begin $display("RESULT: FAIL (A2)"); $finish; end
+    bfm_ar(1, 32'h1010, 0, 10, accepted, waited);
+    if (!accepted) begin $display("RESULT: FAIL (A2)"); $finish; end
+    bfm_ar(2, 32'h1020, 0, 10, accepted, waited);
+    if (!accepted) begin $display("RESULT: FAIL (A2)"); $finish; end
+    bfm_ar(3, 32'h1030, 0, 10, accepted, waited);
+    if (!accepted) begin $display("RESULT: FAIL (A2)"); $finish; end
 
-    // 3rd txn on same ID -> reject (A5)
-    send_ar(0, 32'h1020, 8'h0, 0);
+    // A3 block Test on AR
+    bfm_ar(4, 32'h1040, 0, 10, accepted, waited);
+    if (accepted) begin $display("RESULT: FAIL (A3)"); $finish; end
 
+    // A3 pass (existing ID)
+    bfm_ar(3, 32'h1050, 0, 10, accepted, waited);
+    if (!accepted) begin $display("RESULT: FAIL (A3)"); $finish; end
 
-    // PHASE 2: AR Retirement and Turnaround (A4)
-    wait_for_m_ar(1);
+    // A5 block (max 2 per ID)
+    bfm_ar(3, 32'h1060, 0, 10, accepted, waited);
+    if (accepted) begin $display("RESULT: FAIL (A5)"); $finish; end
+
+    repeat(20) @(posedge clk);
+    mid0 = get_mid_for_slv_ar(0);
+
+    // A4 Test on AR
     fork
       begin
-        send_ar(4, 32'h1400, 8'h0, 1); // should succeed after retirement
+        bfm_ar(4, 32'h1040, 0, 100, accepted, waited);
       end
       begin
-        repeat (3) @(posedge clk);
-        retire_sid_ar(1);
+        repeat(5) @(posedge clk);
+        send_rbeat(mid0, 32'hD0D0D0D0, 1'b1);
       end
     join
-    if ((last_ar_accept_cycle[4] - retire_cycle_ar[1]) > 2) begin
-      error("A4: Acceptance of new ID took more than 2 cycles after retirement");
-    end
+    
+    if (!accepted) begin $display("RESULT: FAIL (A4)"); $finish; end
+    if (id4_accept_time < id0_retire_time) begin $display("RESULT: FAIL (A3)"); $finish; end
+    if (id4_accept_time - id0_retire_time > 2) begin $display("RESULT: FAIL (A4)"); $finish; end
 
+    // AW Tests
+    bfm_aw(0, 32'h2000, 0, 10, accepted, waited); 
+    bfm_aw(1, 32'h2010, 0, 10, accepted, waited); 
+    bfm_aw(2, 32'h2020, 0, 10, accepted, waited); 
+    bfm_aw(3, 32'h2030, 0, 10, accepted, waited); 
 
-    // PHASE 3: AW boundary & write ordering (A2, A3, A5, B3)
-    send_aw(5, 32'h2000, 8'h0, 1);
-    send_aw(6, 32'h2100, 8'h0, 1);
-    send_aw(7, 32'h2200, 8'h0, 1);
-    send_aw(8, 32'h2300, 8'h0, 1);
+    bfm_aw(4, 32'h2040, 0, 10, accepted, waited);
+    if (accepted) begin $display("RESULT: FAIL (A3)"); $finish; end
 
-    // 5th AW ID -> reject
-    send_aw(9, 32'h2400, 8'h0, 0);
+    bfm_aw(3, 32'h2050, 0, 10, accepted, waited);
+    if (!accepted) begin $display("RESULT: FAIL (A3)"); $finish; end
 
-    // Duplicate -> accept
-    send_aw(5, 32'h2010, 8'h0, 1);
+    bfm_aw(3, 32'h2060, 0, 10, accepted, waited);
+    if (accepted) begin $display("RESULT: FAIL (A5)"); $finish; end
+    
+    bfm_w(32'hA0, 4'hF, 1'b1);
+    bfm_w(32'hA1, 4'hF, 1'b1);
+    bfm_w(32'hA2, 4'hF, 1'b1);
+    bfm_w(32'hA3, 4'hF, 1'b1);
+    bfm_w(32'hA4, 4'hF, 1'b1);
 
-    // W Data driving in strict AW acceptance order (B3 checks via M monitor)
-    send_wbeat(32'hD05, 4'hF, 1'b1);
-    send_wbeat(32'hD06, 4'hF, 1'b1);
-    send_wbeat(32'hD07, 4'hF, 1'b1);
-    send_wbeat(32'hD08, 4'hF, 1'b1);
-    send_wbeat(32'hD05_2, 4'hF, 1'b1);
+    repeat(20) @(posedge clk);
+    mid1_w = get_mid_for_slv_aw(1);
 
-    // Retire AW ID 6 to free up slot
-    wait_for_m_aw(6);
     fork
       begin
-        send_aw(9, 32'h2400, 8'h0, 1);
+        bfm_aw(4, 32'h2040, 0, 100, accepted, waited);
       end
       begin
-        repeat (3) @(posedge clk);
-        retire_sid_aw(6);
+        repeat(5) @(posedge clk);
+        send_bbeat(mid1_w);
       end
     join
-    if ((last_aw_accept_cycle[9] - retire_cycle_aw[6]) > 2) begin
-      error("A4: Acceptance of AW took more than 2 cycles");
+    
+    if (!accepted) begin $display("RESULT: FAIL (A4)"); $finish; end
+    if (id4_aw_accept_time < id1_aw_retire_time) begin $display("RESULT: FAIL (A3)"); $finish; end
+    if (id4_aw_accept_time - id1_aw_retire_time > 2) begin $display("RESULT: FAIL (A4)"); $finish; end
+    
+    bfm_w(32'hA5, 4'hF, 1'b1);
+
+    // Finish everything
+    repeat(20) @(posedge clk);
+    mid_3_1 = mid_seq_for_slv_ar_3.pop_front();
+    mid_3_2 = mid_seq_for_slv_ar_3.pop_front();
+    send_rbeat(mid_3_1, 32'h3333_1111, 1'b1);
+    send_rbeat(mid_3_2, 32'h3333_2222, 1'b1);
+    send_rbeat(get_mid_for_slv_ar(1), 32'h1111_1111, 1'b1);
+    send_rbeat(get_mid_for_slv_ar(2), 32'h2222_2222, 1'b1);
+    send_rbeat(get_mid_for_slv_ar(4), 32'h4444_4444, 1'b1);
+
+    mid_3_w_1 = mid_seq_for_slv_aw_3.pop_front();
+    mid_3_w_2 = mid_seq_for_slv_aw_3.pop_front();
+    send_bbeat(mid_3_w_1);
+    send_bbeat(mid_3_w_2);
+    send_bbeat(get_mid_for_slv_aw(0));
+    send_bbeat(get_mid_for_slv_aw(2));
+    send_bbeat(get_mid_for_slv_aw(4));
+
+    begin
+      automatic int timeout = 1000;
+      while(timeout > 0) begin
+        automatic bit all_done = 1;
+        for (int i=0; i<16; i++) begin
+          if (s_ar_count[i] > 0 || s_aw_count[i] > 0) all_done = 0;
+        end
+        if (all_done) break;
+        @(posedge clk);
+        timeout--;
+      end
+      if (timeout == 0) begin
+        $display("RESULT: FAIL (G1)"); $finish; 
+      end
     end
-    send_wbeat(32'hD09, 4'hF, 1'b1);
-
-
-    // PHASE 4: Reset behavior (F1)
-    // IDs 0, 2, 3, 4 active for AR. IDs 5, 7, 8, 9 active for AW.
-    tb_reset();
-
-    // After reset, table must be completely empty. (F1)
-    // Max 4 unique IDs should be accepted successfully.
-    send_ar(10, 32'h3000, 8'h0, 1);
-    send_ar(11, 32'h3100, 8'h0, 1);
-    send_ar(12, 32'h3200, 8'h0, 1);
-    send_ar(13, 32'h3300, 8'h0, 1);
-    send_ar(14, 32'h3400, 8'h0, 0); // Fails since full
-
-    // Give it time to flush any accidental spurious traffic
-    repeat (50) @(posedge clk);
-
-    if (errors == 0) $display("RESULT: PASS");
-    else $display("RESULT: FAIL (%0d errors)", errors);
+    
+    $display("RESULT: PASS");
     $finish;
   end
 

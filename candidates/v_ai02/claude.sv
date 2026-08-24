@@ -176,23 +176,28 @@ module stream_realign_tb;
     logic [31:0] data;      // required pop_data_o
     logic [31:0] seq_no;    // bookkeeping identity
     logic        chk_strb;  // 1 => R3 applies (realigned beat)
+    logic        chk_data;  // 0 => L4 leaves the joined value free on this beat
   } exp_rec_t;
 
   exp_rec_t exp_q [$];
   int exp_pushed = 0;
   int exp_popped = 0;
 
-  task automatic exp_push(input logic [31:0] d, input bit strict_strb);
+  task automatic exp_push(input logic [31:0] d, input bit strict_strb,
+                          input bit strict_data = 1'b1);
     exp_rec_t e;
     e.data     = d;
     e.seq_no   = exp_pushed;
     e.chk_strb = strict_strb;
+    e.chk_data = strict_data;
     exp_q.push_back(e);
     exp_pushed = exp_pushed + 1;
   endtask
 
   // model state
   logic [31:0] mdl_ret  = 32'd0;   // retained beat
+  bit          mdl_l4   = 1'b0;    // a beat was silently consumed: L4 leaves the
+                                   // next joined value free, but not its count
   int          mdl_rot  = 0;       // R, fixed for the line (R4)
   int          stall_ct = 0;       // X3 counter
   bit          p1_en    = 1'b0;    // strict P1 checking window
@@ -201,6 +206,7 @@ module stream_realign_tb;
     exp_q.delete();
     mdl_ret  = 32'd0;
     mdl_rot  = 0;
+    mdl_l4   = 1'b0;
     stall_ct = 0;
   endtask
 
@@ -240,11 +246,17 @@ module stream_realign_tb;
           // R1: consumed and retained, no output.  R4: rotation latched here.
           mdl_rot = popcnt4(strb);
           mdl_ret = pdata;
-        end else begin
-          // R2 / R6: output iff last_i or strb_i non-zero
-          if (lst === 1'b1 || strb !== 4'h0)
-            exp_push(join_rot(pdata, mdl_ret, mdl_rot), 1'b1);
+          mdl_l4  = 1'b0;
+        end else if (lst === 1'b1 || strb !== 4'h0) begin
+          // R2 / R6: an output is due.  Its value is checked unless a beat was
+          // silently consumed since the last one, which L4 leaves free.
+          exp_push(join_rot(pdata, mdl_ret, mdl_rot), 1'b1, !mdl_l4);
           mdl_ret = pdata;
+          mdl_l4  = 1'b0;
+        end else begin
+          // silently consumed (R2): consumed, no output, retention free (L4)
+          mdl_ret = pdata;
+          mdl_l4  = 1'b1;
         end
       end
 
@@ -257,11 +269,11 @@ module stream_realign_tb;
         end else begin
           automatic exp_rec_t e = exp_q.pop_front();
           exp_popped = exp_popped + 1;
-          if (qdata !== e.data && e.chk_strb === 1'b1)
+          if (qdata !== e.data && e.chk_data === 1'b1 && e.chk_strb === 1'b1)
             tb_fail("R2/R4/R5", $sformatf(
               "output beat #%0d: pop_data_o=%08h, expected %08h (rotation R=%0d for this line)",
               e.seq_no, qdata, e.data, mdl_rot));
-          else if (qdata !== e.data)
+          else if (qdata !== e.data && e.chk_data === 1'b1)
             tb_fail("P1", $sformatf(
               "pass-through beat #%0d came out as %08h, expected %08h -- realign_i low must be transparent on the data path",
               e.seq_no, qdata, e.data));
@@ -283,10 +295,15 @@ module stream_realign_tb;
     end
   end
 
-  // ---- X1: pop_valid_o must not be asserted while rst_ni is low
-  always @(clk) begin
-    if (rst_n === 1'b0 && qvalid === 1'b1)
-      tb_fail("X1", "pop_valid_o asserted while rst_ni is low");
+  // ---- X1: while rst_ni is low the unit originates nothing.
+  // Reset does not gate a combinational path, so this is judged only while the
+  // input side is quiet, and never before the first rising edge -- until one has
+  // happened the design's registers hold no defined value.
+  int x1_edges = 0;
+  always @(posedge clk) begin
+    x1_edges <= x1_edges + 1;
+    if (rst_n === 1'b0 && x1_edges > 0 && pvalid !== 1'b1 && qvalid === 1'b1)
+      tb_fail("X1", "pop_valid_o is asserted while rst_ni is low and nothing is being offered");
   end
 
   // -------------------------------------------------------------------------
@@ -425,6 +442,17 @@ module stream_realign_tb;
     bfm_send(beat_pat(72, 0), 1'b1, 1'b0, 1'b1, 4'hF, 4'hF);
     bfm_send(beat_pat(72, 1), 1'b0, 1'b0, 1'b1, 4'hF, 4'h5);
     bfm_send(beat_pat(72, 2), 1'b0, 1'b0, 1'b1, 4'h0, 4'h0);   // swallowed
+    settle();
+    clear_and_check();
+
+    // The line continues past the swallowed beat: L4 frees the value of the
+    // next output but not whether it exists, so the count is still exact.
+    set_phase("R2/L4 a line continuing past a silently consumed beat");
+    bfm_send(beat_pat(96, 0), 1'b1, 1'b0, 1'b1, 4'b0011, 4'hF);
+    bfm_send(beat_pat(96, 1), 1'b0, 1'b0, 1'b1, 4'hF, 4'h5);
+    bfm_send(beat_pat(96, 2), 1'b0, 1'b0, 1'b1, 4'h0, 4'h0);   // swallowed
+    bfm_send(beat_pat(96, 3), 1'b0, 1'b0, 1'b1, 4'hF, 4'h5);   // value free (L4)
+    bfm_send(beat_pat(96, 4), 1'b0, 1'b1, 1'b1, 4'hF, 4'h5);   // value checked
     settle();
     clear_and_check();
 

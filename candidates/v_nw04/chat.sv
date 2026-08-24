@@ -27,88 +27,45 @@ module ptp_time_base_tb;
   logic [3:0]  drift_ns;   logic [15:0] drift_fns;  logic [15:0] drift_rate;
   logic        drift_valid;
   logic [95:0] ts96;       logic [63:0] ts64;
-  logic        ts_step, pps;
+  logic        ts_step,    pps;
 
   ptp_time_base dut (
     .clk_i(clk), .rst_i(rst),
     .set_ts96_i(set_ts96), .set_ts96_valid_i(set_ts96_valid),
     .set_ts64_i(set_ts64), .set_ts64_valid_i(set_ts64_valid),
-    .period_ns_i(period_ns), .period_fns_i(period_fns),
-    .period_valid_i(period_valid),
+    .period_ns_i(period_ns), .period_fns_i(period_fns), .period_valid_i(period_valid),
     .adj_ns_i(adj_ns), .adj_fns_i(adj_fns), .adj_count_i(adj_count),
     .adj_valid_i(adj_valid), .adj_active_o(adj_active),
-    .drift_ns_i(drift_ns), .drift_fns_i(drift_fns),
-    .drift_rate_i(drift_rate), .drift_valid_i(drift_valid),
-    .ts96_o(ts96), .ts64_o(ts64),
-    .ts_step_o(ts_step), .pps_o(pps)
-  );
+    .drift_ns_i(drift_ns), .drift_fns_i(drift_fns), .drift_rate_i(drift_rate),
+    .drift_valid_i(drift_valid),
+    .ts96_o(ts96), .ts64_o(ts64), .ts_step_o(ts_step), .pps_o(pps));
 
-  task automatic bfm_period(
-    input logic [3:0] ns,
-    input logic [15:0] fns
-  );
-    @(negedge clk);
-    period_ns = ns;
-    period_fns = fns;
-    period_valid = 1'b1;
-
-    @(negedge clk);
-    period_valid = 1'b0;
+  task automatic bfm_period(input logic [3:0] ns, input logic [15:0] fns);
+    @(negedge clk); period_ns = ns; period_fns = fns; period_valid = 1'b1;
+    @(negedge clk); period_valid = 1'b0;
   endtask
 
-  task automatic bfm_adjust(
-    input logic [3:0] ns,
-    input logic [15:0] fns,
-    input logic [15:0] count
-  );
-    @(negedge clk);
-    adj_ns = ns;
-    adj_fns = fns;
-    adj_count = count;
-    adj_valid = 1'b1;
-
-    @(negedge clk);
-    adj_valid = 1'b0;
+  task automatic bfm_adjust(input logic [3:0] ns, input logic [15:0] fns,
+                            input logic [15:0] count);
+    @(negedge clk); adj_ns = ns; adj_fns = fns; adj_count = count; adj_valid = 1'b1;
+    @(negedge clk); adj_valid = 1'b0;
   endtask
 
-  task automatic bfm_drift(
-    input logic [3:0] ns,
-    input logic [15:0] fns,
-    input logic [15:0] rate
-  );
-    @(negedge clk);
-    drift_ns = ns;
-    drift_fns = fns;
-    drift_rate = rate;
-    drift_valid = 1'b1;
-
-    @(negedge clk);
-    drift_valid = 1'b0;
+  task automatic bfm_drift(input logic [3:0] ns, input logic [15:0] fns,
+                           input logic [15:0] rate);
+    @(negedge clk); drift_ns = ns; drift_fns = fns; drift_rate = rate; drift_valid = 1'b1;
+    @(negedge clk); drift_valid = 1'b0;
   endtask
 
-  task automatic bfm_set96(
-    input logic [47:0] sec,
-    input logic [29:0] ns,
-    input logic [15:0] fns
-  );
-    @(negedge clk);
-    set_ts96 = {sec, 2'b00, ns, fns};
-    set_ts96_valid = 1'b1;
-
-    @(negedge clk);
-    set_ts96_valid = 1'b0;
+  task automatic bfm_set96(input logic [47:0] sec, input logic [29:0] ns,
+                           input logic [15:0] fns);
+    @(negedge clk); set_ts96 = {sec, 2'b00, ns, fns}; set_ts96_valid = 1'b1;
+    @(negedge clk); set_ts96_valid = 1'b0;
   endtask
 
-  task automatic bfm_set64(
-    input logic [47:0] ns,
-    input logic [15:0] fns
-  );
-    @(negedge clk);
-    set_ts64 = {ns, fns};
-    set_ts64_valid = 1'b1;
-
-    @(negedge clk);
-    set_ts64_valid = 1'b0;
+  task automatic bfm_set64(input logic [47:0] ns, input logic [15:0] fns);
+    @(negedge clk); set_ts64 = {ns, fns}; set_ts64_valid = 1'b1;
+    @(negedge clk); set_ts64_valid = 1'b0;
   endtask
 
   task automatic bfm_wait(input int cycles);
@@ -138,271 +95,328 @@ module ptp_time_base_tb;
 
   initial begin
     #3_000_000;
-    $display("RESULT: FAIL (watchdog: no verdict reached)");
+    $display("FAIL [termination]: watchdog expired before a verdict");
+    $display("RESULT: FAIL");
     $finish;
   end
 
   // ---------------------------------------------------------------------------
-  // CHECKER / REFERENCE HELPERS
+  // CHECKER / MODEL
   // ---------------------------------------------------------------------------
 
-  localparam longint signed RESET_PERIOD_FNS =
-      64'sd419430;                 // {6,16'h6666}
+  localparam longint signed FNS_PER_NS  = 64'sd65536;
+  localparam longint signed FNS_PER_SEC = 64'sd65536000000000;
 
-  localparam longint signed ONE_SECOND_FNS =
-      64'sd65536000000000;         // 1e9 * 65536
+  localparam longint signed P_DEF =
+      64'sh0000_0000_0006_6666;
 
-  localparam longint signed PER_325_FNS =
-      64'sd212992;                 // 3.25 ns
+  localparam longint signed P_TEST =
+      64'sh0000_0000_0005_2222;
 
-  localparam longint signed PER_4_FNS =
-      64'sd262144;                 // 4 ns
+  localparam longint signed P_FRAC =
+      64'sh0000_0000_0001_0001;
 
-  localparam longint signed PER_1_FNS =
-      64'sd65536;                  // 1 ns
+  function automatic longint signed flat96(input logic [95:0] v);
+    longint signed sec_v;
+    longint signed ns_v;
+    longint signed fns_v;
+    begin
+      sec_v = v[95:48];
+      ns_v = v[45:16];
+      fns_v = v[15:0];
 
-  int errors = 0;
-  int fail_prints = 0;
+      flat96 =
+          (sec_v * FNS_PER_SEC) +
+          (ns_v * FNS_PER_NS) +
+          fns_v;
+    end
+  endfunction
+
+  function automatic longint signed flat64(input logic [63:0] v);
+    longint signed ns_v;
+    longint signed fns_v;
+    begin
+      ns_v = v[63:16];
+      fns_v = v[15:0];
+
+      flat64 =
+          (ns_v * FNS_PER_NS) +
+          fns_v;
+    end
+  endfunction
+
+  function automatic longint signed signed20(
+      input logic [3:0] ns,
+      input logic [15:0] fns
+  );
+    logic signed [19:0] raw_v;
+    begin
+      raw_v = {ns, fns};
+      signed20 = $signed(raw_v);
+    end
+  endfunction
 
   task automatic fail_clause(
-    input string clause_name,
-    input string msg
+      input string clause_name,
+      input string detail
   );
     begin
-      errors = errors + 1;
-
-      if (fail_prints < 60)
-        $display(
+      $display(
           "FAIL [%s] cycle=%0d: %s",
           clause_name,
           bfm_cycle,
-          msg
-        );
-
-      fail_prints = fail_prints + 1;
+          detail
+      );
+      $display("RESULT: FAIL");
+      $finish;
     end
   endtask
 
-  function automatic longint signed u20_fns(
-    input logic [3:0] ns_v,
-    input logic [15:0] fns_v
-  );
-    logic [19:0] tmp;
-
+  task automatic check_reset_state;
     begin
-      tmp = {ns_v, fns_v};
-      u20_fns = tmp;
-    end
-  endfunction
+      if (ts96 !== 96'b0)
+        fail_clause(
+            "R2",
+            "ts96 was not zero when reset was released"
+        );
 
-  function automatic longint signed s20_fns(
-    input logic [3:0] ns_v,
-    input logic [15:0] fns_v
+      if (ts64 !== 64'b0)
+        fail_clause(
+            "R2",
+            "ts64 was not zero when reset was released"
+        );
+
+      if (adj_active !== 1'b0)
+        fail_clause(
+            "R2/A3",
+            "adj_active remained asserted after reset"
+        );
+
+      if (ts_step !== 1'b0)
+        fail_clause(
+            "R2/A4",
+            "ts_step remained asserted after reset"
+        );
+    end
+  endtask
+
+  task automatic verify_drift_pattern(
+      input longint signed period_u,
+      input longint signed drift_u,
+      input int rate_v,
+      input int ncycles,
+      input string tag
   );
-    logic signed [19:0] tmp;
-
-    begin
-      tmp = {ns_v, fns_v};
-      s20_fns = tmp;
-    end
-  endfunction
-
-  function automatic longint signed t64_fns(
-    input logic [63:0] t
-  );
-    begin
-      t64_fns = t;
-    end
-  endfunction
-
-  function automatic longint signed t96_fns(
-    input logic [95:0] t
-  );
-    longint signed sec_v;
-    longint signed ns_v;
-    longint signed fn_v;
-
-    begin
-      sec_v = t[95:48];
-      ns_v  = t[45:16];
-      fn_v  = t[15:0];
-
-      t96_fns =
-          sec_v * ONE_SECOND_FNS +
-          ns_v * 64'sd65536 +
-          fn_v;
-    end
-  endfunction
-
-  // ---------------------------------------------------------------------------
-  // RESET DEFAULTS
-  // ---------------------------------------------------------------------------
-
-  task automatic check_default_run(input int ncyc);
-    longint signed prev96;
-    longint signed prev64;
-    longint signed cur96;
-    longint signed cur64;
-    longint signed d96;
-    longint signed d64;
+    longint signed prev96_u;
+    longint signed prev64_u;
+    longint signed cur96_u;
+    longint signed cur64_u;
+    longint signed d96_u;
+    longint signed d64_u;
 
     int i;
-    int c96;
-    int c64;
     int last96;
     int last64;
+    int first96;
+    int first64;
+    int hits96;
+    int hits64;
 
     begin
-      c96 = 0;
-      c64 = 0;
       last96 = -1;
       last64 = -1;
+      first96 = -1;
+      first64 = -1;
+      hits96 = 0;
+      hits64 = 0;
 
       @(negedge clk);
 
-      prev96 = t96_fns(ts96);
-      prev64 = t64_fns(ts64);
+      prev96_u = flat96(ts96);
+      prev64_u = flat64(ts64);
 
-      for (i = 0; i < ncyc; i = i + 1) begin
+      for (i = 0; i < ncycles; i = i + 1) begin
         @(negedge clk);
 
-        cur96 = t96_fns(ts96);
-        cur64 = t64_fns(ts64);
+        cur96_u = flat96(ts96);
+        cur64_u = flat64(ts64);
 
-        d96 = cur96 - prev96;
-        d64 = cur64 - prev64;
+        d96_u = cur96_u - prev96_u;
+        d64_u = cur64_u - prev64_u;
 
         if (ts96[47:46] !== 2'b00)
           fail_clause(
-            "F1",
-            "reserved bits [47:46] of ts96_o are not zero"
+              "F1",
+              "reserved bits [47:46] of ts96 were not zero"
           );
-
-        if (d96 == RESET_PERIOD_FNS + 64'sd2) begin
-          c96 = c96 + 1;
-
-          if ((last96 >= 0) && ((i - last96) != 5))
-            fail_clause(
-              "D2",
-              $sformatf(
-                "ts96 default drift spacing was %0d, expected 5",
-                i - last96
-              )
-            );
-
-          last96 = i;
-
-        end else if (d96 != RESET_PERIOD_FNS) begin
-          fail_clause(
-            "I1/I2/R2",
-            $sformatf(
-              "ts96 default increment=%0d fns",
-              d96
-            )
-          );
-        end
-
-        if (d64 == RESET_PERIOD_FNS + 64'sd2) begin
-          c64 = c64 + 1;
-
-          if ((last64 >= 0) && ((i - last64) != 5))
-            fail_clause(
-              "D2",
-              $sformatf(
-                "ts64 default drift spacing was %0d, expected 5",
-                i - last64
-              )
-            );
-
-          last64 = i;
-
-        end else if (d64 != RESET_PERIOD_FNS) begin
-          fail_clause(
-            "I1/I2/R2",
-            $sformatf(
-              "ts64 default increment=%0d fns",
-              d64
-            )
-          );
-        end
 
         if (adj_active !== 1'b0)
           fail_clause(
-            "A3/R2",
-            "adj_active_o asserted with no active adjustment"
+              "A3",
+              "adj_active asserted with no offset adjustment pending"
           );
 
         if (ts_step !== 1'b0)
           fail_clause(
-            "A4/S3",
-            "ts_step_o asserted without set or adjustment"
+              "A4/S3",
+              "ts_step asserted without an adjustment or set"
           );
 
         if (pps !== 1'b0)
           fail_clause(
-            "W3",
-            "pps_o asserted far from a one-second wrap"
+              "W3",
+              "pps asserted without a one-second ts96 wrap"
           );
 
-        prev96 = cur96;
-        prev64 = cur64;
+        if (d96_u == (period_u + drift_u)) begin
+          if (first96 < 0)
+            first96 = i;
+
+          if ((last96 >= 0) &&
+              ((i - last96) != rate_v))
+            fail_clause(
+                tag,
+                "ts96 drift hits were not exactly drift_rate cycles apart"
+            );
+
+          last96 = i;
+          hits96 = hits96 + 1;
+        end
+        else if (d96_u != period_u) begin
+          fail_clause(
+              "I1/I2/D2",
+              "ts96 increment was neither period nor period+drift"
+          );
+        end
+
+        if (d64_u == (period_u + drift_u)) begin
+          if (first64 < 0)
+            first64 = i;
+
+          if ((last64 >= 0) &&
+              ((i - last64) != rate_v))
+            fail_clause(
+                tag,
+                "ts64 drift hits were not exactly drift_rate cycles apart"
+            );
+
+          last64 = i;
+          hits64 = hits64 + 1;
+        end
+        else if (d64_u != period_u) begin
+          fail_clause(
+              "I1/I2/D2",
+              "ts64 increment was neither period nor period+drift"
+          );
+        end
+
+        prev96_u = cur96_u;
+        prev64_u = cur64_u;
       end
 
-      if (c96 != (ncyc / 5))
+      if ((hits96 < 2) || (hits64 < 2))
         fail_clause(
-          "D2/R2",
-          $sformatf(
-            "ts96 saw %0d default drift events in %0d cycles",
-            c96,
-            ncyc
-          )
+            tag,
+            "too few drift applications were observed"
         );
 
-      if (c64 != (ncyc / 5))
+      if ((first96 < 0) || (first96 >= rate_v))
         fail_clause(
-          "D2/R2",
-          $sformatf(
-            "ts64 saw %0d default drift events in %0d cycles",
-            c64,
-            ncyc
-          )
+            tag,
+            "ts96 did not contain one drift hit in the first drift_rate observations"
+        );
+
+      if ((first64 < 0) || (first64 >= rate_v))
+        fail_clause(
+            tag,
+            "ts64 did not contain one drift hit in the first drift_rate observations"
         );
     end
   endtask
 
-  task automatic configure_drift_zero;
-    begin
-      bfm_drift(
-        4'h0,
-        16'h0000,
-        16'd3
-      );
-
-      // Change live inputs after valid. Correct DUT must use latched values.
-      drift_ns = 4'h7;
-      drift_fns = 16'ha55a;
-      drift_rate = 16'd9;
-
-      bfm_wait(8);
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // PERIOD UPDATE
-  // ---------------------------------------------------------------------------
-
-  task automatic test_period_change(
-    input logic [3:0] new_ns,
-    input logic [15:0] new_fns,
-    input longint signed old_per
+  task automatic verify_constant(
+      input longint signed period_u,
+      input int ncycles,
+      input string tag
   );
-    longint signed new_per;
-    longint signed prev96;
-    longint signed prev64;
-    longint signed cur96;
-    longint signed cur64;
-    longint signed d96;
-    longint signed d64;
+    longint signed prev96_u;
+    longint signed prev64_u;
+    longint signed cur96_u;
+    longint signed cur64_u;
+    longint signed d96_u;
+    longint signed d64_u;
+
+    int i;
+
+    begin
+      @(negedge clk);
+
+      prev96_u = flat96(ts96);
+      prev64_u = flat64(ts64);
+
+      for (i = 0; i < ncycles; i = i + 1) begin
+        @(negedge clk);
+
+        cur96_u = flat96(ts96);
+        cur64_u = flat64(ts64);
+
+        d96_u = cur96_u - prev96_u;
+        d64_u = cur64_u - prev64_u;
+
+        if (d96_u != period_u)
+          fail_clause(
+              tag,
+              "ts96 increment did not equal the exact programmed period"
+          );
+
+        if (d64_u != period_u)
+          fail_clause(
+              tag,
+              "ts64 increment did not equal the exact programmed period"
+          );
+
+        if (ts96[47:46] !== 2'b00)
+          fail_clause(
+              "F1",
+              "reserved bits [47:46] of ts96 were not zero"
+          );
+
+        if (adj_active !== 1'b0)
+          fail_clause(
+              "A3",
+              "adj_active asserted while idle"
+          );
+
+        if (ts_step !== 1'b0)
+          fail_clause(
+              "A4/S3",
+              "ts_step asserted while idle"
+          );
+
+        if (pps !== 1'b0)
+          fail_clause(
+              "W3",
+              "pps asserted without a wrap"
+          );
+
+        prev96_u = cur96_u;
+        prev64_u = cur64_u;
+      end
+    end
+  endtask
+
+  task automatic test_period_latency(
+      input longint signed old_p,
+      input logic [3:0] new_ns,
+      input logic [15:0] new_fns,
+      input longint signed new_p
+  );
+    longint signed prev96_u;
+    longint signed prev64_u;
+    longint signed cur96_u;
+    longint signed cur64_u;
+    longint signed d96_u;
+    longint signed d64_u;
 
     int i;
     int first96;
@@ -412,8 +426,6 @@ module ptp_time_base_tb;
     bit seen64;
 
     begin
-      new_per = u20_fns(new_ns, new_fns);
-
       first96 = -1;
       first64 = -1;
 
@@ -422,128 +434,108 @@ module ptp_time_base_tb;
 
       @(negedge clk);
 
-      prev96 = t96_fns(ts96);
-      prev64 = t64_fns(ts64);
+      prev96_u = flat96(ts96);
+      prev64_u = flat64(ts64);
 
       period_ns = new_ns;
       period_fns = new_fns;
       period_valid = 1'b1;
 
-      for (i = 0; i < 12; i = i + 1) begin
+      for (i = 0; i <= 8; i = i + 1) begin
         @(negedge clk);
 
-        cur96 = t96_fns(ts96);
-        cur64 = t64_fns(ts64);
+        cur96_u = flat96(ts96);
+        cur64_u = flat64(ts64);
 
-        d96 = cur96 - prev96;
-        d64 = cur64 - prev64;
+        d96_u = cur96_u - prev96_u;
+        d64_u = cur64_u - prev64_u;
 
-        if (i == 0) begin
+        if (i == 0)
           period_valid = 1'b0;
 
-          // The valid command must have captured the payload.
-          period_ns = 4'h7;
-          period_fns = 16'hbeef;
-        end
-
-        if (!seen96) begin
-          if (d96 == new_per) begin
+        if (d96_u == new_p) begin
+          if (!seen96) begin
             seen96 = 1'b1;
             first96 = i;
-
-          end else if (d96 != old_per) begin
-            fail_clause(
-              "I2",
-              $sformatf(
-                "ts96 illegal period-transition increment %0d",
-                d96
-              )
-            );
           end
-
-        end else if (d96 != new_per) begin
+        end
+        else if (d96_u == old_p) begin
+          if (seen96)
+            fail_clause(
+                "I2",
+                "ts96 reverted to the old period after adopting the new period"
+            );
+        end
+        else begin
           fail_clause(
-            "I2",
-            "ts96 returned to old/illegal period after new period took effect"
+              "I1/I2",
+              "ts96 showed an illegal increment during period adoption"
           );
         end
 
-        if (!seen64) begin
-          if (d64 == new_per) begin
+        if (d64_u == new_p) begin
+          if (!seen64) begin
             seen64 = 1'b1;
             first64 = i;
-
-          end else if (d64 != old_per) begin
-            fail_clause(
-              "I2",
-              $sformatf(
-                "ts64 illegal period-transition increment %0d",
-                d64
-              )
-            );
           end
-
-        end else if (d64 != new_per) begin
+        end
+        else if (d64_u == old_p) begin
+          if (seen64)
+            fail_clause(
+                "I2",
+                "ts64 reverted to the old period after adopting the new period"
+            );
+        end
+        else begin
           fail_clause(
-            "I2",
-            "ts64 returned to old/illegal period after new period took effect"
+              "I1/I2",
+              "ts64 showed an illegal increment during period adoption"
           );
         end
 
-        if (ts_step !== 1'b0)
+        if ((adj_active !== 1'b0) ||
+            (ts_step !== 1'b0))
           fail_clause(
-            "A4/S3",
-            "period update spuriously asserted ts_step_o"
+              "A3/A4",
+              "period update spuriously asserted adjustment status"
           );
 
-        if (adj_active !== 1'b0)
+        if (pps !== 1'b0)
           fail_clause(
-            "A3",
-            "period update spuriously asserted adj_active_o"
+              "W3",
+              "period update spuriously asserted pps"
           );
 
-        prev96 = cur96;
-        prev64 = cur64;
+        prev96_u = cur96_u;
+        prev64_u = cur64_u;
       end
 
-      if (!seen96)
+      if (first96 < 0)
         fail_clause(
-          "I2/L1",
-          "ts96 never reflected the replacement period"
+            "L1/I2",
+            "ts96 did not adopt the new period within 8 cycles"
         );
 
-      if (!seen64)
+      if (first64 < 0)
         fail_clause(
-          "I2/L1",
-          "ts64 never reflected the replacement period"
-        );
-
-      if ((first96 > 4) && (first64 > 4))
-        fail_clause(
-          "L1",
-          $sformatf(
-            "first visible period effect was later than 4 cycles (ts96=%0d ts64=%0d)",
-            first96,
-            first64
-          )
+            "L1/I2",
+            "ts64 did not adopt the new period within 8 cycles"
         );
     end
   endtask
 
-  // ---------------------------------------------------------------------------
-  // DRIFT
-  // ---------------------------------------------------------------------------
-
-  task automatic test_drift_latency_rate1(
-    input longint signed per_v
+  task automatic test_drift_rate1_latency(
+      input longint signed period_u,
+      input logic [3:0] new_ns,
+      input logic [15:0] new_fns,
+      input longint signed new_drift
   );
-    longint signed prev96;
-    longint signed prev64;
-    longint signed cur96;
-    longint signed cur64;
-    longint signed d96;
-    longint signed d64;
-    longint signed new_delta;
+    longint signed prev96_u;
+    longint signed prev64_u;
+    longint signed cur96_u;
+    longint signed cur64_u;
+    longint signed d96_u;
+    longint signed d64_u;
 
     int i;
     int first96;
@@ -553,8 +545,6 @@ module ptp_time_base_tb;
     bit seen64;
 
     begin
-      new_delta = per_v + 64'sd13;
-
       first96 = -1;
       first64 = -1;
 
@@ -563,1489 +553,1008 @@ module ptp_time_base_tb;
 
       @(negedge clk);
 
-      prev96 = t96_fns(ts96);
-      prev64 = t64_fns(ts64);
+      prev96_u = flat96(ts96);
+      prev64_u = flat64(ts64);
 
-      drift_ns = 4'h0;
-      drift_fns = 16'h000d;
+      drift_ns = new_ns;
+      drift_fns = new_fns;
       drift_rate = 16'd1;
       drift_valid = 1'b1;
 
-      for (i = 0; i < 12; i = i + 1) begin
+      for (i = 0; i <= 8; i = i + 1) begin
         @(negedge clk);
 
-        cur96 = t96_fns(ts96);
-        cur64 = t64_fns(ts64);
+        cur96_u = flat96(ts96);
+        cur64_u = flat64(ts64);
 
-        d96 = cur96 - prev96;
-        d64 = cur64 - prev64;
+        d96_u = cur96_u - prev96_u;
+        d64_u = cur64_u - prev64_u;
 
-        if (i == 0) begin
+        if (i == 0)
           drift_valid = 1'b0;
 
-          // D1 requires the complete command to be latched.
-          drift_ns = 4'h7;
-          drift_fns = 16'h1234;
-          drift_rate = 16'd9;
-        end
-
-        if (!seen96) begin
-          if (d96 == new_delta) begin
+        if (d96_u == (period_u + new_drift)) begin
+          if (!seen96) begin
             seen96 = 1'b1;
             first96 = i;
-
-          end else if (d96 != per_v) begin
-            fail_clause(
-              "D1/D2",
-              $sformatf(
-                "ts96 illegal rate-1 drift transition delta %0d",
-                d96
-              )
-            );
           end
-
-        end else if (d96 != new_delta) begin
+        end
+        else if (d96_u == period_u) begin
+          if (seen96)
+            fail_clause(
+                "D1/D2",
+                "ts96 lost a rate-1 drift after adopting it"
+            );
+        end
+        else begin
           fail_clause(
-            "D2",
-            "ts96 rate-1 drift was not applied on every increment"
+              "I1/D1",
+              "ts96 showed an illegal increment during drift adoption"
           );
         end
 
-        if (!seen64) begin
-          if (d64 == new_delta) begin
+        if (d64_u == (period_u + new_drift)) begin
+          if (!seen64) begin
             seen64 = 1'b1;
             first64 = i;
-
-          end else if (d64 != per_v) begin
-            fail_clause(
-              "D1/D2",
-              $sformatf(
-                "ts64 illegal rate-1 drift transition delta %0d",
-                d64
-              )
-            );
           end
-
-        end else if (d64 != new_delta) begin
+        end
+        else if (d64_u == period_u) begin
+          if (seen64)
+            fail_clause(
+                "D1/D2",
+                "ts64 lost a rate-1 drift after adopting it"
+            );
+        end
+        else begin
           fail_clause(
-            "D2",
-            "ts64 rate-1 drift was not applied on every increment"
+              "I1/D1",
+              "ts64 showed an illegal increment during drift adoption"
           );
         end
 
-        prev96 = cur96;
-        prev64 = cur64;
+        if ((adj_active !== 1'b0) ||
+            (ts_step !== 1'b0))
+          fail_clause(
+              "A3/A4",
+              "drift update spuriously asserted adjustment status"
+          );
+
+        if (pps !== 1'b0)
+          fail_clause(
+              "W3",
+              "drift update spuriously asserted pps"
+          );
+
+        prev96_u = cur96_u;
+        prev64_u = cur64_u;
       end
 
-      if (!seen96)
+      if (first96 < 0)
         fail_clause(
-          "D1/D2/L1",
-          "ts96 never reflected rate-1 drift command"
+            "L1/D1",
+            "ts96 did not adopt rate-1 drift within 8 cycles"
         );
 
-      if (!seen64)
+      if (first64 < 0)
         fail_clause(
-          "D1/D2/L1",
-          "ts64 never reflected rate-1 drift command"
-        );
-
-      if ((first96 > 4) && (first64 > 4))
-        fail_clause(
-          "L1",
-          $sformatf(
-            "first visible drift effect was later than 4 cycles (ts96=%0d ts64=%0d)",
-            first96,
-            first64
-          )
+            "L1/D1",
+            "ts64 did not adopt rate-1 drift within 8 cycles"
         );
     end
   endtask
 
-  task automatic check_drift_pattern(
-    input logic [3:0] d_ns,
-    input logic [15:0] d_fns,
-    input int rate_v,
-    input longint signed per_v,
-    input int ncyc
+  task automatic test_adjustment(
+      input logic [3:0] off_ns,
+      input logic [15:0] off_fns,
+      input logic [15:0] count_v,
+      input longint signed period_u,
+      input string tag
   );
-    longint signed drift_v;
-    longint signed prev96;
-    longint signed prev64;
-    longint signed cur96;
-    longint signed cur64;
-    longint signed d96;
-    longint signed d64;
+    longint signed off_u;
+    longint signed prev96_u;
+    longint signed prev64_u;
+    longint signed cur96_u;
+    longint signed cur64_u;
+    longint signed d96_u;
+    longint signed d64_u;
 
+    int want;
+    int window_v;
     int i;
-    int c96;
-    int c64;
-    int last96;
-    int last64;
+    int start96;
+    int start64;
+    int run96;
+    int run64;
+    int active_run;
+
+    bit seen96;
+    bit seen64;
+    bit done96;
+    bit done64;
+    bit active_seen;
+    bit active_done;
 
     begin
-      drift_v = s20_fns(d_ns, d_fns);
+      off_u = signed20(off_ns, off_fns);
 
-      bfm_drift(
-        d_ns,
-        d_fns,
-        rate_v[15:0]
-      );
+      want = count_v;
+      window_v = want + 24;
 
-      // D1 requires the command payload/rate to be latched.
-      drift_ns = 4'h6;
-      drift_fns = 16'hd00d;
-      drift_rate = 16'd9;
+      start96 = -1;
+      start64 = -1;
 
-      bfm_wait(8);
+      run96 = 0;
+      run64 = 0;
 
-      c96 = 0;
-      c64 = 0;
+      active_run = 0;
 
-      last96 = -1;
-      last64 = -1;
+      seen96 = 1'b0;
+      seen64 = 1'b0;
+
+      done96 = 1'b0;
+      done64 = 1'b0;
+
+      active_seen = 1'b0;
+      active_done = 1'b0;
 
       @(negedge clk);
 
-      prev96 = t96_fns(ts96);
-      prev64 = t64_fns(ts64);
+      prev96_u = flat96(ts96);
+      prev64_u = flat64(ts64);
 
-      for (i = 0; i < ncyc; i = i + 1) begin
-        @(negedge clk);
-
-        cur96 = t96_fns(ts96);
-        cur64 = t64_fns(ts64);
-
-        d96 = cur96 - prev96;
-        d64 = cur64 - prev64;
-
-        if (d96 == per_v + drift_v) begin
-          c96 = c96 + 1;
-
-          if ((last96 >= 0) && ((i - last96) != rate_v))
-            fail_clause(
-              "D2",
-              $sformatf(
-                "ts96 drift spacing=%0d expected=%0d",
-                i - last96,
-                rate_v
-              )
-            );
-
-          last96 = i;
-
-        end else if (d96 != per_v) begin
-          fail_clause(
-            "I1/D3",
-            $sformatf(
-              "ts96 illegal drift increment %0d, period=%0d drift=%0d",
-              d96,
-              per_v,
-              drift_v
-            )
-          );
-        end
-
-        if (d64 == per_v + drift_v) begin
-          c64 = c64 + 1;
-
-          if ((last64 >= 0) && ((i - last64) != rate_v))
-            fail_clause(
-              "D2",
-              $sformatf(
-                "ts64 drift spacing=%0d expected=%0d",
-                i - last64,
-                rate_v
-              )
-            );
-
-          last64 = i;
-
-        end else if (d64 != per_v) begin
-          fail_clause(
-            "I1/D3",
-            $sformatf(
-              "ts64 illegal drift increment %0d, period=%0d drift=%0d",
-              d64,
-              per_v,
-              drift_v
-            )
-          );
-        end
-
-        if (ts_step !== 1'b0)
-          fail_clause(
-            "A4/S3",
-            "drift update/use spuriously asserted ts_step_o"
-          );
-
-        if (adj_active !== 1'b0)
-          fail_clause(
-            "A3",
-            "drift update/use spuriously asserted adj_active_o"
-          );
-
-        prev96 = cur96;
-        prev64 = cur64;
-      end
-
-      if (c96 != (ncyc / rate_v))
-        fail_clause(
-          "D2",
-          $sformatf(
-            "ts96 drift count=%0d expected=%0d",
-            c96,
-            ncyc / rate_v
-          )
-        );
-
-      if (c64 != (ncyc / rate_v))
-        fail_clause(
-          "D2",
-          $sformatf(
-            "ts64 drift count=%0d expected=%0d",
-            c64,
-            ncyc / rate_v
-          )
-        );
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // COUNTED ADJUSTMENT
-  // ---------------------------------------------------------------------------
-
-  task automatic run_adjust_case(
-    input logic [3:0] a_ns,
-    input logic [15:0] a_fns,
-    input int cnt,
-    input longint signed per_v
-  );
-    longint signed adj_v;
-    longint signed prev96;
-    longint signed prev64;
-    longint signed cur96;
-    longint signed cur64;
-    longint signed d96;
-    longint signed d64;
-
-    int span;
-    int i;
-    int c96;
-    int c64;
-    int ca;
-    int first96;
-    int first64;
-    int st96;
-    int st64;
-    int sta;
-
-    begin
-      adj_v = s20_fns(a_ns, a_fns);
-
-      span = cnt + 12;
-
-      c96 = 0;
-      c64 = 0;
-      ca = 0;
-
-      first96 = -1;
-      first64 = -1;
-
-      st96 = 0;
-      st64 = 0;
-      sta = 0;
-
-      @(negedge clk);
-
-      prev96 = t96_fns(ts96);
-      prev64 = t64_fns(ts64);
-
-      adj_ns = a_ns;
-      adj_fns = a_fns;
-      adj_count = cnt[15:0];
+      adj_ns = off_ns;
+      adj_fns = off_fns;
+      adj_count = count_v;
       adj_valid = 1'b1;
 
-      for (i = 0; i < span; i = i + 1) begin
+      for (i = 0; i < window_v; i = i + 1) begin
         @(negedge clk);
 
-        cur96 = t96_fns(ts96);
-        cur64 = t64_fns(ts64);
-
-        d96 = cur96 - prev96;
-        d64 = cur64 - prev64;
-
-        if (i == 0) begin
-          adj_valid = 1'b0;
-
-          // A1 requires both the adjustment and its count to be latched.
-          adj_ns = 4'h7;
-          adj_fns = 16'h55aa;
-          adj_count = 16'd1;
-        end
-
-        if (d96 == per_v + adj_v) begin
-          if (cnt == 0)
-            fail_clause(
-              "A2",
-              "ts96 applied a zero-count adjustment"
-            );
-
-          c96 = c96 + 1;
-
-          if (first96 < 0)
-            first96 = i;
-
-          if (st96 == 2)
-            fail_clause(
-              "A2",
-              "ts96 adjusted increments were not consecutive"
-            );
-
-          st96 = 1;
-
-        end else if (d96 == per_v) begin
-          if (st96 == 1)
-            st96 = 2;
-
-        end else begin
-          fail_clause(
-            "I1/A5",
-            $sformatf(
-              "ts96 illegal adjustment increment %0d, expected %0d or %0d",
-              d96,
-              per_v,
-              per_v + adj_v
-            )
-          );
-        end
-
-        if (d64 == per_v + adj_v) begin
-          if (cnt == 0)
-            fail_clause(
-              "A2",
-              "ts64 applied a zero-count adjustment"
-            );
-
-          c64 = c64 + 1;
-
-          if (first64 < 0)
-            first64 = i;
-
-          if (st64 == 2)
-            fail_clause(
-              "A2",
-              "ts64 adjusted increments were not consecutive"
-            );
-
-          st64 = 1;
-
-        end else if (d64 == per_v) begin
-          if (st64 == 1)
-            st64 = 2;
-
-        end else begin
-          fail_clause(
-            "I1/A5",
-            $sformatf(
-              "ts64 illegal adjustment increment %0d, expected %0d or %0d",
-              d64,
-              per_v,
-              per_v + adj_v
-            )
-          );
-        end
-
-        if (adj_active === 1'b1) begin
-          if (cnt == 0)
-            fail_clause(
-              "A3",
-              "adj_active_o asserted for zero-count adjustment"
-            );
-
-          ca = ca + 1;
-
-          if (sta == 2)
-            fail_clause(
-              "A3",
-              "adj_active_o cycles were not consecutive"
-            );
-
-          sta = 1;
-
-        end else if (adj_active === 1'b0) begin
-          if (sta == 1)
-            sta = 2;
-
-        end else begin
-          fail_clause(
-            "A3",
-            "adj_active_o is X/Z"
-          );
-        end
-
-        if (ts_step !== adj_active)
-          fail_clause(
-            "A4",
-            "without a set, ts_step_o did not exactly match adj_active_o"
-          );
-
-        prev96 = cur96;
-        prev64 = cur64;
-      end
-
-      if (c96 != cnt)
-        fail_clause(
-          "A2",
-          $sformatf(
-            "ts96 adjusted increment count=%0d expected=%0d",
-            c96,
-            cnt
-          )
-        );
-
-      if (c64 != cnt)
-        fail_clause(
-          "A2",
-          $sformatf(
-            "ts64 adjusted increment count=%0d expected=%0d",
-            c64,
-            cnt
-          )
-        );
-
-      if (ca != cnt)
-        fail_clause(
-          "A3",
-          $sformatf(
-            "adj_active_o count=%0d expected=%0d",
-            ca,
-            cnt
-          )
-        );
-
-      if ((cnt > 0) &&
-          (first96 < 0) &&
-          (first64 < 0))
-        fail_clause(
-          "L1",
-          "adjustment never became visible"
-        );
-
-      if ((cnt > 0) &&
-          (first96 > 4) &&
-          (first64 > 4))
-        fail_clause(
-          "L1",
-          $sformatf(
-            "first visible adjustment effect was later than 4 cycles (ts96=%0d ts64=%0d)",
-            first96,
-            first64
-          )
-        );
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // SIMULTANEOUS OFFSET + DRIFT
-  // ---------------------------------------------------------------------------
-
-  task automatic test_combined_adjust_and_drift(
-    input longint signed per_v
-  );
-    longint signed prev96;
-    longint signed prev64;
-    longint signed cur96;
-    longint signed cur64;
-    longint signed d96;
-    longint signed d64;
-    longint signed adj_v;
-    longint signed drift_v;
-
-    int i;
-    int ac96;
-    int ac64;
-    int dc96;
-    int dc64;
-    int lastd96;
-    int lastd64;
-    int ast96;
-    int ast64;
-
-    begin
-      adj_v = 64'sd100;
-      drift_v = 64'sd7;
-
-      bfm_drift(
-        4'h0,
-        16'h0007,
-        16'd3
-      );
-
-      bfm_wait(8);
-
-      ac96 = 0;
-      ac64 = 0;
-      dc96 = 0;
-      dc64 = 0;
-
-      lastd96 = -1;
-      lastd64 = -1;
-
-      ast96 = 0;
-      ast64 = 0;
-
-      @(negedge clk);
-
-      prev96 = t96_fns(ts96);
-      prev64 = t64_fns(ts64);
-
-      adj_ns = 4'h0;
-      adj_fns = 16'h0064;
-      adj_count = 16'd9;
-      adj_valid = 1'b1;
-
-      for (i = 0; i < 24; i = i + 1) begin
-        @(negedge clk);
-
-        cur96 = t96_fns(ts96);
-        cur64 = t64_fns(ts64);
-
-        d96 = cur96 - prev96;
-        d64 = cur64 - prev64;
-
-        if (i == 0) begin
-          adj_valid = 1'b0;
-
-          adj_ns = 4'h7;
-          adj_fns = 16'h55aa;
-          adj_count = 16'd1;
-        end
-
-        if ((d96 == per_v + adj_v) ||
-            (d96 == per_v + adj_v + drift_v)) begin
-
-          ac96 = ac96 + 1;
-
-          if (ast96 == 2)
-            fail_clause(
-              "I1/A2",
-              "ts96 adjustment was not consecutive when drift overlapped"
-            );
-
-          ast96 = 1;
-
-        end else if ((d96 == per_v) ||
-                     (d96 == per_v + drift_v)) begin
-
-          if (ast96 == 1)
-            ast96 = 2;
-
-        end else begin
-          fail_clause(
-            "I1",
-            $sformatf(
-              "ts96 did not form period+adjustment+drift correctly: delta=%0d",
-              d96
-            )
-          );
-        end
-
-        if ((d64 == per_v + adj_v) ||
-            (d64 == per_v + adj_v + drift_v)) begin
-
-          ac64 = ac64 + 1;
-
-          if (ast64 == 2)
-            fail_clause(
-              "I1/A2",
-              "ts64 adjustment was not consecutive when drift overlapped"
-            );
-
-          ast64 = 1;
-
-        end else if ((d64 == per_v) ||
-                     (d64 == per_v + drift_v)) begin
-
-          if (ast64 == 1)
-            ast64 = 2;
-
-        end else begin
-          fail_clause(
-            "I1",
-            $sformatf(
-              "ts64 did not form period+adjustment+drift correctly: delta=%0d",
-              d64
-            )
-          );
-        end
-
-        if ((d96 == per_v + drift_v) ||
-            (d96 == per_v + adj_v + drift_v)) begin
-
-          dc96 = dc96 + 1;
-
-          if ((lastd96 >= 0) &&
-              ((i - lastd96) != 3))
-            fail_clause(
-              "D2",
-              "ts96 drift spacing changed while adjustment overlapped"
-            );
-
-          lastd96 = i;
-        end
-
-        if ((d64 == per_v + drift_v) ||
-            (d64 == per_v + adj_v + drift_v)) begin
-
-          dc64 = dc64 + 1;
-
-          if ((lastd64 >= 0) &&
-              ((i - lastd64) != 3))
-            fail_clause(
-              "D2",
-              "ts64 drift spacing changed while adjustment overlapped"
-            );
-
-          lastd64 = i;
-        end
-
-        if (ts_step !== adj_active)
-          fail_clause(
-            "A4",
-            "ts_step_o did not match adj_active_o in combined adjustment/drift test"
-          );
-
-        prev96 = cur96;
-        prev64 = cur64;
-      end
-
-      if (ac96 != 9)
-        fail_clause(
-          "A2/I1",
-          $sformatf(
-            "ts96 combined-case adjustment count=%0d expected 9",
-            ac96
-          )
-        );
-
-      if (ac64 != 9)
-        fail_clause(
-          "A2/I1",
-          $sformatf(
-            "ts64 combined-case adjustment count=%0d expected 9",
-            ac64
-          )
-        );
-
-      if (dc96 != 8)
-        fail_clause(
-          "D2/I1",
-          $sformatf(
-            "ts96 combined-case drift count=%0d expected 8",
-            dc96
-          )
-        );
-
-      if (dc64 != 8)
-        fail_clause(
-          "D2/I1",
-          $sformatf(
-            "ts64 combined-case drift count=%0d expected 8",
-            dc64
-          )
-        );
-    end
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // SETTING AND INDEPENDENCE
-  // ---------------------------------------------------------------------------
-
-  task automatic test_set_independence(
-    input longint signed per_v
-  );
-    longint signed prev64;
-    longint signed cur64;
-    longint signed prev96;
-    longint signed cur96;
-
-    logic [95:0] wanted96;
-    logic [63:0] wanted64;
-
-    begin
-      wanted96 =
-          {48'd2, 2'b00, 30'd123456789, 16'h1357};
-
-      @(negedge clk);
-
-      prev64 = t64_fns(ts64);
-
-      set_ts96 = wanted96;
-      set_ts96_valid = 1'b1;
-
-      @(negedge clk);
-
-      cur64 = t64_fns(ts64);
-      set_ts96_valid = 1'b0;
-
-      if (ts96 !== wanted96)
-        fail_clause(
-          "S1/F1",
-          "set_ts96_valid_i did not set ts96_o exactly"
-        );
-
-      if ((cur64 - prev64) != per_v)
-        fail_clause(
-          "S4",
-          $sformatf(
-            "setting ts96 disturbed ts64 increment: got %0d expected %0d",
-            cur64 - prev64,
-            per_v
-          )
-        );
-
-      if (ts_step !== 1'b1)
-        fail_clause(
-          "S3",
-          "ts_step_o was not asserted on 96-bit set cycle"
-        );
-
-      if (pps !== 1'b0)
-        fail_clause(
-          "W3",
-          "setting ts96 without wrapping spuriously asserted pps_o"
-        );
-
-      @(negedge clk);
-
-      if (ts_step !== 1'b0)
-        fail_clause(
-          "S3",
-          "ts_step_o lasted more than one cycle after 96-bit set"
-        );
-
-      wanted64 =
-          {48'd345678901, 16'h2468};
-
-      prev96 = t96_fns(ts96);
-
-      set_ts64 = wanted64;
-      set_ts64_valid = 1'b1;
-
-      @(negedge clk);
-
-      cur96 = t96_fns(ts96);
-      set_ts64_valid = 1'b0;
-
-      if (ts64 !== wanted64)
-        fail_clause(
-          "S2/F2",
-          "set_ts64_valid_i did not set ts64_o exactly"
-        );
-
-      if ((cur96 - prev96) != per_v)
-        fail_clause(
-          "S4",
-          $sformatf(
-            "setting ts64 disturbed ts96 increment: got %0d expected %0d",
-            cur96 - prev96,
-            per_v
-          )
-        );
-
-      if (ts_step !== 1'b1)
-        fail_clause(
-          "S3",
-          "ts_step_o was not asserted on 64-bit set cycle"
-        );
-
-      @(negedge clk);
-
-      if (ts_step !== 1'b0)
-        fail_clause(
-          "S3",
-          "ts_step_o lasted more than one cycle after 64-bit set"
-        );
-    end
-  endtask
-
-  task automatic test_drift_survives_set96(
-    input longint signed per_v
-  );
-    longint signed prev64;
-    longint signed cur64;
-    longint signed d64;
-    longint signed drift_v;
-
-    int i;
-    int cnt;
-    int last_i;
-
-    begin
-      drift_v = 64'sd11;
-
-      bfm_drift(
-        4'h0,
-        16'h000b,
-        16'd4
-      );
-
-      bfm_wait(8);
-
-      cnt = 0;
-      last_i = -1;
-
-      @(negedge clk);
-
-      prev64 = t64_fns(ts64);
-
-      for (i = 0; i < 16; i = i + 1) begin
-        if (i == 5) begin
-          set_ts96 =
-              {48'd4, 2'b00, 30'd1000, 16'h0000};
-
-          set_ts96_valid = 1'b1;
-        end
-
-        @(negedge clk);
-
-        cur64 = t64_fns(ts64);
-        d64 = cur64 - prev64;
-
-        if (i == 5)
-          set_ts96_valid = 1'b0;
-
-        if (d64 == per_v + drift_v) begin
-          cnt = cnt + 1;
-
-          if ((last_i >= 0) &&
-              ((i - last_i) != 4))
-            fail_clause(
-              "S4/D2",
-              "setting ts96 changed ts64 drift spacing"
-            );
-
-          last_i = i;
-
-        end else if (d64 != per_v) begin
-          fail_clause(
-            "S4/I1",
-            $sformatf(
-              "setting ts96 disturbed ts64 delta: %0d",
-              d64
-            )
-          );
-        end
-
-        if (i == 5) begin
-          if (ts_step !== 1'b1)
-            fail_clause(
-              "S3",
-              "ts_step_o missing on set during drift test"
-            );
-
-        end else if (ts_step !== 1'b0) begin
-          fail_clause(
-            "S3",
-            "ts_step_o asserted outside set during drift continuity test"
-          );
-        end
-
-        prev64 = cur64;
-      end
-
-      if (cnt != 4)
-        fail_clause(
-          "S4/D2",
-          $sformatf(
-            "drift count across ts96 set was %0d expected 4",
-            cnt
-          )
-        );
-    end
-  endtask
-
-  task automatic test_adjust_survives_set96(
-    input longint signed per_v
-  );
-    longint signed prev64;
-    longint signed cur64;
-    longint signed d64;
-    longint signed adj_v;
-
-    int i;
-    int cnt;
-    int active_cnt;
-    int st;
-
-    begin
-      adj_v = 64'sd8;
-
-      cnt = 0;
-      active_cnt = 0;
-      st = 0;
-
-      @(negedge clk);
-
-      prev64 = t64_fns(ts64);
-
-      adj_ns = 4'h0;
-      adj_fns = 16'h0008;
-      adj_count = 16'd20;
-      adj_valid = 1'b1;
-
-      for (i = 0; i < 32; i = i + 1) begin
-        @(negedge clk);
-
-        cur64 = t64_fns(ts64);
-        d64 = cur64 - prev64;
+        cur96_u = flat96(ts96);
+        cur64_u = flat64(ts64);
+
+        d96_u = cur96_u - prev96_u;
+        d64_u = cur64_u - prev64_u;
 
         if (i == 0)
           adj_valid = 1'b0;
 
-        if (d64 == per_v + adj_v) begin
-          cnt = cnt + 1;
-
-          if (st == 2)
+        if (d96_u == (period_u + off_u)) begin
+          if (done96)
             fail_clause(
-              "S4/A2",
-              "ts64 adjustment became nonconsecutive across ts96 set"
+                "A2",
+                "ts96 adjustment increments were not consecutive"
             );
 
-          st = 1;
+          if (!seen96) begin
+            seen96 = 1'b1;
+            start96 = i;
+          end
 
-        end else if (d64 == per_v) begin
-          if (st == 1)
-            st = 2;
-
-        end else begin
+          run96 = run96 + 1;
+        end
+        else if (d96_u == period_u) begin
+          if (seen96 && !done96)
+            done96 = 1'b1;
+        end
+        else begin
           fail_clause(
-            "S4/I1",
-            $sformatf(
-              "ts64 illegal delta during set/adjust interaction: %0d",
-              d64
-            )
+              tag,
+              "ts96 increment had an illegal adjustment value"
           );
         end
 
-        if (adj_active === 1'b1)
-          active_cnt = active_cnt + 1;
-
-        if (i == 5) begin
-          set_ts96 =
-              {48'd5, 2'b00, 30'd2000, 16'h0000};
-
-          set_ts96_valid = 1'b1;
-        end
-
-        if (i == 6)
-          set_ts96_valid = 1'b0;
-
-        if (i == 6) begin
-          if (ts_step !== 1'b1)
+        if (d64_u == (period_u + off_u)) begin
+          if (done64)
             fail_clause(
-              "S3/A4",
-              "ts_step_o missing when set overlaps adjustment"
+                "A2",
+                "ts64 adjustment increments were not consecutive"
             );
 
-        end else if (ts_step !== adj_active) begin
+          if (!seen64) begin
+            seen64 = 1'b1;
+            start64 = i;
+          end
+
+          run64 = run64 + 1;
+        end
+        else if (d64_u == period_u) begin
+          if (seen64 && !done64)
+            done64 = 1'b1;
+        end
+        else begin
           fail_clause(
-            "A4",
-            "ts_step_o did not match adj_active_o outside injected set cycle"
+              tag,
+              "ts64 increment had an illegal adjustment value"
           );
         end
 
-        prev64 = cur64;
+        if (adj_active === 1'b1) begin
+          if (active_done)
+            fail_clause(
+                "A3",
+                "adj_active was not one consecutive run"
+            );
+
+          if (!active_seen)
+            active_seen = 1'b1;
+
+          active_run = active_run + 1;
+        end
+        else begin
+          if (active_seen && !active_done)
+            active_done = 1'b1;
+        end
+
+        if (ts_step !== adj_active)
+          fail_clause(
+              "A4",
+              "ts_step did not exactly match adj_active during an adjustment-only test"
+          );
+
+        if (pps !== 1'b0)
+          fail_clause(
+              "W3",
+              "pps asserted without a wrap during adjustment test"
+          );
+
+        prev96_u = cur96_u;
+        prev64_u = cur64_u;
       end
 
-      if (cnt != 20)
-        fail_clause(
-          "S4/A2",
-          $sformatf(
-            "setting ts96 disturbed ts64 adjustment count: %0d expected 20",
-            cnt
-          )
-        );
+      if (want == 0) begin
+        if (seen96 || seen64)
+          fail_clause(
+              "A2",
+              "zero-count adjustment changed a timestamp increment"
+          );
 
-      if (active_cnt != 20)
-        fail_clause(
-          "S4/A3",
-          $sformatf(
-            "setting ts96 disturbed adj_active count: %0d expected 20",
-            active_cnt
-          )
-        );
+        if (active_seen)
+          fail_clause(
+              "A3",
+              "zero-count adjustment asserted adj_active"
+          );
+      end
+      else begin
+        if (!seen96 || (run96 != want))
+          fail_clause(
+              "A2",
+              "ts96 did not receive exactly adj_count adjusted increments"
+          );
+
+        if (!seen64 || (run64 != want))
+          fail_clause(
+              "A2",
+              "ts64 did not receive exactly adj_count adjusted increments"
+          );
+
+        if ((start96 < 0) || (start96 > 8))
+          fail_clause(
+              "L1/A2",
+              "ts96 adjustment did not begin within 8 cycles"
+          );
+
+        if ((start64 < 0) || (start64 > 8))
+          fail_clause(
+              "L1/A2",
+              "ts64 adjustment did not begin within 8 cycles"
+          );
+
+        if (!active_seen || (active_run != want))
+          fail_clause(
+              "A3",
+              "adj_active was not asserted for exactly adj_count cycles"
+          );
+      end
     end
   endtask
 
-  // ---------------------------------------------------------------------------
-  // FRACTIONAL ARITHMETIC
-  // ---------------------------------------------------------------------------
+  task automatic issue_set96_check(
+      input logic [47:0] sec_v,
+      input logic [29:0] ns_v,
+      input logic [15:0] fns_v,
+      input longint signed other_period
+  );
+    logic [95:0] want96;
+    longint signed before64_u;
+    longint signed after64_u;
 
-  task automatic test_fractional_carry;
     begin
-      configure_drift_zero();
-
-      test_period_change(
-        4'h0,
-        16'h0003,
-        PER_1_FNS
-      );
-
-      bfm_wait(8);
-
-      bfm_set64(
-        48'd100,
-        16'hfffe
-      );
-
-      if (ts64 !== {48'd100, 16'hfffe})
-        fail_clause(
-          "S2",
-          "fractional-carry setup set64 failed"
-        );
+      want96 = {sec_v, 2'b00, ns_v, fns_v};
 
       @(negedge clk);
 
-      if (ts64[63:16] !== 48'd101)
-        fail_clause(
-          "F2/I1",
-          $sformatf(
-            "fractional carry produced ns=%0d expected 101",
-            ts64[63:16]
-          )
-        );
+      before64_u = flat64(ts64);
 
-      if (ts64[15:0] !== 16'h0001)
-        fail_clause(
-          "F3/I1",
-          $sformatf(
-            "fractional carry produced fns=0x%04x expected 0x0001",
-            ts64[15:0]
-          )
-        );
-
-      // Cross the second boundary by just one fractional unit:
-      // 999999999.fffe + 3 fns => next second, 0.0001.
-      bfm_set96(
-        48'd6,
-        30'd999999999,
-        16'hfffe
-      );
-
-      if (pps !== 1'b0)
-        fail_clause(
-          "W3",
-          "set near fractional wrap spuriously asserted pps_o"
-        );
+      set_ts96 = want96;
+      set_ts96_valid = 1'b1;
 
       @(negedge clk);
 
-      if (ts96 !==
-          {48'd7, 2'b00, 30'd0, 16'h0001})
+      after64_u = flat64(ts64);
+
+      set_ts96_valid = 1'b0;
+
+      if (ts96 !== want96)
         fail_clause(
-          "F1/F3/W1",
-          "fractional one-second wrap did not land at sec+1, ns=0, fns=1"
+            "S1/F1",
+            "ts96 did not show the exact set value on the accepting cycle"
         );
 
-      if (pps !== 1'b1)
+      if ((after64_u - before64_u) != other_period)
         fail_clause(
-          "W3",
-          "pps_o missing on fractional one-second wrap"
+            "S4",
+            "setting ts96 disturbed ts64"
         );
 
-      @(negedge clk);
-
-      if (ts96 !==
-          {48'd7, 2'b00, 30'd0, 16'h0004})
+      if (ts_step !== 1'b1)
         fail_clause(
-          "F1/F3/I1",
-          "ts96 did not continue exactly after fractional wrap"
+            "S3",
+            "ts_step was not asserted on a ts96 set"
         );
 
       if (pps !== 1'b0)
         fail_clause(
-          "W3",
-          "pps_o lasted more than one cycle after fractional wrap"
+            "W3",
+            "a set operation itself spuriously asserted pps"
         );
     end
   endtask
 
-  // ---------------------------------------------------------------------------
-  // ONE-SECOND WRAP / PPS
-  // ---------------------------------------------------------------------------
+  task automatic issue_set64_check(
+      input logic [47:0] ns_v,
+      input logic [15:0] fns_v,
+      input longint signed other_period
+  );
+    logic [63:0] want64;
+    longint signed before96_u;
+    longint signed after96_u;
 
-  task automatic test_wrap_and_pps;
-    longint signed model_sub;
-    longint signed per_v;
-    longint signed model_sec;
-    longint signed model_ns64;
-    longint signed model_fns64;
+    begin
+      want64 = {ns_v, fns_v};
+
+      @(negedge clk);
+
+      before96_u = flat96(ts96);
+
+      set_ts64 = want64;
+      set_ts64_valid = 1'b1;
+
+      @(negedge clk);
+
+      after96_u = flat96(ts96);
+
+      set_ts64_valid = 1'b0;
+
+      if (ts64 !== want64)
+        fail_clause(
+            "S2/F2",
+            "ts64 did not show the exact set value on the accepting cycle"
+        );
+
+      if ((after96_u - before96_u) != other_period)
+        fail_clause(
+            "S4",
+            "setting ts64 disturbed ts96"
+        );
+
+      if (ts_step !== 1'b1)
+        fail_clause(
+            "S3",
+            "ts_step was not asserted on a ts64 set"
+        );
+
+      if (pps !== 1'b0)
+        fail_clause(
+            "W3",
+            "a set operation itself spuriously asserted pps"
+        );
+    end
+  endtask
+
+  task automatic ignore_set_warmup_and_check_step;
+    int i;
+
+    begin
+      for (i = 0; i < 4; i = i + 1) begin
+        @(negedge clk);
+
+        if (ts_step !== 1'b0)
+          fail_clause(
+              "S3",
+              "ts_step lasted more than one cycle after a set"
+          );
+      end
+    end
+  endtask
+
+  task automatic test_wrap96(
+      input longint signed period_u
+  );
+    logic [47:0] prev_sec;
+    logic [47:0] exp_sec;
+    logic [29:0] exp_ns;
+    logic [15:0] exp_fns;
+    logic [95:0] exp96;
+
+    longint signed prev_sub;
+    longint signed next_sub;
+    longint signed ns_now;
 
     int i;
-    bit wrap_now;
+
+    bit found_wrap;
+    bit exp_pps;
 
     begin
-      configure_drift_zero();
-
-      test_period_change(
-        4'h4,
-        16'h0000,
-        64'sd3
+      issue_set96_check(
+          48'd7,
+          30'd999999900,
+          16'h8000,
+          period_u
       );
 
-      bfm_wait(8);
+      ignore_set_warmup_and_check_step();
 
-      per_v = 64'sd262144;
-
-      bfm_set96(
-        48'd7,
-        30'd999999990,
-        16'h0000
-      );
-
-      if (ts96 !==
-          {48'd7, 2'b00, 30'd999999990, 16'h0000})
+      if (ts96[47:46] !== 2'b00)
         fail_clause(
-          "S1",
-          "wrap test setup set96 failed"
+            "F1",
+            "ts96 reserved bits were nonzero before wrap test"
         );
+
+      if (ts96[45:16] >= 30'd1000000000)
+        fail_clause(
+            "W1",
+            "ts96 nanoseconds field was already outside the legal range"
+        );
+
+      prev_sec = ts96[95:48];
+
+      ns_now = ts96[45:16];
+
+      prev_sub =
+          (ns_now * FNS_PER_NS) +
+          ts96[15:0];
+
+      found_wrap = 1'b0;
+      i = 0;
+
+      while ((i < 80) && !found_wrap) begin
+        @(negedge clk);
+
+        next_sub = prev_sub + period_u;
+
+        exp_sec = prev_sec;
+        exp_pps = 1'b0;
+
+        if (next_sub >= FNS_PER_SEC) begin
+          next_sub = next_sub - FNS_PER_SEC;
+          exp_sec = prev_sec + 48'd1;
+          exp_pps = 1'b1;
+        end
+
+        exp_ns = next_sub / FNS_PER_NS;
+        exp_fns = next_sub % FNS_PER_NS;
+
+        exp96 = {
+            exp_sec,
+            2'b00,
+            exp_ns,
+            exp_fns
+        };
+
+        if (ts96 !== exp96)
+          fail_clause(
+              "W1/I1",
+              "ts96 did not perform the exact one-second wrap arithmetic"
+          );
+
+        if (pps !== exp_pps)
+          fail_clause(
+              "W3",
+              "pps did not exactly coincide with the ts96 one-second wrap"
+          );
+
+        if ((ts_step !== 1'b0) ||
+            (adj_active !== 1'b0))
+          fail_clause(
+              "A3/A4/S3",
+              "status pulse asserted spuriously during wrap test"
+          );
+
+        if (exp_pps)
+          found_wrap = 1'b1;
+
+        prev_sec = exp_sec;
+        prev_sub = next_sub;
+
+        i = i + 1;
+      end
+
+      if (!found_wrap)
+        fail_clause(
+            "W1/W3",
+            "no one-second wrap was observed after setting ts96 near the boundary"
+        );
+
+      @(negedge clk);
 
       if (pps !== 1'b0)
         fail_clause(
-          "W3",
-          "pps_o asserted merely because set96 was near boundary"
-        );
-
-      model_sec = 7;
-
-      model_sub =
-          64'sd999999990 *
-          64'sd65536;
-
-      for (i = 0; i < 6; i = i + 1) begin
-        @(negedge clk);
-
-        model_sub = model_sub + per_v;
-        wrap_now = 1'b0;
-
-        if (model_sub >= ONE_SECOND_FNS) begin
-          model_sub =
-              model_sub -
-              ONE_SECOND_FNS;
-
-          model_sec =
-              model_sec + 1;
-
-          wrap_now = 1'b1;
-        end
-
-        if (ts96[95:48] != model_sec)
-          fail_clause(
-            "W1/F1",
-            $sformatf(
-              "ts96 seconds=%0d expected=%0d",
-              ts96[95:48],
-              model_sec
-            )
-          );
-
-        if (ts96[47:46] !== 2'b00)
-          fail_clause(
-            "F1",
-            "ts96 reserved bits nonzero during wrap test"
-          );
-
-        if (ts96[45:16] !=
-            (model_sub / 64'sd65536))
-          fail_clause(
-            "W1/F1",
-            $sformatf(
-              "ts96 ns=%0d expected=%0d",
-              ts96[45:16],
-              model_sub / 64'sd65536
-            )
-          );
-
-        if (ts96[15:0] !=
-            (model_sub % 64'sd65536))
-          fail_clause(
-            "F3/W1",
-            $sformatf(
-              "ts96 fns=%0d expected=%0d",
-              ts96[15:0],
-              model_sub % 64'sd65536
-            )
-          );
-
-        if (pps !== wrap_now)
-          fail_clause(
             "W3",
-            $sformatf(
-              "pps_o=%0b expected=%0b on wrap-model cycle",
-              pps,
-              wrap_now
-            )
-          );
-      end
-
-      // Move ts96 safely away from its own wrap while checking ts64.
-      bfm_set96(
-        48'd8,
-        30'd1000,
-        16'h0000
-      );
-
-      bfm_set64(
-        48'd999999990,
-        16'h0000
-      );
-
-      model_ns64 = 999999990;
-      model_fns64 = 0;
-
-      for (i = 0; i < 5; i = i + 1) begin
-        @(negedge clk);
-
-        model_fns64 =
-            model_fns64 +
-            per_v;
-
-        model_ns64 =
-            999999990 +
-            (model_fns64 / 64'sd65536);
-
-        if (ts64[63:16] != model_ns64)
-          fail_clause(
-            "W2/F2",
-            $sformatf(
-              "ts64 ns=%0d expected=%0d (must not wrap at 1 second)",
-              ts64[63:16],
-              model_ns64
-            )
-          );
-
-        if (ts64[15:0] !=
-            (model_fns64 % 64'sd65536))
-          fail_clause(
-            "F3/W2",
-            "ts64 fractional field mismatch in no-wrap test"
-          );
-      end
-
-      if (ts64[63:16] < 48'd1000000000)
-        fail_clause(
-          "W2",
-          "ts64 wrapped at the one-second boundary"
+            "pps remained asserted for more than one cycle"
         );
     end
   endtask
 
-  // ---------------------------------------------------------------------------
-  // RESET WHILE ADJUSTMENT IS OUTSTANDING
-  // ---------------------------------------------------------------------------
+  task automatic test_no_wrap64(
+      input longint signed period_u
+  );
+    longint signed prev_u;
+    longint signed cur_u;
+    longint signed next_u;
+    longint signed threshold_u;
+
+    int i;
+    bit crossed;
+
+    begin
+      issue_set64_check(
+          48'd999999900,
+          16'h4000,
+          period_u
+      );
+
+      ignore_set_warmup_and_check_step();
+
+      threshold_u =
+          64'sd1000000000 *
+          FNS_PER_NS;
+
+      prev_u = flat64(ts64);
+
+      crossed = 1'b0;
+      i = 0;
+
+      while ((i < 80) && !crossed) begin
+        @(negedge clk);
+
+        cur_u = flat64(ts64);
+
+        next_u = prev_u + period_u;
+
+        if (cur_u != next_u)
+          fail_clause(
+              "W2/I1",
+              "ts64 did not continue linearly through the one-second boundary"
+          );
+
+        if ((prev_u < threshold_u) &&
+            (cur_u >= threshold_u))
+          crossed = 1'b1;
+
+        if (pps !== 1'b0)
+          fail_clause(
+              "W3",
+              "ts64 crossing one second incorrectly asserted pps"
+          );
+
+        prev_u = cur_u;
+        i = i + 1;
+      end
+
+      if (!crossed)
+        fail_clause(
+            "W2",
+            "ts64 did not cross the one-second numeric boundary as a linear counter"
+        );
+    end
+  endtask
 
   task automatic test_reset_cancels_adjustment;
+    int i;
+    bit saw_active;
+
     begin
-      configure_drift_zero();
-
-      test_period_change(
-        4'h2,
-        16'h0000,
-        PER_4_FNS
-      );
-
-      bfm_wait(8);
-
       bfm_adjust(
-        4'h0,
-        16'h0100,
-        16'd100
+          4'h0,
+          16'h8000,
+          16'd100
       );
 
-      bfm_wait(10);
+      saw_active = 1'b0;
+      i = 0;
 
-      bfm_reset(4);
+      while ((i < 16) && !saw_active) begin
+        @(negedge clk);
 
-      if (ts96 !== 96'd0)
+        if (adj_active === 1'b1)
+          saw_active = 1'b1;
+
+        i = i + 1;
+      end
+
+      if (!saw_active)
         fail_clause(
-          "R2",
-          "reset did not leave ts96_o at zero"
+            "A3/L1",
+            "adjustment never became active before reset-cancellation test"
         );
 
-      if (ts64 !== 64'd0)
-        fail_clause(
-          "R2",
-          "reset did not leave ts64_o at zero"
-        );
+      rst = 1'b1;
 
-      if (adj_active !== 1'b0)
-        fail_clause(
-          "R2/A3",
-          "reset did not cancel outstanding adjustment activity"
-        );
+      repeat (3)
+        @(posedge clk);
 
-      check_default_run(10);
+      @(negedge clk);
+
+      rst = 1'b0;
+
+      check_reset_state();
+
+      for (i = 0; i < 12; i = i + 1) begin
+        @(negedge clk);
+
+        if (adj_active !== 1'b0)
+          fail_clause(
+              "R2",
+              "reset did not cancel the remaining offset adjustment"
+          );
+
+        if (ts_step !== 1'b0)
+          fail_clause(
+              "R2/A4",
+              "ts_step asserted after reset cancelled an adjustment"
+          );
+      end
+
+      verify_drift_pattern(
+          P_DEF,
+          64'sd2,
+          5,
+          30,
+          "R2/D2"
+      );
     end
   endtask
 
+
   // ---------------------------------------------------------------------------
-  // TEST SEQUENCE
+  // STIMULUS
   // ---------------------------------------------------------------------------
 
   initial begin
+
+    // -------------------------------------------------------------------------
+    // 1) Reset state and exact default increment/drift.
+    //    Measurement starts only after the X2b reset warm-up window.
+    // -------------------------------------------------------------------------
+
     bfm_reset(5);
 
-    if (ts96 !== 96'd0)
-      fail_clause(
-        "R2",
-        "ts96_o not zero after reset release"
-      );
+    check_reset_state();
 
-    if (ts64 !== 64'd0)
-      fail_clause(
-        "R2",
-        "ts64_o not zero after reset release"
-      );
+    bfm_wait(12);
 
-    // Reset defaults:
-    // period = {6,16'h6666}, drift = +2 fns, drift rate = 5.
-    check_default_run(20);
-
-    // Disable observable drift and replace period.
-    configure_drift_zero();
-
-    test_period_change(
-      4'h3,
-      16'h4000,
-      RESET_PERIOD_FNS
+    verify_drift_pattern(
+        P_DEF,
+        64'sd2,
+        5,
+        40,
+        "I2/D2/R2"
     );
 
-    bfm_wait(8);
 
-    // L1 for drift is easy to observe using rate=1.
-    test_drift_latency_rate1(
-      PER_325_FNS
+    // -------------------------------------------------------------------------
+    // 2) Remove drift and test period control.
+    //
+    //    The two timestamp bases are allowed to adopt the period on different
+    //    cycles, so test_period_latency() observes each base independently.
+    // -------------------------------------------------------------------------
+
+    bfm_reset(4);
+
+    check_reset_state();
+
+    bfm_wait(12);
+
+    bfm_drift(
+        4'h0,
+        16'h0000,
+        16'd3
     );
 
-    // Positive and negative drift.
-    check_drift_pattern(
-      4'h0,
-      16'h0007,
-      4,
-      PER_325_FNS,
-      20
+    bfm_wait(12);
+
+    verify_constant(
+        P_DEF,
+        6,
+        "D1/I2"
     );
 
-    check_drift_pattern(
-      4'hf,
-      16'hfffb,
-      3,
-      PER_325_FNS,
-      15
+    test_period_latency(
+        P_DEF,
+        4'h5,
+        16'h2222,
+        P_TEST
     );
 
-    // Clean setup for adjustment tests.
-    configure_drift_zero();
-
-    test_period_change(
-      4'h4,
-      16'h0000,
-      PER_325_FNS
+    verify_constant(
+        P_TEST,
+        5,
+        "I2/L1"
     );
 
-    bfm_wait(8);
 
-    // Positive adjustment: +1.5 ns, exactly 7 increments.
-    run_adjust_case(
-      4'h1,
-      16'h8000,
-      7,
-      PER_4_FNS
+    // -------------------------------------------------------------------------
+    // 3) Drift adoption.
+    //
+    //    rate=1 makes the effect observable on every increment after the base
+    //    independently adopts the new drift setting.
+    // -------------------------------------------------------------------------
+
+    test_drift_rate1_latency(
+        P_TEST,
+        4'h0,
+        16'h0007,
+        64'sd7
     );
 
-    // Negative adjustment: -1.25 ns, exactly 5 increments.
-    run_adjust_case(
-      4'he,
-      16'hc000,
-      5,
-      PER_4_FNS
+    verify_drift_pattern(
+        P_TEST,
+        64'sd7,
+        1,
+        10,
+        "D1/D2/L1"
     );
 
-    // Zero count must mean zero adjusted increments and zero active cycles.
-    run_adjust_case(
-      4'h1,
-      16'h0000,
-      0,
-      PER_4_FNS
+
+    // -------------------------------------------------------------------------
+    // 4) Periodic drift spacing and signed drift.
+    // -------------------------------------------------------------------------
+
+    bfm_drift(
+        4'h0,
+        16'h0011,
+        16'd4
     );
 
-    // I1: period + adjustment + drift must really be summed.
-    test_combined_adjust_and_drift(
-      PER_4_FNS
+    bfm_wait(12);
+
+    verify_drift_pattern(
+        P_TEST,
+        64'sd17,
+        4,
+        40,
+        "D2"
     );
 
-    configure_drift_zero();
+    // Signed 20-bit value:
+    //
+    //     {4'hF, 16'hFFFD} == -3 fns
 
-    // S1-S4.
-    test_set_independence(
-      PER_4_FNS
+    bfm_drift(
+        4'hF,
+        16'hFFFD,
+        16'd3
     );
 
-    // Setting one accumulator must not perturb the drift schedule.
-    test_drift_survives_set96(
-      PER_4_FNS
+    bfm_wait(12);
+
+    verify_drift_pattern(
+        P_TEST,
+        -64'sd3,
+        3,
+        36,
+        "D2/D3"
     );
 
-    configure_drift_zero();
 
-    // Setting one accumulator must not perturb an outstanding adjustment.
-    test_adjust_survives_set96(
-      PER_4_FNS
+    // -------------------------------------------------------------------------
+    // 5) Exact fractional arithmetic.
+    //
+    //    Program a period of:
+    //
+    //       1 ns + 1 fns
+    //
+    //    This directly exercises the 2^-16 ns fractional resolution.
+    // -------------------------------------------------------------------------
+
+    bfm_reset(4);
+
+    check_reset_state();
+
+    bfm_wait(12);
+
+    bfm_drift(
+        4'h0,
+        16'h0000,
+        16'd7
     );
 
-    // Exercise the full 16-bit adjustment-count boundary.
-    test_period_change(
-      4'h1,
-      16'h0000,
-      PER_4_FNS
+    bfm_wait(12);
+
+    bfm_period(
+        4'h1,
+        16'h0001
     );
 
-    bfm_wait(8);
+    bfm_wait(12);
 
-    bfm_set96(
-      48'd0,
-      30'd1000,
-      16'h0000
+    verify_constant(
+        P_FRAC,
+        24,
+        "F3/I1/I2"
     );
 
-    bfm_set64(
-      48'd1000,
-      16'h0000
+
+    // -------------------------------------------------------------------------
+    // 6) Counted positive adjustment.
+    //
+    //    16'h0101 == 257, intentionally exceeding 8 bits so an implementation
+    //    using too-small an adjustment counter is detected.
+    // -------------------------------------------------------------------------
+
+    bfm_reset(4);
+
+    check_reset_state();
+
+    bfm_wait(12);
+
+    bfm_drift(
+        4'h0,
+        16'h0000,
+        16'd3
     );
 
-    run_adjust_case(
-      4'h0,
-      16'h0001,
-      65535,
-      PER_1_FNS
+    bfm_wait(12);
+
+    bfm_period(
+        4'h5,
+        16'h2222
     );
 
-    // Exact 1/65536 ns arithmetic.
-    test_fractional_carry();
+    bfm_wait(12);
 
-    // W1-W3 and F1-F3 at the second boundary.
-    test_wrap_and_pps();
+    test_adjustment(
+        4'h0,
+        16'h8000,
+        16'h0101,
+        P_TEST,
+        "A1/A2/A3/A4"
+    );
 
-    // R2: restore defaults and cancel adjustment still owed.
+
+    // -------------------------------------------------------------------------
+    // 7) Signed negative adjustment and the zero-count boundary.
+    //
+    //    {4'hE,16'hC000} is -1.25 ns in signed 20-bit fixed-point.
+    // -------------------------------------------------------------------------
+
+    test_adjustment(
+        4'hE,
+        16'hC000,
+        16'd7,
+        P_TEST,
+        "A2/A5"
+    );
+
+    test_adjustment(
+        4'h0,
+        16'h4000,
+        16'd0,
+        P_TEST,
+        "A2/A3"
+    );
+
+
+    // -------------------------------------------------------------------------
+    // 8) Timestamp set behavior.
+    //
+    //    Verify exact set format, one-cycle ts_step, and independence of the
+    //    timestamp base that was not set.
+    // -------------------------------------------------------------------------
+
+    bfm_reset(4);
+
+    check_reset_state();
+
+    bfm_wait(12);
+
+    bfm_drift(
+        4'h0,
+        16'h0000,
+        16'd3
+    );
+
+    bfm_wait(12);
+
+    bfm_period(
+        4'h5,
+        16'h2222
+    );
+
+    bfm_wait(12);
+
+    issue_set96_check(
+        48'h0000_0000_0012,
+        30'd123456789,
+        16'hA55A,
+        P_TEST
+    );
+
+    ignore_set_warmup_and_check_step();
+
+    verify_constant(
+        P_TEST,
+        5,
+        "S1/S4/X2c"
+    );
+
+    issue_set64_check(
+        48'd2345678901,
+        16'h5AA5,
+        P_TEST
+    );
+
+    ignore_set_warmup_and_check_step();
+
+    verify_constant(
+        P_TEST,
+        5,
+        "S2/S4/X2c"
+    );
+
+
+    // -------------------------------------------------------------------------
+    // 9) One-second wrap.
+    //
+    //    ts96 must wrap its ns field at 1,000,000,000 and pulse pps.
+    //    ts64 must continue linearly through the same numeric boundary.
+    // -------------------------------------------------------------------------
+
+    test_wrap96(P_TEST);
+
+    bfm_wait(6);
+
+    test_no_wrap64(P_TEST);
+
+
+    // -------------------------------------------------------------------------
+    // 10) Reset cancellation and restoration.
+    //
+    //     Begin a long adjustment, reset while it is active, and confirm:
+    //
+    //       * the remaining adjustment is cancelled,
+    //       * period returns to the default,
+    //       * drift returns to +2 fns,
+    //       * drift rate returns to 5.
+    // -------------------------------------------------------------------------
+
+    bfm_reset(4);
+
+    check_reset_state();
+
+    bfm_wait(12);
+
+    bfm_drift(
+        4'h0,
+        16'h0000,
+        16'd3
+    );
+
+    bfm_wait(12);
+
     test_reset_cancels_adjustment();
 
-    if (errors == 0)
-      $display("RESULT: PASS");
-    else
-      $display("RESULT: FAIL");
 
+    // -------------------------------------------------------------------------
+    // All checks passed.
+    // -------------------------------------------------------------------------
+
+    $display("RESULT: PASS");
     $finish;
+
   end
 
 endmodule

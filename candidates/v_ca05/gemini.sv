@@ -1,22 +1,51 @@
 module tag_tracker_tb;
 
-  parameter int TAG_W = 3;
-  parameter int SLOTS = 8;
-  parameter bit FULL_RATE = 0;
-  parameter bit CUT_POP_PATH = 0;
-  parameter int N_MATCH = 1;
-  typedef logic[31:0] payload_t;
-  typedef logic[TAG_W-1:0] tag_t;
+  localparam int TAG_W = 3;
+  localparam int SLOTS = 8;
+  localparam int N_MATCH = 1;
 
+  typedef logic [31:0] payload_t;
+  typedef logic [TAG_W-1:0] tag_t;
+
+  // ---------------------------------------------------------------------------
+  // PROVIDED PLUMBING -- clock, reset and watchdog only.
+  // ---------------------------------------------------------------------------
   logic clk;
-  logic rst_ni; // Mapped to the provided rst_n
+  initial begin clk = 1'b0; forever #5 clk = ~clk; end
 
+  logic rst_n;
+  initial rst_n = 1'b0;
+
+  task automatic bfm_reset(input int cycles = 4);
+    @(negedge clk);
+    rst_n = 1'b0;
+    repeat (cycles) @(posedge clk);
+    @(negedge clk);
+    rst_n = 1'b1;
+  endtask
+
+  task automatic bfm_drive_point();
+    @(negedge clk);
+  endtask
+
+  task automatic bfm_tick();
+    @(posedge clk);
+  endtask
+
+  initial begin
+    #20_000_000;
+    $display("RESULT: FAIL (watchdog: no forward progress)");
+    $finish;
+  end
+
+  // ---------------------------------------------------------------------------
+  // Signals and DUT
+  // ---------------------------------------------------------------------------
   tag_t     push_tag_i;
   payload_t push_data_i;
   logic     push_req_i;
   logic     push_gnt_o;
 
-  // Packed dimensions must be declared exactly matching the port specification
   payload_t [N_MATCH-1:0] match_data_i;
   payload_t [N_MATCH-1:0] match_mask_i;
   logic     [N_MATCH-1:0] match_req_i;
@@ -36,13 +65,13 @@ module tag_tracker_tb;
   tag_tracker #(
     .TAG_W(TAG_W),
     .SLOTS(SLOTS),
-    .FULL_RATE(FULL_RATE),
-    .CUT_POP_PATH(CUT_POP_PATH),
+    .FULL_RATE(0),
+    .CUT_POP_PATH(0),
     .N_MATCH(N_MATCH),
     .payload_t(payload_t)
   ) dut (
     .clk_i(clk),
-    .rst_ni(rst_ni),
+    .rst_ni(rst_n),
     .push_tag_i(push_tag_i),
     .push_data_i(push_data_i),
     .push_req_i(push_req_i),
@@ -63,242 +92,214 @@ module tag_tracker_tb;
   );
 
   // ---------------------------------------------------------------------------
-  // PROVIDED PLUMBING -- clock, reset and watchdog only.
+  // Checkers and Tasks
   // ---------------------------------------------------------------------------
-  // ---- clock -----------------------------------------------------------------
-  initial begin clk = 1'b0; forever #5 clk = ~clk; end
-
-  // ---- reset (active low) ----------------------------------------------------
-  logic rst_n;
-  initial rst_n = 1'b0;
-  assign rst_ni = rst_n;
-
-  task automatic bfm_reset(input int cycles = 4);
-    @(negedge clk);
-    rst_n = 1'b0;
-    repeat (cycles) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
-  endtask
-
-  // ---- timing discipline -----------------------------------------------------
-  task automatic bfm_drive_point();
-    @(negedge clk);
-  endtask
-
-  task automatic bfm_tick();
-    @(posedge clk);
-  endtask
-
-  // ---- watchdog --------------------------------------------------------------
-  initial begin
-    #20_000_000;
-    $display("RESULT: FAIL (watchdog: no forward progress)");
+  task automatic fail(input string msg);
+    $display("RESULT: FAIL (%s)", msg);
     $finish;
-  end
-  // ---------------------------------------------------------------------------
+  endtask
 
-  // Handshake synchronization flags for drivers
-  logic push_done = 0;
-  logic pop_done = 0;
-  logic match_done = 0;
-
-  always @(posedge clk) begin
-    if (!rst_ni) begin
-      push_done <= 0;
-      pop_done <= 0;
-      match_done <= 0;
-    end else begin
-      push_done  <= (push_req_i && push_gnt_o);
-      pop_done   <= (pop_req_i && pop_gnt_o);
-      match_done <= (match_req_i[0] && match_gnt_o[0]);
-    end
-  end
-
-  // ---- Transaction Tasks ----------------------------------------------------
+  // Executes a push, waiting indefinitely for a grant if necessary (R4, R6)
   task automatic do_push(input tag_t tag, input payload_t data);
     bfm_drive_point();
-    push_req_i = 1'b1;
     push_tag_i = tag;
     push_data_i = data;
+    push_req_i = 1'b1;
+    
     forever begin
-      bfm_tick();
-      bfm_drive_point();
-      if (push_done) begin
-        push_req_i = 1'b0;
-        break;
-      end
+      @(posedge clk);
+      if (push_req_i && push_gnt_o) break;
     end
+    
+    bfm_drive_point();
+    push_req_i = 1'b0;
   endtask
 
-  task automatic do_pop(input tag_t tag, input logic en);
+  // Executes a pop, retrieving the validity and payload (R7)
+  task automatic do_pop(input tag_t tag, input bit en, output bit valid, output payload_t data);
     bfm_drive_point();
-    pop_req_i = 1'b1;
     pop_tag_i = tag;
     pop_en_i = en;
-    forever begin
-      bfm_tick();
-      bfm_drive_point();
-      if (pop_done) begin
-        pop_req_i = 1'b0;
-        break;
-      end
-    end
-  endtask
-
-  task automatic do_search(input payload_t mask, input payload_t data);
-    bfm_drive_point();
-    match_req_i[0] = 1'b1;
-    match_mask_i[0] = mask;
-    match_data_i[0] = data;
-    forever begin
-      bfm_tick();
-      bfm_drive_point();
-      if (match_done) begin
-        match_req_i[0] = 1'b0;
-        break;
-      end
-    end
-  endtask
-
-  // ---- Scoreboard & Monitor -------------------------------------------------
-  localparam int NUM_TAGS = 1 << TAG_W;
-  payload_t store [NUM_TAGS] [$];
-  int total_entries = 0;
-  bit fail_flag = 0;
-
-  always @(posedge clk) begin
-    automatic int tag_count;
-    automatic logic exp_hit;
-    automatic int i;
+    pop_req_i = 1'b1;
     
-    if (!rst_ni) begin
-      for (i = 0; i < NUM_TAGS; i++) store[i].delete();
-      total_entries = 0;
-      fail_flag = 0;
-    end else begin
-      // (R14) Status flag integrity
-      if (empty_o !== (total_entries == 0)) begin
-        $display("RESULT: FAIL (R14: empty_o is %b, expected %b)", empty_o, (total_entries == 0));
-        fail_flag = 1;
-      end
-      if (full_o !== (total_entries == SLOTS)) begin
-        $display("RESULT: FAIL (R14: full_o is %b, expected %b)", full_o, (total_entries == SLOTS));
-        fail_flag = 1;
-      end
-
-      // (R5) Cannot grant pushes when full
-      if ((total_entries == SLOTS) && push_gnt_o) begin
-        $display("RESULT: FAIL (R5: push_gnt_o asserted when store is full)");
-        fail_flag = 1;
-      end
-
-      // (R7, R8, R9, R10) Pop logic
+    forever begin
+      @(posedge clk);
       if (pop_req_i && pop_gnt_o) begin
-        tag_count = store[pop_tag_i].size();
-        if (tag_count > 0) begin
-          if (pop_data_valid_o !== 1'b1) begin
-            $display("RESULT: FAIL (R8: pop_data_valid_o low for non-empty tag %0d)", pop_tag_i);
-            fail_flag = 1;
-          end else if (pop_data_o !== store[pop_tag_i][0]) begin
-            $display("RESULT: FAIL (R8: pop_data_o ordering mismatch. expected %x, got %x)", store[pop_tag_i][0], pop_data_o);
-            fail_flag = 1;
-          end
-          // Only pop/remove if pop_en_i is high
-          if (pop_en_i && pop_data_valid_o) begin
-            automatic payload_t p = store[pop_tag_i].pop_front();
-            total_entries--;
-          end
-        end else begin
-          if (pop_data_valid_o !== 1'b0) begin
-            $display("RESULT: FAIL (R10: pop_data_valid_o high for empty tag %0d)", pop_tag_i);
-            fail_flag = 1;
-          end
-        end
+        valid = pop_data_valid_o;
+        data = pop_data_o;
+        break;
       end
+    end
+    
+    bfm_drive_point();
+    pop_req_i = 1'b0;
+  endtask
 
-      // (R4) Push commit
-      if (push_req_i && push_gnt_o) begin
-        store[push_tag_i].push_back(push_data_i);
-        total_entries++;
-      end
-
-      // (R11, R12, R13) Match logic
+  // Executes a search on port 0, retrieving the hit status (R11)
+  task automatic do_search(input payload_t data, input payload_t mask, output bit hit);
+    bfm_drive_point();
+    match_data_i[0] = data;
+    match_mask_i[0] = mask;
+    match_req_i[0] = 1'b1;
+    
+    forever begin
+      @(posedge clk);
       if (match_req_i[0] && match_gnt_o[0]) begin
-        exp_hit = 0;
-        foreach (store[t]) begin
-          foreach (store[t][idx]) begin
-            if ((store[t][idx] & match_mask_i[0]) == (match_data_i[0] & match_mask_i[0])) begin
-              exp_hit = 1;
-            end
-          end
-        end
-        if (match_hit_o[0] !== exp_hit) begin
-          $display("RESULT: FAIL (R12: match_hit_o logic mismatch. expected %b, got %b)", exp_hit, match_hit_o[0]);
-          fail_flag = 1;
-        end
-        if (match_mask_i[0] == 0 && total_entries > 0 && match_hit_o[0] !== 1'b1) begin
-          $display("RESULT: FAIL (R13: match_hit_o not high for all-zeros mask on non-empty store)");
-          fail_flag = 1;
-        end
+        hit = match_hit_o[0];
+        break;
       end
-
-      if (fail_flag) $finish;
     end
-  end
+    
+    bfm_drive_point();
+    match_req_i[0] = 1'b0;
+  endtask
 
-  // ---- Main Stimulus Sequence -----------------------------------------------
+  // Verifies empty_o and full_o match the expected entry count (R14)
+  task automatic check_status(input int expected_count);
+    if (expected_count == 0) begin
+      if (empty_o !== 1'b1) fail("R14: empty_o not high when store is empty");
+    end else begin
+      if (empty_o !== 1'b0) fail("R14: empty_o high when store is not empty");
+    end
+    
+    if (expected_count == SLOTS) begin
+      if (full_o !== 1'b1) fail("R14: full_o not high when store is full");
+    end else begin
+      if (full_o !== 1'b0) fail("R14: full_o high when store is not full");
+    end
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // Main Sequence
+  // ---------------------------------------------------------------------------
   initial begin
-    push_req_i = 0; pop_req_i = 0; match_req_i[0] = 0;
-    push_tag_i = 0; push_data_i = 0; pop_tag_i = 0; pop_en_i = 0;
-    match_data_i[0] = 0; match_mask_i[0] = 0;
+    automatic bit valid;
+    automatic payload_t data;
+    automatic bit hit;
+    automatic int i;
 
-    bfm_reset(4);
-
-    // Verify initial state
+    push_tag_i = 0;
+    push_data_i = 0;
+    push_req_i = 0;
+    
+    match_data_i[0] = 0;
+    match_mask_i[0] = 0;
+    match_req_i[0] = 0;
+    
+    pop_tag_i = 0;
+    pop_en_i = 0;
+    pop_req_i = 0;
+    
+    bfm_reset();
+    
+    // Check reset state (R15)
     bfm_drive_point();
-    if (empty_o !== 1'b1 || full_o !== 1'b0) begin
-      $display("RESULT: FAIL (R15: invalid reset state)");
-      $finish;
+    if (empty_o !== 1'b1) fail("R15: empty_o not high after reset");
+    if (full_o !== 1'b0) fail("R15: full_o not low after reset");
+    
+    // Scenario 1: Fill with same tag
+    // R1: accepts SLOTS entries, including same tag
+    for (i = 0; i < 8; i++) begin
+      do_push(3'd2, i * 100);
+      check_status(i + 1);
     end
-
-    // Fill store to capacity, iterating through tags
-    for (int i = 0; i < SLOTS; i++) begin
-      do_push(i % 3, i * 10);
-    end
-
-    // Test R5 logic: Request push when store is verifiably full (monitor will catch an illegal grant)
+    
+    // Check R5: push_gnt_o shall be low when full.
     bfm_drive_point();
-    push_req_i  = 1'b1;
-    push_tag_i  = 1;
-    push_data_i = 32'hDEADBEEF;
-    repeat (5) bfm_tick();
+    push_tag_i = 3'd2;
+    push_req_i = 1'b1;
+    repeat (10) begin
+      @(posedge clk);
+      if (push_gnt_o !== 1'b0) fail("R5: push_gnt_o not low when full");
+    end
     bfm_drive_point();
-    push_req_i  = 1'b0;
+    push_req_i = 1'b0;
 
-    // Execute match queries (monitor tracks accuracy directly)
-    do_search(32'hFFFFFFFF, 32'd30);  // Exact positive match on stored item
-    do_search(32'h00000000, 32'd999); // R13 all-zero mask sweep
-    do_search(32'hFFFFFFFF, 32'd999); // Negative match
-
-    // Execute pop permutations
-    do_pop(0, 0); // Inspect without dropping
-    do_pop(0, 1); // Extract safely
-    for (int i = 1; i < SLOTS; i++) begin
-      do_pop(i % 3, 1);
+    // Verify it's globally full, not just tag 2 full.
+    bfm_drive_point();
+    push_tag_i = 3'd1;
+    push_req_i = 1'b1;
+    repeat (10) begin
+      @(posedge clk);
+      if (push_gnt_o !== 1'b0) fail("R5: push_gnt_o not low when full (cross-tag)");
     end
-
-    // R10 logic checks (Pop from empty tag bounds)
-    do_pop(0, 1);
-    do_pop(1, 1);
-
-    // R1 constraints (Fill identically bound subset and drain safely)
-    for (int i = 0; i < SLOTS; i++) begin
-      do_push(7, i * 111);
+    bfm_drive_point();
+    push_req_i = 1'b0;
+    
+    // Test popping an empty tag when store is full (R10)
+    do_pop(3'd1, 1'b1, valid, data);
+    if (valid !== 1'b0) fail("R10: pop_data_valid_o high when empty tag popped");
+    
+    // Scenario 2: pop without en (inspect)
+    // R9: pop_en_i low -> inspected, not removed
+    do_pop(3'd2, 1'b0, valid, data);
+    if (valid !== 1'b1) fail("R8: pop_data_valid_o low but entry exists");
+    if (data !== 0) fail("R8: pop_data_o not oldest entry");
+    check_status(8);
+    
+    // Scenario 3: Pop all 8, verify FIFO order (R2)
+    for (i = 0; i < 8; i++) begin
+      do_pop(3'd2, 1'b1, valid, data);
+      if (valid !== 1'b1) fail("R8: pop_data_valid_o low but entry exists");
+      if (data !== i * 100) fail("R2: popped data not in FIFO order");
+      check_status(7 - i);
     end
-    for (int i = 0; i < SLOTS; i++) begin
-      do_pop(7, 1);
-    end
+    
+    // Empty pop check (R10)
+    do_pop(3'd2, 1'b1, valid, data);
+    if (valid !== 1'b0) fail("R10: pop_data_valid_o high when no entry exists");
+    
+    // Scenario 4: Different tags, search requirements
+    do_push(3'd1, 32'hAAAA);
+    do_push(3'd2, 32'hBBBB);
+    do_push(3'd1, 32'hCCCC);
+    do_push(3'd3, 32'hDDDD);
+    check_status(4);
+    
+    // Search matching all zeros mask (R13)
+    do_search(32'h0, 32'h0, hit);
+    if (hit !== 1'b1) fail("R13: match_hit_o low for all-zero mask when non-empty");
+    
+    // Search matching specific data (R12)
+    do_search(32'hBBBB, 32'hFFFFFFFF, hit);
+    if (hit !== 1'b1) fail("R12: match_hit_o low when matching entry exists");
+    
+    do_search(32'h0000BB00, 32'h0000FF00, hit);
+    if (hit !== 1'b1) fail("R12: match_hit_o low for partial mask match");
+    
+    do_search(32'h0000EE00, 32'h0000FF00, hit);
+    if (hit !== 1'b0) fail("R12: match_hit_o high when no matching entry exists");
+    
+    // Pop tag 1
+    do_pop(3'd1, 1'b1, valid, data);
+    if (valid !== 1'b1 || data !== 32'hAAAA) fail("R2: FIFO order failed for tag 1");
+    do_pop(3'd1, 1'b1, valid, data);
+    if (valid !== 1'b1 || data !== 32'hCCCC) fail("R2: FIFO order failed for tag 1");
+    
+    check_status(2);
+    
+    // Fill it up again with diverse tags
+    do_push(3'd4, 32'h1111);
+    do_push(3'd5, 32'h2222);
+    do_push(3'd6, 32'h3333);
+    do_push(3'd7, 32'h4444);
+    do_push(3'd0, 32'h5555);
+    do_push(3'd1, 32'h6666);
+    check_status(8);
+    
+    // Reset and check it empties properly (R15)
+    bfm_reset();
+    bfm_drive_point();
+    if (empty_o !== 1'b1) fail("R15: empty_o not high after second reset");
+    if (full_o !== 1'b0) fail("R15: full_o not low after second reset");
+    
+    // Search on empty store ensures hit stays low (R12 / R13)
+    do_search(32'h0, 32'h0, hit);
+    if (hit !== 1'b0) fail("R12: match_hit_o high when store is empty");
+
+    // Pop on reset-cleared store
+    do_pop(3'd1, 1'b1, valid, data);
+    if (valid !== 1'b0) fail("R15: store not empty after reset (pop succeeded)");
 
     $display("RESULT: PASS");
     $finish;
