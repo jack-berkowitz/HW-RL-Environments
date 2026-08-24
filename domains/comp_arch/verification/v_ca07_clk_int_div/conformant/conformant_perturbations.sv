@@ -34,7 +34,17 @@ module cdc_c1_accept_window_4 (
   logic [3:0] tick;
   always_ff @(posedge clk_i or negedge rst_ni)
     if (!rst_ni) tick <= '0; else tick <= tick + 4'd1;
-  wire win = tick[2];
+  wire win_raw = tick[2];
+  // H3 pins the same-value case: granted in the SAME cycle, and not gated. A
+  // perturbation may only turn the knobs L3 and L4 leave free, which is the
+  // timing of a REAL change -- so it has to know which is which, and that means
+  // tracking the divisor in force from the handshake it can see.
+  logic [3:0] div_q;
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) div_q <= 4'd0;                 // R2: reset restores the default
+    else if (div_valid_i && div_ready_o) div_q <= div_i;
+  wire is_same = div_valid_i && (div_i == div_q);
+  wire win = win_raw | is_same;
   logic g_ready;
   assign div_ready_o = g_ready & win;
   clk_ratio_div i_g (
@@ -66,7 +76,17 @@ module cdc_c2_accept_window_8 (
   logic [4:0] tick;
   always_ff @(posedge clk_i or negedge rst_ni)
     if (!rst_ni) tick <= '0; else tick <= tick + 5'd1;
-  wire win = tick[3];
+  wire win_raw = tick[3];
+  // H3 pins the same-value case: granted in the SAME cycle, and not gated. A
+  // perturbation may only turn the knobs L3 and L4 leave free, which is the
+  // timing of a REAL change -- so it has to know which is which, and that means
+  // tracking the divisor in force from the handshake it can see.
+  logic [3:0] div_q;
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) div_q <= 4'd0;                 // R2: reset restores the default
+    else if (div_valid_i && div_ready_o) div_q <= div_i;
+  wire is_same = div_valid_i && (div_i == div_q);
+  wire win = win_raw | is_same;
   logic g_ready;
   assign div_ready_o = g_ready & win;
   clk_ratio_div i_g (
@@ -98,8 +118,18 @@ module cdc_c3_extra_gating (
   output logic [3:0] cycl_count_o
 );
   logic g_clk;
+  // H3 pins the same-value case: granted in the SAME cycle, and not gated. A
+  // perturbation may only turn the knobs L3 and L4 leave free, which is the
+  // timing of a REAL change -- so it has to know which is which, and that means
+  // tracking the divisor in force from the handshake it can see.
+  logic [3:0] div_q;
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) div_q <= 4'd0;                 // R2: reset restores the default
+    else if (div_valid_i && div_ready_o) div_q <= div_i;
+  wire is_same = div_valid_i && (div_i == div_q);
   logic accepted, hold_q;
-  assign accepted = div_valid_i & div_ready_o;
+  // only a real change is gated further -- H3 forbids gating a same-value one
+  assign accepted = div_valid_i & div_ready_o & ~is_same;
   always_ff @(posedge clk_i or negedge rst_ni)
     if (!rst_ni) hold_q <= 1'b0; else hold_q <= accepted;
   logic hold_n;

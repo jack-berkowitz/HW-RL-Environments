@@ -219,3 +219,86 @@ have made**, whether or not you wrote it down. Five clauses beside five
 perturbations asserts a pairing. Two divisor values with one behaviour asserts a
 distinction is testable. Neither was true, and neither was stated until it was
 checked.
+
+## CORRECTION — the duty-cycle claim was mine too, so it is three of three
+
+Recorded above, twice, is the claim that the anchor's header is wrong to say it
+"always generates clean 50% duty cycle output clock", and that the real rule is
+`high = floor(div/2)`, `low = ceil(div/2)`.
+
+**That is wrong. The header is right.** Measured in RAW TIME rather than in whole
+`clk_i` cycles, high equals low equals half the period at every divisor from 2
+to 8. At odd divisors the split is a **half-integer** — divisor 3 is 1.5 and 1.5
+— because the transitions use `clk_i`'s falling edges as well as its rising
+ones. That is what a 50%-duty odd divider is.
+
+**How it survived two measurements.** Both divided each endpoint by the clock
+period *before* subtracting, so 1.5 truncated to 1 and the low phase appeared to
+be 2. The step-1 probe did it, and then the reference testbench's own P2 check
+did it again independently — and agreed, which is exactly the agreement that
+made the number look solid.
+
+**How it survived reasoning, which is the worse half.** I wrote that the odd case
+was "arithmetically necessary, since an odd number of input cycles cannot be
+split evenly". That is true only if the split must land on whole cycles. It does
+not. A plausible argument was constructed on top of a truncation and made it look
+settled rather than provisional — the reasoning did not check the measurement, it
+ratified it.
+
+So all three of the "the header is wrong" claims about this module were mine: a
+sampling phase that aliased pass-through, an interval measured from the wrong
+origin, and now a truncation dressed in an argument. **Zero defects found in the
+anchor. Three in my own instruments.**
+
+The consequence for the task is not small: P2 is a central clause, `dut2`
+implemented the wrong rule and had to be rebuilt to use both edges, and a
+submission measuring the way I did would reject correct hardware at every odd
+divisor. The spec now says so explicitly, because it is the trap I fell into
+twice.
+
+## The reference testbench, against all seven
+
+All seven legal implementations PASS: the anchor, `dut2`, and the five
+conformant perturbations. Coverage: 16 divisors, 7 odd, both pass-through
+values, 12 reconfigurations, the gating bound measured 12 times.
+
+**The counting basis is a property of the harness, not a habit.** Every reported
+number comes from a structured counter incremented where the event happens.
+There is no text-matching surface, because four instrument faults on this task
+were miscounts and two of them were grep-shaped.
+
+**Agent 3's input-variation monitor is in**, with their allowlist discipline: an
+input that never varies and is not declared constant is a FAILURE, and each
+declared constant prints its reason. One declared here — `test_mode_en_i`, citing
+X4. Its negative control (`+declare_all`) prints `RESULT: SELFTEST -- not a
+score` and suppresses both the PASS and FAIL branches, so a self-test can never
+be read as a result. Written as plain if/else, not a ternary between string
+literals, which pads the shorter with NULs and prints nothing.
+
+## What the reference caught while being built
+
+**Two of my own perturbations violated H3.** `c1` throttled every request
+including a same-value one, and `c3` gated on every acceptance. H3 says a
+same-value request is granted in the same cycle and is not gated. Both now track
+the divisor in force so they only turn the knob L3 and L4 actually leave free —
+the timing of a *real* change. The reference discriminating against artefacts I
+built to be legal is the outcome that argues it works.
+
+**`dut2` had a 4-bit overflow at the top of the range.** `(div_q + 1)` at
+`div_q = 15` wraps to zero, the high phase became zero, and the clock never
+started — at divisor 15 only. Found because the ladder sweeps all 16 values
+rather than a sample.
+
+## The P2 correction, and what it cost
+
+Recorded above in full. The duty is 50% at every divisor; at odd ones the split
+is a half-integer, using both edges of `clk_i`. Two independent measurements
+truncated it and agreed with each other, and a plausible arithmetic argument
+ratified the wrong answer.
+
+`dut2` had implemented the wrong rule — `floor(div/2)` whole cycles, giving 33%
+at divisor 3 — and was rebuilt to AND the posedge phase with a half-cycle-delayed
+copy. The testbench's own P2 check had the same defect and now compares in time
+units. Both are in the spec as an explicit warning, because measuring in whole
+`clk_i` cycles rejects correct hardware at every odd divisor and it is the trap I
+fell into twice.

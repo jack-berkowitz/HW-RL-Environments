@@ -40,9 +40,24 @@ module clk_ratio_div_alt (
   logic [3:0]  cnt;
   logic [1:0]  gate_left;
 
-  wire pass    = (div_q < 4'd2);                 // P3: 0 and 1 both pass through
-  wire [3:0] hi_cycles = div_q >> 1;             // P2: high = floor(div/2)
-  wire same    = div_valid_i && (div_i == div_q);
+  wire pass = (div_q < 4'd2);                    // P3: 0 and 1 both pass through
+  wire same = div_valid_i && (div_i == div_q);
+
+  // P2: 50% duty at EVERY divisor. At an even divisor the high phase is
+  // div/2 whole cycles. At an ODD divisor it is a HALF-INTEGER, which cannot be
+  // built from posedge logic alone: the second term below is the first delayed
+  // half a cycle, and their AND is high for exactly div/2 -- 1.5 cycles at
+  // div=3. A first version used floor(div/2) whole cycles and produced 33% at
+  // div=3, which is not this contract.
+  wire       odd  = div_q[0];
+  // FIVE bits, not four. (div_q + 1) at div_q = 15 wraps to zero in 4-bit
+  // arithmetic, the high phase becomes zero, and the clock never starts -- which
+  // is what it did, at the top of the range only.
+  wire [4:0] hi_p = odd ? (({1'b0, div_q} + 5'd1) >> 1) : ({1'b0, div_q} >> 1);
+  wire       phase_p = ({1'b0, cnt} < hi_p);
+  logic      phase_n;
+  always_ff @(negedge clk_i or negedge rst_ni)
+    if (!rst_ni) phase_n <= 1'b0; else phase_n <= phase_p;
 
   // H3: a same-value offer is granted in the SAME cycle and does not gate.
   // L3: a real change is also granted immediately -- the anchor waits.
@@ -83,6 +98,6 @@ module clk_ratio_div_alt (
     if (!rst_ni) run_en <= 1'b0;
     else         run_en <= en_i && (st == RUN);
 
-  wire divided = (cnt < hi_cycles);
+  wire divided = odd ? (phase_p & phase_n) : phase_p;
   assign clk_o = run_en & (pass ? clk_i : divided);
 endmodule

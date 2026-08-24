@@ -31,15 +31,22 @@ was chosen rather than derived it is named as such.
 
 - **P1 — period.** For `div_i` of 2 or more, one `clk_o` period is exactly
   `div_i` `clk_i` cycles.
-- **P2 — the duty split, which is NOT always 50%.** In each period `clk_o` is
-  high for `floor(div_i / 2)` `clk_i` cycles and low for `ceil(div_i / 2)`.
+- **P2 — the duty cycle is 50%, at EVERY divisor.** In each period `clk_o` is
+  high for exactly half the period and low for exactly half.
 
-  It is exactly 50% at **even** divisors only. At odd divisors the **low** phase
-  is the longer one, by exactly one `clk_i` cycle.
-  *Measured: div 3 gives high 1 / low 2, div 5 gives 2 / 3, div 7 gives 3 / 4.
-  This is arithmetically forced — an odd number of input cycles cannot be split
-  evenly — so an implementation claiming 50% everywhere is not merely different,
-  it is impossible.*
+  At an **even** divisor that is a whole number of `clk_i` cycles. At an **odd**
+  divisor it is a **half-integer**: the transitions fall on `clk_i`'s falling
+  edges as well as its rising ones, so divisor 3 is high for 1.5 cycles and low
+  for 1.5, divisor 5 is 2.5 and 2.5, divisor 7 is 3.5 and 3.5.
+
+  **Measure this in time, not in whole `clk_i` cycles.** Counting rising edges of
+  `clk_i` between a rise and a fall of `clk_o` truncates the half and reports
+  divisor 3 as high 1, low 2 — a 33% duty that the unit does not have. A
+  testbench that measures that way will reject correct hardware at every odd
+  divisor.
+  *Measured in raw time at divisors 2 through 8: high equals low equals half the
+  period in every case.*
+
 - **P3 — 0 and 1 are a DEGENERATE PAIR, and the distinction is UNSCORED.** Both
   mean pass-through: `clk_o` has the same period as `clk_i`, one input cycle.
   *Measured for both.*
