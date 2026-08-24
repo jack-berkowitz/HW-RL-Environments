@@ -357,4 +357,69 @@
 //     synthesis frontend with this exact error, which is why that task carries
 //     the same clause. This task's own second source hit it again, on the same
 //     construct, before this clause existed.
+//
+// -----------------------------------------------------------------------------
+// G -- GRADING
+// -----------------------------------------------------------------------------
+// G1. THE ORDER, and correctness is a GATE rather than a weighting.
+//
+//     1. CORRECTNESS, at BOTH legal HEIGHT values. The submission is driven with
+//        a recorded stimulus stream and compared against the reference cycle by
+//        cycle on z_o and status_o, over the scored cycles only -- that is, every
+//        cycle except those excluded by C2, C3 and C4. The comparison is
+//        BIT-EXACT. There is no partial credit and no tolerance: a value that is
+//        one ulp out fails exactly as a value that is nonsense fails.
+//
+//     2. THE GATE. A submission that fails correctness at EITHER geometry
+//        produces NO PPA NUMBER AT ALL. It is recorded as a failure, not as a
+//        missing measurement, and it scores zero on every PPA axis. Passing at
+//        the scored geometry alone is not sufficient -- see T3.
+//
+//     3. PPA, measured only for submissions that already passed, and measured
+//        ONCE AT A PINNED CLOCK PERIOD rather than by sweeping for a maximum
+//        frequency. At the time of writing that period is 50 ns on sky130hd. The
+//        number is the harness's to set and may be re-pinned; what does not
+//        change is that it is FIXED for every submission, so all designs are
+//        compared at one frequency rather than at each design's own best.
+//
+// G2. WHAT IS COMPARED. Three axes, all measured from the same build:
+//       * AREA, post-synthesis and post-place-and-route.
+//       * POWER, at the pinned period.
+//       * TIMING SLACK, the worst negative slack against the pinned period. A
+//         build that does not meet timing does not yield a comparable area or
+//         power number -- an area figure from a build that missed timing is not
+//         a smaller design, it is an unfinished one.
+//
+// G3. WHAT IS NOT AVAILABLE TO OPTIMISE. Read this before choosing an
+//     architecture, because the lever most designs reach for first is absent.
+//
+//       * LATENCY IS NOT FREE. The per-stage delay D is fixed at 4 by L1 and the
+//         operand skew d(k) by A3. Adding pipeline stages to shorten the
+//         critical path CHANGES THE DELIVERED VALUES and fails correctness. You
+//         cannot buy frequency with depth here, which is the usual trade and is
+//         not on offer.
+//       * THROUGHPUT IS NOT FREE. One result per row per enabled tick, fixed by
+//         A3. There is no rate to raise.
+//       * THE ARITHMETIC IS NOT FREE. Every delivered value is pinned to the bit
+//         by F1 and A1-A10, including both range tables. There is no
+//         accuracy-for-area trade, and narrowing an internal datapath to save
+//         area will fail on the vectors written for A5, A6 and A7.
+//
+// G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes from.
+//     The contract fixes WHAT is delivered and WHEN. It says nothing about HOW,
+//     and every remaining choice is an implementation one:
+//
+//       * how the fused multiply-add is built -- shared versus replicated
+//         datapath, how alignment and normalisation are structured, how much
+//         logic is common across the HEIGHT stages of a row;
+//       * how the WIDTH rows share or replicate that logic, given that w_i is
+//         broadcast to every row and is the same value in each;
+//       * how state is held -- what is registered where, within the fixed
+//         per-stage delay budget;
+//       * whether and how clock gating is used. row_clk_gate_en_i is part of the
+//         contract; what a design does with it internally is not.
+//
+//     A submission that meets the pinned period with less area and less power
+//     scores better. Meeting it comfortably buys nothing extra -- there is no
+//     credit for slack beyond zero, because the period is fixed for everyone.
 // =============================================================================
