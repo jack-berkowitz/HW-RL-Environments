@@ -413,10 +413,6 @@ checks them. Everything else is normative.
 //   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
 //         * AREA, post-synthesis and post-place-and-route.
 //         * POWER, at the pinned period.
-//         * TIMING SLACK against the pinned period. A build that misses timing
-//           yields no comparable area or power figure -- an area number from a
-//           build that did not close is not a smaller design, it is an
-//           unfinished one, and it is withheld rather than reported.
 //         * OUTSTANDING MISSES CARRIED. This is a CAPABILITY: more is better,
 //           it costs area, and it is reported both raw and per unit of area so
 //           a design is not rewarded merely for tracking fewer misses.
@@ -425,6 +421,21 @@ checks them. Everything else is normative.
 //           against each other on latency; the number is reported so that an
 //           area difference between them is read as the trade it is.
 //
+//       TIMING CLOSURE IS A GATE, NOT AN AXIS, AND SLACK IS NOT SCORED. A build
+//       that misses the pinned period yields no comparable area or power figure --
+//       an area number from a build that did not close is not a smaller design, it
+//       is an unfinished one -- so its PPA is withheld rather than reported.
+//
+//       Slack ABOVE zero earns nothing either, and the reason is that it is not a
+//       separate quantity from area. Meeting timing with margin is bought WITH
+//       area: the tools upsize cells, insert buffers and duplicate logic to close
+//       faster. A design sitting at +2 ns on the pinned period spent silicon
+//       getting there that a design at +0.05 ns did not. Area already charges for
+//       that, so scoring slack as well would count one tradeoff twice and in
+//       opposite directions -- rewarding a design for the very spending the area
+//       axis penalises. Closure is therefore pass or fail, and everything above
+//       the line is the same result.
+
 //       Fmax is NOT a scored axis. It is measured once per task, on the
 //       REFERENCE ONLY, and its sole job is to set the pinned period above.
 //       Submissions are not swept. A design that could run faster than the
