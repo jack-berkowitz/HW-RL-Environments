@@ -72,3 +72,67 @@ queue was non-empty came down to scheduling order. No B was returned, and the
 measurement said single-beat `size=1` writes get no write response. They do. This
 is the same defect class as the merged-block fix in v_nw04 and v_ca04 — shared
 state written by two blocks on the same edge.
+
+## Step 5c artefacts, built BEFORE the mutants
+
+Deliberate ordering. The re-grade showed that what stopped the strongest
+submissions was not mutant ingenuity but **latitude** — claude produced no score
+at all on v_ca05 and v_nw02, both times for rejecting a legal variant, never for
+missing a defect. So the legal implementations were written first, and the
+reference testbench will be developed against six implementations rather than
+fitted to one.
+
+`dut2/dw_downsizer_alt.sv` is an independent implementation from the spec alone.
+It holds **one transaction at a time per direction** — A4 makes `MAX_READS` an
+upper bound, not an obligation — registers every path, buffers a whole upstream
+`W` beat before emitting any downstream beat of it (L4), and drives a fixed
+pattern on payloads while their valid is low (X2). The anchor does the opposite
+on all four.
+
+`conformant/` holds five perturbations, each turning a different named knob:
+
+| id | clause | what it does |
+|---|---|---|
+| `dwc_c1_extra_latency` | L1, L2 | every design-driven ready gated, 4 cycles on / 4 off |
+| `dwc_c2_admission_throttled` | A4, L2 | upstream address admission gated 8 on / 8 off |
+| `dwc_c3_downstream_w_spilled` | L1, L5 | skid buffer on the downstream W channel: later, and gapped |
+| `dwc_c4_garbage_when_invalid` | X2 | a recognisable junk pattern on every payload while its valid is low |
+| `dwc_c5_response_intake_slow` | L2 | slow to accept downstream responses, 2 on / 2 off |
+
+All six were verified **by measurement**, not by inspection: each was run through
+both probes and its output compared against the golden's, field by field, and all
+six are contract-identical.
+
+## Four errors in my own apparatus, all found by that comparison
+
+**Gating a ready alone desynchronises the handshake.** c1, c2 and c5 first masked
+only the design-driven ready. The golden asserts its ready and considers the
+transfer done; the master never sees it and re-offers; the transaction is
+accepted three times. `dsAR=3` for one upstream request — the PERTURBATION
+violated A2. Gating a ready is legal *behaviour*; masking one is not a legal
+*implementation* of it. The valid presented to the golden and the ready presented
+outward now carry the same gate, so no cycle exists in which the two sides
+disagree. This is the discipline v_ca03's mutants already state, rediscovered on
+the conformant side.
+
+**A one-cycle gate can make acceptance impossible.** With `adm` true one cycle in
+eight, a design whose ready is registered rather than combinational on valid can
+never coincide with it, and nothing is ever accepted. That is not a slow design,
+it is a broken one. The gates are multi-cycle windows now.
+
+**An edit leaked between modules.** c2 and c5 ended up referencing `slow`, a
+signal declared only in c1. Verilator created an implicit net, tied it low, and
+`--lint-only` reported **zero errors** — the read address was simply never
+presented, and c2 looked like a design that accepts nothing. `-Wall` reports it
+as IMPLICIT/UNDRIVEN, and `-Wall` is the standard for this task from here. There
+is now a check that every gate expression names a signal declared in its own
+module.
+
+**A third probe race.** `pend_b` was written by one always block and read by
+another; for a `len=0` burst the increment and the read land in the same cycle,
+so no B was returned. Merged into the single ordered block, as the AW/W capture
+already had been. Third instance of this defect class in this task alone.
+
+`dsB_sent` was also dropped from the comparison: it counts when the design drives
+`m_bready`, which is L2 latitude, not a contract observable. Comparing it made
+two legal implementations look different.

@@ -1,3 +1,6 @@
+`ifndef DUT_MOD
+  `define DUT_MOD dw_downsizer
+`endif
 // STEP 1 -- semantic confirmation, measured not read.
 module dw_probe;
   localparam int SW=64, MW=16;
@@ -13,7 +16,7 @@ module dw_probe;
   logic m_arvalid,m_arready=1,m_rlast=0,m_rvalid=0,m_rready;
   logic [SW-1:0] s_wdata=0,s_rdata; logic [SW/8-1:0] s_wstrb=0;
   logic [MW-1:0] m_wdata,m_rdata=0; logic [MW/8-1:0] m_wstrb;
-  dw_downsizer dut(.clk_i(clk), .rst_ni(rst_n), .*);
+  `DUT_MOD dut(.clk_i(clk), .rst_ni(rst_n), .*);
 
   // downstream slave: answer every AR with len+1 beats, data = addr-derived
   int q_len[$]; int q_id[$]; int q_addr[$];
@@ -44,10 +47,10 @@ module dw_probe;
     repeat(3) @(posedge clk); @(negedge clk) rst_n=1; repeat(2) @(posedge clk);
     @(negedge clk); s_arid=4'(id); s_araddr=a; s_arlen=8'(len); s_arsize=3'(size);
                     s_arburst=burst; s_arvalid=1;
-    for (t=0;t<40;t++) begin @(posedge clk); if (s_arready) break; end
+    for (t=0;t<400;t++) begin @(posedge clk); if (s_arready) break; end
     @(negedge clk) s_arvalid=0;
-    if (t>=40) begin $display("  %-30s AR NOT ACCEPTED in 40 cycles", label); return; end
-    for (t=0;t<400;t++) begin
+    if (t>=40) begin $display("  %-30s AR NOT ACCEPTED", label); return; end
+    for (t=0;t<4000;t++) begin
       @(posedge clk);
       if (s_rvalid && s_rready) begin
         n_rbeat++;

@@ -1,3 +1,6 @@
+`ifndef DUT_MOD
+  `define DUT_MOD dw_downsizer
+`endif
 // STEP 1 -- write path, measured not read.
 module dw_wprobe;
   localparam int SW=64, MW=16;
@@ -17,7 +20,7 @@ module dw_wprobe;
   logic [3:0] m_bid_drv=0; logic m_bvalid_drv=0;
   wire [3:0] m_bid = m_bid_drv; wire [1:0] m_bresp = m_bresp_drv; wire m_bvalid = m_bvalid_drv;
 
-  dw_downsizer dut(.clk_i(clk), .rst_ni(rst_n), .*);
+  `DUT_MOD dut(.clk_i(clk), .rst_ni(rst_n), .*);
 
   // ---- downstream slave: log W beats, return one B per completed W burst ----
   int    n_aw, n_wbeat, n_dsb; string wlog; int aw_id_q[$]; int pend_b;
@@ -37,14 +40,13 @@ module dw_wprobe;
       wlog = {wlog, $sformatf("%04x/%02b%s ", m_wdata, m_wstrb, m_wlast?"L":"")};
       if (m_wlast) pend_b <= pend_b + 1;
     end
-  end
-  // return B after each downstream W burst completes
-  always @(posedge clk) begin
-    if (!rst_n) begin m_bvalid_drv<=0; end
-    else if (m_bvalid_drv && m_bready) begin
-      m_bvalid_drv <= 0;
+    // B driver lives HERE, in the same ordered block: pend_b written by one
+    // always block and read by another is a race, and for a len=0 burst the
+    // increment and the read land in the same cycle.
+    if (m_bvalid_drv && m_bready) begin
+      m_bvalid_drv <= 0; n_dsb <= n_dsb + 1;
       if (aw_id_q.size()>0) void'(aw_id_q.pop_front());
-    end else if (!m_bvalid_drv && pend_b>0) begin
+    end else if (!m_bvalid_drv && (pend_b>0)) begin
       m_bvalid_drv <= 1; m_bresp_drv <= 2'b00;
       m_bid_drv <= (aw_id_q.size()>0) ? 4'(aw_id_q[0]) : '0;
       pend_b <= pend_b - 1;
@@ -59,7 +61,7 @@ module dw_wprobe;
     repeat(3) @(posedge clk); @(negedge clk) rst_n=1; repeat(2) @(posedge clk);
     @(negedge clk); s_awid=4'(id); s_awaddr=a; s_awlen=8'(len); s_awsize=3'(size);
                     s_awburst=burst; s_awvalid=1;
-    for (t=0;t<40;t++) begin @(posedge clk); if (s_awready) break; end
+    for (t=0;t<400;t++) begin @(posedge clk); if (s_awready) break; end
     @(negedge clk) s_awvalid=0;
     if (t>=40) begin $display("  %-34s AW NOT ACCEPTED", label); return; end
     // drive len+1 upstream beats; byte i of beat k = (k<<4)|i
@@ -67,11 +69,11 @@ module dw_wprobe;
       @(negedge clk);
       for (int i=0;i<8;i++) s_wdata[8*i +: 8] = 8'((k<<4)|i);
       s_wstrb=strb; s_wlast=(k==len); s_wvalid=1;
-      for (t=0;t<200;t++) begin @(posedge clk); if (s_wready) break; end
+      for (t=0;t<2000;t++) begin @(posedge clk); if (s_wready) break; end
     end
     @(negedge clk) s_wvalid=0; s_wlast=0;
     got_b=0;
-    for (t=0;t<600;t++) begin
+    for (t=0;t<6000;t++) begin
       @(posedge clk);
       if (s_bvalid && s_bready) begin got_b=1; bresp=s_bresp; break; end
     end
