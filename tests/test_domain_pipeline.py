@@ -13,6 +13,7 @@ from runner.direct_models import BY_LABEL
 from runner.direct_providers import Generation
 from runner.domain_tasks import DomainTask, discover_tasks
 from runner import domain_sweep
+from runner import subscription_providers
 
 
 class PayloadIsolationTests(unittest.TestCase):
@@ -58,6 +59,132 @@ class PayloadIsolationTests(unittest.TestCase):
         self.assertEqual(result.finish_reason, "stop")
         self.assertAlmostEqual(result.estimated_cost_usd, 0.0044)
         self.assertNotIn("not-recorded", json.dumps(result.to_dict()))
+
+
+class SubscriptionTransportTests(unittest.TestCase):
+    def test_codex_command_is_ephemeral_and_reads_prompt_from_stdin(self):
+        command = subscription_providers._codex_command(
+            "/bin/codex", "gpt-5.6-luna", Path("/tmp/work"), Path("/tmp/out")
+        )
+        self.assertEqual(command[-1], "-")
+        for flag in (
+            "--ephemeral", "--ignore-user-config", "--ignore-rules",
+            "--skip-git-repo-check", "--output-last-message",
+        ):
+            self.assertIn(flag, command)
+        self.assertIn("read-only", command)
+
+    def test_claude_command_disables_context_tools_and_persistence(self):
+        command = subscription_providers._claude_command(
+            "/bin/claude", "claude-sonnet-5", Path("/tmp/mcp.json")
+        )
+        for flag in (
+            "--safe-mode", "--no-session-persistence", "--strict-mcp-config",
+            "--system-prompt", "--tools", "--disable-slash-commands",
+            "--fallback-model",
+        ):
+            self.assertIn(flag, command)
+        self.assertEqual(command[command.index("--tools") + 1], "")
+        self.assertEqual(command[command.index("--system-prompt") + 1], "")
+        self.assertEqual(command[command.index("--fallback-model") + 1], "")
+
+    @mock.patch.dict(
+        os.environ,
+        {
+            "OPENAI_API_KEY": "billed-openai",
+            "ANTHROPIC_API_KEY": "billed-anthropic",
+            "KEEP_ME": "yes",
+        },
+    )
+    def test_subscription_child_environment_removes_api_keys(self):
+        openai_env = subscription_providers.subscription_environment("openai")
+        anthropic_env = subscription_providers.subscription_environment("anthropic")
+        self.assertNotIn("OPENAI_API_KEY", openai_env)
+        self.assertNotIn("ANTHROPIC_API_KEY", anthropic_env)
+        self.assertEqual(openai_env["KEEP_ME"], "yes")
+        self.assertEqual(anthropic_env["KEEP_ME"], "yes")
+
+    @mock.patch("runner.subscription_providers.shutil.which", return_value="/bin/codex")
+    @mock.patch("runner.subscription_providers.subprocess.run")
+    def test_codex_auth_must_explicitly_be_chatgpt(self, run, _which):
+        run.return_value = mock.Mock(
+            returncode=0, stdout="Logged in using ChatGPT\n", stderr=""
+        )
+        subscription_providers.ensure_subscription_auth("openai")
+
+        run.return_value = mock.Mock(
+            returncode=0, stdout="Logged in using an API key\n", stderr=""
+        )
+        with self.assertRaises(subscription_providers.ProviderError):
+            subscription_providers.ensure_subscription_auth("openai")
+
+    @mock.patch("runner.subscription_providers.shutil.which", return_value="/bin/claude")
+    @mock.patch("runner.subscription_providers.subprocess.run")
+    def test_claude_auth_requires_a_subscription_type(self, run, _which):
+        run.return_value = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({
+                "loggedIn": True,
+                "authMethod": "oauth_token",
+                "apiProvider": "firstParty",
+                "subscriptionType": "pro",
+            }),
+            stderr="",
+        )
+        subscription_providers.ensure_subscription_auth("anthropic")
+
+        run.return_value = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({
+                "loggedIn": True,
+                "authMethod": "api_key",
+                "apiProvider": "firstParty",
+            }),
+            stderr="",
+        )
+        with self.assertRaises(subscription_providers.ProviderError):
+            subscription_providers.ensure_subscription_auth("anthropic")
+
+    def test_claude_selected_model_is_verified_from_reported_usage(self):
+        self.assertTrue(subscription_providers._requested_model_was_used(
+            "claude-opus-5", ["claude-opus-5-20260724"]
+        ))
+        self.assertFalse(subscription_providers._requested_model_was_used(
+            "claude-opus-5", ["claude-haiku-4-5-20251001"]
+        ))
+
+    def test_codex_selected_model_is_parsed_from_cli_provenance(self):
+        stderr = "workdir: /tmp/example\nmodel: gpt-5.6-luna\nprovider: openai\n"
+        self.assertEqual(
+            subscription_providers._codex_reported_model(stderr), "gpt-5.6-luna"
+        )
+
+    def test_claude_usage_includes_prompt_cache_tokens(self):
+        data = {"usage": {
+            "input_tokens": 1,
+            "cache_creation_input_tokens": 5672,
+            "cache_read_input_tokens": 3,
+            "output_tokens": 20,
+        }}
+        self.assertEqual(subscription_providers._usage(data), (5676, 20))
+
+    @mock.patch("runner.subscription_providers.time.sleep")
+    @mock.patch("runner.subscription_providers._complete_once")
+    def test_temporary_subscription_overload_is_retried(self, once, _sleep):
+        once.side_effect = [
+            Generation(
+                "anthropic", "claude-opus-5", None, "",
+                error="API Error: 529 Overloaded",
+            ),
+            Generation(
+                "anthropic", "claude-opus-5", "claude-opus-5", "ok",
+            ),
+        ]
+        result = subscription_providers.complete(
+            "prompt", BY_LABEL["opus-5"], max_retries=2
+        )
+        self.assertEqual(result.text, "ok")
+        self.assertEqual(once.call_count, 2)
 
     @mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "not-recorded"})
     @mock.patch("runner.direct_providers._post_json")
@@ -159,6 +286,59 @@ class SweepIntegrationTests(unittest.TestCase):
             raw = json.loads((repo / entry["raw_response"]).read_text())
             self.assertEqual(raw["prompt_sha256"], task.prompt_sha256)
             self.assertEqual(raw["request"]["isolation"]["messages"], 1)
+
+    def test_subscription_generation_is_labeled_and_dispatched_separately(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = Path(temporary)
+            prompt_path = repo / "domains" / "demo" / "probe" / "PASTE.md"
+            prompt_path.parent.mkdir(parents=True)
+            prompt_text = "subscription prompt\n"
+            prompt_path.write_text(prompt_text, encoding="utf-8")
+            task = DomainTask(
+                "d_demo", "design", "demo", prompt_path.parent.parent,
+                prompt_path, prompt_text.encode(), prompt_text,
+                hashlib.sha256(prompt_text.encode()).hexdigest(), "task-hash",
+            )
+            generation = Generation(
+                provider="openai",
+                requested_model="gpt-5.6-luna",
+                resolved_model="gpt-5.6-luna",
+                text="module demo; endmodule",
+                finish_reason="stop",
+            )
+            artifact_root = repo / "results" / "generations"
+            with (
+                mock.patch.object(domain_sweep, "REPO_ROOT", repo),
+                mock.patch.object(domain_sweep, "ARTIFACT_ROOT", artifact_root),
+                mock.patch.object(
+                    domain_sweep, "subscription_complete", return_value=generation
+                ) as generate,
+                mock.patch.object(
+                    domain_sweep, "_grade",
+                    return_value={"simulation": {"returncode": 0}},
+                ),
+            ):
+                _, manifest = domain_sweep.execute(
+                    tasks=[task],
+                    models=[BY_LABEL["gpt-5.6-luna"]],
+                    samples=1,
+                    api_workers=1,
+                    max_output_tokens=None,
+                    max_spend=None,
+                    smoke=True,
+                    ppa=False,
+                    run_id="subscription-test",
+                    transport="subscription",
+                )
+
+            generate.assert_called_once_with(
+                prompt_text, BY_LABEL["gpt-5.6-luna"], max_output_tokens=None
+            )
+            entry = next(iter(manifest["jobs"].values()))
+            self.assertIn("__subscription__", entry["candidate"])
+            raw = json.loads((repo / entry["raw_response"]).read_text())
+            self.assertEqual(raw["request"]["transport"], "subscription")
+            self.assertTrue(raw["request"]["isolation"]["fresh_process"])
 
     @mock.patch("runner.domain_sweep._run_command")
     def test_verification_uses_the_verification_grader(self, run_command):

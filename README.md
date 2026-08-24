@@ -338,13 +338,31 @@ bash scripts/sim_verification.sh domains/comp_arch/verification/v_ca05_id_queue 
 ### Automated model submissions
 
 `runner.domain_sweep` replaces the manual prompt/chat/copy loop for every task
-that has a canonical `probe/PASTE.md`. It calls OpenAI and Anthropic directly,
-sends that file as the only user message, extracts the submitted module, and
-dispatches to the existing design or verification grader. The two older design
-tasks without packaged prompts (`d_ca04` and `d_nw01`) are deliberately absent.
+that has a canonical `probe/PASTE.md`. It sends that prompt to a selected model,
+extracts the submitted module, and dispatches to the existing design or
+verification grader. The two older design tasks without packaged prompts
+(`d_ca04` and `d_nw01`) are deliberately absent.
 
-Use API keys, not ChatGPT or Claude logins. Entering them with `read -s` keeps
-the values out of shell history:
+To use included ChatGPT or Claude subscription quota instead of paying for API
+tokens, authenticate the provider CLIs and select the subscription transport:
+
+```bash
+codex login
+claude auth login
+python3 -m runner.domain_sweep --transport subscription \
+  --tasks d_nw03 --models gpt-5.6-luna --smoke
+```
+
+Each subscription request runs as a fresh, non-persistent process in an empty
+temporary directory. Project and account customizations are disabled, and the
+prompt is passed through stdin. Subscription artifacts include `subscription`
+in their filenames and manifests. Do not set `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY`; the runner removes them from child processes and verifies
+subscription authentication before starting. Included quota is limited, so a
+sweep can stop until the provider's usage window resets.
+
+For strict direct-API runs, enter keys with `read -s` to keep them out of shell
+history:
 
 ```bash
 read -s -p "OpenAI API key: " OPENAI_API_KEY; export OPENAI_API_KEY; echo
