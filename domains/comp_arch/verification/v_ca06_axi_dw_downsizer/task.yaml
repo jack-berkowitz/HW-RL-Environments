@@ -217,6 +217,49 @@ mutants:
     Within-transaction and since-reset are different quantities and the wrong one
     is silently unreachable.
 
+unscored_clauses:
+  WHY_THIS_EXISTS: >
+    D6 and E6 are contract clauses that NO MUTANT IS KEYED ON. Without this note
+    a reader comparing the clause list to the mutant list would reasonably assume
+    they are covered, because every other substantive clause is. They are not.
+    A submission cannot be scored on them in either direction: it is not rewarded
+    for checking them and not penalised for ignoring them.
+  clauses:
+    - id: D6
+      text: downstream read error precedence -- an error on any downstream R beat
+            must make the upstream response an error too
+      status: EXERCISED by the reference, NOT SCORED by any mutant
+    - id: E6
+      text: the same on the write side -- an error on the downstream B must make
+            the upstream B an error
+      status: EXERCISED by the reference, NOT SCORED by any mutant
+  history: >
+    Found by Agent 3, who noticed m_rresp and m_bresp were pinned to OKAY in the
+    reference and raised it as a candidate rather than a finding. The pinning was
+    a stimulus gap; that two contract clauses depended on it and no mutant was
+    keyed on either made it a FAIRNESS gap. Error GENERATION is well covered --
+    dw_m6 turns on the SLVERR the unit manufactures for a refused burst -- it is
+    error PROPAGATION, downstream error in and upstream error out, that had never
+    run.
+  decision: >
+    The reference was extended to drive downstream errors, which costs no
+    task_text_hash bump because the hash covers spec/ and PASTE.md but not tb/.
+    The mutant question is DEFERRED: adding one breaks the freeze on the scored
+    set, and that asymmetry -- stimulus gaps are always cheaper to close than
+    coverage gaps -- is the reason the two halves were split rather than done
+    together.
+  A4:
+    text: at most MAX_READS reads outstanding at once
+    status: closed by a CONTROL, not a mutant -- see negative_controls
+    note: >
+      A4 is an UPPER bound and its permissive half says a further address "need
+      not be accepted until one retires", so a design accepting FEWER than four
+      is conforming -- dut2 accepts one and passes. The only way to violate A4 is
+      to accept MORE than four. The control is therefore capability-INCREASED,
+      which inverts the capability-reduced shape Agent 3 described for a task
+      whose bound was a minimum. Same idea, opposite direction, and worth saying
+      so rather than copying the shape.
+
 negative_controls:
   null_testbench:
     status: PASS -- rejected
