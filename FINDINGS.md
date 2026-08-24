@@ -3789,3 +3789,98 @@ clauses were NARROWED instead: window named in enabled ticks, one pipeline depth
 long, excluded from scoring. Nothing is scored that the text cannot specify.
 
 **Rules:** 26
+
+## F69. A parameter free on the cost side and unscored on the benefit side degenerates to zero
+
+`d_ca03`'s first draft left TLB capacity, associativity and second-level sizing
+as implementation choices, on the reasoning that microarchitectural storage is
+exactly the freedom a design task should measure. It is not, under this scoring
+model, and the draft was wrong.
+
+Correctness never depends on the TLB: every request a TLB misses is resolved by
+the page-table walk, and the transparency clause requires the two paths to agree.
+Latency is unscored, because it depends on a testbench-controlled memory
+handshake. So the dominant strategy for a free capacity parameter is **ZERO
+ENTRIES** -- walk every request, satisfy every functional clause, and take the
+smallest area on the board.
+
+The same argument defeats the neighbouring freedoms:
+
+* **free associativity** -- direct-mapped strictly dominates fully-associative
+  when hit rate is unmeasured; the tag comparators are pure cost;
+* **free second-level sizing** -- deleting the level entirely is free area.
+
+A submission that did all three would be fully conforming. The area column would
+then rank submissions by **who read the capacity clause closely**, not by design
+quality, and the PPA gap would be measuring the specification -- which is F62's
+sentence, arrived at from the opposite direction.
+
+### This is rule 25 read backwards
+
+Rule 25 came from `d_nw01`, where an unpriced axis let a submission
+OVER-provision: 20,480 bits of buffering, correct on every checked axis, 14.2x
+the reference's area. The remedy was to bound the axis in the specification
+rather than add a metric for it.
+
+`d_ca03` is the same defect with the sign flipped -- an unpriced axis letting a
+submission UNDER-provision. Rule 25's remedy applies unchanged, and rule 25 is
+extended rather than duplicated: **any parameter free on the cost side must be
+scored on the benefit side, or bounded in the specification.**
+
+### Measured, so the fix can be judged rather than assumed
+
+Pinning `d_ca03`'s storage at 16+16 fully-associative entries with no second
+level fixes **45.5%** of the reference's area: 3,467 flip-flops at 25.02 um^2
+each, 86,744 of 190,657 um^2. That is close to irreducible -- the RTL's own field
+list implies about 99 bits per entry, so 3,168 flops for 32 entries, and the
+measured 3,467 is within 9% of it.
+
+Pinning therefore caps the achievable spread at **2.20x** if the surrounding
+logic went to zero, and about **1.9x** realistically.
+
+### Pinning is the fallback. Scoring the crediting axis is the better remedy.
+
+Pinning capacity does not fix the root cause, which is that **the benefit side was
+unscored at all**. With time free and area charged, serialising any work was free:
+one comparator swept across sixteen TLB entries beat sixteen parallel ones, one
+PMP comparator beat eight, a per-entry flush clear beat a generation counter. All
+conforming, all dominant strategies.
+
+**The cheaper fix turned out to be scoring the crediting axis, not pinning the
+cost side, and it needed nothing new.** `d_ca03` already had a fixed probe
+sequence, fixed page-table contents and a testbench that controls memory response
+timing -- so total cycles over that sequence is deterministic and comparable
+across submissions without an address trace, a working-set definition or a memory
+model. Adding it as a second reported axis converts all three exploits back into
+trades: on the measured sequence a swept comparator costs about 16 cycles per hit,
+a single PMP comparator about 8 per check, and the measured flush is 139 cycles
+against a generation counter's one.
+
+**The crediting axis only works if the sequence exercises the benefit.** Measured
+on `d_ca03`'s probes: the functional sequence alone is 5 requests, 1 hit, **20%**
+-- almost all cold walks, so a serialised lookup would cost almost nothing and the
+cycle axis would not discriminate. Adding the capacity replays reaches 32%; adding
+four reuse passes over the resident pages reaches **55% hits**, at which point the
+swept-comparator penalty is about 2.26x on total cycles. A cycle axis over a
+miss-heavy sequence is close to no axis at all, so the hit ratio has to be
+measured before the axis is relied upon.
+
+So the remedy ordering is: **score the crediting axis if a deterministic sequence
+already exists; pin the parameter only when it does not.** Pinning costs a
+normative clause and removes a design choice; scoring costs a column and keeps
+it.
+
+### Where this will recur
+
+Any structure whose cost is area and whose benefit is hit rate or latency:
+branch predictors, prefetchers, victim buffers, store merge buffers, way
+predictors, MSHR counts.
+
+For each of those, PREFER SCORING THE BENEFIT to pinning the parameter. A branch
+predictor charged for mispredict cycles over a fixed branch trace, or an MSHR
+count charged for stall cycles over a fixed miss sequence, is a better task than
+one with the size pinned -- it keeps the design choice that makes the structure
+interesting. Pin only when no deterministic sequence can credit the benefit, and
+check the sequence actually exercises it before relying on the axis.
+
+**Rules:** 25

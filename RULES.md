@@ -586,7 +586,49 @@ defects. It runs with the regression.
     wasted area rather than insurance. Buffering simply never received the same
     sentence.
 
-    **From:** F62
+    **AND THE SAME DEFECT WITH THE SIGN FLIPPED: A PARAMETER FREE ON THE COST
+    SIDE MUST BE SCORED ON THE BENEFIT SIDE, OR BOUNDED.** `d_nw01` shows an
+    unpriced axis letting a submission OVER-provision. The mirror case lets it
+    UNDER-provision, and it reads as generosity rather than as a hole: `d_ca03`
+    drafted TLB capacity, associativity and second-level sizing as
+    "microarchitectural freedom". But correctness there never depends on the TLB
+    — the page-table walk resolves every miss — and latency is unscored, so the
+    dominant strategy is ZERO ENTRIES, direct-mapped, no second level. Fully
+    conforming, smallest area, and the column then ranks submissions by who read
+    the clause rather than by design quality.
+
+    **The test to apply before publishing.** For each free parameter, name the
+    axis that CHARGES for spending on it and the axis that CREDITS the benefit.
+    If the crediting axis does not exist, the parameter has a degenerate optimum
+    at one end and must be pinned. Structures where this bites: TLBs, branch
+    predictors, prefetchers, victim buffers, store merge buffers, way predictors,
+    MSHR counts — anything whose benefit is hit rate or latency.
+
+    **PREFER SCORING THE CREDITING AXIS TO PINNING THE COST SIDE.** Pinning
+    removes a design choice; scoring keeps it. Where a task already has a fixed
+    probe sequence and a harness that controls response timing, total cycles over
+    that sequence is a deterministic second axis costing no new apparatus --
+    `d_ca03` needed no address trace, no working-set definition and no memory
+    model. Adding it converted three dominant strategies back into trades: a
+    swept comparator costs ~16 cycles per TLB hit, one PMP comparator ~8 per
+    check, a per-entry flush clear 139 cycles against a generation counter's one.
+    Report the axes SEPARATELY; folding them into a scalar needs a
+    cycle-per-square-micron exchange rate, which is rule 22's refusal again.
+
+    **A crediting axis over a sequence that does not exercise the benefit is not
+    an axis.** Measured on `d_ca03`: the functional probes alone are 20% TLB hits,
+    where serialising a lookup costs almost nothing; the capacity replays reach
+    32%; four reuse passes reach 55%, where the penalty is 2.26x on total cycles.
+    Measure the hit ratio before relying on the axis, and lengthen the reuse
+    portion until it discriminates.
+
+    **Pin only when nothing can credit the benefit.** Pinning `d_ca03`'s storage
+    fixes 45.5% of its area — 3,467 flip-flops, 86,744 of 190,657 um^2 — and is
+    still worth doing alongside the cycle axis, because capacity has no crediting
+    axis even with cycles scored: correctness never depends on it and the walk
+    resolves every miss.
+
+    **From:** F62, F69
 
 26. **Every control input of a pipelined design requires a stated transition
     behaviour.** For any design whose pipeline depth is greater than one, each

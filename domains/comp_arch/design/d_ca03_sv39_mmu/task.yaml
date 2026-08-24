@@ -1,0 +1,285 @@
+title: RISC-V Sv39 MMU -- page-table walker, TLBs, PMP
+id: d_ca03
+module: sv39_mmu
+domain: comp_arch
+type: design
+catalog: TASK_CATALOG.md
+procedure: TIER-B
+task_text_hash: b05dbe9522c9ff2e
+
+catalog_divergence: >
+  The catalog row d_ca03 reads `mmu_sv39_full`: "Integrated MMU: PTW, TLB, ASID
+  handling, superpages, fault generation and prioritization". The contract here is
+  named for what it pins rather than for the anchor module, and it ADDS one thing
+  the row does not mention: PHYSICAL MEMORY PROTECTION. PMP is not optional here,
+  it is in the page-walk path -- cva6_ptw.sv:250 instantiates the pmp module
+  directly, and with no PMP region configured a U-mode walk is denied and reports
+  cause 5 rather than translating. A spec that omitted it would be describing a
+  different module. Recorded and reported; I do not own TASK_CATALOG.md.
+
+oracle_class: A
+reference:
+  refs_lock_repo: openhwgroup/cva6
+  file: refs/cva6/core/cva6_mmu/cva6_mmu.sv
+  licence: Solderpad 0.51
+  mode: vendor
+  closure: [cva6_tlb, cva6_shared_tlb, cva6_ptw, pmp, pmp_entry, lzc, lfsr,
+            cf_math_pkg, riscv_pkg, config_pkg, cv64a6_imafdc_sv39_config_pkg,
+            build_config_pkg, ariane_pkg]
+  shim: ref/sv39_mmu_ref.sv
+  shim_top: ref/sv39_mmu_top.sv
+  why_this_boundary: >
+    THE COMPOSITION IS ITSELF A MODULE. cva6_mmu instantiates two cva6_tlb, a
+    cva6_shared_tlb, a cva6_ptw and a pmp, so one port list covers 2,869 lines of
+    walker, TLB and protection logic. That is exactly what d_ai01 lacked --
+    RedMulE's array-plus-buffers composition existed only as siblings under
+    redmule_top, no shimmable boundary exposed it, and the task premise was
+    refuted. The boundary was checked before any spec text was written.
+  why_it_is_testable: >
+    THE PAGE TABLE IS EXTERNAL. req_port_o/req_port_i are ports, so the walker's
+    memory accesses are driven by the testbench and the contract reduces to "given
+    these page-table entries, deliver this address or this fault". No memory model
+    lives inside the reference.
+  shim_note: >
+    Parameter binding, rename, struct flatten and reassembly only. CVA6Cfg is
+    build_config(cv64a6_imafdc_sv39_config_pkg::cva6_cfg) -- a PREBUILT
+    configuration, not one assembled here. `imafdc` has no `h`, so the package
+    sets CVA6ConfigHExtEn = 0, "always disabled"; HYP_EXT is 0 and every G-stage
+    port is tied off.
+  struct_hazard: >
+    THE PART MOST LIKELY TO GO SILENTLY WRONG. cva6_mmu takes its port types as
+    `parameter type`, and the concrete types are in NO PACKAGE: cva6.sv declares
+    them as anonymous `localparam type` structs inside its own parameter list. The
+    shim reproduces them field for field and then checks each with $bits() against
+    the width its field list must produce. Copying carefully is not the control;
+    the assertion is. This is d_dsp01's FP4 mask (F53) in a new costume.
+    Incidentally `cbo_t` is not a package type either -- it is `logic [7:0]`,
+    cva6.sv:174.
+  config_assertions: >
+    The shim $fatal's at elaboration unless RVH=0, XLEN=64, SV=39, PtLevels=3,
+    PLEN=56, VLEN=64, ASID_WIDTH=16 and NrPMPEntries=8. Every one was also
+    confirmed by RUNNING before the spec was written, not by reading the config
+    file name.
+
+anchor_conformance:
+  status: VERIFIED_BEFORE_USE
+  method: five probes under tb/audit/, all recorded in MEASUREMENTS.md
+  elaboration:
+    verilator: "0 errors"
+    slang: "clean, 0.61 s, 108 MB peak"
+  functional: >
+    Three-level walk delivers pa 0x5000 in 14 cycles; the same page again in 1
+    (TLB hit); a 1 GiB superpage in 6, with the offset within the superpage
+    preserved (0x4000_0001, not 0x4000_0000); an invalid PTE and a leaf without U
+    accessed in U mode both raise cause 13.
+  implementation_defined_choices_measured:
+    - "A/D POLICY. RISC-V permits either hardware update during the walk or a
+       fault leaving software to set the bits. THIS ANCHOR FAULTS AND NEVER WRITES
+       A PAGE-TABLE ENTRY: load through a leaf with A=0 gives cause 13, store
+       through a leaf with A=1 D=0 gives cause 15, and the entry is byte-identical
+       in memory afterwards. Pinned in spec A5."
+    - "PMP PRIORITY. An access fault from the walker's own PMP check precedes any
+       page fault the returned entry would cause. Measured: with no region
+       matching, a walk that would page-fault reports cause 5; the same walk
+       reports 13 once a permitting region exists. That 5 -> 13 transition is the
+       evidence both mechanisms are live and separable. Pinned in spec A7/A8."
+  probe_defects_found:
+    - "The first walk probe returned pa=0 with cause 5 and looked like a broken
+       walker. It was PMP denying a U-mode access with all eight entries zero --
+       an instrument defect, not an anchor defect."
+    - "The harness POLLED lsu_valid_o as a level once per cycle. A
+       flush_i-cancelled walk produces a narrow pulse, so the recorded reference
+       for the flush-mid step read valid=0 when the design had asserted valid, and
+       a control that latched internally then disagreed with a vector that was
+       itself wrong. Retirement is now LATCHED. Third appearance of this shape in
+       this project."
+
+spec: [spec/sv39_mmu_iface.sv]
+probe: probe/PASTE.md
+measurements: MEASUREMENTS.md
+
+scored_configuration:
+  SV: 39
+  XLEN: 64
+  VLEN: 64
+  PLEN: 56
+  ASID_WIDTH: 16
+  NrPMPEntries: 8
+  ITLB_ENTRIES: 16
+  DTLB_ENTRIES: 16
+  SHARED_TLB: none
+  rationale: >
+    One configuration; the task does not parameterise geometry. The TRANSLATION
+    STORAGE is normative (spec P2) rather than a design choice, and that is the
+    load-bearing decision on this task -- see storage_is_pinned below.
+  storage_is_pinned: >
+    Correctness never depends on TLB capacity: the walk resolves every miss and
+    spec A9 requires the two paths to agree. So if capacity were free, the
+    dominant strategy would be ZERO ENTRIES -- walk everything, satisfy every
+    functional clause, take the smallest area. The same argument makes
+    direct-mapped strictly dominate fully-associative when hit rate is unmeasured,
+    and makes deleting a second-level TLB free area. The comparison would rank
+    submissions by who read the capacity clause closely rather than by design
+    quality. Pinned at the harvested reference values: InstrTlbEntries 16,
+    DataTlbEntries 16, UseSharedTlb 0. See rule 25 and F69.
+  storage_share_measured: >
+    Pinning fixes 45.5% of the reference's area: 3,467 flip-flops at 25.02 um^2
+    each, 86,744 of 190,561 um^2, against a field-list floor of about 3,168 flops
+    for 32 entries -- within 9%, because the declared-but-unused gpte field and the
+    whole shared TLB constant-fold away at RVH=0 and UseSharedTlb=0.
+  replacement_policy_left_free: >
+    Deliberately. The storage is already fixed, so no area is won by choosing one
+    victim-selection policy over another, and pinning it would mandate a specific
+    circuit for no measured benefit. T2 therefore does not score
+    lsu_dtlb_hit_o/itlb_miss_o/dtlb_miss_o either -- scoring them would pin the
+    policy A9 declined to pin.
+
+scored_axes:
+  # Two axes, REPORTED SEPARATELY. Not folded into a scalar: that needs a
+  # cycle-per-square-micron exchange rate nobody can defend, which is rule 22's
+  # refusal to weight area against frequency, applied again.
+  - axis: correctness
+    kind: gate
+    surface: lsu_valid_o, lsu_paddr_o, lsu_exc_valid_o, lsu_exc_cause_o and the
+             fetch equivalents, bit-exact over the 118 requests of sequence C
+    note: fail it and NO PPA number is produced
+  - axis: total_cycles
+    kind: reported
+    where: sim record, metrics.total_cycles
+    reference_value: 832
+    note: >
+      THIS AXIS IS WHY SERIALISATION IS NOT FREE. Without it, one comparator swept
+      across the 16 TLB entries, one PMP comparator instead of eight, and a
+      per-entry flush clear instead of a generation counter were all dominant
+      strategies -- smaller area at no measured cost. Validated by
+      nc_b_serial_response, which passes correctness with 0 failures and moves
+      cycles 832 -> 2,651.
+  - axis: area
+    kind: reported
+    where: ppa record, design_area_um2 / synth_area_um2
+    reference_value: 190561.51
+    note: >
+      Validated by nc_c_bloat_storage, which passes correctness, leaves cycles
+      byte-identical at 832, and moves area 190,561 -> 329,980 with an exact
+      +4,096 flop delta.
+
+reporting_requirement_for_agent_1:
+  status: REQUIREMENT, not a suggestion
+  what_exists: >
+    The join key ALREADY EXISTS and is ALREADY ENFORCED. write_run_record.py puts
+    submission_sha256_16 on the sim record; ppa_candidate.sh computes the same
+    sha256-16 of the submission and REFUSES to build unless a runs/<task>/*__sim.json
+    carries the same value with all_passed. Verified by running its gate snippet
+    verbatim against two files with different hashes and one sim record: the
+    matching sha was ACCEPTED and paired, the other REFUSED.
+  what_is_needed: >
+    report_table.py must PAIR the cycle metric (sim record) with the area figure
+    (ppa record) USING submission_sha256_16, and must refuse to display a pair
+    whose identifiers differ. Cycles come from simulation and area from
+    place-and-route -- different tools, different runs -- so the records stay
+    separate and the join is a reporting concern. But without the key enforced at
+    the reporting step, a submission could be shown with cycles from one build and
+    area from another, accidentally or otherwise.
+  not_done_by_me: scripts/ is Agent 1's; this is flagged rather than edited.
+
+vectors:
+  files: [vectors/vectors_sv39.hex]
+  records: 118
+  record_bits: 190
+  captured_by: tb/audit/capture_vectors_tb.sv
+  sequence: >
+    SEQUENCE C, defined once in tb/sv39_mmu_seq.svh and included by BOTH the
+    capture rig and the scoring testbench -- a sequence that lived separately in
+    each would present a silent divergence as a mismatch on every request.
+    7 functional cases, 2 bare-mode, 2 flush, 16-page fill, 16-page replay, a 17th
+    page, 17-page replay, then 57 reuse requests.
+  hit_ratio_is_a_construct: >
+    51% TLB hits, AND THAT IS A SCORING CONSTRUCT, NOT A WORKLOAD CLAIM. The mix
+    was chosen to price serialisation: at the functional probes' 20% hit rate a
+    swept comparator costs almost nothing and the cycle axis cannot discriminate;
+    the reuse passes lift it to where a swept comparator costs 3.19x. No working
+    set is modelled and no address trace is replayed. Quote it as "the scored
+    sequence is 51% hits by construction", never as "the MMU sees 51% hit rates".
+    MEASUREMENTS.md section 9.
+
+results:
+  measured_against_task_text: b05dbe9522c9ff2e
+  reference: PASS -- 118 of 118 requests, 0 failures, all coverage floors met
+  reference_metrics: {total_cycles: 832, pte_reads: 330, tlb_hits: 61, hit_pct: 51}
+
+negative_controls:
+  measured_over: vectors/vectors_sv39.hex, 118 requests
+  record: controls/CONTROLS.md
+  controls:
+  - {name: nc_a_stuck_output,     targets: "floor case",          verdict: FAIL, failures: 118}
+  - {name: nc_b_serial_response,  targets: "the CYCLE axis",      verdict: PASS, failures: 0,
+     total_cycles: 2651, note: "axis probe: correctness untouched, cycles 3.19x"}
+  - {name: nc_c_bloat_storage,    targets: "the AREA axis",       verdict: PASS, failures: 0,
+     total_cycles: 832, area_um2: 329980, note: "axis probe: cycles identical, area 1.73x, +4096 flops exactly"}
+  - {name: nc_d_no_resident_tlb,  targets: "T4 capacity",         verdict: FAIL, failures: 119}
+  - {name: nc_e_super_offset,     targets: "A2 superpage offset", verdict: FAIL, failures: 2}
+  - {name: nc_f_ad_ignored,       targets: "A5 fault-on-unset",   verdict: FAIL, failures: 4}
+  one_control_per_axis: >
+    nc_b and nc_c are not correctness controls -- both PASS by design. They prove
+    the two scored axes are live and INDEPENDENT, each moving only its own axis.
+    Without both, a broken measurement on either would pass silently.
+  the_area_control_failed_first: >
+    Worth recording because it is the exact silent failure the control exists to
+    prevent. The first nc_c terminated its register chain in a local wire,
+    synthesis deleted all 4,096 flops, and the "bloated" build measured 190,469
+    um^2 -- SMALLER than the reference. It now drives lsu_dtlb_ppn_o, which T2
+    does not score, so the storage is load-bearing for a real output and survives.
+    The exact +4,096 flop delta is how the fix is known to have worked.
+  t4_validated_before_gating: >
+    Rule 24. The 16-page replay returned 0 page-table reads on every request and
+    the 17-page replay returned 6 on every request, measured against the
+    reference, BEFORE the assertion was wired as a gate.
+
+second_source:
+  status: ABSENT
+  note: >
+    Not yet written, and its absence is stated rather than implied. Rule 5 makes it
+    mandatory before candidates are solicited -- not before they are scored -- so
+    this task is one piece short of ready for solicitation. Nothing here has been
+    checked against an independent implementation of the contract, so there is no
+    evidence yet that the task is SOLVABLE at the pinned contract.
+
+orfs:
+  config: orfs/config.mk
+  sdc: orfs/constraint.sdc
+  synthesis_verified:
+    stage: synthesis + OpenSTA only (place-and-route not run -- Agent 1's)
+    area_um2: 190561.51
+    flops: 3467
+    logic_delay_ns: 16.852
+    closes_at_period_ns: 21.33
+    sdc_starting_period_ns: 25.0
+    how_the_period_was_chosen: >
+      MEASURED at two periods and reconciled. Arrival 18.852 at 10 ns and 20.852
+      at 20 ns differ by exactly the input-delay change, so both give logic =
+      16.852 ns. Required is period - 0.213, so it closes at >= 21.33 and 25 ns
+      leaves +2.94 ns for place-and-route.
+
+ppa: ABSENT
+ppa_note: >
+  Agent 1 owns PPA. Tier-B pins a fixed clock period rather than sweeping fmax. No
+  place-and-route run exists. Note that the fixed period matters more here than on
+  most tasks: with cycles scored (L1) and area compared at a pinned period (G2), a
+  design cannot buy frequency by pipelining harder -- the stages cost area and the
+  period is not swept -- and cannot buy area by serialising, because that costs
+  cycles.
+
+skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
+
+difficulty_assessment: >
+  Sv39 translation with three page sizes, Svnapot NAPOT pages, permission checks
+  across U/S with SUM and MXR, ASID matching and global pages, the fault-on-unset
+  A/D choice, six distinct fault causes, fault PRIORITY between access and page
+  faults, and PMP checking on both the walker's own reads and the final address.
+  Most of it carries external authority from the RISC-V privileged architecture,
+  which is why this task needed three implementation-defined choices pinned rather
+  than the dozen d_dsp02 and d_ai01 each needed.
+  .
+  The two scored axes make it harder than a correctness-only task: the obvious
+  area optimisations all cost cycles, and the obvious cycle optimisations all cost
+  area, with the period fixed so neither can be hidden.
