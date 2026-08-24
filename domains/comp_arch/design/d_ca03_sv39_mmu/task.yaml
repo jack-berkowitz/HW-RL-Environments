@@ -5,7 +5,7 @@ domain: comp_arch
 type: design
 catalog: TASK_CATALOG.md
 procedure: TIER-B
-task_text_hash: 360afdc7295d5fd8
+task_text_hash: 7bc21e751be26fa2
 
 catalog_divergence: >
   The catalog row d_ca03 reads `mmu_sv39_full`: "Integrated MMU: PTW, TLB, ASID
@@ -150,7 +150,7 @@ scored_axes:
   - axis: correctness
     kind: gate
     surface: lsu_valid_o, lsu_paddr_o, lsu_exc_valid_o, lsu_exc_cause_o and the
-             fetch equivalents, bit-exact over the 175 requests of sequence D
+             fetch equivalents, bit-exact over the 207 requests of sequence F
     note: fail it and NO PPA number is produced
   - axis: total_cycles
     kind: reported
@@ -162,7 +162,7 @@ scored_axes:
       per-entry flush clear instead of a generation counter were all dominant
       strategies -- smaller area at no measured cost. Validated by
       nc_b_serial_response, which passes correctness with 0 failures and moves
-      cycles 1,513 -> 3,332.
+      cycles 1,269 -> 3,278.
   - axis: area
     kind: reported
     where: ppa record, design_area_um2 / synth_area_um2
@@ -193,47 +193,74 @@ reporting_requirement_for_agent_1:
 
 vectors:
   files: [vectors/vectors_sv39.hex]
-  records: 175
+  records: 207
   record_bits: 190
   captured_by: tb/audit/capture_vectors_tb.sv
   sequence: >
-    SEQUENCE D, defined once in tb/sv39_mmu_seq.svh and included by BOTH the
+    SEQUENCE F, defined once in tb/sv39_mmu_seq.svh and included by BOTH the
     capture rig and the scoring testbench -- a sequence that lived separately in
     each would present a silent divergence as a mismatch on every request.
-    LOAD/STORE PORT, 118 requests: 7 functional cases, 2 bare-mode, 2 flush,
-    16-page fill, 16-page replay, a 17th page, 17-page replay, then 57 reuse
-    requests. INSTRUCTION PORT, 57 requests, added in sequence D because
-    sequence C never asserted fetch_req_i at all: 7 functional (walk, hit,
-    superpage, two faults reaching cause 12, bare mode in and out) then the same
-    16-fill / 16-replay / 17th / 17-replay capacity phase. See T8 and T9.
+    LOAD/STORE PORT, 118: 7 functional, 2 bare-mode, 2 flush, 16-page fill,
+    16-page replay, a 17th page, 17-page replay, then 57 reuse requests.
+    INSTRUCTION PORT, 74: 7 functional then a HIT-INTERLEAVED 16-page fill,
+    16-page replay, a 17th, 17-page replay. PMP, 5: the three access-fault
+    causes plus a no-matching-region walk. PRIVILEGE, 6: supervisor mode with
+    SUM set and clear, an S-mode fetch of a U page, and MXR set and clear.
+    ASID, 4: a global page and a non-global page each requested under a second
+    ASID. See T8, T9 and T10.
   hit_ratio_is_a_construct: >
-    36% TLB hits, AND THAT IS A SCORING CONSTRUCT, NOT A WORKLOAD CLAIM. The mix
+    55% TLB hits, AND THAT IS A SCORING CONSTRUCT, NOT A WORKLOAD CLAIM. The mix
     was chosen to price serialisation: at the functional probes' 20% hit rate a
     swept comparator costs almost nothing and the cycle axis cannot discriminate;
     the reuse passes lift it to where nc_b_serial_response measures 2.20x. It was
-    51% under sequence C, and fell because sequence D's added phase is dominated
-    by cold instruction walks. No working
+    51% under sequence C. It fell to 36% under sequence D, whose added phase was
+    dominated by cold instruction walks, and recovered to 55% under sequence F
+    once that fill was hit-interleaved for T9. No working
     set is modelled and no address trace is replayed. Quote it as "the scored
-    sequence is 36% hits by construction", never as "the MMU sees 36% hit rates".
+    sequence is 55% hits by construction", never as "the MMU sees 55% hit rates".
     MEASUREMENTS.md section 9.
 
 results:
-  measured_against_task_text: 360afdc7295d5fd8
-  reference: PASS -- 175 of 175 requests, 0 failures, all coverage floors met
-  reference_metrics: {total_cycles: 1513, pte_reads: 642, tlb_hits: 64, hit_pct: 36}
+  measured_against_task_text: 7bc21e751be26fa2
+  reference: PASS -- 207 of 207 requests, 0 failures, all coverage floors met
+  reference_metrics: {total_cycles: 1269, pte_reads: 502, tlb_hits: 115, hit_pct: 55}
 
 negative_controls:
-  measured_over: vectors/vectors_sv39.hex, 175 requests
+  measured_over: vectors/vectors_sv39.hex, 207 requests
   record: controls/CONTROLS.md
   controls:
-  - {name: nc_a_stuck_output,     targets: "floor case",          verdict: FAIL, failures: 114}
+  - {name: nc_a_stuck_output,     targets: "floor case",          verdict: FAIL, failures: 122}
   - {name: nc_b_serial_response,  targets: "the CYCLE axis",      verdict: PASS, failures: 0,
-     total_cycles: 3332, note: "axis probe: correctness untouched, cycles 2.20x"}
+     total_cycles: 3278, note: "axis probe: correctness untouched, cycles 2.58x"}
   - {name: nc_c_bloat_storage,    targets: "the AREA axis",       verdict: PASS, failures: 0,
-     total_cycles: 1513, area_um2: 329980, note: "axis probe: cycles identical, area 1.73x, +4096 flops exactly"}
-  - {name: nc_d_no_resident_tlb,  targets: "T4 capacity",         verdict: FAIL, failures: 119}
+     total_cycles: 1269, area_um2: 329980, note: "axis probe: cycles identical at 25 ns, area 1.73x, +4096 flops exactly"}
+  - {name: nc_d_no_resident_tlb,  targets: "T4 capacity",         verdict: FAIL, failures: 212}
   - {name: nc_e_super_offset,     targets: "A2 superpage offset", verdict: FAIL, failures: 2}
-  - {name: nc_f_ad_ignored,       targets: "A5 fault-on-unset",   verdict: FAIL, failures: 4}
+  - {name: nc_f_ad_ignored,       targets: "A5 fault-on-unset",   verdict: FAIL, failures: 6}
+  - name: nc_g_itlb_one_entry
+    targets: "T9, instruction TLB capacity"
+    verdict: "FAIL at ITLB=1, PASS at ITLB=16"
+    failures: 1
+    total_cycles: 1627
+    note: >
+      CAPABILITY-REDUCED, in nc_g's shape on d_ai01. The second source with its
+      instruction TLB pinned to one entry and ports left full width, so it
+      answers every request correctly and only discards capacity. At ITLB=1 it
+      fails T9 ALONE with ZERO per-step T1 failures -- a miss walks and returns
+      the same translation, so nothing on the scored surface can catch it. That
+      isolation is what makes T9 credible rather than merely passing.
+      .
+      POLARITY IS INVERTED from d_ai01's nc_g: there the TASK varies (HEIGHT 4
+      or 8) and the control passes at the small geometry. P1 and P2 give this
+      task ONE configuration, so what varies is the control's own literal, and
+      it fails at the small capacity and passes at the large one.
+      .
+      REGENERATE THIS FILE whenever the second source changes -- it is a copy
+      with one literal altered, and the first version was derived before A8 was
+      rewritten and failed at BOTH capacities on its source's stale PMP check,
+      reporting a defect that belonged to its source rather than to the
+      perturbation under test.
+
   one_control_per_axis: >
     nc_b and nc_c are not correctness controls -- both PASS by design. They prove
     the two scored axes are live and INDEPENDENT, each moving only its own axis.
@@ -253,10 +280,10 @@ negative_controls:
 second_source:
   status: PRESENT -- PASS, 175 of 175 requests
   file: tb/sv39_mmu_alt_ref.sv
-  metrics: {total_cycles: 899, pte_reads: 273, tlb_hits: 80, hit_pct: 45}
+  metrics: {total_cycles: 977, pte_reads: 292, tlb_hits: 104, hit_pct: 50}
   divergence_from_reference: >
-    1.68x fewer cycles (899 against 1,513) and 2.35x fewer page-table reads (273
-    against 642), from the three deliberate structural choices the file's header
+    1.30x fewer cycles (977 against 1,269) and 1.72x fewer page-table reads (292
+    against 502), from the three deliberate structural choices the file's header
     names: a one-cycle parallel flush against the reference's 139, a fully
     combinational 16-way lookup, and one parallel PMP comparator bank shared
     between the walker's reads and the final address. Its instruction TLB also
@@ -334,7 +361,21 @@ ppa_note: >
   period is not swept -- and cannot buy area by serialising, because that costs
   cycles.
 
-skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
+skipped_under_tier_b: [mutant_set, formal_EC_per_task]
+# find_fmax IS NOT SKIPPED. Tier-B drops the PER-CANDIDATE frequency search, not
+# the reference measurement: find_fmax.py runs ONCE on the reference to derive the
+# pinned clock period, and that number is a task-construction constant rather than
+# a result. The earlier wording listed find_fmax here, which reads as "never run"
+# and would leave the pinned period underivable.
+fmax_use:
+  scored_axis: false          # candidates are neither ranked nor rewarded on frequency
+  reference_measurement: PENDING -- Agent 1 holds the sweep until this bump lands
+  recipe: pinned_period_ns = roundup(1.5 * converged_period_ns, 0.25)
+  units_caution: >
+    find_fmax.py emits BOTH converged_period_ns AND achieved_fmax_mhz in the same
+    record. The recipe takes the PERIOD. Taking the frequency field yields a
+    0.667x period no design can close, and the failure presents as every
+    submission missing timing rather than as a wrong pin.
 
 difficulty_assessment: >
   Sv39 translation with three page sizes, Svnapot NAPOT pages, permission checks
@@ -348,3 +389,53 @@ difficulty_assessment: >
   The two scored axes make it harder than a correctness-only task: the obvious
   area optimisations all cost cycles, and the obvious cycle optimisations all cost
   area, with the period fixed so neither can be hidden.
+
+# =============================================================================
+version_boundary:
+  boundary: STIMULUS
+  task_text_hash_before: 360afdc7295d5fd8      # my own last landed state
+  task_text_hash_intervening: c2265a1e480ab767  # Agent 1's f19cd10, G5 + Fmax text
+  task_text_hash_after: 7bc21e751be26fa2
+  stimulus_changed: YES
+  prior_results_comparable: NO
+  what_changed: >
+    THE SCORED STIMULUS CHANGED, from 118 requests to 207, so nothing measured
+    before this boundary is comparable to anything measured after it. Stated
+    plainly rather than left to be inferred from a differing hash.
+    .
+    Sequence C drove the LOAD/STORE PORT ONLY -- fetch_req was initialised to zero
+    and never assigned. Sequence D added the instruction port. Sequence E made the
+    instruction capacity fill HIT-INTERLEAVED, without which no residency check is
+    possible against this anchor. Sequence F added PMP, privilege/SUM/MXR, and
+    ASID/global phases, and moved the flush-mid step onto a NON-RESIDENT page --
+    it had been targeting a page the previous step installed, so the request hit
+    the TLB in one cycle and the flush arrived with nothing in flight to abort.
+    C3's abort-and-restart and T5's cancelled-request check were both unexercised.
+    .
+    Clause changes in the same boundary: A8 rewritten from measurement (only the
+    walker's reads are PMP-checked, and they need R; the final translated address
+    is not checked at all); A11 added for the retirement handshake; T2 unscores
+    paddr_o on a faulting request; T8 rewritten as a VARIATION requirement with
+    three declared constants; T9 replaced -- the instruction TLB's capacity IS
+    checkable and the structural flop count is dropped; T10 added for ASID and
+    global pages.
+  what_did_not_change: >
+    NO RTL. The reference shim, the ORFS config and the SDC are untouched, so the
+    190,561 um^2 synthesis area is unaffected BY THIS BOUNDARY.
+  areas_are_not_final: >
+    190,561 um^2 for the reference and 329,980 um^2 for nc_c_bloat_storage were
+    both measured at the 25 ns STARTING CONSTRAINT in orfs/constraint.sdc, which
+    is a derived logic-path figure and not a reference sweep. That constraint is
+    about to change: Agent 1 pins at 1.5x the reference's measured period rounded
+    up to 0.25 ns, and this design closes at >=21.33 ns, so the pin lands near
+    32 ns. AT A LOOSER PERIOD BOTH AREAS MOVE. They are recorded here as measured
+    and are NOT FINAL. The 1.73x ratio may survive; the absolutes will not.
+  next_boundary_is_ppa:
+    scope: >
+      One boundary, not two, so no number is measured across two moving things:
+      CORE_UTILIZATION and PLACE_DENSITY added to orfs/config.mk (absent today, so
+      the raw task config cannot floorplan and a sweep dies at do-2_1_floorplan),
+      the reference sweep, the pinned period, and the area re-baseline all land
+      together with their own record.
+    owner: Agent 1 -- values, sweep and re-baseline are all PPA-side
+    blocked_on: nothing; this bump was the blocker and it has landed

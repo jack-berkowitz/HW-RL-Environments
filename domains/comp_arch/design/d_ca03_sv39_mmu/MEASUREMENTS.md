@@ -476,3 +476,105 @@ The hit fraction fell from 51% to 36% because sequence D's added phase is
 dominated by cold instruction walks. Section 9's warning stands and now applies
 to a different number: **36% is a scoring construct, not a claim about
 representative workloads.**
+
+---
+
+## 15. Sequence F: what six frozen inputs were hiding
+
+STEP 2's variation monitor found seven contract inputs held at one value for the
+whole run. Three were legitimate and are now declared with the clause that
+permits them. The other four, plus `asid_i`, were hiding clauses:
+
+| input | clause it starved | reached now by |
+|---|---|---|
+| `pmpcfg_i`, `pmpaddr_i` | A8 entirely; A6 causes 1, 5, 7; A7's no-match case | phase 10 |
+| `priv_lvl_i`, `ld_st_priv_lvl_i` | A4 supervisor rules | phase 11 |
+| `sum_i` | A4's SUM exception | phase 11 |
+| `mxr_i` | A4's execute-as-read | phase 11 |
+| `asid_i` (+ `mk_pte` having no `G` argument) | A10, both halves | phase 12 |
+
+Eleven of the twelve new requests behaved exactly as predicted before running.
+
+### The twelfth rewrote a normative clause
+
+Step 195 fetches through a PMP region granting R+W but not X. Predicted: cause 1.
+Measured: **it translates.** `tb/audit/probe_pmp_tb.sv` then swept the matrix:
+
+```
+load  through R+W+X                              -> translates
+load  through W+X, R denied                      -> cause 5
+store through R+X, W denied                      -> TRANSLATES
+fetch through R+W, X denied                      -> TRANSLATES
+load  with no region at all                      -> cause 5
+load  R denied, TLB WARM, zero page-table reads  -> TRANSLATES
+```
+
+The last line settles it. With the entry already resident no read is issued, and
+the request succeeds through a region that denies R — so **the final translated
+address is not permission-checked at all.** Only the walker's own reads are, and
+only for R, which is the only bit a reader can need.
+
+A8 had said "Every address the walker reads is checked ... and so is the final
+translated address." That was written from the architectural rule rather than
+from measurement, and it survived review because the sequence pinned `pmpcfg_i`
+at one permitting region for its whole length, so no request could discriminate.
+The second source recorded the ambiguity as gap G-3 before it was ever run, took
+the architectural reading, and was correct against the text and wrong against the
+reference. One measurement resolved four of its nine recorded gaps: G-3 answered,
+G-4 and G-5 dissolved (there is no final-address check to prioritise, and bare
+mode issues no walk), G-6 confirmed.
+
+## 16. The flush-mid step was not aborting anything
+
+Making four coverage flags outcome-derived instead of schedule-derived (F75) cost
+one line and immediately failed the reference:
+
+    controls: bare=1 flush_tlb=1 flush_mid=0
+
+Step 10 carried `EV_FLUSH_MID`, and the flag had been set from `seq[i].ev` — the
+array the testbench had just built — so it could not be false. Derived instead
+from what the reference did, it went to zero. The trace says why:
+
+    step=10 va=0000000080000000 acc=0 cyc=1 v=1 e=0 pa=00000000100000
+
+**acc=0, cyc=1.** The step requested `SEQ_BASE`, which step 9 had just installed,
+so it HIT THE TLB and retired in one cycle. `do_step` pulses `flush_i` three
+cycles after asserting the request — long after retirement, with nothing in
+flight to abort. C3's abort-and-restart and T5's cancelled-request check were
+both unexercised, in a task where C3 had already been rewritten twice and T5
+written specifically to check it.
+
+Pointing the step at a non-resident page fixes it:
+
+    step=10 va=0000000080012000 acc=8 cyc=15 v=1 e=0 pa=00000000112000
+
+Eight reads — a partial walk aborted, then a full re-walk — and 15 cycles, which
+is the figure C3 quotes for the held-request discipline. The clause now has the
+stimulus it always claimed.
+
+This is the strongest argument in the task for the F75 rule. The flag was not
+merely weak; it was reporting coverage of the one clause this task has revised
+most, and it reported it green for the whole life of the sequence.
+
+## 17. Sequence F, measured end to end
+
+| design | verdict | cycles | PTE reads | hits |
+|---|---|---|---|---|
+| reference | PASS 207/207 | 1,269 | 502 | 55% |
+| second source | PASS 207/207 | **977** | **292** | 50% |
+| `nc_a_stuck_output` | FAIL 122 | 1,269 | 502 | |
+| `nc_b_serial_response` | PASS (axis) | **3,278** | | |
+| `nc_c_bloat_storage` | PASS (axis) | 1,269 | | |
+| `nc_d_no_resident_tlb` | FAIL 212 | 123,002 | | |
+| `nc_e_super_offset` | FAIL 2 | 1,269 | | |
+| `nc_f_ad_ignored` | FAIL 6 | 1,269 | | |
+| `nc_g_itlb_one_entry` @1 | FAIL 1 (T9 alone) | 1,627 | | |
+| `nc_g_itlb_one_entry` @16 | PASS | 977 | | |
+
+Two conforming designs 1.30x apart on cycles — narrower than sequence D's 1.68x,
+because the second source's advantage was concentrated in the instruction fill
+that sequence F now hit-interleaves for both.
+
+**The A5 check can fail now.** `+mutate_pte` flips one bit in a planted entry at
+step 50 and the table comparison fires. Its predecessor was a counter that was
+declared, compared, printed and never incremented — see F75.

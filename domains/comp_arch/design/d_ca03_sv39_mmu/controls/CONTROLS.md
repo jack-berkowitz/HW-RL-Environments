@@ -7,8 +7,8 @@ Measured over sequence C, 118 requests, `vectors/vectors_sv39.hex`.
 |---|---|---|---|---|---|
 | *(reference)* | -- | PASS | 0 | **832** | **190,561** |
 | `nc_a_stuck_output` | floor case | FAIL | 118 / 118 | 832 | -- |
-| `nc_b_serial_response` | **the CYCLE axis** | PASS | **0** | **3,332 (2.20x)** | ~unchanged |
-| `nc_c_bloat_storage` | **the AREA axis** | PASS | **0** | 1,513 (identical) | **329,980 (1.73x)** |
+| `nc_b_serial_response` | **the CYCLE axis** | PASS | **0** | **3,278 (2.58x)** | ~unchanged |
+| `nc_c_bloat_storage` | **the AREA axis** | PASS | **0** | 1,269 (identical) | **329,980 (1.73x)** |
 | `nc_d_no_resident_tlb` | T4 capacity | FAIL | 119 | 70,201 | -- |
 | `nc_e_super_offset` | A2 superpage offset | FAIL | **2** | 832 | -- |
 | `nc_f_ad_ignored` | A5 fault-on-unset A/D | FAIL | **4** | 832 | -- |
@@ -98,3 +98,34 @@ So a cycle count from one build cannot be paired with an area figure from
 another. The key and the gate exist; what does not yet exist is
 `report_table.py` USING that key to show the two axes side by side. That is a
 requirement on the reporting side, not a suggestion -- see the note in task.yaml.
+
+## Sequence F, and a seventh control
+
+Re-measured over 207 requests. All six earlier controls keep their verdicts;
+`nc_b`'s ratio moved 2.20x -> **2.58x** because the hit-interleaved instruction
+fill raised the hit fraction from 36% to 55%, and a serialisation control is
+worth more on a sequence with more hits. That is the second time this number has
+moved for a stimulus reason rather than a control reason, which is why it is
+recorded with its cause each time rather than just restated.
+
+**`nc_g_itlb_one_entry` is new, and it is the control that makes T9 mean
+something.** It is the second source with its instruction TLB pinned to one
+entry and its ports left full width, so it receives every request, answers every
+one correctly, and only discards capacity.
+
+| capacity | verdict | failing checks | per-step T1 | cycles |
+|---|---|---|---|---|
+| `ITLB_ENTRIES=1` | **FAIL** | 1 — T9 alone | **0** | 1,627 |
+| `ITLB_ENTRIES=16` | PASS | 0 | 0 | 977 |
+
+The zero in the per-step column is the point. A miss walks and returns the same
+translation, so an under-provisioned instruction TLB is invisible everywhere
+except the residency check — which is exactly why pricing it on the cycle axis
+was not enough, and why an earlier draft was wrong to call it unenforceable.
+
+**Regenerate this control whenever the second source changes.** It is a copy of
+`tb/sv39_mmu_alt_ref.sv` with one literal altered. The first version was derived
+before A8 was rewritten from measurement and still carried a final-address PMP
+check the reference does not perform, so it failed step 195 at BOTH capacities —
+reporting a defect that belonged to its source rather than to the perturbation
+under test, and briefly looking like the check did not discriminate.

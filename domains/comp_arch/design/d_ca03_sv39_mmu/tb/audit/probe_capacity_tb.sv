@@ -39,6 +39,26 @@ module probe_capacity_tb;
     end
   endtask
 
+  // fill n pages, but re-touch each page immediately after installing it, so the
+  // install is followed by a HIT. The anchor's PLRU tree advances only on
+  // lu_hit & lu_access (cva6_tlb.sv:436), so this is the pattern that should
+  // spread the installs across entries where a cold fill does not.
+  task automatic sweep_hitfill(input logic isf, input int n, output int hits);
+    int a;
+    begin
+      flush_tlb = 1; @(posedge clk); flush_tlb = 0; repeat (200) @(posedge clk);
+      for (int i = 0; i < n; i++) begin
+        one(isf, SEQ_BASE + i*4096, a);   // install
+        one(isf, SEQ_BASE + i*4096, a);   // hit -> advances the tree
+      end
+      hits = 0;
+      for (int i = 0; i < n; i++) begin
+        one(isf, SEQ_BASE + i*4096, a);
+        if (a == 0) hits++;
+      end
+    end
+  endtask
+
   int h;
   initial begin
     plant_table();
@@ -50,6 +70,16 @@ module probe_capacity_tb;
       int hf, hl;
       sweep(1'b1, n, hf);
       sweep(1'b0, n, hl);
+      $display("  %2d      %2d           %2d", n, hf, hl);
+    end
+
+    $display("");
+    $display("HIT-INTERLEAVED fill (install, then re-touch), then replay all n:");
+    $display("   n   FETCH hits   LDST hits");
+    for (int n = 1; n <= 20; n++) begin
+      int hf, hl;
+      sweep_hitfill(1'b1, n, hf);
+      sweep_hitfill(1'b0, n, hl);
       $display("  %2d      %2d           %2d", n, hf, hl);
     end
     $finish;

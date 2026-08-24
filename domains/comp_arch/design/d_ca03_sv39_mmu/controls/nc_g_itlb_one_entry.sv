@@ -1,85 +1,64 @@
-// =============================================================================
-// sv39_mmu_alt_ref.sv -- d_ca03 SECOND SOURCE (rule 5, Class B).
+// nc_g_itlb_one_entry.sv -- d_ca03 CAPACITY-REDUCED CONTROL.
+// Never shipped, never scored as a submission.
 //
-// AUTHORING CONSTRAINT, binding and recorded in task.yaml so it survives a
-// handoff: this file was written against spec/sv39_mmu_iface.sv ALONE.
-// ref/sv39_mmu_ref.sv was not opened while it was written, and neither was
-// anything under refs/cva6/. Adjudication against the reference happens
-// AFTERWARDS. The reason is in task.yaml:second_source.authoring_constraint,
-// together with the contamination that is present anyway and is not claimed
-// away: I wrote the shim, so the anchor's port semantics, memory handshake,
-// TLB field list and PMP config layout were already known. The walker FSM and
-// the lookup logic were not.
+// PURPOSE. Every other control here except nc_b and nc_c is a correctness
+// perturbation: wrong everywhere. This one answers a different question -- IS
+// THE INSTRUCTION TLB'S PINNED CAPACITY LOAD-BEARING? T9 previously recorded
+// that it was not checkable, on the strength of a COLD 16-page fill under which
+// the reference itself retains one entry. That measurement was right and the
+// conclusion drawn from it was wrong: the anchor's replacement tree advances
+// only on a lookup hit (cva6_tlb.sv:436), so the cold fill was measuring the
+// replacement policy, not the capacity. Sequence E's phase 9 re-touches each
+// page after installing it, and the reference then retains all 16. This control
+// exists to show that the resulting check DISCRIMINATES rather than merely
+// passing.
 //
-// DELIBERATE STRUCTURAL DIVERGENCE, in the places G4 names as free:
-//   * flush_tlb_i clears all 32 valid bits in ONE cycle, against the
-//     reference's measured 139 (L1). Nothing else is cleared; the payload
-//     fields are left stale, since a cleared valid bit makes them unreachable.
-//   * lookup is fully combinational, 16 tag comparators per bank in parallel.
-//   * ONE PMP comparator bank, eight regions in parallel, reused for the
-//     walker's reads and for the final address (G4 asks exactly this question).
-//   * one walker datapath with a 2-bit level counter.
-//   * DELIVERY HAPPENS IN ONE PLACE. A successful walk installs the entry and
-//     returns to idle without delivering anything; the hit path delivers on the
-//     following cycle. So A9's "a translation delivered from a TLB entry is
-//     identical to the one the walk would have produced" holds structurally
-//     here instead of being a property maintained in two code paths. Only
-//     faults that install nothing are delivered by the walker itself.
+// THE PERTURBATION. The instruction TLB is instantiated with `ITLB_ENTRIES
+// entries; the data TLB keeps 16. NOTHING ELSE DIFFERS from the second source.
+// The ports stay full width, so the design receives every request, answers
+// every one correctly, and simply discards capacity -- which is the shape a
+// real under-provisioning submission would take, and the shape that the cycle
+// axis alone cannot refuse.
 //
-// SPEC GAPS FOUND WHILE IMPLEMENTING. Recorded as they were hit, before any
-// comparison against the reference, so the record cannot be back-filled from
-// what the reference turns out to do. Adjudication in MEASUREMENTS.md.
+// PREDICTION, stated before running.
+//   `ITLB_ENTRIES = 16 -- identical to tb/sv39_mmu_alt_ref.sv in every respect.
+//                Should PASS, 0 failing checks, instr replay reads 0.
+//   `ITLB_ENTRIES = 1  -- the 16-page instruction replay (steps 157..172) finds
+//                one page resident and walks the other fifteen, so T9's first
+//                assertion fires. THE PER-STEP T1 SURFACE SHOULD BE CLEAN: a
+//                miss walks and returns the same translation, so valid, paddr,
+//                exc_valid and cause all still match. Should FAIL, and fail on
+//                T9 ALONE. If it also fails per-step checks the control is
+//                perturbing more than capacity and is not isolated.
 //
-//   G-1  mem_tag_valid_o and mem_kill_o are in the port list (V1) and NO clause
-//        says what they mean. V3 specifies req -> gnt -> rvalid and nothing
-//        else. Tied low here.
-//   G-2  lsu_exc_tval_o / fetch_exc_tval_o are unspecified AND absent from T1's
-//        scored surface. Driven with the faulting virtual address.
-//   G-3  A8 does not say WHICH permission bit each PMP check requires. Taken as
-//        the architectural rule: a walker read needs R; the final address needs
-//        R for a load, W for a store, X for a fetch.
-//        RESOLVED AGAINST THIS FILE, and it took four gaps with it. Measured
-//        over seven configurations: a store through a W-denied region
-//        TRANSLATES, a fetch through an X-denied region TRANSLATES, and a warm
-//        TLB hit through an R-denied region TRANSLATES issuing no read. Only R
-//        is ever required, only the WALKER'S READS are checked, and the final
-//        translated address is not checked at all. A8 now says so, and the code
-//        above follows it. G-4 and G-5 dissolve with it -- there is no
-//        final-address check to conflict with a page fault, and bare mode issues
-//        no walk so nothing is checked. G-6 is confirmed: no matching region
-//        denies, giving cause 5.
-//   G-4  RESOLVED -- see G-3. No final-address check exists to prioritise.
-//   G-5  RESOLVED -- see G-3. Bare mode performs no walk, so nothing is checked.
-//   G-6  The no-match PMP case is stated only through A7's measurement ("with
-//        no PMP region matching ... reports cause 5"), which the text gives
-//        unconditionally. Implemented as deny-on-no-match at EVERY privilege
-//        level. That differs from RISC-V, where M-mode allows on no match, and
-//        the spec gives no way to tell which was intended.
-//   G-7  F3 makes PTE bits [63:54] "reserved, ignored", which excludes the
-//        Svnapot N bit at 63. G4 nevertheless lists "three page sizes plus
-//        Svnapot" as an area axis. F3 is normative and is followed: bit 63 is
-//        ignored and there is no NAPOT page support.
-//   G-8  Arbitration between fetch_req_i and lsu_req_i for the single walker is
-//        unspecified. LSU wins here.
-//   ADJUDICATED, afterwards and not during. G-9 and the paddr question under it
-//        were both rule 5 branch three -- ambiguous specification, both
-//        implementations legal -- so the SPECIFICATION changed: A11 states the
-//        retirement handshake and T2 unscores paddr_o on a faulting request.
-//        G-1 is now stated in T2. The code below follows A11 as written. G-3 to
-//        G-8 are not reached by the scored sequence and remain open readings,
-//        listed so the next author need not rediscover them.
+// POLARITY, AND WHY IT IS INVERTED FROM d_ai01's nc_g. In nc_g the TASK varies
+// -- HEIGHT is 4 or 8 -- and the control passes at the small geometry because
+// there its literal equals the parameter. d_ca03 has ONE configuration: P1 says
+// so and P2 pins the storage, so there is no second task geometry to run at.
+// What varies here is the CONTROL'S OWN literal, and the polarity therefore
+// inverts: it FAILS at the small capacity and PASSES at the large one. Stated
+// rather than quietly flipped.
 //
-//   G-9  WHETHER lsu_valid_o IS ALSO ASSERTED ON A FAULT IS NEVER STATED, and
-//        this one is not cosmetic: T1 scores lsu_valid_o AND lsu_exc_valid_o,
-//        so the two readings are distinguishable on the scored surface and a
-//        submission has no way to choose. Taken as MUTUALLY EXCLUSIVE, from
-//        L2's "either with a translation or with a fault".
-// =============================================================================
+// If it passes at BOTH, the task does not discriminate on instruction TLB
+// capacity and T9 needs a clause change rather than a label change.
+
+// REGENERATED from tb/sv39_mmu_alt_ref.sv after A8 was rewritten from
+// measurement. The first version was derived before that change and still
+// carried a final-address PMP check the reference does not perform, so it failed
+// step 195 at BOTH capacities -- a stale derived artifact reporting a defect that
+// belonged to its source, not to the perturbation under test. Regenerate this
+// file whenever the second source changes; it is a copy with one literal altered.
+
+`ifndef ITLB_ENTRIES
+  `define ITLB_ENTRIES 1
+`endif
 
 // -----------------------------------------------------------------------------
 // One fully-associative TLB bank. 16 entries, per P2.
 // -----------------------------------------------------------------------------
-module sv39_alt_tlb (
+module sv39_ctl_tlb #(
+  parameter int unsigned N = 16
+) (
   input  logic        clk_i,
   input  logic        rst_ni,
   input  logic        flush_i,          // full flush; C2 permits treating any
@@ -98,7 +77,6 @@ module sv39_alt_tlb (
   input  logic [1:0]  wr_lvl_i,
   input  logic [6:0]  wr_perm_i
 );
-  localparam int unsigned N = 16;
 
   logic [N-1:0]  vld;
   logic [15:0]   e_asid [N];
@@ -144,8 +122,8 @@ module sv39_alt_tlb (
   // ---- victim selection: an invalid slot if there is one, else round robin --
   // A9 leaves the replacement policy free and unscored. Round robin is chosen
   // because it needs a 4-bit counter and no per-entry age state.
-  logic [3:0] rr;
-  logic [3:0] vict;
+  logic [$clog2(N)-1:0] rr;
+  logic [$clog2(N)-1:0] vict;
   logic       have_free;
 
   always_comb begin
@@ -154,7 +132,7 @@ module sv39_alt_tlb (
     for (int unsigned k = 0; k < N; k++) begin
       if (!vld[k] && !have_free) begin
         have_free = 1'b1;
-        vict      = k[3:0];
+        vict      = k[$clog2(N)-1:0];
       end
     end
   end
@@ -162,7 +140,7 @@ module sv39_alt_tlb (
   always_ff @(posedge clk_i) begin
     if (!rst_ni) begin
       vld <= '0;
-      rr  <= 4'd0;
+      rr  <= '0;
     end else if (flush_i) begin
       vld <= '0;                       // one cycle, all 16 -- see the header
     end else if (wr_en_i) begin
@@ -172,7 +150,7 @@ module sv39_alt_tlb (
       e_lvl [vict] <= wr_lvl_i;
       e_ppn [vict] <= wr_ppn_i;
       e_perm[vict] <= wr_perm_i;
-      if (!have_free) rr <= rr + 4'd1;
+      if (!have_free) rr <= rr + 1'b1;
     end
   end
 endmodule
@@ -337,7 +315,7 @@ module sv39_mmu (
   logic [1:0]  d_lvl, i_lvl;
   logic [6:0]  d_perm, i_perm;
 
-  sv39_alt_tlb u_dtlb (
+  sv39_ctl_tlb #(.N(16)) u_dtlb (
     .clk_i, .rst_ni, .flush_i(flush_tlb_i), .asid_i,
     .lu_vpn_i(ls_vpn), .lu_hit_o(d_hit), .lu_ppn_o(d_ppn),
     .lu_lvl_o(d_lvl), .lu_perm_o(d_perm),
@@ -345,7 +323,7 @@ module sv39_mmu (
     .wr_lvl_i(ins_lvl), .wr_perm_i(ins_perm)
   );
 
-  sv39_alt_tlb u_itlb (
+  sv39_ctl_tlb #(.N(`ITLB_ENTRIES)) u_itlb (
     .clk_i, .rst_ni, .flush_i(flush_tlb_i), .asid_i,
     .lu_vpn_i(if_vpn), .lu_hit_o(i_hit), .lu_ppn_o(i_ppn),
     .lu_lvl_o(i_lvl), .lu_perm_o(i_perm),

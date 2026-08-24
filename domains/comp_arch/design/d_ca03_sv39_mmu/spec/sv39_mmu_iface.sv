@@ -117,13 +117,46 @@
 //     region matching, a walk that would otherwise page-fault reports cause 5,
 //     and the same walk reports 13 once a permitting PMP region exists.
 //
-// A8. PHYSICAL MEMORY PROTECTION IS IN THE WALK PATH. Every address the walker
-//     reads is checked against pmpcfg_i/pmpaddr_i, and so is the final
-//     translated address. Eight entries, each pmpcfg_i[n] packed as
+// A8. PHYSICAL MEMORY PROTECTION IS IN THE WALK PATH, AND ONLY THERE. Eight
+//     entries, each pmpcfg_i[n] packed as
 //       {locked, reserved[1:0], addr_mode[1:0], X, W, R}
 //     with addr_mode 0 OFF, 1 TOR, 2 NA4, 3 NAPOT. A failing check raises an
 //     ACCESS fault per A6, not a page fault.
-//     AUTHORITY: RISC-V Privileged Architecture, PMP section.
+//
+//     WHAT IS CHECKED, and this is measured rather than assumed:
+//       * EVERY ADDRESS THE WALKER READS, and the check requires R. The walker
+//         only ever reads, so R is the only bit that can matter to it.
+//       * NO PERMISSION CHECK IS APPLIED TO THE FINAL TRANSLATED ADDRESS, by any
+//         access type. A translation delivered from a TLB hit issues no
+//         page-table read and is therefore never PMP-checked at all.
+//       * A REGION MATCHING NOTHING DENIES. With no entry matching, the walker's
+//         read fails and the request takes an access fault.
+//
+//     Measured over seven configurations (tb/audit/probe_pmp_tb.sv):
+//       load  through R+W+X            -> translates
+//       load  through W+X, R denied    -> cause 5
+//       store through R+X, W denied    -> TRANSLATES
+//       fetch through R+W, X denied    -> TRANSLATES
+//       fetch through R+W+X            -> translates
+//       load  with no region at all    -> cause 5
+//       load  through R denied, TLB warm, ZERO page-table reads -> TRANSLATES
+//     The last line is the one that settles it: with the entry already resident
+//     no read is issued, and the request succeeds through a region that denies
+//     R. If the final address were checked it would have faulted.
+//
+//     AN EARLIER DRAFT OF THIS CLAUSE SAID "and so is the final translated
+//     address", which is false. It was written from the architectural rule
+//     rather than from measurement, and it survived because the sequence pinned
+//     pmpcfg_i and pmpaddr_i at one permitting region for its whole length, so
+//     no request ever discriminated. An independent implementation took the
+//     architectural reading, checked the final address by access type, and was
+//     correct against the text and wrong against the reference.
+//
+//     The consequence for a submission: causes 1, 5 and 7 arise ONLY from a
+//     denied walker read, and the cause reflects the ORIGINAL access type, not
+//     the walker's.
+//     AUTHORITY: RISC-V Privileged Architecture, PMP section, for the entry
+//     encoding. The scope of the check is this contract's, and is measured.
 //
 // A9. TLB TRANSPARENCY. A translation delivered from a TLB entry is identical to
 //     the one the walk would have produced. Capacity and organisation are NOT
@@ -405,12 +438,34 @@
 //     tasks in this repository hit that exact error.
 //
 // T7. A submission must pass every clause above; there is no partial credit.
-// T8. BOTH PORTS ARE EXERCISED, and this is a scoring requirement rather than a
-//     remark about the harness. The scored sequence drives fetch_req_i as well
-//     as lsu_req_i: an instruction walk, an instruction TLB hit, a superpage
-//     fetch, two instruction faults reaching cause 12, bare mode on the
-//     instruction side, and the T4 capacity check run a second time against the
-//     instruction TLB.
+// T8. EVERY INPUT THIS CONTRACT GIVES MEANING TO MUST TAKE MORE THAN ONE VALUE
+//     over the scored sequence, and an input permitted to stay constant must be
+//     NAMED HERE WITH THE CLAUSE THAT PERMITS IT. This is a scoring requirement,
+//     not a remark about the harness, and an undeclared constant FAILS.
+//
+//     VARIATION, NOT ASSIGNMENT, and the difference is the whole clause. An
+//     earlier draft required only that fetch_req_i be DRIVEN. That catches an
+//     input nobody assigns and misses an input assigned every cycle at a fixed
+//     value -- which is what asid_i was, so A10 went unexercised while a
+//     driven-at-least-once test passed. Five further inputs were frozen the same
+//     way, taking A4's supervisor, SUM and MXR rules and the whole of A8 with
+//     them. An input that never changes has not been tested, however
+//     continuously it was assigned.
+//
+//     PERMITTED CONSTANTS, each with its reason:
+//       satp_ppn_i               one root page table; C5 puts changing it out of
+//                                scope, so one value is the whole scored regime.
+//       asid_to_be_flushed_i     C2 lets any flush be treated as a full flush,
+//       vaddr_to_be_flushed_i    which makes both narrowing inputs non-load-bearing.
+//     Everything else varies: both request ports, both address ports, is_store,
+//     the two enables, both flushes, priv_lvl_i, ld_st_priv_lvl_i, sum_i, mxr_i,
+//     asid_i, pmpcfg_i, pmpaddr_i, and the three memory response inputs.
+//
+//     What the sequence reaches as a result: an instruction walk, an instruction
+//     TLB hit, a superpage fetch, two instruction faults reaching cause 12, bare
+//     mode on both sides, the capacity replay on both TLBs, all three PMP access
+//     causes, supervisor mode with SUM set and clear, MXR set and clear, and a
+//     global page hit under a second ASID.
 //
 //     WHY IT IS WRITTEN DOWN. An earlier sequence left fetch_req_i tied to zero
 //     for all 118 of its requests while T1 declared the fetch surface scored and
@@ -425,8 +480,59 @@
 //     needs the check that makes the budget real, and the check has to run.
 //
 //
-// T9. THE INSTRUCTION TLB'S ENTRY COUNT IS NOT BEHAVIOURALLY CHECKED, and this
-//     is a stated hole rather than an oversight.
+// T9. THE INSTRUCTION TLB'S ENTRY COUNT IS CHECKED, by the same replay T4 uses
+//     on the data side, with one difference that makes it possible at all: THE
+//     FILL RE-TOUCHES EACH PAGE after installing it.
+//
+//     Why that detail is load-bearing. The reference's replacement tree advances
+//     only on a lookup HIT, so a COLD fill of 16 distinct pages puts every
+//     install in one entry and the reference itself retains ONE. Measured, filling
+//     n pages then replaying all n:
+//
+//       n:                  1   2   4   8  16  17
+//       cold fill,   instr: 1   0   0   0   0   0
+//       hit-interleaved:    1   2   4   8  16  15
+//
+//     With the re-touch the reference retains all 16 and 17 pages thrash it to
+//     15, so the check discriminates. It is also MORE policy-tolerant than the
+//     cold fill, not less: the reference's PLRU-on-hit and a
+//     prefer-invalid-then-round-robin policy both pass, and those are two
+//     genuinely different policies.
+//
+//     VALIDATED BY A CONTROL, not by passing. controls/nc_g_itlb_one_entry.sv is
+//     the second source with its instruction TLB pinned to one entry and its
+//     ports left full width, so it answers every request correctly and merely
+//     discards capacity. At 16 entries it passes; at 1 it FAILS THIS CHECK ALONE,
+//     with zero per-step failures on the T1 surface -- a miss walks and returns
+//     the same translation, so nothing else can catch it.
+//
+//     AN EARLIER DRAFT SAID THIS COULD NOT BE CHECKED and downgraded the budget
+//     to "priced, not enforced". That was wrong, and wrong in the expensive
+//     direction: the probe behind it filled cold, so it measured the replacement
+//     policy and not the capacity. A structural flip-flop count was proposed to
+//     stand in its place and has been DROPPED -- a check requiring synthesis
+//     cannot gate correctness without inverting G1's order, in which a failing
+//     submission produces no PPA number at all.
+//
+// T10. ASID AND GLOBAL PAGES ARE CHECKED, and the check reads mem_* activity
+//     rather than the T1 surface, as a stated exception to T2 alongside T4 and T9.
+//
+//     THE REASON IT CANNOT BE SCORED ON T1. One page table serves every ASID
+//     here, because satp_ppn_i is fixed. So a design that ignores asid_i and
+//     reuses a stale non-global entry returns EXACTLY THE SAME ADDRESS as one
+//     that re-walks. The difference is not observable in what is delivered, only
+//     in whether a page-table read happened.
+//
+//     The check, after a flush, with a global leaf and a non-global leaf both
+//     installed under ASID 1:
+//       * the GLOBAL page, requested under ASID 2, must issue NO page-table read;
+//       * the NON-GLOBAL page, requested under ASID 2, MUST issue at least one.
+//
+//     Neither half was reachable before. asid_i was driven at the constant zero
+//     for the whole sequence, and the page-table constructor had no G argument at
+//     all -- PTE bit 5 was hardcoded to zero, so no planted entry was ever
+//     global. A10 was pinned longhand and unexercised in both halves.
+
 //
 //     Run the T4 replay against the instruction TLB and the REFERENCE ITSELF
 //     issues 96 page-table reads where the data TLB issues none -- every replay

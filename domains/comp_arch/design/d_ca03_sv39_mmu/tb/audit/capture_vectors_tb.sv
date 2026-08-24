@@ -20,6 +20,7 @@ module capture_vectors_tb;
   initial begin
     if (!$value$plusargs("out=%s", fname)) fname = "vectors.hex";
     plant_table();
+    snapshot_table();
     build_sequence(seq);
 
     repeat (4) @(posedge clk); rst_n = 1; repeat (4) @(posedge clk);
@@ -47,7 +48,9 @@ module capture_vectors_tb;
     $display("capture: %0d records of %0d bits -> %s", NSTEP, REC_W, fname);
     $display("capture: reference cycles=%0d PTE reads=%0d hits=%0d (%0d%%)",
              tot_cyc, tot_acc, n_hit, (100*n_hit)/NSTEP);
-    if (wr_attempts != 0) $fatal(1, "capture: the unit attempted a memory WRITE (A5)");
+    verify_table_unchanged();
+    if (pte_mutations != 0)
+      $fatal(1, "capture: %0d page table entries changed during the run (A5)", pte_mutations);
     $finish;
   end
 endmodule
