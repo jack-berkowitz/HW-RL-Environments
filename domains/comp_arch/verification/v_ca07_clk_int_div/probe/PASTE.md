@@ -29,6 +29,14 @@ gating, and folding it in makes a conforming unit look like it breaks the bound.
 This is not a trick: it is stated in G1 and repeated here because it is the
 mistake most likely to make you reject correct hardware.
 
+**G1 and L2 are a pair, and they are easy to conflate.** G1 is an EXACT upper
+bound and it binds — a unit outside it is faulty. L2 says how long gating
+*actually* lasts below that bound is free — a unit that resumes sooner is
+correct, and requiring a particular duration rejects it. Check the bound; do not
+check the duration. Two of the implementations you will be run against differ
+from each other on exactly this: one sits at the bound, another resumes in
+two-thirds of it, and both are conforming.
+
 ## Port map
 
 ```systemverilog

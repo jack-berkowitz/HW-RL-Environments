@@ -186,3 +186,36 @@ the anchor, which I know has none. The grep was matching the word VIOLATION in
 the harness's own explanatory line. Counting the result lines rather than the
 word gives zero everywhere. Same class as the `fail()`-label map and the
 degenerate control: what was counted was not what was claimed.
+
+## Declared unscoreable, to be carried into task.yaml verbatim
+
+**This task has no `task.yaml` yet** — creating a partial one would make
+`check_witness_sync.py` report v_ca07 as missing its rule-24 record, which is
+true but not useful noise. It is written here so it cannot be lost, and it goes
+into `task.yaml` in the same form as v_ca06's D6/E6/D7 block when the task is
+complete.
+
+    unscored_clauses:
+      P3_distinction:
+        text: divisors 0 and 1 are observationally identical -- both pass-through
+        scored:   pass-through ITSELF is scored. A unit giving period 2 at
+                  div_i=1 violates P3 and is caught.
+        unscored: any DIFFERENCE between 0 and 1. No testbench can distinguish
+                  them and no fault will be keyed on the distinction.
+        why_both_kept: >
+          Dropping one would hide a degenerate case an implementation can get
+          wrong in the same way for both. The distinction is declared
+          unscoreable rather than removed.
+      L1_not_perturbed:
+        text: the phase of clk_o against clk_i
+        note: >
+          Covered by dut2, which is independent, and NOT by any conformant
+          perturbation -- a wrapper cannot shift the phase of a clock it did not
+          generate. Recorded because five latitude clauses against five
+          perturbations invites the inference that each covers one.
+
+The general rule both entries serve: **a count a reader can do is a claim you
+have made**, whether or not you wrote it down. Five clauses beside five
+perturbations asserts a pairing. Two divisor values with one behaviour asserts a
+distinction is testable. Neither was true, and neither was stated until it was
+checked.

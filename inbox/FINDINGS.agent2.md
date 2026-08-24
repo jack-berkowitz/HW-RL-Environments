@@ -53,3 +53,50 @@ anchor's header is wrong" claims I made about this same module were mine rather
 than the header's — one from sampling a clock at a phase that aliases
 pass-through, one from measuring an interval from the wrong origin. Three
 measurement-basis defects on one module, none of them in the design.
+
+---
+
+## Candidate — "conservative is safe" is a reflex calibrated for lower bounds, and it silently produces non-conforming artifacts against upper bounds
+
+**A different class from the control-selection instance above.** That one is a
+measurement reporting the wrong observable. This one is a **conformance reflex**
+producing a wrong artifact — nothing is mismeasured, the thing built is simply
+out of spec, and it looks careful while being so.
+
+**The instance.** v_ca07's clause G1 is an upper bound: after a divisor change
+the output clock is gated for **at most** 3 × the new period. Writing the
+independent second source, I chose to gate for two cycles — deliberately
+generous, on the reasoning that holding the output down a little longer is the
+cautious thing to do.
+
+It gated for **four**, against a bound of three, on every transition to
+pass-through. Non-conforming.
+
+**Two things made it happen, and the second is the interesting one.**
+
+The reflex: *more gating is safer*. That is correct for a setup margin, a hold
+time, a settling window — every bound most hardware intuition is trained on is a
+**lower** bound, where overshooting costs performance and nothing else. Against
+an **upper** bound the same instinct walks straight out of the contract, and it
+does not feel like risk-taking while you do it.
+
+The mechanism: the author chose two cycles. **The implementation delivered
+three.** The negedge-registered clock enable — present for a good reason, so
+gating cannot truncate a high phase — added a cycle that was never in the count.
+Nothing in the source says "three"; the number is distributed across a
+constant and a register, and only the measurement showed the sum.
+
+**Why second sourcing is where it does damage.** A second source exists to be an
+independent reading of the contract. One built on this reflex is *worse than a
+careless one*: it is out of spec in a direction its author believes is safe, so
+it attracts no scrutiny, and if it is used to validate anything else the error
+propagates as agreement. Mine would have been accepted as a conforming variant
+that the reference must PASS — encoding a violation as a requirement.
+
+**Detection.** Measure the artifact against the bound rather than reasoning about
+the constant. The gap here is between a number the author chose and a number the
+implementation produces, and no amount of reading finds it.
+
+**Rule:** when a clause is an upper bound, "generous" is the failing direction.
+Every margin deliberately added against an upper bound must be measured end to
+end, because the implemented total is not the constant the author wrote.
