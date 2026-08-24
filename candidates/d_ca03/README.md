@@ -10,13 +10,17 @@ nothing else: no reference, no vectors, no testbench.
 
 ## Task text hash
 
-    7bc21e751be26fa2
+    32dab6d0eca816dc
 
-It supersedes `b05dbe9522c9ff2e`, `360afdc7295d5fd8` and `c2265a1e480ab767`.
+It supersedes five earlier texts: `b05dbe9522c9ff2e`, `360afdc7295d5fd8`,
+`c2265a1e480ab767`, `7bc21e751be26fa2` and `83b793dff2273998`.
 
-**All three boundaries are BEHAVIOURAL and nothing measured against them is
-comparable to anything measured here.** The scored stimulus went from 118
-requests to 207 across them, and normative clauses changed with it:
+**Not all five boundaries are equal, and the distinction decides whether a
+result can be carried across one.**
+
+**BEHAVIOURAL, up to `7bc21e751be26fa2`.** The scored stimulus went from 118
+requests to 207, and normative clauses changed with it. Nothing measured before
+this point is comparable to anything measured here:
 
 * **A8 was WRONG and is rewritten from measurement.** It said the final
   translated address is PMP-checked. It is not checked at all -- only the
@@ -29,8 +33,35 @@ requests to 207 across them, and normative clauses changed with it:
 * **T8, T9 and T10** are new or replaced: every input must VARY, the instruction
   TLB's capacity is checked, and ASID and global pages are checked.
 
-A submission conformant against any earlier text is not conformant here. Re-solicit
+A submission conformant against any of those is not conformant here. Re-solicit
 rather than re-scoring.
+
+**NOT BEHAVIOURAL, `83b793dff2273998` and `32dab6d0eca816dc`.** Both are scoring
+policy, and every clause in F, V, A, C, L, P and T is byte-identical across them.
+A design conformant against `7bc21e751be26fa2` is still conformant here, and
+re-running reproduces every number exactly.
+
+* `83b793d` restated **G2**: timing closure is a GATE, not an axis, and slack is
+  not scored. An area figure from a build that did not close is not a smaller
+  design, it is an unfinished one, so its PPA is withheld rather than reported —
+  and slack above zero earns nothing, because meeting timing with margin is
+  bought with area and charging for both counts one tradeoff twice.
+* `32dab6d` restated **G1**: a submission that fails to build scores zero on
+  every PPA axis, so a design the simulator accepts and the synthesis frontend
+  rejects gets full correctness and no PPA. It also records that the pinned
+  period is NOT YET SET, pending the queued reference sweep.
+
+The hash changed both times because the shipped text changed, which is what the
+hash is for. **A submission cannot infer comparability from the hash alone** —
+only from which clauses moved.
+
+## A caution about quoting this hash
+
+It moved three times in twelve minutes, twice by a second author correcting the
+same file. **Recompute it at the point of use** rather than carrying one that was
+quoted in a message: run `scripts/task_text_hash.py` on the task directory when
+you write a record. A hash in a message is a snapshot and the message outlives
+the snapshot.
 
 ## Configuration
 
