@@ -360,11 +360,16 @@
 //          synthesis frontend rejects scores full correctness and no PPA.
 //
 //       3. PPA, measured only for submissions that already passed, ONCE AT A
-//          PINNED CLOCK PERIOD, at the scored WIDTH and nowhere else. At the
-//          time of writing that period is 46.875 ns on sky130hd. The number is
-//          the harness's to set and may be re-pinned; what does not change is
-//          that it is THE SAME for every submission, so all designs are
-//          compared at one frequency rather than at each design's own best.
+//          PINNED CLOCK PERIOD, at the scored WIDTH and nowhere else.
+//          The pinned period is 70.5 ns on sky130hd. It is derived as 1.5x the
+//          reference implementation's own measured period (46.875 ns), rounded
+//          up to the next 0.25 ns, and it is STATED HERE BEFORE ANY SUBMISSION IS
+//          SOLICITED. It does not move in response to what is submitted -- an
+//          earlier scheme pinned the row at the slowest submission's own Fmax,
+//          which rewards a slow design by moving the measurement toward the period
+//          where its own area looks best. The period is THE SAME for every
+//          submission, so all designs are compared at one frequency rather than at
+//          each design's own best.
 //
 //   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
 //         * AREA, post-synthesis and post-place-and-route.
@@ -382,9 +387,14 @@
 //           each other on latency. The number is reported so that an area
 //           difference between them is read as the trade it is.
 //
-//       Fmax is measured SEPARATELY, by a per-design search, and reported
-//       beside these. It is never mixed into the same score as area and power,
-//       because those are at the pinned period and Fmax is not.
+//       Fmax is NOT a scored axis. It is measured once per task, on the
+//       REFERENCE ONLY, and its sole job is to set the pinned period above.
+//       Submissions are not swept. A design that could run faster than the
+//       pinned period earns nothing for it, exactly as a design handed a
+//       frequency target in practice earns nothing for exceeding it; and a
+//       per-design Fmax could not be combined with the area and power above
+//       in any case, because those come from a build at the pinned period and
+//       an Fmax comes from a different build at a different one.
 //
 //   G3. WHAT IS NOT AVAILABLE TO OPTIMISE.
 //

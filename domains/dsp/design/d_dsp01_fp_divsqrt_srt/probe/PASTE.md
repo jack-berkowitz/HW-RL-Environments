@@ -228,9 +228,14 @@ is normative.
 //           other on latency. The number is reported so that an area difference
 //           between them is read as the trade it is.
 //
-//       Fmax is measured SEPARATELY, by a per-design search, and reported
-//       beside these. It is never mixed into the same score as area and power,
-//       because those are at the pinned period and Fmax is not.
+//       Fmax is NOT a scored axis. It is measured once per task, on the
+//       REFERENCE ONLY, and its sole job is to set the pinned period above.
+//       Submissions are not swept. A design that could run faster than the
+//       pinned period earns nothing for it, exactly as a design handed a
+//       frequency target in practice earns nothing for exceeding it; and a
+//       per-design Fmax could not be combined with the area and power above
+//       in any case, because those come from a build at the pinned period and
+//       an Fmax comes from a different build at a different one.
 //
 //   G3. WHAT IS NOT AVAILABLE TO OPTIMISE.
 //
