@@ -109,26 +109,26 @@ These are selected on failure modes frontier models actually hit:
 
 | id | module | why it's hard | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
-| `d_ca01` | `nonblocking_dcache` | Full hit-under-miss and miss-under-miss: MSHR allocation, secondary merge, fill/replay ordering, store merging, forward progress under saturating traffic. Deadlock freedom is the real requirement. | basejump `bsg_cache_non_blocking` | A | not started |
+| `d_ca01` | `nonblocking_dcache` | Full hit-under-miss and miss-under-miss: MSHR allocation, secondary merge, fill/replay ordering, store merging, forward progress under saturating traffic. Deadlock freedom is the real requirement. | basejump `bsg_cache_non_blocking` | A | **BUILT, NOT SCOREABLE.** Reference 16/16; mutants BUILT; conformant BUILT with 2 surviving. Second source `BUILT_NOT_PASSING` after 3 of 3 budgeted iterations, which blocks solicitation under rule 5. |
 | `d_ca02` | `speculative_lsq` | Speculative load issue with memory-order-violation detection and replay. The violation detector only fails under specific store/load interleavings. | CVA6 `load_store_unit` subsystem | A | not started |
-| `d_ca03` | `sv39_mmu` | Sv39 MMU: three-level page-table walk, 16-entry instruction and data TLBs, ASID and global pages, superpages with misalignment faults, permission and A/D checks, fault-cause generation and priority — **and physical memory protection, which is in the walk path rather than alongside it**: `cva6_ptw.sv:250` instantiates `pmp` directly, so with no PMP region configured a U-mode walk is denied and reports cause 5 instead of translating. A spec omitting it describes a different module. | CVA6 `cva6_mmu` (`cva6_ptw` + `cva6_tlb` + `pmp`) | A | **BUILT + SCOREABLE.** Ships `sv39_mmu`. Reference PASS 175/175; second source PASS 175/175, written against the spec alone and 1.68x faster (899 cycles against 1,513); 6 negative controls hold their verdicts. Two scored axes reported separately, correctness and total cycles. task_text_hash `360afdc7295d5fd8`. PPA not yet run. |
-| `d_ca04` | `async_fifo_cdc` | **Two-clock.** Gray pointers, synchronizer depth, full/empty with no false assertion at any clock ratio, reset sequencing across domains. | PULP `common_cells/cdc_fifo_gray.sv` | A | **BUILT + AUDITED** |
+| `d_ca03` | `sv39_mmu` | Sv39 MMU: three-level page-table walk, 16-entry instruction and data TLBs, ASID and global pages, superpages with misalignment faults, permission and A/D checks, fault-cause generation and priority — **and physical memory protection, which is in the walk path rather than alongside it**: `cva6_ptw.sv:250` instantiates `pmp` directly, so with no PMP region configured a U-mode walk is denied and reports cause 5 instead of translating. A spec omitting it describes a different module. | CVA6 `cva6_mmu` (`cva6_ptw` + `cva6_tlb` + `pmp`) | A | **BUILT + SCOREABLE.** Ships `sv39_mmu`. Reference PASS 175/175; second source PASS 175/175, written against the spec alone and 1.68x faster (899 cycles against 1,513); 6 negative controls hold their verdicts. Two scored axes reported separately, correctness and total cycles. PPA not yet run. |
+| `d_ca04` | `async_fifo_cdc` | **Two-clock.** Gray pointers, synchronizer depth, full/empty with no false assertion at any clock ratio, reset sequencing across domains. | PULP `common_cells/cdc_fifo_gray.sv` | A | **BUILT + AUDITED.** Ships `async_fifo_cdc`, two-clock. 18-configuration correctness sweep against reference and second source; scored point pinned at DATA_W=32 LOG_DEPTH=3 SYNC_STAGES=2; reference 20,101 µm² at 2.625 ns against candidate 14,685 µm² at 4.5 ns, ratio 1.369. |
 | `d_ca05` | `miss_handler_arb` | Multi-requester miss handler: arbitration among cache controllers, AMO handling, refill sequencing, no requester starvation. | CVA6 `miss_handler` / `std_nbdcache` | A | not started |
 
 ## Networking (4)
 
 | id | module | why it's hard | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
-| `d_nw01` | `axi4_xbar` | Full AXI4 crossbar: outstanding-ID tracking, no per-ID response reordering, deadlock freedom under all-to-all traffic, QoS arbitration. Correctness is a liveness property. | PULP `axi/src/axi_xbar.sv` | A | **BUILT + AUDITED** |
+| `d_nw01` | `axi4_xbar` | Full AXI4 crossbar: outstanding-ID tracking, no per-ID response reordering, deadlock freedom under all-to-all traffic, QoS arbitration. Correctness is a liveness property. | PULP `axi/src/axi_xbar.sv` | A | **BUILT + AUDITED.** Ships `axi4_xbar`. Second source 16/16 on the tightened spec. PPA 146,818 µm² at 20 ns is marked `HISTORICAL` and `is_baseline: false` in its own task.yaml — at 20 ns the reference closes with +7.831 ns slack, so the clock never bound. Fmax sweep `PENDING`. |
 | `d_nw02` | `vc_router_alloc` | Separable VC allocation plus switch allocation. Allocator design is research-adjacent and the naive answer starves under load. | basejump `bsg_wormhole_router` + `bsg_router_crossbar_o_by_i` | A | not started |
-| `d_nw03` | `axis_switch_oq` | Output-queued stream switch: per-output scheduling, frame atomicity, no head-of-line blocking across inputs. | Forencich `verilog-axis/rtl/axis_switch.v` | A | not started |
+| `d_nw03` | `axis_switch_oq` | Output-queued stream switch: per-output scheduling, frame atomicity, no head-of-line blocking across inputs. | Forencich `verilog-axis/rtl/axis_switch.v` | A | **BUILT.** Reference 8/8. Second source PROBE_COMPLETE 8/8 with 0 adjudication rounds, independent on three named axes: store-and-forward against the anchor's cut-through, oldest-first against round-robin, ready gated on valid where the anchor does not. Negative controls `nc_a_reset_polarity` 0/8 and `nc_b_outputs_serialised` 6/8, isolated. Area 18,410.16 µm². |
 | `d_nw04` | `tcdm_log_interconnect` | Many-master/many-bank interconnect: single-cycle bank conflict resolution at width, fairness under hotspotting. | PULP `hci` | A | not started |
 
 ## AI Acceleration (4)
 
 | id | module | why it's hard | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
-| `d_ai01` | `fp16_gemm_array` | **8×8** chain of binary16 fused multiply-adds with a contractual operand skew, five IEEE rounding modes, subnormals at both ends, and mode-dependent delivered values at the range boundaries. | PULP `redmule` (`redmule_engine`) | A | **BUILT.** Ships `fp16_gemm_array` at HEIGHT=WIDTH=8. Reference PASS at both H=4 and H=8, 3400/3400 cycles each; 7 negative controls; second source PRESENT with one open residual. task_text_hash `86b7d95729381055`. PPA absent. |
+| `d_ai01` | `fp16_gemm_array` | **8×8** chain of binary16 fused multiply-adds with a contractual operand skew, five IEEE rounding modes, subnormals at both ends, and mode-dependent delivered values at the range boundaries. | PULP `redmule` (`redmule_engine`) | A | **BUILT.** Ships `fp16_gemm_array` at HEIGHT=WIDTH=8. Reference PASS at both H=4 and H=8, 3400/3400 cycles each; 7 negative controls; second source PRESENT with one open residual. PPA absent. |
 | `d_ai02` | `gemm_tiler` | Full GEMM tiling control: loop bounds, edge tiles, accumulator reuse, double-buffered operand fetch overlapping compute. | NVDLA CACC/CDMA control | A | not started |
 | `d_ai03` | `dma_2d_chained` | 2D/3D strided DMA: descriptor chaining, unaligned source and destination, mid-transfer reconfiguration, completion ordering. | PULP `idma` | A | not started |
 | `d_ai04` | `sdp_requant_pipeline` | Accumulate → bias → scale → requant → clamp at full rate: per-channel parameters, saturation boundaries, no bubble. | NVDLA SDP | A | not started |
@@ -138,8 +138,8 @@ These are selected on failure modes frontier models actually hit:
 | id | module | why it's hard | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
 | `d_dsp01` | `fp_divsqrt_srt` | Radix-4 SRT divide/sqrt with on-the-fly quotient conversion, all IEEE rounding modes, subnormals, fixed initiation interval. Bit-exactness across the corner space is brutal. | PULP `fpu_div_sqrt_mvp` + `cvfpu` | B | not started |
-| `d_dsp02` | `fp32_fma_ii1` | fp32 FMA at II=1: five rounding modes, subnormals handled in-pipeline rather than via a slow path, correct tininess-after-rounding. | PULP `cvfpu/fpnew_fma.sv` | **A** | **SCOREABLE**: sim_flags, configs registered, 6 mutants killed through the scored path, second source 4290/4290; PPA in progress |
-| `d_dsp03` | `multifmt_slice` | Format-parametric datapath sharing hardware across fp32/fp16/bf16 with correct per-format rounding and exception flags. Resource sharing is the difficulty. | PULP `cvfpu/fpnew_opgroup_multifmt_slice.sv` | B | not started |
+| `d_dsp02` | `fp32_fma_ii1` | fp32 FMA at II=1: five rounding modes, subnormals handled in-pipeline rather than via a slow path, correct tininess-after-rounding. | PULP `cvfpu/fpnew_fma.sv` | **A** | **SCOREABLE**: sim_flags, configs registered, 6 mutants killed through the scored path. PPA **MEASURED** at the scored configuration, fmax 78.05 MHz / 12.8125 ns, converged, bracket [12.5, 12.8125]. Second source 4290/4290 **qualified**: `OPEN_DEFECT_second_source_ftz.md` is filed and unfixed. Candidate set was solicited against a superseded question. |
+| `d_dsp03` | `fp_multifmt_fma` | Format-parametric fused multiply-add sharing hardware across three formats with correct per-format rounding and exception flags, packed SIMD. The contract is narrower than the anchor: FMA only. Resource sharing is the difficulty. | PULP `cvfpu/fpnew_opgroup_multifmt_slice.sv` | **A** | **BUILT.** Reference 2/2 (WIDTH=32 and 64), 14230/14230 vectors bit-exact on results and flags; second source PROBE_COMPLETE 2/2 in 2 adjudication rounds. |
 
 ---
 
@@ -149,8 +149,15 @@ These are selected on failure modes frontier models actually hit:
 > below was checked against what is committed. Nine said "not started" while
 > being built, scoreable and carrying a reference ceiling; `v_dsp01` said "not
 > started" while being rejected; `v_ca06` was missing from the table entirely.
-> All corrected, each built row now naming the module it actually ships and its
-> `task_text_hash`.
+> All corrected, each built row now naming the module it actually ships.
+>
+> **Rows do not carry a `task_text_hash`.** They did, and the hashes rotted
+> silently: a row states a hash, the spec or prompt then changes, and the row goes
+> on asserting a question that no longer exists with nothing to detect it. The
+> hash is computable on demand from the task directory —
+> `python3 scripts/task_text_hash.py <task-dir>` — so the catalog is the wrong
+> home for a value that is derived, cheap to recompute, and load-bearing when
+> wrong. Run records still carry it, which is where it does its job.
 >
 > The **design rows above were NOT audited by this pass** and at least two are
 > known stale — `d_ca03` and `d_ai01` are both built and committed while their
@@ -167,18 +174,18 @@ Anchors disjoint from every design task above.
 |---|---|---|---|---|---|
 | `v_ca01` | `issue_stage` | Full issue: scoreboard, operand read, WAW/RAW tracking, flush and precise recovery. Deep state, rare interleavings. | CVA6 `issue_stage` + `scoreboard` | A | not started |
 | `v_ca02` | `cache_ctrl` | Per-port cache controller: miss sequencing, AMO, replay, interaction with the shared miss handler. | CVA6 `cache_ctrl` | A | not started |
-| `v_ca03` | `axi_iw_converter` | ID-width conversion: table pressure, stall when no free ID, per-ID ordering preserved across the conversion. | PULP `axi/src/axi_iw_converter.sv` | A | **BUILT + SCOREABLE.** Ships `id_width_conv` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `a04f965ad7552b22`. |
-| `v_ca04` | `stream_xbar` | Stream crossbar: fairness, no data loss, deadlock freedom under all-to-all. | PULP `common_cells/stream_xbar.sv` | A | **BUILT + SCOREABLE.** Ships `route_xbar` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `f4ed051311687cf7`. |
-| `v_ca05` | `id_queue` | Out-of-order occupancy by ID, per-ID FIFO ordering, exists-lookup, full/empty edges. | PULP `common_cells/id_queue.sv` | A | **BUILT + SCOREABLE.** Ships `tag_tracker` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `fd2ae1ad9bf3719d`. |
+| `v_ca03` | `axi_iw_converter` | ID-width conversion: table pressure, stall when no free ID, per-ID ordering preserved across the conversion. | PULP `axi/src/axi_iw_converter.sv` | A | **BUILT + SCOREABLE.** Ships `id_width_conv` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
+| `v_ca04` | `stream_xbar` | Stream crossbar: fairness, no data loss, deadlock freedom under all-to-all. | PULP `common_cells/stream_xbar.sv` | A | **BUILT + SCOREABLE.** Ships `route_xbar` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
+| `v_ca05` | `id_queue` | Out-of-order occupancy by ID, per-ID FIFO ordering, exists-lookup, full/empty edges. | PULP `common_cells/id_queue.sv` | A | **BUILT + SCOREABLE.** Ships `tag_tracker` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
 | `v_ca06` | `axi_dw_downsizer` | Data-width downsizing: one wide beat becomes several narrow ones, so the observable is a DERIVED quantity -- the byte stream preserved across a re-segmentation -- rather than a port value. Length follows bytes covered, not beat count, and differs from the naive formula only when unaligned or when the range does not fill one downstream block. Two burst types are refused and the refusal emits NOTHING downstream. | PULP `axi/src/axi_dw_downsizer.sv` | A | **BUILT, docs pending.** Ships `dw_downsizer` (port map + spec only). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22. task.yaml, witness runner and mutants/README.md outstanding; not yet scoreable. |
 
 ## Networking (4)
 
 | id | module | why it's hard to verify | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
-| `v_nw01` | `eth_stack` | ARP plus the surrounding RX/TX path shipped whole: request/reply, cache insert and evict, timeout and retry, gratuitous ARP, broadcast. | Forencich `arp*` + `axis_gmii_rx` | A | **BUILT + SCOREABLE.** Ships `arp_engine` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `63dbe82fceded681`. |
-| `v_nw02` | `axi_atop_filter` | Atomic-op filtering: synthesised B/R responses, no protocol violation on filtered ATOPs. | PULP `axi/src/axi_atop_filter.sv` | A | **BUILT + SCOREABLE.** Ships `atop_filter` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `90f7b34382e396f4`. |
-| `v_nw03` | `axis_arb_mux` | Frame atomicity, arbitration behaviour under backlog — **see the correction below**, `tlast` under backpressure. | Forencich `verilog-axis/rtl/axis_arb_mux.v` | A | **BUILT + SCOREABLE.** Ships `frame_arb_mux` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `839999302366fa24`. |
+| `v_nw01` | `eth_stack` | ARP plus the surrounding RX/TX path shipped whole: request/reply, cache insert and evict, timeout and retry, gratuitous ARP, broadcast. | Forencich `arp*` + `axis_gmii_rx` | A | **BUILT + SCOREABLE.** Ships `arp_engine` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
+| `v_nw02` | `axi_atop_filter` | Atomic-op filtering: synthesised B/R responses, no protocol violation on filtered ATOPs. | PULP `axi/src/axi_atop_filter.sv` | A | **BUILT + SCOREABLE.** Ships `atop_filter` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
+| `v_nw03` | `axis_arb_mux` | Frame atomicity, arbitration behaviour under backlog — **see the correction below**, `tlast` under backpressure. | Forencich `verilog-axis/rtl/axis_arb_mux.v` | A | **BUILT + SCOREABLE.** Ships `frame_arb_mux` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
 
 > **CORRECTION — the fairness claim was measured false.** This row read
 > *"arbitration fairness over long horizons"*. At the anchor's DEFAULT
@@ -189,14 +196,14 @@ Anchors disjoint from every design task above.
 > that in its scored configuration (rule 18) or the property it exists to
 > test is absent from the configuration it is tested in.
 
-| `v_nw04` | `ptp_clock` | Time-base correctness: fractional-ns accumulation, drift, adjustment without discontinuity. | Forencich `verilog-ethernet/rtl/ptp_clock.v` | A | **BUILT + SCOREABLE.** Ships `ptp_time_base` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `b963a88053bae3da`. |
+| `v_nw04` | `ptp_clock` | Time-base correctness: fractional-ns accumulation, drift, adjustment without discontinuity. | Forencich `verilog-ethernet/rtl/ptp_clock.v` | A | **BUILT + SCOREABLE.** Ships `ptp_time_base` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
 
 ## AI Acceleration (4)
 
 | id | module | why it's hard to verify | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
 | `v_ai01` | `idma_backend` | Descriptor-driven DMA: unaligned src/dst, 2D strides, mid-transfer backpressure, completion ordering. **Blocked on the concrete-type wrapper** — see open items. | PULP `idma` (generated backend) | A | not started |
-| `v_ai02` | `hwpe_stream_fabric` | Streamer split/merge/fifo: no data loss across width changes, valid/ready never deadlocks. | PULP `hwpe-stream` | A | **BUILT + SCOREABLE.** Ships `stream_realign` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `0453b447cb8b1a5c`. |
+| `v_ai02` | `hwpe_stream_fabric` | Streamer split/merge/fifo: no data loss across width changes, valid/ready never deadlocks. | PULP `hwpe-stream` | A | **BUILT + SCOREABLE.** Ships `stream_realign` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
 | `v_ai03` | `redmule_ctrl` | GEMM control: loop bounds, edge tiles, accumulator reuse across tiles. Disjoint from `d_ai01`, which uses the datapath. | PULP `redmule` control | A | not started |
 | `v_ai04` | `binconv_array` | Mixed/binary-precision convolution array: precision-mode switching, accumulation correctness per mode. | PULP `ne16` | A | not started |
 
@@ -205,7 +212,7 @@ Anchors disjoint from every design task above.
 | id | module | why it's hard to verify | anchor (vendored) | Class | status |
 |---|---|---|---|---|---|
 | `v_dsp01` | `fp_cast_multi` | Saturation vs wraparound, RTZ vs RNE, out-of-range, NaN→int, every format pair. | PULP `cvfpu/fpnew_cast_multi.sv` | A | **REJECTED**, see `v_dsp01_fp_cast_multi/REJECTED.md`: the anchor carries two flag defects, so a conformant testbench cannot pass it and a passing one is wrong. Not scoreable. |
-| `v_dsp02` | `fp_noncomp` | Comparisons, min/max, classification, sign injection: NaN payloads, signed zero, quiet vs signalling. Enormous corner space, trivial-looking module. | PULP `cvfpu/fpnew_noncomp.sv` | A | **BUILT + SCOREABLE.** Ships `fp_noncomp` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. task_text_hash `eacc3c043e2a5767`. |
+| `v_dsp02` | `fp_noncomp` | Comparisons, min/max, classification, sign injection: NaN payloads, signed zero, quiet vs signalling. Enormous corner space, trivial-looking module. | PULP `cvfpu/fpnew_noncomp.sv` | A | **BUILT + SCOREABLE.** Ships `fp_noncomp` (port map + spec only, no RTL). 10 guarded mutants, reference ceiling 10/10, step 5c 22/22, rule-24 reproduction in `mutants/RULE24.md`. |
 | `v_dsp03` | `cdc_fifo_gray` | **Two-clock.** Gray pointer correctness, no loss or duplication at arbitrary clock ratios, reset skew. Verification counterpart to `d_ca04`, and permitted because a design task's reference is never shipped. | PULP `common_cells/cdc_fifo_gray.sv` | A | not started |
 
 > `v_dsp03` is the one deliberate near-collision with `d_ca04`. It is acceptable

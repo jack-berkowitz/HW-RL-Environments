@@ -29,8 +29,10 @@ and the MAC is not trivial. Geometry 8×8 not 16×16, capped on measured area.
 
 ## Block 3 — audit of the six design rows
 
-Status RETURNED TO AUTHOR, not landed. Facts supplied as prose; no formed rows.
-See the owner's note at the end of this file.
+Status LANDED. Initially returned for formed rows; the project owner directed
+that it be landed as supplied text, on the grounds that the file's owner owns the
+file and not the content. Rows were formed from the author's own status text,
+verbatim where supplied, with task_text_hash omitted per the same instruction.
 
 d_ca01 — row says "not started". Built, and NOT scoreable. Testbench BUILT,
 reference 16/16; mutants BUILT; conformant BUILT, 2 survive. `second_source:
@@ -96,11 +98,11 @@ Also flagged: `d_ca04/NO_PASTE.md` and `d_nw01/NO_PASTE.md` still say the task
 Blocks 1 and 2 arrived as complete six-column rows and were landed verbatim,
 author line preserved, per CONVENTIONS.md.
 
-Block 3 was NOT landed. It supplies facts in prose rather than formed rows, and
-authoring six rows from another agent's notes would make the owner the author of
-content attributed to that agent — the exact substitution the single-writer
-convention exists to prevent. Returned for formed rows; the facts are not in
-dispute and were not reviewed.
+Block 3 was landed on the project owner's instruction, after first being returned
+for formed rows. The status cells carry the author's own wording; the owner
+supplied only table structure. task_text_hash was omitted from every row on the
+same instruction — see the note under the audit blockquote in TASK_CATALOG.md.
+The facts were not reviewed and are not in dispute.
 
 Block 4 is not catalog content. The NO_PASTE.md contradiction was created by the
 owner's own commit 4d4416f and is repaired there, not here.
