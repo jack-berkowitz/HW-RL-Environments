@@ -505,8 +505,20 @@ def main():
             sim, ppa = v["sim"], v["ppa"]
             notes = []
 
-            is_ref = "_ref" in sub or sub.startswith("async_fifo") or sub.startswith("axi4_xbar") or sub.startswith("fp32_fma")
-            name = f"**reference**" if is_ref else f"`{sub[:-3]}`"
+            # THE SECOND SOURCE IS NOT THE REFERENCE. `"_ref" in sub` matches
+            # `<top>_alt_ref.sv` too, so the alternative implementation -- a
+            # deliberately different legal design, carried to prove the
+            # testbench is not fitted to the reference's incidental choices --
+            # rendered as a second row named **reference**, with different
+            # metrics and no PPA. Two rows with one name and no way to tell
+            # which is the anchor is worse than either row alone.
+            is_alt_ref = "_alt_ref" in sub
+            is_ref = (not is_alt_ref) and (
+                "_ref" in sub or sub.startswith("async_fifo")
+                or sub.startswith("axi4_xbar") or sub.startswith("fp32_fma"))
+            name = ("**reference**" if is_ref
+                    else "**second source**" if is_alt_ref
+                    else f"`{sub[:-3]}`")
 
             cf = CORRECTNESS_FAILURES.get(key)
             if cf and not BUILD_FAILURES.get(key):
