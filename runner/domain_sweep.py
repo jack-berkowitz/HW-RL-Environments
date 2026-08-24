@@ -1,4 +1,4 @@
-"""Generate and grade current domain tasks through direct provider APIs.
+"""Generate and grade current domain tasks through isolated model transports.
 
 Examples::
 
@@ -6,9 +6,12 @@ Examples::
     python3 -m runner.domain_sweep --tasks d_ca01 --models gpt-5.6-luna --dry-run
     python3 -m runner.domain_sweep --tasks d_ca01 --models gpt-5.6-luna \
         --max-spend 1 --yes
+    python3 -m runner.domain_sweep --transport subscription \
+        --tasks d_ca01 --models gpt-5.6-luna --smoke
 
-The canonical ``probe/PASTE.md`` is the complete request. Nothing else from the
-repository or from a user account is sent to the model.
+The canonical ``probe/PASTE.md`` is the only task/user content. Direct API runs
+add no application context; subscription runs disable saved and project context
+but retain any provider runtime context documented in their raw provenance.
 """
 
 from __future__ import annotations
@@ -33,6 +36,10 @@ from .domain_tasks import (
     REPO_ROOT, DomainTask, TaskDiscoveryError, discover_tasks, select_tasks,
 )
 from .extract import extract_module
+from .subscription_providers import (
+    complete as subscription_complete,
+    ensure_subscription_auth,
+)
 
 ARTIFACT_ROOT = REPO_ROOT / "results" / "generations"
 
@@ -73,10 +80,12 @@ class Job:
     task: DomainTask
     model: DirectModel
     sample: int
+    transport: str = "api"
 
     @property
     def key(self) -> str:
-        return f"{self.task.task_id}:{self.model.provider}:{self.model.model_id}:{self.sample}"
+        base = f"{self.task.task_id}:{self.model.provider}:{self.model.model_id}:{self.sample}"
+        return base if self.transport == "api" else f"{base}:{self.transport}"
 
 
 class SpendGuard:
@@ -123,8 +132,9 @@ def _configuration(
     max_output_tokens: int | None,
     smoke: bool,
     ppa: bool,
+    transport: str = "api",
 ) -> dict:
-    return {
+    configuration = {
         "tasks": [{
             "id": task.task_id,
             "kind": task.kind,
@@ -146,6 +156,10 @@ def _configuration(
         "smoke": smoke,
         "ppa": ppa,
     }
+    if transport != "api":
+        configuration["transport"] = transport
+        configuration["output_token_limit_enforced"] = False
+    return configuration
 
 
 def _configuration_hash(configuration: dict) -> str:
@@ -154,12 +168,14 @@ def _configuration_hash(configuration: dict) -> str:
 
 
 def _candidate_path(run_id: str, job: Job) -> Path:
-    name = f"{run_id}__{_safe_label(job.model.label)}__s{job.sample:02d}.sv"
+    transport = "" if job.transport == "api" else f"__{_safe_label(job.transport)}"
+    name = f"{run_id}{transport}__{_safe_label(job.model.label)}__s{job.sample:02d}.sv"
     return REPO_ROOT / "candidates" / job.task.task_id / name
 
 
 def _raw_path(run_dir: Path, job: Job) -> Path:
-    name = f"{_safe_label(job.model.provider)}__{_safe_label(job.model.model_id)}__s{job.sample:02d}.json"
+    transport = "" if job.transport == "api" else f"{_safe_label(job.transport)}__"
+    name = f"{transport}{_safe_label(job.model.provider)}__{_safe_label(job.model.model_id)}__s{job.sample:02d}.json"
     return run_dir / "raw" / job.task.task_id / name
 
 
@@ -232,6 +248,18 @@ def _record_generation(run_dir: Path, job: Job, generation: Generation) -> Path:
         },
         "generation": generation.to_dict(include_raw=True),
     }
+    if job.transport != "api":
+        record["request"]["transport"] = job.transport
+        record["request"]["isolation"] = {
+            "user_messages": 1,
+            "user_prompt": "canonical probe/PASTE.md via stdin",
+            "fresh_process": True,
+            "empty_temporary_directory": True,
+            "session_persistence": False,
+            "account_or_project_customizations": False,
+            "tools": False if job.model.provider == "anthropic" else "Codex built-ins",
+            "system": "empty replacement" if job.model.provider == "anthropic" else "Codex built-in",
+        }
     _atomic_json(path, record)
     return path
 
@@ -257,11 +285,12 @@ def execute(
     smoke: bool,
     ppa: bool,
     run_id: str | None = None,
+    transport: str = "api",
 ) -> tuple[str, dict]:
     run_id = run_id or _run_id()
     run_dir = ARTIFACT_ROOT / run_id
     configuration = _configuration(
-        tasks, models, samples, max_output_tokens, smoke, ppa
+        tasks, models, samples, max_output_tokens, smoke, ppa, transport
     )
     config_hash = _configuration_hash(configuration)
     manifest_path = run_dir / "manifest.json"
@@ -284,7 +313,7 @@ def execute(
         _atomic_json(manifest_path, manifest)
 
     all_jobs = [
-        Job(task, model, sample)
+        Job(task, model, sample, transport)
         for task in tasks for model in models for sample in range(1, samples + 1)
     ]
     jobs = [job for job in all_jobs if manifest["jobs"].get(job.key, {}).get("terminal") is not True]
@@ -298,7 +327,8 @@ def execute(
     def generate(job: Job) -> tuple[Job, Generation | None]:
         if not guard.can_start():
             return job, None
-        generation = complete(
+        generate_one = complete if transport == "api" else subscription_complete
+        generation = generate_one(
             job.task.prompt_text,
             job.model,
             max_output_tokens=max_output_tokens,
@@ -327,7 +357,10 @@ def execute(
                     "finish_reason": generation.finish_reason,
                 }
                 if generation.error:
-                    entry.update(status="api_error", error=generation.error, terminal=False)
+                    error_status = "api_error" if transport == "api" else "transport_error"
+                    entry.update(
+                        status=error_status, error=generation.error, terminal=False
+                    )
                 elif generation.truncated:
                     entry.update(status="truncated", terminal=False)
                 else:
@@ -375,6 +408,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--list-models", action="store_true")
     parser.add_argument("--tasks", default="all", help="comma-separated task IDs or all")
     parser.add_argument("--models", default="", help="labels or provider:model-id values")
+    parser.add_argument(
+        "--transport", choices=("api", "subscription"), default="api",
+        help="direct paid API (default) or included Codex/Claude Code quota",
+    )
     parser.add_argument("-k", "--samples", type=int, default=1)
     parser.add_argument("--api-workers", type=int, default=1)
     parser.add_argument("--max-output-tokens", type=int, default=None)
@@ -401,6 +438,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--max-spend must be positive")
     if args.max_spend is not None and args.no_spend_limit:
         parser.error("choose --max-spend or --no-spend-limit, not both")
+    if args.transport == "subscription" and (args.max_spend or args.no_spend_limit):
+        parser.error("subscription runs use included quota; omit API spend flags")
 
     try:
         available = discover_tasks()
@@ -410,20 +449,31 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(str(exc))
 
     jobs = [
-        Job(task, model, sample)
+        Job(task, model, sample, args.transport)
         for task in tasks for model in models for sample in range(1, args.samples + 1)
     ]
-    estimate = estimate_jobs(jobs, args.max_output_tokens)
+    estimate = estimate_jobs(jobs, args.max_output_tokens) if args.transport == "api" else 0.0
     print(
         f"{len(tasks)} tasks x {len(models)} models x k={args.samples} "
         f"= {len(jobs)} requests"
     )
+    print(f"  transport: {args.transport}")
     print(f"  design: {sum(task.kind == 'design' for task in tasks)}")
     print(f"  verification: {sum(task.kind == 'verification' for task in tasks)}")
     for model in models:
-        ceiling = args.max_output_tokens or model.max_output_tokens
-        print(f"  {model.label:18s} {model.provider}:{model.model_id} max_output={ceiling}")
-    if estimate is None:
+        if args.transport == "subscription":
+            output_limit = "provider-managed"
+        else:
+            output_limit = str(args.max_output_tokens or model.max_output_tokens)
+        print(
+            f"  {model.label:18s} {model.provider}:{model.model_id} "
+            f"max_output={output_limit}"
+        )
+    if args.transport == "subscription":
+        print("  incremental API cost: $0 (uses included subscription quota)")
+        if args.max_output_tokens is not None:
+            print("  note: subscription CLIs do not expose a hard output-token cap")
+    elif estimate is None:
         print("  typical-cost estimate: unavailable for an unpriced explicit model ID")
     else:
         print(f"  typical-cost estimate: ${estimate:.2f} (assumes up to 8k output tokens/request)")
@@ -432,17 +482,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return 0
 
-    if args.max_spend is None and not args.no_spend_limit:
+    if args.transport == "api" and args.max_spend is None and not args.no_spend_limit:
         parser.error("paid runs require --max-spend USD (or explicit --no-spend-limit)")
-    if args.max_spend is not None and estimate is None:
+    if args.transport == "api" and args.max_spend is not None and estimate is None:
         parser.error("--max-spend requires configured prices; use a listed model label")
     try:
         for provider in sorted({model.provider for model in models}):
-            api_key(provider)
+            if args.transport == "api":
+                api_key(provider)
+            else:
+                ensure_subscription_auth(provider)
     except ProviderError as exc:
         parser.error(str(exc))
 
-    if not args.yes:
+    if args.transport == "api" and not args.yes:
         if not sys.stdin.isatty():
             parser.error("paid non-interactive runs require --yes")
         answer = input("Send these paid, isolated API requests? [y/N] ").strip().lower()
@@ -461,13 +514,17 @@ def main(argv: list[str] | None = None) -> int:
             smoke=args.smoke,
             ppa=args.ppa,
             run_id=args.resume,
+            transport=args.transport,
         )
     except (ProviderError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(f"\nrun: {run_id}")
     print(f"manifest: {ARTIFACT_ROOT / run_id / 'manifest.json'}")
-    print(f"estimated API cost: ${manifest.get('estimated_cost_usd', 0.0):.4f}")
+    if args.transport == "api":
+        print(f"estimated API cost: ${manifest.get('estimated_cost_usd', 0.0):.4f}")
+    else:
+        print("incremental API cost: $0 (subscription quota)")
     return 0
 
 
