@@ -235,6 +235,77 @@
 //   R2. Reset discards all in-flight transactions. After release the crossbar
 //       starts clean; no response from before reset may be emitted.
 //
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, at every legal NUM_MST / NUM_SLV / MAX_TRANS
+//          combination. Checked against D1-D3, O1-O4, H1-H3, C1-C3, L1-L3 and
+//          R1-R2. There is no partial credit: a crossbar that deadlocks is not
+//          a small design, it is a broken one.
+//
+//       2. THE GATE. A submission that fails correctness at ANY legal
+//          combination, or that fails to build, produces NO PPA NUMBER AT ALL.
+//          It is recorded as a failure and scores zero on every PPA axis --
+//          not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored configuration and nowhere else.
+//          At the time of writing that period is 9.0 ns on sky130hd. The number
+//          is the harness's to set and may be re-pinned; what does not change is
+//          that it is THE SAME for every submission, so all designs are compared
+//          at one frequency rather than at each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * TIMING SLACK against the pinned period. A build that misses timing
+//           yields no comparable area or power figure -- an area number from a
+//           build that did not close is not a smaller design, it is an
+//           unfinished one, and it is withheld rather than reported.
+//         * CONCURRENCY, as outstanding transactions carried and as bursts
+//           completed between disjoint pairs. These are CAPABILITIES: more is
+//           better, they cost area, and they are reported both raw and per unit
+//           of area so a design is not rewarded merely for carrying less.
+//
+//       Fmax is measured SEPARATELY, by a per-design search, and reported
+//       beside these. It is never mixed into the same score as area and power,
+//       because those are at the pinned period and Fmax is not.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. The levers most designs reach for
+//       first are already spent by the contract above.
+//
+//         * OUTSTANDING CAPACITY HAS A FLOOR. C1 requires each master port to
+//           carry MAX_TRANS transactions. A design that accepts one at a time
+//           is smaller and it FAILS, so the area is not bought.
+//         * RESPONSE BUFFERING HAS A CEILING. C3 bounds a design to at most
+//           4 R beats and 4 W beats per master port. Concurrency bought by
+//           buffering whole bursts is not available: a 256-entry response
+//           buffer is wrong, not merely expensive. This clause is why an
+//           earlier submission measured 2,086,235 um2 against a reference of
+//           77,852 -- it was storing what the contract never asked it to store.
+//         * FORWARD PROGRESS IS NOT NEGOTIABLE. L1 and L2 forbid deadlock and
+//           starvation under sustained all-to-all traffic, and L3 requires both
+//           to hold under response backpressure.
+//         * ORDERING IS PINNED WHERE AXI PINS IT. O1 and O4 are not choices.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. The contract fixes WHAT is delivered and WHEN; it says nothing
+//       about HOW:
+//
+//         * how the switch fabric is built -- full crossbar, shared bus, or
+//           anything between, subject to C2's disjoint-pair concurrency;
+//         * how outstanding transactions are tracked, given C1's floor and C3's
+//           ceiling -- the tracking structure is a real choice with real cost;
+//         * how arbitration is done, subject only to L2;
+//         * where registers sit relative to the LATENCY_MODE cuts;
+//         * how much logic is shared across master and slave ports.
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
 // =============================================================================
 
 module axi4_xbar

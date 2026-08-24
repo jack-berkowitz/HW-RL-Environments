@@ -372,6 +372,84 @@ exact port list below. No package, no include, nothing outside the file.
 //       implementation of this contract hit exactly this and was rejected by the
 //       frontend while passing every simulation config -- so it would have
 //       scored full correctness and produced no PPA number at all.
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, bit-exact, in every format and at both vector settings.
+//          Every delivered lane and every flag is compared against the
+//          reference. There is no partial credit and no tolerance: a result one
+//          ulp out fails exactly as a result that is nonsense fails.
+//
+//       2. THE GATE. A submission that fails correctness in ANY format, or that
+//          fails to build, produces NO PPA NUMBER AT ALL. It is recorded as a
+//          failure and scores zero on every PPA axis -- not as a missing
+//          measurement. Note T5: a design the simulator accepts and the
+//          synthesis frontend rejects scores full correctness and no PPA.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored WIDTH and nowhere else. At the
+//          time of writing that period is 46.875 ns on sky130hd. The number is
+//          the harness's to set and may be re-pinned; what does not change is
+//          that it is THE SAME for every submission, so all designs are
+//          compared at one frequency rather than at each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * TIMING SLACK against the pinned period. A build that misses timing
+//           yields no comparable area or power figure -- an area number from a
+//           build that did not close is not a smaller design, it is an
+//           unfinished one, and it is withheld rather than reported.
+//         * THROUGHPUT, as operations completed per 1000 cycles. This is a
+//           CAPABILITY: more is better, it costs area, and it is reported both
+//           raw and per unit of area so a slower design is not rewarded merely
+//           for doing less work.
+//         * LATENCY, reported as a CHOICE. L2 leaves it free; a one-cycle unit
+//           and a ten-cycle unit are both conformant and are NOT ranked against
+//           each other on latency. The number is reported so that an area
+//           difference between them is read as the trade it is.
+//
+//       Fmax is measured SEPARATELY, by a per-design search, and reported
+//       beside these. It is never mixed into the same score as area and power,
+//       because those are at the pinned period and Fmax is not.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE.
+//
+//         * THE ARITHMETIC IS PINNED TO THE BIT by A1-A7, in all three formats,
+//           including the canonical NaN rule (A4) and the exact-zero sign rule
+//           (A6). There is no accuracy-for-area trade, and no format may be
+//           approximated.
+//         * THE SIGNIFICAND DATAPATH HAS A CEILING. A8 bounds it at four times
+//           the format's precision. "As if unbounded" describes the RESULT, not
+//           the hardware. A design that carries a full unbounded intermediate is
+//           wrong, not generous -- an earlier submission built a 448-bit
+//           datapath where 37 bits suffice, and measured accordingly.
+//         * LANE INDEPENDENCE IS PINNED by V2, and the unused-bits rule by V3.
+//           Sharing hardware across lanes is permitted; producing a lane's
+//           result from another lane's operands is not.
+//         * RESULT ORDER IS PINNED by H2. This is not a reordering unit.
+//         * THE UNROLL MUST BE MODEST (T5). A design that elaborates in
+//           simulation but explodes in the synthesis frontend produces no PPA.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. Unusually for this benchmark, BOTH latency and throughput are
+//       free here -- L2 and L3 say so -- which makes the design space wide:
+//
+//         * the algorithm itself is free (L1): how the product is formed, how
+//           the addend is aligned, how normalisation and rounding are done;
+//         * how much hardware is shared across the three formats, versus
+//           replicated per format;
+//         * how much is shared across lanes, given V1's lane counts;
+//         * pipeline depth, which is free and costs area against frequency;
+//         * whether a new operation is accepted while a previous one is in
+//           flight, and how deeply.
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
 // =============================================================================
 
 module fp_multifmt_fma #(

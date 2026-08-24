@@ -145,6 +145,78 @@
 //   64 `rd_clk` cycles, and `wr_ready` must recover within 64 `wr_clk` cycles of
 //   the read side draining.
 //
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, across every legal DATA_W / LOG_DEPTH / SYNC_STAGES
+//          combination and at arbitrary, unrelated clock ratios per C6. Checked
+//          against H1-H3, B1, C1-C6 and R1-R5. There is no partial credit: a
+//          FIFO that drops a beat is not a small design, it is a broken one.
+//
+//       2. THE GATE. A submission that fails correctness at ANY legal
+//          combination, or that fails to build, produces NO PPA NUMBER AT ALL.
+//          It is recorded as a failure and scores zero on every PPA axis --
+//          not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored configuration and nowhere else.
+//          At the time of writing that period is 3.6562 ns on sky130hd. The
+//          number is the harness's to set and may be re-pinned; what does not
+//          change is that it is THE SAME for every submission, so all designs
+//          are compared at one frequency rather than at each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * TIMING SLACK against the pinned period. A build that misses timing
+//           yields no comparable area or power figure -- an area number from a
+//           build that did not close is not a smaller design, it is an
+//           unfinished one, and it is withheld rather than reported.
+//         * CAPACITY, as beats accepted before the write side stalls. This is a
+//           CAPABILITY: more is better, it costs area, and it is reported both
+//           raw and per unit of area so a shallower design is not rewarded
+//           merely for holding less.
+//
+//       Fmax is measured SEPARATELY, by a per-design search, and reported
+//       beside these. It is never mixed into the same score as area and power,
+//       because those are at the pinned period and Fmax is not.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. The levers most designs reach for
+//       first are already spent by the contract above.
+//
+//         * DEPTH IS PINNED, NOT CHOSEN. C4 requires exactly the 2**LOG_DEPTH
+//           beats you were asked for -- a shallower FIFO is wrong, and a deeper
+//           one violates B1.
+//         * STORAGE BEYOND THE FIFO HAS A CEILING. B1 bounds a design to at
+//           most 4 beats held outside the FIFO proper. Throughput bought with
+//           extra skid buffering is not available.
+//         * THE HANDSHAKE IS PINNED. H1 forbids `wr_ready` depending
+//           combinationally on `wr_valid`. The usual latency-for-area trade at
+//           the interface is not on offer.
+//         * SYNCHRONISER DEPTH IS A PARAMETER, NOT A CHOICE. SYNC_STAGES is
+//           given. Removing a stage to shorten the crossing is not a smaller
+//           design, it is a different and wrong one.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. The contract fixes WHAT crosses and IN WHAT ORDER; it says
+//       nothing about HOW:
+//
+//         * how the pointers are encoded and compared -- Gray, one-hot, or
+//           otherwise -- and how full and empty are derived from them;
+//         * how the storage array is built and whether it is registered or
+//           inferred;
+//         * how many beats of the permitted 4 are actually held outside the
+//           FIFO, and where;
+//         * crossing latency, which is a CHOICE reported as a metric and never
+//           gated -- a design may cross faster or slower and pay for it in
+//           area.
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
 // =============================================================================
 
 module async_fifo_cdc #(

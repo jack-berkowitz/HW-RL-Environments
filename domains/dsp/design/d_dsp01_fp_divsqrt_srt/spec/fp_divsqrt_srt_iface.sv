@@ -145,6 +145,79 @@
 //       block, and the error text names neither.
 //   T3. THE MODULE MUST BE NAMED `fp_divsqrt_srt` with the exact port list.
 //   T4. ONE SELF-CONTAINED FILE.
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, bit-exact, for both divide and square root. Every
+//          delivered result and every exception flag is compared against the
+//          reference for the same operand stream. There is no partial credit
+//          and no tolerance: a result one ulp out fails exactly as a result
+//          that is nonsense fails.
+//
+//       2. THE GATE. A submission that fails correctness, or that fails to
+//          build, produces NO PPA NUMBER AT ALL. It is recorded as a failure
+//          and scores zero on every PPA axis -- not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, the same for every submission, so all designs
+//          are compared at one frequency rather than at each design's own best.
+//          The period is the harness's to set and is recorded with the run.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * TIMING SLACK against the pinned period. A build that misses timing
+//           yields no comparable area or power figure -- an area number from a
+//           build that did not close is not a smaller design, it is an
+//           unfinished one, and it is withheld rather than reported.
+//         * THROUGHPUT, as operations completed over a fixed window. This is a
+//           CAPABILITY: more is better, it costs area, and it is reported both
+//           raw and per unit of area so a slower design is not rewarded merely
+//           for doing less work.
+//         * LATENCY, reported as a CHOICE. L2 leaves it free; a short unit and
+//           a long one are both conformant and are NOT ranked against each
+//           other on latency. The number is reported so that an area difference
+//           between them is read as the trade it is.
+//
+//       Fmax is measured SEPARATELY, by a per-design search, and reported
+//       beside these. It is never mixed into the same score as area and power,
+//       because those are at the pinned period and Fmax is not.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE.
+//
+//         * THE ARITHMETIC IS PINNED TO THE BIT by A1-A5, including the
+//           canonical NaN encoding (A4) and the full set of five flags (A5).
+//           There is no accuracy-for-area trade: a unit correct to within an
+//           ulp is wrong, and the last-bit rounding is the expensive part of
+//           both operations by design.
+//         * SUBNORMALS ARE IN SCOPE, at full precision, as operands and as
+//           results (A3). Flushing them is not a permitted simplification.
+//         * RESULT ORDER IS PINNED by H2. This is not a reordering unit.
+//         * FORWARD PROGRESS IS REQUIRED by C1. A unit that stalls
+//           indefinitely on some operand pattern is wrong, not slow.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. This contract fixes the delivered value and almost nothing else,
+//       so the design space here is wide:
+//
+//         * the algorithm is free (L1) -- digit recurrence at any radix,
+//           Newton-Raphson, or anything else that lands on the same bits. This
+//           is the dominant choice and it dominates the area;
+//         * latency is free (L2) and throughput is free (L3): a design may
+//           iterate slowly in little area or unroll for rate, and both are
+//           conformant;
+//         * whether a new operation is accepted while one is in flight, and
+//           how deeply;
+//         * how much hardware is shared between the divide and sqrt paths,
+//           given both are required;
+//         * whether `in_ready_o` is combinational on `in_valid_i` (L4).
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
 // =============================================================================
 
 module fp_divsqrt_srt (

@@ -299,6 +299,84 @@
 //   R2. While `rst_n` is low, `out_valid` is 0.
 //   R3. Reset discards work in flight; no result from before reset may appear
 //       afterwards.
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, bit-exact. Every delivered result and every exception
+//          flag is compared against the reference for the same operand stream.
+//          There is no partial credit and no tolerance: a result one ulp out
+//          fails exactly as a result that is nonsense fails, and a wrong
+//          `inexact` bit fails as surely as a wrong mantissa.
+//
+//       2. THE GATE. A submission that fails correctness, or that fails to
+//          build, produces NO PPA NUMBER AT ALL. It is recorded as a failure
+//          and scores zero on every PPA axis -- not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD. At the time of writing that period is 20.25 ns
+//          on sky130hd. The number is the harness's to set and may be re-pinned;
+//          what does not change is that it is THE SAME for every submission, so
+//          all designs are compared at one frequency rather than at each
+//          design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * TIMING SLACK against the pinned period. A build that misses timing
+//           yields no comparable area or power figure -- an area number from a
+//           build that did not close is not a smaller design, it is an
+//           unfinished one, and it is withheld rather than reported.
+//
+//       Latency and initiation interval are ALSO reported, but as CONFORMANCE
+//       CHECKS rather than as axes: they have expected values and a submission
+//       either meets them or fails. See G3.
+//
+//       Fmax is measured SEPARATELY, by a per-design search, and reported
+//       beside these. It is never mixed into the same score as area and power,
+//       because those are at the pinned period and Fmax is not.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. This contract is unusually tight,
+//       and every lever a floating-point design normally trades is already
+//       spent. Read this before choosing a micro-architecture.
+//
+//         * LATENCY IS PINNED AT 3 CYCLES by S1. It is not a metric to
+//           minimise and not a budget to spend. Adding a pipeline stage to
+//           shorten the critical path CHANGES THE OBSERVABLE SCHEDULE and fails.
+//           You cannot buy frequency with depth here -- the usual trade is not
+//           on offer.
+//         * THROUGHPUT IS PINNED AT ONE RESULT PER CYCLE by C3. There is no
+//           rate to raise and none to give up. An iterative unit that takes the
+//           same area and answers every fourth cycle is wrong, not cheaper.
+//         * THE ARITHMETIC IS PINNED TO THE BIT by A1-A7, including the NaN
+//           payload rule (A4) and the underflow rule (A6), which this task pins
+//           itself because no standard settles them. There is no
+//           accuracy-for-area trade.
+//         * THE SIGNIFICAND DATAPATH HAS A CEILING. A9 bounds it at 96 bits.
+//           "As if unbounded" describes the RESULT, not the hardware; a design
+//           that carries the full unbounded intermediate is wrong, not generous.
+//         * THE HANDSHAKE IS PINNED. H1 forbids `in_ready` depending
+//           combinationally on `in_valid`, and H4 requires in-order results.
+//
+//   G4. WHAT IS ACTUALLY LEFT. The contract fixes WHAT is delivered, WHEN, and
+//       to the bit. What remains is entirely micro-architectural, and it is
+//       where the whole PPA difference comes from:
+//
+//         * how the multiplier is built -- array, Booth-encoded, compressed --
+//           and how the partial products are reduced;
+//         * how alignment, addition, normalisation and rounding are structured
+//           across the three pinned stages, and what is registered where;
+//         * how much logic is shared between the subnormal and normal paths,
+//           given A3 requires subnormals handled in the pipeline;
+//         * how the five rounding modes are implemented -- a common rounder or
+//           separate paths;
+//         * how the flag logic is derived, given A7 requires all five flags.
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
 // =============================================================================
 
 `timescale 1ns/1ps

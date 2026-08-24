@@ -342,6 +342,81 @@
 //   T4. THE SUBMISSION IS A SINGLE SELF-CONTAINED FILE. It may not reference
 //       the testbench hierarchy, any shared model, or any file outside itself.
 //
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, at every legal parameter combination. Checked against
+//          R1-R6, M1-M3, C1-C4 and the reset rules. There is no partial credit:
+//          a cache that answers a load wrongly is not a small design, it is a
+//          broken one.
+//
+//       2. THE GATE. A submission that fails correctness at ANY legal
+//          combination, or that fails to build, produces NO PPA NUMBER AT ALL.
+//          It is recorded as a failure and scores zero on every PPA axis --
+//          not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored configuration and nowhere else.
+//          At the time of writing that period is 10.0 ns on sky130hd. The number
+//          is the harness's to set and may be re-pinned; what does not change is
+//          that it is THE SAME for every submission, so all designs are compared
+//          at one frequency rather than at each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * TIMING SLACK against the pinned period. A build that misses timing
+//           yields no comparable area or power figure -- an area number from a
+//           build that did not close is not a smaller design, it is an
+//           unfinished one, and it is withheld rather than reported.
+//         * OUTSTANDING MISSES CARRIED. This is a CAPABILITY: more is better,
+//           it costs area, and it is reported both raw and per unit of area so
+//           a design is not rewarded merely for tracking fewer misses.
+//         * HIT LATENCY, reported as a CHOICE. A design that answers hits in one
+//           cycle and one that takes two are both conformant and are NOT ranked
+//           against each other on latency; the number is reported so that an
+//           area difference between them is read as the trade it is.
+//
+//       Fmax is measured SEPARATELY, by a per-design search, and reported
+//       beside these. It is never mixed into the same score as area and power,
+//       because those are at the pinned period and Fmax is not.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. The levers most designs reach for
+//       first are already spent by the contract above.
+//
+//         * MISS PARALLELISM HAS A FLOOR. C1 requires at least MAX_MISSES
+//           distinct line misses outstanding at once, and C2 requires a hit to
+//           be answered while a miss is outstanding. A blocking cache is much
+//           smaller and it FAILS, so that area is not bought.
+//         * BLOCK-DATA BUFFERING HAS A CEILING. C4 bounds a design, outside the
+//           tag and data arrays, to 2 cache lines of block data and one merged
+//           store word per pending miss. Miss parallelism bought by buffering
+//           whole lines per miss is not available: it is wrong, not expensive.
+//         * MEMORY-SIDE CONCURRENCY IS PINNED. M3 permits at most one
+//           outstanding memory transaction. Widening the memory interface is
+//           not a design choice here.
+//         * A STORE MISS ALLOCATES. L4 says so explicitly -- write-around is
+//           not a permitted cheaper policy.
+//         * FILL ORDER IS PINNED. M1 fixes ascending word order, so
+//           critical-word-first is out of scope (L3).
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. The contract fixes WHAT is answered and IN WHAT ORDER; it says
+//       nothing about HOW:
+//
+//         * replacement policy, which is free (L1) and differs in cost;
+//         * how outstanding misses are tracked -- a queue, a register file, a
+//           CAM, anything -- subject to C1's floor and C4's ceiling (L2);
+//         * how the tag and data arrays are organised and banked;
+//         * pipeline depth and hit latency, which are unconstrained (L6);
+//         * whether `req_ready_o` is combinational on `req_valid_i` (L5).
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
 // =============================================================================
 
 module nonblocking_dcache #(

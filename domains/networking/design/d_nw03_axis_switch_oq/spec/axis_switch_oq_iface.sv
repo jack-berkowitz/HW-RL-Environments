@@ -197,6 +197,76 @@
 //       below, including port names.
 //   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to
 //       anything outside itself.
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, across all 8 legal parameter combinations. Checked
+//          against R1-R6, B1 and C1-C3. There is no partial credit for PPA: a
+//          design that drops a frame is not a small fast design, it is wrong.
+//
+//       2. THE GATE. A submission that fails correctness at ANY legal
+//          combination, or that fails to build, produces NO PPA NUMBER AT ALL.
+//          It is recorded as a failure and scores zero on every PPA axis --
+//          not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored configuration of S0 and nowhere
+//          else. At the time of writing that period is 4.75 ns on sky130hd. The
+//          number is the harness's to set and may be re-pinned; what does not
+//          change is that it is THE SAME for every submission, so all designs
+//          are compared at one frequency rather than at each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * TIMING SLACK against the pinned period. A build that misses timing
+//           yields no comparable area or power figure -- an area number from a
+//           build that did not close is not a smaller design, it is an
+//           unfinished one, and it is withheld rather than reported.
+//         * THROUGHPUT, as beats delivered over the same window, reported
+//           alongside area. This is a CAPABILITY: more is better, it costs
+//           area, and it is reported both raw and per unit of area so that a
+//           design is not rewarded merely for doing less.
+//
+//       Fmax is measured SEPARATELY, by a per-design search, and is reported
+//       beside these. It is never mixed into the same score as the area and
+//       power above, because those are at the pinned period and Fmax is not.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. Read this before choosing an
+//       architecture: the levers most designs reach for first are already
+//       spent by the contract above.
+//
+//         * THROUGHPUT HAS A FLOOR. C1 requires disjoint pairs to proceed in
+//           parallel, and the floor is 2.0 beats per cycle at the scored
+//           configuration. Serialising all traffic through one datapath is a
+//           smaller design and it FAILS, so area bought that way scores zero.
+//         * BUFFERING HAS A CEILING. B1 bounds storage at 2 frames per output.
+//           Throughput bought with unbounded buffering is not available, and a
+//           design that exceeds the bound is wrong rather than expensive.
+//         * FORWARD PROGRESS IS NOT NEGOTIABLE. C2 and C3 forbid head-of-line
+//           blocking and starvation. A fixed-priority arbiter that never
+//           serves a lower-priority input fails C3 -- it is not a cheap
+//           arbitration choice.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. The contract fixes WHAT is delivered and WHEN; it says nothing
+//       about HOW. Every clause in L is a real choice with a real cost:
+//
+//         * arbitration policy, subject only to C3 (L1);
+//         * how deep to buffer and where, subject only to B1 (L2);
+//         * latency, which is FREE and reported as a metric, never gated (L3);
+//         * whether the switch datapath is replicated per output or shared,
+//           given C1's parallelism floor;
+//         * whether `s_ready_o` is combinational or registered (L5), and
+//           whether a frame is accepted before its output is free (L6).
+//
+//       A submission that meets the pinned period with less area and less
+//       power scores better. Meeting it comfortably buys nothing extra: there
+//       is no credit for slack beyond zero, because the period is fixed for
+//       everyone.
+//
 // =============================================================================
 
 module axis_switch_oq #(
