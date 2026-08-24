@@ -315,12 +315,76 @@ negative_controls:
     changes nothing and would have PASSED.
 
 second_source:
-  status: ABSENT
-  note: >
-    Not yet written. Tier-B does not require it, and its absence is stated rather
-    than implied: nothing here has been checked against an independent
-    implementation of the contract, so the evidence that the task is SOLVABLE at
-    the pinned contract is not yet in hand.
+  status: PRESENT_WITH_OPEN_RESIDUAL
+  file: tb/fp16_gemm_array_alt_ref.sv
+  oracle_class: B
+  oracle_class_note: >
+    A LOCAL MODEL OF RECORD, not an external one. RedMulE exposes no shimmable
+    boundary for this contract beyond redmule_engine itself, so there is no second
+    external RTL to anchor on. NOTHING HERE CARRIES A "passes known-correct
+    external RTL" CLAIM.
+  independence: >
+    NOT A CLEAN ROOM, and the file header says so itself. ref/ was never opened
+    while writing it, but the anchor's structure was already in working memory
+    from the step-0 audit -- W rows of H chained elements, a registered partial
+    sum between stages, physically gated row clocks. The structural differences
+    are therefore DELIBERATE OPPOSITES of a known structure rather than
+    independent convergence, which is weaker evidence and is labelled as such.
+    Where it still bites is the arithmetic and the timing readings, both derived
+    from clause text alone.
+  structural_differences:
+    measured:
+      - "elaborates under Verilator but FAILS slang with `unroll limit of 4000
+         exhausted`, where the reference passes both -- a direct consequence of
+         the iterative wide-value search the exact-integer algorithm uses"
+      - "divergence profile: disagreement confined to control transitions and
+         lasting exactly one pipeline depth, with zero divergence in the directed
+         arithmetic tail -- measures that the two hold state in different places"
+    inspection_verifiable:
+      - "no clock-gating cell of any kind (grep the file), against
+         tc_clk_gating per row in redmule_engine.sv:75 and cluster_clock_gating
+         per element in redmule_ce.sv:68"
+      - "no instantiated arithmetic unit at all, against redmule_row instantiating
+         HEIGHT redmule_ce instances per row"
+      - "one partial-sum shift register per row with an FMA tapped in at position
+         D*k, 14,464 declared state bits at 8x8, against per-element internal
+         pipelines"
+    rule_5_note: >
+      Two measured and three inspection-verifiable, which satisfies the amended
+      rule 5. It is AT THE FLOOR, not comfortably above it, and that is stated
+      rather than left for a reader to work out.
+  results:
+    measured_against_task_text: 9a93e4502979efc9
+    HEIGHT_4: {scored_cycles: 3157, z_mismatches: 4, status_mismatches: 10}
+    HEIGHT_8: {scored_cycles: 2937, z_mismatches: 6, status_mismatches: 13}
+  open_residual: >
+    IT DOES NOT AGREE WITH THE REFERENCE, and is committed in that state
+    deliberately. Two populations remain. (1) 4 z cycles at HEIGHT=4 (2637-2640,
+    one row) and 6 at HEIGHT=8 (1472-1478) that reproduce under NO directed probe
+    built so far -- MEASUREMENTS.md section 17, recorded OPEN, at the adjudication
+    cap, needing a differently-shaped instrument rather than more rounds.
+    (2) flush-cycle status divergences, closed as a second-source defect in
+    MEASUREMENTS.md section 15: the reference keeps advancing its status pipeline
+    through a flush and this file does not, and matching it exactly would mean
+    modelling per-stage internal registers the contract deliberately omits.
+    .
+    Four of five earlier residuals resolved as defects in THIS FILE rather than in
+    the task -- a truncated self-determined product, a missing output pipeline
+    stage, a status pipeline one stage short, and a feedback tap one tick early.
+    On that record the likely reading of the remaining z cycles is a fifth. That
+    is a prior, not a measurement.
+  what_it_bought: >
+    THREE CONTRACT DEFECTS, none of which any of the seven negative controls could
+    see. A10 left flag timing unpinned and permitted two legal readings that
+    disagreed on ~2900 of 3400 cycles. C2 asserted the post-flush refill was
+    contractual when the reference's refill is not derivable from A3. C3 and C4
+    asserted determinism across control transitions the contract cannot deliver.
+    All three are now narrowed or pinned, and F68 and rule 26 generalise the
+    pattern. It also reproduced d_dsp03's slang unroll failure on the same
+    construct, which is why this task now has a T5.
+    .
+    It does NOT yet demonstrate the task is solvable at the pinned contract --
+    that claim needs an implementation that AGREES, and this one does not.
 
 orfs:
   config: orfs/config.mk
@@ -372,7 +436,10 @@ ppa_note: >
   the final pin is Agent 1's, and should be overridden with CLK_PERIOD_NS rather
   than by editing the file.
 
-skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task, second_source]
+skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
+# second_source was listed here and should not have been. Rule 5 makes it
+# mandatory; Tier-B drops find_fmax's binary search in favour of a pinned clock
+# period, which is a PPA procedure change and says nothing about anchoring.
 
 difficulty_assessment: >
   Not a first-try problem, and not for the reason the catalog row expected. The
