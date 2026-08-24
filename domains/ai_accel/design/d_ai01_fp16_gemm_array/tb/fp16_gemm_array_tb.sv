@@ -30,6 +30,14 @@ module fp16_gemm_array_tb;
   localparam int unsigned W = `VW;
   localparam int unsigned NCYC = 3400;
   localparam int unsigned MAX_REPORT = 12;
+  // One pipeline depth, in enabled ticks: 31 at HEIGHT=8, 15 at HEIGHT=4. Three
+  // clauses exclude a window of exactly this length --
+  //   C2  after flush_i falls                     (whole array)
+  //   C3  after accumulate_i changes either way   (whole array)
+  //   C4  after row_clk_gate_en_i[r] changes      (THAT ROW ONLY)
+  // All three are the same defect shape: the contract specifies steady states
+  // and does not model the in-flight pipeline, so transitions are not scored.
+  localparam int unsigned REFILL_W = 4*(H-1) + 3;
 
   logic clk = 1'b0, rst_n = 1'b0;
   always #5 clk = ~clk;
@@ -54,6 +62,11 @@ module fp16_gemm_array_tb;
   string            vfile;
 
   int unsigned errs_z, errs_st, reported, n, checked;
+  int unsigned refill_left, acc_left, skipped;
+  int unsigned gate_left [0:`VW-1];
+  bit          prev_acc;
+  logic [W-1:0] prev_gate;
+  bit          scored, any_z, any_s;
 
   // ---- coverage ----
   logic        cov_of   [0:4][0:1];   // A5: rounding mode x sign of product
@@ -91,6 +104,9 @@ module fp16_gemm_array_tb;
     cov_negzero_delivered = 0;
     cov_tallied = 0;
     errs_z = 0; errs_st = 0; reported = 0; checked = 0;
+    refill_left = 0; acc_left = 0; skipped = 0;
+    prev_acc = 1'b0; prev_gate = {W{1'b1}};
+    for (int gi = 0; gi < W; gi++) gate_left[gi] = 0;
 
     if (!$value$plusargs("vec=%s", vfile)) vfile = "vectors.hex";
     $readmemh(vfile, recs);
@@ -122,21 +138,52 @@ module fp16_gemm_array_tb;
       @(posedge clk);
       #1;
 
-      checked++;
+      // ---- C2 / C3 whole-array exclusion windows -----------------------------
+      scored = 1'b1;
+      if (r.flush)                 refill_left = REFILL_W;
+      else if (refill_left != 0) begin
+        scored = 1'b0;
+        if (r.reg_enable) refill_left = refill_left - 1;
+      end
+      if (r.accumulate !== prev_acc) acc_left = REFILL_W;
+      else if (acc_left != 0) begin
+        scored = 1'b0;
+        if (r.reg_enable) acc_left = acc_left - 1;
+      end
+      prev_acc = r.accumulate;
 
-      if (z !== r.z) begin
+      // ---- C4 per-row exclusion: only the row whose gate moved -------------
+      for (int gi = 0; gi < W; gi++) begin
+        if (r.row_gate[gi] !== prev_gate[gi]) gate_left[gi] = REFILL_W;
+        else if (gate_left[gi] != 0 && r.reg_enable) gate_left[gi] = gate_left[gi] - 1;
+      end
+      prev_gate = r.row_gate;
+
+      if (!scored) begin
+        skipped++;
+      end else begin
+      checked++;
+      any_z = 1'b0; any_s = 1'b0;
+      for (int rr = 0; rr < W; rr++) begin
+        if (gate_left[rr] == 0) begin          // this row is scored this cycle
+          if (z[rr]      !== r.z[rr])      any_z = 1'b1;
+          if (status[rr] !== r.status[rr]) any_s = 1'b1;
+        end
+      end
+      if (any_z) begin
         errs_z++;
         if (reported < MAX_REPORT) begin
           reported++;
           $display("MISMATCH z   cycle %0d: expected %h got %h", n, r.z, z);
         end
       end
-      if (status !== r.status) begin
+      if (any_s) begin
         errs_st++;
         if (reported < MAX_REPORT) begin
           reported++;
           $display("MISMATCH st  cycle %0d: expected %h got %h", n, r.status, status);
         end
+      end
       end
 
       // ---- coverage, tallied from the REFERENCE record so a broken DUT
@@ -178,6 +225,9 @@ module fp16_gemm_array_tb;
     $display("");
     $display("d_ai01 H=%0d W=%0d : %0d cycles checked, %0d z mismatches, %0d status mismatches",
              H, W, checked, errs_z, errs_st);
+    $display("  (%0d cycles unscored: C2 flush / C3 accumulate transition windows, %0d enabled ticks;",
+             skipped, REFILL_W);
+    $display("   C4 gate-transition exclusion is per row and does not remove whole cycles)");
     if (errs_z == 0 && errs_st == 0) $display("RESULT: PASS");
     else                             $display("RESULT: FAIL");
     $finish;

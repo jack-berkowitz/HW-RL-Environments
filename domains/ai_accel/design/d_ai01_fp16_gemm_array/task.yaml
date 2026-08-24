@@ -122,7 +122,72 @@ anchor_conformance:
 spec: [spec/fp16_gemm_array_iface.sv]
 measurements: MEASUREMENTS.md
 probe: probe/PASTE.md
-task_text_hash: 84950ba1d90be2d8
+task_text_hash: 9a93e4502979efc9
+
+version_boundary:
+  changed_on: 2026-08-23
+  pre_bump_task_text_hash:  e43648a5afcacc53
+  post_bump_task_text_hash: 9a93e4502979efc9
+  what_changed_this_boundary: >
+    C3 and C4 narrowed, batched into ONE hash bump. Both are the SAME DEFECT AS
+    C2 one level deeper: the contract specifies steady states and does not model
+    the in-flight pipeline, so its silence about control TRANSITIONS read as a
+    determinism claim it cannot deliver.
+    .
+    C3 -- the pinned dfb stays as the steady-state rule. Partial sums still in
+    flight when accumulate_i changes, in either direction, are UNSCORED for
+    D*(HEIGHT-1)+3 enabled ticks (31 at HEIGHT=8, 15 at HEIGHT=4).
+    .
+    C4 -- "holds" and "resumes from where it stopped" are kept for the row's own
+    registers. The relationship between a resumed row's in-flight sums and an
+    operand stream that advanced during the freeze is UNSCORED for the same
+    window, PER ROW; other rows stay scored throughout.
+    .
+    Not modelled, deliberately: putting the pipeline into the contract would hand
+    every submission a required microarchitecture, which is the freedom this task
+    exists to measure.
+  earlier_boundary:
+    pre_bump_task_text_hash:  84950ba1d90be2d8
+    post_bump_task_text_hash: e43648a5afcacc53
+    what_changed: A10 pinned, C2 narrowed, T5 added. See what_changed below.
+  what_changed: >
+    Three clause changes, all of them found by the second source and none of
+    them visible to any of the seven negative controls.
+    .
+    A10 -- flag TIMING is now pinned. The clause said status_o[r][k] reports
+    that stage's operation "alone" and said nothing about when. Two readings
+    satisfied it, and an independent implementation took the other one and
+    disagreed with the reference on ~2900 of 3400 cycles. Pinned to the
+    reference's behaviour: every stage reports its own in-flight operation at a
+    uniform delay of 2 enabled ticks, NOT aligned with the z_o it contributes
+    to. Measured with a four-tick overflow burst per stage at both geometries.
+    .
+    C2 -- the post-flush refill window is now explicitly UNSCORED, named as
+    D*(HEIGHT-1)+3 enabled ticks. The clause previously asserted the refill
+    intermediates were contractual because they "follow from A3 with the flushed
+    zeros as the starting state". They do not: the reference holds per-stage
+    state this contract does not model. A contract defect, narrowed rather than
+    modelled -- nothing is scored that the text cannot specify.
+    .
+    T5 -- ADDED. Elaboration is required under both slang and Verilator, with the
+    4000-iteration unroll limit named. Without it a bit-exact submission can
+    score full correctness and produce no PPA number at all. Reproduced history,
+    not hypothesis: d_dsp03 hit this exact error and carries the same clause, and
+    this task's own second source hit it again on the same construct.
+  material_to_rule_17: YES
+  prior_results:
+    status: >
+      EVERY RESULT ON THIS TASK PREDATING THE CURRENT HASH WAS MEASURED AGAINST A
+      SUPERSEDED TEXT -- 84950ba1d90be2d8 before the first boundary,
+      e43648a5afcacc53 before the second. That includes the reference's original
+      2/2 at 3400/3400 cycles, every kill count in controls/CONTROLS.md, and the
+      nc_g discrimination measurement. All are retained as historical and NONE is
+      comparable to a number measured against 9a93e4502979efc9.
+    note: >
+      The vector sets themselves did NOT change across EITHER boundary -- the
+      stimulus and the recorded reference behaviour are byte-identical throughout.
+      What changed both times is which cycles are scored.
+  candidates_affected: NONE -- no candidate has ever been scored against this task.
 
 scored_configuration:
   HEIGHT: 8
@@ -206,7 +271,14 @@ vectors:
     controls/CONTROLS.md.
 
 results:
-  reference: 2/2   # PASS at HEIGHT=4 and HEIGHT=8, 3400/3400 cycles each, z and status
+  measured_against_task_text: 9a93e4502979efc9
+  reference: 2/2   # PASS at both; 3157 scored cycles at H=4, 2937 at H=8
+  unscored_cycles: {HEIGHT_4: 243, HEIGHT_8: 463}   # C2 flush + C3 accumulate windows; C4 is per row
+  superseded: >
+    Two boundaries precede this figure: 84950ba1d90be2d8 (reference 2/2 over
+    3400/3400 cycles) and e43648a5afcacc53 (2/2 over 3287 and 3164 scored
+    cycles). Neither is comparable to the current number. The vector sets did
+    not change across either boundary -- only the set of scored cycles did.
   coverage_at_scored_config:
     rounding_modes: 5/5
     A5_overflow_mode_x_sign: 10/10

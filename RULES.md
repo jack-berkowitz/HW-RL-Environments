@@ -533,7 +533,26 @@ defects. It runs with the regression.
     **Revisit when several rigs emit markers natively** -- at that point a script
     enforces a convention that exists rather than inventing one.
 
-    **From:** F60
+    **AN AD-HOC QUERY USED AS EVIDENCE IS APPARATUS.** The scope above names
+    ad-hoc measurement scripts; it reaches further down than "script". A single
+    command line, a glob, a one-liner counter — if a number or a status will be
+    read off it and believed, it is an instrument and it must reproduce a
+    known-good answer before its output is read. Four instances in one session,
+    none of which announced itself: a git pathspec glob that returned a false
+    empty and read as a clean working tree; a zsh glob abort that reported every
+    design task as having no spec; an awk counter that returned zero
+    configurations for a task with two; and a string replacement that changed no
+    bytes and printed success, found while writing the finding itself.
+
+    **Silent zero and silent empty are the shapes to distrust.** `0`, empty
+    output and "no matches" are the same tokens a correct run produces when the
+    answer genuinely is nothing, so they never present as failures. A wrong
+    non-zero number gets questioned; a wrong zero gets believed. After an
+    in-place edit specifically, grep for the text you believe you wrote, with a
+    fixed-string match, and ASSERT rather than print — a "recorded" claim that
+    recorded nothing defeats the recording half of this rule directly.
+
+    **From:** F60, F64
 
 25. **Every capability a module has is either priced by an existing axis or
     bounded in the specification.** Before a design task is published, enumerate
@@ -568,6 +587,34 @@ defects. It runs with the regression.
     sentence.
 
     **From:** F62
+
+26. **Every control input of a pipelined design requires a stated transition
+    behaviour.** For any design whose pipeline depth is greater than one, each
+    control input must have its behaviour AT THE TRANSITION written down — either
+    scored, with the rule stated, or named UNSCORED with an explicit window.
+    Silence at a transition is a defect, not a default.
+
+    **Why silence is not neutral.** A pipelined design holds state its contract
+    does not name, and a control input is precisely a thing that acts on that
+    unnamed state. A reader implementing the text has to do something when the
+    control moves; every choice is as conformant as any other. The reference
+    picks one, the text appears to require it, and an independent implementation
+    that picks differently looks defective when it is not.
+
+    **The signature, when this has gone wrong.** Two implementations agree
+    exactly on the steady-state rule and against a constant stimulus, then
+    diverge under a time-varying one for EXACTLY ONE PIPELINE DEPTH after each
+    control transition, with values far apart rather than within an ulp. That is
+    in-flight state draining, not arithmetic.
+
+    **Do NOT fix it by modelling the pipeline.** Writing the state into the
+    contract hands every submission a required microarchitecture, which is
+    usually the design freedom the task exists to measure. Narrow instead: name
+    the window in whatever tick the contract already counts in, and exclude it.
+    Nothing should be scored that the text cannot specify.
+
+    **From:** F68
+
 
 ---
 

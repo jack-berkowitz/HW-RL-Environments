@@ -3477,6 +3477,25 @@ That asymmetry is what makes grep-and-assert-after-edit load-bearing rather than
 belt-and-braces. A read-side check is a second opinion on a number. A write-side
 check is the only evidence that an edit happened at all.
 
+**5. A verdict line that contradicted its own numbers.** A probe measuring how
+long a post-flush divergence lasts printed `*** OUTSIDE the named window ***`
+while the two numbers printed above it -- 13 ticks at H=4, 29 at H=8 -- are both
+INSIDE the window (15, 31). The window constant was declared `int unsigned`, so
+comparing the sentinel `-1`, meaning "never diverged", against it promoted the
+comparison to unsigned; `-1` became 4294967295 and a clean result rendered as a
+violation.
+
+This is the **second signedness defect in my own instruments in one session**.
+The first was in a second source's exponent handling, where
+`$signed({24'b0, da.e})` zero-extended a negative exponent before a shift. That
+one was real and was MASKED by a larger width defect in the same expression, so
+it never surfaced on its own and was fixed in passing.
+
+**Both were caught the same way: by reading the NUMBERS rather than the
+VERDICT.** A verdict is a derived claim with its own bugs; the measurement it
+summarises is the evidence. Where a rig prints both, read both, and treat a
+disagreement between them as a defect in the rig until shown otherwise.
+
 ### The general rule this generalises to
 
 **An ad-hoc query used as evidence is measurement apparatus.** Rule 24 already
@@ -3702,3 +3721,71 @@ it: a summary may not name scope the run did not cover, and a claim that
 something "was established" must name the run that established it and the state
 it was established in. Stating that as a standing rule needs an edit to RULES.md,
 which is not this agent's file; flagged for its owner rather than taken.
+
+## F68. A contract that specifies steady states is silent about transitions, and the silence reads as a determinism claim
+
+Three clauses of d_ai01 asserted behaviour the contract could not deliver, for
+the same reason each time. No negative control could see any of them; all three
+were found by an independent implementation of the same text.
+
+| clause | what it specified | what it was silent about |
+|---|---|---|
+| C2 | `flush_i` zeroes the chain; z reads +0 while asserted | what z delivers while the chain REFILLS |
+| C3 | the accumulate feedback delay `dfb`, in steady state | partial sums already IN FLIGHT when `accumulate_i` toggles |
+| C4 | a gated row "holds" and "resumes from where it stopped" | the resumed row's in-flight sums against an operand stream that kept advancing |
+
+Each clause described a steady state correctly and said nothing about the
+transition into or out of it. **Silence is not neutral in a contract.** A reader
+implementing the text must do something at the transition, and any choice is as
+conformant as any other. The reference picks one, the text appears to require it,
+and a second implementation picking differently looks like a defect when it is
+not.
+
+### The evidence that this is one defect and not three
+
+They share a signature. In every case:
+
+* the two implementations agree EXACTLY on the steady-state rule -- the measured
+  accumulate feedback delay is 15 enabled ticks at HEIGHT=4 and 31 at HEIGHT=8 in
+  both, and gating a row against a CONSTANT operand field agrees cycle-for-cycle;
+* they diverge only under a TIME-VARYING operand stream, and only around a
+  control transition;
+* the divergence lasts EXACTLY ONE PIPELINE DEPTH and then stops, at both
+  geometries -- the signature of in-flight state draining, not of arithmetic;
+* the disagreeing values are FAR apart, not near. Of 1119 disagreeing values,
+  1104 differ by more than 4 ulp and only 15 by less. Rounding looks nothing
+  like this.
+
+Classified over the pipeline's history window rather than at the divergent cycle,
+all 1320 events at HEIGHT=4 and 1119 at HEIGHT=8 fall into exactly one transition
+class, with **no residue at either geometry**.
+
+### Two classification errors, each of which produced a confident wrong answer
+
+**Bucketing at the divergent cycle** invented a "43 row-gated" class and a "~50
+unclassified" class. A pipeline carries its depth in history, so a control event
+moves the output for that many ticks AFTER it ends; the control state at the
+divergent cycle is the wrong tick to read.
+
+**Then checking whether the diverging ROW was the GATED row** gave 2 of 23 and
+read as "gating is not a cause" -- which was reported as a result before being
+overturned. At one divergent cycle the mask gates row 6 while row 5 diverges; row
+5 had been gated over the preceding 19 cycles and diverges from the first cycle
+AFTER release. The mask at the divergent cycle shows the next row in a walking
+pattern, not the responsible one.
+
+### The general rule this generalises to
+
+A pipelined design holds state its contract does not name, and a control input is
+precisely a thing that acts on that unnamed state. So for any design of pipeline
+depth greater than one, EVERY control input needs its transition behaviour
+written down -- scored with a stated rule, or named unscored with an explicit
+window. Silence at a transition is a defect, not a default.
+
+**The fix is not to model the pipeline.** Modelling it puts a microarchitecture
+into the contract and hands every submission a required implementation, which for
+d_ai01 is exactly the design freedom the task exists to measure. All three
+clauses were NARROWED instead: window named in enabled ticks, one pipeline depth
+long, excluded from scoring. Nothing is scored that the text cannot specify.
+
+**Rules:** 26

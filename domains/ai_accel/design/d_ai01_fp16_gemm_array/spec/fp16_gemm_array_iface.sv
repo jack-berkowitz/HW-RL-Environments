@@ -168,9 +168,30 @@
 //     A NaN entering a stage propagates as 0x7E00 down the remainder of the
 //     chain.
 //
-// A10. FLAG SCOPE. status_o[r][k] reports the exceptions of THAT STAGE'S fused
-//     multiply-add alone. Flags are not accumulated along the chain and not
-//     ORed across stages or rows.
+// A10. FLAG SCOPE AND TIMING. status_o[r][k] reports the exceptions of THAT
+//     STAGE'S fused multiply-add alone. Flags are not accumulated along the
+//     chain and not ORed across stages or rows.
+//
+//     THE TIMING IS PINNED, AND IT IS NOT THE SKEW OF A3. status_o[r][k](t)
+//     reports the operation whose operands were sampled 2 ENABLED TICKS EARLIER
+//     -- the SAME delay for every k, independent of d(k). It is NOT aligned with
+//     the z_o that operation contributes to, so at any tick the HEIGHT entries
+//     of a row generally describe HEIGHT DIFFERENT operations, one per stage in
+//     flight.
+//
+//     Measured: with stage k driven to overflow in a four-tick burst, OF appears
+//     on status_o[r][k] two enabled ticks later and for exactly the burst width,
+//     at every k and at both legal HEIGHTs. One operation is latched; two
+//     consecutive operations are never ORed together. (A single-tick impulse
+//     from a quiescent chain shows a wider, one-tick-earlier response; that is a
+//     startup regime and not the steady-state rule stated here.)
+//
+//     AN EARLIER DRAFT LEFT THE TIMING UNSTATED, and that was a defect in this
+//     text rather than in any implementation. Two readings satisfied the words
+//     -- this one, and "aligned with the z_o it contributed to" -- and an
+//     independent implementation of the same clause took the other reading and
+//     disagreed with the reference on roughly 2900 of 3400 cycles. Both were
+//     legal. The clause was wrong to permit both.
 //
 // -----------------------------------------------------------------------------
 // C -- CONTROL
@@ -192,10 +213,20 @@
 //     flush_i DOES take precedence over reg_enable_i: with reg_enable_i low and
 //     flush_i high, every clocked row clears. Also measured.
 //
-//     On deassertion the chain refills from the operand field then in force; the
-//     refill passes through the partial sums of A3 before settling, and those
-//     intermediate values are contractual -- they follow from A3 with the
-//     flushed zeros as the starting state.
+//     THE REFILL WINDOW IS NOT SCORED. On deassertion the chain refills from the
+//     operand field then in force. The values delivered on z_o and status_o
+//     during the first D*(HEIGHT-1)+3 ENABLED TICKS after flush_i falls -- 31 at
+//     HEIGHT=8, 15 at HEIGHT=4 -- are UNSPECIFIED, and are excluded from
+//     scoring.
+//
+//     An earlier draft asserted the opposite: that the refill passes through the
+//     partial sums of A3 and that those intermediate values are contractual
+//     because they "follow from A3 with the flushed zeros as the starting
+//     state". That was a CONTRACT DEFECT. The reference holds per-stage internal
+//     state that this contract deliberately does not model, so its refill
+//     sequence is not derivable from A3, and an independent implementation that
+//     did derive it from A3 produced a different -- and equally legal -- refill.
+//     Nothing is scored that this text cannot specify.
 //
 // C3. accumulate_i high replaces the bias input of every row with THAT ROW'S
 //     OWN z_o. y_i is ignored while it is high. This is how operands deeper
@@ -218,12 +249,43 @@
 //     both. A contract that said "the row's own z_o" without pinning WHICH z_o
 //     would have left the reference to decide it.
 //
+//     TRANSITIONS ARE NOT SCORED. The rule above is a STEADY-STATE rule. When
+//     accumulate_i changes, in either direction, partial sums seeded with y_i
+//     are still travelling down the chain, and this contract does not model them
+//     -- it describes what a row delivers, not the pipeline that delivers it.
+//     The values on z_o and status_o during the first D*(HEIGHT-1)+3 ENABLED
+//     TICKS after any change of accumulate_i -- 31 at HEIGHT=8, 15 at HEIGHT=4 --
+//     are therefore UNSPECIFIED and excluded from scoring.
+//
+//     Measured: two implementations agreeing exactly on dfb, and agreeing
+//     cycle-for-cycle when accumulate_i is toggled against a CONSTANT operand
+//     field, still diverge under a time-varying field for exactly one pipeline
+//     depth after each toggle. That difference is in state this text declines to
+//     specify, so it is not scored. Modelling it instead would put a pipeline
+//     structure into the contract and hand every submission a required
+//     microarchitecture, which is the freedom this task exists to measure.
+//
 // C4. row_clk_gate_en_i[r] low freezes row r alone. Its registers hold, its
 //     z_o holds, and it resumes from where it stopped when re-enabled. It is a
 //     clock gate, NOT a reset: nothing is cleared. Other rows are unaffected.
 //
 //     The freeze is TOTAL and outranks flush_i -- see C2. rst_ni is the only
 //     input that clears a gated row, because it is asynchronous (V2).
+//
+//     "RESUMES" IS DEFINED FOR THE REGISTERS, NOT FOR THE PIPELINE. A row holds
+//     its own registers across the freeze and continues from them -- that much is
+//     scored. What is NOT specified is the relationship between the resumed row's
+//     in-flight partial sums and an operand stream that kept advancing while the
+//     row was frozen: the contract does not model where in the chain each sum
+//     had reached. The values on z_o[r] and status_o[r][*] during the first
+//     D*(HEIGHT-1)+3 ENABLED TICKS after row_clk_gate_en_i[r] changes are
+//     UNSPECIFIED and excluded from scoring, PER ROW -- other rows are unaffected
+//     and stay scored throughout.
+//
+//     Measured: gating a row and releasing it against a CONSTANT operand field
+//     agrees cycle-for-cycle between independent implementations; under a
+//     time-varying field the released row diverges for one pipeline depth,
+//     starting on the first tick after release.
 //
 // -----------------------------------------------------------------------------
 // L -- LATENCY
@@ -270,4 +332,29 @@
 //     rule (A7) and the exact-zero sign rule (A8) are all separately exercised.
 //     A design that flushes subnormals to zero, or that delivers infinity in
 //     every overflow mode, fails on vectors written specifically for them.
+//
+// T5. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator. Passing
+//     simulation is not sufficient: the synthesis frontend is slang, and a
+//     design Verilator accepts without comment can be rejected there, in which
+//     case a bit-exact submission scores full correctness and produces NO PPA
+//     NUMBER AT ALL, with the cause surfacing much later as an unexplained
+//     mid-pipeline failure.
+//
+//     The construct that exposes this is an UNBOUNDED-LOOKING LOOP whose bound
+//     slang cannot resolve at elaboration. slang enforces an unroll budget of
+//     4000 iterations across nested loops, and exceeding it is a hard error:
+//
+//         error: unroll limit of 4000 exhausted [--unroll-limit=]
+//
+//     A per-bit search over a wide accumulator -- a leading-one scan, a priority
+//     encode, a normalisation loop -- nested inside a per-row and a per-stage
+//     loop reaches that budget quickly: 176 x HEIGHT x WIDTH is far past it.
+//     Give every loop a small CONSTANT bound, or express the search as indexed
+//     logic rather than iteration.
+//
+//     THIS IS REPRODUCED HISTORY, NOT A HYPOTHETICAL. d_dsp03's second source
+//     passed every simulation configuration and was then rejected by the
+//     synthesis frontend with this exact error, which is why that task carries
+//     the same clause. This task's own second source hit it again, on the same
+//     construct, before this clause existed.
 // =============================================================================

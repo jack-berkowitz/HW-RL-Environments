@@ -101,3 +101,80 @@ At HEIGHT=4 the pin equals the parameter, the port mapping is the identity, and
 nc_g is bit-for-bit the reference -- which is exactly why it passes there. A
 control that also failed at HEIGHT=4 would be a broken control rather than a
 finding about the task.
+
+
+## Re-measured against task text e43648a5afcacc53
+
+The A10 pin and the C2 narrowing changed WHICH CYCLES ARE SCORED, not the vector
+set -- `vectors_h4.hex` and `vectors_h8.hex` are byte-identical across the
+boundary. C2 excludes the post-flush refill window: 236 of 3400 cycles at
+HEIGHT=8, 113 at HEIGHT=4.
+
+Everything above this heading was measured against the SUPERSEDED text
+84950ba1d90be2d8 and is retained as historical. The two sets are not comparable.
+
+| control | H=8 old | H=8 new | H=4 new | H=4 result |
+|---|---|---|---|---|
+| `nc_a_stuck_output` | 3399 | 3163 | 3286 | FAIL |
+| `nc_b_extra_pipe_stage` | 2784 | 2583 | 2679 | FAIL |
+| `nc_c_flush_subnormal` | 84 | **80** | **81** | FAIL |
+| `nc_d_overflow_always_inf` | 230 | **215** | **205** | FAIL |
+| `nc_e_positive_zero_only` | 132 | **132** | **148** | FAIL |
+| `nc_f_reversed_chain` | 3203 | 2975 | 3034 | FAIL |
+| `nc_g_height_blind_depth` | 3208 | 2980 | **0** | **PASS at 4, FAIL at 8** |
+
+**Every movement is the C2 accounting and nothing else.** Scaling each control's
+old kill RATE by the 236 removed cycles predicts the drop:
+
+| control | predicted drop | actual |
+|---|---|---|
+| nc_a | 236.0 | 236 |
+| nc_b | 193.2 | 201 |
+| nc_c | 5.8 | 4 |
+| nc_d | 16.0 | 15 |
+| nc_e | 9.2 | **0** |
+| nc_f | 222.3 | 228 |
+| nc_g | 222.7 | 228 |
+
+The residuals are small and follow from kills not being uniformly distributed
+over the excluded window. `nc_e`'s zero drop is the one that looks anomalous and
+is not: every one of its kills lands at cycle 3031 or later, and the capture rig
+stops asserting flush at n < 3000, so no `nc_e` kill was ever inside a refill
+window. That is a prediction confirmed rather than a movement to explain.
+
+`nc_g` still discriminates: PASS at HEIGHT=4 with 0 kills, FAIL at HEIGHT=8 with
+2980. The capacity argument survives the text change.
+
+
+## Re-measured against task text 9a93e4502979efc9 (C3 and C4 narrowed)
+
+Scored cycles fall again as C3's accumulate-transition window is excluded:
+3164 -> 2937 at HEIGHT=8, 3287 -> 3157 at HEIGHT=4. C4's exclusion is per row and
+removes no whole cycles. Vector sets unchanged, as at every boundary.
+
+| control | H=8 prev | H=8 new | drop | predicted | residual | H=4 new |
+|---|---|---|---|---|---|---|
+| `nc_a_stuck_output` | 3163 | 2936 | 227 | 226.9 | +0.1 | 3156 |
+| `nc_b_extra_pipe_stage` | 2583 | 2368 | 215 | 185.3 | +29.7 | 2570 |
+| `nc_c_flush_subnormal` | 80 | 80 | 0 | 5.7 | -5.7 | 81 |
+| `nc_d_overflow_always_inf` | 215 | 167 | 48 | 15.4 | **+32.6** | 185 |
+| `nc_e_positive_zero_only` | 132 | 132 | 0 | 9.5 | -9.5 | 148 |
+| `nc_f_reversed_chain` | 2975 | 2746 | 229 | 213.4 | +15.6 | 2902 |
+| `nc_g_height_blind_depth` | 2980 | 2752 | 228 | 213.8 | +14.2 | **0, PASS** |
+
+**`nc_d`'s +32.6 is the one deviation worth explaining, and it is
+distributional.** Its kills were roughly three times over-represented in the
+newly excluded windows: 48 of 215 kills (22%) sat in 227 cycles (7% of the
+scored set). Measured after exclusion, only 20 of its 167 surviving kills fall
+in the accumulate window, which is 17.6% of the run -- so the accumulate region
+is now under-represented among its kills, exactly as removing a kill-dense
+region predicts. The MECHANISM -- accumulate grows magnitudes, so overflow, which
+is what nc_d perturbs, is likelier there -- is inferred and not separately
+measured.
+
+`nc_c` and `nc_e` dropping zero is the same effect with the sign reversed: their
+kills lie outside every excluded window (subnormal results, and the directed tail
+at cycle 3031+ where flush never fires).
+
+`nc_g` still discriminates: PASS at HEIGHT=4 with 0 kills, FAIL at HEIGHT=8 with
+2752.

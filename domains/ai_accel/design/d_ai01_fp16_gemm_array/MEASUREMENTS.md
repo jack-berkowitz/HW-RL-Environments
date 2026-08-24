@@ -376,3 +376,199 @@ because the pin equals the parameter and the mapping is the identity, FAIL at 8
 because four products are delivered where eight are required. Both held.
 
 `measured:` in task.yaml moved from PARTIAL to true on this result.
+
+
+## 12. A10's timing, and a correction to the instruction rather than to the text
+
+The instruction that produced the A10 pin was "pin it to the REFERENCE's
+behavior". Taken literally that would have written a POINTER into the contract
+instead of a contract: "whatever redmule_engine does" leaves exactly the gap the
+pin exists to close -- a requirement the oracle determines and the text only
+appears to specify, which is F57's shape. **The correction here was to the
+instruction, not only to the clause.** What makes A10 normative is the measured
+number, not the deference.
+
+Measured with a four-tick overflow burst driven at one stage at a time, all
+stages, both geometries:
+
+```
+drive OF on ticks   0-3,  8-11, 16-19
+reference status    1-5, 10-13, 18-21
+```
+
+Steady state: **delay 2 enabled ticks, uniform across k, one operation latched,
+consecutive operations never ORed**, and NOT aligned with the z_o the operation
+contributes to. A single-tick impulse from a quiescent chain reports delay 1 and
+a wider response; that is a startup regime, visible above as the first burst
+being five ticks wide instead of four, and it is not the steady-state rule.
+
+## 13. Procedure note: a stated expected result is not a clean test until the instrument is
+
+Cross-reference: F64, which is the same shape applied to apparatus.
+
+The A10/C2 re-run carried an externally stated falsification condition -- "the
+~2900 status mismatches should disappear; if they don't, the clause fixes are
+wrong". They did not disappear on the first re-run: status stayed at 2523/2703.
+Taken literally, that condition would have reverted a correct clause. Measuring
+the second source's own status latency first showed it landing on ticks
+0-4/9-12/17-20 against the reference's 1-5/10-13/18-21 -- **the measuring
+implementation was one pipeline stage short**, and the clause was never in
+question.
+
+The general form: **an externally stated expected-result condition must be
+checked against the measuring instrument before it is allowed to falsify the
+thing being measured.** A prediction and an instrument can both be wrong, and a
+failed prediction is evidence about the pair, not about the hypothesis alone.
+Rule 24 requires an apparatus to reproduce a known-good answer before its numbers
+are read; this is the same requirement one level up, on the apparatus that a
+prediction is being evaluated through. Recorded as procedure rather than as a
+finding.
+
+
+## 14. H5: isolating the second-source residual
+
+After the A10 pin and the C2 narrowing the second source still differs from the
+reference on z (196 at H=4, 178 at H=8) and on status (224 / 260).
+
+### The z and status residuals do NOT co-occur, so they are not one cause
+
+| | both | z only | status only |
+|---|---|---|---|
+| H=4 | 158 | 38 | 66 |
+| H=8 | 137 | 41 | 123 |
+
+A large status-only population at both geometries rules out a single shared
+cause on the evidence, without needing a mechanism.
+
+### Two classification errors of mine, both corrected by measurement
+
+**First error: bucketing by the control state AT the divergent cycle.** That
+produced a "43 row-gated cases" class and a "~50 unclassified" class, and both
+were artifacts. The pipeline carries LZ ticks of history, so a control event
+changes the output for LZ ticks AFTER it ends; reading the control state at the
+divergent cycle sees the wrong tick.
+
+**Second error, in the opposite direction.** Re-checking whether the diverging
+ROW was the GATED row gave 2 of 23 -- which read as "gating is not a cause", and
+I said so. That was also wrong. At cycle 2242, `gate=10111111` gates row 6 while
+row 5 diverges; row 5 had been gated over 2223-2241 and diverges from **2242, the
+first cycle after its release**. The gate state at the divergent cycle shows the
+NEXT row in the walking pattern, not the responsible one.
+
+### Classified over the history window, nothing is left over
+
+For each (cycle, row) divergence event, asking whether that row was gated, or
+accumulate was active, at any point in the preceding LZ cycles:
+
+| | events | gated within LZ | accumulate within LZ | neither |
+|---|---|---|---|---|
+| H=4 (LZ=15) | 1320 | 19 | 1301 | **0** |
+| H=8 (LZ=31) | 1119 | 23 | 1096 | **0** |
+
+**There is no unclassified residue at either geometry.** Two causes only:
+accumulate transitions (~98%) and row-gate transitions (~2%).
+
+### Both are transitions, not steady states
+
+Directed side-by-side probes with CONSTANT operands show NO divergence in either
+class: gating a row and releasing it agrees cycle-for-cycle, and toggling
+accumulate on and off agrees cycle-for-cycle (both settle to 0x4C00). The
+divergence requires TIME-VARYING operands, which is what makes it a
+transition-with-in-flight-state effect rather than an arithmetic one.
+
+Magnitudes confirm that: of 1119 disagreeing values at H=8, 1104 are far apart
+and only 15 are within 4 ulp. This is not rounding.
+
+Steady-state feedback delay is identical in both implementations -- 15 enabled
+ticks at H=4, 31 at H=8 -- so C3's pinned dfb is not what differs.
+
+### A signedness bug in my own verdict line
+
+The refill-duration probe printed "*** OUTSIDE the named window ***" while its own
+numbers (13 at H=4, 29 at H=8) are INSIDE the window (15, 31). `WIN` was declared
+`int unsigned`, so comparing the sentinel `-1` against it promoted to unsigned and
+made a never-diverged result read as a violation. Caught only because the numbers
+were read rather than the verdict. Same family as F64.
+
+
+## 15. The flush-status residual: CLOSED as a second-source defect, no clause change
+
+The only surviving status divergence sat at exactly the flush cycles -- 200/201,
+430/431, 601/602, 1403/1404, 2205/2206, 2606/2607 and nowhere else. The reference
+keeps reporting each stage's in-flight flags through a flush; the second source
+zeroed them.
+
+**Nothing requires that.** C2 zeroes the INTER-STAGE registers of the chain; the
+status pipeline is not one of them, and A10 -- which is what governs status_o --
+says nothing about flush. The clearing was invented.
+
+**Action taken: the second source was FIXED, not the clause.** A10 is unchanged.
+Removing the clear took the status residual from 12 to 10 at HEIGHT=4 and 15 to
+13 at HEIGHT=8, and removed the 430/431 cycles entirely. It did NOT remove the
+rest: holding the pipeline through flush is closer than zeroing it but still not
+what the reference does, which evidently keeps ADVANCING its status pipeline
+through the flush. Reproducing that exactly would mean modelling the reference's
+per-stage internal registers, which is the thing this contract deliberately does
+not do. The remaining flush-cycle status divergence is therefore left in place
+and stated, not chased.
+
+## 16. Two probes agreeing was not two pieces of evidence
+
+Cross-references: F63 (the observable measured versus the observable required)
+and F64 (an instrument must reproduce a known answer before it is believed).
+
+The second source's accumulate feedback tapped z(t-1) where the reference taps
+z(t) -- a one-tick error that made it disagree on 100% of steady-state accumulate
+ticks. Two separate probes had already been run against that path and both
+reported it correct:
+
+* the first-change latency probe, which raises accumulate from a settled state
+  and records when z first moves;
+* the directed toggle probe, which drives accumulate on and off against a
+  CONSTANT operand field.
+
+**Both share one assumption: a static operand field.** Under a static field
+z(t) == z(t-1) identically, so the two taps are indistinguishable -- not merely
+hard to tell apart, but exactly equal. Neither probe could have detected the
+defect, and their agreement carried no information about it at all.
+
+**The general form: probes that share a stimulus assumption do not corroborate
+each other.** Two instruments agreeing is evidence only to the extent their
+failure modes are independent, and a shared stimulus is a shared failure mode.
+When a defect can only manifest under a condition no probe creates, every probe
+returns a clean result and the count of clean results is irrelevant. The question
+to ask of a corroborating pair is not "do they agree" but "what would each have
+to see to disagree, and does anything generate it".
+
+Here nothing did until the full time-varying vector set was run, which is also
+why the defect survived four earlier rounds of measurement.
+
+## 17. OPEN: 4-6 z cycles that no directed probe reproduces
+
+**Status: OPEN. Not closed, not absorbed into an adjacent class.**
+
+After every fix above, a small z residual remains:
+
+* HEIGHT=4: 4 cycles, 2637-2640, a single row
+* HEIGHT=8: 6 cycles, 1472-1478, several rows
+
+It does not reproduce under any directed probe built so far. Post-rise and
+post-fall accumulate transients both measure ZERO divergence; steady-state
+accumulate measures zero over 90 and 186 sampled ticks; gating and flush probes
+are clean. The cycles sit inside an accumulate-high stretch but outside the C3
+exclusion window, and the directed probes carry band-0 operands with no stalls
+and no corner injections, so whatever distinguishes these cycles is something the
+probes do not generate.
+
+**What that means procedurally: this needs a differently-shaped instrument, not
+more adjudication rounds.** Repeating the existing probes cannot resolve it --
+see section 16 for why running more of the same probes is not more evidence.
+
+**The prior, stated honestly.** Four of four previous second-source residuals on
+this task resolved as defects in the second source, not in the task: a truncated
+self-determined product, a missing output pipeline stage, a status pipeline one
+stage short, and a feedback tap one tick early. Every one was an off-by-one or a
+width/signedness slip invisible to at least one probe that had been trusted. On
+that record the likely reading is a fifth second-source defect rather than a
+task problem, and it is recorded that way -- but it is recorded as OPEN, because
+"likely" is not a measurement.
