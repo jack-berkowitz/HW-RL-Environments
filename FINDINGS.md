@@ -4343,3 +4343,55 @@ computed from the stimulus description rather than the result.
 
 **Rules:** 32
 
+
+## F76. A checker run against the working tree is not a statement about the commit, and `--staged` does not close the gap
+
+`fedb323`'s message ends "Both checkers green." The checkers were green. The
+commit was broken. Both halves are true because they are about different trees.
+
+**What happened.** The commit's subject is the rule 9 amendment, about fifteen
+lines. Its diffstat is **89 insertions**. The other seventy-odd were a peer's
+uncommitted work in the same file — two new rules and an amendment to a third —
+swept in by `git add RULES.md`, which stages the FILE and therefore whatever
+anyone else has left in it.
+
+The content survived intact, so nothing was lost. What did not survive is the
+**pairing**. RULES.md was dirty in my tree; FINDINGS.md was dirty in the peer's.
+The rules landed and their findings did not, so HEAD carried rule 31 citing F74
+and rule 32 citing F75 against a FINDINGS.md that contained neither. HEAD failed
+linkage from that commit until the peer repaired it.
+
+**Why every available gate passed.**
+
+  * The working-tree run passed because the peer's dirty FINDINGS.md was sitting
+    right there, supplying the findings the commit would not contain. I got that
+    green three separate times.
+  * `check_rule_linkage.py --staged` would ALSO have passed for a different
+    reason and by coincidence — no. It would have FAILED, because the staged
+    tree was my RULES.md plus HEAD's FINDINGS.md, which is exactly the broken
+    pair. I did not run it. The gate existed, was correct, and was not used.
+
+That second bullet is the honest version and it took a peer to establish it; my
+first draft of this finding asserted that `--staged` would have passed too, which
+would have turned my own failure to run a gate into a defect in the gate.
+
+**What actually catches it:** extracting HEAD to a clean directory and running the
+checker there. Nothing in the working tree can mask a commit that way, because
+nothing of the working tree is present.
+
+**The staging half is a repeat, not a discovery.** The project's standing rule is
+already "stage the change, not the file": capture HEAD, build a temp index with
+`read-tree`, `git add --` explicit paths, compare-and-swap `update-ref` so a
+concurrent HEAD move fails the write rather than silently reparenting. I had that
+written down and used `git add <path>` on the live index instead, which is
+explicit about the path and says nothing about the change. Explicit-path staging
+is necessary and not sufficient; with three sessions in one tree, the file is not
+the unit of intent.
+
+**And the reporting half is rule 30, violated by the person who wrote rule 30**
+eight commits earlier. "Both checkers green" named a scope the run did not have.
+The rule says a claim that something was established must name the run and the
+tree state that established it; had the sentence been "green on the working tree"
+the gap would have been visible in the sentence itself.
+
+**Rules:** 30
