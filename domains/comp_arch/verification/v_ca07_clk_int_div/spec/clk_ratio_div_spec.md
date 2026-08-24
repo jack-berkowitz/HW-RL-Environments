@@ -40,10 +40,20 @@ was chosen rather than derived it is named as such.
   This is arithmetically forced — an odd number of input cycles cannot be split
   evenly — so an implementation claiming 50% everywhere is not merely different,
   it is impossible.*
-- **P3 — 0 and 1 are a DEGENERATE PAIR.** Both mean pass-through: `clk_o` has the
-  same period as `clk_i`, one input cycle. They are two distinct input values
-  with one behaviour, and nothing on the output distinguishes them.
+- **P3 — 0 and 1 are a DEGENERATE PAIR, and the distinction is UNSCORED.** Both
+  mean pass-through: `clk_o` has the same period as `clk_i`, one input cycle.
   *Measured for both.*
+
+  **What this means for scoring, stated so it is not left to be inferred.**
+  Pass-through itself IS scored — a unit that gives period 2 at `div_i = 1`
+  violates this clause and will be caught. What is **not** scored is any
+  difference **between** 0 and 1: they are observationally identical, so no
+  testbench can distinguish them and no fault will ever be keyed on that
+  distinction. You are not asked to tell them apart and you are not penalised for
+  treating them as one value.
+
+  Both remain in the scored configuration. Removing one would hide a real
+  degenerate case that an implementation can get wrong in the same way for both.
 
 ---
 
