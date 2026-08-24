@@ -254,3 +254,31 @@ the guard could never fire. It survived for that reason and not for any reason
 about the testbench. A separate cumulative counter now backs it. The distinction
 matters for any "every Nth" guard: within-transaction and since-reset are
 different quantities and the wrong one is silently unreachable.
+
+## Step 5c — 22 of 22, and what that does and does not establish
+
+Every one of the ten defects is caught on BOTH bases, and both clean
+implementations pass. First run, no iteration — a first for 5c on this project,
+and the reason is structural rather than lucky: every guard reads the PORTS, so
+the re-derivation is the same wrapper pointed at `dut2`.
+
+**What it establishes.** `dut2` differs from the anchor on latency throughout, on
+buffering (it holds a whole upstream `W` beat first), on outstanding transactions
+(one at a time per direction against the anchor's four), and on what it drives
+while a valid is low. All ten defects remain detectable against that, so the
+reference's detection is not relying on the anchor's timing or scheduling. That
+is real information and it is the thing 5c exists to check.
+
+**What it does NOT establish, and I am not going to let the summary say
+otherwise.** Because these mutants are wrappers whose guard logic is *literally
+the same code* on both bases, 5c here cannot catch a guard that reads something
+only the anchor has — there is nothing anchor-specific for it to read. The
+property is true by construction. Compare v_ai02, where the defects were
+re-derived in each design's own source and 5c caught `sr_m4` as a guard the
+divergent base could not reach at all: that was a test the construction could
+fail, and it did. This one could not fail that way.
+
+So: 22 of 22 licenses "the defects are contract-level and survive a differently
+timed and structured implementation". It does not license "the guards were
+stress-tested against an independent reading of the contract" — the wrapper
+construction bought that cheaply, and cheap evidence should be labelled.
