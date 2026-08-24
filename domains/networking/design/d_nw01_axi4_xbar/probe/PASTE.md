@@ -1,3 +1,51 @@
+# Task: implement an AXI4 crossbar in SystemVerilog
+
+You are given a **port map and a complete specification**. Write the RTL. You
+will not be shown any reference implementation.
+
+Your answer is run against a checker across **16 parameter combinations** and must
+pass every one. It is also synthesised, so it must be legal SystemVerilog for two
+different frontends.
+
+**The difficulty is liveness, not routing.** A crossbar that decodes every
+address correctly and returns every response to the right master is correct on
+every individual transaction and still fails. Under sustained all-to-all traffic
+with masters deasserting `r_ready` and `b_ready`, a design can deadlock or starve
+a master indefinitely, and neither is a data property: comparing responses
+against expected values does not find either one. The clauses headed `LIVENESS`
+are normative and they are the point of the task.
+
+Two further things close the usual escape routes. Each master port is **required**
+to carry a given number of outstanding transactions, so a design that accepts one
+at a time is smaller and fails. And response buffering is **bounded**, so the
+familiar answer of buffering whole bursts until the backpressure goes away is not
+available -- a design that stores more than the contract allows is wrong, not
+merely expensive.
+
+## What to submit
+
+**One self-contained file** containing only `module axi4_xbar`, with the exact
+port list below. No package, no include, nothing outside the file.
+
+Two things that account for most failures here:
+
+- **It must elaborate under BOTH slang and Verilator.** Simulation uses one and
+  synthesis reads the same file with the other; a file only one accepts cannot
+  be built.
+- **Declare every variable before the first statement in its procedural block.**
+  SystemVerilog forbids a declaration after a statement inside a block, and the
+  error text names neither declarations nor placement.
+
+---
+
+## The specification
+
+Everything below is the contract, and all of it is normative. Note that the
+clauses labelled `L`n here are the LIVENESS requirements -- they are not optional
+and not choices. Where the specification leaves something open it says so in
+words at that clause.
+
+```systemverilog
 // =============================================================================
 // axi4_xbar_iface.sv  --  PORT DEFINITION ONLY (no implementation)
 // =============================================================================
@@ -351,3 +399,4 @@ module axi4_xbar
     // IMPLEMENTATION INTENTIONALLY OMITTED.
 
 endmodule
+```

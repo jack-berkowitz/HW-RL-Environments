@@ -1,3 +1,50 @@
+# Task: implement an asynchronous clock-domain-crossing FIFO in SystemVerilog
+
+You are given a **port map and a complete specification**. Write the RTL. You
+will not be shown any reference implementation.
+
+Your answer is run against a checker across **18 parameter combinations** and must
+pass every one. It is also synthesised, so it must be legal SystemVerilog for two
+different frontends.
+
+**The difficulty is the crossing, not the queue.** A FIFO whose pointers are
+compared directly is correct in simulation whenever the two clocks happen to line
+up, and wrong when they do not. The two domains here have no defined phase or
+frequency relationship and the checker exercises arbitrary, unrelated ratios, so
+any multi-bit value that crosses domains has to be encoded to survive being
+sampled mid-change. That requirement is normative and it is the point of the
+task.
+
+Two things close the usual escape routes. The depth is **exactly** what you were
+asked for -- a FIFO that accepts fewer beats than its parameter says is wrong,
+and so is one that accepts more. And storage outside the FIFO proper is
+**bounded**, so the familiar fix of adding skid buffers until the timing works is
+not available.
+
+## What to submit
+
+**One self-contained file** containing only `module async_fifo_cdc`, with the
+exact port list below. No package, no include, nothing outside the file.
+
+Two things that account for most failures here:
+
+- **It must elaborate under BOTH slang and Verilator.** Simulation uses one and
+  synthesis reads the same file with the other; a file only one accepts cannot
+  be built.
+- **Declare every variable before the first statement in its procedural block.**
+  SystemVerilog forbids a declaration after a statement inside a block, and the
+  error text names neither declarations nor placement.
+
+---
+
+## The specification
+
+Everything below is the contract. The section headed `LATENCY AND THROUGHPUT`
+names what is deliberately left **open** -- choose freely there, nothing checks
+it. Everything else is normative, including the reset section, which is the
+subtlest part.
+
+```systemverilog
 // =============================================================================
 // async_fifo_cdc_iface.sv  --  PORT DEFINITION ONLY (no implementation)
 // =============================================================================
@@ -256,3 +303,4 @@ module async_fifo_cdc #(
     // IMPLEMENTATION INTENTIONALLY OMITTED.
 
 endmodule
+```
