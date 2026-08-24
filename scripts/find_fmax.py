@@ -41,6 +41,7 @@ On a native x86_64 host (e.g. WSL2) export these first:
 
 import argparse
 import glob
+import math
 import json
 import os
 import re
@@ -630,6 +631,24 @@ def main():
         "pdk": args.pdk,
         "converged_period_ns": round(converged, 4) if converged is not None else None,
         "achieved_fmax_mhz": round(1000.0 / converged, 2) if converged else None,
+        # THE PIN, COMPUTED HERE SO NOBODY COMPUTES IT FROM THE WRONG FIELD.
+        # The project's rule is 1.5x the reference's measured PERIOD, rounded up
+        # to the next 0.25 ns. This record carried the two ingredients and not the
+        # answer, with the frequency sitting beside the period in the more
+        # familiar unit and the more inviting name. Applying the rule to
+        # achieved_fmax_mhz instead of converged_period_ns on d_nw03 gives
+        # 1.5 x 363.64 = 545.46 MHz = 1.833 ns -- 0.667x the reference period,
+        # TIGHTER than the reference itself, so nothing could close.
+        #
+        # That error is silent where it is made and loud somewhere else: the pin
+        # looks ordinary in a spec and surfaces later as every submission missing
+        # timing, which reads as a hard task or a wrong SDC long before anyone
+        # re-derives the number. Emitting the pin removes the arithmetic from the
+        # caller entirely.
+        "pinned_period_ns": (
+            round(math.ceil(converged * 1.5 / 0.25) * 0.25, 4)
+            if converged else None),
+        "pin_rule": "1.5x converged_period_ns, rounded up to the next 0.25 ns",
         "wns_at_converged_ns": wns_at,
         "confirming_rerun": confirm,
         "bracket": {
