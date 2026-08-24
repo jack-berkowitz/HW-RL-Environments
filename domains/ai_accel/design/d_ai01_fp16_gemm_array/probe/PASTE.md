@@ -408,17 +408,30 @@ Everything normative is in the interface below.
 //        BIT-EXACT. There is no partial credit and no tolerance: a value that is
 //        one ulp out fails exactly as a value that is nonsense fails.
 //
-//     2. THE GATE. A submission that fails correctness at EITHER geometry
-//        produces NO PPA NUMBER AT ALL. It is recorded as a failure, not as a
-//        missing measurement, and it scores zero on every PPA axis. Passing at
-//        the scored geometry alone is not sufficient -- see T3.
+//     2. THE GATE. A submission that fails correctness at EITHER geometry, OR
+//        THAT FAILS TO BUILD, produces NO PPA NUMBER AT ALL. It is recorded as a
+//        failure, not as a missing measurement, and it scores zero on every PPA
+//        axis. Passing at the scored geometry alone is not sufficient -- see T3.
+//        A design the simulator accepts and the synthesis frontend rejects
+//        scores full correctness and no PPA.
 //
 //     3. PPA, measured only for submissions that already passed, and measured
 //        ONCE AT A PINNED CLOCK PERIOD rather than by sweeping for a maximum
-//        frequency. At the time of writing that period is 50 ns on sky130hd. The
-//        number is the harness's to set and may be re-pinned; what does not
-//        change is that it is FIXED for every submission, so all designs are
-//        compared at one frequency rather than at each design's own best.
+//        frequency.
+//
+//        THE PINNED PERIOD FOR THIS TASK IS NOT YET SET. It is derived as 1.5x
+//        the reference implementation's own measured period, rounded up to the
+//        next 0.25 ns, from a single reference Fmax sweep; that sweep is running
+//        and its result will be stated here before any submission is solicited.
+//        The 50 ns in orfs/constraint.sdc is a STARTING CONSTRAINT, not the pin,
+//        and it was never derived by that rule.
+//
+//        Whatever the number turns out to be, it does not move in response to
+//        what is submitted. An earlier scheme pinned the row at the slowest
+//        submission's own Fmax, which rewards a slow design by moving the
+//        measurement toward the period where its own area looks best. The period
+//        is THE SAME for every submission, so all designs are compared at one
+//        frequency rather than at each design's own best.
 //
 // G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
 //       * AREA, post-synthesis and post-place-and-route.

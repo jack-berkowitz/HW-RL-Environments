@@ -711,8 +711,12 @@ module axi4_xbar_tb
         $display("METRIC: checks=%0d", checks);
         // ---- PPA-adjacent axes. Throughput is the P in PPA and was being
         // treated as diagnostic output; it is reported here as a first-class
-        // axis alongside area, power and Fmax. Still ungated -- no flat
-        // threshold separates a good design from a bad one across geometries.
+        // axis alongside area and power. Still ungated -- no flat threshold
+        // separates a good design from a bad one across geometries.
+        //
+        // NOT alongside Fmax: Fmax stopped being a scored axis, and is now
+        // measured once per task on the reference only, to set the pinned period
+        // every submission builds at. See the spec's G2.
         $display("METRIC: scored_beats_per_1000cyc=%0d over %0d cycles",
                  (scored_cyc == 0) ? 0 : (scored_beats * 1000) / scored_cyc, scored_cyc);
         $display("METRIC: read_latency_avg=%0d max=%0d n=%0d",

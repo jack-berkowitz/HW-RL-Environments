@@ -592,11 +592,27 @@ Everything normative is in the interface below.
 // G1. THE ORDER, and correctness is a GATE rather than a weighting.
 //     1. CORRECTNESS. Bit-exact on the T1 surface against the reference. There
 //        is no partial credit and no tolerance.
-//     2. THE GATE. A submission that fails correctness produces NO PPA NUMBER
-//        AT ALL, recorded as a failure rather than as a missing measurement.
+//     2. THE GATE. A submission that fails correctness, OR THAT FAILS TO BUILD,
+//        produces NO PPA NUMBER AT ALL, recorded as a failure rather than as a
+//        missing measurement, and scoring zero on every PPA axis. A design the
+//        simulator accepts and the synthesis frontend rejects scores full
+//        correctness and no PPA.
 //     3. PPA, measured only for submissions that passed, ONCE AT A PINNED CLOCK
 //        PERIOD rather than by sweeping for a maximum frequency, so every
 //        submission is compared at one frequency.
+//
+//        THE PINNED PERIOD FOR THIS TASK IS NOT YET SET. It is derived as 1.5x
+//        the reference implementation's own measured period, rounded up to the
+//        next 0.25 ns, from a single reference Fmax sweep; that sweep is queued
+//        and its result will be stated here before any submission is solicited.
+//        The 25 ns in orfs/constraint.sdc is a STARTING CONSTRAINT, not the pin,
+//        and the recorded areas taken at it are marked NOT FINAL for that reason.
+//
+//        Whatever the number turns out to be, it does not move in response to
+//        what is submitted. An earlier scheme pinned the row at the slowest
+//        submission's own Fmax, which rewards a slow design by moving the
+//        measurement toward the period where its own area looks best. The period
+//        is THE SAME for every submission.
 //
 // G2. WHAT IS COMPARED: area post-synthesis and post-place-and-route, power at
 //     the pinned period, and this task's own cycle axis.

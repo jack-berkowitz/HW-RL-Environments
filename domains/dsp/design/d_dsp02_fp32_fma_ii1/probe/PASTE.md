@@ -261,10 +261,16 @@ exact port list below. No package, no include, nothing outside the file.
 //
 //       WHY THE FREQUENCY IS NOT THE POINT. An FMA is a far larger
 //       combinational block than a FIFO or a crossbar datapath -- 68303 um2
-//       against d_ca04's 20101 -- so a lower Fmax at comparable depth is
-//       arithmetic, not a defect, and comparing frequencies across tasks was
-//       never meaningful. Fmax is compared BETWEEN SUBMISSIONS TO ONE TASK,
-//       which is what rule 18 pins the configuration to make possible.
+//       against d_ca04's 20101 -- so a lower achievable frequency at comparable
+//       depth is arithmetic, not a defect, and comparing frequencies across
+//       tasks was never meaningful.
+//
+//       Nor is frequency compared BETWEEN submissions to this task. That
+//       sentence stood here and is withdrawn: Fmax is not a scored axis at all
+//       (see G2). Every submission is built at one pinned period and compared on
+//       area, power and this task's own axes there. What rule 18 pins the
+//       configuration for is to make THOSE comparable, not to make a frequency
+//       race fair.
 //
 //       Criterion 3 -- closes with margin at a period a plausible alternative
 //       can also hit -- is met: 12.8125 ns with +0.27 ns slack and DRC clean.
