@@ -59,22 +59,37 @@ Let `size` and `len` be the upstream request's, and let
   upstream `size` of 0 stays **0**, and only sizes above the downstream width are
   reduced.
   *Measured: size 3 → 1, size 1 → 1, size 0 → **0**.*
-- **B2 — length.** The downstream `len` is
+- **B2 — length.** Let `first = addr` and `last = addr + total_bytes - 1`. The
+  downstream burst covers every aligned downstream block from the one holding
+  `first` to the one holding `last`, so
 
-  > `total_bytes / beat_bytes(min(size,1)) - 1`
+  > `downstream len = (aligned(last, dsize) - aligned(first, dsize)) / beat_bytes(dsize)`
 
-  **This follows the bytes covered, not the beat count.** For an aligned request
-  at `size` 3 it comes to `(len+1)*4 - 1`. For the *same* request at an unaligned
-  address it does not: the first upstream beat contributes only the bytes from
-  `addr` to the end of its aligned block.
-  *Measured: `len=1 size=3 @0x1000` → downstream `len=7`; `len=1 size=3 @0x1004`
-  → downstream **`len=5`**. A testbench carrying `(len+1)*ratio - 1` is wrong at
-  exactly that case and right everywhere else.*
+  where `dsize = min(size, 1)`.
+
+  **It is a count of BLOCKS SPANNED, not a division of the byte count.** Both
+  readings agree on an aligned request at `size` 3, where it comes to
+  `(len+1)*4 - 1`. They disagree twice:
+  *at an unaligned address, because the first upstream beat contributes only the
+  bytes from `addr` to the end of its aligned block* — `len=1 size=3 @0x1000`
+  gives 7, and the same request `@0x1004` gives **5**;
+  *and when the byte range does not fill one downstream block* — `len=0 size=1
+  @0x1001` covers a single byte, and dividing gives **minus one** where the
+  answer is **0**, one beat.
+  *Measured for all four cases.*
+
 - **B3 — address.** The downstream `addr` **equals** the upstream `addr`,
   unaligned or not. It is not realigned.
-- **B4 — burst.** The downstream `burst` is **`INCR`**, always — including for
-  the single-beat `FIXED` request that §3 permits.
-  *Measured: upstream `FIXED len=0` → downstream `burst = INCR`.*
+- **B4 — burst.** When the downstream burst has **more than one beat** the
+  downstream `burst` is **`INCR`**.
+  *Measured: upstream `FIXED len=0 size=3` becomes a four-beat downstream burst
+  and its type is INCR.*
+
+  When the downstream burst has **exactly one beat** the downstream burst type
+  is **not specified** — see L6. A single-beat burst transfers one block and its
+  type carries no meaning.
+  *Measured: the anchor forwards `FIXED` unchanged there; an implementation that
+  drives `INCR` instead is equally correct.*
 
 ---
 
@@ -193,8 +208,12 @@ Let `size` and `len` be the upstream request's, and let
   upstream beat first is free.
 - **L5 — how many downstream beats are in flight**, and whether the downstream
   burst is issued as one contiguous run of beats or with gaps, is free.
+- **L6 — the burst type of a SINGLE-BEAT downstream burst.** It transfers one
+  aligned block; `FIXED` and `INCR` describe the same transfer, so neither is
+  required. Do not check it. B4 binds only where the downstream burst has more
+  than one beat.
 
-These five are the whole of the latitude in this contract. Everything above is
+These six are the whole of the latitude in this contract. Everything above is
 exact.
 
 ---

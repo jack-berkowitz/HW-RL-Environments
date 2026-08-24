@@ -136,3 +136,67 @@ already had been. Third instance of this defect class in this task alone.
 `dsB_sent` was also dropped from the comparison: it counts when the design drives
 `m_bready`, which is L2 latitude, not a contract observable. Comparing it made
 two legal implementations look different.
+
+## The reference testbench
+
+Developed against all six legal implementations, and it passes every one of
+them: the anchor, the independent `dut2`, and the five conformant perturbations.
+It rejects the all-outputs-high negative control.
+
+Design consequences of being written against six rather than one:
+
+* **No ready is ever required to be high.** Every wait carries a generous budget
+  and fails only on timeout, naming the channel. Two of the six accept one
+  transaction at a time and one throttles admission to eight cycles in sixteen.
+* **Every payload is sampled only when its own valid is high** (X2), which
+  `dwc_c4` exists to punish.
+* **Transactions are driven one at a time for the exact checks**, because A4
+  makes `MAX_READS` an upper bound and two implementations accept only one.
+  Concurrency is *offered* in its own phase and checked only if it is taken;
+  requiring it would reject a conforming design.
+* **The downstream address transform is checked against the FORMULAS**, latched
+  at the handshake, not against the anchor's choices.
+
+## The reference found two defects in my own specification
+
+**B2's length rule was wrong.** It divided the byte count: `total_bytes /
+2^dsize - 1`. For `len=0 size=1` at an odd address the range is a single byte,
+and that gives **minus one** where the answer is one beat. The rule is a count of
+aligned downstream **blocks spanned**:
+
+    ds_len = (aligned(last, dsize) - aligned(first, dsize)) / 2^dsize
+
+Both readings agree on every aligned request, which is why the first eight
+measured cases did not catch it. Re-checked against all of them plus the new
+ones.
+
+**B4 was too strong.** It required the downstream burst to be INCR always.
+Measured: `FIXED len=0 size=3` becomes a four-beat INCR burst, but `FIXED len=0
+size=1` and `size=0` produce a SINGLE-beat downstream burst whose type is
+forwarded unchanged as FIXED. A single-beat burst transfers one block and its
+type carries no meaning, so B4 now binds only where the downstream burst has more
+than one beat, and **L6** names the single-beat case as latitude. Without that,
+`dut2` — which always drives INCR — would have been rejected as non-conforming.
+
+## Three more faults in my own apparatus
+
+**The same lane bug, written three times.** The downstream lane of a byte is
+`address mod bus_bytes`, not the loop index. At `size` 0 a beat advances one byte
+at a time so the lane alternates, and using the index puts every byte in lane 0.
+I wrote the wrong idiom in the testbench's read responder, again in its write
+checker, and again in `dut2` — three independent instances of one
+misunderstanding, each found by a different comparison.
+
+**An `always_comb` that reads a queue another process pushes is not guaranteed
+to re-evaluate on the push.** The first response went out and every later one
+waited for some unrelated signal to move, so each transaction timed out at
+exactly its wait budget and its beats surfaced during the *next* transaction. The
+signature was distinctive: failures at exactly 20001-cycle intervals. The
+downstream read responder is registered now.
+
+**`dut2` had two bugs the probes could not see**: `m_rready` held high while an
+upstream beat was pending, silently dropping every second downstream beat; and
+its next-upstream-beat test used the bus width instead of the beat size, so at
+`size` 1 it reused stale data. The probe comparison passed it because the probes
+covered eight cases; the reference covers the `size` 0..3 by `len` 0..3 grid plus
+unaligned, and caught both.

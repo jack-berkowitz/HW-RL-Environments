@@ -114,6 +114,13 @@ module dw_downsizer_alt #(
                                             input logic [2:0] sz);
     tot_bytes = (int'(l) + 1) * bbytes(sz) - int'(a - algn(a, sz));
   endfunction
+  // clause B2: a count of aligned downstream BLOCKS SPANNED. Dividing the byte
+  // count gives -1 when the range does not fill one block.
+  function automatic logic [7:0] ds_len_f(input logic [31:0] a, input logic [7:0] l,
+                                          input logic [2:0] sz);
+    automatic logic [31:0] lastb = a + 32'(tot_bytes(a, l, sz)) - 32'd1;
+    ds_len_f = 8'((algn(lastb, ds_size(sz)) - algn(a, ds_size(sz))) >> ds_size(sz));
+  endfunction
 
   // ================= READ =================
   typedef enum logic [1:0] {R_IDLE, R_ADDR, R_DATA, R_ERR} rst_e;
@@ -166,8 +173,7 @@ module dw_downsizer_alt #(
             r_errbeat <= s_arlen; r_st <= R_ERR;            // clause C4
           end else begin
             r_dssize <= ds_size(s_arsize);
-            r_dslen  <= 8'((tot_bytes(s_araddr, s_arlen, s_arsize)
-                            >> ds_size(s_arsize)) - 1);
+            r_dslen  <= ds_len_f(s_araddr, s_arlen, s_arsize);
             r_ptr    <= s_araddr;
             r_end    <= s_araddr + 32'(tot_bytes(s_araddr, s_arlen, s_arsize));
             r_upnext <= algn(s_araddr, s_arsize) + 32'(bbytes(s_arsize));
@@ -180,10 +186,13 @@ module dw_downsizer_alt #(
           automatic logic [31:0] p = r_ptr;
           automatic int unsigned nby = 0;
           // place this downstream beat's bytes into their upstream lanes (D2)
+          // BOTH lanes are address-derived. Reading the downstream lane by the
+          // loop index is only right when the beat base is bus-aligned, and at
+          // size 0 a beat advances one byte at a time so the lane alternates.
           for (int b = 0; b < MBYTES; b++) begin
             automatic logic [31:0] a = algn(p, r_dssize) + 32'(b);
             if (a >= p && a < r_end)
-              nb[8*(a % SBYTES) +: 8] = m_rdata[8*b +: 8];
+              nb[8*(a % SBYTES) +: 8] = m_rdata[8*(a % MBYTES) +: 8];
           end
           nby = int'(algn(p, r_dssize)) + bbytes(r_dssize) - int'(p);
           if (m_rresp != 2'b00) r_err_seen <= 1'b1;
@@ -263,8 +272,7 @@ module dw_downsizer_alt #(
             w_beats_left <= s_awlen; w_st <= W_ABSORB;       // C4.3: absorb it all
           end else begin
             w_dssize <= ds_size(s_awsize);
-            w_dslen  <= 8'((tot_bytes(s_awaddr, s_awlen, s_awsize)
-                            >> ds_size(s_awsize)) - 1);
+            w_dslen  <= ds_len_f(s_awaddr, s_awlen, s_awsize);
             w_ptr    <= s_awaddr;
             w_end    <= s_awaddr + 32'(tot_bytes(s_awaddr, s_awlen, s_awsize));
             w_upnext <= algn(s_awaddr, s_awsize) + 32'(bbytes(s_awsize));
@@ -283,8 +291,8 @@ module dw_downsizer_alt #(
           for (int b = 0; b < MBYTES; b++) begin
             automatic logic [31:0] a = algn(p, w_dssize) + 32'(b);
             if (a >= p && a < w_end) begin
-              d[8*b +: 8] = w_hold[8*(a % SBYTES) +: 8];
-              st[b]       = w_hstrb[a % SBYTES];             // E2: per byte lane
+              d[8*(a % MBYTES) +: 8] = w_hold[8*(a % SBYTES) +: 8];
+              st[a % MBYTES]         = w_hstrb[a % SBYTES];   // E2: per byte lane
             end
           end
           nby = int'(algn(p, w_dssize)) + bbytes(w_dssize) - int'(p);
