@@ -220,6 +220,14 @@ is normative.
 //       solicited. Until then, treat the contract above as complete and the
 //       frequency target as not yet issued.
 //
+//       FOR THE SAME REASON, NO PPA FIGURE EXISTS FOR THIS TASK. The axes named
+//       in G2 below describe how this task WILL be measured once it has a build,
+//       not measurements that are available today: with no ORFS configuration
+//       there is no synthesis run and no place-and-route run, so "post-synthesis
+//       and post-place-and-route" states the intended method rather than a
+//       number anyone can look up. Correctness is unaffected and is checked
+//       exactly as described.
+//
 //   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
 //         * AREA, post-synthesis and post-place-and-route.
 //         * POWER, at the pinned period.
