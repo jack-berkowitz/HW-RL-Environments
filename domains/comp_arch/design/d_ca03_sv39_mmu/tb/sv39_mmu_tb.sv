@@ -44,6 +44,12 @@ module sv39_mmu_tb;
   int unsigned cov_tallied = 0;
   localparam int unsigned MAX_REPORT = 12;
 
+  // plusarg-guarded, so a normal run is unaffected
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(1, sv39_mmu_tb.dut);
+  end
+
   initial begin
     if (!$value$plusargs("vec=%s", vfile)) vfile = "vectors/vectors_sv39.hex";
     $readmemh(vfile, recs);

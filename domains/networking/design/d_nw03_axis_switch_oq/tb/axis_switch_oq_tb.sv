@@ -30,6 +30,12 @@ module axis_switch_oq_tb #(
   parameter int unsigned DATA_W  = 32,
   parameter int unsigned SEED    = 1
 );
+  // plusarg-guarded stimulus-variation dump; a normal run is unaffected
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, axis_switch_oq_tb);
+  end
+
 
   localparam int unsigned KEEP_W  = DATA_W/8;
   localparam int unsigned DEST_W  = $clog2(M_COUNT);

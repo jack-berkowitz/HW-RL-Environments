@@ -48,6 +48,12 @@ module axi4_xbar_tb
     parameter int MAX_ERRORS_REPORTED = 20
 );
 
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, axi4_xbar_tb);
+  end
+
+
     // Transactions are scaled so total BEATS stay roughly constant: a 256-beat
     // burst carries 64x the data of a 4-beat one, and sweeping MAX_BURST_LEN
     // without this makes the long configs dominate runtime for no extra
