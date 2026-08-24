@@ -4029,6 +4029,36 @@ must be **declared with its citation**, and an undeclared constant must FAIL
 rather than warn. In `d_ca03` three of eight constants were legitimate and five
 were defects, and nothing in the source distinguished them.
 
+### A frozen input is a defect only when no other varying input reaches the clause
+
+This is the part that keeps the check honest, and it took two tasks to see both
+poles of it.
+
+**`d_ca03`'s `pmpcfg_i` is the defect pole.** Held at one permitting region for
+the whole sequence, and NOTHING ELSE could reach the clause it governs. No
+address, no privilege level, no access type could make a permitted region deny,
+so the entire physical-memory-protection path went unexercised and three fault
+causes pinned longhand were unreachable. Unfreezing it was the only way in.
+
+**`d_nw01`'s `addr_map` is the legitimate pole.** Also held constant for the
+whole run, and that is CORRECT. It is a static configuration input, and the
+clause it governs -- an address matching no rule must return a decode error --
+is reached anyway, because the ADDRESSES vary and the testbench deliberately
+drives one outside the map. Two mutants are keyed on that path. Unfreezing
+`addr_map` would add nothing.
+
+So the check reports a candidate, not a verdict. The question it hands you is
+"which clause does this input govern, and can anything else reach it?" -- and
+that question has to be answered by reading the clause, not by reading the
+report. Automating the answer would mean deciding which inputs are
+configuration and which are stimulus, which is exactly the judgement the
+specification exists to record.
+
+The corollary is the allowlist. A legitimate constant must be **declared with
+the clause permitting it**, because nothing in the source distinguishes a
+deliberate constant from an overlooked one, and the person who left it constant
+is the person least likely to notice.
+
 ### Why review does not catch it
 
 Nothing had to be built to close instance 1. The page table already planted
@@ -4240,6 +4270,33 @@ clauses on error PROPAGATION that the reference never drives and no mutant is
 keyed on, so a submission cannot be scored on them in either direction. Flagging
 them at low confidence rather than as a finding is what made them cheap to check
 instead of another thing to retract.
+
+### Instance 6 — an instrument that could not tell absent from unobserved
+
+The VCD-based replacement for the static scanner, written after four defects in
+the scanner and validated against an independent in-testbench monitor, was wrong
+in the same family on its first run. It reported **"1 of 8 inputs found in the
+dump"** for a task whose testbench drives all eight.
+
+A VCD assigns one identifier code to signals that always carry the same value,
+so a module port and the testbench signal wired to it share a code. The reader
+mapped code to ONE name, and the last binding won -- every port disappeared
+behind the testbench-side name it was tied to. The tool was reporting "the last
+name bound to this code" and it was read as "this signal".
+
+**The generalisable half is not the aliasing.** It is that the tool could not
+distinguish *measured and found constant* from *never observed at all*, and
+reported both as absence. Those two need opposite responses: the first is a
+result, the second is a gap in the instrument. It now prints
+`NOT FOUND in the dump (cannot conclude)` and refuses to count such a signal as
+frozen, which is the safe direction for a gate — over-reporting a gap costs a
+reading, under-reporting one ships it.
+
+This is F64's shape with the polarity that matters here: F64 is about
+apparatus that decays into answering a different question over time, and this is
+apparatus that answered a different question from the first run. Both return a
+number that looks like the one requested. **An instrument must distinguish
+measured-absent from not-observed, and say which it means.**
 
 ### The required practice for impossibility claims
 
