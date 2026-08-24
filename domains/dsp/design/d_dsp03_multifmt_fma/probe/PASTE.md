@@ -21,6 +21,8 @@ independent lanes, so at `WIDTH = 64` a 16-bit operation has FOUR of them. A des
 that handles two because two is what the narrow configuration needed passes one
 configuration and fails the other.
 
+Your submission will be graded on correctness as well as power, performance, and area (PPA), latency, throughput, and any other task-specific performance metrics. Keep these reward signals in mind when choosing an implementation.
+
 ## What to submit
 
 **One self-contained file** containing only `module fp_multifmt_fma`, with the
