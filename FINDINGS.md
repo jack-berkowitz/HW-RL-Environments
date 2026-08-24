@@ -4395,3 +4395,140 @@ tree state that established it; had the sentence been "green on the working tree
 the gap would have been visible in the sentence itself.
 
 **Rules:** 30
+
+---
+
+## F77. A normative clause written from the standard, that the anchor contradicts
+
+`d_ca03`'s A8 said physical memory protection is checked on every address the
+walker reads **"and so is the final translated address."** The second half was
+never true of the anchor. Measured across seven configurations:
+
+```
+load  through R+W+X                              -> translates
+load  through W+X, R denied                      -> cause 5
+store through R+X, W denied                      -> TRANSLATES
+fetch through R+W, X denied                      -> TRANSLATES
+load  with no region at all                      -> cause 5
+load  R denied, TLB WARM, zero page-table reads  -> TRANSLATES
+```
+
+The last line settles it: with the entry already resident no read is issued, and
+the request succeeds through a region that denies R. Nothing checks the final
+address. Only the walker's own reads are checked, and only for R — which is the
+only bit a reader can need.
+
+### Where the sentence came from
+
+Not from a probe. From the architecture. RISC-V does check the physical access
+against PMP by access type, so "the final translated address is checked too" is
+what a specification author who knows the standard writes without pausing. But
+the anchor is an **MMU**: it translates, and something else performs the access.
+The check the standard describes lives outside the module. The clause was
+correct about RISC-V and false about the thing being scored.
+
+### Why it is a distinct class, and the inverse of an existing one
+
+F57 covers a requirement THE ORACLE DETERMINES AND THE CONTRACT LEAVES OPEN — the
+reference silently decides something the text never says, and a submission has no
+way to know. **This is the mirror image: the contract states something the oracle
+CONTRADICTS.** The text is not silent, it is confidently wrong, and it is wrong in
+the most credible possible way — it agrees with the published standard.
+
+That inversion changes what finds it. F57's carry is answered by asking "what did
+the reference decide that I did not write down?" No amount of asking that
+surfaces A8, because A8 *was* written down. The question that surfaces it is the
+opposite one: **"which of my clauses have I never actually seen the anchor obey?"**
+
+### Why review cannot catch it
+
+Three separate reviews of this specification passed over A8, including one
+looking specifically for contract defects. It reads correctly, it cites the right
+authority, and the authority genuinely says what it claims. The only thing wrong
+with it is a fact about a particular RTL module, and no amount of reading the
+clause reveals that.
+
+**What did catch it** was the stimulus variation check. `pmpcfg_i` and
+`pmpaddr_i` had been pinned at one permitting region for the whole scored
+sequence, so no request could discriminate. Unfreezing them took twelve new
+requests; eleven behaved exactly as predicted and the twelfth overturned the
+clause. An independent implementation had already recorded the ambiguity as an
+open gap before it ever ran, taken the architectural reading, and been correct
+against the text and wrong against the reference.
+
+### The check
+
+Every normative clause derived from an external standard must be MEASURED against
+the anchor before it ships. Not spot-checked in the direction the standard
+predicts — measured across the configurations that would separate the standard's
+rule from the anchor's behaviour. **The anchor is the oracle; the standard is
+not.** Where they disagree, the contract must say what the anchor does, and say
+that it diverges, because a submission is scored against the anchor.
+
+A clause carrying an AUTHORITY line is not evidence for the clause. It is
+evidence for what the standard says, which is a different claim.
+
+**Where this recurs.** Any task anchored on RTL implementing a published
+standard, which is most of them here: IEEE-754 arithmetic, AXI ordering, RISC-V
+privileged behaviour, PMP, CDC handshakes. Every clause in those tasks that was
+written from knowledge rather than from a probe is a candidate.
+
+**Rules:** 33
+
+---
+
+## F78. F63 confirmed by construction: the flag was true because it was scheduled
+
+F63 established that a coverage floor tallied from flags does not cover a
+delivered-value requirement. `d_ca03` produced the sharpest instance of it, and
+this entry is the confirmation rather than a new class — with the distinguishing
+detail that **correcting the flag made the reference fail immediately.**
+
+Four coverage floors were set from `seq[i].ev`:
+
+```
+if (seq[i].ev == EV_BARE_ON)    cov_bare      = 1'b1;
+if (seq[i].ev == EV_FLUSH_TLB)  cov_flush_tlb = 1'b1;
+if (seq[i].ev == EV_FLUSH_MID)  cov_flush_mid = 1'b1;
+```
+
+`seq` is built by the testbench, so these assert that an array the rig
+constructed contains what the rig put in it. They cannot be false. Re-derived
+from what the reference actually did, one went to zero on the next run:
+
+    controls: bare=1 flush_tlb=1 flush_mid=0
+
+The trace says why:
+
+    step=10 va=0000000080000000 acc=0 cyc=1 v=1 e=0 pa=00000000100000
+
+**acc=0, cyc=1.** The step requested a page the previous step had just installed,
+so it HIT THE TLB and retired in one cycle. `do_step` pulses `flush_i` three
+cycles after asserting the request — long after retirement, with nothing in
+flight to abort.
+
+### What was actually uncovered
+
+C3, which requires `flush_i` to abort an in-flight walk and the unit to restart
+it, and T5, which exists specifically to check that a cancelled request still
+retires. **In a task where C3 had already been rewritten twice** — once relaxed
+on a retracted measurement, once restored — and where T5 was added deliberately
+to close it. The clause was revised, the check was written, and neither had ever
+run. Pointing the step at a non-resident page:
+
+    step=10 va=0000000080012000 acc=8 cyc=15 v=1 e=0 pa=00000000112000
+
+Eight reads — a partial walk aborted, then a full re-walk — and 15 cycles, which
+is the number C3 itself quotes for the held-request discipline.
+
+### Why this instance is worth recording separately
+
+The correction was one line and the failure was immediate. That combination is
+the argument: a schedule-derived flag costs nothing to fix and its falsity is
+detectable the moment it is fixed, so there is no reason to leave one standing.
+It also shows the failure mode is not theoretical — the flag was not merely
+imprecise, it was reporting green coverage of the single most-revised clause in
+the task for the whole life of the sequence.
+
+**Rules:** 32
+

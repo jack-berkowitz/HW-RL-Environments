@@ -864,4 +864,84 @@ defects. It runs with the regression.
 
     **From:** F75
 
+33. **A normative clause derived from an external standard must be measured
+    against the anchor before it ships. The anchor is the oracle; the standard is
+    not.** Where they disagree the contract must state what the ANCHOR does, and
+    say that it diverges — a submission is scored against the anchor, so a clause
+    that is true of the standard and false of the anchor fails a correct design.
+
+    **An AUTHORITY line is not evidence for the clause.** It is evidence for what
+    the standard says, which is a different claim, and it is the thing that makes
+    the defect survive review: the clause reads correctly, cites a real authority,
+    and the authority genuinely says what it claims. The only thing wrong with it
+    is a fact about one RTL module, and reading the clause cannot reveal that.
+
+    `d_ca03`'s A8 said PMP is checked on the walker's reads "and so is the final
+    translated address". The second half was never true of the anchor. A
+    W-denied store translates, an X-denied fetch translates, and a warm TLB hit
+    through an R-denied region translates issuing zero page-table reads. RISC-V
+    does check the physical access by access type — but the anchor is an MMU, and
+    the access happens somewhere else. The clause was correct about the standard
+    and false about the thing being scored, and it survived because the sequence
+    pinned one permitting region for its whole length so no request could
+    discriminate.
+
+    **The inverse of the leaves-it-open rule, and it needs the opposite
+    question.** That rule asks "what did the reference decide that I did not write
+    down?" — and no amount of asking it surfaces this, because this clause WAS
+    written down. Ask instead: **"which of my clauses have I never actually seen
+    the anchor obey?"** Then measure across the configurations that would separate
+    the standard's rule from the anchor's behaviour, not in the direction the
+    standard predicts.
+
+    **From:** F77
+
+34. **The stimulus-variation check and a capability-reduced control are BUILD
+    STEPS for a design task, not audits of one.** A task is not finished until
+    both have been run and both have been shown to discriminate. Running them
+    afterwards finds the same defect again by hand, once per task.
+
+    **The evidence is four instances in four tasks**, each one a capacity or
+    permission surface declared scored and not actually scored:
+
+    | task | surface | found by |
+    |---|---|---|
+    | `d_ai01` | HEIGHT load-bearing? | a capability-reduced control (`nc_g`) |
+    | `d_ca03` | instruction TLB capacity | a capability-reduced control |
+    | `d_ca03` | the whole PMP path, plus supervisor/SUM/MXR and ASID | the variation check |
+    | `d_ca03` | `flush_i` abort — a clause revised twice, never exercised | outcome-derived coverage |
+
+    Every one was invisible to review, to the reference, and to the existing
+    negative controls, because a control built from the reference inherits its
+    answer to every question the text left open.
+
+    **What each instrument is for, and why one does not substitute for the
+    other.** The variation check asks whether the STIMULUS reaches a clause: every
+    input the contract gives meaning to must take more than one value, and a
+    constant must be declared with the clause permitting it. The
+    capability-reduced control asks whether the CHECK discriminates once the
+    stimulus is there: a design that provides less than a pinned budget, ports
+    left full width so it answers every request correctly and only discards
+    capacity, must FAIL — and preferably fail on that check alone with zero
+    per-step failures, which is what proves the perturbation is isolated.
+
+    A task can pass the first and fail the second: `d_ca03`'s instruction TLB was
+    reached by stimulus and still unenforced, because the residency check had been
+    declared impossible. It can pass the second and fail the first: a control
+    cannot discriminate on a clause no request ever visits.
+
+    **Both are cheap.** The variation monitor is about sixty lines and mostly a
+    name table. The control is a copy of the second source with one literal
+    altered. Neither needs synthesis, so neither inverts the grading order the way
+    a structural check would. There is no cost argument for deferring them.
+
+    **And validate the instruments themselves**, since both are absence-shaped: a
+    reconstruction of a known-failing input for the variation check, and a
+    negative control proving it can pass rather than being stuck-fail. A static
+    scan is a candidate list, never a verdict — cross-check it against a runtime
+    monitor, because the scanner written for this was wrong four times before it
+    agreed with one.
+
+    **From:** F72, F77
+
 ---
