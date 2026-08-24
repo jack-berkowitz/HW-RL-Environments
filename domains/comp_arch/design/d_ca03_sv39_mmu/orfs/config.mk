@@ -8,6 +8,22 @@ export PLATFORM        = sky130hd
 export DESIGN_NAME     = sv39_mmu
 export DESIGN_NICKNAME = d_ca03_sv39_mmu
 
+# FLOORPLAN AND PLACEMENT, matching every other design task in this repo.
+# Without CORE_UTILIZATION or an explicit DIE_AREA/CORE_AREA, ORFS stops at
+# `No floorplan initialization method specified` and dies at do-2_1_floorplan,
+# which is what a reference Fmax sweep on the raw task config hits. It never
+# surfaced because this task's recorded area is a synthesis figure taken after
+# synth+abc -- nothing had ever asked this config to place anything.
+#
+# Values are the other tasks' verbatim, not chosen for this design: a floorplan
+# target picked per-task would make area incomparable across the corpus, the same
+# reason SYNTH_MEMORY_MAX_BITS had to match. This file is NOT part of
+# task_text_hash (which covers spec/ and PASTE.md), so adding these does not
+# change the task text or invalidate any solicitation.
+export CORE_UTILIZATION = 10
+export PLACE_DENSITY    = 0.50
+export TNS_END_PERCENT  = 100
+
 export SYNTH_HDL_FRONTEND = slang
 
 # The dependency closure, EXPLICIT and in order, packages first. slang does not

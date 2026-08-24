@@ -570,9 +570,23 @@
 //        PERIOD rather than by sweeping for a maximum frequency, so every
 //        submission is compared at one frequency.
 //
-// G2. WHAT IS COMPARED: area post-synthesis and post-place-and-route; power at
-//     the pinned period; and worst negative slack against it. A build that
-//     misses timing yields no comparable area or power figure.
+// G2. WHAT IS COMPARED: area post-synthesis and post-place-and-route, power at
+//     the pinned period, and this task's own cycle axis.
+//
+//     TIMING CLOSURE IS A GATE, NOT AN AXIS, AND SLACK IS NOT SCORED. A build
+//     that misses the pinned period yields no comparable area or power figure --
+//     an area number from a build that did not close is not a smaller design, it
+//     is an unfinished one -- so its PPA is withheld rather than reported.
+//
+//     Slack ABOVE zero earns nothing either, and the reason is that it is not a
+//     separate quantity from area. Meeting timing with margin is bought WITH
+//     area: the tools upsize cells, insert buffers and duplicate logic to close
+//     faster. A design sitting well clear of the pinned period spent silicon
+//     getting there that a design sitting just inside it did not. Area already
+//     charges for that, so scoring slack as well would count one tradeoff twice
+//     and in opposite directions -- rewarding a design for the very spending the
+//     area axis penalises. Closure is pass or fail, and everything above the
+//     line is the same result.
 //
 //     Fmax is NOT a scored axis. It is measured once per task, on the REFERENCE
 //     ONLY, and its sole job is to set the pinned period above. Submissions are
