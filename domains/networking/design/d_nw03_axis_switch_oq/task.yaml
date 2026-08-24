@@ -191,30 +191,36 @@ capability_controls:
   buffering_ceiling:
     control: controls/nc_h_overbuffered.sv
     covers: B1
-    verdict: "PASSES AT BOTH CONFIGURATIONS -- B1 IS NOT ENFORCED"
-    failing_checks: 0
+    status: ENFORCED
+    verdict: "FAIL at 4x4 AND at 2x2, 1 failing check each -- B1 alone"
     finding: F80
-    detail: >
-      Eight frame buffers per input where B1 permits two, one edit from
-      tb/axis_switch_oq_alt_ref.sv, ports full width, every frame routed ordered
-      and delivered exactly once. Four times the permitted storage passes every
-      check at 4x4 and 2x2 with zero per-step failures. Nothing in the harness
-      measures frames in flight, counts beats held, or references 2 or 16.
-      .
-      THE PREDICTION WAS THAT IT WOULD PASS, and it is recorded in the control's
-      header before it was run. A control that passes is normally a defect in the
-      control; here it is the finding.
-      .
-      POLARITY HAS NO CROSSOVER, unlike every other control here. B1's ceiling is
-      a CONSTANT, not a parameter, so eight buffers exceeds it at every
-      configuration and the expected verdict is the same at both. The two
-      configurations are run to show the absence of a check is not a
-      configuration artefact.
-    owed: >
-      One of three, and choosing is part of the fix. ENFORCE it with the
-      d_ca04 capacity-phase shape run as a ceiling -- hold every output
-      not-ready, offer frames on every input, count beats accepted before
-      backpressure, all observed in the input domain so nothing races. Or DROP
-      B1 and price buffering on an axis. Or STATE that it is unenforced. Not
-      repaired here: the clause change is the deliverable and belongs with
-      whoever next opens the task.
+    the_transition: >
+      THIS IS THE EVIDENCE THE CHECK WORKS, and it is why the control was built
+      before the check. Before the ceiling phase existed nc_h PASSED BOTH
+      configurations with zero per-step failures; after it, nc_h FAILS both with
+      exactly one failing check, and both conforming designs still pass with
+      zero. A check never seen to flip a known-bad design is a check nobody has
+      tested.
+    measurement: >
+      d_ca04's capacity phase run as a CEILING rather than a floor: hold every
+      output not-ready, offer frames on every input, count beats accepted before
+      the design stops accepting. Everything is observed on s_valid/s_ready in
+      the INPUT domain, so nothing races and this is not the cross-domain
+      occupancy the checker documents as unmeasurable.
+    validated_before_gating:
+      note: "rule 24 -- the bound was set AFTER measuring known-good answers"
+      beats_held_4x4: {reference: 8, second_source: 40, nc_h: 144}
+      beats_held_2x2: {reference: 4, second_source: 16, nc_h: 72}
+      bound: "16 * M_COUNT -- 64 at 4x4, 32 at 2x2"
+      margin: >
+        Both conforming designs clear it at both configurations, the tightest
+        being the second source at 40 against 64. The control exceeds it by
+        2.25x at the tighter configuration. The bound is B1'"'"'S OWN ARITHMETIC --
+        2 frames per output, 8 beats per frame by R6 -- and is not fitted to any
+        implementation.
+    polarity: >
+      NO CROSSOVER, unlike every other control here. B1'"'"'s ceiling is a CONSTANT,
+      not a parameter, so eight buffers exceeds it at every configuration and the
+      verdict is the same at both. The two configurations are run to show the
+      result is not a configuration artefact.
+    unaffected: "nc_a still fails on delivery (23 checks), nc_b still fails on C1 (1)"

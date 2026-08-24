@@ -138,6 +138,7 @@ module axis_switch_oq_tb #(
   assign m_ready = mr_r;
 
   int accepts_r, delivers_r, cycle_r;
+  int b1_snap, b1_prev, b1_quiet, b1_guard, b1_held;
 
   // ---------------------------------------------------------------- scoreboard
   int unsigned  exp_seq [S_COUNT][M_COUNT];   // next frame expected at m from s
@@ -422,8 +423,38 @@ module axis_switch_oq_tb #(
     end
     all_off(); drain(200000);
 
-    // ============ results ==================================================
+    // ============ P6: B1 CEILING -- how much can it hold? ==================
+    // B1 caps output buffering at 2 frames per output, 16 beats given R6's
+    // 8-beat cap, and calls storage beyond it NON-CONFORMING. Nothing checked
+    // it: a design with EIGHT frame buffers per input passed every check at both
+    // configurations with zero per-step failures. See F80.
+    //
+    // The shape is d_ca04's capacity phase run as a CEILING rather than a floor.
+    // Stop every output accepting, offer on every input, and count what the
+    // design takes before it stops taking. EVERYTHING IS OBSERVED IN THE INPUT
+    // DOMAIN -- beats accepted on s_valid/s_ready -- so nothing races and this is
+    // not the cross-domain occupancy the checker documents as unmeasurable.
     phase = 6;
+    @(negedge clk);
+    mr_r = '0;                                   // every output refuses
+    b1_snap = accepts_r; b1_prev = accepts_r; b1_quiet = 0; b1_guard = 0;
+    for (int s = 0; s < int'(S_COUNT); s++) begin
+      g_dest[s] = DEST_W'(s % int'(M_COUNT));    // spread across outputs
+      g_en[s]   = 1'b1;
+    end
+    // fill until acceptance has been still for a settled window
+    while (b1_quiet < 64 && b1_guard < 8000) begin
+      @(negedge clk); b1_guard++;
+      if (accepts_r != b1_prev) begin b1_prev = accepts_r; b1_quiet = 0; end
+      else b1_quiet++;
+    end
+    b1_held = accepts_r - b1_snap;
+    all_off();
+    @(negedge clk); mr_r = '1;
+    drain(200000);
+
+    // ============ results ==================================================
+    phase = 7;
     cov_frames = total_frames; cov_maxlen = maxlen_r;
     for (int s = 0; s < int'(S_COUNT); s++)
       for (int m = 0; m < int'(M_COUNT); m++) begin
@@ -457,6 +488,26 @@ module axis_switch_oq_tb #(
                     c1_beats, c1_cycles));
 
     `LM_CHECK(note_fail)
+
+    // B1 GATED. Validated against known-good answers before it was allowed to
+    // gate (rule 24), at both configurations:
+    //
+    //                     4x4   2x2    bound
+    //   vendored reference   8     4    64 / 32
+    //   second source       40    16    64 / 32
+    //   nc_h_overbuffered  144    72    64 / 32   <- the control, must FAIL
+    //
+    // Both conforming designs clear it with margin at both configurations, and
+    // the control exceeds it by 2.25x at the tighter one. The bound is B1's own
+    // arithmetic -- 2 frames per output, 8 beats per frame by R6 -- and is not
+    // fitted to any implementation.
+    $display("METRIC: b1_beats_held=%0d (M_COUNT=%0d, B1 permits 16 per output = %0d)",
+             b1_held, M_COUNT, 16 * M_COUNT);
+    if (b1_guard >= 8000)
+      note_fail("B1: the ceiling phase never settled -- the design kept accepting");
+    chk(b1_held <= 16 * int'(M_COUNT),
+        $sformatf("B1: held %0d beats with every output stalled; at most 2 frames per output is %0d beats -- storage beyond that is non-conforming",
+                  b1_held, 16 * int'(M_COUNT)));
 
     $display("METRIC: frames total=%0d", cov_frames);
     $display("METRIC: beats accepted=%0d delivered=%0d cycles=%0d", accepts_r, delivers_r, cycle_r);

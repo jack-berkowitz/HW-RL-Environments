@@ -4707,17 +4707,33 @@ output not-ready, offer frames on every input, and count beats accepted before
 backpressure. A conforming design accepts about `2 * M_COUNT` frames; `nc_h`
 accepts roughly four times that. One phase, one counter, no new observable.
 
-### What is owed
+### Resolved by enforcing, and the transition is the evidence
 
-B1 needs one of three things, and saying which is part of the fix rather than
-separate from it: **enforce it** with the capacity phase above; **drop it** and
-price buffering on an axis; or **state that it is unenforced**, so a reader
-knows the clause describes intent rather than a checked requirement. The third
-is the worst option and still better than the present state, where the text
-reads as binding and is not.
+Of the three options — enforce, drop, or mark unenforced — only enforcing keeps
+F62's conclusion. Dropping discards it. Marking it unenforced leaves a clause
+that reads normative and is not, which is the present state with a label on it.
 
-Recorded rather than repaired here: the clause change is the deliverable and it
-belongs with whoever next opens the task, not folded silently into an audit.
+The capacity phase above is now in the harness, and the numbers it was gated on
+were measured first:
+
+| design | 4x4 | 2x2 | bound |
+|---|---|---|---|
+| vendored reference | 8 | 4 | 64 / 32 |
+| second source | 40 | 16 | 64 / 32 |
+| `nc_h_overbuffered` | **144** | **72** | 64 / 32 |
+
+**`nc_h` flipped from PASS/PASS to FAIL/FAIL** — one failing check each, B1
+alone — while both conforming designs still pass with zero and the other two
+controls are unaffected.
+
+That transition is what makes the check credible, and it is why the control was
+built BEFORE the check. **A check never seen to flip a known-bad design is a
+check nobody has tested**, which is the whole of F75 and most of F80. Writing
+the check first would have left no way to observe the flip.
+
+The bound is B1's own arithmetic — 2 frames per output, 8 beats per frame by R6
+— and is not fitted to any implementation. The tightest conforming margin is the
+second source at 40 against 64.
 
 **Rules:** 25
 
