@@ -128,3 +128,61 @@ Had that been written down, the spec would have said a clock divider produces no
 clock at its two most common settings, and inverted the duty rule. A sampled
 measurement of a clock measures the sampling phase. Edges are now recorded
 directly with `always @(posedge clk_o)` and timestamps.
+
+## dut2 and the perturbations, written BEFORE any mutant
+
+Same ordering as v_ca06, for the same reason: what stops the strongest
+submissions is rejecting a legal variant, not missing a defect. Seven legal
+implementations exist before a single mutant does.
+
+### dut2 — independent, opposite on all five latitude clauses
+
+| clause | anchor | `clk_ratio_div_alt` |
+|---|---|---|
+| L1 phase | its own | period begins after the transition ends |
+| L2 gating duration | **at** G1's bound, tight on all 14 transitions to pass-through | worst gap 2 of a permitted 3, tight nowhere |
+| L3 `div_ready_o` on a real change | 1 to 4 cycles | same cycle |
+| L4 deferral of a second request | 8 cycles | about 2 |
+| L5 `cycl_count_o` while gated | counts the new divisor at once | held at 0 |
+
+Verified against the probes: identical period, high, low and duty at every
+divisor. The only differences are edge counts inside fixed windows, which are
+phase and gating-duration artefacts — exactly the latitude.
+
+**dut2's first version violated G1**, gap 4 against a bound of 3 on every
+transition to pass-through. It gated for two cycles and the negedge enable
+register added a third. *Being slower is not automatically safer when the clause
+is an upper bound* — the reflex that a conservative implementation is a safe one
+is wrong in that direction, and it produced a non-conforming second source.
+
+### The five perturbations
+
+| id | clause | what it does |
+|---|---|---|
+| `cdc_c1_accept_window_4` | L3, L4 | acceptance gated, 4 on / 4 off |
+| `cdc_c2_accept_window_8` | L3, L4 | the same knob at 8 on / 8 off |
+| `cdc_c3_extra_gating` | L2 | one extra gated cycle, still inside G1 |
+| `cdc_c4_count_zero_when_disabled` | L5 | counter forced to 0 while disabled |
+| `cdc_c5_count_frozen_when_disabled` | L5 | counter frozen at its last value |
+
+Two on L5 deliberately: they are opposite legal readings of the same clause, so
+a testbench fitted to either fails the other. Two on L3/L4 for the same reason at
+different settings.
+
+**L1 is not perturbed here and cannot be.** A wrapper cannot shift the phase of a
+clock it did not generate. dut2 covers L1 by being independent, which is the only
+way to reach that clause — worth recording, because a reader counting five
+latitude clauses against five perturbations would otherwise assume L1 was among
+them.
+
+Confirmed: all seven implementations show **zero G1 violations** across all 72
+ordered divisor pairs, and all five perturbations are identical to the anchor on
+the divisor ladder — same period, same duty, every divisor.
+
+### One more instrument fault, small
+
+The first sweep reported "G1 violations = 1" for every implementation including
+the anchor, which I know has none. The grep was matching the word VIOLATION in
+the harness's own explanatory line. Counting the result lines rather than the
+word gives zero everywhere. Same class as the `fail()`-label map and the
+degenerate control: what was counted was not what was claimed.
