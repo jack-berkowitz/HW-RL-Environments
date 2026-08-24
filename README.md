@@ -408,6 +408,41 @@ bash scripts/regression.sh
 bash scripts/sim_verification.sh domains/comp_arch/verification/v_ca05_id_queue candidates/v_ca05/chat.sv chat
 ```
 
+### Automated model submissions
+
+`runner.domain_sweep` replaces the manual prompt/chat/copy loop for every task
+that has a canonical `probe/PASTE.md`. It calls OpenAI and Anthropic directly,
+sends that file as the only user message, extracts the submitted module, and
+dispatches to the existing design or verification grader. The two older design
+tasks without packaged prompts (`d_ca04` and `d_nw01`) are deliberately absent.
+
+Use API keys, not ChatGPT or Claude logins. Entering them with `read -s` keeps
+the values out of shell history:
+
+```bash
+read -s -p "OpenAI API key: " OPENAI_API_KEY; export OPENAI_API_KEY; echo
+read -s -p "Anthropic API key: " ANTHROPIC_API_KEY; export ANTHROPIC_API_KEY; echo
+```
+
+List the checked-in direct model roster and preview a sweep without spending:
+
+```bash
+python3 -m runner.domain_sweep --list-models
+python3 -m runner.domain_sweep --tasks all --models gpt-5.6-sol,opus-5 --dry-run
+```
+
+One low-cost live smoke run, with an explicit local spend stop:
+
+```bash
+python3 -m runner.domain_sweep --tasks d_nw03 --models gpt-5.6-luna \
+  --smoke --max-spend 0.25
+```
+
+Every attempt gets a unique file under `candidates/<task>/`. Sanitized original
+responses and a resumable manifest live under the gitignored
+`results/generations/<run-id>/`; the existing graders continue to write their
+immutable records under `runs/`. Add `--ppa` only when place-and-route is wanted.
+
 > **On an Apple Silicon host, the OpenROAD flow runs amd64 under Rosetta and dies at clock-tree synthesis with "child killed: illegal instruction" unless you pass `LEC_CHECK=0`.**
 
 ## Status and limits
