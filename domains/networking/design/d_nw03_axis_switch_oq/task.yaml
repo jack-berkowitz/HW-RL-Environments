@@ -167,3 +167,54 @@ scored_metrics:
   - {metric: beats_delivered,       label: "beats",    role: capability}
   - {metric: beats_cycles,          label: "cycles"}   # denominator of throughput
   - {metric: liveness_worst_wait,   label: "wait.max"} # stimulus-driven
+
+# =============================================================================
+capability_controls:
+  stimulus_variation:
+    status: CLEAN
+    measured: "8 of 8 contract inputs vary"
+    tool: scripts/check_stimulus_variation.py
+  concurrency:
+    control: controls/nc_b_outputs_serialised.sv
+    covers: C1
+    verdict: "FAIL at 4x4, PASS at 2x2"
+    failing_checks: 1
+    measured: "aggregate rate 514 beats / 601 cycles = 0.855, against a 2.0 floor"
+    reference: "PASS at both, so the floor admits correct hardware (rule 24)"
+    polarity: >
+      NOT INVERTED. S_COUNT and M_COUNT are real task configurations, so the TASK
+      varies and the control passes at the small one and fails at the large. C1
+      is deliberately enforced only at 4x4 -- at 2x2 the ceiling IS 2.0 beats per
+      cycle, so a 2.0 floor would fail correct hardware, and the rate is reported
+      there rather than gated. A pass at the small configuration is not
+      capability evidence.
+  buffering_ceiling:
+    control: controls/nc_h_overbuffered.sv
+    covers: B1
+    verdict: "PASSES AT BOTH CONFIGURATIONS -- B1 IS NOT ENFORCED"
+    failing_checks: 0
+    finding: F80
+    detail: >
+      Eight frame buffers per input where B1 permits two, one edit from
+      tb/axis_switch_oq_alt_ref.sv, ports full width, every frame routed ordered
+      and delivered exactly once. Four times the permitted storage passes every
+      check at 4x4 and 2x2 with zero per-step failures. Nothing in the harness
+      measures frames in flight, counts beats held, or references 2 or 16.
+      .
+      THE PREDICTION WAS THAT IT WOULD PASS, and it is recorded in the control's
+      header before it was run. A control that passes is normally a defect in the
+      control; here it is the finding.
+      .
+      POLARITY HAS NO CROSSOVER, unlike every other control here. B1's ceiling is
+      a CONSTANT, not a parameter, so eight buffers exceeds it at every
+      configuration and the expected verdict is the same at both. The two
+      configurations are run to show the absence of a check is not a
+      configuration artefact.
+    owed: >
+      One of three, and choosing is part of the fix. ENFORCE it with the
+      d_ca04 capacity-phase shape run as a ceiling -- hold every output
+      not-ready, offer frames on every input, count beats accepted before
+      backpressure, all observed in the input domain so nothing races. Or DROP
+      B1 and price buffering on an axis. Or STATE that it is unenforced. Not
+      repaired here: the clause change is the deliverable and belongs with
+      whoever next opens the task.

@@ -4655,3 +4655,69 @@ snapshot, and the caller outlives the snapshot.
 
 **Rules:** 17
 
+---
+
+## F80. A bound nobody checks is not a bound: the lesson was learned and the enforcement was not
+
+`d_nw03`'s B1 states a ceiling and declares breaking it non-conforming:
+
+> **at most 2 frames per output**, that is 16 beats given R6's 8-beat frame cap.
+> Storage beyond that is NON-CONFORMING.
+
+`controls/nc_h_overbuffered.sv` holds **four times that** — eight frame buffers
+per input instead of two, one edit from the second source, ports full width,
+routing and ordering and delivering every frame exactly once. It **passes both
+configurations with zero per-step failures.** Nothing in the harness measures
+frames in flight, counts beats held, or references the number 2 or 16.
+
+### Why this one stings
+
+B1 was written *in response to* F62. Its own text is F62's language —
+deeper queues "read as better throughput, with the area charged to nothing, a
+benefit with no stated cost" — and F62 is the finding where a `d_nw01`
+submission buffered a full 256-beat burst per master, 20,480 bits of
+flip-flops, was **entirely conforming**, and came out at 14.2x the reference's
+area. F62's conclusion was that the bound belongs in the specification, "where
+it costs one clause and no columns."
+
+The clause was written. The check was not. **The lesson was learned in the
+right place and stopped one step short of being enforced**, and the gap survived
+because a clause with a clear rationale reads as settled.
+
+### The mirror direction, which is why no existing control caught it
+
+Every capability-reduced control in this repository tests **under**-provisioning:
+d_ai01's HEIGHT, d_ca03's instruction TLB, d_ca04's SYNC_STAGES and LOG_DEPTH,
+d_nw03's own `nc_b` for concurrency. All of them provide LESS than a declared
+budget and must fail. B1 is a CEILING, so the exploit runs the other way, and a
+family of controls built to catch designs that provide too little is
+structurally blind to one that provides too much.
+
+**A stated budget needs a control on whichever side the specification bounds.**
+Where there is a floor, build a design that undershoots. Where there is a
+ceiling, build one that overshoots. Where there are both, build both.
+
+### It is cheaply checkable, which removes the excuse
+
+The shape already exists in this repository. `d_ca04`'s capacity phase stops
+draining, offers writes, and counts what is accepted before the design stops
+accepting — **observed entirely in the input domain, so nothing races across a
+clock boundary.** Run as a CEILING rather than a floor it reads: hold every
+output not-ready, offer frames on every input, and count beats accepted before
+backpressure. A conforming design accepts about `2 * M_COUNT` frames; `nc_h`
+accepts roughly four times that. One phase, one counter, no new observable.
+
+### What is owed
+
+B1 needs one of three things, and saying which is part of the fix rather than
+separate from it: **enforce it** with the capacity phase above; **drop it** and
+price buffering on an axis; or **state that it is unenforced**, so a reader
+knows the clause describes intent rather than a checked requirement. The third
+is the worst option and still better than the present state, where the text
+reads as binding and is not.
+
+Recorded rather than repaired here: the clause change is the deliverable and it
+belongs with whoever next opens the task, not folded silently into an audit.
+
+**Rules:** 25
+

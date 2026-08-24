@@ -570,6 +570,20 @@ defects. It runs with the regression.
     area or power already charges for it. Anything that does not fall out of
     those axes needs a stated bound.
 
+    **AND A BOUND NOBODY CHECKS IS NOT A BOUND.** Stating the ceiling is half
+    the work; the other half is a control that violates it and must fail.
+    `d_nw03`'s B1 caps output buffering at two frames and calls more
+    non-conforming — a clause written in direct response to F62 — and a design
+    holding four times that passes every check at both configurations with zero
+    per-step failures. The lesson was learned in the right place and stopped one
+    step short of enforcement, because a clause with a clear rationale reads as
+    settled.
+
+    **Build the control on whichever side the specification bounds.** Every
+    capability control in this repository tests UNDER-provisioning, so a family
+    of them is structurally blind to a design that provides too much. Floor,
+    build one that undershoots; ceiling, one that overshoots; both, build both.
+
     **An unpriced axis makes a submission unfalsifiable and the comparison
     meaningless.** `d_nw01` required outstanding capacity, ordering and liveness,
     and said nothing about how much data the crossbar might buffer to deliver
