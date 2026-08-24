@@ -196,11 +196,19 @@ watchdog:
   harness_wall_measured_s: 0.02
 
 scoring_ceiling:
-  reference: 5 of 5
+  reference: 10 of 10
+  licensed_by: >
+    Observed run of scripts/sim_verification.sh on 2026-08-23: golden PASS, all
+    five conformant perturbations PASS, all ten guarded mutants killed.
   caveat: >
-    Weaker than it looks: the model was written with these five boundaries in
-    hand. It says the model is consistent with the cases it was built from, not
-    that it is complete.
+    The previous value, 5 of 5, carried a caveat that the model had been written
+    with those five boundaries in hand -- consistent with the cases it was built
+    from rather than complete. That caveat is now WEAKER but not gone. The
+    reference killed only THREE of the ten guarded mutants as first generated;
+    it was read-only and single-beat, so C1, E1, D4 and the entire write side
+    went unobserved. It was rebuilt to reach them. A ceiling raised by extending
+    the reference to meet the mutants is still a statement about the cases the
+    reference was made to cover.
 
 scoring:
   validity_gate: submission must PASS the golden DUT

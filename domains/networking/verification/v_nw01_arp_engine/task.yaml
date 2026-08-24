@@ -81,7 +81,11 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpremised_reliance: must PASS the policy-divergent perturbation and dut2
   fault_detection: reported PER MUTANT, never as a rate
-  reference_ceiling: 8 of 8
+  reference_ceiling: 10 of 10
+  reference_ceiling_licensed_by: >
+    Observed run of scripts/sim_verification.sh on 2026-08-23: golden PASS,
+    gate-mutant rejected, all ten guarded mutants killed. The previous value
+    8 of 8 was the OLD total-mutant set's ceiling and survived the rebuild.
 
 conformant_perturbations:
   - id: ae_c1_assoc_cache_rr

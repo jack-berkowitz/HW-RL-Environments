@@ -43,6 +43,19 @@ harness:
 spec: [spec/tag_tracker_spec.md]
 task_statement: probe/BLIND_TB_TASK.md
 
+scoring_ceiling:
+  reference: 10 of 10
+  licensed_by: >
+    Observed run of scripts/sim_verification.sh on 2026-08-23: golden PASS, all
+    four conformant perturbations PASS, all ten guarded mutants killed. No
+    ceiling was recorded here before; an absent ceiling reads as "not measured"
+    and this one had been.
+  caveat: >
+    The reference killed FIVE of ten as first guarded. It checked every clause,
+    but each one once, in the easiest configuration available. The other five
+    came from re-testing the same clauses at occupancies the earlier phases
+    never constructed.
+
 scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS all 4 conformant perturbations
