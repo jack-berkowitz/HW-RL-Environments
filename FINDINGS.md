@@ -4589,3 +4589,69 @@ the task for the whole life of the sequence.
 
 **Rules:** 32
 
+---
+
+## F79. The predicted failure was a wrong claim; the actual failure was no claim at all
+
+Chasing a stale hash turned up a missing one, and the missing one invalidates PPA.
+
+`d_ca03`'s task text hash moved three times in twelve minutes, twice by a second
+author correcting the same file. One value was quoted to me at the moment it was
+landed and superseded six minutes later by its own author's next commit. **The
+predicted consequence** was that the queued reference sweep would stamp a record
+claiming measurement against a text that existed for six minutes.
+
+The prediction was wrong in the direction that matters. Going to check what the
+sweep actually carried found that `find_fmax` records had **no `task_text_hash`
+field, and no `build_config_hash` either.** Not a stale claim. No claim.
+
+### Why the absent one is PPA-invalidating and the stale one is not
+
+A stale hash is a wrong label on a real measurement: it can be recomputed, the
+record corrected, and nothing downstream silently changes. An absent hash is
+different, because of what a reference sweep is FOR.
+
+The sweep produces the **pinned clock period**, which goes into the specification
+and is the period **every submission is built at**. And a sweep result depends
+directly on `CORE_UTILIZATION` and `PLACE_DENSITY` — floorplan and placement —
+**both of which landed for `d_ai01` and `d_ca03` on the same day**. So a sweep
+run before that change and one run after are indistinguishable from their own
+records, while the number derived from them differs. **An unrecorded
+build-configuration change silently moves the period every submission is
+compared at, and nothing anywhere registers that it moved.**
+
+That is the whole comparison basis for a task, moved without a trace, from a
+change nobody would think to look at because it is a floorplan key rather than a
+clause.
+
+### The family signature
+
+This is the F64 family, and it is the sharpest instance of the pattern
+that family exists for: **the instrument that would have reported the problem was
+not reporting anything.** F64's ad-hoc query answered a different question; F63's
+flag could not be false; F75's counter was never incremented; F74's tools
+measured the wrong observable. Here the field simply was not written.
+
+The recurring shape is that all of them are **indistinguishable from success at
+the point of use.** A record with no hash field looks exactly like a record whose
+hash matches, unless something goes looking for the field by name.
+
+### How it was found, which is the uncomfortable part
+
+By accident, while chasing something smaller. Nobody audited `find_fmax`'s record
+schema; the question "what will the queued sweep stamp?" was asked for an
+unrelated reason and the answer happened to be "nothing". **A defect that
+invalidates every PPA comparison for a task was one incidental question away from
+shipping**, and the smaller defect that led to it — a hash quoted accurately and
+superseded six minutes later — would have been harmless by comparison.
+
+### What closed it
+
+Both hashes are now stamped, **computed at write time from the tree and never
+accepted from a caller**, and both fail closed to `None` rather than raising, so
+a task with no resolvable configuration still records a result. Computing at
+write time is the load-bearing part: a hash passed in as an argument is a
+snapshot, and the caller outlives the snapshot.
+
+**Rules:** 17
+
