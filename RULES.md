@@ -750,4 +750,35 @@ defects. It runs with the regression.
 
     **From:** F73
 
+30. **State only the scope that ran, and identify the run behind any claim that
+    something was established.** A summary may not name coverage the run did not
+    have; a past-tense claim that a state was established must name the run and
+    the tree state that established it. Both halves are about the sentence, not
+    the instrument.
+
+    **The scope half.** A summary line is written once and read many times, by
+    people who will not go and count. When the eleven verdicts a script produced
+    were all on one base and its closing line said "on BOTH bases", every
+    individual verdict was correct and the sentence was false -- and it read as
+    twenty-two of twenty-two to everyone downstream, including the agent that had
+    just run it. A summary states what ran. If a script cannot name its own
+    coverage, it prints the count it actually performed and nothing about the
+    coverage it did not.
+
+    **The provenance half.** "The golden-base half comes from
+    sim_verification.sh" is a claim about a run, and a claim about a run is
+    checkable only if the run is identified. Name the record and the tree it came
+    from -- a timestamp, a task_text_hash, a commit, and whether the tree was
+    dirty. A past-tense assertion with no run behind it is indistinguishable from
+    an intention, and the two were confused within a day of each other here.
+
+    **Why no existing control catches this.** Rule 24 points at apparatus and
+    rule 17 points at configuration; both were satisfied in the instances that
+    produced this rule. The contract was right, the apparatus was right, the
+    number was right, and the prose claimed more than what ran. Nothing in the
+    stack is pointed at prose, so this rule is the only thing standing there.
+
+    **From:** F67
+
+
 ---
