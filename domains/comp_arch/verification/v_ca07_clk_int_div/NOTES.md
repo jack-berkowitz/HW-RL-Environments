@@ -61,6 +61,59 @@ The output is gated throughout reset. After release the divisor returns to
 4. Reset restores the DEFAULT divisor, so the post-reset state is pass-through
    rather than whatever was last configured.
 
+## Step 1, continued — the gating bound and the remaining outputs
+
+`probe/measure_gating.sv`, across **every ordered pair of divisors in 0..8**, 72
+transitions.
+
+### The gating bound: the header is RIGHT, and my first measurement was wrong
+
+The header claims `clk_o` "remains gated for at most 3x<new clk period> clk_i
+cycles". Measured **from the acceptance edge** — the cycle `div_ready_o` rises —
+that holds on all 72 pairs, zero violations, worst gap 17 against a limit of 24.
+
+It is **exactly tight** on 14 of them: every transition to `div_i` 0 or 1 gives a
+gap of exactly 3, against a limit of exactly 3.
+
+**My first attempt reported it as violated on four transitions, and that was my
+error.** I measured the gap from the cycle I asserted `div_valid_i`, which folds
+in the handshake wait — 1 to 4 cycles depending on phase — and the handshake wait
+is not gating. "Remains gated" starts when the change is ACCEPTED. Measuring a
+bound from the wrong origin makes a correct bound look broken, and I had already
+written it down as a finding before rechecking.
+
+The clause is worth having precisely because it is tight: a design that gates one
+cycle longer on a transition to pass-through is outside the bound, and only a
+testbench that measures the interval from acceptance can tell.
+
+### The other outputs
+
+- **`cycl_count_o` is a modulo-`div` counter.** At div=4 it runs `1 2 3 0 1 2 3
+  0`; at div=3, `2 0 1 2 0 1`. It counts 0..div-1.
+- **`div_ready_o` is a genuine handshake, not a constant.** Held low while
+  `div_valid_i` is low — measured 0 across 20 cycles with valid deasserted. A
+  spec must not describe it as always-ready.
+
+### Where the header IS wrong, and this one survives rechecking
+
+The duty-cycle claim. "Always generates clean 50% duty cycle output clock" is
+false for odd divisors: `high = floor(div/2)`, `low = ceil(div/2)`. That was
+measured by direct edge timestamps rather than by sampling, so it is not a phase
+artifact — and it is arithmetically necessary, since an odd number of input
+cycles cannot be split evenly. 33%, 40% and 42% at divisors 3, 5 and 7.
+
+## What this cost, and the rule it produces
+
+Two of my three "the header is wrong" claims were mine, not the header's. The
+pass-through one came from sampling a clock at a phase that aliases it; the
+gating one came from measuring an interval from the wrong origin. Only the duty
+cycle survived.
+
+**A measurement of an interval is only as good as its two endpoints, and a
+measurement of a clock is only as good as its observer's phase.** Both faults
+produced confident, plausible, wrong numbers, and in both cases what caught them
+was rechecking an implausible result rather than anything in the apparatus.
+
 ## A probe fault, found before it became a specification
 
 The first version sampled `clk_o` at the `negedge` of `clk_i`. That **aliases
