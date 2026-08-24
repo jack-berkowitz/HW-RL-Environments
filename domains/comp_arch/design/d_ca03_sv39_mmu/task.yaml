@@ -15,7 +15,16 @@ catalog_divergence: >
   it is in the page-walk path -- cva6_ptw.sv:250 instantiates the pmp module
   directly, and with no PMP region configured a U-mode walk is denied and reports
   cause 5 rather than translating. A spec that omitted it would be describing a
-  different module. Recorded and reported; I do not own TASK_CATALOG.md.
+  different module.
+  .
+  THE ROW ALSO CLAIMS SOMETHING THE CONTRACT DOES NOT SCORE: "walk arbitration
+  between I- and D-side". Both request ports exist on the shim and sequence D
+  now drives both, but ARBITRATION BETWEEN THEM IS UNSPECIFIED AND UNSCORED --
+  no step asserts fetch_req_i and lsu_req_i together, there is a single walker,
+  and which port wins when both are pending is left free. A row advertising it
+  would be soliciting work the scoring cannot see.
+  .
+  Recorded and reported; I do not own TASK_CATALOG.md.
 
 oracle_class: A
 reference:
@@ -188,22 +197,28 @@ vectors:
   record_bits: 190
   captured_by: tb/audit/capture_vectors_tb.sv
   sequence: >
-    SEQUENCE C, defined once in tb/sv39_mmu_seq.svh and included by BOTH the
+    SEQUENCE D, defined once in tb/sv39_mmu_seq.svh and included by BOTH the
     capture rig and the scoring testbench -- a sequence that lived separately in
     each would present a silent divergence as a mismatch on every request.
-    7 functional cases, 2 bare-mode, 2 flush, 16-page fill, 16-page replay, a 17th
-    page, 17-page replay, then 57 reuse requests.
+    LOAD/STORE PORT, 118 requests: 7 functional cases, 2 bare-mode, 2 flush,
+    16-page fill, 16-page replay, a 17th page, 17-page replay, then 57 reuse
+    requests. INSTRUCTION PORT, 57 requests, added in sequence D because
+    sequence C never asserted fetch_req_i at all: 7 functional (walk, hit,
+    superpage, two faults reaching cause 12, bare mode in and out) then the same
+    16-fill / 16-replay / 17th / 17-replay capacity phase. See T8 and T9.
   hit_ratio_is_a_construct: >
-    51% TLB hits, AND THAT IS A SCORING CONSTRUCT, NOT A WORKLOAD CLAIM. The mix
+    36% TLB hits, AND THAT IS A SCORING CONSTRUCT, NOT A WORKLOAD CLAIM. The mix
     was chosen to price serialisation: at the functional probes' 20% hit rate a
     swept comparator costs almost nothing and the cycle axis cannot discriminate;
-    the reuse passes lift it to where a swept comparator costs 3.19x. No working
+    the reuse passes lift it to where nc_b_serial_response measures 2.20x. It was
+    51% under sequence C, and fell because sequence D's added phase is dominated
+    by cold instruction walks. No working
     set is modelled and no address trace is replayed. Quote it as "the scored
     sequence is 36% hits by construction", never as "the MMU sees 36% hit rates".
     MEASUREMENTS.md section 9.
 
 results:
-  measured_against_task_text: b05dbe9522c9ff2e
+  measured_against_task_text: 360afdc7295d5fd8
   reference: PASS -- 175 of 175 requests, 0 failures, all coverage floors met
   reference_metrics: {total_cycles: 1513, pte_reads: 642, tlb_hits: 64, hit_pct: 36}
 
