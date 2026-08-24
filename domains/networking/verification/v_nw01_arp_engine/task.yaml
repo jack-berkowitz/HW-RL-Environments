@@ -175,6 +175,29 @@ mutants:
   reference_reachability: >
     The reference kills all ten. A mutant it cannot reach is unverified, not
     difficult.
+policy_derivation:
+  method: in_source_rederivation
+  what_was_done: >
+    Each of the ten defects was written INTO THE DIVERGENT IMPLEMENTATION'S OWN
+    SOURCE as an edit to its logic, in that design's own terms -- not as a
+    wrapper reused from the golden side. mutants/policy/*.sv each contain the
+    independent implementation carrying one defect.
+  strength: STRONG
+  what_it_establishes: >
+    Both halves. The defects are contract-level rather than latitude-sensitive,
+    AND each guard was restated against an independent reading of the contract.
+    The second half is a test the construction can FAIL: a guard that depends on
+    something only the anchor has cannot be expressed here, and shows up as a
+    mutant the divergent base does not catch.
+  evidence_it_can_fail: >
+    It has failed and been fixed. On v_ai02, sr_m4 passed on the divergent base
+    because that design makes every beat wait for the sink, so a stall taken
+    before the line produced anything left pop_valid_o low -- nothing offered,
+    nothing held off, and the guard was unreachable there. The reference was
+    corrected to make the stall real under either reading of L1.
+  comparability: >
+    NOT comparable with a wrapper_pointed 22/22. See that method's own caveat.
+
 negative_controls:
   known_bad_dut:
     status: PASS

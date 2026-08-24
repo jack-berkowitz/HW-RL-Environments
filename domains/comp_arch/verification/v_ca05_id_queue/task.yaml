@@ -177,3 +177,26 @@ second_dut:
     sim_verification.sh gates on this DECLARATION only and never compiles or runs
     dut2/. The result above came from running tb/tag_tracker_spec_tb.sv against it
     by hand. Do not assume it working as a gate.
+policy_derivation:
+  method: wrapper_pointed
+  what_was_done: >
+    Each mutant is a wrapper that reads its guards from the PORTS and delegates
+    to an implementation. The re-derivation is the SAME WRAPPER pointed at the
+    divergent implementation instead of the anchor. mutants/policy/*.sv each
+    instantiate the independent design and carry the identical guard logic.
+  strength: WEAKER -- read the caveat before quoting the number
+  what_it_establishes: >
+    One half only. The defects are contract-level: they remain detectable
+    against a design with different latency, different structure and different
+    scheduling, so the reference's detection is not relying on the anchor's
+    timing. That is real and it is what 5c exists to check.
+  what_it_does_NOT_establish: >
+    That the guards were stress-tested against an independent reading of the
+    contract. The guard logic is LITERALLY THE SAME CODE on both bases, so there
+    is nothing anchor-specific for the check to catch and the property holds BY
+    CONSTRUCTION. This method cannot fail the way in_source_rederivation can.
+  comparability: >
+    A 22/22 here is NOT equivalent to a 22/22 from in_source_rederivation, and a
+    results table that prints them in one column is comparing two different
+    claims. Report the method alongside the number.
+
