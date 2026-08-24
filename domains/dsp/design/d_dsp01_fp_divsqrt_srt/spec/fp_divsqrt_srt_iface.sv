@@ -1,4 +1,21 @@
 // =============================================================================
+// WITHDRAWN TASK -- NOT SOLICITED, NOT SCORED, NOT LIVE.
+//
+// This task is withdrawn under F54: the only FP divider vendored in refs/ --
+// cvfpu's fpnew_divsqrt_multi over fpu_div_sqrt_mvp -- implements none of the
+// five IEEE rounding modes correctly, so no golden reference is obtainable and
+// the anchor is not fixable from inside this repo. It is WITHDRAWN, not
+// deferred: the directory is kept because it is the evidence, and it has no
+// task.yaml by design.
+//
+// The contract and the grading text below are complete and were kept current by
+// repo-wide sweeps. That is exactly why this banner is here. A withdrawn task
+// carrying current-looking grading text reads as live, and the thing that marks
+// it dead -- an absent task.yaml -- is invisible to anyone reading this file.
+//
+// See domains/dsp/design/d_dsp01_fp_divsqrt_srt/NOTES.md.
+// =============================================================================
+// =============================================================================
 // fp_divsqrt_srt_iface.sv  --  PORT DEFINITION ONLY (no implementation)
 // =============================================================================
 // Task: implement an IEEE-754 binary32 DIVIDE and SQUARE ROOT unit with a

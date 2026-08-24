@@ -1,3 +1,11 @@
+> **WITHDRAWN — this prompt is not solicited and not scored.**
+>
+> The task is withdrawn under F54: the only FP divider vendored in `refs/`
+> implements none of the five IEEE rounding modes correctly, so no golden
+> reference is obtainable and the anchor cannot be fixed from inside this repo.
+> The directory and this prompt are kept as the evidence. See
+> `domains/dsp/design/d_dsp01_fp_divsqrt_srt/NOTES.md`.
+
 # Task: implement a floating-point divide and square-root unit in SystemVerilog
 
 You are given a **port map and a complete specification**. Write the RTL. You
@@ -45,6 +53,23 @@ left **open** -- make them however you like, nothing checks them. Everything els
 is normative.
 
 ```systemverilog
+// =============================================================================
+// WITHDRAWN TASK -- NOT SOLICITED, NOT SCORED, NOT LIVE.
+//
+// This task is withdrawn under F54: the only FP divider vendored in refs/ --
+// cvfpu's fpnew_divsqrt_multi over fpu_div_sqrt_mvp -- implements none of the
+// five IEEE rounding modes correctly, so no golden reference is obtainable and
+// the anchor is not fixable from inside this repo. It is WITHDRAWN, not
+// deferred: the directory is kept because it is the evidence, and it has no
+// task.yaml by design.
+//
+// The contract and the grading text below are complete and were kept current by
+// repo-wide sweeps. That is exactly why this banner is here. A withdrawn task
+// carrying current-looking grading text reads as live, and the thing that marks
+// it dead -- an absent task.yaml -- is invisible to anyone reading this file.
+//
+// See domains/dsp/design/d_dsp01_fp_divsqrt_srt/NOTES.md.
+// =============================================================================
 // =============================================================================
 // fp_divsqrt_srt_iface.sv  --  PORT DEFINITION ONLY (no implementation)
 // =============================================================================

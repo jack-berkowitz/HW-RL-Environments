@@ -9,6 +9,22 @@ export PLATFORM        = sky130hd
 export DESIGN_NAME     = fp16_gemm_array
 export DESIGN_NICKNAME = d_ai01_fp16_gemm_array
 
+# FLOORPLAN AND PLACEMENT, matching every other design task in this repo.
+# Without CORE_UTILIZATION or an explicit DIE_AREA/CORE_AREA, ORFS stops at
+# `No floorplan initialization method specified` and the build dies at
+# do-2_1_floorplan. That never surfaced because this task's recorded area is a
+# SYNTHESIS figure -- task.yaml labels it "synthesis + OpenSTA only
+# (place-and-route not run)" -- so nothing had ever asked this config to place
+# anything. The gap only appeared when the reference Fmax sweep, which runs the
+# full flow, tried to.
+#
+# Values are the other six tasks' verbatim, not chosen for this design: a
+# floorplan target picked per-task would make area incomparable across the row,
+# which is the same reason SYNTH_MEMORY_MAX_BITS had to match.
+export CORE_UTILIZATION = 10
+export PLACE_DENSITY    = 0.50
+export TNS_END_PERCENT  = 100
+
 export SYNTH_HDL_FRONTEND = slang
 
 # TWO shim files, and the order matters. fp16_gemm_array_ref.sv declares
