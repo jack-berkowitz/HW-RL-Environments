@@ -136,6 +136,25 @@
 //     pinning it would mandate a specific victim-selection circuit for no
 //     measured benefit.
 //
+//     THAT FREEDOM IS WIDER THAN IT LOOKS, AND IT COSTS T4 ITS POLICY
+//     INDEPENDENCE. The reference's own policy is a PLRU tree that advances only
+//     on a lookup HIT (cva6_tlb.sv:436) and not on an install, so a cold fill of
+//     N distinct pages with no intervening hit writes all N into ONE entry.
+//     Measured, filling n distinct pages and then replaying all n:
+//
+//       n:              1   2   4   8  16  17
+//       data TLB     hits: 1   2   4   8  16   0
+//       instr TLB    hits: 1   0   0   0   0   0
+//
+//     The data TLB reaches 16 because the scored sequence's first eleven
+//     requests produce hits that spread the tree before the fill begins; the
+//     instruction TLB, reached cold, retains exactly one. BOTH ARE THE SAME
+//     16-ENTRY STRUCTURE, and the difference is entirely the replacement policy
+//     this clause declines to pin. So USABLE capacity is not a behavioural
+//     property of a conforming design, and no residency test can establish it in
+//     general. T4 and T9 say what is done about that instead of pretending
+//     otherwise.
+//
 //     lsu_dtlb_hit_o, itlb_miss_o and dtlb_miss_o report this implementation's
 //     own behaviour and are NOT SCORED (T2) -- scoring them would pin the
 //     replacement policy A9 just declined to pin.
@@ -143,6 +162,39 @@
 // A10. GLOBAL PAGES AND ASID. A leaf with G=1 is valid for every ASID. A leaf
 //     with G=0 is valid only for the ASID current when it was installed.
 //     AUTHORITY: RISC-V Privileged Architecture.
+//
+// A11. RETIREMENT SIGNALLING, and this clause exists because the contract did
+//     not decide it. lsu_valid_o MEANS "THIS REQUEST HAS RETIRED", NOT "A
+//     TRANSLATION WAS PRODUCED":
+//       * a request that translates retires with lsu_valid_o = 1,
+//         lsu_exc_valid_o = 0, and lsu_paddr_o carrying the address of A2;
+//       * A REQUEST THAT FAULTS RETIRES WITH lsu_valid_o = 1 AS WELL, in the
+//         same cycle as lsu_exc_valid_o = 1 and the cause of A6.
+//     The fetch port behaves identically on fetch_valid_o / fetch_exc_valid_o.
+//     Measured: every one of the four faulting requests in the scored sequence
+//     asserts both, in one cycle.
+//
+//     lsu_paddr_o AND fetch_paddr_o ARE NOT CONSTRAINED WHEN THE MATCHING
+//     exc_valid_o IS ASSERTED, and T2 does not score them there. The reason is
+//     not convenience. Their value on a fault reports WHERE the failing check
+//     was made: a design that rejects an A=0 or D=0 leaf inside the walker has
+//     no translated address to present and delivers zero, while one that
+//     installs the leaf and applies A4/A5 on the TLB hit path has computed the
+//     address and delivers it. A5 permits both -- it requires a fault and
+//     forbids a page-table write, and says nothing about where the check sits.
+//     Scoring the address would therefore have scored an internal choice, which
+//     is exactly what T2 exists to prevent.
+//
+//     HOW THIS WAS FOUND. An independent implementation written against this
+//     specification alone read the earlier text the other way -- L2's "either
+//     with a translation or with a fault" reads as an exclusive or -- and
+//     asserted exc_valid_o without valid_o. It failed all four faulting
+//     requests and passed the other 114, so the contract as written admitted
+//     two readings on a surface T1 declares scored. Both readings satisfied
+//     every clause in F, V, A and C. The paddr divergence surfaced the same
+//     way, one step behind it. See rule 5 branch three: ambiguous
+//     specification, both implementations legal, and the specification is what
+//     changes.
 //
 // -----------------------------------------------------------------------------
 // C -- CONTROL
@@ -160,10 +212,22 @@
 //     conservative implementation of a narrowed one and delivers identical
 //     translations.
 //
-// C3. flush_i ABORTS AN IN-FLIGHT WALK. It does NOT empty the TLBs. A request
-//     issued after the abort is served normally. Measured: a walk aborted
-//     mid-flight by flush_i is followed by a correct translation of the same
-//     page in one cycle, from the TLB entry the abort left intact.
+// C3. flush_i ABORTS AN IN-FLIGHT WALK, AND THE UNIT RESTARTS IT. It does not
+//     empty the TLBs.
+//
+//     THE REQUESTER'S OBLIGATION IS TO HOLD lsu_req_i, AND NOTHING MORE. A
+//     request whose lsu_req_i stays asserted across and after the flush is
+//     RE-WALKED by the unit and retires normally, delivering the translation the
+//     page table then describes. The requester does not observe the flush, does
+//     not deassert, and does not re-issue. THE REQUEST IS NOT DROPPED.
+//
+//     Measured both ways, because the difference IS the obligation:
+//       * lsu_req_i HELD across flush_i -- retires after 15 cycles with the
+//         correct address, the unit having re-walked of its own accord;
+//       * deasserted and then re-issued -- also retires, in 1 cycle, from the
+//         entry that re-walk installed.
+//     Both disciplines work, which is why this clause requires only the first
+//     and a submission may not assume the second.
 //
 // C4. RESULTS ARE SCORED ACROSS CONTROL TRANSITIONS; LATENCY IS NOT. Every
 //     transition measured -- flush_tlb_i while idle, flush_tlb_i during a walk,
@@ -213,19 +277,26 @@
 //     NOT constrained: the latency of any INDIVIDUAL request. Only the total over
 //     the sequence is compared, so a design may spend cycles unevenly -- fast
 //     hits and slow walks, or the reverse -- however it likes.
-// L2. FORWARD PROGRESS IS scored, WITH ONE EXCEPTION. Every request must
-//     eventually retire, either with a translation or with a fault, EXCEPT a
-//     request cancelled by flush_i while its walk is in flight: that request is
-//     abandoned and never retires. The requester is expected to reissue it.
+// L2. FORWARD PROGRESS IS scored, WITH NO EXCEPTION. Every request must
+//     eventually retire -- asserting valid_o per A11, with exc_valid_o and a
+//     cause alongside it if the request faults -- INCLUDING a request whose walk
+//     was aborted by flush_i, which C3 requires the unit to restart. A request
+//     that never retires fails.
 //
-//     Measured, and this clause was wrong before it was measured. The reference
-//     leaves a flush_i-cancelled request with neither lsu_valid_o nor
-//     lsu_exc_valid_o asserted, indefinitely -- confirmed by the recorded
-//     reference behaviour for the flush-mid step of the scored sequence, which
-//     carries valid=0 and exc_valid=0. An earlier draft of L2 required every
-//     request to retire, which the reference itself does not satisfy. C3 already
-//     said flush_i aborts the walk; it did not say the aborted request is
-//     abandoned, and that omission is what made L2 wrong.
+//     AN EARLIER DRAFT SAID "either with a translation or with a fault", which
+//     reads as an exclusive or and is not what the reference does: a faulting
+//     request asserts BOTH. A11 now states the handshake, and that phrasing is
+//     gone. It cost an independent implementation four of 175 requests.
+//
+//     AN EARLIER DRAFT CARVED OUT flush_i-CANCELLED REQUESTS, AND THAT WAS
+//     WRONG. The carve-out rested on a recorded reference value showing neither
+//     lsu_valid_o nor lsu_exc_valid_o for the flush-mid step. That was a HARNESS
+//     DEFECT, not a design behaviour: the rig sampled lsu_valid_o as a LEVEL once
+//     per cycle and missed the assertion. The rig was fixed to latch retirement,
+//     and the same step now records valid=1 with the correct address -- but the
+//     clause written from the bad reading was not revisited until the obligation
+//     was measured directly. FIXING AN INSTRUMENT OBLIGES RE-DERIVING WHATEVER
+//     WAS CONCLUDED WITH IT; see rule 27.
 //
 // -----------------------------------------------------------------------------
 // P -- PARAMETERS
@@ -268,35 +339,62 @@
 // T1. Scored surface: lsu_valid_o, lsu_paddr_o, lsu_exc_valid_o,
 //     lsu_exc_cause_o, and the fetch equivalents, compared against the
 //     reference for the same stimulus and the same page-table contents.
+//     BOTH PORTS ARE ACTUALLY DRIVEN -- see T8, which exists because an earlier
+//     sequence declared the fetch surface scored and never exercised it.
+//     valid_o, exc_valid_o and exc_cause_o are compared on EVERY request.
+//     paddr_o is compared only on requests that do not fault, per A11 and T2.
 //
-// T2. NOT scored: lsu_dtlb_hit_o, itlb_miss_o, dtlb_miss_o (A9), and the number
-//     and order of memory accesses a walk issues -- these report an
-//     implementation's own choices. Cycles ARE scored, per L1, but only as a
-//     total over the sequence and never per request.
+// T2. NOT scored: lsu_dtlb_hit_o, lsu_dtlb_ppn_o, itlb_miss_o, dtlb_miss_o
+//     (A9), and the number and order of memory accesses a walk issues -- these
+//     report an implementation's own choices. Cycles ARE scored, per L1, but
+//     only as a total over the sequence and never per request.
+//
+//     ALSO NOT scored: lsu_paddr_o and fetch_paddr_o ON A REQUEST THAT FAULTS,
+//     for the reason A11 gives -- the value reports where the failing check was
+//     made, and A5 leaves that free. Everything else about a faulting request
+//     IS scored: that it retires, that it raises an exception, and the cause.
+//
+//     ALSO NOT scored: mem_tag_valid_o and mem_kill_o. They are in the port list
+//     because V1 fixes the port list, and V3 defines the memory protocol without
+//     them. No clause constrains them and none should be inferred.
 //
 // T3. NOT scored: virtual addresses that are not correctly sign-extended per F1,
 //     and satp_ppn_i or asid_i changes without an intervening flush per C5.
 //
-// T4. THE PINNED ENTRY COUNTS ARE CHECKED, not taken on trust. Without a check,
-//     nothing distinguishes a design that provides 16 usable entries from one that
-//     declares the arrays and never fills them -- and the second is smaller after
-//     synthesis, so the incentive runs the wrong way.
-//
-//     The check is BEHAVIOURAL AND POLICY-INDEPENDENT, so it does not smuggle in
-//     the replacement policy A9 leaves free. For each TLB independently:
+// T4. THE DATA TLB'S ENTRY COUNT IS CHECKED, not taken on trust. Without a
+//     check, nothing distinguishes a design that provides 16 usable entries from
+//     one that declares the arrays and never fills them -- and the second is
+//     smaller after synthesis, so the incentive runs the wrong way. On the DATA
+//     TLB:
 //       * translate 16 distinct pages, then translate all 16 again. The second
-//         pass must issue NO page-table read on mem_*: 16 entries must all be
-//         simultaneously resident, whatever order they were installed in.
+//         pass must issue NO page-table read on mem_*.
 //       * translate a 17th distinct page, then translate all 17. This pass MUST
-//         issue at least one page-table read: 17 cannot be resident in 16 entries.
-//     Which of the 17 is displaced is not checked, and that is what keeps the
-//     test free of any policy assumption.
+//         issue at least one page-table read.
+//     Which of the 17 is displaced is not checked.
 //
 //     FOR THIS CHECK ONLY, the presence or absence of mem_* activity during the
 //     replay is scored, as an exception to T2. The COUNT and ORDER of accesses
 //     remain unscored.
 //
-// T5. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator. Passing
+//     THIS CHECK IS NOT POLICY-INDEPENDENT, AND AN EARLIER DRAFT CLAIMED IT WAS.
+//     The claim was that not checking WHICH entry is displaced keeps the test
+//     free of policy assumptions. It does not: passing the 16-page replay
+//     requires a replacement policy that spreads a cold fill across 16 distinct
+//     entries, and A9 permits policies that do not -- the reference's own is one
+//     of them. What makes the reference pass here is that the eleven requests
+//     preceding the fill generate hits that advance its replacement tree first.
+//     SO THIS CHECK DEPENDS ON THE SEQUENCE'S PREAMBLE. Reorder the sequence and
+//     it can fail on a conforming design. It is kept because it does catch the
+//     declare-and-never-fill cheat and the reference passes it, and it is
+//     labelled rather than trusted. The instruction side is T9.
+//
+// T5. THE CANCELLED-REQUEST OBLIGATION IS CHECKED. The scored sequence contains
+//     a request whose walk is aborted mid-flight by flush_i with lsu_req_i held
+//     asserted throughout, and the reference retires it with the correct address.
+//     A design that drops it -- leaving the requester waiting -- fails L2, and one
+//     that retires it with a stale address fails C3.
+//
+// T6. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator. Passing
 //     simulation is not sufficient: the synthesis frontend is slang, and a
 //     construct Verilator accepts silently can be a hard error there, in which
 //     case a correct submission produces NO PPA NUMBER AT ALL. slang enforces
@@ -306,7 +404,53 @@
 //     every loop a small constant bound. This is reproduced history: two earlier
 //     tasks in this repository hit that exact error.
 //
-// T6. A submission must pass every clause above; there is no partial credit.
+// T7. A submission must pass every clause above; there is no partial credit.
+// T8. BOTH PORTS ARE EXERCISED, and this is a scoring requirement rather than a
+//     remark about the harness. The scored sequence drives fetch_req_i as well
+//     as lsu_req_i: an instruction walk, an instruction TLB hit, a superpage
+//     fetch, two instruction faults reaching cause 12, bare mode on the
+//     instruction side, and the T4 capacity check run a second time against the
+//     instruction TLB.
+//
+//     WHY IT IS WRITTEN DOWN. An earlier sequence left fetch_req_i tied to zero
+//     for all 118 of its requests while T1 declared the fetch surface scored and
+//     A6 pinned causes 12 and 1. A submission could have tied fetch_valid_o low
+//     and provided a ONE-ENTRY instruction TLB and passed everything -- which
+//     reopens, on half of P2's pinned storage, precisely the incentive T4 was
+//     written to close. T4's own text says "for each TLB independently"; only
+//     the data TLB was ever reached. Nothing had to be built to close this: the
+//     page table already planted X=1 U=1 leaves, so the instruction phases are
+//     seven functional requests and a fifty-request capacity replay over the
+//     table that was already there. See rule 25: a clause that pins a budget
+//     needs the check that makes the budget real, and the check has to run.
+//
+//
+// T9. THE INSTRUCTION TLB'S ENTRY COUNT IS NOT BEHAVIOURALLY CHECKED, and this
+//     is a stated hole rather than an oversight.
+//
+//     Run the T4 replay against the instruction TLB and the REFERENCE ITSELF
+//     issues 96 page-table reads where the data TLB issues none -- every replay
+//     walks, because that TLB is reached cold and A9's free replacement policy
+//     leaves all sixteen installs in one entry. A submission providing a
+//     ONE-ENTRY instruction TLB would be behaviourally indistinguishable from
+//     the reference on the whole scored sequence while saving roughly 1,500
+//     flip-flops. No residency assertion can separate them.
+//
+//     TWO THINGS STAND IN ITS PLACE, and only the first is live today.
+//       1. THE CYCLE AXIS PRICES IT. L1 counts cycles over the sequence, and
+//          phase 9 is 50 instruction requests over 17 pages. A design whose
+//          instruction TLB actually retains 16 entries pays 273 page-table reads
+//          across the sequence against the reference's 642, and finishes in 899
+//          cycles against 1,513. Under-provisioning is therefore CHARGED rather
+//          than prohibited -- which is the same trade G4 describes everywhere
+//          else, and is why this hole is tolerable rather than fatal.
+//       2. A STRUCTURAL CHECK, which is the only thing that can actually enforce
+//          P2 here: flip-flop count after synthesis against the field-list floor
+//          G4 already quotes -- 3,467 in the reference against a floor of about
+//          3,168 for 32 entries. That measurement belongs to whoever runs PPA
+//          and IS NOT IN PLACE. UNTIL IT IS, P2's instruction-side budget is
+//          priced but not enforced. Recorded so that nobody reads T4 and
+//          concludes both TLBs are covered.
 //
 // -----------------------------------------------------------------------------
 // G -- GRADING

@@ -29,6 +29,7 @@ module capture_vectors_tb;
       rec.va        = seq[i].va;
       rec.is_store  = seq[i].is_store;
       rec.ev        = seq[i].ev;
+      rec.is_fetch  = seq[i].is_fetch;
       rec.valid     = saw_v;
       rec.paddr     = saw_paddr;
       rec.exc_valid = saw_e;

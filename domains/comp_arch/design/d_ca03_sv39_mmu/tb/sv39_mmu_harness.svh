@@ -108,39 +108,76 @@
   logic        saw_v, saw_e;
   logic [55:0] saw_paddr;
   logic [63:0] saw_cause;
+  logic        early_exc;      // exc_valid_o seen with valid_o low
+  logic [63:0] early_cause;
   task automatic do_step(input step_t st);
     int t, a0;
     begin
+      // a bare-mode event applies to the enable of THIS STEP'S OWN PORT, so C1
+      // is reachable on both sides with one event encoding
       case (st.ev)
         EV_FLUSH_TLB: begin flush_tlb = 1; @(posedge clk); flush_tlb = 0;
                             repeat (200) @(posedge clk); end
-        EV_BARE_ON:   begin en_ldst = 0; repeat (2) @(posedge clk); end
-        EV_BARE_OFF:  begin en_ldst = 1; repeat (2) @(posedge clk); end
+        EV_BARE_ON:   begin if (st.is_fetch) en_tr = 0; else en_ldst = 0;
+                            repeat (2) @(posedge clk); end
+        EV_BARE_OFF:  begin if (st.is_fetch) en_tr = 1; else en_ldst = 1;
+                            repeat (2) @(posedge clk); end
         default: ;
       endcase
 
-      lsu_req = 0; repeat (2) @(posedge clk);
+      lsu_req = 0; fetch_req = 0; repeat (2) @(posedge clk);
       a0 = acc_count;
-      lsu_vaddr = st.va; lsu_is_store = st.is_store; lsu_req = 1;
+      if (st.is_fetch) begin
+        fetch_vaddr = st.va; fetch_req = 1;
+      end else begin
+        lsu_vaddr = st.va; lsu_is_store = st.is_store; lsu_req = 1;
+      end
 
       if (st.ev == EV_FLUSH_MID) begin
         repeat (3) @(posedge clk);
         flush = 1; @(posedge clk); flush = 0;
       end
 
+      // RETIREMENT IS valid_o, ON BOTH PORTS, per A11. exc_valid_o is sampled in
+      // that same cycle and is NOT a retirement signal in its own right.
+      //
+      // This is the third level-versus-event defect in this task and the second
+      // in this rig, so it is written out rather than just fixed. The reference
+      // holds fetch_exc_valid_o asserted for the WHOLE of an in-flight walk --
+      // its instruction-side PMP check runs against a fetch_paddr that is not
+      // valid yet, so it reports "not permitted" for twelve cycles and then
+      // retires correctly on the thirteenth. An earlier version of this task
+      // latched whichever output went high first, so it recorded EVERY
+      // instruction fetch as an access fault at cycle 0, including the ones that
+      // translate. Measured with tb/audit/probe_fetch_tb.sv. See rule 27: the
+      // instrument must take retirement from the defined retirement condition,
+      // not from whichever signal moves first.
       saw_v = 1'b0; saw_e = 1'b0; saw_paddr = '0; saw_cause = '0;
+      early_exc = 1'b0; early_cause = '0;
       t = 0;
-      while (t < 600 && !saw_v && !saw_e) begin
+      while (t < 600 && !saw_v) begin
         @(posedge clk); #1;
-        if (lsu_valid)     begin saw_v = 1'b1; saw_paddr = lsu_paddr; end
-        if (lsu_exc_valid) begin saw_e = 1'b1; saw_cause = lsu_exc_cause; end
+        if (st.is_fetch) begin
+          if (fetch_exc_valid) begin early_exc = 1'b1; early_cause = fetch_exc_cause; end
+          if (fetch_valid) begin
+            saw_v = 1'b1; saw_paddr = fetch_paddr;
+            if (fetch_exc_valid) begin saw_e = 1'b1; saw_cause = fetch_exc_cause; end
+          end
+        end else begin
+          if (lsu_exc_valid) begin early_exc = 1'b1; early_cause = lsu_exc_cause; end
+          if (lsu_valid) begin
+            saw_v = 1'b1; saw_paddr = lsu_paddr;
+            if (lsu_exc_valid) begin saw_e = 1'b1; saw_cause = lsu_exc_cause; end
+          end
+        end
         t++;
       end
-      // a retirement that asserted both in the same cycle latches both
-      if (saw_v && !saw_e && lsu_exc_valid) begin saw_e = 1'b1; saw_cause = lsu_exc_cause; end
-      if (saw_e && lsu_valid)               begin saw_v = 1'b1; saw_paddr = lsu_paddr;     end
+      // A design that raises the exception and never asserts valid_o violates
+      // A11. Report the cause it did raise, so the mismatch reads as "valid=0,
+      // expected 1" instead of as a 600-cycle timeout with no diagnosis.
+      if (!saw_v && early_exc) begin saw_e = 1'b1; saw_cause = early_cause; end
       last_acc = acc_count - a0;
       last_cyc = t;
-      lsu_req = 0; lsu_is_store = 0; @(posedge clk);
+      lsu_req = 0; fetch_req = 0; lsu_is_store = 0; @(posedge clk);
     end
   endtask

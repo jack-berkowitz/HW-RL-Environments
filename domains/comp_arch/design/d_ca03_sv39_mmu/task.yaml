@@ -5,7 +5,7 @@ domain: comp_arch
 type: design
 catalog: TASK_CATALOG.md
 procedure: TIER-B
-task_text_hash: b05dbe9522c9ff2e
+task_text_hash: 360afdc7295d5fd8
 
 catalog_divergence: >
   The catalog row d_ca03 reads `mmu_sv39_full`: "Integrated MMU: PTW, TLB, ASID
@@ -141,7 +141,7 @@ scored_axes:
   - axis: correctness
     kind: gate
     surface: lsu_valid_o, lsu_paddr_o, lsu_exc_valid_o, lsu_exc_cause_o and the
-             fetch equivalents, bit-exact over the 118 requests of sequence C
+             fetch equivalents, bit-exact over the 175 requests of sequence D
     note: fail it and NO PPA number is produced
   - axis: total_cycles
     kind: reported
@@ -153,7 +153,7 @@ scored_axes:
       per-entry flush clear instead of a generation counter were all dominant
       strategies -- smaller area at no measured cost. Validated by
       nc_b_serial_response, which passes correctness with 0 failures and moves
-      cycles 832 -> 2,651.
+      cycles 1,513 -> 3,332.
   - axis: area
     kind: reported
     where: ppa record, design_area_um2 / synth_area_um2
@@ -184,7 +184,7 @@ reporting_requirement_for_agent_1:
 
 vectors:
   files: [vectors/vectors_sv39.hex]
-  records: 118
+  records: 175
   record_bits: 190
   captured_by: tb/audit/capture_vectors_tb.sv
   sequence: >
@@ -199,23 +199,23 @@ vectors:
     swept comparator costs almost nothing and the cycle axis cannot discriminate;
     the reuse passes lift it to where a swept comparator costs 3.19x. No working
     set is modelled and no address trace is replayed. Quote it as "the scored
-    sequence is 51% hits by construction", never as "the MMU sees 51% hit rates".
+    sequence is 36% hits by construction", never as "the MMU sees 36% hit rates".
     MEASUREMENTS.md section 9.
 
 results:
   measured_against_task_text: b05dbe9522c9ff2e
-  reference: PASS -- 118 of 118 requests, 0 failures, all coverage floors met
-  reference_metrics: {total_cycles: 832, pte_reads: 330, tlb_hits: 61, hit_pct: 51}
+  reference: PASS -- 175 of 175 requests, 0 failures, all coverage floors met
+  reference_metrics: {total_cycles: 1513, pte_reads: 642, tlb_hits: 64, hit_pct: 36}
 
 negative_controls:
-  measured_over: vectors/vectors_sv39.hex, 118 requests
+  measured_over: vectors/vectors_sv39.hex, 175 requests
   record: controls/CONTROLS.md
   controls:
-  - {name: nc_a_stuck_output,     targets: "floor case",          verdict: FAIL, failures: 118}
+  - {name: nc_a_stuck_output,     targets: "floor case",          verdict: FAIL, failures: 114}
   - {name: nc_b_serial_response,  targets: "the CYCLE axis",      verdict: PASS, failures: 0,
-     total_cycles: 2651, note: "axis probe: correctness untouched, cycles 3.19x"}
+     total_cycles: 3332, note: "axis probe: correctness untouched, cycles 2.20x"}
   - {name: nc_c_bloat_storage,    targets: "the AREA axis",       verdict: PASS, failures: 0,
-     total_cycles: 832, area_um2: 329980, note: "axis probe: cycles identical, area 1.73x, +4096 flops exactly"}
+     total_cycles: 1513, area_um2: 329980, note: "axis probe: cycles identical, area 1.73x, +4096 flops exactly"}
   - {name: nc_d_no_resident_tlb,  targets: "T4 capacity",         verdict: FAIL, failures: 119}
   - {name: nc_e_super_offset,     targets: "A2 superpage offset", verdict: FAIL, failures: 2}
   - {name: nc_f_ad_ignored,       targets: "A5 fault-on-unset",   verdict: FAIL, failures: 4}
@@ -236,13 +236,63 @@ negative_controls:
     reference, BEFORE the assertion was wired as a gate.
 
 second_source:
-  status: ABSENT
-  note: >
-    Not yet written, and its absence is stated rather than implied. Rule 5 makes it
-    mandatory before candidates are solicited -- not before they are scored -- so
-    this task is one piece short of ready for solicitation. Nothing here has been
-    checked against an independent implementation of the contract, so there is no
-    evidence yet that the task is SOLVABLE at the pinned contract.
+  status: PRESENT -- PASS, 175 of 175 requests
+  file: tb/sv39_mmu_alt_ref.sv
+  metrics: {total_cycles: 899, pte_reads: 273, tlb_hits: 80, hit_pct: 45}
+  divergence_from_reference: >
+    1.68x fewer cycles (899 against 1,513) and 2.35x fewer page-table reads (273
+    against 642), from the three deliberate structural choices the file's header
+    names: a one-cycle parallel flush against the reference's 139, a fully
+    combinational 16-way lookup, and one parallel PMP comparator bank shared
+    between the walker's reads and the final address. Its instruction TLB also
+    retains all 16 entries where the reference's retains one, which is where most
+    of the read difference comes from. Both designs are conforming; the two axes
+    separate them, which is what L1 exists for.
+  defects_it_found: 4
+  defect_summary: >
+    1. A11 did not exist: whether valid_o accompanies a fault was unstated and
+       scored on all four faulting requests, and L2's own wording pointed the
+       wrong way. 2. paddr_o on a faulting request was scored and reports where
+       the failing check was made, which A5 leaves free -- now unscored by T2.
+       3. The sequence never drove fetch_req_i, so the whole instruction surface
+       T1 declares scored went unexercised and T4 only ever reached the data TLB
+       -- now T8. 4. The rig took retirement from whichever output rose first,
+       which is wrong on the instruction port because the reference holds
+       fetch_exc_valid_o for the whole of an in-flight walk; every fetch was
+       recorded as an access fault at cycle 0. Chasing 4 exposed that T4's
+       policy-independence claim was false, which is T9.
+  authoring_constraint: >
+    WRITTEN AGAINST spec/sv39_mmu_iface.sv ALONE. ref/sv39_mmu_ref.sv is NOT to be
+    opened while implementing it, and neither is any file under refs/cva6/. This is
+    a binding constraint on the work, not a preference, and it holds for whoever
+    picks it up.
+    .
+    THE REASON, concretely. If the author can see the reference, a spec gap gets
+    filled silently from it and the exercise loses exactly the defects it exists to
+    surface. That is not hypothetical here: d_ca03's L2 hole -- a clause relaxed on
+    the strength of a harness sampling bug and left standing after the harness was
+    fixed -- survived my own review of the spec and only fell out when the
+    obligation was measured independently. An author with the reference open would
+    have implemented whatever it does and never noticed the text was undecided.
+    .
+    ADJUDICATE AFTERWARDS, NOT DURING. When the second source and the reference
+    disagree, run the failing input through the anchor and take rule 5's three
+    branches in order -- second source wrong, reference wrong, or spec ambiguous
+    and both legal. Doing that adjudication while still writing the implementation
+    collapses it into "make it match", which is the failure mode this constraint
+    prevents.
+    .
+    CONTAMINATION ALREADY PRESENT, stated rather than claimed away: I wrote the
+    shim, so I know the anchor's port semantics, the PTW's memory handshake, the
+    TLB entry field list and the PMP config layout. I have not read the walker FSM
+    or the TLB lookup logic. The structural differences below are therefore
+    deliberate opposites of a partially known design, which is weaker evidence than
+    a genuine clean room, and it is labelled that way.
+  expected_yield: >
+    Contract defects, and each one is the deliverable rather than an obstacle.
+    d_ai01's second source found three (A10 unpinned, C2 over-claimed, C3/C4
+    transition silence) plus the T5 tool gap, and none was visible to any of its
+    seven negative controls.
 
 orfs:
   config: orfs/config.mk

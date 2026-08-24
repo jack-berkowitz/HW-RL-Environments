@@ -3884,3 +3884,175 @@ interesting. Pin only when no deterministic sequence can credit the benefit, and
 check the sequence actually exercises it before relying on the axis.
 
 **Rules:** 25
+
+## F70. A harness that samples a level cannot see a pulse, and every conclusion drawn through it inherits the error
+
+Four incidents across two tasks, all the same defect: a rig read a signal as a
+LEVEL, once per cycle, where the design asserted it as a PULSE. Each returned a
+confident wrong answer, and none announced itself.
+
+**1. `d_ai01`, flush.** `probe_control_tb` pulsed `flush_i`, then sampled `z_o`
+after DEASSERTING it, and reported that flush did nothing. A cycle-by-cycle trace
+showed `z_o` reading 0x0000 for every cycle flush was high; the chain simply
+refилls within one cycle of deassertion, so a post-deassert read sees the refilled
+value.
+
+**2. `d_ai01`, corners.** `probe_corners_tb` sampled one edge early and returned
+`z=0` for EVERY corner case while the status flags varied correctly. Read
+naively, an anchor that returns zero for all arithmetic.
+
+**3. `d_ca03`, retirement.** `do_step` polled `lsu_valid_o` once per cycle. A
+`flush_i`-cancelled walk asserts it as a narrow pulse, so the RECORDED VECTOR for
+that step carried `valid=0` when the design had in fact retired the request. A
+control that latched internally then "disagreed" with a vector that was itself
+wrong.
+
+**4. `d_ca03`, the clause derived from it.** Spec L2 required every request to
+retire. On the strength of incident 3's bad reading, it was RELAXED to carve out
+flush-cancelled requests, with the carve-out documented as measured. The harness
+was then fixed to latch -- and the same step began recording `valid=1` with the
+correct address -- but the clause was not revisited. A normative relaxation stood
+for a while on a reading its own instrument had already retracted.
+
+### The rule this produces
+
+**Latch, never poll.** A completion or handshake signal read by a harness is
+latched from the moment the request is issued until it is retired, and the latched
+value is what gets recorded or compared. Sampling `if (valid)` once per clock is
+correct only for a signal guaranteed to be held, and a multi-cycle unit behind a
+valid/ready interface guarantees no such thing.
+
+**Verify the pulse width before writing the sampling code**, not after a result
+looks wrong. One cycle-by-cycle trace of the signal, once, costs nothing and
+settles whether a level read is even admissible.
+
+### The corollary, which is incident 4 and is the expensive half
+
+**Fixing an instrument obliges re-deriving whatever was concluded with it.** The
+fix and the conclusions are separate work, and doing only the first leaves
+statements standing on evidence that has been withdrawn. Incident 4 produced a
+NORMATIVE CONTRACT CLAUSE from a retracted measurement, and the clause outlived
+the retraction because nobody went back.
+
+So when an instrument defect is found, enumerate what was measured with it before
+the fix and re-run each item. In `d_ca03` that meant re-measuring the
+cancelled-request obligation directly, which showed the unit re-walks and retires
+in 15 cycles -- the opposite of what the relaxed clause said.
+
+### Where this recurs
+
+Every task with a multi-cycle unit behind a valid/ready interface, which is most
+of them: walkers, dividers, FMA pipelines, cache miss handlers, DMA engines,
+arbiters. Anywhere the design may assert completion for exactly one cycle.
+
+**Rules:** 27
+
+---
+
+## F71. A list of what is compared is not a specification of what the values must be
+
+`d_ca03`'s T1 named the scored surface: `lsu_valid_o`, `lsu_paddr_o`,
+`lsu_exc_valid_o`, `lsu_exc_cause_o` "and the fetch equivalents". No clause said
+what `valid_o` does on a faulting request, and none said what `paddr_o` holds
+when an exception is raised. Both are on the scored list. Both discriminate.
+
+An independent implementation written against the specification alone read
+`valid_o` as mutually exclusive with the exception -- L2's own wording, "either
+with a translation or with a fault", reads as an exclusive or -- and failed all
+four faulting requests while passing the other 114. The `paddr_o` divergence sat
+one step behind it and was worse: its value on a fault reports **where the
+failing check was made**, in the walker or on the TLB hit path, and the A/D
+clause permits either. So the scored surface was scoring an internal
+implementation choice, which is the one thing the not-scored clause existed to
+prevent.
+
+**The shape.** Enumerating outputs for comparison feels like specifying them. It
+is not, and the gap is invisible to review because the reference always has *an*
+answer -- the vectors record whatever it does, and the comparison passes for
+anything that happens to agree. Only a second implementation makes the
+undetermined bits visible, because it is the only thing that can disagree.
+
+**The check.** For every output on the scored list, name the clause that
+determines it in each retirement case the task can reach: success, each fault
+class, and each control transition. An output with no such clause is either
+under-specified or should not be scored. `d_ca03` gained A11 for the first
+answer and an exclusion in T2 for the second.
+
+**Where this recurs.** Every task whose scored surface is wider than one data
+bus -- status flags, valid/exception pairs, side-band outputs. `d_ai01` had the
+same shape at A10, where status timing was scored and unpinned.
+
+**Rules:** 28
+
+---
+
+## F72. A surface declared scored, that no stimulus reaches
+
+The same task's harness initialised `fetch_req` to zero and never assigned it.
+Across all 118 requests of the scored sequence, the entire instruction port went
+undriven while T1 declared it scored and the fault-cause clause pinned causes 12
+and 1 longhand. The capacity check said "for each TLB independently" and only
+ever reached the data TLB.
+
+The consequence was not cosmetic. A submission could tie `fetch_valid_o` low and
+provide a one-entry instruction TLB and pass every check -- reopening, on half of
+the pinned storage budget, precisely the incentive the capacity check was written
+to close. Nothing had to be built to close the gap either: the page table already
+planted executable, user-accessible leaves, so the missing phases were seven
+functional requests and a replay over a table that was already there. That is
+part of why it survived review. There was no missing work to notice.
+
+**The check, and it is cheap.** Every clause that pins a value needs a coverage
+witness that the value was reached, and the witness has to be reported next to
+the verdict rather than assumed from the clause's existence. A coverage floor
+that lists conditions is only worth what its stimulus reaches; add the ports
+themselves to the floor, not just the conditions.
+
+**Where this recurs.** Any task whose contract has more than one request port,
+more than one operating mode, or a fault class reachable only from a port the
+sequence does not drive.
+
+**Rules:** 28
+
+---
+
+## F73. A test claimed to be independent of a freedom, validated only against the reference
+
+`d_ca03`'s capacity check asserted that filling 16 distinct pages and replaying
+them must issue no page-table read, and claimed to be "BEHAVIOURAL AND
+POLICY-INDEPENDENT" on the grounds that it never checks *which* entry is
+displaced. The replacement policy is explicitly left free and unscored.
+
+The claim is false, and the reference itself refutes it. Run the same replay
+against the instruction TLB and the reference issues 96 reads where the data TLB
+issues none. Both are the same 16-entry structure. The anchor's replacement tree
+advances only on a lookup **hit** and never on an install, so a cold fill with no
+intervening hit writes all sixteen pages into one entry. Measured, filling n
+pages and replaying all n: the data TLB retains 16, the instruction TLB retains
+**one**.
+
+The data side passes only because the sequence's first eleven requests generate
+hits that spread the tree before the fill begins. So the check depended on the
+sequence preamble, and it had been validated -- correctly, against a known-good
+answer -- on the one port where that preamble existed.
+
+**The shape.** Not checking the thing a freedom controls is not the same as being
+independent of it. Independence is a claim about every legal implementation, and
+validating against the reference tests exactly one. The reference is the
+implementation *least* likely to exercise a freedom in a surprising way, because
+the freedom was usually written down after looking at it.
+
+**The check.** When a test is declared independent of a freedom the specification
+grants, validate it against something that exercises the freedom **differently**
+-- a second source, a control built to take the other choice, or a second
+instance of the same structure driven differently. Here a second instance of the
+same TLB, driven cold, was enough.
+
+**The residue matters too.** Once the claim fell, no residency test could
+establish the instruction TLB's capacity at all, because a one-entry design is
+behaviourally indistinguishable from the reference. The budget is now priced on
+the cycle axis and stated as unenforced pending a structural flip-flop count.
+Recording an open hole in the specification beats leaving a false claim closed.
+
+**Rules:** 29
+

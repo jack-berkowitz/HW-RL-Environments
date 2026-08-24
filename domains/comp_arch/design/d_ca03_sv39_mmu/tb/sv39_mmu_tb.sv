@@ -33,8 +33,10 @@ module sv39_mmu_tb;
   int unsigned errs = 0, checked = 0, reported = 0;
   int unsigned tot_cyc = 0, tot_acc = 0, n_hit = 0, n_walk = 0;
   int unsigned t4_resident_reads = 0, t4_thrash_reads = 0;
+  int unsigned i4_resident_reads = 0, i4_thrash_reads = 0;
   bit          cov_hit, cov_walk, cov_super, cov_fault_page, cov_fault_store;
   bit          cov_bare, cov_flush_tlb, cov_flush_mid, cov_a_fault, cov_d_fault;
+  bit          cov_fetch, cov_fetch_fault, cov_fetch_bare;
   int unsigned cov_tallied = 0;
   localparam int unsigned MAX_REPORT = 12;
 
@@ -45,6 +47,7 @@ module sv39_mmu_tb;
     build_sequence(seq);
     cov_hit=0; cov_walk=0; cov_super=0; cov_fault_page=0; cov_fault_store=0;
     cov_bare=0; cov_flush_tlb=0; cov_flush_mid=0; cov_a_fault=0; cov_d_fault=0;
+    cov_fetch=0; cov_fetch_fault=0; cov_fetch_bare=0;
 
     repeat (4) @(posedge clk); rst_n = 1; repeat (4) @(posedge clk);
 
@@ -63,21 +66,38 @@ module sv39_mmu_tb;
       tot_acc += last_acc;
       if (last_acc == 0) n_hit++; else n_walk++;
 
-      if (saw_v !== r.valid     || saw_paddr !== r.paddr ||
-          saw_e !== r.exc_valid || saw_cause !== r.exc_cause) begin
+      // T2 as amended: paddr_o is NOT compared when exc_valid_o is asserted.
+      // Its value on a fault reports WHERE the failing check was made -- the
+      // walker (no address yet) or the hit path (address computed) -- and A5
+      // permits either, so scoring it scored an implementation choice. valid,
+      // exc_valid and cause remain compared on every request, faulting or not.
+      if (saw_v !== r.valid     || saw_e !== r.exc_valid ||
+          saw_cause !== r.exc_cause ||
+          (!r.exc_valid && saw_paddr !== r.paddr)) begin
         errs++;
         if (reported < MAX_REPORT) begin
           reported++;
-          $display("[FAIL] step %0d va=%016x: expected valid=%0b pa=%014x exc=%0b cause=%0d",
-                   i, seq[i].va, r.valid, r.paddr, r.exc_valid, r.exc_cause);
-          $display("                          got      valid=%0b pa=%014x exc=%0b cause=%0d",
-                   saw_v, saw_paddr, saw_e, saw_cause);
+          $display("[FAIL] step %0d %s va=%016x: expected valid=%0b pa=%014x%s exc=%0b cause=%0d",
+                   i, seq[i].is_fetch ? "FETCH" : "LDST ", seq[i].va,
+                   r.valid, r.paddr, r.exc_valid ? " (unscored)" : "",
+                   r.exc_valid, r.exc_cause);
+          $display("                          got      valid=%0b pa=%014x%s exc=%0b cause=%0d",
+                   saw_v, saw_paddr, r.exc_valid ? " (unscored)" : "",
+                   saw_e, saw_cause);
         end
+      end
+
+      if ($test$plusargs("trace")) begin
+        $display("TRACE step=%0d %s va=%016x acc=%0d cyc=%0d v=%0b e=%0b pa=%014x c=%0d",
+                 i, seq[i].is_fetch ? "F" : "L", seq[i].va, last_acc, last_cyc,
+                 saw_v, saw_e, saw_paddr, saw_cause);
       end
 
       // ---- T4: the pinned entry counts, checked behaviourally ----
       if (i >= T4_REPLAY_LO && i <= T4_REPLAY_HI) t4_resident_reads += last_acc;
       if (i >= T4_R17_LO    && i <= T4_R17_HI)    t4_thrash_reads   += last_acc;
+      if (i >= I4_REPLAY_LO && i <= I4_REPLAY_HI) i4_resident_reads += last_acc;
+      if (i >= I4_R17_LO    && i <= I4_R17_HI)    i4_thrash_reads   += last_acc;
 
       // ---- coverage, tallied from the RECORDED reference so a broken
       // ---- submission can neither inflate nor suppress it ----
@@ -92,6 +112,9 @@ module sv39_mmu_tb;
       if (seq[i].ev == EV_BARE_ON)                          cov_bare        = 1'b1;
       if (seq[i].ev == EV_FLUSH_TLB)                        cov_flush_tlb   = 1'b1;
       if (seq[i].ev == EV_FLUSH_MID)                        cov_flush_mid   = 1'b1;
+      if (seq[i].is_fetch && r.valid)                       cov_fetch       = 1'b1;
+      if (seq[i].is_fetch && r.exc_valid)                   cov_fetch_fault = 1'b1;
+      if (seq[i].is_fetch && seq[i].ev == EV_BARE_ON)        cov_fetch_bare  = 1'b1;
     end
 
     // ---------------------------------------------------------------- verdict
@@ -114,6 +137,17 @@ module sv39_mmu_tb;
       $display("            cannot be resident in 16 entries.");
       errs++;
     end
+    // NOT an assertion on the instruction side, and T9 says why. The same
+    // 16-page replay that issues zero reads on the data TLB issues 96 on the
+    // instruction TLB of the reference itself -- every replay walks -- because
+    // the anchor's replacement tree advances only on a lookup HIT
+    // (cva6_tlb.sv:436), so a cold fill with no intervening hit installs all
+    // sixteen pages into one entry. A9 leaves the replacement policy free, so
+    // that policy is conforming, and a residency assertion would therefore be
+    // testing the policy rather than the capacity. It is REPORTED so the
+    // difference between the two ports stays visible.
+    $display("MEASURE: t4 data replay reads=%0d thrash=%0d | instr replay reads=%0d thrash=%0d",
+             t4_resident_reads, t4_thrash_reads, i4_resident_reads, i4_thrash_reads);
 
     if (cov_tallied == 0) begin
       $display("COVERAGE: NOT MEASURED -- no request was ever tallied.");
@@ -127,9 +161,12 @@ module sv39_mmu_tb;
              cov_fault_page, cov_fault_store, cov_a_fault, cov_d_fault);
     $display("  controls: bare=%0b flush_tlb=%0b flush_mid=%0b",
              cov_bare, cov_flush_tlb, cov_flush_mid);
+    $display("  fetch:    translate=%0b fault=%0b bare=%0b",
+             cov_fetch, cov_fetch_fault, cov_fetch_bare);
 
     if (!(cov_hit && cov_walk && cov_super && cov_fault_page && cov_a_fault &&
-          cov_d_fault && cov_bare && cov_flush_tlb && cov_flush_mid)) begin
+          cov_d_fault && cov_bare && cov_flush_tlb && cov_flush_mid &&
+          cov_fetch && cov_fetch_fault && cov_fetch_bare)) begin
       $display("  FLOOR FAIL: the sequence did not reach every required condition");
       errs++;
     end else

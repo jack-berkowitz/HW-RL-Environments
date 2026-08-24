@@ -658,6 +658,96 @@ defects. It runs with the regression.
     **From:** F68
 
 
----
 
-**Nothing you write is trusted until it has been run.**
+27. **A harness latches completion; it never polls a level. And fixing an
+    instrument obliges re-deriving what was concluded with it.** Any handshake or
+    completion signal a rig reads — `valid`, `done`, an exception flag — is
+    latched from request to retirement, and the latched value is what gets
+    recorded or compared. `if (valid)` once per clock is correct only for a signal
+    guaranteed to be held, and a multi-cycle unit behind a valid/ready interface
+    guarantees nothing of the kind.
+
+    **Verify the pulse width BEFORE writing the sampling code.** One
+    cycle-by-cycle trace settles whether a level read is admissible at all, and it
+    costs nothing next to the cost of not doing it.
+
+    **THE COROLLARY IS THE EXPENSIVE HALF.** When an instrument defect is found,
+    enumerate everything measured with it before the fix and re-run each item.
+    Repairing the rig and leaving the conclusions is how a NORMATIVE CLAUSE ends
+    up standing on a retracted reading: `d_ca03`'s L2 was relaxed to carve out
+    flush-cancelled requests because a polling harness recorded `valid=0`; the
+    harness was fixed to latch, the same step then recorded `valid=1` with the
+    correct address, and the relaxation survived anyway until the obligation was
+    measured directly — at which point the unit turned out to re-walk and retire
+    in 15 cycles, the opposite of what the clause said.
+
+    **Symptoms to distrust.** A probe reporting that a control input does nothing;
+    an oracle returning zero for every case while its flags vary; a control that
+    disagrees with a recorded vector on exactly the steps involving a control
+    transition. All three were this defect.
+
+    **From:** F70
+
+28. **Every output you score needs a clause that determines it, and every clause
+    you write needs a stimulus that reaches it.** A scoring list is not a
+    specification. Naming `valid_o`, `paddr_o` and `exc_valid_o` as "the scored
+    surface" says what gets compared, not what the values must be — and the gap
+    is invisible while the reference is the only implementation, because the
+    vectors record whatever it happens to do and the comparison passes for
+    anything that agrees.
+
+    Walk it in both directions before shipping a task. **Forwards:** for every
+    output on the scored list, name the clause that fixes it in each retirement
+    case the task can reach — success, each fault class, each control transition.
+    An output with no such clause is under-specified, or should not be scored at
+    all because its value reports an implementation choice. **Backwards:** for
+    every clause that pins a value, name the stimulus that reaches it, and report
+    that witness next to the verdict rather than inferring it from the clause's
+    existence.
+
+    `d_ca03` failed both directions at once. Forwards: nothing said whether
+    `valid_o` accompanies a fault, and nothing said what `paddr_o` holds when one
+    is raised — the second turned out to report whether the design checks A/D in
+    the walker or on the hit path, which another clause explicitly leaves free.
+    Backwards: the instruction port was declared scored and the harness never
+    asserted `fetch_req`, so two pinned fault causes and half the pinned TLB
+    budget went unexercised across 118 requests.
+
+    **What finds it.** A second source, and essentially nothing else. Both
+    directions were invisible to seven negative controls and to my own review of
+    the specification, because a control is built from the reference and inherits
+    its answer to every question the text left open.
+
+    **From:** F71, F72
+
+29. **A test declared independent of a freedom must be validated against
+    something that exercises the freedom, not against the reference.** Validating
+    against the reference tests one implementation, and it is the implementation
+    least likely to surprise you, because the freedom was usually written down
+    after looking at it.
+
+    Not checking the thing a freedom controls is not the same as being
+    independent of it. `d_ca03`'s capacity check asserted that replaying 16
+    resident pages issues no page-table read, and claimed policy independence
+    because it never checks *which* entry is displaced. But passing requires a
+    replacement policy that spreads a cold fill, and the specification permits
+    policies that do not — the anchor's own advances only on a lookup hit, so a
+    cold fill lands all sixteen pages in one entry. The same check run against
+    the second TLB of the same design issued 96 reads where the first issued
+    none. The check had been validated correctly, against a known-good answer, on
+    the one port whose preamble happened to satisfy it.
+
+    A second instance of the same structure driven differently was enough here.
+    A second source, or a control built to take the other choice, does as well.
+
+    **And when the claim falls, say what is left open.** Once policy
+    independence failed there was no behavioural test that could establish the
+    second TLB's capacity at all, since an under-provisioned design is
+    indistinguishable from the reference. The budget is now priced on the cycle
+    axis and the specification states plainly that it is not enforced pending a
+    structural check. An open hole recorded in the contract beats a false claim
+    that reads as closed.
+
+    **From:** F73
+
+---

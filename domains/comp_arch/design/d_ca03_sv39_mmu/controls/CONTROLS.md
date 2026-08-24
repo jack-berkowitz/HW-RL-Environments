@@ -7,8 +7,8 @@ Measured over sequence C, 118 requests, `vectors/vectors_sv39.hex`.
 |---|---|---|---|---|---|
 | *(reference)* | -- | PASS | 0 | **832** | **190,561** |
 | `nc_a_stuck_output` | floor case | FAIL | 118 / 118 | 832 | -- |
-| `nc_b_serial_response` | **the CYCLE axis** | PASS | **0** | **2,651 (3.19x)** | ~unchanged |
-| `nc_c_bloat_storage` | **the AREA axis** | PASS | **0** | 832 (identical) | **329,980 (1.73x)** |
+| `nc_b_serial_response` | **the CYCLE axis** | PASS | **0** | **3,332 (2.20x)** | ~unchanged |
+| `nc_c_bloat_storage` | **the AREA axis** | PASS | **0** | 1,513 (identical) | **329,980 (1.73x)** |
 | `nc_d_no_resident_tlb` | T4 capacity | FAIL | 119 | 70,201 | -- |
 | `nc_e_super_offset` | A2 superpage offset | FAIL | **2** | 832 | -- |
 | `nc_f_ad_ignored` | A5 fault-on-unset A/D | FAIL | **4** | 832 | -- |
@@ -57,6 +57,22 @@ Rule 24: the assertion had to reproduce a known-good answer first.
   1 cycle each -- 16 entries simultaneously resident.
 * steps 44-60, the 17-page replay: **every request issued 6 reads** -- 17 pages
   cannot be resident in 16 entries.
+
+## Re-run under sequence D, and one number that moved for a reason
+
+Sequence D adds 57 instruction-port requests (T8), so every figure above was
+re-measured. All six controls keep their verdicts. The one that changed shape is
+`nc_b`: **3.19x became 2.20x**, not because the control got weaker but because
+sequence D's added phase is dominated by cold instruction walks, which `nc_b`'s
+fixed 15-cycle retirement delay does not multiply the way it multiplies a TLB
+hit. The hit fraction fell from 51% to 36% for the same reason. A serialisation
+control is worth less on a sequence with fewer hits, and 2.20x is the honest
+figure for the sequence actually scored.
+
+`nc_d_no_resident_tlb` is worth reading twice: it fails all 175 and reports
+103,802 cycles against the reference's 1,513. Both axes catch it, which is the
+intended overlap -- a design that provides no usable TLB fails correctness on T4
+AND is charged for it on L1.
 
 Only then was it wired as a gate. `nc_d_no_resident_tlb`, which holds `flush_tlb_i`
 high so nothing is ever resident, fires it.

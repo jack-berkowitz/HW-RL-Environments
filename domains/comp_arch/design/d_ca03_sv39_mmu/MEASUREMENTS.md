@@ -310,3 +310,169 @@ Same two tool notes as d_ai01, confirmed again here rather than assumed:
 `all_inputs -no_clocks`), and OpenSTA cannot read yosys's default `write_verilog`
 output -- `-noattr -noexpr -nodec` after `opt_clean; splitnets -ports; opt_clean`
 produces a netlist it accepts.
+
+---
+
+## 12. The second source, and the four contract defects it found
+
+Written against `spec/sv39_mmu_iface.sv` alone. `ref/sv39_mmu_ref.sv` was not
+opened while it was written and neither was anything under `refs/cva6/`;
+adjudication happened afterwards. The constraint is recorded in `task.yaml`
+under `second_source.authoring_constraint` so it survives a handoff, together
+with the contamination that was present anyway and is not claimed away: I wrote
+the shim, so the port semantics, the memory handshake, the TLB field list and
+the PMP config layout were already known. The walker FSM and the lookup were
+not.
+
+Nine spec gaps were written into the file's header **before** it was ever run,
+so the record cannot be back-filled from what the reference turned out to do.
+Four of them were then reached by the scored sequence.
+
+### Defect 1 -- the retirement handshake was never stated, and it was scored
+
+First run: **114 of 118 passed, 4 failed, all the same shape.** Every faulting
+request expected `valid=1 exc=1`; the second source delivered `valid=0 exc=1`.
+
+The specification did not say which. L2 said a request retires "either with a
+translation or with a fault", which reads as an exclusive or, and T1 scores
+`lsu_valid_o` and `lsu_exc_valid_o` separately. So the contract admitted two
+readings on a scored surface, the text pointed at the wrong one, and every
+faulting request in the sequence discriminated between them. Rule 5 branch
+three. **A11** now states it: `valid_o` means the request retired, and a
+faulting request asserts it too.
+
+### Defect 2 -- `paddr_o` on a fault reports an internal choice, and was scored
+
+Asserting `valid_o` on faults fixed two of the four. The other two still
+differed, and only in the address:
+
+| step | condition | reference | second source |
+|---|---|---|---|
+| 4 | leaf without U, U-mode | `0x80000000` | `0x80000000` after fix |
+| 5 | leaf with A=0 | `0` | `0x9000` |
+| 6 | store through A=1 D=0 | `0` | `0xc000` |
+
+The pattern is exact and it is not arbitrary. A fault raised **inside the
+walker** has no translated address to present and delivers zero; a fault raised
+**on the TLB hit path** has computed one and delivers it. The reference rejects
+A=0 and D=0 leaves in the walker and applies A4's permission checks on the hit
+path. The second source installs any well-formed leaf and applies both there.
+**A5 permits both** -- it requires a fault and forbids a page-table write, and
+says nothing about where the check sits. So T1 was scoring where an
+implementation puts a check, which is the one thing T2 exists to prevent.
+**T2** now unscores `paddr_o` on a faulting request; everything else about that
+request -- that it retires, that it excepts, and the cause -- is still scored.
+
+### Defect 3 -- the instruction port was declared scored and never driven
+
+`fetch_req` was initialised to zero in the harness and never assigned. So across
+all 118 requests of sequence C:
+
+* `fetch_valid_o`, `fetch_paddr_o`, `fetch_exc_valid_o`, `fetch_exc_cause_o`
+  were never observed, though T1 declares them scored;
+* A6's causes **12** and **1** were never reached, though A6 pins them longhand;
+* T4's capacity check says "for each TLB independently" and **only ever reached
+  the data TLB**.
+
+A submission could have tied `fetch_valid_o` low and provided a one-entry
+instruction TLB and passed everything. That reopens, on half of P2's pinned
+storage, exactly the incentive T4 was written to close. **T8** now requires both
+ports to be driven, and sequence D adds 57 instruction requests: seven
+functional (walk, hit, superpage, two faults reaching cause 12, bare mode in and
+out) and a fifty-request capacity phase. Nothing had to be built to reach any of
+it -- the page table already planted `X=1 U=1` leaves -- which is part of why it
+went unnoticed.
+
+### Defect 4 -- the rig read a level as an event, for the third time
+
+With the instruction port driven, every fetch retired with **cause 1**, an
+access fault, including the ones that translate correctly. `tb/audit/probe_fetch_tb.sv`
+printed the port cycle by cycle:
+
+```
+c= 0 ivalid=0 iexc=1 icause=1 ipaddr=0        mreq=1 maddr=0x1010
+c= 4 ivalid=0 iexc=1 icause=1 ipaddr=0        mreq=1 maddr=0x2000
+c= 8 ivalid=0 iexc=1 icause=1 ipaddr=0        mreq=1 maddr=0x3000
+c=12 ivalid=1 iexc=0 icause=0 ipaddr=0x100000 mreq=0
+```
+
+The reference holds `fetch_exc_valid_o` asserted for the **whole** of an
+in-flight walk -- its instruction-side PMP check runs against a `fetch_paddr`
+that is not valid yet, so it reports "not permitted" for twelve cycles and then
+retires correctly on the thirteenth. `do_step` latched whichever output rose
+first, so it recorded every fetch as an access fault at cycle 0.
+
+This is the third level-versus-event defect in this task and the second in this
+rig. The previous one missed a pulse by sampling a level; this one caught a
+level that was not completion. Retirement is now taken from `valid_o` on both
+ports, which is what A11 defines it to be. See rule 27.
+
+## 13. Chasing defect 4 refuted T4's central claim
+
+With retirement fixed, fetches translate -- and the instruction-side T4 replay
+issued **96 page-table reads where the data side issues 0**. Every replay
+walked. `tb/audit/probe_capacity_tb.sv` fills n distinct pages, replays all n,
+and counts how many took no read:
+
+```
+   n    1   2   4   8  16  17
+ data   1   2   4   8  16   0
+ instr  1   0   0   0   0   0
+```
+
+**The data TLB retains 16. The instruction TLB retains one.** They are the same
+16-entry structure. The difference is entirely the replacement policy, and the
+mechanism is in the anchor: `cva6_tlb.sv:436` advances the PLRU tree only on
+`lu_hit[i] & lu_access_i` -- on a lookup **hit**, never on an install. A cold
+fill with no intervening hit therefore writes all N entries into one slot. The
+data TLB escapes it because the scored sequence's first eleven requests produce
+hits that spread the tree before the fill begins.
+
+A9 leaves the replacement policy free and unscored, deliberately. So that policy
+is conforming, and **T4's claim to be "BEHAVIOURAL AND POLICY-INDEPENDENT" was
+false**. Not checking *which* entry is displaced does not make a test
+policy-free: passing the 16-page replay requires a policy that spreads a cold
+fill, and A9 permits policies that do not. The check also depends on the
+sequence's preamble, so reordering the sequence can fail a conforming design.
+
+The consequence is worse than the wording. **No residency test can establish the
+instruction TLB's capacity against this anchor**, because a submission with a
+one-entry instruction TLB is behaviourally indistinguishable from the reference
+across the whole sequence while saving roughly 1,500 flip-flops.
+
+What was done, and what was not:
+
+* **T4** keeps the data-side check -- it does catch declare-and-never-fill, and
+  the reference passes it -- with the policy-independence claim removed and the
+  preamble dependency stated.
+* **T9** records that the instruction side is **priced, not enforced**: the
+  cycle axis charges under-provisioning (899 cycles against 1,513, 273 reads
+  against 642 for a design whose instruction TLB actually retains 16), and the
+  only thing that can enforce P2 there is a structural flip-flop count after
+  synthesis, which belongs to whoever runs PPA and **is not in place**.
+
+This is a stated hole, not a closed one. It is written into the specification
+rather than into this file alone so that nobody reads T4 and concludes both TLBs
+are covered.
+
+## 14. Sequence D, re-measured end to end
+
+| design | verdict | cycles | PTE reads | hits | instr replay reads |
+|---|---|---|---|---|---|
+| reference | PASS 175/175 | 1,513 | 642 | 36% | 96 |
+| second source | PASS 175/175 | **899** | **273** | 45% | **0** |
+| `nc_a_stuck_output` | FAIL 114 | 1,513 | 642 | 36% | 96 |
+| `nc_b_serial_response` | PASS (axis) | **3,332** | 660 | 36% | 96 |
+| `nc_c_bloat_storage` | PASS (axis) | 1,513 | 642 | 36% | 96 |
+| `nc_d_no_resident_tlb` | FAIL 175 | 103,802 | 0 | -- | 0 |
+| `nc_e_super_offset` | FAIL 2 | 1,513 | 642 | 36% | 96 |
+| `nc_f_ad_ignored` | FAIL 4 | 1,513 | 642 | 36% | 96 |
+
+Two conforming designs, 1.68x apart on cycles. That spread is the argument for
+L1 having a cycle axis at all, and it is now measured between two real
+implementations rather than between the reference and a control.
+
+The hit fraction fell from 51% to 36% because sequence D's added phase is
+dominated by cold instruction walks. Section 9's warning stands and now applies
+to a different number: **36% is a scoring construct, not a claim about
+representative workloads.**
