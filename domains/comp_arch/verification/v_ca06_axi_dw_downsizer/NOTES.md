@@ -200,3 +200,57 @@ its next-upstream-beat test used the bus width instead of the beat size, so at
 `size` 1 it reused stale data. The probe comparison passed it because the probes
 covered eight cases; the reference covers the `size` 0..3 by `len` 0..3 grid plus
 unaligned, and caught both.
+
+## The guarded mutant set
+
+Ten defects, each a wrong behaviour paired with a rare predicate over
+contract-level state read from the ports. Reference kills all ten; all six legal
+implementations still pass.
+
+**The guards are weighted toward ordinals and depth, on evidence from two
+independent tasks.** v_nw01 and the incognito v_ai02 submission show the same
+split: conditions that are a property of a SINGLE transaction get caught — a
+value, a last beat, a mode — and conditions that are ORDINAL or DEPTH-based get
+missed. v_ai02's incognito result caught rotation-value, last-beat,
+mode-history and stall-release, and missed all six of third-line, fifth-beat,
+five-beat-line, fourth-beat, 32nd-delivery and eight-cycle-stall.
+
+| id | clause | guard |
+|---|---|---|
+| `dw_m1_len_simple_formula_when_unaligned` | B2 | the address is not aligned to its own size |
+| `dw_m2_size_raised_when_narrow` | B1 | the upstream size is narrower than the downstream bus |
+| `dw_m3_len_short_from_eighth_read` | B2 | the eighth read since reset onward |
+| `dw_m4_fixed_single_refused_from_second` | C3 | the second FIXED single-beat request onward |
+| `dw_m5_refused_served_from_third` | C4 | the third refused burst onward |
+| `dw_m6_slverr_only_on_last_beat` | C4 | the refused read is three beats or longer |
+| `dw_m7_zero_strobe_beat_dropped_midburst` | E3 | the unstrobed beat is neither first nor last |
+| `dw_m8_strb_wrong_every_thirty_second` | E2 | the thirty-second downstream write beat, cumulative |
+| `dw_m9_rdata_lanes_swapped_deep_in_burst` | D1 | the fifth upstream beat of a response onward |
+| `dw_m10_rlast_withheld_from_sixteenth_read` | D4 | the sixteenth read since reset onward |
+
+`dw_m1` is the defect the specification itself carried until the reference caught
+it: dividing the byte count instead of counting blocks spanned. It is exact on
+every aligned request, which is why eight measured cases missed it.
+
+**Address-transform defects modify the request PRESENTED TO THE GOLDEN, not the
+golden's output.** Rewriting an output would leave the golden servicing a
+downstream burst inconsistent with what it computed, and it would HANG rather
+than fail — and a hang is not a detection. Modifying the input keeps the golden
+self-consistent while the observable transform is wrong against the real request.
+
+## Two more apparatus errors
+
+**An output cannot be rewritten from an instance port connection.** The first
+generator put the mutated expression in `.s_rresp(...)` on the golden's instance.
+For an output that drives nothing: the module port was left UNDRIVEN, and
+`--lint-only` without `-Wall` reported zero problems. Output rewrites now take
+the golden's value on an inner `<sig>_i` wire and drive the port with an
+`assign`. `-Wall` names it as UNDRIVEN, which is how it was found.
+
+**A per-burst index is not a cumulative count.** `dw_m8` was keyed on
+`g_dwbeat % 32`, but `g_dwbeat` resets with each AW, so it is the index within
+the current downstream burst — and no burst in the reference is 32 beats long, so
+the guard could never fire. It survived for that reason and not for any reason
+about the testbench. A separate cumulative counter now backs it. The distinction
+matters for any "every Nth" guard: within-transaction and since-reset are
+different quantities and the wrong one is silently unreachable.
