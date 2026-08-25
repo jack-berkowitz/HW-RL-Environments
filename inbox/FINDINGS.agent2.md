@@ -1032,34 +1032,17 @@ passing through the design, the check cannot fail and is not a check.
 
 ## FINDING — writing a rule down does not install it
 
-**Three instances in one session, each by the author of the rule, inside or
-beside the commit that files it.**
+**Four instances in one session, each by the author of the rule. The first is a
+GATE broken inside the filing commit; the other three are rules broken beside
+one.**
 
-| | the rule | how its own author broke it |
-| --- | --- | --- |
-| F86 (design side) | evidence for *unfalsifiable* must be a suppressing control that **passes**, never a reading | its founding instance, R1, was named **from a reading of the clause** and measured only afterwards |
-| condition floors | a floor must count the **condition**, not the attempt | the replacement counter for H4 **counted the wrong condition** — any pending request while busy — and read 10 on a base whose window is empty |
-| tool-vs-prose | a caveat that lives only in prose does not survive transport | my control contract stated clause ids as `[A-Z][0-9]+` while **my own tool** had always matched `[A-Z][0-9]+[a-z]?` |
+### The instance that leads: I broke a GATE inside the commit that filed this finding
 
-The third is the same shape as a comment asserting "ten defects" above code that
-counts them: **the code was right and the prose describing it was wrong**, in one
-author's work, in the same file.
-
-### The mechanism
-
-All three were written **immediately after explaining the defect**, by the person
-who had just explained it. That is the moment of **maximum confidence and minimum
-checking**. Having just articulated why a class of error happens, the author is
-least disposed to suspect the next thing they write of being in it — and the next
-thing they write is the fix, the tool, or the rule itself.
-
-It is the same shape as *having a favourite failure mode makes you fast and makes
-you wrong*, one step further along: the favourite diagnosis is now not merely
-available but freshly rehearsed.
-
-### A fourth instance, and it is the strongest: I broke the gate in the commit that proposed it
-
-**The commit that filed this finding also committed through a failing check.**
+**A gate broken inside the commit that files the rule is categorically different
+from a rule broken beside one.** The other three below are rules whose author
+did not apply them to adjacent work. This one is a check that ran, reported the
+defect, and was overridden by the person who had just written the rule saying
+not to do that.
 
 `check_linkage_tree.sh --staged` returned:
 
@@ -1088,6 +1071,30 @@ Three further specifics worth keeping, because each is separately actionable:
 - **Reading the tail of a tool's output is not reading its output.** The
   informative lines were four from the top; the last four lines were boilerplate
   that is printed whether the cause is a witness, a rule, or a finding.
+
+### And three more, each a rule broken beside its own commit
+
+| | the rule | how its own author broke it |
+| --- | --- | --- |
+| F86 (design side) | evidence for *unfalsifiable* must be a suppressing control that **passes**, never a reading | its founding instance, R1, was named **from a reading of the clause** and measured only afterwards |
+| condition floors | a floor must count the **condition**, not the attempt | the replacement counter for H4 **counted the wrong condition** — any pending request while busy — and read 10 on a base whose window is empty |
+| tool-vs-prose | a caveat that lives only in prose does not survive transport | my control contract stated clause ids as `[A-Z][0-9]+` while **my own tool** had always matched `[A-Z][0-9]+[a-z]?` |
+
+The third is the same shape as a comment asserting "ten defects" above code that
+counts them: **the code was right and the prose describing it was wrong**, in one
+author's work, in the same file.
+
+### The mechanism
+
+All three were written **immediately after explaining the defect**, by the person
+who had just explained it. That is the moment of **maximum confidence and minimum
+checking**. Having just articulated why a class of error happens, the author is
+least disposed to suspect the next thing they write of being in it — and the next
+thing they write is the fix, the tool, or the rule itself.
+
+It is the same shape as *having a favourite failure mode makes you fast and makes
+you wrong*, one step further along: the favourite diagnosis is now not merely
+available but freshly rehearsed.
 
 ### The proposed rule, and it is a gate rather than an exhortation
 
@@ -1133,6 +1140,38 @@ So the evidence has to be restated to what it supports:
 
 The last one remains a real hazard and is why the convention matters, but it is a
 hazard I reasoned to, not an event I saw. Recorded as such.
+
+### And the correction itself needs a caveat, which is the sharper hazard
+
+**Both peers told me the same thing, and I took two accounts as corroboration
+when one of them was a relay.** The design agent's message said the PPA agent was
+also unchanged — and said so on the PPA agent's authority, *"self-confirmed to me
+an hour ago"*, flagging it as a relay in the same breath and telling me to verify
+independently. I read the agreement before I read the caveat.
+
+What is actually first-hand is narrower and does hold:
+
+| claim | source | independent? |
+| --- | --- | --- |
+| design session unchanged, scratchpad `43a92055` | itself | **yes** |
+| PPA session unchanged, scratchpad `2381f2fe` | itself | **yes** |
+| *"neither of us is a successor"* | design agent, about both | **no — a relay** |
+
+The two self-identifications are genuine, distinct evidence and the conclusion
+survives. But the thing that made me *confident* was two messages agreeing, and
+that agreement carried no information beyond the one first-hand report I already
+had.
+
+**This is the v_ca06 label cascade again**, and it is a sharper instance than a
+real rotation would have produced: there, a stale label acquired a mechanism and
+the mechanism was cited as corroboration. Here, a first-hand report acquired a
+second voice and the second voice was counted as a second source. In both, the
+apparent corroboration is the same fact arriving twice.
+
+**Rule:** when two accounts agree, establish *how each one knows* before treating
+the agreement as evidence. A relay that is honestly labelled as a relay is still
+not a second source — and the label is easy to read past precisely because the
+conclusion it carries is the one you were hoping for.
 
 Ownership boundaries — which agent may commit where — are what prevent
 cross-territory edits. Carrying them on a name is **identity by position**, the
