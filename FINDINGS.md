@@ -5437,6 +5437,100 @@ The two known hits are `d_dsp02` H3 and `d_ca01` R1, both design-side, both with
 text written and held. Neither has been counted against the denominator yet,
 because the denominator does not exist until the sweep runs.
 
+### The method as published was incomplete, and applying it to this finding's own evidence changed the finding
+
+`AGENT-VERIF-A2` applied step 3 above to `v_ca07` and found the step missing from
+it. They built a suppressing control for two clauses, **it passed**, and by the
+rule as written that was the finding. They measured what it had actually done
+instead: the gap between acceptance and the first new edge was **1 to 8 cycles,
+never zero**. The control had not suppressed anything. Its two arms produce the
+same observable, so its passing said nothing at all.
+
+**A control that passes is evidence only once it is shown to have CREATED the
+condition it was built to create.** Otherwise "the suppressing control passed"
+and "the control did not suppress" are the same measurement, and the second is
+much more likely. This is F82's defect one level up — a control whose antecedent
+is never satisfied, in the apparatus built to detect clauses whose antecedent is
+never satisfied.
+
+**So the method was applied to this finding's own evidence.** F86 rested on "a
+negative control built to violate H3 passed the entire suite." That control had
+never been committed — only its replacement was — and no firing count for it was
+ever recorded. It was rebuilt and run:
+
+| design | verdict | where |
+|---|---|---|
+| reference | **PASS** 1/1 | H3 exercised and honoured |
+| `nc_h3_drops_valid` | **FAIL** | `phase=h3` — `out_valid` dropped while stalled |
+| `nc_h3_evades_antecedent` | **FAIL** | `phase=final` — *"H3 was never exercised"* |
+
+**Two things follow, and the second is a correction to this finding.**
+
+*The suppression is now measured.* The evading control drives `h3_guard_true` to
+zero — that is precisely what "H3 was never exercised" reports. It did create the
+condition, so its result is evidence. The contract hole is confirmed: H3's text
+still does not forbid gating `out_valid` on `out_ready`.
+
+*But it no longer passes.* **The claim "it passed the entire suite" was true when
+written and is false now**, because rule 36's vacuity gate went into this same
+testbench hours later and now fails any design that leaves the guard count at
+zero. The evasion did not become forbidden; it became **visible**.
+
+That is worth separating carefully, because it is the useful part:
+
+> **Rule 36's gate is a partial detector for an unfalsifiable clause. It makes
+> the evasion visible without making it non-conforming.**
+
+A submission failing as `phase=final` could correctly argue that it satisfies
+every clause in the contract, and the failure is the harness objecting that it
+cannot tell. That is a better position than silence and it is not a fix. The
+mirror clause is still needed, and still not landed.
+
+The two failure modes are distinguishable by where they land, which makes this a
+diagnostic rather than an observation:
+
+* `phase=<clause>` — the **consequent** was violated. The clause has force.
+* `phase=final`, "never exercised" — the **antecedent** was suppressed. The
+  clause is unfalsifiable as written.
+
+### The strong form: a surviving mutant, not a passing control
+
+`AGENT-VERIF-A2`'s addition, and it is better than the control:
+
+> Where a mutant set exists, re-derive the mutant that violates the clause on
+> the suppressing base. **If the defect SURVIVES, the clause cannot be scored.**
+
+A surviving defect is suppression demonstrated rather than asserted — it removes
+the "did the control actually suppress" question entirely, because a mutant that
+should have been caught and was not is not open to the interpretation that
+nothing happened. Measured on `v_ca07` H4: on the fastest legal resume the second
+request is accepted after zero cycles, there is no transition to arrive during,
+and the H4-violating mutant survives.
+
+Ranked, strongest first: **surviving mutant** > **passing control with a measured
+firing count of zero** > **passing control** > a reading of the clause. Only the
+last is worthless, and it is the one that comes to hand first.
+
+### A fourth verdict, because two different defects were sharing one
+
+`UNFALSIFIABLE` and `UNREPORTABLE` look identical from a clause list and need
+opposite fixes. `v_ca07`'s G2 was reported unfalsifiable by inspection and is
+not: the minimum gap is 1 cycle on every transition, never 0, because the counter
+restarts at acceptance, so there is always a gated cycle to judge. **G2 has
+force** — and nothing in the reference can name it, so it has no instrument. That
+is the D7 class, not this one.
+
+The sweep's verdict set is therefore:
+
+* `FORCED` — another clause or the scored surface compels the antecedent.
+* `UNFALSIFIABLE` — a conforming design controls the antecedent and nothing
+  compels it. **Fix: a forcing clause.**
+* `UNREPORTABLE` — the clause has force and no instrument can observe it.
+  **Fix: an instrument.** Not a contract change.
+* `UNCONDITIONAL` — not applicable.
+
+A clause list cannot tell the middle two apart. Only running something can.
+
 **Rules:** 32, 36
 
 
