@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=nonblocking_dcache; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=10000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0;",
+  "build_config_hash": "6818499871713eda",
+  "clk_period_ns": "10.0",
+  "correctness_gate": "passed:2026-08-23T012244Z__gemini__sim.json",
+  "design_area_um2": "697750",
+  "git_sha": "128bb73f65a895d348bf28db3b0b7a76d2b31e84-dirty",
+  "kind": "ppa",
+  "label": "gemini_v2",
+  "orfs_nickname": "d_ca01_cand_gemini_v2",
+  "pdk": "sky130hd",
+  "power_w": "1.15e-01",
+  "status": "completed",
+  "submission": "candidates/d_ca01/gemini.sv",
+  "submission_sha256_16": "20f5a89e42b32e18",
+  "synth_area_um2": "552636.272000",
+  "task": "d_ca01_nonblocking_dcache",
+  "timestamp_utc": "2026-08-24T23:41:28Z",
+  "wns_ns": "0.327792"
+}
