@@ -936,6 +936,35 @@ I had it right once, on the clause where I had thought about it, and wrote the
 other three from the floor block without thinking about it — which is exactly the
 mechanism above.
 
+### The third instance of an author breaking the rule inside the commit that files it
+
+**My first replacement counter for H4 was wrong in this finding's own way.** It
+counted any pending different-valued request while the design was busy — which
+includes the natural overlap in the divisor sweep, nothing to do with H4 — and
+**read 10 on a base whose H4 window is empty**. A counter whose name and claim
+outran what it counted, written into the commit that defines that defect.
+
+What caught it was not review. **Both bases passed**, and two passes is exactly
+what a useless counter looks like: the anchor passed because the antecedent held,
+the suppressing control passed because the counter was measuring something else,
+and the pair is indistinguishable from a working detector. It was caught by
+**printing the number** — 9 on the anchor, 10 on the control — instead of reading
+the pass/fail pair.
+
+That makes three in this session, and the pattern is worth more than any one:
+
+| | the rule | broken by its own author |
+| --- | --- | --- |
+| F86 | evidence for *unfalsifiable* must be a suppressing control that passes | its founding instance, R1, was named from a **reading** of the clause |
+| this | a floor must count the condition, not the attempt | the replacement counter **counted the wrong condition** |
+| earlier | the code was right and the prose describing it was wrong | my contract text said `[A-Z][0-9]+` while my own tool had always matched `[A-Z][0-9]+[a-z]?` |
+
+**The generalisation:** writing a rule down does not install it. All three were
+written by someone who had just finished explaining the defect, in the artefact
+that explains it, which is the moment of maximum confidence and therefore of
+minimum checking. A rule is worth having anyway — but the check it prescribes has
+to be run against the commit that introduces it, not only against future work.
+
 ### Rules
 
 - A floor may claim only what its counter observes. *"never driven"* is a claim

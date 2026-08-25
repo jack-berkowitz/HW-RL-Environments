@@ -237,3 +237,52 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation
   fault_detection: reported PER MUTANT, never as a rate
+
+e1_boundary:
+  date: 2026-08-25
+  task_text_hash_before: a04f965ad7552b22
+  task_text_hash_after:  394f1f8fd51e8c2a
+  why_one_boundary: >
+    A spec amendment and a stimulus change that are only meaningful together.
+    Landing either alone leaves the other half asserting something it cannot
+    support, which is the two-halves problem this suite has now hit four times.
+  the_gap: >
+    E1 listed addr and len on the address channels, data/strb/last on W, and
+    data/resp/last on R. It never mentioned the WRITE RESPONSE channel. A
+    converter that normalised SLVERR to OKAY on B conformed to the specification
+    as written.
+  and_the_other_half: >
+    The READ side named resp and could not test it. The responder drove
+    m_rresp = 2'b00 and the checker compared s_rresp against the literal 2'b00 --
+    port and expectation were the same constant, so a design that rewrote every
+    response code passed. A clause with an instrument that cannot fail.
+  change:
+    spec: >
+      E1 gains "and `resp` on the write response channel". Eleven words, no
+      renumbering, no clause added.
+    stimulus: >
+      m_rresp and m_bresp are now a function of the transaction ADDRESS --
+      resp_of() -- so the responder and the expectation agree without a side
+      channel, the responder deciding cycles after the expectation is raised.
+      Addresses already carry a per-transaction counter in their low bits, so
+      the codes vary without new stimulus.
+    checkers: >
+      Both compare against what was DRIVEN. The write side needed bookkeeping
+      the read side already had: waddr_q per slave id, pushed at AW acceptance
+      and popped at B.
+    floor: >
+      At least four non-OKAY responses of each kind must be RETURNED, because
+      "the checker compares against what was driven" is satisfied trivially when
+      everything driven is OKAY.
+  measured: "non-OKAY responses returned: reads=105, writes=10"
+  rebaseline: >
+    Every verdict IDENTICAL. Ten of ten killed, gate-mutant rejected, dut2 PASS,
+    all five conformant perturbations PASS, ACCEPTED, 5c OK on both bases with
+    both clean controls passing. NO kill count moved. The BEFORE table was taken
+    from the committed testbench extracted from git.
+  what_did_not_change: >
+    No mutant was added for the new half. iw_m8_bresp_wrong_when_full already
+    perturbs bresp and is killed; whether the new clause needs a mutant keyed on
+    CODE PRESERVATION rather than on a wrong response is the D6/D7 question in
+    this task's terms, and it is not decided here.
+
