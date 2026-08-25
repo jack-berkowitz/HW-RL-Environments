@@ -18,7 +18,7 @@ A **total** defect fires on the first transaction of its class, so any testbench
 that exercises the class catches it whether or not it is checking the clause — it
 measures coverage, not checking.
 
-**Eight of these eleven are ordinal or depth conditions**, and that weighting is
+**Nine of these twelve are ordinal or depth conditions**, and that weighting is
 measured rather than assumed. Two independent results — v_nw01, and the
 incognito v_ai02 submission — show the same split: conditions that are a property
 of a *single* transaction get caught (a value, a last beat, a mode), and ordinal
@@ -41,6 +41,7 @@ fifth-beat, five-beat-line, fourth-beat, 32nd-delivery and eight-cycle-stall.
 | `dw_m9_rdata_lanes_swapped_deep_in_burst` | **D1** | the fifth upstream beat of a response onward | two byte lanes of the upstream read data are exchanged |
 | `dw_m10_rlast_withheld_from_sixteenth_read` | **D4** | the sixteenth read since reset onward | the final upstream beat does not carry rlast |
 | `dw_m11_downstream_error_dropped_from_second` | **D6, E6** | the second downstream error since reset onward | the upstream response says OKAY where the slave returned SLVERR or DECERR |
+| `dw_m12_error_code_normalised_from_second` | **D7** | the second downstream DECERR since reset onward | a downstream DECERR is reported upstream as SLVERR — an error, of the wrong kind |
 
 
 ## The eleventh, and why it is here
@@ -60,12 +61,29 @@ downstream response channels — never on the SLVERR the design manufactures for
 refused burst, which never appears there at all. That separation is what keeps it
 off `C4`'s ground, where `dw_m5` and `dw_m6` already live.
 
-**D7 is still unscored, and that was measured.** `dw_m11`'s clause profile is
-D6 ×10 and E6 ×2 with **zero D7**. The reason is structural: this mutant *erases*
-the error, and a beat carrying no error cannot test *which* error it carries —
-D6 and E6 fire first, on the very beat that would have tested D7. Closing D7
-needs a mutant that reports **an** error with the **wrong** code, which is a
-disjoint behaviour rather than a stronger version of this one.
+**D7 needed its own, and that was measured before it was written.** `dw_m11`'s
+clause profile is D6 ×10 and E6 ×2 with **zero D7** — structural, not a guard
+wanting tuning: this mutant *erases* the error, and a beat carrying no error
+cannot test *which* error it carries. `dw_m12` leaves an error present and
+changes only its **kind**, which is the disjoint behaviour D7 needs. It fires
+**D7 ×5 and nothing else**.
+
+## The twelfth, and what had to land with it
+
+`dw_m12` exists because **an independent reading of this specification got D7
+wrong**: `dut2`, written from the spec alone, forced SLVERR for any downstream
+error and violated D7 the moment D7 became observable. A clause a real
+independent reading got wrong is a clause submissions will get wrong.
+
+Two things landed in the same change, because a mutant whose guard is unreachable
+is a `dw_m8` repeat:
+
+1. **Two more DECERR-injecting reads.** The run had one DECERR; a guard keyed on
+   the *second* would never have fired. Three now.
+2. **The read-side check was reporting a code swap as D6.** D6 is *precedence* —
+   an error is due and must appear. D7 is *code preservation*. Collapsing them
+   named the wrong clause for the defect and would have credited a submission
+   with checking something it did not. Three outcomes now, not two.
 
 ## Non-equivalence witnesses — rule 16
 

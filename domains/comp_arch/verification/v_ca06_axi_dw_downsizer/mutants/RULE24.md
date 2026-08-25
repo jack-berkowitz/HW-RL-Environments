@@ -38,7 +38,8 @@ exits 2 without printing witnesses.
   dw_m9_rdata_lanes_swapped_deep_in_burst : FAIL [D1] D:long reads: R beat 4 data 8283808186878584, expected 8283808186878485 on the lanes it covers (t=2585)
   dw_m10_rlast_withheld_from_sixteenth_read : FAIL [D4] A:reads, aligned: rlast is 0 on beat 2 of a 3-beat response (t=1295)
   dw_m11_downstream_error_dropped_from_second : FAIL [D6] M:DOWNSTREAM ERRORS -- D6 is sticky, D7 preserves the code: R beat 0 carries resp 0, expected 10 -- an error is STICKY from the beat it occurs on (t=13885)
-  RULE24 positive control : 11 of 11 mutants produced a clause failure
+  dw_m12_error_code_normalised_from_second : FAIL [D7] M:DOWNSTREAM ERRORS -- D6 is sticky, D7 preserves the code: R beat 1 carries resp 10 where the slave returned 11 -- an error, of the WRONG KIND; the code is preserved, not normalised (t=14685)
+  RULE24 positive control : 12 of 12 mutants produced a clause failure
 ```
 
 ## Step 5c
@@ -51,7 +52,7 @@ run whose control failed licenses nothing.
 RULE 24: each "(clean)" line below is a CONTROL -- a conforming
          implementation must PASS. Each defect line is the positive half.
 
-reference testbench vs the GOLDEN base and its eleven defects
+reference testbench vs the GOLDEN base and its 12 defects
   golden (clean)                                 PASS as expected
   dw_m1_len_simple_formula_when_unaligned        FAIL as expected
   dw_m2_size_raised_when_narrow                  FAIL as expected
@@ -64,11 +65,13 @@ reference testbench vs the GOLDEN base and its eleven defects
   dw_m9_rdata_lanes_swapped_deep_in_burst        FAIL as expected
   dw_m10_rlast_withheld_from_sixteenth_read      FAIL as expected
   dw_m11_downstream_error_dropped_from_second    FAIL as expected
+  dw_m12_error_code_normalised_from_second       FAIL as expected
 
-reference testbench vs the POLICY-DIVERGENT base and the same eleven defects
+reference testbench vs the POLICY-DIVERGENT base and the same defects
   policy base (clean)                            PASS as expected
   dw_p10_rlast_withheld_from_sixteenth_read      FAIL as expected
   dw_p11_downstream_error_dropped_from_second    FAIL as expected
+  dw_p12_error_code_normalised_from_second       FAIL as expected
   dw_p1_len_simple_formula_when_unaligned        FAIL as expected
   dw_p2_size_raised_when_narrow                  FAIL as expected
   dw_p3_len_short_from_eighth_read               FAIL as expected

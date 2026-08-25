@@ -257,12 +257,21 @@ module dw_downsizer_tb;
             // the longer's width. The empty arm here printed FIFTY NULs into the
             // middle of this message, and this message is a rule-16 WITNESS --
             // the string the mutant record is checked against. Plain if/else.
+            // THREE outcomes, not two, because D6 and D7 are different clauses.
+            // D6 is precedence -- an error is due and must appear. D7 is code
+            // preservation -- the error that appears must be the one the slave
+            // returned. Collapsing them reported a code swap as a precedence
+            // failure, which names the wrong clause for the defect and would
+            // have credited a submission with checking something it did not.
             if (s_rresp !== want_r) begin
               if (want_r == 2'b00)
                 fail("D5", $sformatf("%s: R beat %0d carries resp %0b, expected %0b",
                                      phase, j, s_rresp, want_r));
-              else
+              else if (s_rresp == 2'b00)
                 fail("D6", $sformatf("%s: R beat %0d carries resp %0b, expected %0b -- an error is STICKY from the beat it occurs on",
+                                     phase, j, s_rresp, want_r));
+              else
+                fail("D7", $sformatf("%s: R beat %0d carries resp %0b where the slave returned %0b -- an error, of the WRONG KIND; the code is preserved, not normalised",
                                      phase, j, s_rresp, want_r));
             end
           end
@@ -619,6 +628,12 @@ module dw_downsizer_tb;
     arm(32'h33_0000, 1, 3); do_read(4'h4, 32'h33_0000, 1, 3, 2'b01);   // DECERR
     arm(32'h11_0000, 3, 3); do_read(4'h5, 32'h11_0000, 3, 3, 2'b01);   // long, beat 1
     arm(32'h1F_0000, 3, 3); do_read(4'h6, 32'h1F_0000, 3, 3, 2'b01);   // beat 15 of 16
+    // More DECERR, because D7 is about telling the two codes apart and one
+    // DECERR read gives a guard exactly one chance to fire. dw_m12 keys on the
+    // SECOND DECERR since reset; with a single one it would be unreachable and
+    // this would be a dw_m8 repeat -- a mutant in the set that cannot be scored.
+    arm(32'h37_0000, 1, 3); do_read(4'hA, 32'h37_0000, 1, 3, 2'b01);   // DECERR, LAST beat
+    arm(32'h31_0000, 3, 3); do_read(4'hB, 32'h31_0000, 3, 3, 2'b01);   // DECERR, long, beat 1
     arm(32'h10_0000, 0, 3); do_write(4'h7, 32'h10_0000, 0, 3, 2'b01, 1'b0);
     arm(32'h30_0000, 1, 3); do_write(4'h8, 32'h30_0000, 1, 3, 2'b01, 1'b0);
     arm(32'h10_0000, 2, 3); do_write(4'h9, 32'h10_0000, 2, 3, 2'b01, 1'b1);

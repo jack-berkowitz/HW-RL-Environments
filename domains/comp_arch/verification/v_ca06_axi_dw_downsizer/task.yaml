@@ -57,13 +57,13 @@ scoring:
   fault_detection: reported PER MUTANT, never as a rate
 
 scoring_ceiling:
-  reference: 11 of 11
+  reference: 12 of 12
   licensed_by: >
     Observed run on 2026-08-24: golden PASS, dut2 PASS, all five conformant
-    perturbations PASS, all ELEVEN guarded mutants killed with a named clause
+    perturbations PASS, all TWELVE guarded mutants killed with a named clause
     failure each, and the all-outputs-high control rejected with 4024 failures.
     Re-measured on 2026-08-24 at eleven, after the A4 retirement fix: witness
-    runner 11 of 11 with its negative control passing, 5c 24 of 24 on both
+    runner 12 of 12 with its negative control passing, 5c 26 of 26 on both
     bases, check_witness_sync --fresh verbatim.
   caveat: >
     The reference was developed against SIX legal implementations rather than
@@ -143,7 +143,7 @@ policy_derivation:
     would cost about as much as writing dut2 again for evidence this set does
     not need.
   policy_independence: >
-    24 of 24: both clean implementations pass and every defect is caught on both
+    26 of 26: both clean implementations pass and every defect is caught on both
     bases. Rerun with mutants/check_policy_independence.sh, whose "(clean)" lines
     are rule-24 controls and which ABORTS on a failing control.
 
@@ -202,6 +202,10 @@ mutants:
      guard: "the sixteenth read since reset and every read after it",
      defect: "the final upstream beat of a response does not carry rlast",
      witness: "FAIL [D4] A:reads, aligned: rlast is 0 on beat 2 of a 3-beat response (t=1295)"}
+  - {id: dw_m12_error_code_normalised_from_second, violates: "D7",
+     guard: "the second downstream DECERR since reset and every one after it -- the first is preserved correctly",
+     defect: "a downstream DECERR is reported upstream as SLVERR -- an error, of the wrong kind, so precedence holds and only the CODE is wrong",
+     witness: "FAIL [D7] M:DOWNSTREAM ERRORS -- D6 is sticky, D7 preserves the code: R beat 1 carries resp 10 where the slave returned 11 -- an error, of the WRONG KIND; the code is preserved, not normalised (t=14685)"}
   - {id: dw_m11_downstream_error_dropped_from_second, violates: "D6, E6",
      guard: "the second downstream error since reset and every one after it -- the first is propagated correctly",
      defect: "a downstream error is not propagated: the upstream response says OKAY where the slave returned SLVERR or DECERR",
@@ -218,7 +222,7 @@ mutants:
     exact on every aligned request, which is why the eight cases measured in
     step 1 walked past it.
   reference_reachability: >
-    The reference kills all eleven. dw_m8 survived the first run and the reason was
+    The reference kills all twelve. dw_m8 survived the first run and the reason was
     the guard, not the testbench: it was keyed on a PER-BURST beat index that
     resets with each AW, and no burst in the reference is thirty-two beats long,
     so the guard could never fire. A cumulative counter now backs it.
@@ -245,14 +249,25 @@ unscored_clauses:
       text: the error CODE is preserved -- SLVERR stays SLVERR, DECERR stays
             DECERR, neither normalised to the other
       status: >
-        STILL UNSCORED, and this was MEASURED rather than assumed. dw_m11 was
-        run and its clause profile is D6 x10 and E6 x2 with ZERO D7. The reason
-        is structural, not a matter of tuning the guard: dw_m11 ERASES the
-        error, and a beat that carries no error cannot test which error it
-        carries. D6 and E6 fire first on the very beat that would have tested
-        D7. Closing D7 needs a mutant that reports AN error with the WRONG code
-        -- a disjoint behaviour, not a stronger version of this one -- and
-        whether the suite takes a twelfth is not this decision.
+        SCORED as of 2026-08-24 by dw_m12 -- 5 D7 failures and nothing else.
+        It could NOT be folded into dw_m11, and that was measured: dw_m11's
+        profile is D6 x10 and E6 x2 with ZERO D7, because it ERASES the error
+        and a beat carrying no error cannot test which error it carries. dw_m12
+        leaves an error present and changes only its KIND.
+        TWO THINGS LANDED WITH IT, because a mutant whose guard is unreachable
+        is a dw_m8 repeat. (1) Two more DECERR-injecting reads, taking the run
+        from one DECERR to three, so a guard keyed on the SECOND has room.
+        (2) The read-side check was reporting a code swap as D6. D6 is
+        PRECEDENCE -- an error is due and must appear -- and D7 is CODE
+        PRESERVATION. Collapsing them named the wrong clause for the defect and
+        would have credited a submission with checking something it did not.
+        Three outcomes now, not two.
+      why_it_was_taken: >
+        dut2 -- an independent implementation written from this specification
+        alone -- forced SLVERR for any downstream error and violated D7 the
+        moment D7 became observable. A clause a real independent reading got
+        wrong is a clause submissions will get wrong. That outweighed keeping
+        the denominator symmetric with sibling tasks at ten.
   rebaseline: >
     The full set was re-run against the extended reference, all ten, because
     the mutants are untouched but the environment they run in is not.
