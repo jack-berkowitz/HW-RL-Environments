@@ -1,7 +1,8 @@
 #!/bin/bash
 # TIER-B 5c: no mutant may be killed by the POLICY difference alone.
 #
-# The ten defects of mutants.sv are re-derived on the policy-divergent
+# The defects of mutants.sv -- however many it defines; this script counts them
+# rather than naming a number -- are re-derived on the policy-divergent
 # implementation (mutants/policy/), which makes every beat wait for the sink and
 # drives a fixed pattern while pop_valid_o is low -- the opposite choice on both
 # named latitude clauses. A verdict that differs from the same defect on the
