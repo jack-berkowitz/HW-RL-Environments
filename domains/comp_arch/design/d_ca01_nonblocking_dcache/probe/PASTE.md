@@ -383,6 +383,136 @@ checks them. Everything else is normative.
 //   T4. THE SUBMISSION IS A SINGLE SELF-CONTAINED FILE. It may not reference
 //       the testbench hierarchy, any shared model, or any file outside itself.
 //
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, at every legal parameter combination. Checked against
+//          R1-R6, M1-M3, C1-C4 and the reset rules. There is no partial credit:
+//          a cache that answers a load wrongly is not a small design, it is a
+//          broken one.
+//
+//       2. THE GATE. A submission that fails correctness at ANY legal
+//          combination, or that fails to build, produces NO PPA NUMBER AT ALL.
+//          It is recorded as a failure and scores zero on every PPA axis --
+//          not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored configuration and nowhere else.
+//          The pinned period is 15.0 ns on sky130hd. It is derived as 1.5x the
+//          reference implementation's own measured period (10.0 ns), rounded
+//          up to the next 0.25 ns, and it is STATED HERE BEFORE ANY SUBMISSION IS
+//          SOLICITED. It does not move in response to what is submitted -- an
+//          earlier scheme pinned the row at the slowest submission's own Fmax,
+//          which rewards a slow design by moving the measurement toward the
+//          period where its area looks best. The period is THE SAME for every
+//          submission, so all designs are compared at one frequency rather than
+//          at each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * OUTSTANDING MISSES CARRIED. This is a CAPABILITY: more is better,
+//           it costs area, and it is reported both raw and per unit of area so
+//           a design is not rewarded merely for tracking fewer misses.
+//         * HIT LATENCY, reported as a CHOICE. A design that answers hits in one
+//           cycle and one that takes two are both conformant and are NOT ranked
+//           against each other on latency; the number is reported so that an
+//           area difference between them is read as the trade it is.
+//
+//       TIMING CLOSURE IS A GATE, NOT AN AXIS, AND SLACK IS NOT SCORED. A build
+//       that misses the pinned period yields no comparable area or power figure --
+//       an area number from a build that did not close is not a smaller design, it
+//       is an unfinished one -- so its PPA is withheld rather than reported.
+//
+//       Slack ABOVE zero earns nothing either, and the reason is that it is not a
+//       separate quantity from area. Meeting timing with margin is bought WITH
+//       area: the tools upsize cells, insert buffers and duplicate logic to close
+//       faster. A design sitting at +2 ns on the pinned period spent silicon
+//       getting there that a design at +0.05 ns did not. Area already charges for
+//       that, so scoring slack as well would count one tradeoff twice and in
+//       opposite directions -- rewarding a design for the very spending the area
+//       axis penalises. Closure is therefore pass or fail, and everything above
+//       the line is the same result.
+
+//       Fmax is NOT a scored axis. It is measured once per task, on the
+//       REFERENCE ONLY, and its sole job is to set the pinned period above.
+//       Submissions are not swept. A design that could run faster than the
+//       pinned period earns nothing for it, exactly as a design handed a
+//       frequency target in practice earns nothing for exceeding it; and a
+//       per-design Fmax could not be combined with the area and power above
+//       in any case, because those come from a build at the pinned period and
+//       an Fmax comes from a different build at a different one.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. The levers most designs reach for
+//       first are already spent by the contract above.
+//
+//         * MISS PARALLELISM HAS A FLOOR. C1 requires at least MAX_MISSES
+//           distinct line misses outstanding at once, and C2 requires a hit to
+//           be answered while a miss is outstanding. A blocking cache is much
+//           smaller and it FAILS, so that area is not bought.
+//         * BLOCK-DATA BUFFERING HAS A CEILING. C4 bounds a design, outside the
+//           tag and data arrays, to 2 cache lines of block data and one merged
+//           store word per pending miss. Miss parallelism bought by buffering
+//           whole lines per miss is not available: it is wrong, not expensive.
+//         * MEMORY-SIDE CONCURRENCY IS PINNED. M3 permits at most one
+//           outstanding memory transaction. Widening the memory interface is
+//           not a design choice here.
+//         * A STORE MISS ALLOCATES. L4 says so explicitly -- write-around is
+//           not a permitted cheaper policy.
+//         * FILL ORDER IS PINNED. M1 fixes ascending word order, so
+//           critical-word-first is out of scope (L3).
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. The contract fixes WHAT is answered and IN WHAT ORDER; it says
+//       nothing about HOW:
+//
+//         * replacement policy, which is free (L1) and differs in cost;
+//         * how outstanding misses are tracked -- a queue, a register file, a
+//           CAM, anything -- subject to C1's floor and C4's ceiling (L2);
+//         * how the tag and data arrays are organised and banked;
+//         * pipeline depth and hit latency, which are unconstrained (L6);
+//         * whether `req_ready_o` is combinational on `req_valid_i` (L5).
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
+//   G5. THERE IS NO SINGLE COMBINED SCORE, and that is deliberate rather than
+//       unfinished. Nothing in this project establishes what a unit of
+//       capability is worth in square micrometres, so no weighted sum of area,
+//       power and capability is computed, and none should be inferred from the
+//       phrase "scores better" above. Each axis is reported separately, and a
+//       submission that wins on one and loses on another is reported as exactly
+//       that.
+//
+//       WHAT A SUBMISSION IS COMPARED AGAINST. The reference implementation,
+//       built from the same contract at the same pinned period and the same
+//       scored configuration, and the other submissions to this task on the
+//       same axes. The reference is an ANCHOR, not a target: beating it is not
+//       required and losing to it is not disqualifying. It exists so that a
+//       number has something to be a ratio of.
+//
+//       EVERY REPORTED METRIC CARRIES A ROLE, and the role decides how a
+//       difference from the reference is read:
+//
+//         * FIXED -- the contract requires a value. Deviating is a specification
+//         violation, not a design choice, and it fails correctness.
+//         * CHOICE -- the contract leaves it free and it moves PPA. Where a
+//         submission chose differently from the reference, the area ratio is
+//         marked NOT LIKE-FOR-LIKE rather than presented as a quality gap.
+//         Choosing differently from the reference is not penalised; it is
+//         disclosed.
+//         * CAPABILITY -- more is better and area buys it. Reported both raw and
+//         per unit of area, because raw area credits a design for being small
+//         when it was actually doing less.
+//
+//       So the honest summary of the whole scheme: correctness gates, timing
+//       closure gates, and what survives both is described on several axes at one
+//       operating point, with the free choices named so that a difference in area
+//       can be read as the trade it is rather than as a verdict.
+//
 // =============================================================================
 
 module nonblocking_dcache #(

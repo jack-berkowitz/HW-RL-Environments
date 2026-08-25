@@ -73,6 +73,29 @@ scoring:
     checker and the mutants in one sitting. The set has not been challenged by
     anything its author did not anticipate. See NOTES.md section 7.
 
+policy_derivation:
+  method: wrapper_pointed
+  what_was_done: >
+    Each mutant is a wrapper that reads its guards from the PORTS and delegates
+    to an implementation. The re-derivation is the SAME WRAPPER pointed at the
+    divergent implementation instead of the anchor. mutants/policy/*.sv each
+    instantiate the independent design and carry the identical guard logic.
+  strength: WEAKER -- read the caveat before quoting the number
+  what_it_establishes: >
+    One half only. The defects are contract-level: they remain detectable
+    against a design with different latency, different structure and different
+    scheduling, so the reference's detection is not relying on the anchor's
+    timing. That is real and it is what 5c exists to check.
+  what_it_does_NOT_establish: >
+    That the guards were stress-tested against an independent reading of the
+    contract. The guard logic is LITERALLY THE SAME CODE on both bases, so there
+    is nothing anchor-specific for the check to catch and the property holds BY
+    CONSTRUCTION. This method cannot fail the way in_source_rederivation can.
+  comparability: >
+    A 22/22 here is NOT equivalent to a 22/22 from in_source_rederivation, and a
+    results table that prints them in one column is comparing two different
+    claims. Report the method alongside the number.
+
 watchdog:
   tb_sim_time_limit: 20ms
   tb_sim_time_measured: ~21us          # ~950x margin
@@ -92,6 +115,24 @@ conformant_perturbations:
      witness: "transfer cycle differs at beat 5 (golden 8, variant 9)"}
   enumeration: conformant/README.md    # every clause marked pinned or perturbed
   all_survive: true
+
+policy_independence_5c:
+  policy_independence: >
+    All ten guarded defects re-derived on the policy-divergent implementation in
+    dut2/ -- an INDEPENDENT design written from the spec, not a wrapper around
+    the anchor -- and re-run: every one caught on BOTH bases, both clean
+    implementations pass. 22 of 22.
+
+    HOW THE RE-DERIVATION IS DONE. Every mutant in this task wraps an
+    implementation and reads its guards from the PORTS only, so the re-derived
+    defect is the same wrapper pointed at the other design. The wrapper cannot
+    depend on either implementation's internals because it never sees them --
+    which is the reason guards were restricted to contract-level state in the
+    first place.
+
+    RULE 24: licensed by an observed run on 2026-08-23; the output is recorded
+    in mutants/RULE24.md alongside the witness-runner controls.
+    Rerun with mutants/check_policy_independence.sh.
 
 mutants:
   design: >

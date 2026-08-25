@@ -228,3 +228,75 @@ ppa_baseline:
   tns_ns: 0.0
   timing_closed: true
   flow_completed: true
+
+# =============================================================================
+# RULE 34, second instrument. These already existed in tb/audit/ and were NOT
+# recorded here, so an audit reading task.yaml saw "0 negative controls" and
+# concluded this task had no capability control. It has four, one per declared
+# parameter. The instrument was present and the BOOKKEEPING hid it.
+capability_controls:
+  location: tb/audit/
+  shape: >
+    Each is derived from tb/async_fifo_cdc_alt_ref.sv by ONE edit and is
+    otherwise a correct FIFO -- it loses nothing, duplicates nothing, preserves
+    order. The only thing wrong with it is that it ignores one parameter. Ports
+    stay full width, so it receives everything and discards capacity.
+  polarity: >
+    NOT INVERTED, unlike d_ca03's nc_g_itlb_one_entry. This task has REAL
+    configurations for every parameter (18 of them), so the TASK varies and each
+    probe passes where its literal equals the parameter and fails above it. The
+    d_ca03 control had to invert because P1 and P2 give that task one
+    configuration, leaving only the control's own literal to vary.
+  measured: 2026-08-24, against the current rig
+  probes:
+  - name: p3_ignores_sync_stages
+    parameter: SYNC_STAGES
+    verdict: "PASS at 2, FAIL at 3"
+    failing_checks: 1
+    of_checks: 4215
+    isolation: >
+      THE BEST OF THE FOUR. One failing check in 4,215, and it is the minimum
+      crossing latency alone: measured min 2 rd_clk cycles where SYNC_STAGES=3
+      requires 3. Nothing else trips, because a shorter synchroniser chain loses
+      no data and reorders nothing.
+    history: >
+      THIS PROBE FOUND A REAL GAP. SYNC_STAGES originally had NO binding check
+      and this probe passed at SYNC_STAGES=3. It is now bound by the one
+      consequence visible in simulation -- a beat cannot reach the read side
+      until the write pointer has crossed SYNC_STAGES flops clocked by rd_clk,
+      so the MINIMUM observed crossing latency is a lower bound implied by the
+      CDC requirement rather than a latency budget. Backpressure can only make a
+      crossing slower, never faster, so the minimum is uncontaminated by the
+      checker's own stalling.
+  - name: p2_ignores_log_depth
+    parameter: LOG_DEPTH
+    verdict: "PASS at 2, FAIL at 4"
+    failing_checks: 2
+    of_checks: 4212
+    isolation: "accepted 4 beats where DEPTH=16; C4's direct capacity check plus its coverage consequence"
+  - name: p2b_log_depth_off_by_one
+    parameter: LOG_DEPTH
+    verdict: "FAIL at 3"
+    failing_checks: 2
+    of_checks: 4212
+    isolation: "off-by-one rather than blind, so it catches a design one entry short"
+  - name: p1_ignores_data_w_high_bits
+    parameter: DATA_W
+    verdict: "PASS at 32, FAIL at 64"
+    failing_checks: 4214
+    of_checks: 4215
+    isolation: >
+      DELIBERATELY NOT ISOLATED, and that is correct rather than a defect. A
+      narrowed datapath corrupts every beat, so DATA_W is a correctness
+      perturbation and not a capacity one -- it is not exploitable as a silent
+      area saving, because the first delivered beat exposes it.
+  reference_control: >
+    The reference passes at both SYNC_STAGES settings with minimum crossing
+    latency 3 and 4, so the floor admits both correct designs and catches the
+    probe exactly where it is wrong (rule 24: validated against a known-good
+    answer before it was allowed to gate).
+
+stimulus_variation:
+  status: CLEAN
+  measured: "7 of 7 contract inputs vary"
+  tool: scripts/check_stimulus_variation.py

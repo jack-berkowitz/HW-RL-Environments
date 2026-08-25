@@ -105,9 +105,14 @@ conformant_perturbations:
     reference_tb_verdict: PASS
   policy_independence: >
     All ten defects re-derived on the divergent implementation
-    (mutants/policy/) and re-run: every one is caught on BOTH bases, and both
-    clean implementations pass. 22 of 22. Rerun with
-    mutants/check_policy_independence.sh.
+    (mutants/policy/) and re-run: every one caught on BOTH bases, both clean
+    implementations pass. 22 of 22.
+
+    RULE 24: this number is licensed by an observed run of
+    mutants/check_policy_independence.sh on 2026-08-23, which printed 22 lines
+    of "as expected". It was previously carried over from an earlier run and
+    edited into this file by string substitution without re-measuring.
+    Rerun with mutants/check_policy_independence.sh.
 
 mutants:
   design: >
@@ -179,6 +184,29 @@ mutants:
     far a guard can be narrowed: a mutant the reference does not reach is not
     difficult, it is unverified, and it would be scored against submissions on
     evidence the task itself cannot produce.
+
+policy_derivation:
+  method: in_source_rederivation
+  what_was_done: >
+    Each of the ten defects was written INTO THE DIVERGENT IMPLEMENTATION'S OWN
+    SOURCE as an edit to its logic, in that design's own terms -- not as a
+    wrapper reused from the golden side. mutants/policy/*.sv each contain the
+    independent implementation carrying one defect.
+  strength: STRONG
+  what_it_establishes: >
+    Both halves. The defects are contract-level rather than latitude-sensitive,
+    AND each guard was restated against an independent reading of the contract.
+    The second half is a test the construction can FAIL: a guard that depends on
+    something only the anchor has cannot be expressed here, and shows up as a
+    mutant the divergent base does not catch.
+  evidence_it_can_fail: >
+    It has failed and been fixed. On v_ai02, sr_m4 passed on the divergent base
+    because that design makes every beat wait for the sink, so a stall taken
+    before the line produced anything left pop_valid_o low -- nothing offered,
+    nothing held off, and the guard was unreachable there. The reference was
+    corrected to make the stall real under either reading of L1.
+  comparability: >
+    NOT comparable with a wrapper_pointed 22/22. See that method's own caveat.
 
 negative_controls:
   known_bad_dut:

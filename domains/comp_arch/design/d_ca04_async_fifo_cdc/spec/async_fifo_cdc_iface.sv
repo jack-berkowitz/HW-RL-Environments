@@ -145,6 +145,147 @@
 //   64 `rd_clk` cycles, and `wr_ready` must recover within 64 `wr_clk` cycles of
 //   the read side draining.
 //
+// -----------------------------------------------------------------------------
+// TOOL REQUIREMENTS
+// -----------------------------------------------------------------------------
+//   T1. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator.
+//       Simulation uses Verilator; physical synthesis reads the same file with
+//       slang. A file one accepts and the other rejects cannot be built, and a
+//       submission that cannot be built produces no PPA number at all -- see G1.
+//   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
+//       BLOCK -- SystemVerilog forbids a declaration after a statement inside a
+//       block, and the error text names neither.
+//   T3. THE MODULE MUST BE NAMED `async_fifo_cdc` with the exact port list below,
+//       including port names.
+//   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to
+//       anything outside itself.
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, across every legal DATA_W / LOG_DEPTH / SYNC_STAGES
+//          combination and at arbitrary, unrelated clock ratios per C6. Checked
+//          against H1-H3, B1, C1-C6 and R1-R5. There is no partial credit: a
+//          FIFO that drops a beat is not a small design, it is a broken one.
+//
+//       2. THE GATE. A submission that fails correctness at ANY legal
+//          combination, or that fails to build, produces NO PPA NUMBER AT ALL.
+//          It is recorded as a failure and scores zero on every PPA axis --
+//          not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored configuration and nowhere else.
+//          The pinned period is 4.25 ns on sky130hd. It is derived as 1.5x the
+//          reference implementation's own measured period (2.8125 ns), rounded
+//          up to the next 0.25 ns, and it is STATED HERE BEFORE ANY SUBMISSION IS
+//          SOLICITED. It does not move in response to what is submitted -- an
+//          earlier scheme pinned the row at the slowest submission's own Fmax,
+//          which rewards a slow design by moving the measurement toward the
+//          period where its area looks best. The period is THE SAME for every
+//          submission, so all designs are compared at one frequency rather than
+//          at each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * CAPACITY, as beats accepted before the write side stalls. This is a
+//           CAPABILITY: more is better, it costs area, and it is reported both
+//           raw and per unit of area so a shallower design is not rewarded
+//           merely for holding less.
+//
+//       TIMING CLOSURE IS A GATE, NOT AN AXIS, AND SLACK IS NOT SCORED. A build
+//       that misses the pinned period yields no comparable area or power figure --
+//       an area number from a build that did not close is not a smaller design, it
+//       is an unfinished one -- so its PPA is withheld rather than reported.
+//
+//       Slack ABOVE zero earns nothing either, and the reason is that it is not a
+//       separate quantity from area. Meeting timing with margin is bought WITH
+//       area: the tools upsize cells, insert buffers and duplicate logic to close
+//       faster. A design sitting at +2 ns on the pinned period spent silicon
+//       getting there that a design at +0.05 ns did not. Area already charges for
+//       that, so scoring slack as well would count one tradeoff twice and in
+//       opposite directions -- rewarding a design for the very spending the area
+//       axis penalises. Closure is therefore pass or fail, and everything above
+//       the line is the same result.
+
+//       Fmax is NOT a scored axis. It is measured once per task, on the
+//       REFERENCE ONLY, and its sole job is to set the pinned period above.
+//       Submissions are not swept. A design that could run faster than the
+//       pinned period earns nothing for it, exactly as a design handed a
+//       frequency target in practice earns nothing for exceeding it; and a
+//       per-design Fmax could not be combined with the area and power above
+//       in any case, because those come from a build at the pinned period and
+//       an Fmax comes from a different build at a different one.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. The levers most designs reach for
+//       first are already spent by the contract above.
+//
+//         * DEPTH IS PINNED, NOT CHOSEN. C4 requires exactly the 2**LOG_DEPTH
+//           beats you were asked for -- a shallower FIFO is wrong, and a deeper
+//           one violates B1.
+//         * STORAGE BEYOND THE FIFO HAS A CEILING. B1 bounds a design to at
+//           most 4 beats held outside the FIFO proper. Throughput bought with
+//           extra skid buffering is not available.
+//         * THE HANDSHAKE IS PINNED. H1 forbids `wr_ready` depending
+//           combinationally on `wr_valid`. The usual latency-for-area trade at
+//           the interface is not on offer.
+//         * SYNCHRONISER DEPTH IS A PARAMETER, NOT A CHOICE. SYNC_STAGES is
+//           given. Removing a stage to shorten the crossing is not a smaller
+//           design, it is a different and wrong one.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. The contract fixes WHAT crosses and IN WHAT ORDER; it says
+//       nothing about HOW:
+//
+//         * how the pointers are encoded and compared -- Gray, one-hot, or
+//           otherwise -- and how full and empty are derived from them;
+//         * how the storage array is built and whether it is registered or
+//           inferred;
+//         * how many beats of the permitted 4 are actually held outside the
+//           FIFO, and where;
+//         * crossing latency, which is a CHOICE reported as a metric and never
+//           gated -- a design may cross faster or slower and pay for it in
+//           area.
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
+//   G5. THERE IS NO SINGLE COMBINED SCORE, and that is deliberate rather than
+//       unfinished. Nothing in this project establishes what a unit of
+//       capability is worth in square micrometres, so no weighted sum of area,
+//       power and capability is computed, and none should be inferred from the
+//       phrase "scores better" above. Each axis is reported separately, and a
+//       submission that wins on one and loses on another is reported as exactly
+//       that.
+//
+//       WHAT A SUBMISSION IS COMPARED AGAINST. The reference implementation,
+//       built from the same contract at the same pinned period and the same
+//       scored configuration, and the other submissions to this task on the
+//       same axes. The reference is an ANCHOR, not a target: beating it is not
+//       required and losing to it is not disqualifying. It exists so that a
+//       number has something to be a ratio of.
+//
+//       EVERY REPORTED METRIC CARRIES A ROLE, and the role decides how a
+//       difference from the reference is read:
+//
+//         * FIXED -- the contract requires a value. Deviating is a specification
+//         violation, not a design choice, and it fails correctness.
+//         * CHOICE -- the contract leaves it free and it moves PPA. Where a
+//         submission chose differently from the reference, the area ratio is
+//         marked NOT LIKE-FOR-LIKE rather than presented as a quality gap.
+//         Choosing differently from the reference is not penalised; it is
+//         disclosed.
+//         * CAPABILITY -- more is better and area buys it. Reported both raw and
+//         per unit of area, because raw area credits a design for being small
+//         when it was actually doing less.
+//
+//       So the honest summary of the whole scheme: correctness gates, timing
+//       closure gates, and what survives both is described on several axes at one
+//       operating point, with the free choices named so that a difference in area
+//       can be read as the trade it is rather than as a verdict.
+//
 // =============================================================================
 
 module async_fifo_cdc #(

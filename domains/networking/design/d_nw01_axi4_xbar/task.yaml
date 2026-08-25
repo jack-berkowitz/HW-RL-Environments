@@ -324,3 +324,112 @@ controls:
       source is judged only on whether it disagrees with the checker, and it
       passed 4290/4290 after three defects that all adjudicated to the second
       source under rule 5.
+
+# =============================================================================
+capability_controls:
+  stimulus_variation:
+    status: CLEAN
+    measured: "4 of 5 contract inputs vary; addr_map constant and CORRECT"
+    addr_map_note: >
+      A frozen input is a defect only when no other varying input can reach the
+      clause it governs. addr_map is static configuration, and D2's decode-error
+      clause is reached anyway because the ADDRESSES vary -- the testbench drives
+      UNMAPPED = 0x8000_0000 deliberately, and mutants mD2 and mD3 are keyed on
+      that path. See F72.
+    tool: scripts/check_stimulus_variation.py
+  outstanding_capacity:
+    covers: C1
+    status: ENFORCED, and well
+    detail: >
+      A dedicated capacity phase holds r_ready and b_ready low, lets the slave
+      side accept, and counts what each master got in before the crossbar stopped
+      accepting. Floor is ceil(MAX_TRANS/2), not MAX_TRANS, and the gap is stated
+      tolerance rather than slack: observable capacity depends on pipeline depth
+      as well as queue depth, so requiring the full parameter would fail a correct
+      crossbar for being less pipelined. Backed by a CAPABILITY-class mutant.
+  response_buffering_ceiling:
+    control: controls/nc_i_overbuffered_r.sv
+    covers: C3 (the ceiling at spec line 177)
+    status: NOT ENFORCED
+    verdict: "PASSES at MAX_TRANS=8 and MAX_TRANS=2, zero failures"
+    finding: F80
+    detail: >
+      The vendored reference verbatim with a 64-deep FIFO on each master's R
+      channel -- sixteen times C3's allowance. Ports full width, every
+      transaction routed, ordered and returned to its issuer, per-ID order
+      preserved because a FIFO cannot reorder. Nothing in tb/ counts beats held:
+      grepping for an occupancy counter finds only a comment inside C1's FLOOR
+      about pipeline-depth tolerance.
+      .
+      THE PREDICTION THAT IT WOULD PASS is in the control's header, written
+      before it ran.
+      .
+      THIS IS F62'S OWN TASK. C3 is the clause written in response to a
+      submission here that buffered 2 x 256 x ~40 bits and came out at 14x the
+      reference's area. That design is no longer on disk -- chat.sv was
+      re-solicited after C3 was added -- but nothing would stop it being
+      resubmitted.
+    owed: >
+      ENFORCEMENT ATTEMPTED AND BLOCKED, not deferred. Four approaches measured;
+      see F80 instance 2. The blocker is not C3 and not the design: the slave
+      model drops r_valid via a rate counter while a beat is pending, which real
+      AXI forbids -- once RVALID is asserted it must hold until RREADY -- and the
+      anchor's rr_arb_tree asserts on exactly that assumption. So SUSTAINED
+      RESPONSE BACKPRESSURE IS ILLEGAL STIMULUS AGAINST THIS HARNESS.
+      .
+      A throttled stall at ~1 beat in 8 discriminates cleanly -- reference 0,
+      control 36 against a bound of 16, one failing check, isolated -- but the
+      assertion trips on a configuration-dependent subset and retuning only moves
+      which configuration trips. Reverted rather than landed: tuning a throttle
+      until the assertion happens not to fire is fitting to noise.
+      .
+      WHAT IT NEEDS: a protocol-correct slave responder holding r_valid stable
+      under backpressure. That is a harness rework rather than a check, and it
+      also fixes something else -- L3 says liveness holds under RESPONSE
+      BACKPRESSURE and is exercised only at ~25% random stall, never sustained,
+      blocked by the same defect. Doing it once buys both.
+  stimulus_legality:
+    status: VIOLATION -- see F81
+    where: "tb/axi4_xbar_tb.sv:299 and tb/axi4_xbar_liveness_tb.sv:135"
+    what: >
+      slv_resp[s].r_valid = (s_rbeats[s] != 0) && (s_rdelay[s] == 0). r_valid
+      DROPS while a beat is still pending, which AXI forbids and which this
+      task's own H3 requires of submissions -- "a crossbar output holding valid
+      with ready low must keep valid high". The harness breaks the rule it
+      imposes.
+    consequence: >
+      The anchor's rr_arb_tree asserts that a locked decision stays stable while
+      its output is not ready, so sustained response backpressure is ILLEGAL
+      STIMULUS against this harness and the assertion reports the harness's
+      defect in the design's name. L3 -- liveness under RESPONSE BACKPRESSURE --
+      has therefore never been tested in the condition it names, only at ~25%
+      random stall. C3's ceiling check is blocked behind the same defect.
+    still_valid: >
+      nc_i_overbuffered_r's pass was measured on runs that completed without
+      protocol error, so F80 instance 2 stands: C3 is unchecked. What is blocked
+      is the fix, not the finding.
+
+  spec_defect:
+    issue: "two clauses numbered C3"
+    where: "spec/axi4_xbar_iface.sv:177 (buffering ceiling) and :216 (holds at every combination)"
+    consequence: >
+      A duplicate identifier makes "fails C3" ambiguous in exactly the place a
+      submission needs precision. Reported, not renumbered -- renumbering moves
+      task_text_hash and belongs in a deliberate boundary.
+    rides: >
+      THE HARNESS-REWORK BOUNDARY, not a bump of its own. The C3 enforcement
+      bump it was going to ride did not happen, so it waits for the
+      protocol-correct slave responder that unblocks L3 and C3 together.
+    verified_safe_to_renumber: >
+      RECORDED SO IT DOES NOT HAVE TO BE RE-DERIVED. Every C3 reference in the
+      tree points at the CEILING at line 177, none at line 216: spec lines 44,
+      317 and 334; task.yaml under response_buffering_ceiling; and the whole
+      header of controls/nc_i_overbuffered_r.sv. So renaming LINE 216 to C4
+      breaks nothing. Do not renumber the ceiling instead -- and leave C1 and C2
+      alone, they carry 44 and 30 references respectively while C3 carries 17.
+      Line 258's "C1-C3" range becomes "C1-C4" in the same edit.
+    position_is_deliberate: >
+      The ceiling sits between C1 and C2 on purpose, not by accident of
+      numbering: its text contrasts with C1 directly -- "C1 says how much the
+      design must be able to do at once; this says how much it may SPEND doing
+      it." Keep the position when renumbering.

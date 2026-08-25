@@ -17,6 +17,11 @@ TASK="$1"          # e.g. d_nw01
 PER="$2"           # e.g. 9.0   -- MUST match the candidates' string exactly
 LABEL="$3"         # e.g. reference_fx9.0
 
+# The flow directory is resolved and checked below, before the build. Both hosts
+# fixed this independently after it cost three completed reference builds; the
+# check kept is the stricter one -- a bare `[ -d ]` passes on an empty directory
+# that is not a flow tree.
+
 TASK_DIR="$(dirname "$(dirname "$(find domains -path "*${TASK}_*/orfs/config.mk" | head -1)")")"
 CFG="$TASK_DIR/orfs/config.mk"
 TASK_NAME="$(basename "$TASK_DIR")"
@@ -47,6 +52,31 @@ if [ ! -f "$FLOW/Makefile" ] || [ ! -d "$FLOW/platforms" ]; then
   echo "       set ORFS_FLOW_DIR to the flow/ directory of an ORFS clone" >&2
   exit 2
 fi
+export ORFS_FLOW_DIR="$FLOW"   # so run_orfs_build.sh cannot resolve it differently
+
+# THE REFERENCE MUST BUILD UNDER THE CANDIDATES' CONFIG, NOT THE TASK'S.
+# ppa_candidate.sh generates its config by copying the task's and adding
+# SYNTH_MEMORY_MAX_BITS=65536 (its own comment explains why: ORFS aborts above
+# 4096 bits, and a candidate writing a plain array has asked for registers).
+# reference_ppa.sh handed the task config straight to the build, so every
+# reference in the corpus carried SYNTH_MEMORY_MAX_BITS=<unset> and every design
+# row -- all six -- had a reference whose build_config_hash disagreed with its
+# own candidates.
+#
+# ppa_candidate.sh's comment says the setting "changes nothing for them and the
+# comparison stays like-for-like". That is almost certainly true; the references
+# declare no arrays. But rule 17 exists so comparability is a matching digest
+# rather than an argument, and this converts the argument into a measurement: if
+# the rebuilt area is unchanged, the claim is demonstrated; if it moves, the
+# claim was wrong and the old numbers were confounded.
+#
+# Config paths are absolute /work/... so relocating the file is safe, and
+# orfs_runs/ is gitignored. DESIGN_NICKNAME is copied verbatim, so the flow
+# output directory is unchanged.
+GEN_CFG="orfs_runs/${TASK_NAME}_reference/config.mk"
+mkdir -p "$(dirname "$GEN_CFG")"
+{ cat "$CFG"; printf '\nexport SYNTH_MEMORY_MAX_BITS = 65536\n'; } > "$GEN_CFG"
+CFG="$GEN_CFG"
 
 echo "task=$TASK_NAME  ref=$REF  nick=$NICK  clk=${PER}ns  label=$LABEL  flow=$FLOW"
 

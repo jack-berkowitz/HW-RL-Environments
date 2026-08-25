@@ -41,6 +41,7 @@ On a native x86_64 host (e.g. WSL2) export these first:
 
 import argparse
 import glob
+import math
 import json
 import os
 import re
@@ -61,6 +62,35 @@ STATUS_TOOL = "tool_error"
 # ---------------------------------------------------------------------------
 # design resolution
 # ---------------------------------------------------------------------------
+
+def _config_hash(cfg_path):
+    """build_config_hash for the config actually swept, or None."""
+    try:
+        sdc = read_config_var(cfg_path, "SDC_FILE") or ""
+        sdc = os.path.join(REPO_DIR, sdc.replace("/work/", "")) if sdc else ""
+        out = subprocess.run(
+            [sys.executable, os.path.join(REPO_DIR, "scripts", "build_config_hash.py"),
+             cfg_path, sdc],
+            capture_output=True, text=True, timeout=60)
+        return out.stdout.splitlines()[0].strip() if out.returncode == 0 and out.stdout else None
+    except Exception:
+        return None
+
+
+def _task_text_hash(design):
+    """task_text_hash for the task swept, computed now -- never passed in."""
+    try:
+        hits = sorted(glob.glob(os.path.join(REPO_DIR, "domains", "*", "design", f"{design}_*")))
+        if not hits:
+            return None
+        out = subprocess.run(
+            [sys.executable, os.path.join(REPO_DIR, "scripts", "task_text_hash.py"), hits[0]],
+            capture_output=True, text=True, timeout=60)
+        return out.stdout.splitlines()[0].strip() if out.returncode == 0 and out.stdout else None
+    except Exception:
+        return None
+
+
 def resolve_design(design, pdk):
     """Locate the design's ORFS config, across all three layouts.
 
@@ -630,6 +660,40 @@ def main():
         "pdk": args.pdk,
         "converged_period_ns": round(converged, 4) if converged is not None else None,
         "achieved_fmax_mhz": round(1000.0 / converged, 2) if converged else None,
+        # THE PIN, COMPUTED HERE SO NOBODY COMPUTES IT FROM THE WRONG FIELD.
+        # The project's rule is 1.5x the reference's measured PERIOD, rounded up
+        # to the next 0.25 ns. This record carried the two ingredients and not the
+        # answer, with the frequency sitting beside the period in the more
+        # familiar unit and the more inviting name. Applying the rule to
+        # achieved_fmax_mhz instead of converged_period_ns on d_nw03 gives
+        # 1.5 x 363.64 = 545.46 MHz = 1.833 ns -- 0.667x the reference period,
+        # TIGHTER than the reference itself, so nothing could close.
+        #
+        # That error is silent where it is made and loud somewhere else: the pin
+        # looks ordinary in a spec and surfaces later as every submission missing
+        # timing, which reads as a hard task or a wrong SDC long before anyone
+        # re-derives the number. Emitting the pin removes the arithmetic from the
+        # caller entirely.
+        "pinned_period_ns": (
+            round(math.ceil(converged * 1.5 / 0.25) * 0.25, 4)
+            if converged else None),
+        "pin_rule": "1.5x converged_period_ns, rounded up to the next 0.25 ns",
+        # PROVENANCE, RECOMPUTED HERE RATHER THAN PASSED IN.
+        # This record carried rtl_git_commit and nothing about the build config,
+        # yet a sweep result depends directly on it: CORE_UTILIZATION and
+        # PLACE_DENSITY drive floorplan and placement, and two tasks gained those
+        # keys today. A sweep run before and after that change is indistinguishable
+        # from its own record, while the PIN derived from it goes into the spec --
+        # so an unrecorded config change silently moves the pinned period.
+        #
+        # task_text_hash is stamped for the same reason and computed AT WRITE TIME,
+        # never accepted from a caller. A hash quoted in a message is a snapshot
+        # and the message outlives the snapshot: d_ca03's moved three times in
+        # twelve minutes while a sweep for it sat queued, and a record carrying the
+        # hash it was told rather than the one that was true would assert it
+        # measured a text that no longer exists.
+        "build_config_hash": _config_hash(cfg_path),
+        "task_text_hash": _task_text_hash(args.design),
         "wns_at_converged_ns": wns_at,
         "confirming_rerun": confirm,
         "bracket": {

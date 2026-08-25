@@ -235,6 +235,146 @@
 //   R2. Reset discards all in-flight transactions. After release the crossbar
 //       starts clean; no response from before reset may be emitted.
 //
+// -----------------------------------------------------------------------------
+// TOOL REQUIREMENTS
+// -----------------------------------------------------------------------------
+//   T1. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator.
+//       Simulation uses Verilator; physical synthesis reads the same file with
+//       slang. A file one accepts and the other rejects cannot be built, and a
+//       submission that cannot be built produces no PPA number at all -- see G1.
+//   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
+//       BLOCK -- SystemVerilog forbids a declaration after a statement inside a
+//       block, and the error text names neither.
+//   T3. THE MODULE MUST BE NAMED `axi4_xbar` with the exact port list below,
+//       including port names.
+//   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to
+//       anything outside itself.
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, at every legal NUM_MST / NUM_SLV / MAX_TRANS
+//          combination. Checked against D1-D3, O1-O4, H1-H3, C1-C3, L1-L3 and
+//          R1-R2. There is no partial credit: a crossbar that deadlocks is not
+//          a small design, it is a broken one.
+//
+//       2. THE GATE. A submission that fails correctness at ANY legal
+//          combination, or that fails to build, produces NO PPA NUMBER AT ALL.
+//          It is recorded as a failure and scores zero on every PPA axis --
+//          not as a missing measurement.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored configuration and nowhere else.
+//          The pinned period is 8.0 ns on sky130hd. It is derived as 1.5x the
+//          reference implementation's own measured period (5.25 ns), rounded
+//          up to the next 0.25 ns, and it is STATED HERE BEFORE ANY SUBMISSION IS
+//          SOLICITED. It does not move in response to what is submitted -- an
+//          earlier scheme pinned the row at the slowest submission's own Fmax,
+//          which rewards a slow design by moving the measurement toward the period
+//          where its own area looks best. The period is THE SAME for every
+//          submission, so all designs are compared at one frequency rather than at
+//          each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * CONCURRENCY, as outstanding transactions carried and as bursts
+//           completed between disjoint pairs. These are CAPABILITIES: more is
+//           better, they cost area, and they are reported both raw and per unit
+//           of area so a design is not rewarded merely for carrying less.
+//
+//       TIMING CLOSURE IS A GATE, NOT AN AXIS, AND SLACK IS NOT SCORED. A build
+//       that misses the pinned period yields no comparable area or power figure --
+//       an area number from a build that did not close is not a smaller design, it
+//       is an unfinished one -- so its PPA is withheld rather than reported.
+//
+//       Slack ABOVE zero earns nothing either, and the reason is that it is not a
+//       separate quantity from area. Meeting timing with margin is bought WITH
+//       area: the tools upsize cells, insert buffers and duplicate logic to close
+//       faster. A design sitting at +2 ns on the pinned period spent silicon
+//       getting there that a design at +0.05 ns did not. Area already charges for
+//       that, so scoring slack as well would count one tradeoff twice and in
+//       opposite directions -- rewarding a design for the very spending the area
+//       axis penalises. Closure is therefore pass or fail, and everything above
+//       the line is the same result.
+
+//       Fmax is NOT a scored axis. It is measured once per task, on the
+//       REFERENCE ONLY, and its sole job is to set the pinned period above.
+//       Submissions are not swept. A design that could run faster than the
+//       pinned period earns nothing for it, exactly as a design handed a
+//       frequency target in practice earns nothing for exceeding it; and a
+//       per-design Fmax could not be combined with the area and power above
+//       in any case, because those come from a build at the pinned period and
+//       an Fmax comes from a different build at a different one.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE. The levers most designs reach for
+//       first are already spent by the contract above.
+//
+//         * OUTSTANDING CAPACITY HAS A FLOOR. C1 requires each master port to
+//           carry MAX_TRANS transactions. A design that accepts one at a time
+//           is smaller and it FAILS, so the area is not bought.
+//         * RESPONSE BUFFERING HAS A CEILING. C3 bounds a design to at most
+//           4 R beats and 4 W beats per master port. Concurrency bought by
+//           buffering whole bursts is not available: a 256-entry response
+//           buffer is wrong, not merely expensive. This clause is why an
+//           earlier submission measured 2,086,235 um2 against a reference of
+//           77,852 -- it was storing what the contract never asked it to store.
+//         * FORWARD PROGRESS IS NOT NEGOTIABLE. L1 and L2 forbid deadlock and
+//           starvation under sustained all-to-all traffic, and L3 requires both
+//           to hold under response backpressure.
+//         * ORDERING IS PINNED WHERE AXI PINS IT. O1 and O4 are not choices.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. The contract fixes WHAT is delivered and WHEN; it says nothing
+//       about HOW:
+//
+//         * how the switch fabric is built -- full crossbar, shared bus, or
+//           anything between, subject to C2's disjoint-pair concurrency;
+//         * how outstanding transactions are tracked, given C1's floor and C3's
+//           ceiling -- the tracking structure is a real choice with real cost;
+//         * how arbitration is done, subject only to L2;
+//         * where registers sit relative to the LATENCY_MODE cuts;
+//         * how much logic is shared across master and slave ports.
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
+//   G5. THERE IS NO SINGLE COMBINED SCORE, and that is deliberate rather than
+//       unfinished. Nothing in this project establishes what a unit of
+//       capability is worth in square micrometres, so no weighted sum of area,
+//       power and capability is computed, and none should be inferred from the
+//       phrase "scores better" above. Each axis is reported separately, and a
+//       submission that wins on one and loses on another is reported as exactly
+//       that.
+//
+//       WHAT A SUBMISSION IS COMPARED AGAINST. The reference implementation,
+//       built from the same contract at the same pinned period and the same
+//       scored configuration, and the other submissions to this task on the
+//       same axes. The reference is an ANCHOR, not a target: beating it is not
+//       required and losing to it is not disqualifying. It exists so that a
+//       number has something to be a ratio of.
+//
+//       EVERY REPORTED METRIC CARRIES A ROLE, and the role decides how a
+//       difference from the reference is read:
+//
+//         * FIXED -- the contract requires a value. Deviating is a specification
+//         violation, not a design choice, and it fails correctness.
+//         * CHOICE -- the contract leaves it free and it moves PPA. Where a
+//         submission chose differently from the reference, the area ratio is
+//         marked NOT LIKE-FOR-LIKE rather than presented as a quality gap.
+//         Choosing differently from the reference is not penalised; it is
+//         disclosed.
+//         * CAPABILITY -- more is better and area buys it. Reported both raw and
+//         per unit of area, because raw area credits a design for being small
+//         when it was actually doing less.
+//
+//       So the honest summary of the whole scheme: correctness gates, timing
+//       closure gates, and what survives both is described on several axes at one
+//       operating point, with the free choices named so that a difference in area
+//       can be read as the trade it is rather than as a verdict.
+//
 // =============================================================================
 
 module axi4_xbar

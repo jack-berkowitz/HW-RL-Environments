@@ -834,3 +834,47 @@ answer** — the model is not deterministic and its version may no longer be
 reachable. `candidates/d_dsp02/claude.sv` was lost exactly this way, and unlike
 every other collision here there was no diff to catch it: the file had never
 been in git, so nothing registered a change.
+
+## The four shared documents have one writer
+
+`TASK_CATALOG.md`, `FINDINGS.md`, `RULES.md` and `CONVENTIONS.md` are written by
+**one agent only**. No other agent writes to them. Everything else in the tree
+stays owned by whoever is working on it; these four are the exception because
+they are the documents every agent reads and none of them is derived from
+anything — a lost concurrent edit here cannot be recovered by regenerating it.
+
+### Peers stage; the owner lands
+
+A peer with something to add does not edit the shared file. It appends a block
+to a staging file:
+
+    inbox/<shared-file>.agent<N>.md        e.g. inbox/FINDINGS.md.agent3.md
+
+Every block opens with an explicit author line, so authorship survives the move:
+
+    <!-- author: agent3 -->
+
+The owner moves blocks into the shared file **verbatim**, preserving that author
+line, and runs both checkers after each landing:
+
+    python3 scripts/check_rule_linkage.py
+    bash scripts/check_linkage_tree.sh
+
+### Landing is not reviewing
+
+The owner lands content. The owner does not edit it, rewrite it, tighten it, or
+judge whether it is right. A block that fails linkage **goes back to its author**
+with the checker's message; it does not get repaired in place.
+
+This is the whole point of the separation. An owner who edits on the way in
+becomes a second author of a document that is supposed to have one, and the
+authorship line then names someone who did not write what is under it. An owner
+who reviews on the way in becomes a gate on other agents' findings, which is a
+role nobody granted and which silently drops what the gatekeeper disagrees with.
+Landing verbatim keeps the owner's job mechanical: move the block, run the
+checkers, and if they fail, hand it back.
+
+The one thing an owner may fix without returning a block is a collision the
+owner's **own** landing created — for example, adding a rule whose opening words
+duplicate prose already in a finding, which trips the rule-13 restatement check.
+That defect belongs to the landing, not to the block.

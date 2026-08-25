@@ -119,12 +119,21 @@ defects. It runs with the regression.
 
     **From:** P4, F20, F27
 
-9. **Area and power are reported at own Fmax and at a common binding period**,
-   and every area comparison splits three ways: off-spec configuration,
-   capability gap, genuine optimisation. A headline ratio without that split is
-   not a result. Composite metrics (area × delay) are not scoring axes and are
-   only meaningful where area is elastic under constraint — which must be tested
-   per design, not assumed.
+9. **Area and power are reported at one common binding period**, and every area
+   comparison splits three ways: off-spec configuration, capability gap, genuine
+   optimisation. A headline ratio without that split is not a result. Composite
+   metrics (area × delay) are not scoring axes and are only meaningful where area
+   is elastic under constraint — which must be tested per design, not assumed.
+
+   **Amended.** This rule used to require reporting "at own Fmax and at a common
+   binding period". The own-Fmax half never followed from F8, which is entirely
+   about decomposing an area ratio, and as of 91c63bb it contradicts every design
+   specification: the pinned period is derived from one reference sweep, stated
+   before solicitation, and submissions are not swept at all. A per-design Fmax
+   cannot be reported beside area and power in any case, because those come from
+   a build at the pinned period and an Fmax comes from a different build at a
+   different one. Dropping the clause leaves the rule saying what F8 actually
+   established.
 
     **From:** F8
 
@@ -533,7 +542,26 @@ defects. It runs with the regression.
     **Revisit when several rigs emit markers natively** -- at that point a script
     enforces a convention that exists rather than inventing one.
 
-    **From:** F60
+    **AN AD-HOC QUERY USED AS EVIDENCE IS APPARATUS.** The scope above names
+    ad-hoc measurement scripts; it reaches further down than "script". A single
+    command line, a glob, a one-liner counter — if a number or a status will be
+    read off it and believed, it is an instrument and it must reproduce a
+    known-good answer before its output is read. Four instances in one session,
+    none of which announced itself: a git pathspec glob that returned a false
+    empty and read as a clean working tree; a zsh glob abort that reported every
+    design task as having no spec; an awk counter that returned zero
+    configurations for a task with two; and a string replacement that changed no
+    bytes and printed success, found while writing the finding itself.
+
+    **Silent zero and silent empty are the shapes to distrust.** `0`, empty
+    output and "no matches" are the same tokens a correct run produces when the
+    answer genuinely is nothing, so they never present as failures. A wrong
+    non-zero number gets questioned; a wrong zero gets believed. After an
+    in-place edit specifically, grep for the text you believe you wrote, with a
+    fixed-string match, and ASSERT rather than print — a "recorded" claim that
+    recorded nothing defeats the recording half of this rule directly.
+
+    **From:** F60, F64
 
 25. **Every capability a module has is either priced by an existing axis or
     bounded in the specification.** Before a design task is published, enumerate
@@ -541,6 +569,20 @@ defects. It runs with the regression.
     long it may take, how much it may spend -- and for each, ask whether latency,
     area or power already charges for it. Anything that does not fall out of
     those axes needs a stated bound.
+
+    **AND A BOUND NOBODY CHECKS IS NOT A BOUND.** Stating the ceiling is half
+    the work; the other half is a control that violates it and must fail.
+    `d_nw03`'s B1 caps output buffering at two frames and calls more
+    non-conforming — a clause written in direct response to F62 — and a design
+    holding four times that passes every check at both configurations with zero
+    per-step failures. The lesson was learned in the right place and stopped one
+    step short of enforcement, because a clause with a clear rationale reads as
+    settled.
+
+    **Build the control on whichever side the specification bounds.** Every
+    capability control in this repository tests UNDER-provisioning, so a family
+    of them is structurally blind to a design that provides too much. Floor,
+    build one that undershoots; ceiling, one that overshoots; both, build both.
 
     **An unpriced axis makes a submission unfalsifiable and the comparison
     meaningless.** `d_nw01` required outstanding capacity, ordering and liveness,
@@ -567,8 +609,389 @@ defects. It runs with the regression.
     wasted area rather than insurance. Buffering simply never received the same
     sentence.
 
-    **From:** F62
+    **AND THE SAME DEFECT WITH THE SIGN FLIPPED: A PARAMETER FREE ON THE COST
+    SIDE MUST BE SCORED ON THE BENEFIT SIDE, OR BOUNDED.** `d_nw01` shows an
+    unpriced axis letting a submission OVER-provision. The mirror case lets it
+    UNDER-provision, and it reads as generosity rather than as a hole: `d_ca03`
+    drafted TLB capacity, associativity and second-level sizing as
+    "microarchitectural freedom". But correctness there never depends on the TLB
+    — the page-table walk resolves every miss — and latency is unscored, so the
+    dominant strategy is ZERO ENTRIES, direct-mapped, no second level. Fully
+    conforming, smallest area, and the column then ranks submissions by who read
+    the clause rather than by design quality.
+
+    **The test to apply before publishing.** For each free parameter, name the
+    axis that CHARGES for spending on it and the axis that CREDITS the benefit.
+    If the crediting axis does not exist, the parameter has a degenerate optimum
+    at one end and must be pinned. Structures where this bites: TLBs, branch
+    predictors, prefetchers, victim buffers, store merge buffers, way predictors,
+    MSHR counts — anything whose benefit is hit rate or latency.
+
+    **PREFER SCORING THE CREDITING AXIS TO PINNING THE COST SIDE.** Pinning
+    removes a design choice; scoring keeps it. Where a task already has a fixed
+    probe sequence and a harness that controls response timing, total cycles over
+    that sequence is a deterministic second axis costing no new apparatus --
+    `d_ca03` needed no address trace, no working-set definition and no memory
+    model. Adding it converted three dominant strategies back into trades: a
+    swept comparator costs ~16 cycles per TLB hit, one PMP comparator ~8 per
+    check, a per-entry flush clear 139 cycles against a generation counter's one.
+    Report the axes SEPARATELY; folding them into a scalar needs a
+    cycle-per-square-micron exchange rate, which is rule 22's refusal again.
+
+    **A crediting axis over a sequence that does not exercise the benefit is not
+    an axis.** Measured on `d_ca03`: the functional probes alone are 20% TLB hits,
+    where serialising a lookup costs almost nothing; the capacity replays reach
+    32%; four reuse passes reach 55%, where the penalty is 2.26x on total cycles.
+    Measure the hit ratio before relying on the axis, and lengthen the reuse
+    portion until it discriminates.
+
+    **Pin only when nothing can credit the benefit.** Pinning `d_ca03`'s storage
+    fixes 45.5% of its area — 3,467 flip-flops, 86,744 of 190,657 um^2 — and is
+    still worth doing alongside the cycle axis, because capacity has no crediting
+    axis even with cycles scored: correctness never depends on it and the walk
+    resolves every miss.
+
+    **From:** F62, F69
+
+26. **Every control input of a pipelined design requires a stated transition
+    behaviour.** For any design whose pipeline depth is greater than one, each
+    control input must have its behaviour AT THE TRANSITION written down — either
+    scored, with the rule stated, or named UNSCORED with an explicit window.
+    Silence at a transition is a defect, not a default.
+
+    **Why silence is not neutral.** A pipelined design holds state its contract
+    does not name, and a control input is precisely a thing that acts on that
+    unnamed state. A reader implementing the text has to do something when the
+    control moves; every choice is as conformant as any other. The reference
+    picks one, the text appears to require it, and an independent implementation
+    that picks differently looks defective when it is not.
+
+    **The signature, when this has gone wrong.** Two implementations agree
+    exactly on the steady-state rule and against a constant stimulus, then
+    diverge under a time-varying one for EXACTLY ONE PIPELINE DEPTH after each
+    control transition, with values far apart rather than within an ulp. That is
+    in-flight state draining, not arithmetic.
+
+    **Do NOT fix it by modelling the pipeline.** Writing the state into the
+    contract hands every submission a required microarchitecture, which is
+    usually the design freedom the task exists to measure. Narrow instead: name
+    the window in whatever tick the contract already counts in, and exclude it.
+    Nothing should be scored that the text cannot specify.
+
+    **From:** F68
+
+
+
+27. **A harness latches completion; it never polls a level. And fixing an
+    instrument obliges re-deriving what was concluded with it.** Any handshake or
+    completion signal a rig reads — `valid`, `done`, an exception flag — is
+    latched from request to retirement, and the latched value is what gets
+    recorded or compared. `if (valid)` once per clock is correct only for a signal
+    guaranteed to be held, and a multi-cycle unit behind a valid/ready interface
+    guarantees nothing of the kind.
+
+    **Verify the pulse width BEFORE writing the sampling code.** One
+    cycle-by-cycle trace settles whether a level read is admissible at all, and it
+    costs nothing next to the cost of not doing it.
+
+    **THE COROLLARY IS THE EXPENSIVE HALF.** When an instrument defect is found,
+    enumerate everything measured with it before the fix and re-run each item.
+    Repairing the rig and leaving the conclusions is how a NORMATIVE CLAUSE ends
+    up standing on a retracted reading: `d_ca03`'s L2 was relaxed to carve out
+    flush-cancelled requests because a polling harness recorded `valid=0`; the
+    harness was fixed to latch, the same step then recorded `valid=1` with the
+    correct address, and the relaxation survived anyway until the obligation was
+    measured directly — at which point the unit turned out to re-walk and retire
+    in 15 cycles, the opposite of what the clause said.
+
+    **Symptoms to distrust.** A probe reporting that a control input does nothing;
+    an oracle returning zero for every case while its flags vary; a control that
+    disagrees with a recorded vector on exactly the steps involving a control
+    transition. All three were this defect.
+
+    **From:** F70
+
+28. **Every output you score needs a clause that determines it, and every clause
+    you write needs a stimulus that reaches it.** A scoring list is not a
+    specification. Naming `valid_o`, `paddr_o` and `exc_valid_o` as "the scored
+    surface" says what gets compared, not what the values must be — and the gap
+    is invisible while the reference is the only implementation, because the
+    vectors record whatever it happens to do and the comparison passes for
+    anything that agrees.
+
+    Walk it in both directions before shipping a task. **Forwards:** for every
+    output on the scored list, name the clause that fixes it in each retirement
+    case the task can reach — success, each fault class, each control transition.
+    An output with no such clause is under-specified, or should not be scored at
+    all because its value reports an implementation choice. **Backwards:** for
+    every clause that pins a value, name the stimulus that reaches it, and report
+    that witness next to the verdict rather than inferring it from the clause's
+    existence.
+
+    `d_ca03` failed both directions at once. Forwards: nothing said whether
+    `valid_o` accompanies a fault, and nothing said what `paddr_o` holds when one
+    is raised — the second turned out to report whether the design checks A/D in
+    the walker or on the hit path, which another clause explicitly leaves free.
+    Backwards: the instruction port was declared scored and the harness never
+    asserted `fetch_req`, so two pinned fault causes and half the pinned TLB
+    budget went unexercised across 118 requests.
+
+    **The backwards direction is VARIATION, not assignment.** This is the part
+    that is easy to get wrong and cheap to get right. The obvious check — "assert
+    every scored port was driven at least once" — catches ONE of `d_ca03`'s three
+    instances. `fetch_req` was never assigned, so it is caught. `asid_i` is
+    assigned every single cycle, at the constant zero, and sails through while the
+    whole ASID and global-page clause goes untested; five further inputs sail
+    through with it, taking three pinned fault causes and an entire
+    memory-protection path with them. An input that never changes value has not
+    been tested, however continuously it was assigned.
+
+    An input may legitimately be constant. The only thing separating a deliberate
+    constant from an overlooked one is a written reason, so a constant must be
+    **declared with the citation that permits it**, and an undeclared constant
+    must FAIL rather than warn. Three of `d_ca03`'s eight constants were
+    legitimate and five were defects; nothing in the source distinguished them.
+
+    **What finds it.** A second source, and essentially nothing else. Both
+    directions were invisible to seven negative controls and to my own review of
+    the specification, because a control is built from the reference and inherits
+    its answer to every question the text left open.
+
+    **From:** F71, F72
+
+29. **A test declared independent of a freedom must be validated against
+    something that exercises the freedom, not against the reference.** Validating
+    against the reference tests one implementation, and it is the implementation
+    least likely to surprise you, because the freedom was usually written down
+    after looking at it.
+
+    Not checking the thing a freedom controls is not the same as being
+    independent of it. `d_ca03`'s capacity check asserted that replaying 16
+    resident pages issues no page-table read, and claimed policy independence
+    because it never checks *which* entry is displaced. But passing requires a
+    replacement policy that spreads a cold fill, and the specification permits
+    policies that do not — the anchor's own advances only on a lookup hit, so a
+    cold fill lands all sixteen pages in one entry. The same check run against
+    the second TLB of the same design issued 96 reads where the first issued
+    none. The check had been validated correctly, against a known-good answer, on
+    the one port whose preamble happened to satisfy it.
+
+    A second instance of the same structure driven differently was enough here.
+    A second source, or a control built to take the other choice, does as well.
+
+    **And when the claim falls, say what is left open.** Once policy
+    independence failed there was no behavioural test that could establish the
+    second TLB's capacity at all, since an under-provisioned design is
+    indistinguishable from the reference. The budget is now priced on the cycle
+    axis and the specification states plainly that it is not enforced pending a
+    structural check. An open hole recorded in the contract beats a false claim
+    that reads as closed.
+
+    **From:** F73
+
+30. **State only the scope that ran, and identify the run behind any claim that
+    something was established.** A summary may not name coverage the run did not
+    have; a past-tense claim that a state was established must name the run and
+    the tree state that established it. Both halves are about the sentence, not
+    the instrument.
+
+    **The scope half.** A summary line is written once and read many times, by
+    people who will not go and count. When the eleven verdicts a script produced
+    were all on one base and its closing line said "on BOTH bases", every
+    individual verdict was correct and the sentence was false -- and it read as
+    twenty-two of twenty-two to everyone downstream, including the agent that had
+    just run it. A summary states what ran. If a script cannot name its own
+    coverage, it prints the count it actually performed and nothing about the
+    coverage it did not.
+
+    **The provenance half.** "The golden-base half comes from
+    sim_verification.sh" is a claim about a run, and a claim about a run is
+    checkable only if the run is identified. Name the record and the tree it came
+    from -- a timestamp, a task_text_hash, a commit, and whether the tree was
+    dirty. A past-tense assertion with no run behind it is indistinguishable from
+    an intention, and the two were confused within a day of each other here.
+
+    **Why no existing control catches this.** Rule 24 points at apparatus and
+    rule 17 points at configuration; both were satisfied in the instances that
+    produced this rule. The contract was right, the apparatus was right, the
+    number was right, and the prose claimed more than what ran. Nothing in the
+    stack is pointed at prose, so this rule is the only thing standing there.
+
+    **From:** F67
+
+31. **An impossibility claim must name its instrument, that instrument's
+    assumption, and what a different instrument would have to see.** "X cannot be
+    measured" is itself a measurement, and it inherits every assumption of the
+    experiment behind it — but unlike a false negative it does not get retested,
+    because it converts into a specification clause and clauses get read and
+    believed rather than re-run.
+
+    Three things, or it is an untested hypothesis and must be labelled one:
+    **the instrument** actually run; **what that instrument assumes**, which is
+    usually the thing nobody chose and so is invisible; and **what a different
+    instrument would have to observe** for the claim to fail. The third is
+    load-bearing — if you cannot state it, one experiment has failed and nothing
+    has been established.
+
+    `d_ca03` came two steps from shipping a pinned 16-entry instruction TLB as
+    permanently unenforceable, on the strength of a probe that filled the TLB
+    COLD. The anchor's replacement tree advances only on a lookup hit, so the
+    probe was measuring the replacement policy and not the capacity. Re-touching
+    each page after installing it makes the reference retain all 16, and a
+    one-entry control then fails on that check alone. Naming the assumption —
+    "this fill produces no hits, and the policy may need one" — would have found
+    it in the same sentence that made the claim.
+
+    **The family.** Same error as rules on level-versus-event and on ad-hoc
+    queries as apparatus: an instrument measuring a different observable than the
+    claim is about, returning a plausible number. What makes this member the
+    expensive one is that its output is a clause rather than a result.
+
+    **From:** F74
+
+32. **A counter or flag that feeds a verdict must be shown to reach both states
+    against a known input, and a coverage flag must derive from a recorded
+    outcome rather than from the schedule.** A check that cannot fire and a check
+    that passes print the same thing, so nothing about a green run distinguishes
+    them.
+
+    `d_ca03`'s testbench declared `wr_attempts`, compared it, incremented `errs`
+    on it and printed a message — and nothing anywhere assigned it. The clause
+    forbidding the unit from ever writing a page table entry had been reporting
+    PASS on a property it never tested, across every run, for the reference, a
+    second source and seven negative controls. The check was shaped exactly like
+    a real one, which is why confirming "is this property checked?" found four
+    pieces of evidence and stopped.
+
+    Four of its coverage floors were set from `seq[i].ev` — the schedule the
+    testbench had just built — so they asserted that an array the rig constructed
+    contains what the rig put in it. **If a flag can be evaluated without running
+    the design, it is not coverage.** The other eight derived from recorded
+    reference outcomes and were genuine; all twelve printed in the same block,
+    indistinguishable at a glance.
+
+    **For an absence-shaped property** — "never writes", "no deadlock", "issues
+    no read", "no false assertion" — constructing the presence and watching the
+    check fire is PART OF THE CHECK, not an optional extra. This is the
+    write-side of the rules on instruments reporting the wrong observable: there
+    the instrument answers a different question, here it cannot answer at all.
+
+    **From:** F75
+
+33. **A normative clause derived from an external standard must be measured
+    against the anchor before it ships. The anchor is the oracle; the standard is
+    not.** Where they disagree the contract must state what the ANCHOR does, and
+    say that it diverges — a submission is scored against the anchor, so a clause
+    that is true of the standard and false of the anchor fails a correct design.
+
+    **An AUTHORITY line is not evidence for the clause.** It is evidence for what
+    the standard says, which is a different claim, and it is the thing that makes
+    the defect survive review: the clause reads correctly, cites a real authority,
+    and the authority genuinely says what it claims. The only thing wrong with it
+    is a fact about one RTL module, and reading the clause cannot reveal that.
+
+    `d_ca03`'s A8 said PMP is checked on the walker's reads "and so is the final
+    translated address". The second half was never true of the anchor. A
+    W-denied store translates, an X-denied fetch translates, and a warm TLB hit
+    through an R-denied region translates issuing zero page-table reads. RISC-V
+    does check the physical access by access type — but the anchor is an MMU, and
+    the access happens somewhere else. The clause was correct about the standard
+    and false about the thing being scored, and it survived because the sequence
+    pinned one permitting region for its whole length so no request could
+    discriminate.
+
+    **The inverse of the leaves-it-open rule, and it needs the opposite
+    question.** That rule asks "what did the reference decide that I did not write
+    down?" — and no amount of asking it surfaces this, because this clause WAS
+    written down. Ask instead: **"which of my clauses have I never actually seen
+    the anchor obey?"** Then measure across the configurations that would separate
+    the standard's rule from the anchor's behaviour, not in the direction the
+    standard predicts.
+
+    **From:** F77
+
+34. **The stimulus-variation check and a capability-reduced control are BUILD
+    STEPS for a design task, not audits of one.** A task is not finished until
+    both have been run and both have been shown to discriminate. Running them
+    afterwards finds the same defect again by hand, once per task.
+
+    **The evidence is four instances in four tasks**, each one a capacity or
+    permission surface declared scored and not actually scored:
+
+    | task | surface | found by |
+    |---|---|---|
+    | `d_ai01` | HEIGHT load-bearing? | a capability-reduced control (`nc_g`) |
+    | `d_ca03` | instruction TLB capacity | a capability-reduced control |
+    | `d_ca03` | the whole PMP path, plus supervisor/SUM/MXR and ASID | the variation check |
+    | `d_ca03` | `flush_i` abort — a clause revised twice, never exercised | outcome-derived coverage |
+
+    Every one was invisible to review, to the reference, and to the existing
+    negative controls, because a control built from the reference inherits its
+    answer to every question the text left open.
+
+    **What each instrument is for, and why one does not substitute for the
+    other.** The variation check asks whether the STIMULUS reaches a clause: every
+    input the contract gives meaning to must take more than one value, and a
+    constant must be declared with the clause permitting it. The
+    capability-reduced control asks whether the CHECK discriminates once the
+    stimulus is there: a design that provides less than a pinned budget, ports
+    left full width so it answers every request correctly and only discards
+    capacity, must FAIL — and preferably fail on that check alone with zero
+    per-step failures, which is what proves the perturbation is isolated.
+
+    A task can pass the first and fail the second: `d_ca03`'s instruction TLB was
+    reached by stimulus and still unenforced, because the residency check had been
+    declared impossible. It can pass the second and fail the first: a control
+    cannot discriminate on a clause no request ever visits.
+
+    **Both are cheap.** The variation monitor is about sixty lines and mostly a
+    name table. The control is a copy of the second source with one literal
+    altered. Neither needs synthesis, so neither inverts the grading order the way
+    a structural check would. There is no cost argument for deferring them.
+
+    **And validate the instruments themselves**, since both are absence-shaped: a
+    reconstruction of a known-failing input for the variation check, and a
+    negative control proving it can pass rather than being stuck-fail. A static
+    scan is a candidate list, never a verdict — cross-check it against a runtime
+    monitor, because the scanner written for this was wrong four times before it
+    agreed with one.
+
+    **From:** F72, F77
+
+35. **A harness must obey the protocol it imposes on the design.** Apparatus
+    that drives the DUT outside its contract is not a weak test — it is an
+    invalid one, because a design given illegal stimulus may do anything, and
+    whatever goes wrong is attributed to the design.
+
+    **An assertion firing inside vendored RTL is evidence about the STIMULUS at
+    least as often as about the design**, and the reason the wrong reading wins
+    is EFFORT, not likelihood.
+
+    Attributing the assertion to the design costs nothing and ends the
+    investigation: a failing assertion in the DUT already looks like a design
+    defect, needs no argument to be believed, and the next step is to fix the
+    design. Attributing it to the stimulus costs reading the protocol, finding
+    the responder, and establishing what it may and may not do — and it only
+    pays off if you were right. So the default is not the more probable reading;
+    it is the cheaper one, and it terminates the search before the alternative is
+    considered. Reach for the stimulus reading FIRST, precisely because nothing
+    else will make you.
+
+    `d_nw01`'s slave model drops `r_valid` while a beat is pending, which AXI
+    forbids and which the task's own H3 requires of submissions. The anchor's
+    arbiter asserts on exactly that assumption, so sustained response
+    backpressure is illegal stimulus against that harness — which leaves L3,
+    a clause about response backpressure, never tested in the condition it
+    names. `d_ca01` has the same construction, with a comment showing the author
+    hit the symptom and worked around it by gating the output.
+
+    **Ask it of every handshake the contract names**, in both directions: where
+    a spec says "once valid is asserted it holds until ready", the testbench's
+    own responders are bound by that sentence too. No instrument in this
+    repository asks this — the variation check asks whether an input moves, the
+    capability controls ask whether a check discriminates, and legality is a
+    relation between a signal and a protocol rather than a property of either.
+
+    **From:** F81
 
 ---
-
-**Nothing you write is trusted until it has been run.**

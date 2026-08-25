@@ -343,6 +343,139 @@
 //       implementation of this contract hit exactly this and was rejected by the
 //       frontend while passing every simulation config -- so it would have
 //       scored full correctness and produced no PPA number at all.
+// -----------------------------------------------------------------------------
+// G. GRADING -- how a submission is judged, and against what
+// -----------------------------------------------------------------------------
+//   G1. THE ORDER. Correctness is a GATE, not a weighting.
+//
+//       1. CORRECTNESS, bit-exact, in every format and at both vector settings.
+//          Every delivered lane and every flag is compared against the
+//          reference. There is no partial credit and no tolerance: a result one
+//          ulp out fails exactly as a result that is nonsense fails.
+//
+//       2. THE GATE. A submission that fails correctness in ANY format, or that
+//          fails to build, produces NO PPA NUMBER AT ALL. It is recorded as a
+//          failure and scores zero on every PPA axis -- not as a missing
+//          measurement. Note T5: a design the simulator accepts and the
+//          synthesis frontend rejects scores full correctness and no PPA.
+//
+//       3. PPA, measured only for submissions that already passed, ONCE AT A
+//          PINNED CLOCK PERIOD, at the scored WIDTH and nowhere else.
+//          The pinned period is 70.5 ns on sky130hd. It is derived as 1.5x the
+//          reference implementation's own measured period (46.875 ns), rounded
+//          up to the next 0.25 ns, and it is STATED HERE BEFORE ANY SUBMISSION IS
+//          SOLICITED. It does not move in response to what is submitted -- an
+//          earlier scheme pinned the row at the slowest submission's own Fmax,
+//          which rewards a slow design by moving the measurement toward the period
+//          where its own area looks best. The period is THE SAME for every
+//          submission, so all designs are compared at one frequency rather than at
+//          each design's own best.
+//
+//   G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//         * AREA, post-synthesis and post-place-and-route.
+//         * POWER, at the pinned period.
+//         * THROUGHPUT, as operations completed per 1000 cycles. This is a
+//           CAPABILITY: more is better, it costs area, and it is reported both
+//           raw and per unit of area so a slower design is not rewarded merely
+//           for doing less work.
+//         * LATENCY, reported as a CHOICE. L2 leaves it free; a one-cycle unit
+//           and a ten-cycle unit are both conformant and are NOT ranked against
+//           each other on latency. The number is reported so that an area
+//           difference between them is read as the trade it is.
+//
+//       TIMING CLOSURE IS A GATE, NOT AN AXIS, AND SLACK IS NOT SCORED. A build
+//       that misses the pinned period yields no comparable area or power figure --
+//       an area number from a build that did not close is not a smaller design, it
+//       is an unfinished one -- so its PPA is withheld rather than reported.
+//
+//       Slack ABOVE zero earns nothing either, and the reason is that it is not a
+//       separate quantity from area. Meeting timing with margin is bought WITH
+//       area: the tools upsize cells, insert buffers and duplicate logic to close
+//       faster. A design sitting at +2 ns on the pinned period spent silicon
+//       getting there that a design at +0.05 ns did not. Area already charges for
+//       that, so scoring slack as well would count one tradeoff twice and in
+//       opposite directions -- rewarding a design for the very spending the area
+//       axis penalises. Closure is therefore pass or fail, and everything above
+//       the line is the same result.
+
+//       Fmax is NOT a scored axis. It is measured once per task, on the
+//       REFERENCE ONLY, and its sole job is to set the pinned period above.
+//       Submissions are not swept. A design that could run faster than the
+//       pinned period earns nothing for it, exactly as a design handed a
+//       frequency target in practice earns nothing for exceeding it; and a
+//       per-design Fmax could not be combined with the area and power above
+//       in any case, because those come from a build at the pinned period and
+//       an Fmax comes from a different build at a different one.
+//
+//   G3. WHAT IS NOT AVAILABLE TO OPTIMISE.
+//
+//         * THE ARITHMETIC IS PINNED TO THE BIT by A1-A7, in all three formats,
+//           including the canonical NaN rule (A4) and the exact-zero sign rule
+//           (A6). There is no accuracy-for-area trade, and no format may be
+//           approximated.
+//         * THE SIGNIFICAND DATAPATH HAS A CEILING. A8 bounds it at four times
+//           the format's precision. "As if unbounded" describes the RESULT, not
+//           the hardware. A design that carries a full unbounded intermediate is
+//           wrong, not generous -- an earlier submission built a 448-bit
+//           datapath where 37 bits suffice, and measured accordingly.
+//         * LANE INDEPENDENCE IS PINNED by V2, and the unused-bits rule by V3.
+//           Sharing hardware across lanes is permitted; producing a lane's
+//           result from another lane's operands is not.
+//         * RESULT ORDER IS PINNED by H2. This is not a reordering unit.
+//         * THE UNROLL MUST BE MODEST (T5). A design that elaborates in
+//           simulation but explodes in the synthesis frontend produces no PPA.
+//
+//   G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes
+//       from. Unusually for this benchmark, BOTH latency and throughput are
+//       free here -- L2 and L3 say so -- which makes the design space wide:
+//
+//         * the algorithm itself is free (L1): how the product is formed, how
+//           the addend is aligned, how normalisation and rounding are done;
+//         * how much hardware is shared across the three formats, versus
+//           replicated per format;
+//         * how much is shared across lanes, given V1's lane counts;
+//         * pipeline depth, which is free and costs area against frequency;
+//         * whether a new operation is accepted while a previous one is in
+//           flight, and how deeply.
+//
+//       A submission that meets the pinned period with less area and less power
+//       scores better. Meeting it comfortably buys nothing extra: there is no
+//       credit for slack beyond zero, because the period is fixed for everyone.
+//
+//   G5. THERE IS NO SINGLE COMBINED SCORE, and that is deliberate rather than
+//       unfinished. Nothing in this project establishes what a unit of
+//       capability is worth in square micrometres, so no weighted sum of area,
+//       power and capability is computed, and none should be inferred from the
+//       phrase "scores better" above. Each axis is reported separately, and a
+//       submission that wins on one and loses on another is reported as exactly
+//       that.
+//
+//       WHAT A SUBMISSION IS COMPARED AGAINST. The reference implementation,
+//       built from the same contract at the same pinned period and the same
+//       scored configuration, and the other submissions to this task on the
+//       same axes. The reference is an ANCHOR, not a target: beating it is not
+//       required and losing to it is not disqualifying. It exists so that a
+//       number has something to be a ratio of.
+//
+//       EVERY REPORTED METRIC CARRIES A ROLE, and the role decides how a
+//       difference from the reference is read:
+//
+//         * FIXED -- the contract requires a value. Deviating is a specification
+//         violation, not a design choice, and it fails correctness.
+//         * CHOICE -- the contract leaves it free and it moves PPA. Where a
+//         submission chose differently from the reference, the area ratio is
+//         marked NOT LIKE-FOR-LIKE rather than presented as a quality gap.
+//         Choosing differently from the reference is not penalised; it is
+//         disclosed.
+//         * CAPABILITY -- more is better and area buys it. Reported both raw and
+//         per unit of area, because raw area credits a design for being small
+//         when it was actually doing less.
+//
+//       So the honest summary of the whole scheme: correctness gates, timing
+//       closure gates, and what survives both is described on several axes at one
+//       operating point, with the free choices named so that a difference in area
+//       can be read as the trade it is rather than as a verdict.
+//
 // =============================================================================
 
 module fp_multifmt_fma #(

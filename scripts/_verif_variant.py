@@ -26,6 +26,15 @@ import re
 import sys
 
 
+def _strip_noncode(src):
+    """Comments and string literals removed, so a residual-reference scan sees
+    code only. Positions are not preserved; this feeds a yes/no check, never a
+    substitution."""
+    src = re.sub(r"//[^\n]*", "", src)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    return re.sub(r'"(?:[^"\\\n]|\\.)*"', '""', src)
+
+
 def main():
     if len(sys.argv) != 5:
         sys.exit(__doc__.strip().splitlines()[0])
@@ -83,8 +92,49 @@ def main():
     # the instantiation rewrite then catches the declaration too, producing a
     # module named <top>_golden that collides with the real golden -- which is
     # a second silent way for every perturbation row to run the wrong DUT.
-    body = re.sub(r"\b%s(\s*)#\(" % re.escape(top),
-                  r"%s_golden\1#(" % top, body)
+    inst_param = r"\b%s(\s*)#\(" % re.escape(top)
+    inst_bare = r"(?<!module )\b%s(\s+)(\w+\s*\()" % re.escape(top)
+    body, n_param = re.subn(inst_param, r"%s_golden\1#(" % top, body)
+    body, n_bare = re.subn(inst_bare, r"%s_golden\1\2" % top, body)
+
+    # A DELEGATION THAT WAS NOT REWRITTEN IS THE SAME BUG AS A sed NO-OP.
+    # Only the parameterised form was handled. `%s i_g (` -- no parameter
+    # list -- fell straight through, and the declaration rename below then
+    # produced a module named <top> instantiating <top>: either a recursive
+    # instantiation the compiler rejects, or the golden. The compiler error is
+    # the dangerous half, but not by inflating the numerator: a variant that
+    # fails to build hits the `continue` in sim_verification.sh's DUT loop and
+    # never reaches the verdict block, so it increments NEITHER NKILL NOR NMUT.
+    # It vanishes from the DENOMINATOR. A submission that would have scored
+    # 9/10 reports 9/9, and a mutant that never ran cannot be seen in the
+    # result. The record's `did_not_compile` is one boolean for the whole run;
+    # it does not say which variant, or how many.
+    #
+    # The check is a RESIDUAL one, not a zero-match one. Zero matches is the
+    # normal case, not an error: 65 of the 114 perturbations and mutants in the
+    # corpus are standalone reimplementations that never name the golden, and
+    # refusing on a zero rewrite count would refuse the majority of them. What
+    # is never acceptable is a reference to <top> that SURVIVES the rewrite,
+    # because the declaration rename is about to make this module <top> itself.
+    #
+    # Scanned on a copy with comments and string literals removed: ten mutants
+    # in v_nw02 carry the literal "atop_filter is scored at one pinned
+    # configuration only" inside a $fatal, and a naive scan refuses all ten.
+    residual = re.findall(r"(?<!module )\b%s\b(?!_golden)" % re.escape(top),
+                          _strip_noncode(body))
+    if residual:
+        sys.exit("module %s in %s still references '%s' after the delegation "
+                 "rewrite (%d parameterised, %d bare substituted).\n"
+                 "  An unrewritten reference becomes a self-instantiation once "
+                 "the declaration is renamed to '%s', which the compiler either "
+                 "rejects -- dropping the mutant from the scored denominator, so "
+                 "a missed defect reads as a smaller ceiling -- or resolves to "
+                 "the golden, which is worse: the mutant runs no defect at all.\n"
+                 "  Rewrite the instantiation to a form this handles "
+                 "(`%s #(...) inst (...)` or `%s inst (...)`), or say why the "
+                 "reference is not an instantiation."
+                 % (which, conf, top, n_param, n_bare, top, top, top))
+
     body = re.sub(r"\bmodule %s\b" % re.escape(which), "module %s" % top, body)
 
     open(extra, "w", encoding="utf-8").write(head + body)

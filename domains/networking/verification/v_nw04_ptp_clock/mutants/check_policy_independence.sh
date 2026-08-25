@@ -27,8 +27,18 @@ run_one() {   # $1 label, $2 expected, $3.. files
   else printf '  %-34s %-4s BUT EXPECTED %s\n' "$label" "$got" "$expect"; fails=$((fails+1)); fi
 }
 
+echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
+echo "         implementation must PASS. Each defect line is the positive half."
+echo
 echo "reference testbench vs the GOLDEN base and its ten defects"
+_r24=$fails
 run_one "golden (clean)" PASS "$T/dut/ptp_clock.sv" "$T/dut/ptp_time_base.sv"
+if [ "$fails" -ne "$_r24" ]; then
+  echo "  RULE24: a CLEAN implementation was reported as failing. That is the"
+  echo "          control, not a result -- the instrument has not reproduced a"
+  echo "          known answer, so no verdict below it is a measurement."
+  exit 2
+fi
 for M in $(grep -oE "^module pt_m[A-Za-z0-9_]+" "$T/mutants/mutants.sv" | awk '{print $2}'); do
   python3 -c "
 import re
@@ -42,7 +52,14 @@ echo
 echo "reference testbench vs the POLICY-DIVERGENT base and the same eight defects"
 sed 's/module pt_c1_zero_latency/module ptp_time_base/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean_policy.sv"
+_r24=$fails
 run_one "policy base (clean)" PASS "$W/clean_policy.sv"
+if [ "$fails" -ne "$_r24" ]; then
+  echo "  RULE24: a CLEAN implementation was reported as failing. That is the"
+  echo "          control, not a result -- the instrument has not reproduced a"
+  echo "          known answer, so no verdict below it is a measurement."
+  exit 2
+fi
 for f in "$T"/mutants/policy/*.sv; do
   run_one "$(basename "$f" .sv)" FAIL "$f"
 done

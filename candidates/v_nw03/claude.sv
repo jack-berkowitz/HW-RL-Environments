@@ -1,47 +1,27 @@
-// =============================================================================
-// frame_arb_mux_tb.sv
-// -----------------------------------------------------------------------------
-// Self-checking testbench for frame_arb_mux, S_COUNT=4 DATA_WIDTH=32 USER_WIDTH=1.
+// ===========================================================================
+// frame_arb_mux_tb.sv -- specification-driven testbench for frame_arb_mux
 //
-// How it decides things
-// ---------------------
-// There is no selection output and none is inferable from s_tready_o (S6), so
-// the source of an output frame is recovered from a TAG the testbench itself
-// planted in the payload: bits [31:30] of every beat carry its source index.
-// That is bookkeeping, not content matching -- every beat is made globally
-// unique by (src, frame number, beat number) so nothing is ambiguous.
+// There is no selection output and S6 forbids inferring one from s_tready_o, so
+// every output beat is attributed by BOOKKEEPING: each beat is given a tdata
+// value that is unique for the whole run (a bijection of a global counter), and
+// the checker looks that value up among the per-input queues of beats that have
+// actually transferred on the inputs.  Nothing here reads s_tready_o as a grant.
 //
-// The model is one queue of beats in input-transfer order, each tagged with its
-// source. An output beat is checked against the OLDEST not-yet-emitted beat OF
-// ITS OWN SOURCE, which gives S4's per-input ordering while saying nothing
-// about order between inputs.
+// Checks:  S2  a frame may be a single beat -- exercised, not assumed
+//          S3  frame atomicity: no other input's beat between first and last
+//          S4  tdata/tkeep/tuser forwarded unmodified, per-input order kept,
+//              m_tlast_o high on exactly the beats that carried s_tlast_i
+//          S5  every beat of a completed input frame appears exactly once
+//          S5a a frame abandoned at the source is NOT counted as a loss
+//          S8  none of the above changes under arbitrary back-pressure
+//          S10 every input begins a frame within any 16 completed frames
+//          S12 reset: m_tvalid_o low after release, and nothing from before
+//              reset appears afterwards
 //
-// Input recording and output checking live in ONE always @(posedge clk) block,
-// inputs first. That way a design with zero latency -- an output beat in the
-// same cycle as the input beat that feeds it -- is handled, and a design with
-// deep buffering is handled equally, without either being assumed.
-//
-// Deliberately NOT checked, because the spec leaves them free
-// -----------------------------------------------------------
-//   S9  / scope 1 : which input goes next. Nothing anywhere compares the source
-//                   sequence against an expected order; S10's window is the
-//                   only constraint applied.
-//   S11 / scope 2 : latency. No check refers to WHEN a beat appears, only to
-//                   the order in which beats appear.
-//   scope 3       : s_tready_o promptness. Ready is never required to be high.
-//                   Sends time out silently rather than failing.
-//   scope 4       : m_tdata_o / m_tkeep_o / m_tuser_o are read ONLY in a cycle
-//                   where m_tvalid_o and m_tready_i are both high.
-//   scope 5       : gaps between frames. Frame boundaries are tracked by
-//                   m_tlast_o alone; idle cycles are never counted.
-//   scope 6, 7    : internal structure, tkeep patterns. tkeep is generated
-//                   varying and only compared against what was sent.
-//
-// Termination: every wait is a bounded loop, and an independent watchdog
-// reports failure and finishes regardless of what the design does. A design
-// that never selects an input is reported, not waited on.
-// =============================================================================
-
+// Deliberately NOT checked: which input is selected and on what basis (S9),
+// latency (S11), promptness of s_tready_o, the payload while m_tvalid_o is low,
+// whether frames may abut on the output, and any pattern on tkeep.
+// ===========================================================================
 module frame_arb_mux_tb;
 
   localparam int S_COUNT    = 4;
@@ -49,12 +29,26 @@ module frame_arb_mux_tb;
   localparam int USER_WIDTH = 1;
   localparam int KEEP_W     = DATA_WIDTH/8;
 
-  localparam int SEND_LIM   = 4000;   // per-beat bound; NOT a conformance limit
-  localparam int FAIR_N     = 64;     // frames collected for the S10 window scan
+  // -------------------------------------------------------------------------
+  // signals -- packed, matching the port declarations exactly
+  // -------------------------------------------------------------------------
+  logic [S_COUNT-1:0][DATA_WIDTH-1:0] s_tdata;
+  logic [S_COUNT-1:0][KEEP_W-1:0]     s_tkeep;
+  logic [S_COUNT-1:0]                 s_tvalid;
+  logic [S_COUNT-1:0]                 s_tready;
+  logic [S_COUNT-1:0]                 s_tlast;
+  logic [S_COUNT-1:0][USER_WIDTH-1:0] s_tuser;
 
-// ---------------------------------------------------------------------------
-// PROVIDED PLUMBING -- moves beats, checks nothing.
-// ---------------------------------------------------------------------------
+  logic [DATA_WIDTH-1:0]              m_tdata;
+  logic [KEEP_W-1:0]                  m_tkeep;
+  logic                               m_tvalid;
+  logic                               m_tready;
+  logic                               m_tlast;
+  logic [USER_WIDTH-1:0]              m_tuser;
+
+  // -------------------------------------------------------------------------
+  // PROVIDED PLUMBING -- moves beats, checks nothing.
+  // -------------------------------------------------------------------------
   // ---- clock -----------------------------------------------------------------
   logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end
@@ -70,40 +64,6 @@ module frame_arb_mux_tb;
     @(negedge clk);
     rst = 1'b0;
   endtask
-
-  // ---- signals ---------------------------------------------------------------
-  logic [S_COUNT-1:0][DATA_WIDTH-1:0] s_tdata;
-  logic [S_COUNT-1:0][KEEP_W-1:0]     s_tkeep;
-  logic [S_COUNT-1:0]                 s_tvalid;
-  logic [S_COUNT-1:0]                 s_tready;
-  logic [S_COUNT-1:0]                 s_tlast;
-  logic [S_COUNT-1:0][USER_WIDTH-1:0] s_tuser;
-
-  logic [DATA_WIDTH-1:0] m_tdata;
-  logic [KEEP_W-1:0]     m_tkeep;
-  logic                  m_tvalid;
-  logic                  m_tready;
-  logic                  m_tlast;
-  logic [USER_WIDTH-1:0] m_tuser;
-
-  initial begin
-    s_tdata  = '0;
-    s_tkeep  = '0;
-    s_tvalid = '0;
-    s_tlast  = '0;
-    s_tuser  = '0;
-    m_tready = 1'b0;
-  end
-
-  frame_arb_mux #(
-    .S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)
-  ) dut (
-    .clk_i(clk), .rst_i(rst),
-    .s_tdata_i(s_tdata), .s_tkeep_i(s_tkeep), .s_tvalid_i(s_tvalid),
-    .s_tready_o(s_tready), .s_tlast_i(s_tlast), .s_tuser_i(s_tuser),
-    .m_tdata_o(m_tdata), .m_tkeep_o(m_tkeep), .m_tvalid_o(m_tvalid),
-    .m_tready_i(m_tready), .m_tlast_o(m_tlast), .m_tuser_o(m_tuser)
-  );
 
   // ---- input side ------------------------------------------------------------
   task automatic bfm_send(input int                          k,
@@ -140,392 +100,407 @@ module frame_arb_mux_tb;
     $display("RESULT: FAIL (watchdog: no forward progress)");
     $finish;
   end
-// ---------------------------------------------------------------------------
-// END OF PROVIDED PLUMBING -- everything below is the checker.
-// ---------------------------------------------------------------------------
 
-  // ---- bounded send. A beat that is not accepted is NOT a failure: ready
-  // promptness is out of scope. It only stops this testbench from waiting.
-  task automatic send_lim(input int                        k,
-                          input logic [DATA_WIDTH-1:0]     data,
-                          input logic [KEEP_W-1:0]         keep,
-                          input logic                      last,
-                          input logic [USER_WIDTH-1:0]     user,
-                          input int                        lim,
-                          output bit                       ok);
-    int t;
-    begin
-      ok = 1'b0;
-      @(negedge clk);
-      s_tdata[k]  = data;
-      s_tkeep[k]  = keep;
-      s_tlast[k]  = last;
-      s_tuser[k]  = user;
-      s_tvalid[k] = 1'b1;
-      for (t = 0; t < lim; t = t + 1) begin
-        @(posedge clk);
-        if (s_tready[k] === 1'b1) begin
-          ok = 1'b1;
-          break;
-        end
-      end
-    end
+  // -------------------------------------------------------------------------
+  // DUT
+  // -------------------------------------------------------------------------
+  frame_arb_mux #(
+      .S_COUNT(S_COUNT), .DATA_WIDTH(DATA_WIDTH), .USER_WIDTH(USER_WIDTH)
+  ) dut (
+      .clk_i(clk), .rst_i(rst),
+      .s_tdata_i(s_tdata), .s_tkeep_i(s_tkeep), .s_tvalid_i(s_tvalid),
+      .s_tready_o(s_tready), .s_tlast_i(s_tlast), .s_tuser_i(s_tuser),
+      .m_tdata_o(m_tdata), .m_tkeep_o(m_tkeep), .m_tvalid_o(m_tvalid),
+      .m_tready_i(m_tready), .m_tlast_o(m_tlast), .m_tuser_o(m_tuser));
+
+  int cyc = 0;
+  always @(posedge clk) if (!rst) cyc <= cyc + 1;
+
+  // -------------------------------------------------------------------------
+  // bookkeeping
+  // -------------------------------------------------------------------------
+  int    errs = 0;
+  string phase_name = "startup";
+
+  task automatic oops(input string req_id, input string msg);
+    errs = errs + 1;
+    if (errs <= 20)
+      $display("FAIL [%s] cycle %0d, phase '%s': %s", req_id, cyc, phase_name, msg);
+    if (errs == 21) $display("... further diagnostics suppressed");
   endtask
 
-  // ---- model -----------------------------------------------------------------
   typedef struct packed {
-    logic [1:0]            src;
     logic [DATA_WIDTH-1:0] data;
     logic [KEEP_W-1:0]     keep;
-    logic                  last;
     logic [USER_WIDTH-1:0] user;
-  } rec_t;
+    logic                  last;
+  } beat_t;
 
-  rec_t exp_q [$];        // beats transferred in, not yet seen out
-  int   src_seq [$];      // source of each completed output frame (S10 window)
+  beat_t inq [S_COUNT][$];          // beats that transferred in, awaiting output
+  bit    partial [S_COUNT];         // an unterminated frame is in flight (S5a)
+  bit    forbidden [logic [DATA_WIDTH-1:0]];   // discarded by reset (S12)
 
-  int  nerr        = 0;
-  int  frames_out  = 0;
-  int  beats_out   = 0;
-  int  beats_in    = 0;
-  bit  in_frame    = 1'b0;
-  int  cur_src     = 0;
-  bit  mon_en      = 1'b0;
-  bit  quiet_win   = 1'b0;
-  bit  fair_rec    = 1'b0;
-  bit  stop_load   = 1'b0;
-  bit  send_gaveup = 1'b0;
-  bit  rst_d       = 1'b1;
-  int  fcnt [S_COUNT];
+  int  cur_src   = -1;              // output frame in progress, -1 if none
+  bit  mid_frame = 1'b0;
+  int  out_beats = 0, out_frames = 0;
 
-  task automatic err(input string sid, input string msg);
-    begin
-      nerr = nerr + 1;
-      if (nerr <= 40) $display("FAIL [%s] t=%0t : %s", sid, $time, msg);
-    end
-  endtask
+  int  frame_src [$];               // sources of completed output frames (S10)
+  bit  fair_collect = 1'b0;
 
-  // ---- the monitor -----------------------------------------------------------
-  // One block, inputs recorded before outputs are checked, so a zero-latency
-  // design and a deeply buffered one are both handled.
+  // unique payload generator: gseq * odd constant is a bijection on 32 bits, so
+  // no two beats in the whole run ever carry the same tdata
+  int  gseq = 0;
+  function automatic logic [DATA_WIDTH-1:0] next_data();
+    gseq = gseq + 1;
+    return DATA_WIDTH'(32'(gseq) * 32'h9E37_79B9);
+  endfunction
+
+  int lfsr = 32'h1357_9BDF;
+  function automatic int rnd();
+    lfsr = (lfsr * 32'd1103515245 + 32'd12345);
+    return (lfsr >>> 8) & 32'h00FF_FFFF;
+  endfunction
+
+  // -------------------------------------------------------------------------
+  // MONITOR
+  //   input transfers are recorded first, so a design with zero latency that
+  //   forwards a beat in the cycle it arrives is handled correctly.
+  // -------------------------------------------------------------------------
   always @(posedge clk) begin
-    int  k, qi, sidx, j;
-    rec_t r, e;
+    automatic beat_t b, e;
+    automatic int    owner, deep;
 
-    if (rst === 1'b1) begin
-      // S12: reset returns the design to idle and discards what it held.
-      exp_q.delete();
-      in_frame = 1'b0;
-    end else begin
-      if (rst_d === 1'b1) begin
-        if (m_tvalid !== 1'b0)
-          err("S12", "m_tvalid_o is high on the first cycle after rst_i is released");
-      end
-
-      // ---- record every input beat that transferred (S1) ----
-      for (k = 0; k < S_COUNT; k = k + 1) begin
-        if ((s_tvalid[k] === 1'b1) && (s_tready[k] === 1'b1)) begin
-          r.src  = k[1:0];
-          r.data = s_tdata[k];
-          r.keep = s_tkeep[k];
-          r.last = s_tlast[k];
-          r.user = s_tuser[k];
-          exp_q.push_back(r);
-          beats_in = beats_in + 1;
+    if (rst) begin
+      // S12: everything taken in before or during reset is discarded, and must
+      // not appear on the output afterwards
+      for (int k = 0; k < S_COUNT; k++) begin
+        while (inq[k].size() > 0) begin
+          b = inq[k].pop_front();
+          forbidden[b.data] = 1'b1;
         end
+        partial[k] = 1'b0;
       end
+      cur_src   = -1;
+      mid_frame = 1'b0;
+    end else begin
+      // ---- input beats (S1)
+      for (int k = 0; k < S_COUNT; k++)
+        if (s_tvalid[k] === 1'b1 && s_tready[k] === 1'b1) begin
+          b.data = s_tdata[k];
+          b.keep = s_tkeep[k];
+          b.user = s_tuser[k];
+          b.last = s_tlast[k];
+          inq[k].push_back(b);
+          partial[k] = !b.last;
+        end
 
-      // ---- check every output beat that transferred (S1) ----
-      if ((m_tvalid === 1'b1) && (m_tready === 1'b1)) begin
-        beats_out = beats_out + 1;
-        if (quiet_win) begin
-          err("S12", "a beat appeared on the output after reset, with nothing offered since");
-        end else if (mon_en) begin
-          sidx = int'(m_tdata[DATA_WIDTH-1 -: 2]);
-          if (!in_frame) begin
-            cur_src = sidx;
-          end else if (sidx !== cur_src) begin
-            err("S3", $sformatf("a beat tagged input %0d transferred inside a frame from input %0d",
-                                sidx, cur_src));
-            cur_src = sidx;   // resynchronise so the run keeps producing evidence
+      // ---- output beat (S1)
+      if (m_tvalid === 1'b1 && m_tready === 1'b1) begin
+        out_beats = out_beats + 1;
+        if (forbidden.exists(m_tdata) != 0) begin
+          oops("S12", $sformatf(
+            "output beat %08h transferred on an input before or during reset and must not appear afterwards",
+            m_tdata));
+        end else begin
+          owner = -1;
+          if (mid_frame) begin
+            // S3: this beat must be the next beat of the frame in progress
+            if (inq[cur_src].size() > 0 && inq[cur_src][0].data === m_tdata) begin
+              owner = cur_src;
+            end else begin
+              owner = -1;
+              for (int k = 0; k < S_COUNT; k++)
+                if (owner < 0 && inq[k].size() > 0 && inq[k][0].data === m_tdata)
+                  owner = k;
+              if (owner >= 0)
+                oops("S3", $sformatf(
+                  "output beat %08h comes from input %0d while the frame from input %0d is still open",
+                  m_tdata, owner, cur_src));
+              else begin
+                deep = -1;
+                for (int k = 0; k < S_COUNT; k++)
+                  for (int i = 1; i < inq[k].size(); i++)
+                    if (deep < 0 && inq[k][i].data === m_tdata) deep = k;
+                if (deep >= 0)
+                  oops("S4", $sformatf(
+                    "output beat %08h is out of order: input %0d has earlier beats still unsent",
+                    m_tdata, deep));
+                else
+                  oops("S5", $sformatf(
+                    "output beat %08h was never offered on any input, or has already been sent once",
+                    m_tdata));
+              end
+            end
+          end else begin
+            // start of a frame: find the input whose next unsent beat this is
+            for (int k = 0; k < S_COUNT; k++)
+              if (owner < 0 && inq[k].size() > 0 && inq[k][0].data === m_tdata)
+                owner = k;
+            if (owner < 0) begin
+              deep = -1;
+              for (int k = 0; k < S_COUNT; k++)
+                for (int i = 1; i < inq[k].size(); i++)
+                  if (deep < 0 && inq[k][i].data === m_tdata) deep = k;
+              if (deep >= 0)
+                oops("S4", $sformatf(
+                  "output beat %08h is out of order: input %0d has earlier beats still unsent",
+                  m_tdata, deep));
+              else
+                oops("S5", $sformatf(
+                  "output beat %08h was never offered on any input, or has already been sent once",
+                  m_tdata));
+            end
           end
 
-          // oldest not-yet-emitted beat of THIS source: gives S4's per-input
-          // order without constraining order between inputs (S9/scope 1).
-          qi = -1;
-          for (j = 0; j < exp_q.size(); j = j + 1)
-            if ((qi < 0) && (exp_q[j].src == cur_src[1:0])) qi = j;
-
-          if (qi < 0) begin
-            err("S5", $sformatf("output beat tagged input %0d with no such beat outstanding (duplicate or invented)",
-                                cur_src));
-          end else begin
-            e = exp_q[qi];
-            if (m_tdata !== e.data)
-              err("S4", $sformatf("tdata %08h on the output, %08h went in (input %0d)",
-                                  m_tdata, e.data, cur_src));
+          if (owner >= 0) begin
+            e = inq[owner].pop_front();
+            // S4: every field forwarded unmodified, across its full width
             if (m_tkeep !== e.keep)
-              err("S4", $sformatf("tkeep %b on the output, %b went in (input %0d)",
-                                  m_tkeep, e.keep, cur_src));
+              oops("S4", $sformatf("beat %08h: m_tkeep_o is %0h, the input carried %0h",
+                                   m_tdata, m_tkeep, e.keep));
             if (m_tuser !== e.user)
-              err("S4", $sformatf("tuser %b on the output, %b went in (input %0d)",
-                                  m_tuser, e.user, cur_src));
+              oops("S4", $sformatf("beat %08h: m_tuser_o is %0h, the input carried %0h",
+                                   m_tdata, m_tuser, e.user));
             if (m_tlast !== e.last)
-              err("S4", $sformatf("m_tlast_o=%b on a beat whose s_tlast_i was %b (input %0d)",
-                                  m_tlast, e.last, cur_src));
-            exp_q.delete(qi);
-          end
-
-          if (m_tlast === 1'b1) begin
-            in_frame   = 1'b0;
-            frames_out = frames_out + 1;
-            if (fair_rec) src_seq.push_back(cur_src);
-          end else begin
-            in_frame = 1'b1;
+              oops("S4", $sformatf("beat %08h: m_tlast_o is %b, the input beat had s_tlast_i %b",
+                                   m_tdata, m_tlast, e.last));
+            if (e.last) begin
+              mid_frame  = 1'b0;
+              out_frames = out_frames + 1;
+              if (fair_collect) frame_src.push_back(owner);
+              cur_src = -1;
+            end else begin
+              mid_frame = 1'b1;
+              cur_src   = owner;
+            end
           end
         end
       end
     end
-    rst_d = rst;
   end
 
-  // ---- stimulus helpers ------------------------------------------------------
-  // Every beat is globally unique: {src, frame number, beat number, pattern}.
-  function automatic logic [DATA_WIDTH-1:0] mk_data(input int k, input int f, input int b);
-    mk_data = {k[1:0], f[13:0], b[7:0], (f[7:0] ^ {b[3:0], ~b[3:0]})};
-  endfunction
+  // -------------------------------------------------------------------------
+  // input drivers, one process per input
+  // -------------------------------------------------------------------------
+  bit drv_run     [S_COUNT];
+  bit drv_partial [S_COUNT];
+  int drv_frames  [S_COUNT];
 
-  function automatic logic [KEEP_W-1:0] mk_keep(input int f, input int b);
-    mk_keep = KEEP_W'(((f + b) % 15) + 1);   // varying, never zero; no pattern is required
-  endfunction
-
-  function automatic logic mk_user(input int f, input int b);
-    mk_user = logic'((f + b) & 1);
-  endfunction
-
-  // Sends one complete frame. Returns 0 only if the design stopped accepting,
-  // which is not itself a failure (scope 3).
-  task automatic send_frame(input int k, input int nbeats, output bit ok);
-    int b, f;
-    bit bok;
-    begin
-      ok = 1'b1;
-      f  = fcnt[k];
-      fcnt[k] = fcnt[k] + 1;
-      for (b = 0; b < nbeats; b = b + 1) begin
-        send_lim(k, mk_data(k, f, b), mk_keep(f, b), (b == nbeats-1), mk_user(f, b),
-                 SEND_LIM, bok);
-        if (!bok) begin
-          ok = 1'b0;
-          send_gaveup = 1'b1;
-          break;
+  for (genvar k = 0; k < S_COUNT; k++) begin : g_drv
+    initial begin
+      int nbeats, i;
+      logic [DATA_WIDTH-1:0] d;
+      logic [KEEP_W-1:0]     kp;
+      drv_run[k]     = 1'b0;
+      drv_partial[k] = 1'b0;
+      drv_frames[k]  = 0;
+      forever begin
+        if (drv_partial[k]) begin
+          // S5a: two beats of a frame that is never completed
+          for (i = 0; i < 2; i++) begin
+            d  = next_data();
+            kp = KEEP_W'(d);
+            bfm_send(k, d, kp, 1'b0, USER_WIDTH'(d[4]));
+          end
+          drv_partial[k] = 1'b0;
+          bfm_idle(k);
+        end else if (drv_run[k]) begin
+          nbeats = 1 + (rnd() % 4);        // S2: length 1 is included
+          for (i = 0; i < nbeats; i++) begin
+            d  = next_data();
+            kp = KEEP_W'(d);
+            bfm_send(k, d, kp, (i == nbeats-1) ? 1'b1 : 1'b0, USER_WIDTH'(d[4]));
+          end
+          drv_frames[k] = drv_frames[k] + 1;
+          if (!drv_run[k] && !drv_partial[k]) bfm_idle(k);
+        end else begin
+          @(negedge clk);
+          s_tvalid[k] = 1'b0;
         end
       end
     end
-  endtask
+  end
 
-  task automatic burst_driver(input int k, input int nframes);
-    int f;
-    bit ok;
-    begin
-      for (f = 0; f < nframes; f = f + 1) begin
-        send_frame(k, 1 + ((f + k) % 5), ok);   // includes single-beat frames (S2)
-        if (!ok) break;
-      end
-      bfm_idle(k);
-    end
-  endtask
-
-  // Continuous offered load: tvalid never drops between frames (S10's premise).
-  task automatic load_driver(input int k);
-    int f;
-    bit ok;
-    begin
-      f = 0;
-      while (!stop_load) begin
-        send_frame(k, 1 + (f % 4), ok);
-        if (!ok) break;
-        f = f + 1;
-      end
-      bfm_idle(k);
-    end
-  endtask
-
-  task automatic ready_wiggle(input int cycles);
-    int t;
-    begin
-      for (t = 0; t < cycles; t = t + 1) begin
-        @(negedge clk);
-        // long low runs, including across m_tlast_o beats (S8)
-        m_tready = ((t % 11) < 6);
-      end
-      @(negedge clk);
-      m_tready = 1'b1;
-    end
-  endtask
-
-  task automatic wait_drain(input int max_cyc, output bit ok);
-    int t;
-    begin
-      ok = 1'b0;
-      for (t = 0; t < max_cyc; t = t + 1) begin
-        @(posedge clk);
-        if (exp_q.size() == 0) begin
-          ok = 1'b1;
-          break;
-        end
-      end
-    end
-  endtask
-
-  // ---- test program ----------------------------------------------------------
+  // ---- output-side ready pattern (S8) ---------------------------------------
+  int bp_mode = 0;                  // 0 = always ready, 1 = random, 2 = never
   initial begin
-    int  i, w, j, seen, nwin;
-    bit  ok;
-    bit  any_win_bad;
+    m_tready = 1'b0;
+    forever begin
+      @(negedge clk);
+      case (bp_mode)
+        0:       m_tready = 1'b1;
+        1:       m_tready = ((rnd() % 4) != 0) ? 1'b1 : 1'b0;
+        2:       m_tready = 1'b0;
+        default: m_tready = 1'b1;
+      endcase
+    end
+  end
 
-    for (i = 0; i < S_COUNT; i = i + 1) fcnt[i] = 0;
+  // -------------------------------------------------------------------------
+  // helpers
+  // -------------------------------------------------------------------------
+  task automatic set_phase(input string nm);
+    @(negedge clk);
+    phase_name = nm;
+  endtask
 
-    // -------------------------------------------------------------- S12 ------
+  task automatic run_all(input bit on);
+    @(negedge clk);
+    for (int k = 0; k < S_COUNT; k++) drv_run[k] = on;
+  endtask
+
+  // Waits for the design to drain what it owes, then reports anything left.
+  task automatic drain_and_check(input int budget);
+    int t;
+    bit quiet;
+    bp_mode = 0;
+    for (t = 0; t < budget; t++) begin
+      @(posedge clk);
+      quiet = 1'b1;
+      for (int k = 0; k < S_COUNT; k++)
+        if (inq[k].size() > 0) quiet = 1'b0;
+      if (quiet) break;
+    end
+    @(negedge clk);
+    for (int k = 0; k < S_COUNT; k++) begin
+      automatic bit has_last = 1'b0;
+      for (int i = 0; i < inq[k].size(); i++) if (inq[k][i].last) has_last = 1'b1;
+      if (has_last)
+        oops("S5", $sformatf(
+          "input %0d has %0d beat(s) of a COMPLETED frame that never appeared on the output",
+          k, inq[k].size()));
+      else if (inq[k].size() > 0 && !partial[k])
+        oops("S5", $sformatf("input %0d has %0d beat(s) that never appeared on the output",
+                             k, inq[k].size()));
+      // a partial frame still held is S5a and is not a failure
+    end
+  endtask
+
+  // -------------------------------------------------------------------------
+  // STIMULUS
+  // -------------------------------------------------------------------------
+  initial begin
+    int nsrc;
+    bit [S_COUNT-1:0] seen;
+
+    for (int k = 0; k < S_COUNT; k++) begin
+      s_tvalid[k] = 1'b0; s_tdata[k] = '0; s_tkeep[k] = '0;
+      s_tlast[k] = 1'b0; s_tuser[k] = '0;
+    end
+
     bfm_reset(4);
-    mon_en = 1'b1;
-    bfm_ready(1'b1);
-    repeat (4) @(posedge clk);
 
-    // --------------------------------------------------- S2 / S4 / S5 --------
-    // One input at a time: a single-beat frame, then multi-beat frames.
-    send_frame(0, 1, ok);
-    send_frame(0, 4, ok);
-    send_frame(2, 1, ok);
-    send_frame(2, 8, ok);
-    bfm_idle(0);
-    bfm_idle(2);
-    wait_drain(3000, ok);
-    if (!ok) err("S5", "beats from single-input frames never appeared on the output");
+    // ---------------- S12: idle after reset --------------------------------
+    set_phase("S12 state after reset is released");
+    @(posedge clk);
+    if (m_tvalid !== 1'b0)
+      oops("S12", "m_tvalid_o is high on the first cycle after rst_i was released");
 
-    // ------------------------------------------------------ S3 / S5 ----------
-    // All four inputs offering at once, output always ready.
-    fork
-      burst_driver(0, 6);
-      burst_driver(1, 6);
-      burst_driver(2, 6);
-      burst_driver(3, 6);
-    join
-    wait_drain(8000, ok);
-    if (!ok)
-      err(send_gaveup ? "S10" : "S5",
-          $sformatf("%0d beat(s) still undelivered after concurrent traffic drained",
-                    exp_q.size()));
+    // ---------------- S2/S4: one input at a time ---------------------------
+    set_phase("S2/S4 single-beat and multi-beat frames, one input at a time");
+    bp_mode = 0;
+    for (int k = 0; k < S_COUNT; k++) begin
+      @(negedge clk) drv_run[k] = 1'b1;
+      repeat (60) @(posedge clk);
+      @(negedge clk) drv_run[k] = 1'b0;
+      drain_and_check(400);
+    end
+    if (out_frames < 4)
+      oops("S5", $sformatf("only %0d frames reached the output from four inputs offering", out_frames));
 
-    // ------------------------------------------------------------- S8 --------
-    // Same traffic with the sink stalling, including across m_tlast_o beats.
-    fork
-      burst_driver(0, 5);
-      burst_driver(1, 5);
-      burst_driver(2, 5);
-      burst_driver(3, 5);
-      ready_wiggle(700);
-    join
-    bfm_ready(1'b1);
-    wait_drain(8000, ok);
-    if (!ok)
-      err(send_gaveup ? "S10" : "S8",
-          $sformatf("%0d beat(s) lost or stuck after output backpressure", exp_q.size()));
+    // ---------------- S3: all inputs contending ----------------------------
+    set_phase("S3 four inputs contending, sink always ready");
+    run_all(1'b1);
+    repeat (400) @(posedge clk);
+    run_all(1'b0);
+    drain_and_check(2000);
 
-    // Long unbroken stall, then release.
-    bfm_ready(1'b0);
-    fork
-      burst_driver(1, 3);
-      burst_driver(3, 3);
-      begin
-        repeat (40) @(posedge clk);
-        bfm_ready(1'b1);
-      end
-    join
-    bfm_ready(1'b1);
-    wait_drain(8000, ok);
-    if (!ok)
-      err(send_gaveup ? "S10" : "S8",
-          $sformatf("%0d beat(s) lost after a sustained stall", exp_q.size()));
+    // ---------------- S8: arbitrary back-pressure --------------------------
+    set_phase("S8 the same under random back-pressure");
+    bp_mode = 1;
+    run_all(1'b1);
+    repeat (1500) @(posedge clk);
+    run_all(1'b0);
+    drain_and_check(4000);
 
-    // ------------------------------------------------------------ S10 --------
-    // Continuous offered load on every input, sink always ready.
-    bfm_ready(1'b1);
-    stop_load = 1'b0;
-    fair_rec  = 1'b1;
-    fork
-      load_driver(0);
-      load_driver(1);
-      load_driver(2);
-      load_driver(3);
-      begin
-        int t;
-        for (t = 0; t < 40000; t = t + 1) begin
-          @(posedge clk);
-          if (src_seq.size() >= FAIR_N) break;
-        end
-        stop_load = 1'b1;
-      end
-    join
-    fair_rec = 1'b0;
-    bfm_ready(1'b1);
-    wait_drain(20000, ok);
+    set_phase("S8 the sink stalled for a long stretch, then released");
+    bp_mode = 2;
+    run_all(1'b1);
+    repeat (200) @(posedge clk);
+    bp_mode = 0;
+    repeat (400) @(posedge clk);
+    run_all(1'b0);
+    drain_and_check(4000);
 
-    if (src_seq.size() < 16) begin
-      err("S10", $sformatf("only %0d frame(s) completed under continuous load on all inputs",
-                           src_seq.size()));
+    // ---------------- S10: bounded fairness --------------------------------
+    set_phase("S10 every input begins a frame within any 16 completed frames");
+    bp_mode = 0;
+    run_all(1'b1);
+    repeat (40) @(posedge clk);       // let the load become continuous
+    frame_src.delete();
+    fair_collect = 1'b1;
+    for (int t = 0; t < 20000; t++) begin
+      @(posedge clk);
+      if (frame_src.size() >= 200) break;
+    end
+    fair_collect = 1'b0;
+    run_all(1'b0);
+    if (frame_src.size() < 64) begin
+      oops("S10", $sformatf(
+        "only %0d frames completed under continuous load from all four inputs; fairness cannot be met",
+        frame_src.size()));
     end else begin
-      any_win_bad = 1'b0;
-      nwin = 0;
-      for (w = 0; (w + 16) <= src_seq.size(); w = w + 1) begin
-        seen = 0;
-        for (j = w; j < (w + 16); j = j + 1) seen = seen | (1 << src_seq[j]);
-        nwin = nwin + 1;
-        if (seen !== ((1 << S_COUNT) - 1)) begin
-          if (!any_win_bad)
-            err("S10", $sformatf("in the 16 completed frames at position %0d, only inputs {%b} began a frame",
-                                 w, seen[S_COUNT-1:0]));
-          any_win_bad = 1'b1;
+      for (int i = 0; i + 16 <= frame_src.size(); i++) begin
+        seen = '0;
+        for (int j = i; j < i + 16; j++) seen[frame_src[j]] = 1'b1;
+        if (seen !== {S_COUNT{1'b1}}) begin
+          for (int k = 0; k < S_COUNT; k++)
+            if (!seen[k])
+              oops("S10", $sformatf(
+                "input %0d began no frame in the 16 completed frames %0d..%0d",
+                k, i, i + 15));
+          i = frame_src.size();       // one report is enough
         end
       end
     end
+    drain_and_check(4000);
 
-    // ------------------------------------------------------------- S12 -------
-    // Reset with beats held inside the design: none of them may emerge after.
+    // ---------------- S5a then S12 -----------------------------------------
+    set_phase("S5a a frame abandoned at the source may be held indefinitely");
+    @(negedge clk) drv_partial[2] = 1'b1;
+    repeat (200) @(posedge clk);
+    // nothing is owed here: the design may hold those beats forever
+    for (int k = 0; k < S_COUNT; k++)
+      if (k != 2 && inq[k].size() > 0)
+        oops("S5", $sformatf("input %0d still holds beats that were not part of a partial frame", k));
+
+    // Reset must also discard a beat the design is holding because the sink
+    // refused it -- otherwise a stale beat reappears after release.
+    set_phase("S12 reset while the sink is stalled and beats are held inside");
+    bp_mode = 2;
+    run_all(1'b1);
+    repeat (60) @(posedge clk);
+    run_all(1'b0);
+    repeat (20) @(posedge clk);
     bfm_reset(4);
-    mon_en = 1'b1;
-    repeat (4) @(posedge clk);
+    @(posedge clk);
+    if (m_tvalid !== 1'b0)
+      oops("S12", "m_tvalid_o is high on the first cycle after rst_i was released");
+    nsrc = out_frames;
+    run_all(1'b1);
+    repeat (400) @(posedge clk);
+    run_all(1'b0);
+    drain_and_check(2000);
+    if (out_frames <= nsrc)
+      oops("S5", "no frame reached the output after the reset");
 
-    bfm_ready(1'b0);               // stall the output so beats stay inside
-    send_frame(0, 2, ok);
-    send_frame(1, 2, ok);
-
-    @(negedge clk);
-    rst = 1'b1;                    // assert reset with that traffic held
-    repeat (3) @(posedge clk);
-    @(negedge clk);
-    s_tvalid = '0;                 // stop offering while the design is in reset
-    m_tready = 1'b1;               // and let it drain if it wrongly tries to
-    repeat (3) @(posedge clk);
-    quiet_win = 1'b1;
-    @(negedge clk);
-    rst = 1'b0;
-
-    repeat (30) @(posedge clk);    // nothing offered: any output beat is stale
-    quiet_win = 1'b0;
-
-    // and the design still works afterwards
-    send_frame(2, 3, ok);
-    bfm_idle(2);
-    wait_drain(3000, ok);
-    if (!ok) err("S5", "the design did not deliver a frame sent after reset");
-
-    // ---- verdict --------------------------------------------------------------
-    if ((beats_out == 0) || (frames_out == 0))
-      err("S5", "no output beat ever transferred");
-
-    if (nerr == 0) $display("RESULT: PASS");
-    else           $display("RESULT: FAIL");
+    if (errs == 0) begin
+      $display("checked %0d beats in %0d frames", out_beats, out_frames);
+      $display("RESULT: PASS");
+    end else begin
+      $display("%0d failure(s); %0d beats in %0d frames", errs, out_beats, out_frames);
+      $display("RESULT: FAIL");
+    end
     $finish;
   end
 

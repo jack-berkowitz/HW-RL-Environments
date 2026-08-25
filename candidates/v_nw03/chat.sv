@@ -3,28 +3,16 @@ module frame_arb_mux_tb;
   localparam int S_COUNT    = 4;
   localparam int DATA_WIDTH = 32;
   localparam int USER_WIDTH = 1;
-  localparam int KEEP_WIDTH = DATA_WIDTH/8;
 
-  // --------------------------------------------------------------------------
-  // DUT signals -- packed dimensions exactly match the DUT port declarations.
-  // --------------------------------------------------------------------------
-  logic [S_COUNT-1:0][DATA_WIDTH-1:0] s_tdata;
-  logic [S_COUNT-1:0][KEEP_WIDTH-1:0] s_tkeep;
-  logic [S_COUNT-1:0]                 s_tvalid;
-  logic [S_COUNT-1:0]                 s_tready;
-  logic [S_COUNT-1:0]                 s_tlast;
-  logic [S_COUNT-1:0][USER_WIDTH-1:0] s_tuser;
+  localparam int PHASE_FUNC = 0;
+  localparam int PHASE_FAIR = 1;
 
-  logic [DATA_WIDTH-1:0]              m_tdata;
-  logic [KEEP_WIDTH-1:0]              m_tkeep;
-  logic                               m_tvalid;
-  logic                               m_tready;
-  logic                               m_tlast;
-  logic [USER_WIDTH-1:0]              m_tuser;
+  localparam logic [5:0] FUNC_MARK = 6'h2A;
+  localparam logic [5:0] FAIR_MARK = 6'h15;
 
-  // --------------------------------------------------------------------------
-  // PROVIDED PLUMBING -- moves beats, checks nothing.
-  // --------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Clock / reset / DUT wiring
+  // ---------------------------------------------------------------------------
   logic clk;
   initial begin
     clk = 1'b0;
@@ -34,794 +22,573 @@ module frame_arb_mux_tb;
   logic rst;
   initial rst = 1'b1;
 
-  task automatic bfm_reset(input int cycles = 4);
-    @(negedge clk);
-    rst = 1'b1;
-    repeat (cycles) @(posedge clk);
-    @(negedge clk);
-    rst = 1'b0;
-  endtask
+  logic [S_COUNT-1:0][DATA_WIDTH-1:0]       s_tdata = '0;
+  logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0]   s_tkeep = '0;
+  logic [S_COUNT-1:0]                       s_tvalid = '0;
+  logic [S_COUNT-1:0]                       s_tready;
+  logic [S_COUNT-1:0]                       s_tlast = '0;
+  logic [S_COUNT-1:0][USER_WIDTH-1:0]       s_tuser = '0;
 
-  task automatic bfm_send(
-      input int                        k,
-      input logic [DATA_WIDTH-1:0]     data,
-      input logic [KEEP_WIDTH-1:0]     keep,
-      input logic                      last,
-      input logic [USER_WIDTH-1:0]     user
+  logic [DATA_WIDTH-1:0]                    m_tdata;
+  logic [(DATA_WIDTH/8)-1:0]                m_tkeep;
+  logic                                     m_tvalid;
+  logic                                     m_tready = 1'b1;
+  logic                                     m_tlast;
+  logic [USER_WIDTH-1:0]                    m_tuser;
+
+  frame_arb_mux #(
+    .S_COUNT(S_COUNT),
+    .DATA_WIDTH(DATA_WIDTH),
+    .USER_WIDTH(USER_WIDTH)
+  ) dut (
+    .clk_i(clk),
+    .rst_i(rst),
+    .s_tdata_i(s_tdata),
+    .s_tkeep_i(s_tkeep),
+    .s_tvalid_i(s_tvalid),
+    .s_tready_o(s_tready),
+    .s_tlast_i(s_tlast),
+    .s_tuser_i(s_tuser),
+    .m_tdata_o(m_tdata),
+    .m_tkeep_o(m_tkeep),
+    .m_tvalid_o(m_tvalid),
+    .m_tready_i(m_tready),
+    .m_tlast_o(m_tlast),
+    .m_tuser_o(m_tuser)
   );
-    @(negedge clk);
-    s_tdata[k]  = data;
-    s_tkeep[k]  = keep;
-    s_tlast[k]  = last;
-    s_tuser[k]  = user;
-    s_tvalid[k] = 1'b1;
 
-    forever begin
-      @(posedge clk);
-      if (s_tready[k])
-        break;
+  // ---------------------------------------------------------------------------
+  // Common helpers
+  // ---------------------------------------------------------------------------
+  bit verdict_printed = 1'b0;
+
+  task automatic fail_now(input string req_name, input string msg);
+    begin
+      if (!verdict_printed) begin
+        verdict_printed = 1'b1;
+        $display("FAIL %s: %s", req_name, msg);
+        $display("RESULT: FAIL");
+        $finish;
+      end
     end
   endtask
 
-  task automatic bfm_idle(input int k);
-    @(negedge clk);
-    s_tvalid[k] = 1'b0;
+  task automatic pass_now();
+    begin
+      if (!verdict_printed) begin
+        verdict_printed = 1'b1;
+        $display("RESULT: PASS");
+        $finish;
+      end
+    end
   endtask
 
   task automatic bfm_ready(input logic value);
-    @(negedge clk);
-    m_tready = value;
+    begin
+      @(negedge clk);
+      m_tready = value;
+    end
   endtask
 
-  // --------------------------------------------------------------------------
-  // Independent watchdog.
+  // ---------------------------------------------------------------------------
+  // Deterministic source stream.
   //
-  // A total lack of progress with completed input frames outstanding violates
-  // S5. During the fairness phase this also prevents a permanently wedged DUT
-  // from blocking the overall regression forever.
-  // --------------------------------------------------------------------------
-  initial begin
-    #20_000_000;
-    $display("FAIL S5: watchdog expired with no sufficient forward progress");
-    $display("RESULT: FAIL");
-    $finish;
+  // Every data beat carries an unambiguous source code in [31:30] and a phase
+  // marker in [29:24]. This lets the checker identify the source without ever
+  // inferring selection from READY. Sequence order is then checked from
+  // bookkeeping counters, not by searching for a repeated payload value.
+  // ---------------------------------------------------------------------------
+  typedef struct packed {
+    logic [31:0] data;
+    logic [3:0]  keep;
+    logic        last;
+    logic        user;
+  } beat_t;
+
+  function automatic int func_script_count(input int k);
+    begin
+      case (k)
+        0: func_script_count = 6;
+        1: func_script_count = 7;
+        2: func_script_count = 6;
+        3: func_script_count = 7;
+        default: func_script_count = 0;
+      endcase
+    end
+  endfunction
+
+  function automatic logic func_last(input int k, input int idx);
+    begin
+      func_last = 1'b1;
+      case (k)
+        0: begin
+          case (idx)
+            0, 1, 4: func_last = 1'b0;
+            default: func_last = 1'b1;
+          endcase
+        end
+        1: begin
+          case (idx)
+            0, 2, 3, 4: func_last = 1'b0;
+            default: func_last = 1'b1;
+          endcase
+        end
+        2: begin
+          case (idx)
+            1, 2, 4: func_last = 1'b0;
+            default: func_last = 1'b1;
+          endcase
+        end
+        3: begin
+          case (idx)
+            0, 1, 2, 5: func_last = 1'b0;
+            default: func_last = 1'b1;
+          endcase
+        end
+        default: func_last = 1'b1;
+      endcase
+    end
+  endfunction
+
+  function automatic beat_t make_beat(
+    input int phase_v,
+    input int k,
+    input int idx
+  );
+    beat_t b;
+    begin
+      b = '0;
+      b.data[31:30] = k;
+      b.data[23:0] = idx;
+
+      if (phase_v == PHASE_FUNC)
+        b.data[29:24] = FUNC_MARK;
+      else
+        b.data[29:24] = FAIR_MARK;
+
+      case (idx % 4)
+        0: b.keep = 4'b0001;
+        1: b.keep = 4'b0101;
+        2: b.keep = 4'b1110;
+        default: b.keep = 4'b1011;
+      endcase
+
+      b.user = idx[0] ^ k[0];
+
+      if (phase_v == PHASE_FUNC) begin
+        if (idx < func_script_count(k))
+          b.last = func_last(k, idx);
+        else
+          b.last = 1'b1;
+      end else begin
+        // Fairness phase is an endless stream of complete one-beat frames.
+        b.last = 1'b1;
+      end
+
+      make_beat = b;
+    end
+  endfunction
+
+  // ---------------------------------------------------------------------------
+  // Continuous-load source driver.
+  //
+  // Once enabled, all four inputs keep VALID asserted continuously and replace
+  // a beat only after its actual handshake. That satisfies S7 and establishes
+  // the S10 continuous-load precondition whenever m_tready is high.
+  // ---------------------------------------------------------------------------
+  logic [S_COUNT-1:0] src_hs = '0;
+  int src_offer_idx [0:S_COUNT-1];
+  bit source_enable = 1'b0;
+  int phase_mode = PHASE_FUNC;
+
+  integer drv_k;
+  beat_t drv_beat;
+
+  always @(posedge clk) begin
+    if (rst)
+      src_hs <= '0;
+    else
+      src_hs <= s_tvalid & s_tready;
   end
 
-  // --------------------------------------------------------------------------
-  // DUT
-  // --------------------------------------------------------------------------
-  frame_arb_mux #(
-      .S_COUNT    (S_COUNT),
-      .DATA_WIDTH (DATA_WIDTH),
-      .USER_WIDTH (USER_WIDTH)
-  ) dut (
-      .clk_i       (clk),
-      .rst_i       (rst),
-
-      .s_tdata_i   (s_tdata),
-      .s_tkeep_i   (s_tkeep),
-      .s_tvalid_i  (s_tvalid),
-      .s_tready_o  (s_tready),
-      .s_tlast_i   (s_tlast),
-      .s_tuser_i   (s_tuser),
-
-      .m_tdata_o   (m_tdata),
-      .m_tkeep_o   (m_tkeep),
-      .m_tvalid_o  (m_tvalid),
-      .m_tready_i  (m_tready),
-      .m_tlast_o   (m_tlast),
-      .m_tuser_o   (m_tuser)
-  );
-
-  // --------------------------------------------------------------------------
-  // Scoreboard bookkeeping.
-  //
-  // Each generated beat gets a unique 24-bit transaction ID in tdata[23:0].
-  // The ID is used strictly as a ledger key.  We never search candidate queue
-  // entries for a payload that "looks like" the output beat.
-  //
-  // The full tdata, tkeep, tuser and tlast values are separately stored and
-  // checked after the ledger identifies the accepted input transaction.
-  // --------------------------------------------------------------------------
-  typedef struct {
-    logic [DATA_WIDTH-1:0] data;
-    logic [KEEP_WIDTH-1:0] keep;
-    logic                  last;
-    logic [USER_WIDTH-1:0] user;
-    int                    src_idx;
-    int                    frame_no;
-    int                    beat_no;
-    int                    epoch_no;
-  } beat_rec_t;
-
-  beat_rec_t src_q [S_COUNT][$];
-  beat_rec_t ledger [int unsigned];
-  bit        emitted [int unsigned];
-
-  int unsigned tx_seq [S_COUNT];
-
-  int in_frame_no [S_COUNT];
-  int in_beat_no  [S_COUNT];
-
-  int epoch_id;
-  bit was_rst;
-
-  // Output-frame state for S3.
-  bit out_frame_active;
-  int out_frame_src;
-  int out_frame_no;
-  int out_frame_start_src;
-
-  // S8 stall-state bookkeeping.
-  bit                        stall_hold;
-  logic [DATA_WIDTH-1:0]     stall_data;
-  logic [KEEP_WIDTH-1:0]     stall_keep;
-  logic                      stall_last;
-  logic [USER_WIDTH-1:0]     stall_user;
-
-  // Used to deliberately introduce backpressure after a frame has begun.
-  int nonlast_output_xfers;
-
-  // Fairness bookkeeping.
-  bit fair_mode;
-  int fair_hist[$];
-  int fair_completed_frames;
-
-  // --------------------------------------------------------------------------
-  // Failure helper.  Fail-fast prevents a corrupt DUT from cascading one bad
-  // transaction into hundreds of misleading diagnostics.
-  // --------------------------------------------------------------------------
-  task automatic fail_now(input string req_name, input string msg);
-    $display("FAIL %s: %s", req_name, msg);
-    $display("RESULT: FAIL");
-    $finish;
-  endtask
-
-  // --------------------------------------------------------------------------
-  // Test-data generation.
-  //
-  // tdata[23:0]:
-  //   [23:22] source number
-  //   [21:0]  monotonically increasing per-source transaction number
-  //
-  // tdata[31:24] is an independent checksum-like byte so corruption of the
-  // upper data byte is also explicitly checked rather than being part of the
-  // bookkeeping key.
-  // --------------------------------------------------------------------------
-  function automatic logic [DATA_WIDTH-1:0] make_data(
-      input int          k,
-      input int unsigned seq_no
-  );
-    automatic logic [23:0] token_bits;
-    automatic logic [7:0]  check_bits;
-
-    token_bits = ((k & 3) << 22) | (seq_no & 22'h3fffff);
-    check_bits = 8'hA7 ^
-                 token_bits[7:0] ^
-                 token_bits[15:8] ^
-                 token_bits[23:16];
-
-    make_data = {check_bits, token_bits};
-  endfunction
-
-  function automatic logic [KEEP_WIDTH-1:0] make_keep(
-      input int unsigned seq_no
-  );
-    case (seq_no % 6)
-      0: make_keep = 4'hf;
-      1: make_keep = 4'h5;
-      2: make_keep = 4'ha;
-      3: make_keep = 4'h3;
-      4: make_keep = 4'hc;
-      default: make_keep = 4'h9;
-    endcase
-  endfunction
-
-  function automatic logic [USER_WIDTH-1:0] make_user(
-      input int          k,
-      input int unsigned seq_no
-  );
-    make_user = seq_no[0] ^ k[0];
-  endfunction
-
-  // --------------------------------------------------------------------------
-  // Generate a complete frame on one source.
-  //
-  // S7 is obeyed by bfm_send: every presented beat remains unchanged until its
-  // handshake.  Every frame this task starts is completed.
-  // --------------------------------------------------------------------------
-  task automatic send_frame(input int k, input int beat_count);
-    automatic int b;
-    automatic int unsigned seq_no;
-    automatic logic [DATA_WIDTH-1:0] data_word;
-    automatic logic [KEEP_WIDTH-1:0] keep_word;
-    automatic logic [USER_WIDTH-1:0] user_word;
-    automatic logic                  last_word;
-
-    for (b = 0; b < beat_count; b = b + 1) begin
-      seq_no   = tx_seq[k];
-      tx_seq[k] = tx_seq[k] + 1;
-
-      data_word = make_data(k, seq_no);
-      keep_word = make_keep(seq_no);
-      user_word = make_user(k, seq_no);
-
-      if (b == beat_count-1)
-        last_word = 1'b1;
-      else
-        last_word = 1'b0;
-
-      bfm_send(k, data_word, keep_word, last_word, user_word);
-    end
-  endtask
-
-  // A mixture of single-beat and multi-beat frames.
-  task automatic basic_source(input int k);
-    case (k)
-      0: begin
-        send_frame(0, 1);   // S2 single-beat frame
-        send_frame(0, 5);
-        send_frame(0, 2);
-        send_frame(0, 4);
-        bfm_idle(0);
-      end
-
-      1: begin
-        send_frame(1, 3);
-        send_frame(1, 1);   // S2 single-beat frame
-        send_frame(1, 6);
-        send_frame(1, 2);
-        bfm_idle(1);
-      end
-
-      2: begin
-        send_frame(2, 4);
-        send_frame(2, 2);
-        send_frame(2, 1);   // S2 single-beat frame
-        send_frame(2, 5);
-        bfm_idle(2);
-      end
-
-      default: begin
-        send_frame(3, 2);
-        send_frame(3, 6);
-        send_frame(3, 3);
-        send_frame(3, 1);   // S2 single-beat frame
-        bfm_idle(3);
-      end
-    endcase
-  endtask
-
-  // Continuous single-beat frames for S10.
-  //
-  // s_tvalid never drops between frames: when one bfm_send returns at a
-  // positive edge, the next invocation changes the payload at the following
-  // negative edge while leaving valid asserted.
-  task automatic fairness_source(input int k);
-    forever begin
-      send_frame(k, 1);
-    end
-  endtask
-
-  function automatic bit queues_empty();
-    automatic int k;
-
-    queues_empty = 1'b1;
-    for (k = 0; k < S_COUNT; k = k + 1) begin
-      if (src_q[k].size() != 0)
-        queues_empty = 1'b0;
-    end
-  endfunction
-
-  task automatic wait_for_drain();
-    while (!queues_empty())
-      @(posedge clk);
-
-    // Move away from the sampling edge before the caller proceeds.
-    @(negedge clk);
-  endtask
-
-  // --------------------------------------------------------------------------
-  // Monitor / scoreboard.
-  //
-  // All handshake decisions are made only at rising edges per S1.
-  // s_tready is never interpreted as an arbitration grant (S6).
-  // --------------------------------------------------------------------------
-  always @(posedge clk) begin : scoreboard_monitor
-    automatic int k;
-    automatic int j;
-    automatic int unsigned token_id;
-    automatic beat_rec_t rec_now;
-    automatic beat_rec_t exp_rec;
-    automatic int dropped_src;
-    automatic bit seen_src;
-    automatic bit fair_conditions;
-
-    // ------------------------------------------------------------------------
-    // S12 -- synchronous reset.
-    // ------------------------------------------------------------------------
+  always @(negedge clk) begin
     if (rst) begin
-      if (!was_rst)
-        epoch_id = epoch_id + 1;
+      s_tvalid = '0;
+      s_tdata  = '0;
+      s_tkeep  = '0;
+      s_tlast  = '0;
+      s_tuser  = '0;
 
-      // Once reset has already sampled high for one full clock, the interface
-      // must be in the idle reset state.
-      if (was_rst) begin
-        if (m_tvalid !== 1'b0) begin
-          fail_now(
-              "S12",
-              "m_tvalid_o remained asserted while synchronous reset was held"
-          );
-        end
+      for (drv_k = 0; drv_k < S_COUNT; drv_k = drv_k + 1)
+        src_offer_idx[drv_k] = 0;
+
+    end else if (!source_enable) begin
+      s_tvalid = '0;
+
+    end else begin
+      for (drv_k = 0; drv_k < S_COUNT; drv_k = drv_k + 1) begin
+        if (src_hs[drv_k])
+          src_offer_idx[drv_k] = src_offer_idx[drv_k] + 1;
+
+        drv_beat = make_beat(
+          phase_mode,
+          drv_k,
+          src_offer_idx[drv_k]
+        );
+
+        s_tdata[drv_k]  = drv_beat.data;
+        s_tkeep[drv_k]  = drv_beat.keep;
+        s_tlast[drv_k]  = drv_beat.last;
+        s_tuser[drv_k]  = drv_beat.user;
+        s_tvalid[drv_k] = 1'b1;
+      end
+    end
+  end
+
+  // ---------------------------------------------------------------------------
+  // Scoreboard / frame checker
+  // ---------------------------------------------------------------------------
+  int in_accepted [0:S_COUNT-1];
+  int out_seen    [0:S_COUNT-1];
+
+  bit out_in_frame = 1'b0;
+  int locked_src = 0;
+
+  // Backpressure trigger. A known two-beat frame is chosen, so the beat after
+  // the trigger is TLAST.
+  bit bp_candidate = 1'b0;
+  bit bp_done = 1'b0;
+
+  // Fairness sliding window.
+  int fair_hist [0:15];
+  int fair_hist_len = 0;
+  int fair_windows_checked = 0;
+  logic [3:0] fair_mask_tmp;
+
+  integer mon_k;
+  integer fair_i;
+  int mon_src;
+  beat_t mon_exp;
+  beat_t mon_next;
+
+  always @(posedge clk) begin
+    if (rst) begin
+
+      for (mon_k = 0; mon_k < S_COUNT; mon_k = mon_k + 1) begin
+        in_accepted[mon_k] = 0;
+        out_seen[mon_k] = 0;
       end
 
-      for (k = 0; k < S_COUNT; k = k + 1) begin
-        src_q[k].delete();
-        in_frame_no[k] = 0;
-        in_beat_no[k]  = 0;
-      end
-
-      out_frame_active = 1'b0;
-      stall_hold       = 1'b0;
-
-      fair_hist.delete();
-      fair_completed_frames = 0;
+      out_in_frame = 1'b0;
+      locked_src = 0;
+      bp_candidate = 1'b0;
+      fair_hist_len = 0;
+      fair_windows_checked = 0;
 
     end else begin
 
-      // First rising edge following reset release.
-      if (was_rst) begin
-        if (m_tvalid !== 1'b0) begin
-          fail_now(
-              "S12",
-              "m_tvalid_o was not low on the first cycle after reset release"
-          );
-        end
+      // S1/S6: record only actual input handshakes. READY alone is never
+      // interpreted as selection.
+      for (mon_k = 0; mon_k < S_COUNT; mon_k = mon_k + 1) begin
+        if (s_tvalid[mon_k] && s_tready[mon_k])
+          in_accepted[mon_k] = in_accepted[mon_k] + 1;
       end
 
-      // ----------------------------------------------------------------------
-      // S8 -- once an AXI-Stream beat is offered while READY is low, it must
-      // remain offered unchanged.  This is also necessary to prevent a beat
-      // from being lost under output backpressure.
-      // ----------------------------------------------------------------------
-      if (stall_hold) begin
-        if (m_tvalid !== 1'b1) begin
-          fail_now(
-              "S8",
-              "m_tvalid_o was withdrawn while an output beat was stalled"
-          );
-        end
-
-        if ((m_tdata !== stall_data) ||
-            (m_tkeep !== stall_keep) ||
-            (m_tlast !== stall_last) ||
-            (m_tuser !== stall_user)) begin
-          fail_now(
-              "S8",
-              "output payload changed while m_tvalid_o=1 and m_tready_i=0"
-          );
-        end
+      // An S10 window is valid only while its entire continuous-load
+      // precondition holds.
+      if (phase_mode == PHASE_FAIR) begin
+        if (!(source_enable && m_tready && (&s_tvalid)))
+          fair_hist_len = 0;
+      end else begin
+        fair_hist_len = 0;
       end
 
-      stall_hold = m_tvalid && !m_tready;
-
-      if (m_tvalid && !m_tready) begin
-        stall_data = m_tdata;
-        stall_keep = m_tkeep;
-        stall_last = m_tlast;
-        stall_user = m_tuser;
-      end
-
-      // ----------------------------------------------------------------------
-      // S1/S4 -- record exactly the beats that actually transfer on each input.
-      // This is bookkeeping only; READY by itself has no selection meaning.
-      // ----------------------------------------------------------------------
-      for (k = 0; k < S_COUNT; k = k + 1) begin
-        if (s_tvalid[k] && s_tready[k]) begin
-          rec_now.data     = s_tdata[k];
-          rec_now.keep     = s_tkeep[k];
-          rec_now.last     = s_tlast[k];
-          rec_now.user     = s_tuser[k];
-          rec_now.src_idx  = k;
-          rec_now.frame_no = in_frame_no[k];
-          rec_now.beat_no  = in_beat_no[k];
-          rec_now.epoch_no = epoch_id;
-
-          token_id = s_tdata[k][23:0];
-
-          ledger[token_id] = rec_now;
-          src_q[k].push_back(rec_now);
-
-          if (s_tlast[k]) begin
-            in_frame_no[k] = in_frame_no[k] + 1;
-            in_beat_no[k]  = 0;
-          end else begin
-            in_beat_no[k] = in_beat_no[k] + 1;
-          end
-        end
-      end
-
-      // ----------------------------------------------------------------------
-      // Output transfer -- S1.
-      // ----------------------------------------------------------------------
       if (m_tvalid && m_tready) begin
-        token_id = m_tdata[23:0];
 
-        // Every output beat must correspond to a beat that really transferred
-        // on an input.  Unknown transaction IDs cannot be legitimate output.
-        if (!ledger.exists(token_id)) begin
+        // Any functional-phase beat appearing after the reset between phases
+        // is forbidden by S12.
+        if ((phase_mode == PHASE_FAIR) &&
+            (m_tdata[29:24] == FUNC_MARK)) begin
           fail_now(
-              "S4",
-              $sformatf(
-                  "output beat 0x%08x has no accepted input transaction",
-                  m_tdata
-              )
+            "S12",
+            "a pre-reset functional-phase beat appeared after reset"
           );
         end
 
-        rec_now = ledger[token_id];
+        mon_src = int'(m_tdata[31:30]);
 
-        // Anything accepted in an older epoch was discarded by reset.
-        if (rec_now.epoch_no != epoch_id) begin
+        if ((mon_src < 0) || (mon_src >= S_COUNT)) begin
           fail_now(
-              "S12",
-              $sformatf(
-                  "pre-reset transaction 0x%06x appeared after reset",
-                  token_id
-              )
+            "S4",
+            "output beat carried an invalid source signature"
           );
         end
 
-        // S5 -- no duplication.
-        if (emitted.exists(token_id)) begin
-          if (emitted[token_id]) begin
+        if (out_seen[mon_src] >= in_accepted[mon_src]) begin
+          fail_now(
+            "S4/S5",
+            $sformatf(
+              "output source %0d produced beat %0d before that beat transferred on its input",
+              mon_src,
+              out_seen[mon_src]
+            )
+          );
+        end
+
+        mon_exp = make_beat(
+          phase_mode,
+          mon_src,
+          out_seen[mon_src]
+        );
+
+        if (m_tdata !== mon_exp.data) begin
+          fail_now(
+            "S4",
+            $sformatf(
+              "tdata mismatch for source %0d beat %0d: got %08h expected %08h",
+              mon_src,
+              out_seen[mon_src],
+              m_tdata,
+              mon_exp.data
+            )
+          );
+        end
+
+        if (m_tkeep !== mon_exp.keep) begin
+          fail_now(
+            "S4",
+            $sformatf(
+              "tkeep mismatch for source %0d beat %0d: got %h expected %h",
+              mon_src,
+              out_seen[mon_src],
+              m_tkeep,
+              mon_exp.keep
+            )
+          );
+        end
+
+        if (m_tuser !== mon_exp.user) begin
+          fail_now(
+            "S4",
+            $sformatf(
+              "tuser mismatch for source %0d beat %0d: got %0b expected %0b",
+              mon_src,
+              out_seen[mon_src],
+              m_tuser,
+              mon_exp.user
+            )
+          );
+        end
+
+        if (m_tlast !== mon_exp.last) begin
+          fail_now(
+            "S2/S4",
+            $sformatf(
+              "tlast mismatch for source %0d beat %0d: got %0b expected %0b",
+              mon_src,
+              out_seen[mon_src],
+              m_tlast,
+              mon_exp.last
+            )
+          );
+        end
+
+        // S3: no source switch is permitted inside a frame.
+        if (out_in_frame) begin
+
+          if (mon_src != locked_src) begin
             fail_now(
-                "S5",
-                $sformatf(
-                    "transaction 0x%06x was emitted more than once",
-                    token_id
-                )
+              "S3",
+              $sformatf(
+                "frame interleaving: source %0d appeared while source %0d frame was active",
+                mon_src,
+                locked_src
+              )
             );
+          end
+
+        end else begin
+
+          locked_src = mon_src;
+
+          // Find the beginning of any known two-beat scripted frame.
+          if ((phase_mode == PHASE_FUNC) &&
+              !bp_candidate &&
+              !bp_done &&
+              !mon_exp.last) begin
+
+            mon_next = make_beat(
+              phase_mode,
+              mon_src,
+              out_seen[mon_src] + 1
+            );
+
+            if (mon_next.last)
+              bp_candidate = 1'b1;
           end
         end
 
-        // A currently accepted transaction must still be present at the head
-        // of its source's ordered queue.
-        if ((rec_now.src_idx < 0) ||
-            (rec_now.src_idx >= S_COUNT) ||
-            (src_q[rec_now.src_idx].size() == 0)) begin
-          fail_now(
-              "S5",
-              $sformatf(
-                  "output transaction 0x%06x has no remaining source beat",
-                  token_id
-              )
-          );
-        end
+        if (mon_exp.last)
+          out_in_frame = 1'b0;
+        else
+          out_in_frame = 1'b1;
 
-        exp_rec = src_q[rec_now.src_idx].pop_front();
+        out_seen[mon_src] = out_seen[mon_src] + 1;
 
-        // --------------------------------------------------------------------
-        // S4 -- per-input ordering.
-        //
-        // rec_now identifies the transaction via the ledger; exp_rec is the
-        // next transaction that is legally allowed to leave that source.
-        // --------------------------------------------------------------------
-        if ((rec_now.frame_no != exp_rec.frame_no) ||
-            (rec_now.beat_no  != exp_rec.beat_no)) begin
-          fail_now(
-              "S4",
-              $sformatf(
-                  "input %0d output order changed: got frame %0d beat %0d, expected frame %0d beat %0d",
-                  rec_now.src_idx,
-                  rec_now.frame_no,
-                  rec_now.beat_no,
-                  exp_rec.frame_no,
-                  exp_rec.beat_no
-              )
-          );
-        end
+        // S10: every frame in this phase is one beat, so every completed frame
+        // is also its frame-begin event. Check every overlapping 16-frame
+        // window while continuous load holds.
+        if ((phase_mode == PHASE_FAIR) &&
+            source_enable &&
+            m_tready &&
+            (&s_tvalid)) begin
 
-        // Full-width payload/sideband integrity.
-        if (m_tdata !== exp_rec.data) begin
-          fail_now(
-              "S4",
-              $sformatf(
-                  "tdata corruption: got 0x%08x expected 0x%08x",
-                  m_tdata,
-                  exp_rec.data
-              )
-          );
-        end
+          if (fair_hist_len < 16) begin
 
-        if (m_tkeep !== exp_rec.keep) begin
-          fail_now(
-              "S4",
-              $sformatf(
-                  "tkeep corruption on transaction 0x%06x: got 0x%x expected 0x%x",
-                  token_id,
-                  m_tkeep,
-                  exp_rec.keep
-              )
-          );
-        end
+            fair_hist[fair_hist_len] = mon_src;
+            fair_hist_len = fair_hist_len + 1;
 
-        if (m_tuser !== exp_rec.user) begin
-          fail_now(
-              "S4",
-              $sformatf(
-                  "tuser corruption on transaction 0x%06x",
-                  token_id
-              )
-          );
-        end
+          end else begin
 
-        if (m_tlast !== exp_rec.last) begin
-          fail_now(
-              "S4",
-              $sformatf(
-                  "tlast mismatch on input %0d frame %0d beat %0d",
-                  rec_now.src_idx,
-                  rec_now.frame_no,
-                  rec_now.beat_no
-              )
-          );
-        end
+            for (fair_i = 0; fair_i < 15; fair_i = fair_i + 1)
+              fair_hist[fair_i] = fair_hist[fair_i + 1];
 
-        // --------------------------------------------------------------------
-        // S3 -- frame atomicity.
-        //
-        // Arbitration order itself is deliberately NOT checked (S9).
-        // --------------------------------------------------------------------
-        if (!out_frame_active) begin
-          out_frame_src       = rec_now.src_idx;
-          out_frame_no        = rec_now.frame_no;
-          out_frame_start_src = rec_now.src_idx;
-        end else begin
-          if ((rec_now.src_idx != out_frame_src) ||
-              (rec_now.frame_no != out_frame_no)) begin
-            fail_now(
-                "S3",
-                $sformatf(
-                    "frame interleaving: active input/frame %0d/%0d, observed %0d/%0d",
-                    out_frame_src,
-                    out_frame_no,
-                    rec_now.src_idx,
-                    rec_now.frame_no
-                )
-            );
+            fair_hist[15] = mon_src;
           end
-        end
 
-        emitted[token_id] = 1'b1;
+          if (fair_hist_len >= 16) begin
 
-        if (!m_tlast) begin
-          out_frame_active = 1'b1;
-          nonlast_output_xfers = nonlast_output_xfers + 1;
-        end else begin
-          out_frame_active = 1'b0;
-        end
+            fair_mask_tmp = 4'b0000;
 
-        // --------------------------------------------------------------------
-        // S10 -- bounded fairness.
-        //
-        // The fairness stimulus consists exclusively of single-beat frames.
-        // Therefore each completed frame's source is also exactly the source
-        // that began that frame.
-        //
-        // Only windows sampled while all four sources are continuously valid
-        // and the sink is continuously ready participate in this check.
-        // --------------------------------------------------------------------
-        fair_conditions = fair_mode &&
-                          (&s_tvalid) &&
-                          m_tready;
+            for (fair_i = 0; fair_i < 16; fair_i = fair_i + 1)
+              fair_mask_tmp[fair_hist[fair_i]] = 1'b1;
 
-        if (fair_mode && !fair_conditions) begin
-          fair_hist.delete();
-          fair_completed_frames = 0;
-        end
-
-        if (fair_conditions && m_tlast) begin
-          fair_hist.push_back(out_frame_start_src);
-          fair_completed_frames = fair_completed_frames + 1;
-
-          if (fair_hist.size() > 16)
-            dropped_src = fair_hist.pop_front();
-
-          if (fair_hist.size() == 16) begin
-            for (k = 0; k < S_COUNT; k = k + 1) begin
-              seen_src = 1'b0;
-
-              for (j = 0; j < 16; j = j + 1) begin
-                if (fair_hist[j] == k)
-                  seen_src = 1'b1;
-              end
-
-              if (!seen_src) begin
-                fail_now(
-                    "S10",
-                    $sformatf(
-                        "input %0d did not begin a frame within a 16-completed-frame continuous-load window",
-                        k
-                    )
-                );
-              end
+            if (fair_mask_tmp != 4'b1111) begin
+              fail_now(
+                "S10",
+                $sformatf(
+                  "a 16-frame continuous-load window omitted an input; seen mask=%b",
+                  fair_mask_tmp
+                )
+              );
             end
+
+            fair_windows_checked = fair_windows_checked + 1;
           end
         end
       end
+    end
+  end
 
-      // If fairness conditions disappear on a cycle without an output
-      // transfer, that also terminates the current continuous-load window.
-      if (fair_mode) begin
-        if (!((&s_tvalid) && m_tready)) begin
-          fair_hist.delete();
-          fair_completed_frames = 0;
-        end
+  // ---------------------------------------------------------------------------
+  // Reset helper.
+  //
+  // Inputs are made idle before reset. Reset is then sampled high on several
+  // rising edges. The source remains idle through the first released cycle,
+  // where S12 explicitly requires m_tvalid_o low.
+  // ---------------------------------------------------------------------------
+  task automatic reset_to_phase(input int new_phase);
+    begin
+
+      source_enable = 1'b0;
+
+      @(negedge clk);
+      rst = 1'b1;
+
+      repeat (4) @(posedge clk);
+
+      @(negedge clk);
+
+      if (m_tvalid !== 1'b0) begin
+        fail_now(
+          "S12",
+          "m_tvalid_o was not low after synchronous reset had taken effect"
+        );
+      end
+
+      phase_mode = new_phase;
+      rst = 1'b0;
+
+      @(posedge clk);
+      @(negedge clk);
+
+      if (m_tvalid !== 1'b0) begin
+        fail_now(
+          "S12",
+          "m_tvalid_o was not low on the first cycle after reset release"
+        );
       end
     end
+  endtask
 
-    was_rst = rst;
-  end
-
-  // --------------------------------------------------------------------------
-  // Initial state.
-  // --------------------------------------------------------------------------
-  integer init_k;
+  // ---------------------------------------------------------------------------
+  // Stimulus
+  // ---------------------------------------------------------------------------
   initial begin
-    s_tdata  = '0;
-    s_tkeep  = '0;
-    s_tvalid = '0;
-    s_tlast  = '0;
-    s_tuser  = '0;
-    m_tready = 1'b0;
 
-    epoch_id = 0;
-    was_rst  = 1'b0;
+    // Initial reset.
+    m_tready = 1'b1;
+    bp_done = 1'b0;
 
-    out_frame_active    = 1'b0;
-    out_frame_src       = 0;
-    out_frame_no        = 0;
-    out_frame_start_src = 0;
+    reset_to_phase(PHASE_FUNC);
 
-    stall_hold = 1'b0;
-    stall_data = '0;
-    stall_keep = '0;
-    stall_last = 1'b0;
-    stall_user = '0;
+    // All four sources now remain continuously offered. Each scripted prefix
+    // contains varied one-, two-, three-, and four-beat frames followed by
+    // endless one-beat frames.
+    source_enable = 1'b1;
 
-    nonlast_output_xfers = 0;
+    // S8: after the first beat of a known two-beat frame transfers, deassert
+    // READY before the next rising edge. The next beat is TLAST, so this
+    // exercises backpressure while a frame is active and across its end.
+    wait (bp_candidate);
 
-    fair_mode             = 1'b0;
-    fair_completed_frames = 0;
+    bfm_ready(1'b0);
 
-    for (init_k = 0; init_k < S_COUNT; init_k = init_k + 1) begin
-      tx_seq[init_k]      = 0;
-      in_frame_no[init_k] = 0;
-      in_beat_no[init_k]  = 0;
-    end
-  end
+    repeat (6) @(posedge clk);
 
-  // --------------------------------------------------------------------------
-  // Main test.
-  //
-  // No arbitration order or latency assumption is made anywhere.
-  // --------------------------------------------------------------------------
-  initial begin : main_test
-    automatic int stall_base;
-
-    // ------------------------------------------------------------------------
-    // S12 -- initial synchronous reset and mandated first post-reset idle cycle.
-    // ------------------------------------------------------------------------
-    bfm_reset(4);
-
-    // Output is allowed to remain backpressured initially.  Release it without
-    // making any assumption about input READY.
     bfm_ready(1'b1);
 
-    // ------------------------------------------------------------------------
-    // S2/S3/S4/S5/S6/S8/S9/S11:
-    //
-    // All four inputs issue complete frames concurrently.  Lengths vary,
-    // single-beat frames are included, and payload/keep/user patterns vary.
-    //
-    // Because all sources run concurrently, the DUT is free to choose any
-    // frame order.  The scoreboard derives legality from accepted input
-    // transactions, never from s_tready as a "grant".
-    // ------------------------------------------------------------------------
-    stall_base = nonlast_output_xfers;
+    bp_done = 1'b1;
 
-    fork
-      begin
-        basic_source(0);
-      end
+    // All scripted beats must eventually leave exactly once and in per-input
+    // order. No arbitration order or cycle latency is assumed.
+    wait (
+      (out_seen[0] >= 6) &&
+      (out_seen[1] >= 7) &&
+      (out_seen[2] >= 6) &&
+      (out_seen[3] >= 7)
+    );
 
-      begin
-        basic_source(1);
-      end
+    // Flush continuing filler traffic and explicitly test reset behavior.
+    reset_to_phase(PHASE_FAIR);
 
-      begin
-        basic_source(2);
-      end
-
-      begin
-        basic_source(3);
-      end
-
-      // ----------------------------------------------------------------------
-      // S8 -- force backpressure after a multi-beat output frame has actually
-      // begun.  READY remains low across several rising edges, then returns.
-      //
-      // We do not require the DUT to present the next beat while READY is low;
-      // latency is explicitly unconstrained by S11.
-      // ----------------------------------------------------------------------
-      begin
-        wait (nonlast_output_xfers > stall_base);
-        bfm_ready(1'b0);
-        repeat (8) @(posedge clk);
-        bfm_ready(1'b1);
-      end
-    join
-
-    // S5 -- all frames above are complete, so every accepted beat must
-    // eventually leave exactly once.
-    wait_for_drain();
-
-    // Leave the sink enabled for a few additional clocks.  Any immediate
-    // duplicate or unsolicited transfer is caught by the scoreboard.
-    repeat (4) @(posedge clk);
-    @(negedge clk);
-
-    // ------------------------------------------------------------------------
-    // S12 -- reset again after real traffic has flowed.
-    //
-    // The ledger is intentionally retained across reset epochs.  Therefore if
-    // any old transaction reappears after this reset it is detected as S12,
-    // even though the normal expected queues are flushed.
-    // ------------------------------------------------------------------------
-    bfm_reset(4);
-
-    // Let the required first post-reset cycle occur before starting fairness
-    // traffic.
-    @(posedge clk);
-    @(negedge clk);
-
+    // Dedicated S10 phase: all four sources offer an endless sequence of
+    // complete single-beat frames while output READY remains continuously high.
     m_tready = 1'b1;
+    source_enable = 1'b1;
 
-    // ------------------------------------------------------------------------
-    // S10 -- continuous offered load.
-    //
-    // Four infinite source threads offer single-beat complete frames.  They
-    // are intentionally left running until $finish so no source ever runs out
-    // and no shutdown transient weakens the fairness premise.
-    // ------------------------------------------------------------------------
-    fork
-      fairness_source(0);
-      fairness_source(1);
-      fairness_source(2);
-      fairness_source(3);
-    join_none
+    // This corresponds to many overlapping 16-completed-frame windows.
+    wait (fair_windows_checked >= 32);
 
-    // Wait until every source really is presenting VALID simultaneously.
-    wait (&s_tvalid);
+    // Finish through reset so outstanding endless-load traffic is discarded by
+    // the contract rather than becoming an unfinished test obligation.
+    reset_to_phase(PHASE_FAIR);
 
-    // Enable fairness checking away from the rising sampling edge.
-    @(negedge clk);
-    fair_hist.delete();
-    fair_completed_frames = 0;
-    fair_mode = 1'b1;
+    pass_now();
+  end
 
-    // Check substantially more than one 16-frame window.  The monitor checks
-    // every overlapping 16-completed-frame window.
-    while (fair_completed_frames < 48)
-      @(posedge clk);
+  // ---------------------------------------------------------------------------
+  // Independent watchdog.
+  // ---------------------------------------------------------------------------
+  initial begin
+    #20_000_000;
 
-    // Let the scoreboard finish processing the final rising edge before PASS.
-    @(negedge clk);
-    fair_mode = 1'b0;
-
-    $display("RESULT: PASS");
-    $finish;
+    if (!verdict_printed) begin
+      verdict_printed = 1'b1;
+      $display("FAIL S5/S10: watchdog: no forward progress");
+      $display("RESULT: FAIL");
+      $finish;
+    end
   end
 
 endmodule

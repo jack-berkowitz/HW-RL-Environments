@@ -1,8 +1,20 @@
 module atop_filter_tb;
-
 // ---------------------------------------------------------------------------
 // PROVIDED PLUMBING -- moves transactions, checks nothing.
 // ---------------------------------------------------------------------------
+// This exists so you spend your effort on checking rather than on AXI
+// handshake mechanics. It has been compiled and run against a correct design.
+//
+// What it does: generates the clock, sequences reset, connects the design,
+// offers one beat at a time on a chosen channel and returns once that beat has
+// transferred, and plays the part of the subordinate on the master port --
+// accepting requests and answering them.
+//
+// What it does NOT do: it has no notion of which writes are special, keeps no
+// model of what the design owes anyone, counts nothing, and draws no conclusion
+// from any signal. Every check is yours to write.
+// ---------------------------------------------------------------------------
+
   // ---- clock ---------------------------------------------------------------
   logic clk = 1'b0;
   always #5 clk = ~clk;
@@ -14,6 +26,8 @@ module atop_filter_tb;
   // ---- reset ---------------------------------------------------------------
   logic rst_n = 1'b0;      // ACTIVE LOW
 
+  // Asserts reset, holds it, and releases it OFF the sampling edge, so nothing
+  // you or the design samples changes in the same timestep as the change.
   task automatic bfm_reset(input int cycles = 5);
     @(negedge clk);
     rst_n = 1'b0;
@@ -208,6 +222,7 @@ module atop_filter_tb;
     .m_rvalid_i(m_rvalid),
     .m_rready_o(m_rready));
 
+  // ---- upstream: offering requests to the design ---------------------------
   task automatic bfm_aw(input logic [3:0] id, input logic [31:0] addr,
                         input logic [7:0] len, input logic [5:0] atop,
                         input int timeout, output bit accepted);
@@ -258,6 +273,7 @@ module atop_filter_tb;
   task automatic bfm_b_ready(input bit v); @(negedge clk); s_bready = v; endtask
   task automatic bfm_r_ready(input bit v); @(negedge clk); s_rready = v; endtask
 
+  // ---- downstream: this plumbing is the SUBORDINATE ------------------------
   int bfm_b_lag = 0;
   task automatic bfm_dn_b_lag(input int cycles); bfm_b_lag = cycles; endtask
 
@@ -315,349 +331,342 @@ module atop_filter_tb;
     $finish;
   end
 
-// ---------------------------------------------------------------------------
-// TESTBENCH IMPLEMENTATION
-// ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // VERIFICATION CODE
+  // ---------------------------------------------------------------------------
 
-  task automatic fail(string msg);
+  typedef struct {
+    logic [3:0] id; logic [31:0] addr; logic [7:0] len; logic [2:0] size;
+    logic [1:0] burst; logic lock; logic [3:0] cache; logic [2:0] prot;
+    logic [3:0] qos; logic [3:0] region; logic [5:0] atop; logic user;
+  } aw_tx_t;
+
+  typedef struct {
+    logic [31:0] data; logic [3:0] strb; logic last; logic user;
+  } w_tx_t;
+
+  typedef struct {
+    logic [3:0] id; logic [31:0] addr; logic [7:0] len; logic [2:0] size;
+    logic [1:0] burst; logic lock; logic [3:0] cache; logic [2:0] prot;
+    logic [3:0] qos; logic [3:0] region; logic user;
+  } ar_tx_t;
+
+  typedef struct {
+    logic [3:0] id; logic [1:0] resp; logic user;
+  } b_tx_t;
+
+  typedef struct {
+    logic [3:0] id; logic [31:0] data; logic [1:0] resp; logic last; logic user;
+  } r_tx_t;
+
+  aw_tx_t expected_m_aw[$];
+  bit     m_aw_is_atomic[$];
+  w_tx_t  expected_m_w[$];
+  ar_tx_t expected_m_ar[$];
+  b_tx_t  expected_s_b[$];
+  r_tx_t  expected_s_r[$];
+
+  int owed_b_err[16];
+  int owed_r_err[16];
+  int downstream_debt = 0;
+
+  bit x3_m_awvalid, x3_m_wvalid, x3_m_arvalid, x3_s_bvalid, x3_s_rvalid;
+
+  task automatic report_fail(string msg);
     $display("RESULT: FAIL (%s)", msg);
     $finish;
   endtask
 
-  typedef struct { logic [3:0] id; logic [31:0] addr; logic [7:0] len; logic [5:0] atop; logic is_atomic; logic owes_r; int w_beats_expected; } aw_tx_t;
-  typedef struct { logic last; } w_beat_t;
-  typedef struct { logic [1:0] resp; logic is_mfg; logic user; } expected_b_t;
-  typedef struct { logic [1:0] resp; logic last; logic is_mfg; logic [31:0] data; logic user; } expected_r_t;
-  typedef struct { logic [3:0] id; logic [31:0] addr; logic [7:0] len; } ar_tx_t;
+  function automatic bit owed_b_err_all_zero();
+    for(int i=0; i<16; i++) if(owed_b_err[i] > 0) return 0;
+    return 1;
+  endfunction
 
-  typedef expected_b_t queue_of_b_t[$];
-  typedef expected_r_t queue_of_r_t[$];
+  function automatic bit owed_r_err_all_zero();
+    for(int i=0; i<16; i++) if(owed_r_err[i] > 0) return 0;
+    return 1;
+  endfunction
 
-  aw_tx_t w_match_q[$];
-  aw_tx_t expected_m_aw_q[$];
-  w_beat_t expected_m_w_q[$];
-  queue_of_b_t exp_slv_b_q[16];
-  queue_of_r_t exp_slv_r_q[16];
-  ar_tx_t exp_m_ar_q[$];
+  task automatic wait_for_idle();
+    int timeout = 1000;
+    while (timeout > 0) begin
+      if (expected_m_aw.size() == 0 && expected_m_w.size() == 0 &&
+          expected_m_ar.size() == 0 && expected_s_b.size() == 0 &&
+          expected_s_r.size() == 0 &&
+          owed_b_err_all_zero() && owed_r_err_all_zero())
+        return;
+      @(posedge clk);
+      timeout--;
+    end
+    report_fail("wait_for_idle timeout");
+  endtask
 
-  aw_tx_t current_w_tx;
-  bit in_w_burst = 0;
-  int w_beats_done = 0;
-  int w_debt = 0;
-
-  // Liveness tracking
-  int aw_wait_cycles = 0;
-  int w_wait_cycles = 0;
-  int b_wait_cycles[16];
-  int r_wait_cycles[16];
+  task automatic wait_for_responses(input int id, input int timeout);
+    int t = 0;
+    while (owed_b_err[id] > 0 || owed_r_err[id] > 0) begin
+      @(posedge clk);
+      t++;
+      if (t > timeout) report_fail("X4: response not completed within timeout");
+    end
+  endtask
 
   always @(posedge clk) begin
     if (!rst_n) begin
-      w_debt <= 0;
-      in_w_burst <= 0;
-      w_beats_done <= 0;
-      w_match_q.delete();
-      expected_m_aw_q.delete();
-      expected_m_w_q.delete();
-      exp_m_ar_q.delete();
-      for(int i=0; i<16; i++) begin
-        exp_slv_b_q[i].delete();
-        exp_slv_r_q[i].delete();
-        b_wait_cycles[i] = 0;
-        r_wait_cycles[i] = 0;
-      end
-      aw_wait_cycles = 0;
-      w_wait_cycles = 0;
+      expected_m_aw.delete();
+      m_aw_is_atomic.delete();
+      expected_m_w.delete();
+      expected_m_ar.delete();
+      expected_s_b.delete();
+      expected_s_r.delete();
+      for (int i=0; i<16; i++) owed_b_err[i] = 0;
+      for (int i=0; i<16; i++) owed_r_err[i] = 0;
+      downstream_debt = 0;
+      x3_m_awvalid = 0; x3_m_wvalid = 0; x3_m_arvalid = 0;
+      x3_s_bvalid = 0; x3_s_rvalid = 0;
 
-      // X1: outputs valid during reset
-      if (s_bvalid || s_rvalid || m_awvalid || m_wvalid || m_arvalid) 
-        fail("X1: output valid asserted while reset is low");
-
+      if (m_awvalid || m_wvalid) report_fail("X1: originates valid during reset");
+      if (s_bvalid) report_fail("X1: originates B valid during reset");
+      if (s_rvalid) report_fail("X1: originates R valid during reset");
     end else begin
-      automatic int inc;
-      automatic int dec;
-      inc = (m_awvalid && m_awready) ? 1 : 0;
-      dec = (m_wvalid && m_wready && m_wlast) ? 1 : 0;
-      w_debt <= w_debt + inc - dec;
-      
-      if (w_debt + inc - dec > 4) fail("W2: downstream write debt exceeds 4");
+      // X3 checks
+      if (x3_m_awvalid && !m_awvalid) report_fail("X3: m_awvalid dropped without ready");
+      if (x3_m_wvalid && !m_wvalid) report_fail("X3: m_wvalid dropped without ready");
+      if (x3_m_arvalid && !m_arvalid) report_fail("X3: m_arvalid dropped without ready");
+      if (x3_s_bvalid && !s_bvalid) report_fail("X3: s_bvalid dropped without ready");
+      if (x3_s_rvalid && !s_rvalid) report_fail("X3: s_rvalid dropped without ready");
 
-      if (m_awvalid && m_awatop != 0) fail("F1: m_awatop must be 0 when m_awvalid is high");
+      x3_m_awvalid = m_awvalid && !m_awready;
+      x3_m_wvalid  = m_wvalid && !m_wready;
+      x3_m_arvalid = m_arvalid && !m_arready;
+      x3_s_bvalid  = s_bvalid && !s_bready;
+      x3_s_rvalid  = s_rvalid && !s_rready;
 
-      // X4 trackers
-      if (s_awvalid && !s_awready) aw_wait_cycles++; else aw_wait_cycles = 0;
-      if (s_wvalid && !s_wready) w_wait_cycles++; else w_wait_cycles = 0;
-
-      if (aw_wait_cycles > 64 && w_debt < 4) fail("X4/W3: AW stalled > 64 cycles when debt < 4");
-      if (w_wait_cycles > 64) fail("X4: W stalled > 64 cycles");
-
-      for (int i=0; i<16; i++) begin
-        if (exp_slv_b_q[i].size() > 0) b_wait_cycles[i]++;
-        else b_wait_cycles[i] = 0;
-        if (b_wait_cycles[i] > 64 && s_bready) fail("X4: B response > 64 cycles");
-
-        if (exp_slv_r_q[i].size() > 0) r_wait_cycles[i]++;
-        else r_wait_cycles[i] = 0;
-        if (r_wait_cycles[i] > 64 && s_rready) fail("X4: R response > 64 cycles");
+      // W Bound Checking
+      begin
+        automatic int next_debt = downstream_debt;
+        if (m_awvalid && m_awready) next_debt++;
+        if (m_wvalid && m_wready && m_wlast) next_debt--;
+        downstream_debt = next_debt;
+        
+        if (downstream_debt > 4) report_fail("W2: downstream write debt exceeded 4");
+        if (downstream_debt == 4 && !(m_wvalid && m_wready && m_wlast)) begin
+          if (m_awvalid) report_fail("W2: m_awvalid asserted while debt is 4 and not completing W");
+        end
       end
 
-      // s_aw handshake
+      // AW Scoreboard Tracking
       if (s_awvalid && s_awready) begin
-        automatic logic [1:0] atop_top = s_awatop[5:4];
-        automatic bit is_atomic = (atop_top != 2'b00); // C1
-        automatic bit owes_r = s_awatop[5];            // C2
-        automatic aw_tx_t tx;
-        tx.id = s_awid; tx.addr = s_awaddr; tx.len = s_awlen; tx.atop = s_awatop;
-        tx.is_atomic = is_atomic; tx.owes_r = owes_r; tx.w_beats_expected = s_awlen + 1;
-        w_match_q.push_back(tx);
-        if (!is_atomic) expected_m_aw_q.push_back(tx);
+        automatic bit is_atomic = (s_awatop[5:4] != 2'b00);
+        m_aw_is_atomic.push_back(is_atomic);
+        if (!is_atomic) begin
+          automatic aw_tx_t tx;
+          tx.id = s_awid; tx.addr = s_awaddr; tx.len = s_awlen; tx.size = s_awsize;
+          tx.burst = s_awburst; tx.lock = s_awlock; tx.cache = s_awcache; tx.prot = s_awprot;
+          tx.qos = s_awqos; tx.region = s_awregion; tx.atop = s_awatop; tx.user = s_awuser;
+          expected_m_aw.push_back(tx);
+        end else begin
+          owed_b_err[s_awid]++;
+          if (s_awatop[5] == 1'b1) owed_r_err[s_awid] += (int'(s_awlen) + 1);
+        end
       end
 
-      // m_aw handshake
       if (m_awvalid && m_awready) begin
-        if (expected_m_aw_q.size() == 0) fail("F1: unexpected m_aw handshake (atomic forwarded?)");
+        if (expected_m_aw.size() == 0) report_fail("P1: m_awvalid high but no non-atomic AW expected");
         else begin
-          automatic aw_tx_t exp = expected_m_aw_q.pop_front();
-          if (m_awid != exp.id || m_awaddr != exp.addr || m_awlen != exp.len) fail("P1: m_aw payload mismatch");
+          automatic aw_tx_t exp = expected_m_aw.pop_front();
+          if (m_awid !== exp.id || m_awaddr !== exp.addr || m_awlen !== exp.len ||
+              m_awsize !== exp.size || m_awburst !== exp.burst || m_awlock !== exp.lock ||
+              m_awcache !== exp.cache || m_awprot !== exp.prot || m_awqos !== exp.qos ||
+              m_awregion !== exp.region || m_awuser !== exp.user) begin
+            report_fail("P1: forwarded AW fields do not match");
+          end
+          if (m_awatop !== 6'b000000) report_fail("F1: m_awatop_o != 0");
         end
       end
 
-      // s_w handshake
+      // W Scoreboard Tracking
       if (s_wvalid && s_wready) begin
-        if (!in_w_burst) begin
-          if (w_match_q.size() == 0) fail("Testbench error: W burst without AW");
-          current_w_tx = w_match_q.pop_front();
-          in_w_burst = 1;
-          w_beats_done = 0;
+        if (m_aw_is_atomic.size() == 0) report_fail("W beat arrived but no AW was sent");
+        if (!m_aw_is_atomic[0]) begin
+          automatic w_tx_t tx;
+          tx.data = s_wdata; tx.strb = s_wstrb; tx.last = s_wlast; tx.user = s_wuser;
+          expected_m_w.push_back(tx);
         end
-        w_beats_done++;
+        if (s_wlast) void'(m_aw_is_atomic.pop_front());
+      end
 
-        if (!current_w_tx.is_atomic) begin
-          automatic w_beat_t wb; wb.last = s_wlast;
-          expected_m_w_q.push_back(wb);
+      if (m_wvalid && m_wready) begin
+        if (expected_m_w.size() == 0) report_fail("F2: m_w valid but no forwarded W beat expected");
+        else begin
+          automatic w_tx_t exp = expected_m_w.pop_front();
+          if (m_wdata !== exp.data || m_wstrb !== exp.strb || m_wlast !== exp.last || m_wuser !== exp.user)
+            report_fail("P2: forwarded W fields do not match");
         end
+      end
 
-        if (s_wlast) begin
-          if (w_beats_done != current_w_tx.w_beats_expected) fail("W burst length mismatch with AW len");
-          in_w_burst = 0;
-          if (current_w_tx.is_atomic) begin
-            automatic expected_b_t eb; eb.resp = 2'b10; eb.is_mfg = 1; eb.user = 0;
-            exp_slv_b_q[current_w_tx.id].push_back(eb); // F3
-            if (current_w_tx.owes_r) begin
-              for (int i=0; i<current_w_tx.w_beats_expected; i++) begin
-                automatic expected_r_t er; 
-                er.resp = 2'b10; er.last = (i == current_w_tx.w_beats_expected - 1);
-                er.is_mfg = 1; er.data = 0; er.user = 0;
-                exp_slv_r_q[current_w_tx.id].push_back(er); // F4
-              end
-            end
+      // AR Scoreboard Tracking
+      if (s_arvalid && s_arready) begin
+        automatic ar_tx_t tx;
+        tx.id = s_arid; tx.addr = s_araddr; tx.len = s_arlen; tx.size = s_arsize;
+        tx.burst = s_arburst; tx.lock = s_arlock; tx.cache = s_arcache; tx.prot = s_arprot;
+        tx.qos = s_arqos; tx.region = s_arregion; tx.user = s_aruser;
+        expected_m_ar.push_back(tx);
+      end
+
+      if (m_arvalid && m_arready) begin
+        if (expected_m_ar.size() == 0) report_fail("P3: Spurious m_arvalid");
+        else begin
+          automatic ar_tx_t exp = expected_m_ar.pop_front();
+          if (m_arid !== exp.id || m_araddr !== exp.addr || m_arlen !== exp.len ||
+              m_arsize !== exp.size || m_arburst !== exp.burst || m_arlock !== exp.lock ||
+              m_arcache !== exp.cache || m_arprot !== exp.prot || m_arqos !== exp.qos ||
+              m_arregion !== exp.region || m_aruser !== exp.user)
+            report_fail("P3: forwarded AR fields do not match");
+        end
+      end
+
+      // Response Tracking (Downstream -> Upstream)
+      if (m_bvalid && m_bready) begin
+        automatic b_tx_t tx;
+        tx.id = m_bid; tx.resp = m_bresp; tx.user = m_buser;
+        expected_s_b.push_back(tx);
+      end
+
+      if (m_rvalid && m_rready) begin
+        automatic r_tx_t tx;
+        tx.id = m_rid; tx.data = m_rdata; tx.resp = m_rresp; tx.last = m_rlast; tx.user = m_ruser;
+        expected_s_r.push_back(tx);
+      end
+
+      if (s_bvalid && s_bready) begin
+        if (s_bresp == 2'b10) begin
+          if (owed_b_err[s_bid] > 0) owed_b_err[s_bid]--;
+          else report_fail("F3: Spurious manufactured B response");
+        end else begin
+          if (expected_s_b.size() == 0) report_fail("P4: Spurious pass-through B response");
+          else begin
+            automatic b_tx_t exp = expected_s_b.pop_front();
+            if (s_bid !== exp.id || s_bresp !== exp.resp || s_buser !== exp.user)
+              report_fail("P4: forwarded B fields do not match");
           end
         end
       end
 
-      // m_w handshake
-      if (m_wvalid && m_wready) begin
-        if (expected_m_w_q.size() == 0) fail("F2: W beat forwarded but none expected");
-        else begin
-          automatic w_beat_t exp = expected_m_w_q.pop_front();
-          if (m_wlast != exp.last) fail("P2: m_wlast mismatch");
-        end
-      end
-
-      // m_b handshake
-      if (m_bvalid && m_bready) begin
-        automatic expected_b_t eb; eb.resp = m_bresp; eb.is_mfg = 0; eb.user = m_buser;
-        exp_slv_b_q[m_bid].push_back(eb); // P4
-      end
-
-      // s_b handshake
-      if (s_bvalid && s_bready) begin
-        if (exp_slv_b_q[s_bid].size() == 0) fail("Unexpected B response on slave");
-        else begin
-          automatic expected_b_t eb = exp_slv_b_q[s_bid].pop_front();
-          if (s_bresp != eb.resp) fail("F3/P4: B resp mismatch");
-          if (!eb.is_mfg && s_buser != eb.user) fail("P4: B user mismatch");
-        end
-      end
-
-      // s_ar handshake
-      if (s_arvalid && s_arready) begin
-        automatic ar_tx_t tx; tx.id = s_arid; tx.addr = s_araddr; tx.len = s_arlen;
-        exp_m_ar_q.push_back(tx);
-      end
-
-      // m_ar handshake
-      if (m_arvalid && m_arready) begin
-        if (exp_m_ar_q.size() == 0) fail("Unexpected master AR");
-        else begin
-          automatic ar_tx_t tx = exp_m_ar_q.pop_front();
-          if (m_arid != tx.id || m_araddr != tx.addr || m_arlen != tx.len) fail("P3: AR mismatch");
-        end
-      end
-
-      // m_r handshake
-      if (m_rvalid && m_rready) begin
-        automatic expected_r_t er; er.resp = m_rresp; er.last = m_rlast; er.is_mfg = 0; er.data = m_rdata; er.user = m_ruser;
-        exp_slv_r_q[m_rid].push_back(er); // P3
-      end
-
-      // s_r handshake
       if (s_rvalid && s_rready) begin
-        if (exp_slv_r_q[s_rid].size() == 0) fail("Unexpected R response on slave");
-        else begin
-          automatic expected_r_t er = exp_slv_r_q[s_rid].pop_front();
-          if (s_rresp != er.resp) fail("F4/P3: R resp mismatch");
-          if (s_rlast != er.last) fail("F4/P3: R last mismatch");
-          if (!er.is_mfg && s_rdata != er.data) fail("P3: R data mismatch");
-          if (!er.is_mfg && s_ruser != er.user) fail("P3: R user mismatch");
+        if (s_rresp == 2'b10) begin
+          if (owed_r_err[s_rid] > 0) begin
+            owed_r_err[s_rid]--;
+            if (owed_r_err[s_rid] == 0 && !s_rlast) report_fail("F4: s_rlast_o not asserted on final manufactured R beat");
+            if (owed_r_err[s_rid] > 0 && s_rlast) report_fail("F4: s_rlast_o asserted early on manufactured R beat");
+          end else begin
+            report_fail("F4/F5: Spurious manufactured R response");
+          end
+        end else begin
+          if (expected_s_r.size() == 0) report_fail("P3: Spurious pass-through R response");
+          else begin
+            automatic r_tx_t exp = expected_s_r.pop_front();
+            if (s_rid !== exp.id || s_rdata !== exp.data || s_rresp !== exp.resp ||
+                s_rlast !== exp.last || s_ruser !== exp.user)
+              report_fail("P3: forwarded R fields do not match");
+          end
         end
       end
     end
   end
 
-  // X3 Payload Stability
-  logic m_awvalid_stalled; logic [3:0] m_awid_s; logic [31:0] m_awaddr_s; logic [7:0] m_awlen_s; logic [5:0] m_awatop_s;
-  logic m_wvalid_stalled; logic [31:0] m_wdata_s; logic [3:0] m_wstrb_s; logic m_wlast_s;
-  logic s_bvalid_stalled; logic [3:0] s_bid_s; logic [1:0] s_bresp_s;
-  logic s_rvalid_stalled; logic [3:0] s_rid_s; logic [1:0] s_rresp_s; logic s_rlast_s;
-  logic m_arvalid_stalled; logic [3:0] m_arid_s; logic [31:0] m_araddr_s; logic [7:0] m_arlen_s;
-
-  always @(posedge clk) begin
-    if (!rst_n) begin
-      m_awvalid_stalled <= 0; m_wvalid_stalled <= 0; s_bvalid_stalled <= 0; s_rvalid_stalled <= 0; m_arvalid_stalled <= 0;
-    end else begin
-      if (m_awvalid_stalled) begin
-        if (!m_awvalid) fail("X3: m_awvalid dropped");
-        if (m_awid != m_awid_s || m_awaddr != m_awaddr_s || m_awlen != m_awlen_s || m_awatop != m_awatop_s) fail("X3: m_aw payload changed");
-      end
-      m_awvalid_stalled <= m_awvalid && !m_awready;
-      if (m_awvalid && (!m_awvalid_stalled || m_awready)) begin
-        m_awid_s <= m_awid; m_awaddr_s <= m_awaddr; m_awlen_s <= m_awlen; m_awatop_s <= m_awatop;
-      end
-
-      if (m_wvalid_stalled) begin
-        if (!m_wvalid) fail("X3: m_wvalid dropped");
-        if (m_wdata != m_wdata_s || m_wstrb != m_wstrb_s || m_wlast != m_wlast_s) fail("X3: m_w payload changed");
-      end
-      m_wvalid_stalled <= m_wvalid && !m_wready;
-      if (m_wvalid && (!m_wvalid_stalled || m_wready)) begin
-        m_wdata_s <= m_wdata; m_wstrb_s <= m_wstrb; m_wlast_s <= m_wlast;
-      end
-
-      if (s_bvalid_stalled) begin
-        if (!s_bvalid) fail("X3: s_bvalid dropped");
-        if (s_bid != s_bid_s || s_bresp != s_bresp_s) fail("X3: s_b payload changed");
-      end
-      s_bvalid_stalled <= s_bvalid && !s_bready;
-      if (s_bvalid && (!s_bvalid_stalled || s_bready)) begin
-        s_bid_s <= s_bid; s_bresp_s <= s_bresp;
-      end
-
-      if (s_rvalid_stalled) begin
-        if (!s_rvalid) fail("X3: s_rvalid dropped");
-        if (s_rid != s_rid_s || s_rresp != s_rresp_s || s_rlast != s_rlast_s) fail("X3: s_r payload changed");
-      end
-      s_rvalid_stalled <= s_rvalid && !s_rready;
-      if (s_rvalid && (!s_rvalid_stalled || s_rready)) begin
-        s_rid_s <= s_rid; s_rresp_s <= s_rresp; s_rlast_s <= s_rlast;
-      end
-
-      if (m_arvalid_stalled) begin
-        if (!m_arvalid) fail("X3: m_arvalid dropped");
-        if (m_arid != m_arid_s || m_araddr != m_araddr_s || m_arlen != m_arlen_s) fail("X3: m_ar payload changed");
-      end
-      m_arvalid_stalled <= m_arvalid && !m_arready;
-      if (m_arvalid && (!m_arvalid_stalled || m_arready)) begin
-        m_arid_s <= m_arid; m_araddr_s <= m_araddr; m_arlen_s <= m_arlen;
-      end
-    end
-  end
-
-  // STIMULUS
+  // ---- Test Sequence -------------------------------------------------------
   initial begin
-    bit accepted;
-    bfm_dn_b_lag(0);
-    #10;
+    automatic bit acc;
+    
     bfm_reset(5);
-
-    // --- TEST 1: Normal pass-through ---
-    bfm_aw(1, 32'h100, 0, 6'b00_0000, 100, accepted);
-    if (!accepted) fail("T1 AW not accepted");
-    bfm_w(32'hAAAA, 4'hF, 1, 100, accepted);
-    if (!accepted) fail("T1 W not accepted");
-    while (exp_slv_b_q[1].size() > 0) @(posedge clk);
-
-    // --- TEST 2: Atomic no R ---
-    bfm_aw(2, 32'h200, 1, 6'b01_0000, 100, accepted);
-    bfm_w(32'hB1, 4'hF, 0, 100, accepted);
-    bfm_w(32'hB2, 4'hF, 1, 100, accepted);
-    while (exp_slv_b_q[2].size() > 0) @(posedge clk);
-
-    // --- TEST 3: Atomic with R ---
-    bfm_aw(3, 32'h300, 2, 6'b10_0000, 100, accepted);
-    bfm_w(32'hC1, 4'hF, 0, 100, accepted);
-    bfm_w(32'hC2, 4'hF, 0, 100, accepted);
-    bfm_w(32'hC3, 4'hF, 1, 100, accepted);
-    while (exp_slv_b_q[3].size() > 0 || exp_slv_r_q[3].size() > 0) @(posedge clk);
-
-    // --- TEST 4: Max Debt (W2, W3, W4) ---
-    bfm_aw(4, 32'h400, 0, 6'b00_0000, 100, accepted);
-    bfm_aw(5, 32'h500, 0, 6'b00_0000, 100, accepted);
-    bfm_aw(6, 32'h600, 0, 6'b00_0000, 100, accepted);
-    bfm_aw(7, 32'h700, 0, 6'b00_0000, 100, accepted);
     
-    @(posedge clk);
-    fork
-      begin
-        bfm_aw(8, 32'h800, 0, 6'b00_0000, 50, accepted);
-        if (!accepted) fail("W3: Non-atomic AW stalled despite master W completion");
-      end
-      begin
-        repeat(15) @(posedge clk);
-        bfm_w(32'hD4, 4'hF, 1, 100, accepted);
-      end
-    join
-    
-    // Test W5 (Filtered write doesn't change debt)
-    bfm_aw(11, 32'hB00, 0, 6'b01_0000, 100, accepted);
-    bfm_w(32'hF1, 4'hF, 1, 100, accepted);
-    
-    bfm_w(32'hD5, 4'hF, 1, 100, accepted);
-    bfm_w(32'hD6, 4'hF, 1, 100, accepted);
-    bfm_w(32'hD7, 4'hF, 1, 100, accepted);
-    bfm_w(32'hD8, 4'hF, 1, 100, accepted);
+    // Set a moderate lag for B responses so they appear naturally after W beats finish
+    bfm_dn_b_lag(100);
 
-    while (exp_slv_b_q[4].size() > 0 || exp_slv_b_q[8].size() > 0 || exp_slv_b_q[11].size() > 0) @(posedge clk);
+    // 1. Pass-through test
+    bfm_aw(1, 32'h1000, 0, 6'b000000, 64, acc);
+    if (!acc) report_fail("X4: Non-atomic AW not accepted");
+    bfm_w(32'hAABB, 4'hF, 1, 64, acc);
+    if (!acc) report_fail("X4: Non-atomic W not accepted");
+    wait_for_idle();
 
-    // --- TEST 5: AR / R Pass-through ---
-    bfm_ar(9, 32'h900, 1, 100, accepted);
-    while (exp_slv_r_q[9].size() > 0) @(posedge clk);
+    // 2. Filtered test C2=0
+    bfm_aw(2, 32'h2000, 0, 6'b010000, 64, acc);
+    if (!acc) report_fail("X4: Atomic AW not accepted");
+    bfm_w(32'h1122, 4'hF, 1, 64, acc);
+    if (!acc) report_fail("X4: Atomic W not consumed");
+    wait_for_responses(2, 64);
 
-    // --- TEST 6: X4 Liveness (Holding Ready Low) ---
-    bfm_b_ready(0);
-    bfm_r_ready(0);
-    bfm_aw(10, 32'hA00, 0, 6'b11_0000, 100, accepted);
-    bfm_w(32'hE1, 4'hF, 1, 100, accepted);
+    // 3. Filtered test C2=1
+    bfm_aw(3, 32'h3000, 0, 6'b100000, 64, acc);
+    bfm_w(32'h3344, 4'hF, 1, 64, acc);
+    wait_for_responses(3, 64);
 
-    repeat(30) @(posedge clk);
-    bfm_b_ready(1);
-    bfm_r_ready(1);
-    while (exp_slv_b_q[10].size() > 0 || exp_slv_r_q[10].size() > 0) @(posedge clk);
+    // 4. Test AR pass-through
+    bfm_ar(4, 32'h4000, 0, 64, acc);
+    wait_for_idle();
 
-    // Finish conditions
-    repeat(50) @(posedge clk);
-
-    if (w_match_q.size() > 0) fail("Orphan AW (no W burst seen)");
-    if (expected_m_aw_q.size() > 0) fail("Orphan AW (not forwarded)");
-    if (expected_m_w_q.size() > 0) fail("Orphan W (not forwarded)");
-    for (int i=0; i<16; i++) begin
-      if (exp_slv_b_q[i].size() > 0) fail("Missing expected B response");
-      if (exp_slv_r_q[i].size() > 0) fail("Missing expected R response");
+    // 5. Debt Bound W2, W3, W4 (requires built-up traffic)
+    // Send 4 non-atomic AWs but hold W back
+    for (int i=0; i<4; i++) begin
+      bfm_aw(4'(5+i), 32'h5000 + 32'(i*4), 0, 6'b000000, 64, acc);
+      if (!acc) report_fail("W3: AW stalled when debt < 4");
     end
-    if (exp_m_ar_q.size() > 0) fail("Orphan AR (not forwarded)");
+    
+    // Attempt 5th AW -> expected to stall
+    bfm_aw(9, 32'h6000, 0, 6'b000000, 10, acc);
+    if (acc) report_fail("W2: 5th AW accepted while debt is 4 and no W last");
+
+    // Complete 1 W burst -> debt goes from 4 to 3
+    bfm_w(32'hDEAD, 4'hF, 1, 64, acc);
+    if (!acc) report_fail("X4: W beat not accepted when debt=4");
+
+    // 5th AW should now be accepted
+    bfm_aw(9, 32'h6000, 0, 6'b000000, 64, acc);
+    if (!acc) report_fail("W4: 5th AW not accepted after W burst completion");
+
+    // Clear the remaining 4 W bursts
+    for (int i=0; i<4; i++) begin
+      bfm_w(32'hBEEF, 4'hF, 1, 64, acc);
+    end
+    wait_for_idle();
+
+    // 6. Test Burst length > 0 (Atomic)
+    bfm_aw(10, 32'h7000, 3, 6'b110000, 64, acc);
+    if (!acc) report_fail("X4: Atomic AW not accepted");
+    bfm_w(32'h1, 4'hF, 0, 64, acc);
+    bfm_w(32'h2, 4'hF, 0, 64, acc);
+    bfm_w(32'h3, 4'hF, 0, 64, acc);
+    bfm_w(32'h4, 4'hF, 1, 64, acc);
+    wait_for_responses(10, 64);
+
+    // 7. Test Burst length > 0 (Non-atomic)
+    bfm_aw(11, 32'h8000, 2, 6'b000000, 64, acc);
+    bfm_w(32'hA, 4'hF, 0, 64, acc);
+    bfm_w(32'hB, 4'hF, 0, 64, acc);
+    bfm_w(32'hC, 4'hF, 1, 64, acc);
+    wait_for_idle();
+
+    // 8. Test C1: ensure [3:0] payload doesn't affect classification
+    bfm_aw(12, 32'h9000, 0, 6'b011111, 64, acc);
+    bfm_w(32'hD, 4'hF, 1, 64, acc);
+    wait_for_responses(12, 64);
+
+    bfm_aw(13, 32'hA000, 0, 6'b001111, 64, acc);
+    bfm_w(32'hE, 4'hF, 1, 64, acc);
+    wait_for_idle();
+
+    // 9. Back-to-back atomic sequences
+    bfm_aw(14, 32'hB000, 0, 6'b100000, 64, acc);
+    bfm_w(32'hF, 4'hF, 1, 64, acc);
+    bfm_aw(15, 32'hC000, 0, 6'b100000, 64, acc);
+    bfm_w(32'h10, 4'hF, 1, 64, acc);
+    wait_for_responses(14, 64);
+    wait_for_responses(15, 64);
+
+    wait_for_idle();
 
     $display("RESULT: PASS");
     $finish;
   end
-
 endmodule

@@ -43,26 +43,89 @@ disk=hashlib.sha256(open(sub,'rb').read()).hexdigest()[:16]
 print("yes" if best.get("submission_sha256_16")==disk else "filechanged")
 PY
 }
+converged () {   # $1 = fmax json -> true only if a frequency was actually found
+  [ -f "$1" ] || return 1
+  python3 -c "
+import json,sys
+try: d=json.load(open(sys.argv[1]))
+except Exception: sys.exit(1)
+sys.exit(0 if d.get('achieved_fmax_mhz') else 1)" "$1" 2>/dev/null
+}
+
+reclaim () {   # $1 = orfs nickname -- drop flow output once the record exists
+  # ORFS keeps every intermediate stage: ~2 GB for a d_ca01-sized design, 6 GB
+  # for the pre-C3 crossbar. Thirteen sweeps at 4-7 builds each fills any disk,
+  # and it filled this one tonight. Once the record is written the numbers are
+  # extracted and this is scratch.
+  #
+  # THE RECORD IS NEVER TOUCHED, only the flow output. Cost: check_ppa_record.py
+  # can no longer re-verify that record against its artefacts and reports
+  # "flow dir gone" -- a state it already handles for several records.
+  local fd="${ORFS_FLOW_DIR:-$HOME/tools/OpenROAD-flow-scripts/flow}"
+  for sub in results objects logs reports; do
+    [ -d "$fd/$sub/sky130hd/$1" ] && rm -rf "$fd/$sub/sky130hd/$1"
+  done
+}
+
 sweep () {   # task model seed
   local task="$1" m="$2" seed="$3" nick="${1}_cand_${2}_v2"
   local cand="candidates/${task}/${m}.sv"
   [ -f "$cand" ] || { say "MISSING $cand"; return 0; }
   local ok; ok="$(buildable "$cand")"
   [ "$ok" = "yes" ] || { say "SKIP sweep ${task}/${m} -- gate: $ok"; return 0; }
-  [ -f "$REPO/fmax_results/${nick}_fmax.json" ] && { say "SKIP sweep $nick (done)"; return 0; }
+  # A FILE IS NOT A RESULT. find_fmax writes its json even when the seed run
+  # fails -- achieved_fmax_mhz null, aborted_reason set. Nine sweeps aborted
+  # that way during a Docker outage; skipping on mere existence would mark all
+  # nine "done" and leave a table with no Fmax at all.
+  if converged "$REPO/fmax_results/${nick}_fmax.json"; then
+    say "SKIP sweep $nick (converged)"; return 0
+  fi
   say "SWEEP $nick (seed ${seed}ns)"
   [ "$PLAN" = "1" ] && return 0
+  # REGENERATE IF THE SNAPSHOT IS STALE, not merely if the config is absent.
+  # ppa_candidate.sh copies the candidate into orfs_runs/<nick>/, and skipping
+  # regeneration whenever config.mk exists silently re-sweeps whatever RTL was
+  # snapshotted first. The PC hit exactly this: orfs_runs/d_nw01_cand_claude/
+  # still held pre-C3 RTL at 0f35254446decbc2, so a restart would have measured
+  # the superseded design a second time. It has already cost 19h here and 1h22m
+  # there; the check is two lines.
+  # COMPARE AGAINST THE TRANSFORM, NOT THE RAW FILE. ppa_candidate.sh:122
+  # writes the snapshot as `LC_ALL=C sed 's/\xc2\xa0/ /g'` (NBSP -> space) with
+  # a newline appended, so the raw candidate and its snapshot NEVER hash equal.
+  # A guard that compares raw bytes therefore fires on every sweep, and firing
+  # means a full regeneration -- an extra ORFS build per sweep, while looking
+  # like it is working. Caught on the PC before it ran here.
+  local snap; snap="$(ls "orfs_runs/$nick"/*.sv 2>/dev/null | head -1)"
+  if [ -n "$snap" ] && [ -f "orfs_runs/$nick/config.mk" ]; then
+    local a b
+    a="$(shasum -a 256 "$snap" | cut -c1-16)"
+    b="$( { LC_ALL=C sed $'s/\xc2\xa0/ /g' "$cand"; printf '\n'; } | shasum -a 256 | cut -c1-16)"
+    if [ "$a" != "$b" ]; then
+      say "  snapshot $a != candidate $b -- regenerating $nick"
+      rm -rf "orfs_runs/$nick" "$REPO/fmax_results/${nick}_logs"
+    fi
+  fi
   [ -f "orfs_runs/$nick/config.mk" ] || bash scripts/ppa_candidate.sh "$task" "$cand" "${m}_v2" >>"$LOG" 2>&1 || true
   python3 scripts/find_fmax.py --design "$nick" --seed-period-ns "$seed" \
      --resolution-ns 0.5 --skip-sim-check >>"$LOG" 2>&1
+  reclaim "$nick"
+  say "  reclaimed $nick  (free: $(df -h /System/Volumes/Data | tail -1 | awk '{print $4}'))"
 }
 refsweep () {
   local task="$1" seed="$2" nick="${1}_v2"
-  [ -f "$REPO/fmax_results/${nick}_fmax.json" ] && { say "SKIP sweep $nick (done)"; return 0; }
+  # A FILE IS NOT A RESULT. find_fmax writes its json even when the seed run
+  # fails -- achieved_fmax_mhz null, aborted_reason set. Nine sweeps aborted
+  # that way during a Docker outage; skipping on mere existence would mark all
+  # nine "done" and leave a table with no Fmax at all.
+  if converged "$REPO/fmax_results/${nick}_fmax.json"; then
+    say "SKIP sweep $nick (converged)"; return 0
+  fi
   say "SWEEP $task reference (seed ${seed}ns)"
   [ "$PLAN" = "1" ] && return 0
   python3 scripts/find_fmax.py --design "$task" --seed-period-ns "$seed" \
      --resolution-ns 0.5 --skip-sim-check --output-dir "$REPO/fmax_results" >>"$LOG" 2>&1
+  reclaim "$task"
+  say "  reclaimed $task  (free: $(df -h /System/Volumes/Data | tail -1 | awk '{print $4}'))"
 }
 period_for () { python3 - "$REPO" "$@" <<'PY'
 import json, os, sys
@@ -91,7 +154,9 @@ build_at () {   # task label period
   else
     CLK_PERIOD_NS="$per" bash scripts/ppa_candidate.sh "$task" \
       "candidates/${task}/${label}.sv" "${label}_cc${per}" >>"$LOG" 2>&1 || say "  FAILED ${task}/${label}"
+    reclaim "${task}_cand_${label}_cc${per}"
   fi
+  say "  free: $(df -h /System/Volumes/Data | tail -1 | awk '{print $4}')"
 }
 task_round () {   # task seed model...
   local task="$1" seed="$2"; shift 2

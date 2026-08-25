@@ -116,10 +116,17 @@ finding_convs = {}
 for m in re.finditer(r"^#{2,3} ([PF]\d+)\..*?\n(.*?)(?=^#{2,3} [PF]\d+\.|\n---\n# |\Z)",
                      find_txt, re.S | re.M):
     fid = m.group(1)
-    rm = re.search(r"\*\*Rules:\*\*\s*(.+)", m.group(2))
-    cm = re.search(r"\*\*Convention:\*\*\s*(.+)", m.group(2))
-    finding_rules[fid] = rm.group(1).strip() if rm else None
-    finding_convs[fid] = cm.group(1).strip() if cm else None
+    # ANCHORED, AND THE LAST ONE. Unanchored `re.search` matched the first
+    # "**Rules:**" ANYWHERE in the body, including a mid-sentence mention in
+    # backticks: F19 discusses the convention -- "`**Rules:**` lines in
+    # `FINDINGS.md`" -- and that prose was read as its citation, so F19's real
+    # trailer, `**Rules:** 13`, has never been checked by this script. It is a
+    # trailer, so take the LAST line-initial one, not the first thing that
+    # looks like it.
+    rms = re.findall(r"^\*\*Rules:\*\*[ \t]*(.+)$", m.group(2), re.M)
+    cms = re.findall(r"^\*\*Convention:\*\*[ \t]*(.+)$", m.group(2), re.M)
+    finding_rules[fid] = rms[-1].strip() if rms else None
+    finding_convs[fid] = cms[-1].strip() if cms else None
 
 
 def norm(s):
@@ -154,7 +161,24 @@ for fid in sorted(finding_ids):
         errors.append(f"finding {fid} cites nothing it produced "
                       f"(add '**Rules:**' or '**Convention:**')")
         continue
-    for n in re.findall(r"\b(\d+)\b", src or ""):
+    cited_ids = re.findall(r"\b(\d+)\b", src or "")
+    # A TRAILER THAT NAMES NO RULE IS NOT A CITATION.
+    # This loop used to be the only thing that read `src`, so a "**Rules:**"
+    # line holding prose instead of ids passed silently: findall returned
+    # nothing, the loop body never ran, and the finding counted as linked. F65
+    # shipped exactly that -- "**Rules:** a check on an input must run before
+    # the work that consumes it" -- and the only reason it was caught is that
+    # it also misspelled the trailer as "**Rule:**" and tripped the missing-
+    # trailer branch above. Spelled correctly, it would have been a finding
+    # that cited nothing while this script printed "linkage complete".
+    #
+    # That is the same shape as the defect in the header note: a control that
+    # reports success over a set it never examined. Checked explicitly now.
+    if src is not None and not cited_ids:
+        errors.append(f"finding {fid} has a '**Rules:**' trailer that names no "
+                      f"rule id: {src!r} -- a trailer holding prose is not a "
+                      f"citation; give rule numbers, or use '**Convention:**'")
+    for n in cited_ids:
         if int(n) not in rule_ids:
             errors.append(f"finding {fid} cites rule {n}, which does not exist in RULES.md")
     if conv and norm(conv) not in conv_norm:

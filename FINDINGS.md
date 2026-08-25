@@ -3351,4 +3351,1620 @@ This is the coverage-side counterpart of F59 — a pass count is evidence only o
 the region the vector set reaches — with a sharper edge, because here the
 coverage report itself asserted that the region HAD been reached.
 
+
+### Exposure checked across the project, and the gate
+
+Every built v3 task was checked against this shape. The test is whether a GAP
+exists: a clause requiring a specific delivered value, guarded by a floor that
+can be satisfied without that value ever appearing. A stimulus-side floor over a
+deterministic mapping has no gap — driving the stimulus forces the delivered
+value. Flag-side floors at floating-point boundaries do, because one flag covers
+several delivered values and no flag carries a zero's sign.
+
+**`d_dsp03_multifmt_fma` — HIT, and GATED.** Clause A6 (EXACT-ZERO SIGN,
+authority IEEE 754-2019 clause 6.3) requires +0 in every rounding mode except
+roundTowardNegative, where it requires −0, and requires same-sign zero terms to
+carry their sign. **No A6 coverage exists in the testbench at all.** The only
+floor touching zeros is `floor_chk("zero results", cov_zero, 50)`, which is
+sign-blind and mode-blind: fifty `+0` results satisfy it completely, and A6's
+entire content is about which zeros are `−0`.
+
+The committed vector sets DO exercise it, measured rather than assumed:
+
+| set | exact −0, per format | of those, under RDN |
+|---|---|---|
+| `vectors_w32.hex` | 11 (fp32, fp16, bf16 each) | 3 each |
+| `vectors_w64.hex` | 11 each | 3 each |
+
+Scanner validated before its numbers were read (rule 24): its per-format record
+counts reproduce the testbench's own METRIC line exactly — fp32=1310, fp16=2580,
+bf16=2580 at WIDTH=32.
+
+**THE ADEQUACY CLAIM ATTACHES TO THESE BYTES, NOT TO THE FILENAMES:**
+
+    vectors_w32.hex   git blob f7798be1226ff26387e5edffd5b67c4049344cb3
+                      sha256   2cdd376e701fa157c07ac1eb4f21492320d816aad24774b2ec76bf6f627d88a6
+                      6470 records
+    vectors_w64.hex   git blob 8b6a463ce71f27ffabd1918157aa266cf61e3f7e
+                      sha256   65fff50f0de17f81127a03eff01249fc54051e6b42ff2d024a81d51c805f7817
+                      7760 records
+
+**GATE.** Hard gate on regenerating, reordering or re-deriving either file, and
+on any A6-relevant revision of `spec/fp_multifmt_fma_iface.sv`, until a
+sign × mode floor for exact zeros exists in `tb/fp_multifmt_fma_tb.sv` — in the
+shape that already guards A7a, whose `cov_band_combo[f]` is keyed on
+`{sgn, f_rnd}` with `sgn` taken from `lane_of(f_r(...))`, the delivered result
+lane's sign bit.
+
+**NOT a gate on scoring the committed set**, whose adequacy is the measurement
+above. A6 is exercised today by accident of the generator, not by anything that
+would notice its loss — which is the whole distinction between a latent hole and
+an active one. Any change to those bytes trips the gate automatically, because
+the claim is pinned to the hashes.
+
+**`d_dsp02_fp32_fma_ii1` — CHECKED AND CLEARED. Recorded so it is not
+re-suspected.** The suspicion was reasonable and wrong: its underflow rule sits
+next to a flag and looks exactly like this shape. Two things clear it. First, it
+has no exact-zero-sign clause at all — its A-clauses are A1, A2, A3, A4, A4b, A5,
+A6, A7, A9, and A6 is UNDERFLOW, not zero sign. Second, the floor guarding A6 is
+already delivered-value-side: `cov_a6_zero` is keyed on `{vr[31], v_rnd(v)}` —
+**the sign bit of the delivered result** crossed with the rounding mode, eight
+combinations, gated on inexact — backed by run-failing holes at
+`cov_subn_res == 0` and `cov_szero_res == 0`. It reads the value, not the flag.
+
+**Not this shape:** `d_ca01` and `d_nw03` (floors entirely stimulus-side, over
+mappings the stimulus determines); `d_ca04` (has real status flags, but its
+payload floor is delivered-value-side — "no payload above bit 31 was ever set");
+`d_nw01` (DECERR is a delivered RESP value, floored stimulus-side, and driving an
+unmapped access determines the response); `v_dsp02` (its testbench labels the
+section "coverage floors, all stimulus-side").
+
+**Unmeasured, and marked so rather than asserted clean:** `v_ai02`, `v_ca03`,
+`v_ca04`, `v_ca05`, `v_nw01`, `v_nw02`, `v_nw03`, `v_nw04`. Verification tasks
+gate on mutant discrimination rather than delivered-value floors, so this shape
+does not map onto them directly and they were not audited in depth.
+
 **Rules:** 16, 24
+
+## F64. An ad-hoc query used as evidence is measurement apparatus, and decays the same way
+
+Four times in one session a one-off query returned a clean-looking answer that
+was not an answer. None announced itself. Each was caught only because it was
+cross-checked against a value already known by other means, and each would
+otherwise have been quoted as a result.
+
+**1. A git pathspec glob that returned a false empty.** Checking whether another
+agent's working tree had been disturbed:
+
+```
+git status --porcelain -- 'domains/*/verification'      ->  no output at all
+```
+
+which reads as "nothing modified, nothing staged, nothing untracked". Re-run with
+the four directories written out explicitly, the same query returns **140 lines**.
+Git pathspec globbing does not behave like shell globbing, and the quoted `*` did
+not match across the path segment. I was one step from reporting a verified-clean
+tree that the command had never checked.
+
+**2. A shell glob abort that read as a missing file.** Enumerating built tasks,
+`ls $d/spec/*.sv $d/spec/*.md` under zsh aborts the whole expression when the
+second pattern matches nothing — so every design task, all of which have a
+`spec/*_iface.sv`, was reported `spec:NO`. The absence of `.md` files erased the
+`.sv` files from the answer.
+
+**3. An awk counter that returned zero for everything.** Counting scored
+configurations per task, an awk block-matcher returned `0` for all seven design
+tasks, including `d_ai01`, which demonstrably has two. Re-run through a real YAML
+parser: `d_ca04` has 18, `d_nw01` has 16, `d_nw03` has 8. A zero from a counter is
+indistinguishable from a zero in the data.
+
+**4. A string replacement that silently did nothing, and reported success.**
+Found while writing THIS finding, which is the reason it is here. A Python
+`str.replace` anchored on `--` was run against a file whose text had been
+normalised to `—`; the anchor never matched, no bytes changed, and the script
+printed `written` because the print was unconditional. The verification grep
+immediately afterwards returned `0` occurrences of text that had supposedly just
+been inserted. **This is the worst of the four, and it is worst for a structural reason: it is
+the only WRITE-SIDE instance.** The other three misreport a read — they return a
+wrong answer to a question, and the damage is bounded by what is done with that
+answer. This one misreports a write: the file was not changed, and the operator
+was told it was. A "recorded" claim that recorded nothing defeats the recording
+half of rule 24 directly, and nothing downstream can detect it, because every
+later reader sees a file that is simply missing text nobody knows was meant to be
+there.
+
+That asymmetry is what makes grep-and-assert-after-edit load-bearing rather than
+belt-and-braces. A read-side check is a second opinion on a number. A write-side
+check is the only evidence that an edit happened at all.
+
+**5. A verdict line that contradicted its own numbers.** A probe measuring how
+long a post-flush divergence lasts printed `*** OUTSIDE the named window ***`
+while the two numbers printed above it -- 13 ticks at H=4, 29 at H=8 -- are both
+INSIDE the window (15, 31). The window constant was declared `int unsigned`, so
+comparing the sentinel `-1`, meaning "never diverged", against it promoted the
+comparison to unsigned; `-1` became 4294967295 and a clean result rendered as a
+violation.
+
+This is the **second signedness defect in my own instruments in one session**.
+The first was in a second source's exponent handling, where
+`$signed({24'b0, da.e})` zero-extended a negative exponent before a shift. That
+one was real and was MASKED by a larger width defect in the same expression, so
+it never surfaced on its own and was fixed in passing.
+
+**Both were caught the same way: by reading the NUMBERS rather than the
+VERDICT.** A verdict is a derived claim with its own bugs; the measurement it
+summarises is the evidence. Where a rig prints both, read both, and treat a
+disagreement between them as a defect in the rig until shown otherwise.
+
+### The general rule this generalises to
+
+**An ad-hoc query used as evidence is measurement apparatus.** Rule 24 already
+names "ad-hoc measurement scripts" in scope and says the last item "is not
+padding — it is where this was actually needed". Every instance above is smaller
+than a script: a single command line, a glob, a one-liner. Size is not the
+boundary. If a number or a status is going to be read off it and believed, it is
+an instrument, and it must reproduce a known-good answer before its output is
+read.
+
+The check is usually one line and costs nothing:
+
+* run the scoped query against a directory whose contents you already know;
+* count something the target already reports, and compare — the d_dsp03 vector
+  scan in F63 was validated this way, by reproducing the testbench's own
+  `fp32=1310 fp16=2580 bf16=2580` before its zero-sign counts were trusted;
+* after any in-place edit, grep for the text you believe you just wrote, with a
+  fixed-string match, and assert rather than print.
+
+**A silent-zero and a silent-empty are the dangerous shapes.** `0`, empty output
+and "no matches" are the same tokens a correct run produces when the answer
+genuinely is nothing, so they never look like failures. A wrong non-zero number
+gets questioned; a wrong zero gets believed.
+
+**What this does not claim.** Cross-checking catches an instrument pointed at the
+wrong thing. It does not catch an instrument pointed at the right thing and
+reasoning wrongly about it — that is F59's and rule 4's territory, a measurement
+quoted beyond the region it covers. It also cannot help when no independently
+known value exists to check against; in that case the honest move is to mark the
+result unmeasured, as F63's exposure section does for the eight verification
+tasks, rather than to quote an unvalidated query.
+
+**Rules:** 24
+
+## F65. A precondition checked after the expensive work is not a precondition, and cleanup that ignores exit status destroys the evidence
+
+Three reference builds — d_ca01 at 10.0 ns, d_ca04 at 3.6562, d_nw03 at 4.7500 —
+each ran ORFS to completion and each produced no record. Roughly two hours of
+wall time, nothing measured, nothing left on disk to re-measure.
+
+Two independent defects had to line up.
+
+**The precondition ran last.** `reference_ppa.sh` was adopted verbatim from the
+second host, where the shell profile exports `ORFS_FLOW_DIR`. Every other script
+in this repo defaults that variable (`run_orfs_build.sh:65`,
+`ppa_candidate.sh:215`, `build_queue.sh:97`, `mac_sweep_queue.sh:64` — all
+`${ORFS_FLOW_DIR:-...}`). This one alone demanded it, with `:?`, and read it at
+the *extraction* step:
+
+    CLK_PERIOD_NS="$PER" bash scripts/run_orfs_build.sh ...   # 40 minutes
+    FLOW="${ORFS_FLOW_DIR:?ORFS_FLOW_DIR must be set}"        # then this
+
+The guard was correct and fired correctly. It fired after place-and-route. A
+required-input check placed downstream of the work it guards buys nothing: the
+cost it exists to avoid has already been paid by the time it speaks.
+
+**The cleanup did not read exit status.** The wrapper reclaimed flow output after
+every build unconditionally:
+
+    timeout 5400 bash scripts/reference_ppa.sh "$1" "$2" "$3" 2>&1 | tail -10
+    for sub in results objects logs reports; do rm -rf "$FD/$sub/sky130hd/$nick"; done
+
+Alone, defect one costs a re-run — the routed database is still sitting there and
+the numbers can be extracted by hand. Together they cost the builds outright. The
+`rm -rf` deleted exactly the artifact that made the failure cheap.
+
+Both fixed: the flow directory is resolved and existence-checked before
+`run_orfs_build.sh` is called, with the same default the rest of the repo uses, so
+a misconfigured host costs a second; and the wrapper reclaims only after
+confirming the record file appeared, otherwise printing where the output was kept.
+
+Note what did *not* fail. No wrong number entered the corpus. Rule 20 held —
+failing to obtain a value produced no value, not a default — and rule 24's
+insistence that apparatus prove itself is precisely what this violated: the
+wrapper was never once observed to write a record before three builds were fed to
+it. The reportable damage is entirely wasted compute, which is the cheap failure
+mode, and it stayed cheap only by luck of which host ran it.
+
+**The general form.** A check on an input must run before the work that consumes
+it, and cleanup must be conditional on the success of what it cleans up after.
+Both are rule 24 applied to a wrapper rather than to a measurement: this
+apparatus was never pointed at a known answer before three builds were fed to it.
+
+**Rules:** 24
+
+## F66. A mutant that impersonates the module it replaces is a duplicate definition, and the compiler silently runs the original
+
+*Authored by Agent 2; swept into c4f3f00 by another agent's whole-file commit rather than landed on its own.*
+
+**A mutant that takes the golden's module name and delegates to the golden is a
+duplicate definition. The compiler picks one, and every mutant silently runs the
+golden — reporting "no defect found" from a rig that never instantiated a
+defect.**
+
+Found while building step 5c for the four verification tasks that had none. The
+golden half of the new `check_policy_independence.sh` reported all ten mutants
+`PASS BUT EXPECTED FAIL` — a clean sweep of nothing. The policy half, written
+minutes earlier and structurally identical, was 11 of 11.
+
+The mutants here wrap an implementation: each takes the top module's name so the
+testbench instantiates it unchanged, and delegates to the real design inside. So
+the build was handed two modules called `fp_noncomp` — the golden and the mutant
+wearing its name. Verilator resolved the collision without complaint and ran the
+golden every time.
+
+    run_one "$M" FAIL $OTHER "$D/$TOP.sv" "$W/$M.sv"     # both define $TOP
+
+The fix is the one the harness already uses: rename the golden to `<top>_golden`,
+rewrite the mutant's inner instantiation to match, and never pass the original
+under its own name.
+
+**What makes this worth a number is the shape, not the bug.** It is the fourth
+instrument fault in this batch and the fourth to produce *silence that reads as
+success*:
+
+  - a rename using `\b` in BSD `sed`, which matched nothing, so ten witnesses ran
+    the golden and reported "no difference observed";
+  - a runner grepping `^FAIL` against a testbench printing `[FAIL] R14 :`, so ten
+    real failures were reported as no failure;
+  - a guard reading an occupancy that its own clear reset on the pulse's first
+    cycle, so the predicate disarmed the defect it gated;
+  - this one.
+
+None would have been caught by a positive-only or a negative-only control. A
+negative control alone passes: the golden really does behave like the golden. A
+positive control alone passes on the three where the failure path was live. Both
+halves together catch all four, which is why rule 24's controls are now paired
+and refuse to report rather than warn.
+
+**Scope, checked rather than assumed.** The pattern needs a mutant that both
+takes the top's name *and* delegates. It does not appear in the design tasks: all
+29 design mutants across four tasks are standalone DUTs declaring the top
+themselves, none references a `_golden` module, and `sim_candidate.sh` passes the
+testbench and one candidate — its header documents the hazard explicitly. Nor in
+the PPA path: `ppa_candidate.sh` points `VERILOG_FILES` at the candidate plus
+spec packages, never at a reference. No kill count and no PPA number was produced
+through this fault.
+
+**One latent hazard, reported and not fixed.** `scripts/_verif_variant.py`
+rewrites the delegating instantiation as `\b<top>(\s*)#\(` — the parameterised
+form only. A mutant delegating as `<top> i_g (`, with no parameter list, would
+slip past it and land in the scoring path, where the consequence is a kill count
+rather than a witness string. Checked: today every delegating mutant across the
+nine tasks uses the `#(` form, 31 instantiations, zero bare. The gap is latent,
+not live. `scripts/` is outside this agent's boundary; flagged for its owner.
+
+**Rules:** 24
+
+When a mutant impersonates the module it replaces, the thing it replaces must be
+renamed out of the namespace, and the substitution must be proved by a control
+that fails when the substitution does not happen. That is rule 24 applied to a
+substitution step rather than to a measurement: the apparatus here is the
+rename, and it had never been pointed at a known answer.
+
+## F67. A prose claim can outrun a correct apparatus, and no control in the stack is pointed at prose
+
+Two defects so far have a home. A **contract** defect is the spec saying
+something wrong or leaving something unsaid -- v_nw04's `X2b`, cited by two
+clauses and defined nowhere; v_ai02's missing `L4`. An **apparatus** defect is
+the instrument not measuring what it claims -- F66, and the rename and grep
+faults beside it. Rule 24 exists for the second class.
+
+This is a third, and it sits downstream of both: the contract is right, the
+apparatus is right, the number is right, and **the sentence reporting it claims
+more than what ran**. Every control in the stack can pass and the prose can still
+be false, because no control is pointed at the prose.
+
+Both instances are v_nw02, within a day of each other.
+
+**One: the instrument's own summary line.** `check_policy_independence.sh` ended
+its run with
+
+    OK: every defect is caught on BOTH bases, so none of them is killed by
+        the latitude choice.
+
+It had run eleven checks -- one clean policy base and ten defects re-derived on
+it -- all on the **policy base**. It never compiled the golden. The eleven
+verdicts were individually correct and the summary named a scope twice their
+size. It read as 22 of 22 to anyone who did not go and count, which for a while
+included the agent that had just run it.
+
+**Two: a commit message.** `6e39080` asserted:
+
+    The golden-base half (golden PASS, ten mutants killed) comes from
+    scripts/sim_verification.sh.
+
+At the moment that was written, v_nw02's most recent reference run carried
+`task_text_hash e07eba252fa0afa8` against a dirty tree at `245aa0fa` -- a
+different task text, and a tree predating the guarded mutants entirely. The
+sentence was true of *a* run. It was not true of the state it was written about.
+It became true afterwards, when the run was actually done at `f660156`.
+
+**What the two share is the failure mode, not the subject.** Each is a
+true-sounding sentence that was true once, or true of a neighbouring thing,
+asserted about the current state without anyone checking that it still held. Neither
+is a lie in the sense of a wrong number; both are claims whose *scope* exceeds
+what was executed. And both were durable: the first sat in a script's output for
+as long as the script existed, the second is in permanent history.
+
+**Why the existing controls miss it.** Rule 24 makes an apparatus prove itself to
+the operator, and its second half -- record the reproduction beside the numbers
+-- addresses part of this. But it reaches numbers, not the sentences around them.
+Rule 17's task-text hash catches a comparison across two different questions; it
+says nothing about a summary that misdescribes one run. Rule 20 catches a missing
+value being defaulted; here no value was missing. The number was there and
+correct in every instance.
+
+The asymmetry is worth naming: rule 24 protects the operator from the instrument.
+Nothing protects the reader from the operator. Prose is what actually gets
+consumed -- nobody re-derives a figure from the log when a sentence beside it
+already says what it means.
+
+**What was done.** The script's summary now states what it ran and says plainly
+that "both bases" would claim a check it never performed. The commit-message
+claim was made true by running the golden half at `f660156` -- same scored inputs
+as the 11/11 policy run, the only difference between the two trees being a
+documentation file.
+
+**Rules:** 24
+
+This extends rule 24's subject from the instrument to the sentence that reports
+it: a summary may not name scope the run did not cover, and a claim that
+something "was established" must name the run that established it and the state
+it was established in. Stating that as a standing rule needs an edit to RULES.md,
+which is not this agent's file; flagged for its owner rather than taken.
+
+## F68. A contract that specifies steady states is silent about transitions, and the silence reads as a determinism claim
+
+Three clauses of d_ai01 asserted behaviour the contract could not deliver, for
+the same reason each time. No negative control could see any of them; all three
+were found by an independent implementation of the same text.
+
+| clause | what it specified | what it was silent about |
+|---|---|---|
+| C2 | `flush_i` zeroes the chain; z reads +0 while asserted | what z delivers while the chain REFILLS |
+| C3 | the accumulate feedback delay `dfb`, in steady state | partial sums already IN FLIGHT when `accumulate_i` toggles |
+| C4 | a gated row "holds" and "resumes from where it stopped" | the resumed row's in-flight sums against an operand stream that kept advancing |
+
+Each clause described a steady state correctly and said nothing about the
+transition into or out of it. **Silence is not neutral in a contract.** A reader
+implementing the text must do something at the transition, and any choice is as
+conformant as any other. The reference picks one, the text appears to require it,
+and a second implementation picking differently looks like a defect when it is
+not.
+
+### The evidence that this is one defect and not three
+
+They share a signature. In every case:
+
+* the two implementations agree EXACTLY on the steady-state rule -- the measured
+  accumulate feedback delay is 15 enabled ticks at HEIGHT=4 and 31 at HEIGHT=8 in
+  both, and gating a row against a CONSTANT operand field agrees cycle-for-cycle;
+* they diverge only under a TIME-VARYING operand stream, and only around a
+  control transition;
+* the divergence lasts EXACTLY ONE PIPELINE DEPTH and then stops, at both
+  geometries -- the signature of in-flight state draining, not of arithmetic;
+* the disagreeing values are FAR apart, not near. Of 1119 disagreeing values,
+  1104 differ by more than 4 ulp and only 15 by less. Rounding looks nothing
+  like this.
+
+Classified over the pipeline's history window rather than at the divergent cycle,
+all 1320 events at HEIGHT=4 and 1119 at HEIGHT=8 fall into exactly one transition
+class, with **no residue at either geometry**.
+
+### Two classification errors, each of which produced a confident wrong answer
+
+**Bucketing at the divergent cycle** invented a "43 row-gated" class and a "~50
+unclassified" class. A pipeline carries its depth in history, so a control event
+moves the output for that many ticks AFTER it ends; the control state at the
+divergent cycle is the wrong tick to read.
+
+**Then checking whether the diverging ROW was the GATED row** gave 2 of 23 and
+read as "gating is not a cause" -- which was reported as a result before being
+overturned. At one divergent cycle the mask gates row 6 while row 5 diverges; row
+5 had been gated over the preceding 19 cycles and diverges from the first cycle
+AFTER release. The mask at the divergent cycle shows the next row in a walking
+pattern, not the responsible one.
+
+### The general rule this generalises to
+
+A pipelined design holds state its contract does not name, and a control input is
+precisely a thing that acts on that unnamed state. So for any design of pipeline
+depth greater than one, EVERY control input needs its transition behaviour
+written down -- scored with a stated rule, or named unscored with an explicit
+window. Silence at a transition is a defect, not a default.
+
+**The fix is not to model the pipeline.** Modelling it puts a microarchitecture
+into the contract and hands every submission a required implementation, which for
+d_ai01 is exactly the design freedom the task exists to measure. All three
+clauses were NARROWED instead: window named in enabled ticks, one pipeline depth
+long, excluded from scoring. Nothing is scored that the text cannot specify.
+
+**Rules:** 26
+
+## F69. A parameter free on the cost side and unscored on the benefit side degenerates to zero
+
+`d_ca03`'s first draft left TLB capacity, associativity and second-level sizing
+as implementation choices, on the reasoning that microarchitectural storage is
+exactly the freedom a design task should measure. It is not, under this scoring
+model, and the draft was wrong.
+
+Correctness never depends on the TLB: every request a TLB misses is resolved by
+the page-table walk, and the transparency clause requires the two paths to agree.
+Latency is unscored, because it depends on a testbench-controlled memory
+handshake. So the dominant strategy for a free capacity parameter is **ZERO
+ENTRIES** -- walk every request, satisfy every functional clause, and take the
+smallest area on the board.
+
+The same argument defeats the neighbouring freedoms:
+
+* **free associativity** -- direct-mapped strictly dominates fully-associative
+  when hit rate is unmeasured; the tag comparators are pure cost;
+* **free second-level sizing** -- deleting the level entirely is free area.
+
+A submission that did all three would be fully conforming. The area column would
+then rank submissions by **who read the capacity clause closely**, not by design
+quality, and the PPA gap would be measuring the specification -- which is F62's
+sentence, arrived at from the opposite direction.
+
+### This is rule 25 read backwards
+
+Rule 25 came from `d_nw01`, where an unpriced axis let a submission
+OVER-provision: 20,480 bits of buffering, correct on every checked axis, 14.2x
+the reference's area. The remedy was to bound the axis in the specification
+rather than add a metric for it.
+
+`d_ca03` is the same defect with the sign flipped -- an unpriced axis letting a
+submission UNDER-provision. Rule 25's remedy applies unchanged, and rule 25 is
+extended rather than duplicated: **any parameter free on the cost side must be
+scored on the benefit side, or bounded in the specification.**
+
+### Measured, so the fix can be judged rather than assumed
+
+Pinning `d_ca03`'s storage at 16+16 fully-associative entries with no second
+level fixes **45.5%** of the reference's area: 3,467 flip-flops at 25.02 um^2
+each, 86,744 of 190,657 um^2. That is close to irreducible -- the RTL's own field
+list implies about 99 bits per entry, so 3,168 flops for 32 entries, and the
+measured 3,467 is within 9% of it.
+
+Pinning therefore caps the achievable spread at **2.20x** if the surrounding
+logic went to zero, and about **1.9x** realistically.
+
+### Pinning is the fallback. Scoring the crediting axis is the better remedy.
+
+Pinning capacity does not fix the root cause, which is that **the benefit side was
+unscored at all**. With time free and area charged, serialising any work was free:
+one comparator swept across sixteen TLB entries beat sixteen parallel ones, one
+PMP comparator beat eight, a per-entry flush clear beat a generation counter. All
+conforming, all dominant strategies.
+
+**The cheaper fix turned out to be scoring the crediting axis, not pinning the
+cost side, and it needed nothing new.** `d_ca03` already had a fixed probe
+sequence, fixed page-table contents and a testbench that controls memory response
+timing -- so total cycles over that sequence is deterministic and comparable
+across submissions without an address trace, a working-set definition or a memory
+model. Adding it as a second reported axis converts all three exploits back into
+trades: on the measured sequence a swept comparator costs about 16 cycles per hit,
+a single PMP comparator about 8 per check, and the measured flush is 139 cycles
+against a generation counter's one.
+
+**The crediting axis only works if the sequence exercises the benefit.** Measured
+on `d_ca03`'s probes: the functional sequence alone is 5 requests, 1 hit, **20%**
+-- almost all cold walks, so a serialised lookup would cost almost nothing and the
+cycle axis would not discriminate. Adding the capacity replays reaches 32%; adding
+four reuse passes over the resident pages reaches **55% hits**, at which point the
+swept-comparator penalty is about 2.26x on total cycles. A cycle axis over a
+miss-heavy sequence is close to no axis at all, so the hit ratio has to be
+measured before the axis is relied upon.
+
+So the remedy ordering is: **score the crediting axis if a deterministic sequence
+already exists; pin the parameter only when it does not.** Pinning costs a
+normative clause and removes a design choice; scoring costs a column and keeps
+it.
+
+### Where this will recur
+
+Any structure whose cost is area and whose benefit is hit rate or latency:
+branch predictors, prefetchers, victim buffers, store merge buffers, way
+predictors, MSHR counts.
+
+For each of those, PREFER SCORING THE BENEFIT to pinning the parameter. A branch
+predictor charged for mispredict cycles over a fixed branch trace, or an MSHR
+count charged for stall cycles over a fixed miss sequence, is a better task than
+one with the size pinned -- it keeps the design choice that makes the structure
+interesting. Pin only when no deterministic sequence can credit the benefit, and
+check the sequence actually exercises it before relying on the axis.
+
+**Rules:** 25
+
+## F70. A harness that samples a level cannot see a pulse, and every conclusion drawn through it inherits the error
+
+Four incidents across two tasks, all the same defect: a rig read a signal as a
+LEVEL, once per cycle, where the design asserted it as a PULSE. Each returned a
+confident wrong answer, and none announced itself.
+
+**1. `d_ai01`, flush.** `probe_control_tb` pulsed `flush_i`, then sampled `z_o`
+after DEASSERTING it, and reported that flush did nothing. A cycle-by-cycle trace
+showed `z_o` reading 0x0000 for every cycle flush was high; the chain simply
+refилls within one cycle of deassertion, so a post-deassert read sees the refilled
+value.
+
+**2. `d_ai01`, corners.** `probe_corners_tb` sampled one edge early and returned
+`z=0` for EVERY corner case while the status flags varied correctly. Read
+naively, an anchor that returns zero for all arithmetic.
+
+**3. `d_ca03`, retirement.** `do_step` polled `lsu_valid_o` once per cycle. A
+`flush_i`-cancelled walk asserts it as a narrow pulse, so the RECORDED VECTOR for
+that step carried `valid=0` when the design had in fact retired the request. A
+control that latched internally then "disagreed" with a vector that was itself
+wrong.
+
+**4. `d_ca03`, the clause derived from it.** Spec L2 required every request to
+retire. On the strength of incident 3's bad reading, it was RELAXED to carve out
+flush-cancelled requests, with the carve-out documented as measured. The harness
+was then fixed to latch -- and the same step began recording `valid=1` with the
+correct address -- but the clause was not revisited. A normative relaxation stood
+for a while on a reading its own instrument had already retracted.
+
+### The rule this produces
+
+**Latch, never poll.** A completion or handshake signal read by a harness is
+latched from the moment the request is issued until it is retired, and the latched
+value is what gets recorded or compared. Sampling `if (valid)` once per clock is
+correct only for a signal guaranteed to be held, and a multi-cycle unit behind a
+valid/ready interface guarantees no such thing.
+
+**Verify the pulse width before writing the sampling code**, not after a result
+looks wrong. One cycle-by-cycle trace of the signal, once, costs nothing and
+settles whether a level read is even admissible.
+
+### The corollary, which is incident 4 and is the expensive half
+
+**Fixing an instrument obliges re-deriving whatever was concluded with it.** The
+fix and the conclusions are separate work, and doing only the first leaves
+statements standing on evidence that has been withdrawn. Incident 4 produced a
+NORMATIVE CONTRACT CLAUSE from a retracted measurement, and the clause outlived
+the retraction because nobody went back.
+
+So when an instrument defect is found, enumerate what was measured with it before
+the fix and re-run each item. In `d_ca03` that meant re-measuring the
+cancelled-request obligation directly, which showed the unit re-walks and retires
+in 15 cycles -- the opposite of what the relaxed clause said.
+
+### Where this recurs
+
+Every task with a multi-cycle unit behind a valid/ready interface, which is most
+of them: walkers, dividers, FMA pipelines, cache miss handlers, DMA engines,
+arbiters. Anywhere the design may assert completion for exactly one cycle.
+
+**Rules:** 27
+
+---
+
+## F71. A list of what is compared is not a specification of what the values must be
+
+`d_ca03`'s T1 named the scored surface: `lsu_valid_o`, `lsu_paddr_o`,
+`lsu_exc_valid_o`, `lsu_exc_cause_o` "and the fetch equivalents". No clause said
+what `valid_o` does on a faulting request, and none said what `paddr_o` holds
+when an exception is raised. Both are on the scored list. Both discriminate.
+
+An independent implementation written against the specification alone read
+`valid_o` as mutually exclusive with the exception -- L2's own wording, "either
+with a translation or with a fault", reads as an exclusive or -- and failed all
+four faulting requests while passing the other 114. The `paddr_o` divergence sat
+one step behind it and was worse: its value on a fault reports **where the
+failing check was made**, in the walker or on the TLB hit path, and the A/D
+clause permits either. So the scored surface was scoring an internal
+implementation choice, which is the one thing the not-scored clause existed to
+prevent.
+
+**The shape.** Enumerating outputs for comparison feels like specifying them. It
+is not, and the gap is invisible to review because the reference always has *an*
+answer -- the vectors record whatever it does, and the comparison passes for
+anything that happens to agree. Only a second implementation makes the
+undetermined bits visible, because it is the only thing that can disagree.
+
+**The check.** For every output on the scored list, name the clause that
+determines it in each retirement case the task can reach: success, each fault
+class, and each control transition. An output with no such clause is either
+under-specified or should not be scored. `d_ca03` gained A11 for the first
+answer and an exclusion in T2 for the second.
+
+**Where this recurs.** Every task whose scored surface is wider than one data
+bus -- status flags, valid/exception pairs, side-band outputs. `d_ai01` had the
+same shape at A10, where status timing was scored and unpinned.
+
+**Rules:** 28
+
+---
+
+## F72. A surface declared scored, that no stimulus reaches — and the check is VARIATION, not assignment
+
+Three instances in `d_ca03` alone, and the third was found only because the
+check built for the first two was written correctly.
+
+**Instance 1 — never assigned.** The harness initialised `fetch_req` to zero and
+never assigned it. Across all 118 requests of the scored sequence the entire
+instruction port went undriven while the scoring clause declared it scored and
+the fault-cause clause pinned causes 12 and 1 longhand. The exploit: tie
+`fetch_valid_o` low, ship a one-entry instruction TLB, pass everything — which
+reopens on half the pinned storage budget precisely the incentive the capacity
+check was written to close.
+
+**Instance 2 — assigned every cycle, at a constant.** `asid_i` is driven
+continuously at zero, and `mk_pte` has no `G` argument at all, hardcoding PTE
+bit 5 to `1'b0` so no planted entry is ever global. The clause requiring a
+non-global leaf to match only its installing ASID, and a global leaf to match
+every ASID, is therefore unexercised in both halves. A design ignoring `asid_i`
+entirely passes.
+
+**Instance 3 — five more, found by the check.** `priv_lvl_i`,
+`ld_st_priv_lvl_i`, `sum_i`, `mxr_i`, `pmpcfg_i` and `pmpaddr_i` are all frozen,
+so the supervisor-mode, SUM and MXR permission rules go untested and — larger —
+the whole physical-memory-protection path does: three access-fault causes pinned
+longhand and never reached, and a clause describing behaviour "with no PMP
+region matching" against a configuration the sequence never visits.
+
+### The load-bearing part: variation, not assignment
+
+The obvious check is "assert every scored port was DRIVEN at least once". **It
+catches one instance in three.** `fetch_req` was never driven, so it is caught;
+`asid_i` is driven every single cycle and sails through; the five frozen inputs
+sail through with it. An input that never changes value has not been tested,
+however continuously it was assigned. The observable is variation.
+
+The allowlist matters as much as the assertion. An input may legitimately be
+constant — a task pinning one root page table, or an input a clause explicitly
+declares non-load-bearing — and the only thing separating a deliberate constant
+from an overlooked one is that somebody wrote the reason down. So a constant
+must be **declared with its citation**, and an undeclared constant must FAIL
+rather than warn. In `d_ca03` three of eight constants were legitimate and five
+were defects, and nothing in the source distinguished them.
+
+### A frozen input is a defect only when no other varying input reaches the clause
+
+This is the part that keeps the check honest, and it took two tasks to see both
+poles of it.
+
+**`d_ca03`'s `pmpcfg_i` is the defect pole.** Held at one permitting region for
+the whole sequence, and NOTHING ELSE could reach the clause it governs. No
+address, no privilege level, no access type could make a permitted region deny,
+so the entire physical-memory-protection path went unexercised and three fault
+causes pinned longhand were unreachable. Unfreezing it was the only way in.
+
+**`d_nw01`'s `addr_map` is the legitimate pole.** Also held constant for the
+whole run, and that is CORRECT. It is a static configuration input, and the
+clause it governs -- an address matching no rule must return a decode error --
+is reached anyway, because the ADDRESSES vary and the testbench deliberately
+drives one outside the map. Two mutants are keyed on that path. Unfreezing
+`addr_map` would add nothing.
+
+So the check reports a candidate, not a verdict. The question it hands you is
+"which clause does this input govern, and can anything else reach it?" -- and
+that question has to be answered by reading the clause, not by reading the
+report. Automating the answer would mean deciding which inputs are
+configuration and which are stimulus, which is exactly the judgement the
+specification exists to record.
+
+The corollary is the allowlist. A legitimate constant must be **declared with
+the clause permitting it**, because nothing in the source distinguishes a
+deliberate constant from an overlooked one, and the person who left it constant
+is the person least likely to notice.
+
+### Why review does not catch it
+
+Nothing had to be built to close instance 1. The page table already planted
+executable, user-accessible leaves, so the missing phases were seven functional
+requests over a table that was already there. **There was no missing artifact to
+notice** — no empty file, no TODO, no unwired port. The rig looked complete
+because everything it did, it did correctly.
+
+**Where this recurs.** Any task with more than one request port, more than one
+operating mode, or a fault class reachable only from stimulus the sequence does
+not produce. A scan for the signature — a testbench variable initialised to a
+literal and never re-assigned — found it in three other tasks in this
+repository.
+
+**Rules:** 28
+
+---
+
+## F73. A test claimed to be independent of a freedom, validated only against the reference
+
+`d_ca03`'s capacity check asserted that filling 16 distinct pages and replaying
+them must issue no page-table read, and claimed to be "BEHAVIOURAL AND
+POLICY-INDEPENDENT" on the grounds that it never checks *which* entry is
+displaced. The replacement policy is explicitly left free and unscored.
+
+The claim is false, and the reference itself refutes it. Run the same replay
+against the instruction TLB and the reference issues 96 reads where the data TLB
+issues none. Both are the same 16-entry structure. The anchor's replacement tree
+advances only on a lookup **hit** and never on an install, so a cold fill with no
+intervening hit writes all sixteen pages into one entry. Measured, filling n
+pages and replaying all n: the data TLB retains 16, the instruction TLB retains
+**one**.
+
+The data side passes only because the sequence's first eleven requests generate
+hits that spread the tree before the fill begins. So the check depended on the
+sequence preamble, and it had been validated -- correctly, against a known-good
+answer -- on the one port where that preamble existed.
+
+**The shape.** Not checking the thing a freedom controls is not the same as being
+independent of it. Independence is a claim about every legal implementation, and
+validating against the reference tests exactly one. The reference is the
+implementation *least* likely to exercise a freedom in a surprising way, because
+the freedom was usually written down after looking at it.
+
+**The check.** When a test is declared independent of a freedom the specification
+grants, validate it against something that exercises the freedom **differently**
+-- a second source, a control built to take the other choice, or a second
+instance of the same structure driven differently. Here a second instance of the
+same TLB, driven cold, was enough.
+
+**The residue, and its correction.** The first conclusion drawn from this was
+that no residency test could establish the instruction TLB's capacity at all,
+since a one-entry design would be indistinguishable from the reference. That was
+itself wrong, for the reason F74 records: the probe behind it filled the
+TLB cold and so measured the replacement policy, not the capacity. A
+hit-interleaved fill makes the reference retain all 16, and a one-entry control
+then fails on that check alone. The capacity is enforced behaviourally and the
+structural flip-flop count was dropped -- a check requiring synthesis cannot gate
+correctness without inverting the grading order, which is disqualifying on its
+own.
+
+### Does the pipeline-transition rule cover this? No, and it must not be extended to
+
+Asked directly, because extending the wrong rule is how two defects end up with
+one unusable instruction. The pipeline-transition rule is about SILENCE: a
+control input whose behaviour at a transition nobody wrote down, and its fix is
+to NARROW the contract -- name the window in the tick the contract already counts
+in, and exclude it. This finding is about a CLAIM: a test asserting independence
+from a freedom the specification grants, and its fix is to WIDEN the validation
+-- run it against something that exercises the freedom differently.
+
+The fixes point in opposite directions. A single rule spanning both could only
+say "be careful about freedoms", which instructs nobody. They stay separate: the
+transition rule keeps its scope, and this finding's rule is the one that applies
+here.
+
+**Rules:** 29
+
+---
+
+## F74. An instrument that measures a different observable than the claim is about, and returns a plausible answer
+
+The class. Three shapes of it are already recorded separately; this is what they
+have in common, and why the family is worth a number of its own: **in every case
+the number was correct and the sentence built on it was not.** Nothing looks
+wrong at the point of measurement, so nothing prompts a re-measurement.
+
+### Instance 1 — a level read as an event (see F70, three incidents)
+
+A harness sampled a level once per cycle and reported on an event. It missed a
+narrow pulse, so a recorded reference vector was itself wrong; later, on another
+port, it caught a level asserted for the whole of an in-flight walk and called it
+retirement, recording every instruction fetch as an access fault at cycle 0. The
+instrument reported on "did this happen"; it measured "is this high now".
+
+### Instance 2 — an impossibility claim, which is the expensive member
+
+`d_ca03`'s T9 was written to say the instruction TLB's pinned capacity **could
+not be established behaviourally against this anchor**. The evidence was a probe
+filling n distinct pages and replaying them: the data TLB retained 16, the
+instruction TLB retained one. Since the replacement policy is explicitly free,
+that looked like proof no residency test could exist. It was accepted and written
+into the specification as a permanent limitation, and the storage budget it was
+meant to enforce was downgraded to "priced, not enforced".
+
+It was wrong. The probe filled COLD. The anchor's replacement tree advances only
+on `lu_hit & lu_access` (`cva6_tlb.sv:436`), so a cold fill puts every install in
+the same entry — the probe was measuring the replacement policy, not the
+capacity. Re-touch each page after installing it and the reference retains all
+16, with 17 pages thrashing it to 15:
+
+```
+              n:   1   2   4   8  16  17
+cold fill,  instr: 1   0   0   0   0   0
+hit-interleaved:   1   2   4   8  16  15
+```
+
+A control with a one-entry instruction TLB then fails the resulting check on that
+check alone, zero per-step failures. The capacity was enforceable all along.
+
+**Why this member is worse than a false negative.** A false negative gets
+retested — someone tries the case again, a second implementation disagrees, a
+control fires. **An impossibility claim closes the question.** It converts into a
+specification clause — "not behaviourally checkable", "priced rather than
+enforced" — and clauses do not get retested, they get read and believed. This one
+was two steps from shipping as a permanent hole in a pinned budget, and what
+reopened it was not a review of the claim but an unrelated question about what
+the anchor's replacement policy actually does.
+
+### Instance 3 — the gate caught itself, four times
+
+The static scanner written to find unvaried inputs across the repository was
+wrong four separate times, each time the same class, and **each time it
+under-reported** — the dangerous direction for a gate.
+
+1. It concluded `satp_ppn` was assigned because a COMMENT read
+   `// root @0x1000 (satp_ppn=1)`. Matching source text, reporting on
+   assignments.
+2. It skipped every line beginning with `assign`, an exclusion added on purpose
+   to keep `wire x = <expr>` out of the output. That silently reclassified every
+   REGISTERED RESPONDER as undriven, and produced a false accusation against
+   another agent's task: a read-response path driven by
+   `assign m_rvalid = m_rvalid_q;` off a clocked queue was reported as never
+   driven. Two other agents refuted it independently, one by reading the block
+   and one by pointing at three mutants on that path that are killed and could
+   not be reachable if no response ever returned.
+3. Repaired, it then asked "is this signal assigned" rather than "how many
+   DISTINCT values does it take" — so a ready signal assigned exactly once, and
+   always to 1, cleared the check. That is the variation-not-assignment defect
+   of F72, inside the instrument written to find it, after that finding was
+   written.
+4. Repaired again, it compared literals as TEXT: a declaration saying `1` and a
+   continuous assign saying `1'b1` are two strings and one value, and the signal
+   cleared a third time.
+
+Four defects, one class. That is the most direct evidence available that this is
+a default failure mode rather than a lapse: the tool was built by someone who had
+just written the finding, while writing it. What settled each one was
+cross-checking the static scan against a RUNTIME MONITOR that observes value
+changes rather than source text; the two now agree on 8 of 8 signals, and that
+agreement is the only reason either is quoted.
+
+### Instance 4 — an observer's sampling phase (contributed by the agent who hit it)
+
+Measuring a clock divider, a probe sampled the generated clock at the NEGEDGE of
+the input clock. That aliases the pass-through case TOTALLY, not partially: when
+`clk_o` is `clk_i` it is low at every negedge, so pass-through reports ZERO
+rising edges -- not fewer, zero. The probe said "no output clock" for exactly the
+two divisor settings that pass through.
+
+**It also inverted a measurement it did not suppress**, reporting odd-divisor
+duty as 66% where it is 33%, high and low swapped. That is the worse half, and
+the distinction is worth keeping: a suppressed measurement looks like a bug and
+invites a recheck, while an INVERTED one looks like data and gets used.
+
+**What caught it was that the number was implausible** -- a clock divider
+reporting no clock at its two most common settings -- and not any check. That is
+the honest answer to "what would have caught this", and it belongs in the record
+rather than a tidier one, because it means nothing in the apparatus was watching.
+
+Same class, different medium: the instrument reported on its own sampling phase
+and the claim was about the signal.
+
+### Instance 5 — a coverage map that measured its own labels
+
+Checking one of the claims above, an agent built a clause-coverage map by
+extracting clause IDs from the `fail()` strings in a reference model. It reported
+ten clauses as having neither stimulus nor a mutant. **Four of those were wrong.**
+Three clauses about burst types are driven -- one phase issues WRAP and multi-beat
+FIXED, then single-beat FIXED -- but their failures are attributed under a
+different clause's label, because that other clause is the one whose text spells
+out what the failing condition means. Another group runs under one phase and
+reports under an unrelated label.
+
+The map measured WHICH CLAUSE IDS APPEAR IN `fail()` STRINGS, and was read as
+WHICH CLAUSES ARE EXERCISED. The label names the clause the author chose to cite,
+not the clause the stimulus reaches. The real uncovered count was three, not ten
+-- and it under-reported coverage, which is the same direction as all four
+scanner defects above, though for a gate over-reporting a gap is the safer
+direction to be wrong in.
+
+**Generalise it:** a `fail()`-label scan is a LOWER BOUND on coverage and never a
+measurement of it.
+
+Worth recording alongside the outcome, because the hedge did work: the two
+response-code signals flagged from the corrected scan as "candidates, not
+findings" turned out to be real and worse than a stimulus gap -- two contract
+clauses on error PROPAGATION that the reference never drives and no mutant is
+keyed on, so a submission cannot be scored on them in either direction. Flagging
+them at low confidence rather than as a finding is what made them cheap to check
+instead of another thing to retract.
+
+### Instance 6 — an instrument that could not tell absent from unobserved
+
+The VCD-based replacement for the static scanner, written after four defects in
+the scanner and validated against an independent in-testbench monitor, was wrong
+in the same family on its first run. It reported **"1 of 8 inputs found in the
+dump"** for a task whose testbench drives all eight.
+
+A VCD assigns one identifier code to signals that always carry the same value,
+so a module port and the testbench signal wired to it share a code. The reader
+mapped code to ONE name, and the last binding won -- every port disappeared
+behind the testbench-side name it was tied to. The tool was reporting "the last
+name bound to this code" and it was read as "this signal".
+
+**The generalisable half is not the aliasing.** It is that the tool could not
+distinguish *measured and found constant* from *never observed at all*, and
+reported both as absence. Those two need opposite responses: the first is a
+result, the second is a gap in the instrument. It now prints
+`NOT FOUND in the dump (cannot conclude)` and refuses to count such a signal as
+frozen, which is the safe direction for a gate — over-reporting a gap costs a
+reading, under-reporting one ships it.
+
+This is F64's shape with the polarity that matters here: F64 is about
+apparatus that decays into answering a different question over time, and this is
+apparatus that answered a different question from the first run. Both return a
+number that looks like the one requested. **An instrument must distinguish
+measured-absent from not-observed, and say which it means.**
+
+### The required practice for impossibility claims
+
+Any claim that something CANNOT be measured must carry three things, and one
+missing them is an untested hypothesis rather than a finding:
+
+1. **The instrument.** What was actually run. "A cold fill of n pages, replayed."
+2. **What that instrument assumes.** Usually invisible, because it is the thing
+   nobody chose — here, that fill order does not matter, which is false for any
+   policy keyed on hits.
+3. **What a different instrument would have to see** for the claim to fail.
+
+Point 3 is load-bearing. Writing "a residency test would have to spread the
+installs across entries, which needs the policy to advance on something this fill
+never produces" makes the hit-interleaved fill obvious in the same sentence that
+states the claim.
+
+**Relation to the F64 family.** F64 is the same error on a query used as
+evidence: an ad-hoc view reported on as though it were the tree. F64 is about
+apparatus decaying; this is about apparatus that was never measuring the right
+thing to begin with.
+
+**Where this recurs.** Anywhere a specification records a limitation rather than
+a requirement — "not checkable", "cannot be isolated", "no way to distinguish".
+Each is a measurement claim wearing a clause's clothes.
+
+**Rules:** 31
+
+---
+
+## F75. A check that cannot fire, and a flag that cannot be false
+
+Two shapes of the same defect, both found in `d_ca03`'s own scoring testbench
+after it had been run hundreds of times and used to validate seven negative
+controls, a reference and a second source.
+
+### The counter nothing increments
+
+The contract forbids the unit from ever writing a page table entry, and states
+it twice -- once normatively, once as a measured result. The testbench appears to
+check it:
+
+```
+tb/sv39_mmu_harness.svh:63     int unsigned wr_attempts = 0;
+tb/sv39_mmu_tb.sv:123          if (wr_attempts != 0) begin ... errs++; end
+```
+
+Those are the only two occurrences in the task. **Nothing increments it.** The
+condition is permanently false, so the clause has been reporting PASS on a
+property it never tested, in every run, for every design. A submission that wrote
+page table entries on every walk would have been scored clean on that clause.
+
+The failure is not that the check is weak. It is that the check is *shaped
+exactly like a real one* -- a counter, a comparison, an error increment, a
+message -- and a reader confirming "is this property checked?" finds all four and
+stops.
+
+### The flags that are true by construction
+
+Four coverage floors are set from the SCHEDULE rather than from an outcome:
+
+```
+if (seq[i].ev == EV_BARE_ON)    cov_bare      = 1'b1;
+if (seq[i].ev == EV_FLUSH_TLB)  cov_flush_tlb = 1'b1;
+if (seq[i].ev == EV_FLUSH_MID)  cov_flush_mid = 1'b1;
+```
+
+`seq` is built by the testbench itself, so these assert that a step the rig just
+constructed exists in the array the rig just constructed. They cannot be false.
+The remaining eight floors are tallied from the RECORDED REFERENCE OUTCOME --
+`r.valid`, `r.exc_valid`, `last_acc` -- and are genuine evidence; the four
+schedule-derived ones are a tautology wearing a floor's clothes, and they sat in
+the same list, printed in the same block, indistinguishable at a glance.
+
+### Why this is the write-side of an existing family
+
+F63 and F64 are the read-side: an instrument that reports on
+something other than what it was asked about. This is the write-side and the
+construction-side -- an instrument that cannot report at all, or can only report
+one answer. All three share the property that makes them expensive: **the output
+is indistinguishable from success.** A dead check and a passing check print the
+same thing.
+
+It is also the mirror of F72. There, stimulus never reached a clause; here,
+a clause never reached its stimulus. Both end with a verdict asserting more than
+the run established.
+
+### The check
+
+Any counter or flag that feeds a verdict must be shown to reach **both** states
+against a known input -- the failing state as well as the passing one -- before
+the verdict it feeds is trusted. For an absence-shaped property, that means
+constructing the presence and watching the check fire; a control that makes it
+fire is part of the check, not an optional extra. And a coverage flag must derive
+from a recorded outcome, never from the schedule that produced the stimulus: if
+the flag can be evaluated without running the design, it is not coverage.
+
+**Where this recurs.** Every absence-shaped assertion -- "never writes", "no
+deadlock", "no false assertion", "issues no read" -- and every coverage floor
+computed from the stimulus description rather than the result.
+
+**Rules:** 32
+
+
+## F76. A checker run against the working tree is not a statement about the commit, and `--staged` does not close the gap
+
+`fedb323`'s message ends "Both checkers green." The checkers were green. The
+commit was broken. Both halves are true because they are about different trees.
+
+**What happened.** The commit's subject is the rule 9 amendment, about fifteen
+lines. Its diffstat is **89 insertions**. The other seventy-odd were a peer's
+uncommitted work in the same file — two new rules and an amendment to a third —
+swept in by `git add RULES.md`, which stages the FILE and therefore whatever
+anyone else has left in it.
+
+The content survived intact, so nothing was lost. What did not survive is the
+**pairing**. RULES.md was dirty in my tree; FINDINGS.md was dirty in the peer's.
+The rules landed and their findings did not, so HEAD carried rule 31 citing F74
+and rule 32 citing F75 against a FINDINGS.md that contained neither. HEAD failed
+linkage from that commit until the peer repaired it.
+
+**Why every available gate passed.**
+
+  * The working-tree run passed because the peer's dirty FINDINGS.md was sitting
+    right there, supplying the findings the commit would not contain. I got that
+    green three separate times.
+  * `check_rule_linkage.py --staged` would ALSO have passed for a different
+    reason and by coincidence — no. It would have FAILED, because the staged
+    tree was my RULES.md plus HEAD's FINDINGS.md, which is exactly the broken
+    pair. I did not run it. The gate existed, was correct, and was not used.
+
+That second bullet is the honest version and it took a peer to establish it; my
+first draft of this finding asserted that `--staged` would have passed too, which
+would have turned my own failure to run a gate into a defect in the gate.
+
+**What actually catches it:** extracting HEAD to a clean directory and running the
+checker there. Nothing in the working tree can mask a commit that way, because
+nothing of the working tree is present.
+
+**The staging half is a repeat, not a discovery.** The project's standing rule is
+already "stage the change, not the file": capture HEAD, build a temp index with
+`read-tree`, `git add --` explicit paths, compare-and-swap `update-ref` so a
+concurrent HEAD move fails the write rather than silently reparenting. I had that
+written down and used `git add <path>` on the live index instead, which is
+explicit about the path and says nothing about the change. Explicit-path staging
+is necessary and not sufficient; with three sessions in one tree, the file is not
+the unit of intent.
+
+**And the reporting half is rule 30, violated by the person who wrote rule 30**
+eight commits earlier. "Both checkers green" named a scope the run did not have.
+The rule says a claim that something was established must name the run and the
+tree state that established it; had the sentence been "green on the working tree"
+the gap would have been visible in the sentence itself.
+
+**Rules:** 30
+
+---
+
+## F77. A normative clause written from the standard, that the anchor contradicts
+
+`d_ca03`'s A8 said physical memory protection is checked on every address the
+walker reads **"and so is the final translated address."** The second half was
+never true of the anchor. Measured across seven configurations:
+
+```
+load  through R+W+X                              -> translates
+load  through W+X, R denied                      -> cause 5
+store through R+X, W denied                      -> TRANSLATES
+fetch through R+W, X denied                      -> TRANSLATES
+load  with no region at all                      -> cause 5
+load  R denied, TLB WARM, zero page-table reads  -> TRANSLATES
+```
+
+The last line settles it: with the entry already resident no read is issued, and
+the request succeeds through a region that denies R. Nothing checks the final
+address. Only the walker's own reads are checked, and only for R — which is the
+only bit a reader can need.
+
+### Where the sentence came from
+
+Not from a probe. From the architecture. RISC-V does check the physical access
+against PMP by access type, so "the final translated address is checked too" is
+what a specification author who knows the standard writes without pausing. But
+the anchor is an **MMU**: it translates, and something else performs the access.
+The check the standard describes lives outside the module. The clause was
+correct about RISC-V and false about the thing being scored.
+
+### Why it is a distinct class, and the inverse of an existing one
+
+F57 covers a requirement THE ORACLE DETERMINES AND THE CONTRACT LEAVES OPEN — the
+reference silently decides something the text never says, and a submission has no
+way to know. **This is the mirror image: the contract states something the oracle
+CONTRADICTS.** The text is not silent, it is confidently wrong, and it is wrong in
+the most credible possible way — it agrees with the published standard.
+
+That inversion changes what finds it. F57's carry is answered by asking "what did
+the reference decide that I did not write down?" No amount of asking that
+surfaces A8, because A8 *was* written down. The question that surfaces it is the
+opposite one: **"which of my clauses have I never actually seen the anchor obey?"**
+
+### Why review cannot catch it
+
+Three separate reviews of this specification passed over A8, including one
+looking specifically for contract defects. It reads correctly, it cites the right
+authority, and the authority genuinely says what it claims. The only thing wrong
+with it is a fact about a particular RTL module, and no amount of reading the
+clause reveals that.
+
+**What did catch it** was the stimulus variation check. `pmpcfg_i` and
+`pmpaddr_i` had been pinned at one permitting region for the whole scored
+sequence, so no request could discriminate. Unfreezing them took twelve new
+requests; eleven behaved exactly as predicted and the twelfth overturned the
+clause. An independent implementation had already recorded the ambiguity as an
+open gap before it ever ran, taken the architectural reading, and been correct
+against the text and wrong against the reference.
+
+### The check
+
+Every normative clause derived from an external standard must be MEASURED against
+the anchor before it ships. Not spot-checked in the direction the standard
+predicts — measured across the configurations that would separate the standard's
+rule from the anchor's behaviour. **The anchor is the oracle; the standard is
+not.** Where they disagree, the contract must say what the anchor does, and say
+that it diverges, because a submission is scored against the anchor.
+
+A clause carrying an AUTHORITY line is not evidence for the clause. It is
+evidence for what the standard says, which is a different claim.
+
+**Where this recurs.** Any task anchored on RTL implementing a published
+standard, which is most of them here: IEEE-754 arithmetic, AXI ordering, RISC-V
+privileged behaviour, PMP, CDC handshakes. Every clause in those tasks that was
+written from knowledge rather than from a probe is a candidate.
+
+**Rules:** 33
+
+---
+
+## F78. F63 confirmed by construction: the flag was true because it was scheduled
+
+F63 established that a coverage floor tallied from flags does not cover a
+delivered-value requirement. `d_ca03` produced the sharpest instance of it, and
+this entry is the confirmation rather than a new class — with the distinguishing
+detail that **correcting the flag made the reference fail immediately.**
+
+Four coverage floors were set from `seq[i].ev`:
+
+```
+if (seq[i].ev == EV_BARE_ON)    cov_bare      = 1'b1;
+if (seq[i].ev == EV_FLUSH_TLB)  cov_flush_tlb = 1'b1;
+if (seq[i].ev == EV_FLUSH_MID)  cov_flush_mid = 1'b1;
+```
+
+`seq` is built by the testbench, so these assert that an array the rig
+constructed contains what the rig put in it. They cannot be false. Re-derived
+from what the reference actually did, one went to zero on the next run:
+
+    controls: bare=1 flush_tlb=1 flush_mid=0
+
+The trace says why:
+
+    step=10 va=0000000080000000 acc=0 cyc=1 v=1 e=0 pa=00000000100000
+
+**acc=0, cyc=1.** The step requested a page the previous step had just installed,
+so it HIT THE TLB and retired in one cycle. `do_step` pulses `flush_i` three
+cycles after asserting the request — long after retirement, with nothing in
+flight to abort.
+
+### What was actually uncovered
+
+C3, which requires `flush_i` to abort an in-flight walk and the unit to restart
+it, and T5, which exists specifically to check that a cancelled request still
+retires. **In a task where C3 had already been rewritten twice** — once relaxed
+on a retracted measurement, once restored — and where T5 was added deliberately
+to close it. The clause was revised, the check was written, and neither had ever
+run. Pointing the step at a non-resident page:
+
+    step=10 va=0000000080012000 acc=8 cyc=15 v=1 e=0 pa=00000000112000
+
+Eight reads — a partial walk aborted, then a full re-walk — and 15 cycles, which
+is the number C3 itself quotes for the held-request discipline.
+
+### Why this instance is worth recording separately
+
+The correction was one line and the failure was immediate. That combination is
+the argument: a schedule-derived flag costs nothing to fix and its falsity is
+detectable the moment it is fixed, so there is no reason to leave one standing.
+It also shows the failure mode is not theoretical — the flag was not merely
+imprecise, it was reporting green coverage of the single most-revised clause in
+the task for the whole life of the sequence.
+
+**Rules:** 32
+
+---
+
+## F79. The predicted failure was a wrong claim; the actual failure was no claim at all
+
+Chasing a stale hash turned up a missing one, and the missing one invalidates PPA.
+
+`d_ca03`'s task text hash moved three times in twelve minutes, twice by a second
+author correcting the same file. One value was quoted to me at the moment it was
+landed and superseded six minutes later by its own author's next commit. **The
+predicted consequence** was that the queued reference sweep would stamp a record
+claiming measurement against a text that existed for six minutes.
+
+The prediction was wrong in the direction that matters. Going to check what the
+sweep actually carried found that `find_fmax` records had **no `task_text_hash`
+field, and no `build_config_hash` either.** Not a stale claim. No claim.
+
+### Why the absent one is PPA-invalidating and the stale one is not
+
+A stale hash is a wrong label on a real measurement: it can be recomputed, the
+record corrected, and nothing downstream silently changes. An absent hash is
+different, because of what a reference sweep is FOR.
+
+The sweep produces the **pinned clock period**, which goes into the specification
+and is the period **every submission is built at**. And a sweep result depends
+directly on `CORE_UTILIZATION` and `PLACE_DENSITY` — floorplan and placement —
+**both of which landed for `d_ai01` and `d_ca03` on the same day**. So a sweep
+run before that change and one run after are indistinguishable from their own
+records, while the number derived from them differs. **An unrecorded
+build-configuration change silently moves the period every submission is
+compared at, and nothing anywhere registers that it moved.**
+
+That is the whole comparison basis for a task, moved without a trace, from a
+change nobody would think to look at because it is a floorplan key rather than a
+clause.
+
+### The family signature
+
+This is the F64 family, and it is the sharpest instance of the pattern
+that family exists for: **the instrument that would have reported the problem was
+not reporting anything.** F64's ad-hoc query answered a different question; F63's
+flag could not be false; F75's counter was never incremented; F74's tools
+measured the wrong observable. Here the field simply was not written.
+
+The recurring shape is that all of them are **indistinguishable from success at
+the point of use.** A record with no hash field looks exactly like a record whose
+hash matches, unless something goes looking for the field by name.
+
+### How it was found, which is the uncomfortable part
+
+By accident, while chasing something smaller. Nobody audited `find_fmax`'s record
+schema; the question "what will the queued sweep stamp?" was asked for an
+unrelated reason and the answer happened to be "nothing". **A defect that
+invalidates every PPA comparison for a task was one incidental question away from
+shipping**, and the smaller defect that led to it — a hash quoted accurately and
+superseded six minutes later — would have been harmless by comparison.
+
+### What closed it
+
+Both hashes are now stamped, **computed at write time from the tree and never
+accepted from a caller**, and both fail closed to `None` rather than raising, so
+a task with no resolvable configuration still records a result. Computing at
+write time is the load-bearing part: a hash passed in as an argument is a
+snapshot, and the caller outlives the snapshot.
+
+**Rules:** 17
+
+---
+
+## F80. A bound nobody checks is not a bound: the lesson was learned and the enforcement was not
+
+`d_nw03`'s B1 states a ceiling and declares breaking it non-conforming:
+
+> **at most 2 frames per output**, that is 16 beats given R6's 8-beat frame cap.
+> Storage beyond that is NON-CONFORMING.
+
+`controls/nc_h_overbuffered.sv` holds **four times that** — eight frame buffers
+per input instead of two, one edit from the second source, ports full width,
+routing and ordering and delivering every frame exactly once. It **passes both
+configurations with zero per-step failures.** Nothing in the harness measures
+frames in flight, counts beats held, or references the number 2 or 16.
+
+### Why this one stings
+
+B1 was written *in response to* F62. Its own text is F62's language —
+deeper queues "read as better throughput, with the area charged to nothing, a
+benefit with no stated cost" — and F62 is the finding where a `d_nw01`
+submission buffered a full 256-beat burst per master, 20,480 bits of
+flip-flops, was **entirely conforming**, and came out at 14.2x the reference's
+area. F62's conclusion was that the bound belongs in the specification, "where
+it costs one clause and no columns."
+
+The clause was written. The check was not. **The lesson was learned in the
+right place and stopped one step short of being enforced**, and the gap survived
+because a clause with a clear rationale reads as settled.
+
+### The mirror direction, which is why no existing control caught it
+
+Every capability-reduced control in this repository tests **under**-provisioning:
+d_ai01's HEIGHT, d_ca03's instruction TLB, d_ca04's SYNC_STAGES and LOG_DEPTH,
+d_nw03's own `nc_b` for concurrency. All of them provide LESS than a declared
+budget and must fail. B1 is a CEILING, so the exploit runs the other way, and a
+family of controls built to catch designs that provide too little is
+structurally blind to one that provides too much.
+
+**A stated budget needs a control on whichever side the specification bounds.**
+Where there is a floor, build a design that undershoots. Where there is a
+ceiling, build one that overshoots. Where there are both, build both.
+
+### It is cheaply checkable, which removes the excuse
+
+The shape already exists in this repository. `d_ca04`'s capacity phase stops
+draining, offers writes, and counts what is accepted before the design stops
+accepting — **observed entirely in the input domain, so nothing races across a
+clock boundary.** Run as a CEILING rather than a floor it reads: hold every
+output not-ready, offer frames on every input, and count beats accepted before
+backpressure. A conforming design accepts about `2 * M_COUNT` frames; `nc_h`
+accepts roughly four times that. One phase, one counter, no new observable.
+
+### Instance 2: the same clause, unenforced on the task that produced F62
+
+`d_nw01`'s C3 says a design may hold **at most 4 R beats and 4 W beats per
+master port**, and that "storage beyond that is NON-CONFORMING, not a design
+choice." `controls/nc_i_overbuffered_r.sv` is the vendored reference verbatim
+with a **64-deep FIFO** on each master's R channel — sixteen times the
+allowance, ports full width, every transaction routed and ordered and returned
+to its issuer, per-ID order preserved because a FIFO cannot reorder. **It passes
+both `MAX_TRANS` configurations with zero failures.**
+
+This is worse than the `d_nw03` instance for three reasons.
+
+**It is F62's own task.** C3 is not a clause copied from a pattern; it is the
+clause written in direct response to what happened here. Its text names the
+incident: "a 256-entry per-master read buffer, 2 x 256 x ~40 bits of
+flip-flops, which is 14x the reference's total area on a design that is
+otherwise correct on every axis."
+
+**The submission it was written to reject would pass today.** That design is no
+longer on disk — the candidate was re-solicited after C3 was added and the
+current `chat.sv` buffers `NUM_MST * MAX_TRANS` — but nothing in the harness
+would stop it being resubmitted. The clause added to close the gap closed
+nothing.
+
+**The floor beside it is checked, thoroughly.** C1's outstanding-capacity floor
+has a dedicated phase, a stated tolerance of `ceil(MAX_TRANS/2)` with the
+reasoning for the gap, measurements at both settings, and a CAPABILITY-class
+mutant. The two clauses sit adjacent in the same specification, written by the
+same hand — one enforced with care, the other not at all. **The difference is
+direction: C1 is a floor and every instrument here tests floors.**
+
+A smaller thing found alongside: `d_nw01`'s specification has **two clauses
+numbered C3** — the buffering ceiling at line 177 and "Both hold at every legal
+NUM_MST / NUM_SLV / MAX_TRANS combination" at line 216. A duplicate identifier in
+a contract makes "fails C3" ambiguous in exactly the place a submission would
+need it to be precise.
+
+### Instance 2 could NOT be enforced the same way, and the blocker is the anchor
+
+`d_nw03`'s B1 took one phase. `d_nw01`'s C3 does not, and four attempts were
+measured before stopping:
+
+1. **A dedicated stall phase**, the shape B1 uses. Trips an assertion inside the
+   ANCHOR — `rr_arb_tree.sv:169`, *"lock implies same arbiter decision in next
+   cycle if output is not ready"* — because fresh AR requests keep changing the
+   R-mux request vector while its output is stalled.
+2. **A passive high-water monitor**, beats accepted at the slave side minus beats
+   delivered at the master side, no new stimulus at all. Legal, and it does not
+   discriminate: under the existing ~25% random stall a 64-deep FIFO peaks at
+   **4**, comfortably under the bound of 16. A ceiling is invisible unless the
+   drain is held off long enough for the design to reach its own limit.
+3. **A total stall inside the scored phase.** Same assertion. Forcing the slave
+   model to present R continuously to avoid it corrupts the scoreboard — 21 data
+   failures, because `r.data` is combinational off state the model has not
+   advanced.
+4. **A throttled stall**, ~1 R beat in 16, then 1 in 8. This DISCRIMINATES
+   cleanly — reference 0, control 61/36/19 against a bound of 16, one failing
+   check, isolated — but the assertion still trips on a configuration-dependent
+   subset, and changing the throttle only moves WHICH configuration trips. At
+   that point tuning is fitting to noise, so it was reverted rather than landed.
+
+**The root cause is in the harness, and it is bigger than C3.** The slave model
+drops `r_valid` via a rate counter while a beat is still pending. Real AXI
+forbids that: once `RVALID` is asserted it must stay asserted until `RREADY`.
+The anchor's arbiter assumes the rule holds, so **sustained response
+backpressure is illegal stimulus against this harness** — not against the
+design.
+
+Which means L3, *"both hold under RESPONSE BACKPRESSURE"*, is exercised only at
+~25% random stall and has never been tested sustained. The clause that would
+have justified building the ceiling check is itself only partly exercised, by
+the same defect that blocks the check.
+
+**What C3 actually needs** is a protocol-correct slave responder that holds
+`r_valid` stable under backpressure. That is a harness rework, not a check, and
+it would strengthen L3 at the same time. Recorded rather than attempted: the
+control stands as proof the gap is real, and the enforcement is blocked on
+something worth fixing for its own sake.
+
+### Resolved by enforcing, and the transition is the evidence
+
+Of the three options — enforce, drop, or mark unenforced — only enforcing keeps
+F62's conclusion. Dropping discards it. Marking it unenforced leaves a clause
+that reads normative and is not, which is the present state with a label on it.
+
+The capacity phase above is now in the harness, and the numbers it was gated on
+were measured first:
+
+| design | 4x4 | 2x2 | bound |
+|---|---|---|---|
+| vendored reference | 8 | 4 | 64 / 32 |
+| second source | 40 | 16 | 64 / 32 |
+| `nc_h_overbuffered` | **144** | **72** | 64 / 32 |
+
+**`nc_h` flipped from PASS/PASS to FAIL/FAIL** — one failing check each, B1
+alone — while both conforming designs still pass with zero and the other two
+controls are unaffected.
+
+That transition is what makes the check credible, and it is why the control was
+built BEFORE the check. **A check never seen to flip a known-bad design is a
+check nobody has tested**, which is the whole of F75 and most of F80. Writing
+the check first would have left no way to observe the flip.
+
+The bound is B1's own arithmetic — 2 frames per output, 8 beats per frame by R6
+— and is not fitted to any implementation. The tightest conforming margin is the
+second source at 40 against 64.
+
+**Rules:** 25
+
+---
+
+## F81. Apparatus that drives the DUT ILLEGALLY, and reports its own defect as a design failure
+
+Every apparatus defect recorded so far measures the wrong thing: F74's
+instruments read a different observable, F75's checks cannot fire, F63's flags
+cannot be false. **This one is different in kind. The stimulus itself is outside
+the contract**, so the design under test is entitled to do anything at all, and
+whatever goes wrong is attributed to the design.
+
+### The defect
+
+`d_nw01`'s slave model drives the read-data channel like this:
+
+```
+slv_resp[s].r_valid = (s_rbeats[s] != 0) && (s_rdelay[s] == 0);
+```
+
+`s_rdelay` is a rate counter. So `r_valid` **drops while a beat is still
+pending** — the model announces data and then withdraws the offer. AXI forbids
+that: once `RVALID` is asserted it stays asserted until `RREADY`. The initiator
+may not take back an offer.
+
+The anchor assumes the rule, because real AXI hardware may. Its arbiter locks a
+decision while its output is stalled and asserts that the decision stays valid:
+
+```
+rr_arb_tree.sv:169  lock: Lock implies same arbiter decision in next cycle
+                          if output is not ready.
+```
+
+Hold the master side off long enough and the assertion fires. **It looks exactly
+like the design under test failing.** It is the harness reporting its own
+protocol violation, through the design's assertion, in the design's name.
+
+### Both specifications require the rule their testbenches break
+
+This is the part that makes it a class rather than a slip. `d_nw01`'s **H3** says
+"a crossbar output holding valid with ready low must keep valid high"; its own
+slave model does not. `d_ca01`'s spec says a valid, once "asserted it remains
+asserted, with the payload held stable, until the" handshake completes; its
+testbench does this:
+
+```
+// mem_data_stall gates the OUTPUT and never the FSM's own state. Dropping
+// mrd_valid_r inside M_FILL and re-raising it left the model wedged.
+assign mem_rd_valid = mrd_valid_r & ~mem_data_stall;
+```
+
+**The comment is the mechanism, not an illustration of it.** Read what it says:
+the author diagnosed the situation CORRECTLY. `mem_data_stall` does gate the
+output and not the FSM's state, and dropping `mrd_valid_r` inside `M_FILL` and
+re-raising it did leave the model wedged. Every clause is true. The workaround
+stopped the wedge, and a stopped wedge is what a fix looks like from the inside.
+
+What it traded away was valid-stability, and nothing anywhere checked that.
+
+> **A workaround that resolves a symptom is indistinguishable from a fix unless
+> something independently checks the property the workaround traded away.**
+
+That is how this class survives review, and it is not a lapse in care — the
+author who wrote the workaround also wrote the comment explaining it, which is
+more diligence than most changes get. Reading the diff harder would not have
+helped, because the diff is correct about everything it claims. Only a check
+that asks a question the author was not asking can catch it, which is why the
+answer here had to be a tool rather than closer attention.
+
+**And `d_ca01` has a second instance of the same mechanism, which is what makes
+it a mechanism.** Its testbench pins the response channel:
+
+```
+// Response is always taken. CONSTANT, not `rsp_valid` -- remedy 1.
+assign rsp_ready = 1'b1;
+```
+
+Another remedy, correctly reasoned, that resolved a symptom by pinning a signal.
+What it traded away is that **R1's response-side stability can no longer be
+exercised at all**. R1 says a valid, once asserted, "remains asserted, with the
+payload held stable, until the transfer completes… Responses use the same
+discipline on `rsp_valid_o` / `rsp_ready_i`" — and with `rsp_ready_i` never low,
+`rsp_valid_o` is accepted the cycle it rises, every time. The clause is not
+weakly tested; it is **STRUCTURALLY UNEXERCISABLE**, and the distinction is worth
+the word. An under-exercised clause has a test that could fail and usually does
+not. R1's response half has **no test that could ever fail** — at any seed, under
+any stimulus this testbench can produce — because the condition it names cannot
+occur. L3 is under-exercised: 25% random stall, never sustained. R1's response
+half is not tested at all.
+
+**And the two remedies are the same move twice, in one testbench.** Gating
+`mem_rd_valid` with `mem_data_stall` and pinning `rsp_ready` to a constant are
+both correctly-reasoned fixes to real symptoms that traded away a property
+nothing was checking. One traded protocol legality — narrowly avoided, by a
+guard added for an unrelated reason — and the other traded a clause's
+exercisability outright. **Two independent instances in one file is what makes
+this a mechanism rather than an anecdote**: same author, same file, the same move
+reached for twice, neither of them a lapse.
+
+The variation check finds it immediately — `rsp_ready_i` is the single frozen
+input of thirteen — and `d_ca01` was not in the sweep, because the sweep covered
+the three tasks named rather than all of them.
+
+### Blast radius, and it is not only the check that found it
+
+* **`d_nw01`'s L3** — "both hold under RESPONSE BACKPRESSURE" — has never been
+  tested in the condition it names. Only ~25% random stall has ever been applied,
+  because sustained backpressure trips the assertion. The clause is partly
+  unexercised, and the defect blocking it is the same one.
+* **`d_nw01`'s C3 ceiling check is blocked behind it.** Four approaches were
+  measured; the only one that discriminated cleanly also tripped the assertion on
+  a configuration-dependent subset. See F80 instance 2.
+* **`d_ca01` carries the shape but NOT the violation, and I claimed otherwise
+  before measuring.** Instrumented, it shows **zero illegal drops across 1,904
+  legal handshakes** on a passing run. Both `mem_data_stall` sites are guarded by
+  `while (mstate != M_IDLE)`, so the stall only ever rises from quiescence and
+  `mrd_valid_r` is already low: the valid is **suppressed before the transfer
+  starts**, never withdrawn during one. Holding a valid low is legal; taking one
+  back is not. The scanner produced a candidate, the finding asserted a
+  violation, and nothing in between read the usage — the same error as reporting
+  a peer's read path dead from a grep. **Corrected here rather than left
+  standing.**
+* `d_nw01`'s liveness testbench has it too, at `axi4_xbar_liveness_tb.sv:135`.
+  **LATENT, not minor.** The construction is present and identical; it is masked
+  only because masters there hold `r_ready` permanently high, so the crossbar's
+  R output is never stalled and the illegal transition never coincides with a
+  locked arbiter. Any future change to `r_ready` behaviour — adding backpressure
+  to the liveness test, which is exactly what L3 would want — unmasks it with no
+  signal that anything changed. **A masked defect and an absent one look
+  identical in a passing run**, so it is recorded at the same weight as the
+  active site rather than as a footnote.
+
+**F80 instance 2 stands.** `nc_i`'s pass was measured on runs that completed
+without protocol error, so it remains valid evidence that C3 is unchecked. What
+is blocked is the fix, not the finding.
+
+### Why no existing instrument asks this
+
+The variation check asks whether an input MOVES. The capability controls ask
+whether a check DISCRIMINATES. Neither asks whether the stimulus is **legal**,
+and legality is not a property of any one signal — it is a relation between a
+signal and the protocol the contract names. A scan can flag a candidate: a
+`*_valid` whose driving expression mentions a delay, rate or stall term. Whether
+that gates the START of a transfer (legal) or an in-flight one (not) has to be
+read.
+
+**The check.** For every handshake the contract names, ask whether the harness
+obeys the same rule it imposes on the design. Where a spec says "once valid is
+asserted it holds until ready", the testbench's own responders are bound by that
+sentence too — and an assertion firing inside vendored RTL is evidence about the
+STIMULUS at least as often as about the design.
+
+**Rules:** 35
+

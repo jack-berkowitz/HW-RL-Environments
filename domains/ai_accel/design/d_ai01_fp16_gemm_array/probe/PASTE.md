@@ -21,6 +21,18 @@ usual default:
   the general rounding clause; several entries differ from what "round it and
   see" would give.
 
+* **Elaboration under two frontends is a requirement, not a formality.** Clause
+  T5 requires the design to elaborate under both slang and Verilator. A
+  construct Verilator accepts silently can be a hard error in the synthesis
+  frontend, and a bit-exact submission that trips it produces no PPA number at
+  all.
+
+* **Read the G clauses before choosing an architecture.** They set out how the
+  submission is graded, in what order, and — more importantly — which of the
+  usual optimisation levers this contract has already taken away. Latency,
+  throughput and the arithmetic are all pinned; area, power and timing at a fixed
+  clock period are what remain.
+
 Everything normative is in the interface below.
 
 ```systemverilog
@@ -194,9 +206,30 @@ Everything normative is in the interface below.
 //     A NaN entering a stage propagates as 0x7E00 down the remainder of the
 //     chain.
 //
-// A10. FLAG SCOPE. status_o[r][k] reports the exceptions of THAT STAGE'S fused
-//     multiply-add alone. Flags are not accumulated along the chain and not
-//     ORed across stages or rows.
+// A10. FLAG SCOPE AND TIMING. status_o[r][k] reports the exceptions of THAT
+//     STAGE'S fused multiply-add alone. Flags are not accumulated along the
+//     chain and not ORed across stages or rows.
+//
+//     THE TIMING IS PINNED, AND IT IS NOT THE SKEW OF A3. status_o[r][k](t)
+//     reports the operation whose operands were sampled 2 ENABLED TICKS EARLIER
+//     -- the SAME delay for every k, independent of d(k). It is NOT aligned with
+//     the z_o that operation contributes to, so at any tick the HEIGHT entries
+//     of a row generally describe HEIGHT DIFFERENT operations, one per stage in
+//     flight.
+//
+//     Measured: with stage k driven to overflow in a four-tick burst, OF appears
+//     on status_o[r][k] two enabled ticks later and for exactly the burst width,
+//     at every k and at both legal HEIGHTs. One operation is latched; two
+//     consecutive operations are never ORed together. (A single-tick impulse
+//     from a quiescent chain shows a wider, one-tick-earlier response; that is a
+//     startup regime and not the steady-state rule stated here.)
+//
+//     AN EARLIER DRAFT LEFT THE TIMING UNSTATED, and that was a defect in this
+//     text rather than in any implementation. Two readings satisfied the words
+//     -- this one, and "aligned with the z_o it contributed to" -- and an
+//     independent implementation of the same clause took the other reading and
+//     disagreed with the reference on roughly 2900 of 3400 cycles. Both were
+//     legal. The clause was wrong to permit both.
 //
 // -----------------------------------------------------------------------------
 // C -- CONTROL
@@ -218,10 +251,20 @@ Everything normative is in the interface below.
 //     flush_i DOES take precedence over reg_enable_i: with reg_enable_i low and
 //     flush_i high, every clocked row clears. Also measured.
 //
-//     On deassertion the chain refills from the operand field then in force; the
-//     refill passes through the partial sums of A3 before settling, and those
-//     intermediate values are contractual -- they follow from A3 with the
-//     flushed zeros as the starting state.
+//     THE REFILL WINDOW IS NOT SCORED. On deassertion the chain refills from the
+//     operand field then in force. The values delivered on z_o and status_o
+//     during the first D*(HEIGHT-1)+3 ENABLED TICKS after flush_i falls -- 31 at
+//     HEIGHT=8, 15 at HEIGHT=4 -- are UNSPECIFIED, and are excluded from
+//     scoring.
+//
+//     An earlier draft asserted the opposite: that the refill passes through the
+//     partial sums of A3 and that those intermediate values are contractual
+//     because they "follow from A3 with the flushed zeros as the starting
+//     state". That was a CONTRACT DEFECT. The reference holds per-stage internal
+//     state that this contract deliberately does not model, so its refill
+//     sequence is not derivable from A3, and an independent implementation that
+//     did derive it from A3 produced a different -- and equally legal -- refill.
+//     Nothing is scored that this text cannot specify.
 //
 // C3. accumulate_i high replaces the bias input of every row with THAT ROW'S
 //     OWN z_o. y_i is ignored while it is high. This is how operands deeper
@@ -244,12 +287,43 @@ Everything normative is in the interface below.
 //     both. A contract that said "the row's own z_o" without pinning WHICH z_o
 //     would have left the reference to decide it.
 //
+//     TRANSITIONS ARE NOT SCORED. The rule above is a STEADY-STATE rule. When
+//     accumulate_i changes, in either direction, partial sums seeded with y_i
+//     are still travelling down the chain, and this contract does not model them
+//     -- it describes what a row delivers, not the pipeline that delivers it.
+//     The values on z_o and status_o during the first D*(HEIGHT-1)+3 ENABLED
+//     TICKS after any change of accumulate_i -- 31 at HEIGHT=8, 15 at HEIGHT=4 --
+//     are therefore UNSPECIFIED and excluded from scoring.
+//
+//     Measured: two implementations agreeing exactly on dfb, and agreeing
+//     cycle-for-cycle when accumulate_i is toggled against a CONSTANT operand
+//     field, still diverge under a time-varying field for exactly one pipeline
+//     depth after each toggle. That difference is in state this text declines to
+//     specify, so it is not scored. Modelling it instead would put a pipeline
+//     structure into the contract and hand every submission a required
+//     microarchitecture, which is the freedom this task exists to measure.
+//
 // C4. row_clk_gate_en_i[r] low freezes row r alone. Its registers hold, its
 //     z_o holds, and it resumes from where it stopped when re-enabled. It is a
 //     clock gate, NOT a reset: nothing is cleared. Other rows are unaffected.
 //
 //     The freeze is TOTAL and outranks flush_i -- see C2. rst_ni is the only
 //     input that clears a gated row, because it is asynchronous (V2).
+//
+//     "RESUMES" IS DEFINED FOR THE REGISTERS, NOT FOR THE PIPELINE. A row holds
+//     its own registers across the freeze and continues from them -- that much is
+//     scored. What is NOT specified is the relationship between the resumed row's
+//     in-flight partial sums and an operand stream that kept advancing while the
+//     row was frozen: the contract does not model where in the chain each sum
+//     had reached. The values on z_o[r] and status_o[r][*] during the first
+//     D*(HEIGHT-1)+3 ENABLED TICKS after row_clk_gate_en_i[r] changes are
+//     UNSPECIFIED and excluded from scoring, PER ROW -- other rows are unaffected
+//     and stay scored throughout.
+//
+//     Measured: gating a row and releasing it against a CONSTANT operand field
+//     agrees cycle-for-cycle between independent implementations; under a
+//     time-varying field the released row diverges for one pipeline depth,
+//     starting on the first tick after release.
 //
 // -----------------------------------------------------------------------------
 // L -- LATENCY
@@ -296,5 +370,162 @@ Everything normative is in the interface below.
 //     rule (A7) and the exact-zero sign rule (A8) are all separately exercised.
 //     A design that flushes subnormals to zero, or that delivers infinity in
 //     every overflow mode, fails on vectors written specifically for them.
+//
+// T5. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator. Passing
+//     simulation is not sufficient: the synthesis frontend is slang, and a
+//     design Verilator accepts without comment can be rejected there, in which
+//     case a bit-exact submission scores full correctness and produces NO PPA
+//     NUMBER AT ALL, with the cause surfacing much later as an unexplained
+//     mid-pipeline failure.
+//
+//     The construct that exposes this is an UNBOUNDED-LOOKING LOOP whose bound
+//     slang cannot resolve at elaboration. slang enforces an unroll budget of
+//     4000 iterations across nested loops, and exceeding it is a hard error:
+//
+//         error: unroll limit of 4000 exhausted [--unroll-limit=]
+//
+//     A per-bit search over a wide accumulator -- a leading-one scan, a priority
+//     encode, a normalisation loop -- nested inside a per-row and a per-stage
+//     loop reaches that budget quickly: 176 x HEIGHT x WIDTH is far past it.
+//     Give every loop a small CONSTANT bound, or express the search as indexed
+//     logic rather than iteration.
+//
+//     THIS IS REPRODUCED HISTORY, NOT A HYPOTHETICAL. d_dsp03's second source
+//     passed every simulation configuration and was then rejected by the
+//     synthesis frontend with this exact error, which is why that task carries
+//     the same clause. This task's own second source hit it again, on the same
+//     construct, before this clause existed.
+//
+// -----------------------------------------------------------------------------
+// G -- GRADING
+// -----------------------------------------------------------------------------
+// G1. THE ORDER, and correctness is a GATE rather than a weighting.
+//
+//     1. CORRECTNESS, at BOTH legal HEIGHT values. The submission is driven with
+//        a recorded stimulus stream and compared against the reference cycle by
+//        cycle on z_o and status_o, over the scored cycles only -- that is, every
+//        cycle except those excluded by C2, C3 and C4. The comparison is
+//        BIT-EXACT. There is no partial credit and no tolerance: a value that is
+//        one ulp out fails exactly as a value that is nonsense fails.
+//
+//     2. THE GATE. A submission that fails correctness at EITHER geometry, OR
+//        THAT FAILS TO BUILD, produces NO PPA NUMBER AT ALL. It is recorded as a
+//        failure, not as a missing measurement, and it scores zero on every PPA
+//        axis. Passing at the scored geometry alone is not sufficient -- see T3.
+//        A design the simulator accepts and the synthesis frontend rejects
+//        scores full correctness and no PPA.
+//
+//     3. PPA, measured only for submissions that already passed, and measured
+//        ONCE AT A PINNED CLOCK PERIOD rather than by sweeping for a maximum
+//        frequency.
+//
+//        THE PINNED PERIOD FOR THIS TASK IS NOT YET SET. It is derived as 1.5x
+//        the reference implementation's own measured period, rounded up to the
+//        next 0.25 ns, from a single reference Fmax sweep; that sweep is running
+//        and its result will be stated here before any submission is solicited.
+//        The 50 ns in orfs/constraint.sdc is a STARTING CONSTRAINT, not the pin,
+//        and it was never derived by that rule.
+//
+//        Whatever the number turns out to be, it does not move in response to
+//        what is submitted. An earlier scheme pinned the row at the slowest
+//        submission's own Fmax, which rewards a slow design by moving the
+//        measurement toward the period where its own area looks best. The period
+//        is THE SAME for every submission, so all designs are compared at one
+//        frequency rather than at each design's own best.
+//
+// G2. WHAT IS COMPARED. Measured from one build, at the pinned period:
+//       * AREA, post-synthesis and post-place-and-route.
+//       * POWER, at the pinned period.
+//
+//     TIMING CLOSURE IS A GATE, NOT AN AXIS, AND SLACK IS NOT SCORED. A build
+//     that misses the pinned period yields no comparable area or power figure --
+//     an area number from a build that did not close is not a smaller design, it
+//     is an unfinished one -- so its PPA is withheld rather than reported.
+//
+//     Slack ABOVE zero earns nothing either, and the reason is that it is not a
+//     separate quantity from area. Meeting timing with margin is bought WITH
+//     area: the tools upsize cells, insert buffers and duplicate logic to close
+//     faster. A design sitting at +2 ns on the pinned period spent silicon
+//     getting there that a design at +0.05 ns did not. Area already charges for
+//     that, so scoring slack as well would count one tradeoff twice and in
+//     opposite directions -- rewarding a design for the very spending the area
+//     axis penalises. Closure is therefore pass or fail, and everything above
+//     the line is the same result.
+
+//     Fmax is NOT a scored axis. It is measured once per task, on the REFERENCE
+//     ONLY, and its sole job is to set the pinned period above. Submissions are
+//     not swept. A design that could run faster than the pinned period earns
+//     nothing for it, exactly as a design handed a frequency target in practice
+//     earns nothing for exceeding it; and a per-design Fmax could not be combined
+//     with the area and power above in any case, because those come from a build
+//     at the pinned period and an Fmax comes from a different build at a
+//     different one.
+//
+// G3. WHAT IS NOT AVAILABLE TO OPTIMISE. Read this before choosing an
+//     architecture, because the lever most designs reach for first is absent.
+//
+//       * LATENCY IS NOT FREE. The per-stage delay D is fixed at 4 by L1 and the
+//         operand skew d(k) by A3. Adding pipeline stages to shorten the
+//         critical path CHANGES THE DELIVERED VALUES and fails correctness. You
+//         cannot buy frequency with depth here, which is the usual trade and is
+//         not on offer.
+//       * THROUGHPUT IS NOT FREE. One result per row per enabled tick, fixed by
+//         A3. There is no rate to raise.
+//       * THE ARITHMETIC IS NOT FREE. Every delivered value is pinned to the bit
+//         by F1 and A1-A10, including both range tables. There is no
+//         accuracy-for-area trade, and narrowing an internal datapath to save
+//         area will fail on the vectors written for A5, A6 and A7.
+//
+// G4. WHAT IS ACTUALLY LEFT, and it is where the whole PPA difference comes from.
+//     The contract fixes WHAT is delivered and WHEN. It says nothing about HOW,
+//     and every remaining choice is an implementation one:
+//
+//       * how the fused multiply-add is built -- shared versus replicated
+//         datapath, how alignment and normalisation are structured, how much
+//         logic is common across the HEIGHT stages of a row;
+//       * how the WIDTH rows share or replicate that logic, given that w_i is
+//         broadcast to every row and is the same value in each;
+//       * how state is held -- what is registered where, within the fixed
+//         per-stage delay budget;
+//       * whether and how clock gating is used. row_clk_gate_en_i is part of the
+//         contract; what a design does with it internally is not.
+//
+//     A submission that meets the pinned period with less area and less power
+//     scores better. Meeting it comfortably buys nothing extra -- there is no
+//     credit for slack beyond zero, because the period is fixed for everyone.
+// G5. THERE IS NO SINGLE COMBINED SCORE, and that is deliberate rather than
+//     unfinished. Nothing in this project establishes what a unit of
+//     capability is worth in square micrometres, so no weighted sum of area,
+//     power and capability is computed, and none should be inferred from the
+//     phrase "scores better" above. Each axis is reported separately, and a
+//     submission that wins on one and loses on another is reported as exactly
+//     that.
+//
+//     WHAT A SUBMISSION IS COMPARED AGAINST. The reference implementation,
+//     built from the same contract at the same pinned period and the same
+//     scored configuration, and the other submissions to this task on the
+//     same axes. The reference is an ANCHOR, not a target: beating it is not
+//     required and losing to it is not disqualifying. It exists so that a
+//     number has something to be a ratio of.
+//
+//     EVERY REPORTED METRIC CARRIES A ROLE, and the role decides how a
+//     difference from the reference is read:
+//
+//       * FIXED -- the contract requires a value. Deviating is a specification
+//       violation, not a design choice, and it fails correctness.
+//       * CHOICE -- the contract leaves it free and it moves PPA. Where a
+//       submission chose differently from the reference, the area ratio is
+//       marked NOT LIKE-FOR-LIKE rather than presented as a quality gap.
+//       Choosing differently from the reference is not penalised; it is
+//       disclosed.
+//       * CAPABILITY -- more is better and area buys it. Reported both raw and
+//       per unit of area, because raw area credits a design for being small
+//       when it was actually doing less.
+//
+//     So the honest summary of the whole scheme: correctness gates, timing
+//     closure gates, and what survives both is described on several axes at one
+//     operating point, with the free choices named so that a difference in area
+//     can be read as the trade it is rather than as a verdict.
+//
 // =============================================================================
 ```

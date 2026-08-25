@@ -167,3 +167,60 @@ scored_metrics:
   - {metric: beats_delivered,       label: "beats",    role: capability}
   - {metric: beats_cycles,          label: "cycles"}   # denominator of throughput
   - {metric: liveness_worst_wait,   label: "wait.max"} # stimulus-driven
+
+# =============================================================================
+capability_controls:
+  stimulus_variation:
+    status: CLEAN
+    measured: "8 of 8 contract inputs vary"
+    tool: scripts/check_stimulus_variation.py
+  concurrency:
+    control: controls/nc_b_outputs_serialised.sv
+    covers: C1
+    verdict: "FAIL at 4x4, PASS at 2x2"
+    failing_checks: 1
+    measured: "aggregate rate 514 beats / 601 cycles = 0.855, against a 2.0 floor"
+    reference: "PASS at both, so the floor admits correct hardware (rule 24)"
+    polarity: >
+      NOT INVERTED. S_COUNT and M_COUNT are real task configurations, so the TASK
+      varies and the control passes at the small one and fails at the large. C1
+      is deliberately enforced only at 4x4 -- at 2x2 the ceiling IS 2.0 beats per
+      cycle, so a 2.0 floor would fail correct hardware, and the rate is reported
+      there rather than gated. A pass at the small configuration is not
+      capability evidence.
+  buffering_ceiling:
+    control: controls/nc_h_overbuffered.sv
+    covers: B1
+    status: ENFORCED
+    verdict: "FAIL at 4x4 AND at 2x2, 1 failing check each -- B1 alone"
+    finding: F80
+    the_transition: >
+      THIS IS THE EVIDENCE THE CHECK WORKS, and it is why the control was built
+      before the check. Before the ceiling phase existed nc_h PASSED BOTH
+      configurations with zero per-step failures; after it, nc_h FAILS both with
+      exactly one failing check, and both conforming designs still pass with
+      zero. A check never seen to flip a known-bad design is a check nobody has
+      tested.
+    measurement: >
+      d_ca04's capacity phase run as a CEILING rather than a floor: hold every
+      output not-ready, offer frames on every input, count beats accepted before
+      the design stops accepting. Everything is observed on s_valid/s_ready in
+      the INPUT domain, so nothing races and this is not the cross-domain
+      occupancy the checker documents as unmeasurable.
+    validated_before_gating:
+      note: "rule 24 -- the bound was set AFTER measuring known-good answers"
+      beats_held_4x4: {reference: 8, second_source: 40, nc_h: 144}
+      beats_held_2x2: {reference: 4, second_source: 16, nc_h: 72}
+      bound: "16 * M_COUNT -- 64 at 4x4, 32 at 2x2"
+      margin: >
+        Both conforming designs clear it at both configurations, the tightest
+        being the second source at 40 against 64. The control exceeds it by
+        2.25x at the tighter configuration. The bound is B1'"'"'S OWN ARITHMETIC --
+        2 frames per output, 8 beats per frame by R6 -- and is not fitted to any
+        implementation.
+    polarity: >
+      NO CROSSOVER, unlike every other control here. B1'"'"'s ceiling is a CONSTANT,
+      not a parameter, so eight buffers exceeds it at every configuration and the
+      verdict is the same at both. The two configurations are run to show the
+      result is not a configuration artefact.
+    unaffected: "nc_a still fails on delivery (23 checks), nc_b still fails on C1 (1)"

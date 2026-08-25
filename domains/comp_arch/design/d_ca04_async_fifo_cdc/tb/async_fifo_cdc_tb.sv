@@ -36,6 +36,11 @@
 `timescale 1ps/1ps
 
 module async_fifo_cdc_tb;
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, async_fifo_cdc_tb);
+  end
+
 
     parameter int DATA_W      = 32;    // 8 / 32 / 64
     parameter int LOG_DEPTH   = 3;     // 2 / 3 / 4

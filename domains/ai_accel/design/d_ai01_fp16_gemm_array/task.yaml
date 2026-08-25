@@ -122,7 +122,96 @@ anchor_conformance:
 spec: [spec/fp16_gemm_array_iface.sv]
 measurements: MEASUREMENTS.md
 probe: probe/PASTE.md
-task_text_hash: 84950ba1d90be2d8
+task_text_hash: 86b7d95729381055
+
+version_boundary:
+  changed_on: 2026-08-23
+  pre_bump_task_text_hash:  9a93e4502979efc9
+  post_bump_task_text_hash: 86b7d95729381055
+  what_changed_this_boundary: >
+    GRADING CRITERIA ADDED to the shipped contract, as clauses G1-G4. The text
+    previously specified WHAT to build and said nothing about how a submission
+    would be judged or what it should optimise, leaving every candidate to guess
+    at the objective.
+    .
+    G1 states the order, and that correctness is a GATE rather than a weighting:
+    bit-exact at BOTH geometries over the scored cycles, and a failure at either
+    yields no PPA number at all. G2 names the three compared axes. G3 states what
+    is NOT available to optimise, which for this task is unusual and
+    load-bearing -- latency, throughput and the arithmetic are all pinned by L1,
+    A3 and A1-A10, so a submission CANNOT buy frequency by changing pipeline
+    depth, the lever most designs reach for first. G4 states what is actually
+    left: how the fused multiply-add is built, how rows share logic given the
+    broadcast weight vector, where state sits inside the fixed delay budget, and
+    clock gating.
+  non_behavioural: >
+    MEASURED, NOT ASSERTED. Only spec/fp16_gemm_array_iface.sv and probe/PASTE.md
+    changed; the testbench, vectors, controls and reference shim are byte-identical.
+    Re-running at the new hash reproduces every number exactly -- reference 0 z and
+    0 status at both geometries, second source 4/10 at HEIGHT=4 and 6/13 at
+    HEIGHT=8. So unlike the two earlier boundaries, results DO carry across this
+    one: a design conformant before it is still conformant after, and no candidate
+    needs re-scoring for correctness. The hash still changes, because the shipped
+    text changed and the hash is what asserts "same question".
+  earlier_boundaries:
+    - {pre: 84950ba1d90be2d8, post: e43648a5afcacc53, what: "A10 pinned, C2 narrowed, T5 added", behavioural: true}
+    - {pre: e43648a5afcacc53, post: 9a93e4502979efc9, what: "C3 and C4 narrowed", behavioural: true}
+  what_changed_this_boundary: >
+    C3 and C4 narrowed, batched into ONE hash bump. Both are the SAME DEFECT AS
+    C2 one level deeper: the contract specifies steady states and does not model
+    the in-flight pipeline, so its silence about control TRANSITIONS read as a
+    determinism claim it cannot deliver.
+    .
+    C3 -- the pinned dfb stays as the steady-state rule. Partial sums still in
+    flight when accumulate_i changes, in either direction, are UNSCORED for
+    D*(HEIGHT-1)+3 enabled ticks (31 at HEIGHT=8, 15 at HEIGHT=4).
+    .
+    C4 -- "holds" and "resumes from where it stopped" are kept for the row's own
+    registers. The relationship between a resumed row's in-flight sums and an
+    operand stream that advanced during the freeze is UNSCORED for the same
+    window, PER ROW; other rows stay scored throughout.
+    .
+    Not modelled, deliberately: putting the pipeline into the contract would hand
+    every submission a required microarchitecture, which is the freedom this task
+    exists to measure.
+  what_changed: >
+    Three clause changes, all of them found by the second source and none of
+    them visible to any of the seven negative controls.
+    .
+    A10 -- flag TIMING is now pinned. The clause said status_o[r][k] reports
+    that stage's operation "alone" and said nothing about when. Two readings
+    satisfied it, and an independent implementation took the other one and
+    disagreed with the reference on ~2900 of 3400 cycles. Pinned to the
+    reference's behaviour: every stage reports its own in-flight operation at a
+    uniform delay of 2 enabled ticks, NOT aligned with the z_o it contributes
+    to. Measured with a four-tick overflow burst per stage at both geometries.
+    .
+    C2 -- the post-flush refill window is now explicitly UNSCORED, named as
+    D*(HEIGHT-1)+3 enabled ticks. The clause previously asserted the refill
+    intermediates were contractual because they "follow from A3 with the flushed
+    zeros as the starting state". They do not: the reference holds per-stage
+    state this contract does not model. A contract defect, narrowed rather than
+    modelled -- nothing is scored that the text cannot specify.
+    .
+    T5 -- ADDED. Elaboration is required under both slang and Verilator, with the
+    4000-iteration unroll limit named. Without it a bit-exact submission can
+    score full correctness and produce no PPA number at all. Reproduced history,
+    not hypothesis: d_dsp03 hit this exact error and carries the same clause, and
+    this task's own second source hit it again on the same construct.
+  material_to_rule_17: YES
+  prior_results:
+    status: >
+      EVERY RESULT ON THIS TASK PREDATING THE CURRENT HASH WAS MEASURED AGAINST A
+      SUPERSEDED TEXT -- 84950ba1d90be2d8 before the first boundary,
+      e43648a5afcacc53 before the second. That includes the reference's original
+      2/2 at 3400/3400 cycles, every kill count in controls/CONTROLS.md, and the
+      nc_g discrimination measurement. All are retained as historical and NONE is
+      comparable to a number measured against 9a93e4502979efc9.
+    note: >
+      The vector sets themselves did NOT change across EITHER boundary -- the
+      stimulus and the recorded reference behaviour are byte-identical throughout.
+      What changed both times is which cycles are scored.
+  candidates_affected: NONE -- no candidate has ever been scored against this task.
 
 scored_configuration:
   HEIGHT: 8
@@ -145,13 +234,32 @@ scored_configuration:
     hardcodes one depth cannot pass at the other. WIDTH is pure replication and
     would not discriminate.
   discrimination_evidence:
-    measured: PARTIAL
+    measured: true
+    reference: PASS at HEIGHT=4, PASS at HEIGHT=8 (3400/3400 cycles each)
+    capacity_reduced_control: nc_g_height_blind_depth
+    control_result: PASS at HEIGHT=4, FAIL at HEIGHT=8
+    numbers:
+      HEIGHT_4: {result: PASS, z_kills: 0, status_kills: 0, first_kill: none}
+      HEIGHT_8: {result: FAIL, z_kills: 3208, first_z_kill_cycle: 14,
+                 status_kills: 3189, first_status_kill_cycle: 13}
+    witness: >
+      HEIGHT=8, x=1.0 and w=2.0 on every stage, y=+0, field held until settled.
+      The reference delivers 0x4C00 (16.0 = 8 * 2.0); nc_g delivers 0x4800
+      (8.0 = 4 * 2.0). Hand-checkable, and a real non-equivalence rather than a
+      no-op perturbation. Both instances are handed the same eight operand pairs
+      -- nc_g's ports are HEIGHT-wide, it simply discards stages 4..7.
     detail: >
-      The reference passes at both HEIGHT=4 and HEIGHT=8, 3400/3400 cycles each.
-      No capability-reduced control that passes at HEIGHT=4 and fails at HEIGHT=8
-      has been built yet, so the d_dsp03-style two-configuration discrimination
-      argument is NOT yet established by measurement for this task. Stated as
-      absent rather than assumed.
+      HEIGHT IS LOAD-BEARING, and this is now measured rather than assumed.
+      nc_g pins the chain depth to the literal 4 instead of deriving it from
+      HEIGHT. At HEIGHT=4 that is the identity and it is bit-for-bit the
+      reference; at HEIGHT=8 it computes a four-deep dot product where the
+      contract requires eight, and additionally carries the four-deep operand
+      skew, so it fails on both z_o and status_o.
+      .
+      The control passing at the unscored configuration is the evidence, not an
+      inconvenience: it is the direct measurement that HEIGHT=4 cannot tell a
+      HEIGHT-blind design from a conformant one and HEIGHT=8 can. This is why
+      the scored configuration is the larger geometry.
 
 configs:
   - {HEIGHT: 4, WIDTH: 8}
@@ -187,7 +295,14 @@ vectors:
     controls/CONTROLS.md.
 
 results:
-  reference: 2/2   # PASS at HEIGHT=4 and HEIGHT=8, 3400/3400 cycles each, z and status
+  measured_against_task_text: 86b7d95729381055
+  reference: 2/2   # PASS at both; 3157 scored cycles at H=4, 2937 at H=8
+  unscored_cycles: {HEIGHT_4: 243, HEIGHT_8: 463}   # C2 flush + C3 accumulate windows; C4 is per row
+  superseded: >
+    Two boundaries precede this figure: 84950ba1d90be2d8 (reference 2/2 over
+    3400/3400 cycles) and e43648a5afcacc53 (2/2 over 3287 and 3164 scored
+    cycles). Neither is comparable to the current number. The vector sets did
+    not change across either boundary -- only the set of scored cycles did.
   coverage_at_scored_config:
     rounding_modes: 5/5
     A5_overflow_mode_x_sign: 10/10
@@ -206,6 +321,9 @@ negative_controls:
   - {name: nc_d_overflow_always_inf, targets: "A5 mode-dependence", z_kills: 230, status_kills: 0, isolated: true}
   - {name: nc_e_positive_zero_only,  targets: "A6 sign, A8",       z_kills: 132,  status_kills: 0, isolated: true}
   - {name: nc_f_reversed_chain,      targets: "A2 ordering",       z_kills: 3203, status_kills: 3057}
+  - {name: nc_g_height_blind_depth,  targets: "P1 HEIGHT is load-bearing",
+     kind: capacity-reduced, at_HEIGHT_4: PASS, at_HEIGHT_8: FAIL,
+     z_kills_at_8: 3208, status_kills_at_8: 3189, isolated: true}
   discrimination_note: >
     nc_c at 84 and nc_e at 132 out of 3400 are the useful ones: they fire only on
     the behaviour their clause describes, so passing them is evidence about that
@@ -221,12 +339,76 @@ negative_controls:
     changes nothing and would have PASSED.
 
 second_source:
-  status: ABSENT
-  note: >
-    Not yet written. Tier-B does not require it, and its absence is stated rather
-    than implied: nothing here has been checked against an independent
-    implementation of the contract, so the evidence that the task is SOLVABLE at
-    the pinned contract is not yet in hand.
+  status: PRESENT_WITH_OPEN_RESIDUAL
+  file: tb/fp16_gemm_array_alt_ref.sv
+  oracle_class: B
+  oracle_class_note: >
+    A LOCAL MODEL OF RECORD, not an external one. RedMulE exposes no shimmable
+    boundary for this contract beyond redmule_engine itself, so there is no second
+    external RTL to anchor on. NOTHING HERE CARRIES A "passes known-correct
+    external RTL" CLAIM.
+  independence: >
+    NOT A CLEAN ROOM, and the file header says so itself. ref/ was never opened
+    while writing it, but the anchor's structure was already in working memory
+    from the step-0 audit -- W rows of H chained elements, a registered partial
+    sum between stages, physically gated row clocks. The structural differences
+    are therefore DELIBERATE OPPOSITES of a known structure rather than
+    independent convergence, which is weaker evidence and is labelled as such.
+    Where it still bites is the arithmetic and the timing readings, both derived
+    from clause text alone.
+  structural_differences:
+    measured:
+      - "elaborates under Verilator but FAILS slang with `unroll limit of 4000
+         exhausted`, where the reference passes both -- a direct consequence of
+         the iterative wide-value search the exact-integer algorithm uses"
+      - "divergence profile: disagreement confined to control transitions and
+         lasting exactly one pipeline depth, with zero divergence in the directed
+         arithmetic tail -- measures that the two hold state in different places"
+    inspection_verifiable:
+      - "no clock-gating cell of any kind (grep the file), against
+         tc_clk_gating per row in redmule_engine.sv:75 and cluster_clock_gating
+         per element in redmule_ce.sv:68"
+      - "no instantiated arithmetic unit at all, against redmule_row instantiating
+         HEIGHT redmule_ce instances per row"
+      - "one partial-sum shift register per row with an FMA tapped in at position
+         D*k, 14,464 declared state bits at 8x8, against per-element internal
+         pipelines"
+    rule_5_note: >
+      Two measured and three inspection-verifiable, which satisfies the amended
+      rule 5. It is AT THE FLOOR, not comfortably above it, and that is stated
+      rather than left for a reader to work out.
+  results:
+    measured_against_task_text: 86b7d95729381055
+    HEIGHT_4: {scored_cycles: 3157, z_mismatches: 4, status_mismatches: 10}
+    HEIGHT_8: {scored_cycles: 2937, z_mismatches: 6, status_mismatches: 13}
+  open_residual: >
+    IT DOES NOT AGREE WITH THE REFERENCE, and is committed in that state
+    deliberately. Two populations remain. (1) 4 z cycles at HEIGHT=4 (2637-2640,
+    one row) and 6 at HEIGHT=8 (1472-1478) that reproduce under NO directed probe
+    built so far -- MEASUREMENTS.md section 17, recorded OPEN, at the adjudication
+    cap, needing a differently-shaped instrument rather than more rounds.
+    (2) flush-cycle status divergences, closed as a second-source defect in
+    MEASUREMENTS.md section 15: the reference keeps advancing its status pipeline
+    through a flush and this file does not, and matching it exactly would mean
+    modelling per-stage internal registers the contract deliberately omits.
+    .
+    Four of five earlier residuals resolved as defects in THIS FILE rather than in
+    the task -- a truncated self-determined product, a missing output pipeline
+    stage, a status pipeline one stage short, and a feedback tap one tick early.
+    On that record the likely reading of the remaining z cycles is a fifth. That
+    is a prior, not a measurement.
+  what_it_bought: >
+    THREE CONTRACT DEFECTS, none of which any of the seven negative controls could
+    see. A10 left flag timing unpinned and permitted two legal readings that
+    disagreed on ~2900 of 3400 cycles. C2 asserted the post-flush refill was
+    contractual when the reference's refill is not derivable from A3. C3 and C4
+    asserted determinism across control transitions the contract cannot deliver.
+    All three are now narrowed or pinned, and F68 and rule 26 generalise the
+    pattern. It also reproduced d_dsp03's slang unroll failure on the same
+    construct, which is why this task now has a T5.
+    .
+    It does NOT yet demonstrate the task is solvable at the pinned contract --
+    that claim needs an implementation that AGREES, and this one does not.
 
 orfs:
   config: orfs/config.mk
@@ -278,7 +460,10 @@ ppa_note: >
   the final pin is Agent 1's, and should be overridden with CLK_PERIOD_NS rather
   than by editing the file.
 
-skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task, second_source]
+skipped_under_tier_b: [find_fmax, mutant_set, formal_EC_per_task]
+# second_source was listed here and should not have been. Rule 5 makes it
+# mandatory; Tier-B drops find_fmax's binary search in favour of a pinned clock
+# period, which is a PPA procedure change and says nothing about anchoring.
 
 difficulty_assessment: >
   Not a first-try problem, and not for the reason the catalog row expected. The

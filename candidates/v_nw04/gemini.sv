@@ -81,7 +81,6 @@ module ptp_time_base_tb;
     drift_ns = '0; drift_fns = '0; drift_rate = '0; drift_valid = 1'b0;
   end
 
-  // ---- watchdog ------------------------------------------------------------
   initial begin
     #3_000_000;
     $display("RESULT: FAIL (watchdog: no verdict reached)");
@@ -92,279 +91,291 @@ module ptp_time_base_tb;
 // TESTBENCH CHECKING LOGIC
 // ---------------------------------------------------------------------------
 
-  // Utility to print fail and terminate
-  task automatic fail(string reason);
-    $display("RESULT: FAIL (%s)", reason);
+  typedef logic signed [63:0] delta_t;
+
+  // Expected parameters for our test sequence
+  int expect_p = 0;          // 0 for default 6.4ns, 1 for 7.0ns
+  int expect_d = 0;          // 0 for default +2fns, 1 for -5fns
+  int active_rate = 5;
+  int allow_p_transition = 0;
+  int allow_d_transition = 0;
+
+  // Base state tracking
+  int dr_count[2] = '{0, 0};
+  int dr_phase_locked[2] = '{0, 0};
+  int adj_seen[2] = '{0, 0};
+  int in_adj[2] = '{0, 0};
+  int adj_blocks[2] = '{0, 0};
+
+  // Global counts for outputs
+  int adj_active_count = 0;
+  int adj_active_blocks = 0;
+  int step_alone_count = 0;
+  int ts_step_count = 0;
+  int pps_count = 0;
+
+  int cyc_rst = 0;
+  int cyc_set96 = 100;
+  int cyc_set64 = 100;
+  logic prev_adj_active = 0;
+
+  logic [63:0] ts64_prev = 0;
+  logic [47:0] prev_ts96_sec = 0;
+  logic [29:0] prev_ts96_ns = 0;
+  logic [15:0] prev_ts96_fns = 0;
+
+  task automatic FAIL(input string msg);
+    $display("RESULT: FAIL (%s)", msg);
     $finish;
   endtask
 
-  // Decoding functions for F1, F2
-  function automatic logic [47:0] ts96_sec(logic [95:0] ts); return ts[95:48]; endfunction
-  function automatic logic [29:0] ts96_ns(logic [95:0] ts);  return ts[45:16]; endfunction
-  function automatic logic [15:0] ts96_fns(logic [95:0] ts); return ts[15:0]; endfunction
-  
-  function automatic logic [47:0] ts64_ns(logic [63:0] ts);  return ts[63:16]; endfunction
-  function automatic logic [15:0] ts64_fns(logic [63:0] ts); return ts[15:0]; endfunction
-
-  // Convert to absolute 128-bit FNS quantities for easy delta calculation
-  function automatic logic [127:0] val96_to_fns(logic [95:0] ts);
-    return (128'(ts96_sec(ts)) * 1000000000 * 65536) + (128'(ts96_ns(ts)) * 65536) + 128'(ts96_fns(ts));
-  endfunction
-
-  function automatic logic [127:0] val64_to_fns(logic [63:0] ts);
-    return (128'(ts64_ns(ts)) * 65536) + 128'(ts64_fns(ts));
-  endfunction
-  
-  function automatic logic [63:0] signed_20bit_to_fns(logic [3:0] ns, logic [15:0] fns);
-    logic [19:0] combined;
-    combined = {ns, fns};
-    return 64'(signed'(combined));
-  endfunction
-
-  // --- Checking states ---
-  logic test_running = 0;
-  
-  logic [127:0] prev_ts96_val;
-  logic [127:0] prev_ts64_val;
-  logic         prev_ts96_valid;
-  logic         prev_ts64_valid;
-
-  // Expected operating parameters
-  longint expected_period;
-  longint expected_drift;
-  int     expected_drift_rate;
-  
-  // Outstanding adjustment state
-  longint expected_adj;
-  int     adj96_rem;
-  int     adj64_rem;
-  int     adj_active_rem;
-  logic   adj_active_in_progress;
-  logic   adj_active_seen_first;
-
-  int     drift_ctr_96;
-  int     drift_ctr_64;
-
-  logic   expect_pps;
-  logic   expect_step_96;
-  logic   expect_step_64;
-
-  // To tolerate up to 4 cycles of delay for settings
-  int     period_change_grace;
-  int     drift_change_grace;
-  
-  // Track continuous pps/step assertions
-  int     pps_assertions;
-  int     step_assertions;
-  int     expected_step_assertions;
-
-  // Monitors
-  always @(posedge clk) begin
-    if (rst) begin
-      prev_ts96_valid <= 0;
-      prev_ts64_valid <= 0;
-      
-      expected_period <= 64'h66666; // 6 ns, 0x6666 fns
-      expected_drift  <= 64'h00002;
-      expected_drift_rate <= 5;
-      
-      adj96_rem <= 0;
-      adj64_rem <= 0;
-      adj_active_rem <= 0;
-      adj_active_in_progress <= 0;
-      adj_active_seen_first <= 0;
-      
-      drift_ctr_96 <= 0;
-      drift_ctr_64 <= 0;
-
-      period_change_grace <= 0;
-      drift_change_grace <= 0;
-      
-      expect_pps <= 0;
-      expect_step_96 <= 0;
-      expect_step_64 <= 0;
-      pps_assertions <= 0;
-      step_assertions <= 0;
-      expected_step_assertions <= 0;
-
-      if (ts96 !== '0 || ts64 !== '0)
-        fail("R2: Reset did not zero the accumulators.");
-    end else if (test_running) begin
-      automatic logic [127:0] curr_ts96_val = val96_to_fns(ts96);
-      automatic logic [127:0] curr_ts64_val = val64_to_fns(ts64);
-      
-      // Checking F1: static bit format
-      if (ts96[47:46] !== 2'b00) fail("F1: ts96_o format bits 47:46 are not zero.");
-      
-      // Checking W1: ns never reaches 1B
-      if (ts96_ns(ts96) >= 1000000000) fail("W1: ts96_o ns field reached or exceeded 1 000 000 000.");
-      
-      // Checking W3: pps_o exactly one cycle on wrap
-      if (pps) pps_assertions++;
-      
-      if (ts_step) step_assertions++;
-
-      if (period_change_grace > 0) period_change_grace--;
-      if (drift_change_grace > 0) drift_change_grace--;
-
-      if (prev_ts96_valid && !expect_step_96) begin
-        automatic longint delta96 = curr_ts96_val - prev_ts96_val;
-        automatic logic is_drift = 0;
-        automatic logic is_adj = 0;
-        automatic longint expected_delta;
-        
-        drift_ctr_96++;
-        if (drift_ctr_96 == expected_drift_rate) begin
-          is_drift = 1;
-          drift_ctr_96 = 0;
-        end else if (drift_ctr_96 > expected_drift_rate) begin
-           if (drift_change_grace == 0) fail("D2: Drift spacing violated for ts96");
-           drift_ctr_96 = 1; // Resync on change
-        end
-
-        if (adj96_rem > 0) begin
-           // Check if adjustment has started for this base
-           // We'll optimistically consume an adjustment if it matches
-           // The stricter enforcement comes from the overall count.
-           is_adj = 1; 
-        end
-        
-        expected_delta = expected_period;
-        if (is_drift) expected_delta += expected_drift;
-        if (is_adj)   expected_delta += expected_adj;
-
-        if (delta96 != expected_delta) begin
-           if (is_adj && delta96 == (expected_delta - expected_adj)) begin
-              // Adjustment hasn't hit this base yet, wait
-           end else if (period_change_grace > 0 || drift_change_grace > 0) begin
-              // Pending parameter changes, forgive mismatch temporarily and attempt to resync
-           end else begin
-              fail($sformatf("I1/D2/A2: ts96 increment mismatch. Expected %0d, got %0d", expected_delta, delta96));
-           end
-        end else begin
-           if (is_adj) adj96_rem--;
+  // Decodes a raw 64-bit signed increment into its component pieces.
+  // Because our test values are chosen carefully, there is zero overlap between
+  // any valid combination of period, drift, and adjustment.
+  function automatic void decode_delta(
+    input delta_t d,
+    output logic found,
+    output logic is_p0, output logic is_p1,
+    output logic has_d0, output logic has_d1,
+    output logic has_a1
+  );
+    delta_t p_vals[2]; 
+    delta_t d_vals[3];
+    delta_t a_vals[2];
+    
+    found = 0; is_p0 = 0; is_p1 = 0; has_d0 = 0; has_d1 = 0; has_a1 = 0;
+    
+    p_vals[0] = 419430; // 6.4ns = 6*65536 + 26214
+    p_vals[1] = 458752; // 7.0ns = 7*65536
+    
+    d_vals[0] = 0;
+    d_vals[1] = 2;
+    d_vals[2] = -5;
+    
+    a_vals[0] = 0;
+    a_vals[1] = 327680; // 5ns = 5*65536
+    
+    for (int p=0; p<2; p++) begin
+      for (int dr=0; dr<3; dr++) begin
+        for (int a=0; a<2; a++) begin
+          if (d == p_vals[p] + d_vals[dr] + a_vals[a]) begin
+            found = 1;
+            if (p==0) is_p0 = 1;
+            if (p==1) is_p1 = 1;
+            if (dr==1) has_d0 = 1;
+            if (dr==2) has_d1 = 1;
+            if (a==1) has_a1 = 1;
+            return;
+          end
         end
       end
-      
-      if (prev_ts64_valid && !expect_step_64) begin
-        automatic longint delta64 = curr_ts64_val - prev_ts64_val;
-        automatic logic is_drift = 0;
-        automatic logic is_adj = 0;
-        automatic longint expected_delta;
-        
-        drift_ctr_64++;
-        if (drift_ctr_64 == expected_drift_rate) begin
-          is_drift = 1;
-          drift_ctr_64 = 0;
-        end else if (drift_ctr_64 > expected_drift_rate) begin
-           if (drift_change_grace == 0) fail("D2: Drift spacing violated for ts64");
-           drift_ctr_64 = 1;
-        end
-
-        if (adj64_rem > 0) is_adj = 1;
-        
-        expected_delta = expected_period;
-        if (is_drift) expected_delta += expected_drift;
-        if (is_adj)   expected_delta += expected_adj;
-
-        if (delta64 != expected_delta) begin
-           if (is_adj && delta64 == (expected_delta - expected_adj)) begin
-              // Adjustment hasn't hit this base yet, wait
-           end else if (period_change_grace > 0 || drift_change_grace > 0) begin
-              // Pending
-           end else begin
-              fail($sformatf("I1/D2/A2: ts64 increment mismatch. Expected %0d, got %0d", expected_delta, delta64));
-           end
-        end else begin
-           if (is_adj) adj64_rem--;
-        end
-      end
-
-      // adj_active tracking (A3)
-      if (adj_active) begin
-         if (!adj_active_seen_first) begin
-            adj_active_seen_first = 1;
-            adj_active_in_progress = 1;
-         end else if (!adj_active_in_progress) begin
-            fail("A3: adj_active_o was asserted non-consecutively.");
-         end
-         
-         if (adj_active_rem > 0) adj_active_rem--;
-         else fail("A3: adj_active_o asserted for more than adj_count_i cycles.");
-      end else begin
-         if (adj_active_in_progress) begin
-            adj_active_in_progress = 0; // finished
-            if (adj_active_rem > 0) fail("A3: adj_active_o deasserted before adj_count_i cycles completed.");
-         end
-      end
-
-      prev_ts96_val <= curr_ts96_val;
-      prev_ts96_valid <= 1;
-      prev_ts64_val <= curr_ts64_val;
-      prev_ts64_valid <= 1;
-      
-      expect_pps <= 0;
-      expect_step_96 <= 0;
-      expect_step_64 <= 0;
     end
+  endfunction
+
+  task automatic check_base(input int base_idx, input delta_t d);
+    logic found, is_p0, is_p1, has_d0, has_d1, has_a1;
+    decode_delta(d, found, is_p0, is_p1, has_d0, has_d1, has_a1);
+    
+    if (!found) FAIL("I1: Invalid increment value observed");
+    
+    if (!allow_p_transition) begin
+      if (expect_p == 0 && !is_p0) FAIL("I2: Period did not match expected P0");
+      if (expect_p == 1 && !is_p1) FAIL("I2: Period did not match expected P1");
+    end
+    
+    if (!allow_d_transition) begin
+      if (expect_d == 0 && has_d1) FAIL("D1: Saw D1 but expected D0");
+      if (expect_d == 1 && has_d0) FAIL("D1: Saw D0 but expected D1");
+    end
+    
+    // Adjustment tracking (A2)
+    if (has_a1) begin
+      adj_seen[base_idx] = adj_seen[base_idx] + 1;
+      if (!in_adj[base_idx]) begin
+        in_adj[base_idx] = 1;
+        adj_blocks[base_idx] = adj_blocks[base_idx] + 1;
+      end
+    end else begin
+      if (in_adj[base_idx]) in_adj[base_idx] = 0;
+    end
+    
+    // Drift tracking (D2)
+    if (allow_d_transition) begin
+      dr_phase_locked[base_idx] = 0;
+      dr_count[base_idx] = 0;
+    end else begin
+      dr_count[base_idx] = dr_count[base_idx] + 1;
+      if (has_d0 || has_d1) begin
+        if (dr_phase_locked[base_idx]) begin
+          if (dr_count[base_idx] != active_rate) FAIL("D2: drift spacing wrong");
+        end else begin
+          dr_phase_locked[base_idx] = 1;
+        end
+        dr_count[base_idx] = 0;
+      end else begin
+        if (dr_phase_locked[base_idx] && dr_count[base_idx] >= active_rate) FAIL("D2: missed drift");
+      end
+    end
+  endtask
+
+  always @(negedge clk) begin
+    if (rst) begin
+      cyc_rst = 0;
+      dr_phase_locked[0] = 0;
+      dr_phase_locked[1] = 0;
+      dr_count[0] = 0;
+      dr_count[1] = 0;
+      in_adj[0] = 0;
+      in_adj[1] = 0;
+    end else begin
+      cyc_rst = cyc_rst + 1;
+    end
+    
+    if (set_ts96_valid) cyc_set96 = 0;
+    else if (!rst) cyc_set96 = cyc_set96 + 1;
+    
+    if (set_ts64_valid) cyc_set64 = 0;
+    else if (!rst) cyc_set64 = cyc_set64 + 1;
+    
+    if (!rst) begin
+      automatic logic [47:0] ts96_sec;
+      automatic logic [29:0] ts96_ns;
+      automatic logic [15:0] ts96_fns;
+      automatic int valid96;
+      automatic int valid64;
+      
+      ts96_sec = ts96[95:48];
+      ts96_ns  = ts96[45:16];
+      ts96_fns = ts96[15:0];
+      
+      valid96 = (cyc_rst >= 9) && (cyc_set96 >= 5);
+      valid64 = (cyc_rst >= 9) && (cyc_set64 >= 5);
+      
+      if (valid96) begin
+        automatic delta_t d96;
+        automatic logic wrap;
+        
+        wrap = 0;
+        if (ts96_ns < prev_ts96_ns) begin
+          wrap = 1;
+          d96 = {1'b0, ts96_ns, ts96_fns} + (64'd1000000000 * 64'd65536) - {1'b0, prev_ts96_ns, prev_ts96_fns};
+          if (ts96_sec != prev_ts96_sec + 1) FAIL("W1: sec did not increment by 1 on wrap");
+        end else begin
+          d96 = {1'b0, ts96_ns, ts96_fns} - {1'b0, prev_ts96_ns, prev_ts96_fns};
+          if (ts96_sec != prev_ts96_sec) FAIL("W1: sec changed without wrap");
+        end
+        
+        if (wrap) begin
+          if (!pps) FAIL("W3: pps not asserted on wrap cycle");
+        end else begin
+          if (pps && cyc_set96 > 5) FAIL("W3: pps asserted without wrap"); 
+        end
+        
+        check_base(0, d96);
+        
+        if (cyc_rst == 9) begin
+          if (ts96_sec != 0 || ts96_ns > 1000) FAIL("R2: ts96 did not reset to near zero");
+        end
+      end
+      
+      if (valid64) begin
+        automatic delta_t d64;
+        d64 = ts64 - ts64_prev;
+        check_base(1, d64);
+        
+        if (cyc_rst == 9) begin
+          if (ts64 > (64'd1000 * 64'd65536)) FAIL("R2: ts64 did not reset to near zero");
+        end
+      end
+      
+      if (adj_active && !prev_adj_active) adj_active_blocks = adj_active_blocks + 1;
+      if (adj_active) adj_active_count = adj_active_count + 1;
+      if (ts_step && !adj_active) step_alone_count = step_alone_count + 1;
+      if (ts_step) ts_step_count = ts_step_count + 1;
+      if (adj_active && !ts_step) FAIL("A4: adj_active asserted but ts_step not");
+      if (pps) pps_count = pps_count + 1;
+      
+      ts64_prev = ts64;
+      prev_ts96_sec = ts96[95:48];
+      prev_ts96_ns  = ts96[45:16];
+      prev_ts96_fns = ts96[15:0];
+    end
+    prev_adj_active = adj_active;
   end
 
-  // --- Main Test Sequence ---
+// ---------------------------------------------------------------------------
+// STIMULUS
+// ---------------------------------------------------------------------------
+
   initial begin
-    bfm_wait(5);
-    bfm_reset();
-    
-    test_running = 1;
+    // Step 1: Warm-up and default state check
+    bfm_reset(5);
     bfm_wait(20);
     
-    // Check initial reset state conditions
-    if (expected_period != 64'h66666) fail("R2: Period did not reset.");
-
-    // 1. Change Period
-    period_change_grace = 4;
-    expected_period = 64'h88000;
-    bfm_period(4'h8, 16'h8000);
-    bfm_wait(10);
-    
-    // 2. Change Drift
-    drift_change_grace = 4;
-    expected_drift = -64'h00010; // -16 fns
-    expected_drift_rate = 3;
-    bfm_drift(4'hF, 16'hFFF0, 16'd3); // -16 fns signed
+    // Step 2: Change period to 7.0ns
+    allow_p_transition = 1;
+    bfm_period(4'h7, 16'h0000);
     bfm_wait(15);
+    expect_p = 1;
+    allow_p_transition = 0;
+    bfm_wait(20);
     
-    // 3. Offset Adjustment
-    adj_active_rem = 10;
-    adj96_rem = 10;
-    adj64_rem = 10;
-    adj_active_seen_first = 0;
-    expected_step_assertions = step_assertions + 10;
-    expected_adj = signed_20bit_to_fns(4'h1, 16'h0000); // +1 ns per cycle
-    bfm_adjust(4'h1, 16'h0000, 16'd10);
-    
-    bfm_wait(20); // wait out the adjustment and latency
-    if (adj96_rem != 0 || adj64_rem != 0 || adj_active_rem != 0) fail("A2/A3: Offset adjustment counts were not fully exhausted.");
-    if (step_assertions != expected_step_assertions) fail("A4: ts_step_o not asserted exactly adj_count_i times during adjustment.");
-
-    // 4. Set Time Base 96
-    expected_step_assertions = step_assertions + 1;
-    expect_step_96 = 1;
-    bfm_set96(48'h0, 30'h3B9ACA00 - 30'd20, 16'h0); // Set close to 1 sec to trigger wrap soon
-    bfm_wait(5);
-    if (step_assertions != expected_step_assertions) fail("S3: ts_step_o not asserted exactly once for set_ts96.");
-
-    // 5. Set Time Base 64
-    expected_step_assertions = step_assertions + 1;
-    expect_step_64 = 1;
-    bfm_set64(48'h0, 16'h0);
-    bfm_wait(5);
-    if (step_assertions != expected_step_assertions) fail("S3: ts_step_o not asserted exactly once for set_ts64.");
-    
-    // 6. Test Wrap (W1, W3)
-    // We set ts96 close to 1s earlier, let it run out the clock
+    // Step 3: Counted adjustment (5ns, 10 counts)
+    bfm_adjust(4'h5, 16'h0000, 10);
     bfm_wait(30); 
-    if (pps_assertions != 1) fail("W3: pps_o was not asserted exactly once during the 1-second wrap.");
-
+    
+    // Step 4: Change drift to -5fns, rate 3
+    allow_d_transition = 1;
+    bfm_drift(4'hF, 16'hFFFB, 3); // 20'hFFFFB = -5 signed
+    bfm_wait(15);
+    expect_d = 1;
+    active_rate = 3;
+    allow_d_transition = 0;
+    bfm_wait(20);
+    
+    // Step 5: Set96 to just before 1s wrap
+    bfm_set96(48'd10, 30'd999_999_850, 16'd0);
+    bfm_wait(50); // wrap will occur around +22 cycles
+    if (step_alone_count != 1) FAIL("S3: ts_step_o not asserted exactly once for set96");
+    if (pps_count != 1) FAIL("W3: pps_o did not fire exactly once");
+    
+    // Step 6: Set64 and verify independence
+    bfm_set64(48'd500, 16'd0);
+    bfm_wait(30);
+    if (step_alone_count != 2) FAIL("S3: ts_step_o not asserted exactly once for set64");
+    
+    // Verification of events before reset clears them
+    if (adj_seen[0] != 10) FAIL("A2: ts96 didn't see exactly 10 adjustments");
+    if (adj_seen[1] != 10) FAIL("A2: ts64 didn't see exactly 10 adjustments");
+    if (adj_blocks[0] != 1) FAIL("A2: ts96 adjustment not consecutive");
+    if (adj_blocks[1] != 1) FAIL("A2: ts64 adjustment not consecutive");
+    if (adj_active_count != 10) FAIL("A3: adj_active_o not asserted exactly 10 times");
+    if (adj_active_blocks != 1) FAIL("A3: adj_active_o not consecutive");
+    
+    // Step 7: Issue large adjustment, then reset to test cancellation (R2)
+    bfm_adjust(4'h5, 16'h0000, 1000);
+    bfm_wait(3); // allow valid to register and possibly apply a few increments
+    
+    allow_p_transition = 1;
+    allow_d_transition = 1;
+    bfm_reset(5);
+    // Reset immediately restores parameters
+    expect_p = 0;
+    expect_d = 0;
+    active_rate = 5;
+    allow_p_transition = 0;
+    allow_d_transition = 0;
+    
+    begin
+      automatic int adj_96_after = adj_seen[0];
+      automatic int adj_64_after = adj_seen[1];
+      
+      bfm_wait(20); // allow normal counting to resume
+      
+      if (adj_seen[0] != adj_96_after) FAIL("R2: adjustment was not cancelled by reset (ts96)");
+      if (adj_seen[1] != adj_64_after) FAIL("R2: adjustment was not cancelled by reset (ts64)");
+    end
+    
     $display("RESULT: PASS");
     $finish;
   end

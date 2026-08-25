@@ -1,8 +1,8 @@
 module route_xbar_tb;
-
 // ---------------------------------------------------------------------------
 // PROVIDED PLUMBING -- moves beats, checks nothing.
 // ---------------------------------------------------------------------------
+
   localparam int N_IN = 4, N_OUT = 4, DW = 32, SW = 2, IW = 2;
 
   // ---- clock ---------------------------------------------------------------
@@ -46,6 +46,8 @@ module route_xbar_tb;
   logic [DW-1:0]    bfm_next_data [N_IN];
   logic [SW-1:0]    bfm_next_sel  [N_IN];
 
+  // Registered handshake: bfm_accepted[k] is high for the cycle following the
+  // rising edge on which input k's beat was taken.
   logic [N_IN-1:0]  bfm_accepted;
   always @(posedge clk) bfm_accepted <= (rst_n ? (in_valid & in_ready) : '0);
 
@@ -66,11 +68,13 @@ module route_xbar_tb;
 
   task automatic bfm_ready(input logic [N_OUT-1:0] v); out_ready = v; endtask
 
+  // ---- idle everything at time zero ----------------------------------------
   initial begin
     in_data = '0; in_sel = '0; in_valid = '0; out_ready = '1; bfm_offer = '0;
     for (int k = 0; k < N_IN; k++) begin bfm_next_data[k] = '0; bfm_next_sel[k] = '0; end
   end
 
+  // ---- watchdog ------------------------------------------------------------
   initial begin
     #2_000_000;
     $display("RESULT: FAIL (watchdog: no verdict reached)");
@@ -78,241 +82,314 @@ module route_xbar_tb;
   end
 
 // ---------------------------------------------------------------------------
-// CHECKERS & MONITORING
+// TESTBENCH IMPLEMENTATION
 // ---------------------------------------------------------------------------
-  
-  logic fail = 0;
-  task automatic fail_with(string msg);
-    if (!fail) begin
-      $display("RESULT: FAIL (%s)", msg);
-      fail = 1;
-      $finish;
-    end
-  endtask
 
-  logic [DW-1:0] expected_beats [N_IN][N_OUT][$];
+  typedef struct {
+    logic [31:0] data;
+    logic [1:0] sel;
+  } beat_t;
 
-  // A3 and Delivery States
-  logic [N_OUT-1:0] prev_out_valid;
-  logic [N_OUT-1:0] prev_out_ready;
-  logic [DW-1:0]    prev_out_data [N_OUT];
-  logic [IW-1:0]    prev_out_idx  [N_OUT];
+  beat_t stim_q [N_IN][$];
+  int expected_data [N_IN][N_OUT][$];
 
-  // A2 and X3 track state
-  int served_while_offering[N_IN][N_IN];
-  int wait_time[N_IN];
-
-  initial begin
-    prev_out_valid = '0;
-    prev_out_ready = '0;
-  end
-
-  // Reset checker (X1, X2)
-  always @(negedge rst_n) begin
-    for (int k=0; k<N_IN; k++) begin
-      for (int j=0; j<N_OUT; j++) begin
-        expected_beats[k][j].delete();
+  // Stimulus feeding logic
+  always_comb begin
+    for (int k = 0; k < N_IN; k++) begin
+      if (stim_q[k].size() > 0) begin
+        bfm_offer[k] = 1'b1;
+        bfm_next_data[k] = stim_q[k][0].data;
+        bfm_next_sel[k]  = stim_q[k][0].sel;
+      end else begin
+        bfm_offer[k] = 1'b0;
+        bfm_next_data[k] = '0;
+        bfm_next_sel[k]  = '0;
       end
     end
   end
 
-  always @* begin
-    if (!rst_n && out_valid !== '0) begin
-      $display("RESULT: FAIL (X1: out_valid_o asserted during reset)");
-      $finish;
-    end
-  end
-
-  // Synchronous checks
+  // Stimulus pop and Scoreboard push
   always @(posedge clk) begin
     if (!rst_n) begin
-      for (int k=0; k<N_IN; k++) begin
-        wait_time[k] = 0;
-        for (int m=0; m<N_IN; m++) served_while_offering[k][m] = 0;
+      for (int k = 0; k < N_IN; k++) begin
+        stim_q[k].delete();
+        for (int j = 0; j < N_OUT; j++) begin
+          expected_data[k][j].delete();
+        end
       end
     end else begin
-      // A3: No withdrawal of offered beats
-      for (int j=0; j<N_OUT; j++) begin
-        if (prev_out_valid[j] && !prev_out_ready[j]) begin
-          if (!out_valid[j]) fail_with($sformatf("A3: Output %0d valid withdrawn", j));
-          if (bfm_odata(j) !== prev_out_data[j]) fail_with($sformatf("A3: Output %0d data changed", j));
-          if (bfm_oidx(j) !== prev_out_idx[j]) fail_with($sformatf("A3: Output %0d idx changed", j));
-        end
-      end
-
-      // A2 (Fairness) and X3 (Liveness)
-      for (int k=0; k<N_IN; k++) begin
-        if (in_valid[k] && !in_ready[k]) begin
-          automatic int j_sel = in_sel[k*SW +: SW];
-          
-          // X3: Wait time bounded by 32 if output is continuously ready
-          if (out_ready[j_sel]) begin
-            wait_time[k]++;
-            if (wait_time[k] > 32) fail_with($sformatf("X3: Input %0d waited >32 cycles for ready output %0d", k, j_sel));
-          end else begin
-            wait_time[k] = 0;
-          end
-          
-          // A2: Fairness bound check
-          if (out_valid[j_sel] && out_ready[j_sel]) begin
-            automatic int m = bfm_oidx(j_sel);
-            served_while_offering[k][m]++;
-            if (served_while_offering[k][m] > 1) begin
-               fail_with($sformatf("A2: Input %0d bypassed by input %0d multiple times", k, m));
-            end
-          end
-        end else begin
-          wait_time[k] = 0;
-          for (int m=0; m<N_IN; m++) served_while_offering[k][m] = 0;
-        end
-      end
-
-      // Record accepted beats (R1, R4)
-      for (int k=0; k<N_IN; k++) begin
+      for (int k = 0; k < N_IN; k++) begin
         if (in_valid[k] && in_ready[k]) begin
-          automatic int j_sel = in_sel[k*SW +: SW];
-          expected_beats[k][j_sel].push_back(in_data[k*DW +: DW]);
-        end
-      end
-      
-      // Verify delivered beats (R2, R3, R4, R5)
-      for (int j=0; j<N_OUT; j++) begin
-        if (out_valid[j] && out_ready[j]) begin
-          automatic int k_idx = bfm_oidx(j);
-          automatic logic [DW-1:0] d = bfm_odata(j);
-          
-          if (k_idx >= N_IN) begin
-            fail_with($sformatf("R3: Output %0d delivered beat from invalid input %0d", j, k_idx));
-          end else if (expected_beats[k_idx][j].size() == 0) begin
-            fail_with($sformatf("R4: Output %0d delivered unexpected beat from input %0d", j, k_idx));
-          end else begin
-            automatic logic [DW-1:0] exp_d = expected_beats[k_idx][j].pop_front();
-            if (exp_d !== d) begin
-              fail_with($sformatf("R2/R5: Output %0d data mismatch or order broken. Exp %h, got %h", j, exp_d, d));
-            end
+          if (stim_q[k].size() > 0) begin
+            void'(stim_q[k].pop_front());
           end
+          expected_data[k][in_sel[k*SW+:SW]].push_back(in_data[k*DW+:DW]);
         end
       end
-    end
-    
-    // Register outputs for next cycle A3 check
-    for (int j=0; j<N_OUT; j++) begin
-      prev_out_valid[j] = out_valid[j];
-      prev_out_ready[j] = out_ready[j];
-      prev_out_data[j]  = bfm_odata(j);
-      prev_out_idx[j]   = bfm_oidx(j);
     end
   end
 
-// ---------------------------------------------------------------------------
-// STIMULUS GENERATION
-// ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // Checkers
+  // -------------------------------------------------------------------------
 
-  // Sends 'count' back-to-back beats on input 'k'.
-  task automatic run_traffic(input int k, input int count, input logic random_dest);
-    automatic int j = random_dest ? (k % N_OUT) : 0;
-    
-    @(negedge clk);
-    bfm_next_sel[k]  = j;
-    bfm_next_data[k] = (k << 16) | 0;
-    bfm_offer[k]     = 1'b1;
-    
-    for (int i=1; i<count; i++) begin
-      // Wait exactly for the cycle it is accepted
-      do begin
-        @(posedge clk);
-      end while (!(in_valid[k] && in_ready[k]));
-      
-      // Provide the next payload instantly at posedge, ready for BFM negedge pickup
-      if (random_dest) j = (k + i) % N_OUT;
-      bfm_next_sel[k]  = j;
-      bfm_next_data[k] = (k << 16) | i;
-    end
-    
-    // Wait for the final beat to be taken
-    do begin
-      @(posedge clk);
-    end while (!(in_valid[k] && in_ready[k]));
-    
-    @(negedge clk);
-    bfm_offer[k] = 1'b0;
-  endtask
-
-  task automatic run_output_ready_toggle();
-    automatic logic [N_OUT-1:0] r;
-    for (int i=0; i<150; i++) begin
-      @(negedge clk);
-      r[0] = (i % 3) != 0;
-      r[1] = (i % 4) != 0;
-      r[2] = (i % 5) != 0;
-      r[3] = (i % 2) != 0;
-      bfm_ready(r);
-    end
-    bfm_ready('1);
-  endtask
-
-  initial begin
-    bfm_reset(5);
-    @(negedge clk);
-
-    // TEST 1: Absolute Contention (A2, R5, X3, R1-R4)
-    // Hammer output 0 continuously from all 4 inputs to test scheduling fairness.
-    fork
-      run_traffic(0, 30, 0); 
-      run_traffic(1, 30, 0);
-      run_traffic(2, 30, 0);
-      run_traffic(3, 30, 0);
-    join
-
-    repeat(20) @(negedge clk);
-
-    // TEST 2: Independence and HoL Blocking (I1, I2)
-    // Block output 0 entirely.
-    bfm_ready('b1110);
-    @(negedge clk);
-    
-    // Input 0 aims for Output 0 (will block in the crossbar).
-    bfm_next_sel[0] = 0;
-    bfm_next_data[0] = 'hDEAD;
-    bfm_offer[0] = 1'b1;
-    
-    // Inputs 1, 2, 3 aim for their respective unblocked outputs.
-    fork
-      run_traffic(1, 15, 1);
-      run_traffic(2, 15, 1);
-      run_traffic(3, 15, 1);
-    join
-
-    // Unblock output 0 so Input 0 can finally proceed.
-    bfm_ready('b1111);
-    
-    // Wait for Input 0's blocked payload to finish
-    do begin @(posedge clk); end while (!(in_valid[0] && in_ready[0]));
-    @(negedge clk);
-    bfm_offer[0] = 1'b0;
-
-    repeat(20) @(negedge clk);
-
-    // TEST 3: Random traffic and dynamic backpressure
-    fork
-      run_traffic(0, 50, 1);
-      run_traffic(1, 50, 1);
-      run_traffic(2, 50, 1);
-      run_traffic(3, 50, 1);
-      run_output_ready_toggle();
-    join
-
-    repeat(50) @(negedge clk);
-
-    // Final checks for lost/stuck beats (R4)
-    for (int k=0; k<N_IN; k++) begin
-      for (int j=0; j<N_OUT; j++) begin
-        if (expected_beats[k][j].size() > 0) begin
-          fail_with($sformatf("R4: Missing %0d beats from input %0d to output %0d", expected_beats[k][j].size(), k, j));
+  // X1: Reset origin checker
+  always @(posedge clk) begin
+    if (!rst_n && bfm_cycle > 0) begin
+      for (int j = 0; j < N_OUT; j++) begin
+        if (out_valid[j]) begin
+          $display("RESULT: FAIL (X1: Output valid asserted while reset is low and inputs quiet)");
+          $finish;
         end
       end
     end
+  end
 
+  // A3: Output hold checker
+  logic [N_OUT-1:0]    prev_out_valid = '0;
+  logic [N_OUT-1:0]    prev_out_ready = '0;
+  logic [N_OUT*DW-1:0] prev_out_data = '0;
+  logic [N_OUT*IW-1:0] prev_out_idx = '0;
+
+  always @(posedge clk) begin
+    if (!rst_n) begin
+      prev_out_valid <= '0;
+      prev_out_ready <= '0;
+    end else begin
+      for (int j = 0; j < N_OUT; j++) begin
+        if (prev_out_valid[j] && !prev_out_ready[j]) begin
+          if (!out_valid[j]) begin
+            $display("RESULT: FAIL (A3: out_valid[%0d] dropped before out_ready was seen)", j);
+            $finish;
+          end
+          if (out_data[j*DW+:DW] !== prev_out_data[j*DW+:DW]) begin
+            $display("RESULT: FAIL (A3: out_data[%0d] changed before out_ready was seen)", j);
+            $finish;
+          end
+          if (out_idx[j*IW+:IW] !== prev_out_idx[j*IW+:IW]) begin
+            $display("RESULT: FAIL (A3: out_idx[%0d] changed before out_ready was seen)", j);
+            $finish;
+          end
+        end
+      end
+      prev_out_valid <= out_valid;
+      prev_out_ready <= out_ready;
+      prev_out_data  <= out_data;
+      prev_out_idx   <= out_idx;
+    end
+  end
+
+  // Scoreboard Checkers: R1, R2, R3, R4, R5
+  // A2: Fairness Checker
+  int wait_transfers [N_IN];
+
+  always @(posedge clk) begin
+    automatic int src;
+    automatic int exp_d;
+    automatic int winner;
+    automatic int active_count;
+
+    if (!rst_n) begin
+      for (int k = 0; k < N_IN; k++) wait_transfers[k] = 0;
+    end else begin
+      // Reset A2 counter for any input that is not actively offering
+      for (int k = 0; k < N_IN; k++) begin
+        if (!in_valid[k]) wait_transfers[k] = 0;
+      end
+
+      for (int j = 0; j < N_OUT; j++) begin
+        if (out_valid[j] && out_ready[j]) begin
+          src = out_idx[j*IW+:IW];
+          
+          // R4 check: Ensure we expected a beat from this source for this output
+          if (expected_data[src][j].size() == 0) begin
+            $display("RESULT: FAIL (R4: Unexpected or duplicate delivery on output %0d from source %0d)", j, src);
+            $finish;
+          end
+          
+          // R2, R5 check: Validate payload sequence
+          exp_d = expected_data[src][j].pop_front();
+          if (out_data[j*DW+:DW] !== exp_d) begin
+            $display("RESULT: FAIL (R2/R5: Payload or ordering mismatch on out %0d. Exp:%h Got:%h)", j, exp_d, out_data[j*DW+:DW]);
+            $finish;
+          end
+
+          // A2 Fairness evaluation
+          winner = src;
+          active_count = 0;
+          for (int k = 0; k < N_IN; k++) begin
+            if (in_valid[k] && in_sel[k*SW+:SW] == j) active_count++;
+          end
+
+          for (int k = 0; k < N_IN; k++) begin
+            if (in_valid[k] && in_sel[k*SW+:SW] == j) begin
+              if (k == winner) begin
+                wait_transfers[k] = 0;
+              end else begin
+                wait_transfers[k]++;
+                if (wait_transfers[k] >= active_count) begin
+                  $display("RESULT: FAIL (A2: Fairness bound violated on output %0d for input %0d. Missed %0d transfers, active_count=%0d)", j, k, wait_transfers[k], active_count);
+                  $finish;
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  // X3: Liveness checker
+  int x3_wait_cycles [N_IN];
+  always @(posedge clk) begin
+    automatic int bound_j;
+    if (!rst_n) begin
+      for (int k = 0; k < N_IN; k++) x3_wait_cycles[k] = 0;
+    end else begin
+      for (int k = 0; k < N_IN; k++) begin
+        if (in_valid[k] && !in_ready[k]) begin
+          bound_j = in_sel[k*SW+:SW];
+          if (out_ready[bound_j]) begin
+            x3_wait_cycles[k]++;
+            if (x3_wait_cycles[k] > 32) begin
+              $display("RESULT: FAIL (X3: Liveness bound exceeded for input %0d to output %0d)", k, bound_j);
+              $finish;
+            end
+          end else begin
+            x3_wait_cycles[k] = 0;
+          end
+        end else begin
+          x3_wait_cycles[k] = 0;
+        end
+      end
+    end
+  end
+
+  // -------------------------------------------------------------------------
+  // Test Sequence Utilities
+  // -------------------------------------------------------------------------
+
+  int seq_num = 0;
+  task automatic push_beat(input int k, input int j);
+    beat_t b;
+    // Embed source, dest, and a unique sequence ID to guarantee uniqueness
+    b.data = {k[7:0], j[7:0], seq_num[15:0]};
+    seq_num++;
+    b.sel = j;
+    stim_q[k].push_back(b);
+  endtask
+
+  task automatic wait_all_done();
+    int timeout = 5000;
+    automatic bit empty;
+    while (timeout > 0) begin
+      empty = 1;
+      for (int k = 0; k < N_IN; k++) begin
+        if (stim_q[k].size() > 0 || in_valid[k]) empty = 0;
+        for (int j = 0; j < N_OUT; j++) begin
+          if (expected_data[k][j].size() > 0) empty = 0;
+        end
+      end
+      if (empty) return;
+      @(posedge clk);
+      timeout--;
+    end
+    $display("RESULT: FAIL (Test timeout: beats lost in flight or deadlock occurred)");
+    $finish;
+  endtask
+
+  task automatic set_out_ready(input logic [N_OUT-1:0] v);
+    @(negedge clk);
+    out_ready = v;
+  endtask
+
+  // -------------------------------------------------------------------------
+  // Main Sequence
+  // -------------------------------------------------------------------------
+
+  initial begin
+    // Setup and wait out of reset
+    repeat(10) @(posedge clk);
+    set_out_ready(4'b1111);
+    
+    // Test 1: Sequential 1-to-1 routing
+    for (int k = 0; k < N_IN; k++) begin
+      push_beat(k, k);
+    end
+    wait_all_done();
+    
+    // Test 2: All inputs mapping to a single output (A1, A2 fairness, R5 ordering)
+    for (int i = 0; i < 10; i++) begin
+      push_beat(0, 0);
+      push_beat(1, 0);
+      push_beat(2, 0);
+      push_beat(3, 0);
+    end
+    wait_all_done();
+    
+    // Test 3: Backpressure and Independence (I1, I2, A3)
+    set_out_ready(4'b1110); // Output 0 is NOT ready
+    for (int i = 0; i < 5; i++) push_beat(0, 0);
+    repeat(10) @(posedge clk); // Allow traffic to clog the crossbar towards output 0
+    
+    // Test independent paths while output 0 is congested
+    push_beat(1, 1);
+    push_beat(2, 2);
+    push_beat(3, 3);
+    
+    begin
+      int timeout = 100;
+      while (timeout > 0) begin
+        if (stim_q[1].size() == 0 && stim_q[2].size() == 0 && stim_q[3].size() == 0 &&
+            !in_valid[1] && !in_valid[2] && !in_valid[3] &&
+            expected_data[1][1].size() == 0 && expected_data[2][2].size() == 0 && 
+            expected_data[3][3].size() == 0) begin
+          break;
+        end
+        @(posedge clk);
+        timeout--;
+      end
+      if (timeout == 0) begin
+        $display("RESULT: FAIL (I1/I2: Traffic blocked by unrelated stalled output)");
+        $finish;
+      end
+    end
+    
+    set_out_ready(4'b1111); // Unblock and drain
+    wait_all_done();
+
+    // Test 4: Heavy uniform traffic
+    for (int i = 0; i < 40; i++) begin
+      for (int k = 0; k < N_IN; k++) begin
+        push_beat(k, (k + i) % N_OUT);
+      end
+    end
+    wait_all_done();
+
+    // Test 5: Reset during flight (X1, X2 checks)
+    set_out_ready(4'b0000); // Stall to build up state
+    push_beat(0, 1);
+    push_beat(1, 2);
+    push_beat(2, 3);
+    push_beat(3, 0);
+    repeat(5) @(posedge clk); 
+    
+    // Assert reset while active
+    bfm_reset(5);
+    
+    set_out_ready(4'b1111);
+    repeat(5) @(posedge clk);
+    
+    // Check X2: After reset is released, no delivery owed
+    for (int j = 0; j < N_OUT; j++) begin
+      if (out_valid[j]) begin
+        $display("RESULT: FAIL (X2: valid output asserted after reset without new stimulus)");
+        $finish;
+      end
+    end
+    wait_all_done();
+
+    // Done
     $display("RESULT: PASS");
     $finish;
   end

@@ -1,0 +1,318 @@
+title: AXI data-width downsizer
+id: v_ca06
+module: dw_downsizer
+domain: comp_arch
+type: verification
+catalog: TASK_CATALOG.md
+tier: B
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/axi
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/axi/src/axi_dw_downsizer.sv
+  golden: dut/dw_downsizer.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/dw_downsizer_iface.sv (port map) and
+    spec/dw_downsizer_spec.md only. dut/ holds the anchor VERBATIM plus a Class A
+    port shim, used for scoring and never given to a submission.
+  provenance_caveat: >
+    The files are present at the paths refs.manifest.yaml names, in a repo
+    refs.lock pins. Their CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+
+harness:
+  golden_top: dw_downsizer
+  tb_module: dw_downsizer_tb
+  conformant_prefix: dwc_c
+  mutant_prefix: dw_m
+  golden_file: dut/dw_downsizer.sv
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  include_dirs: domains/comp_arch/verification/v_ca06_axi_dw_downsizer/dut/include
+  sim_timeout_s: 120
+
+spec: [spec/dw_downsizer_spec.md, spec/dw_downsizer_iface.sv]
+task_text_hash: ca63302d6b23df46
+
+scored_configuration:
+  SLV_DATA_W: 64
+  MST_DATA_W: 16
+  ratio: 4
+  ADDR_W: 32
+  ID_W: 4
+  MAX_READS: 4
+  rationale: >
+    A ratio of 4 makes the re-segmentation rich enough that the byte stream is a
+    DERIVED observable rather than a port value, while staying small enough to
+    state exactly. size and burst are EXPOSED on both address channels rather
+    than pinned: the whole contract turns on them -- WRAP is refused, multi-beat
+    FIXED is refused, and size fixes how the segmentation lands -- so pinning
+    either would delete the task.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpremised_reliance: must PASS dut2 and all five conformant perturbations
+  fault_detection: reported PER MUTANT, never as a rate
+
+scoring_ceiling:
+  reference: 10 of 10
+  licensed_by: >
+    Observed run on 2026-08-24: golden PASS, dut2 PASS, all five conformant
+    perturbations PASS, all ten guarded mutants killed, and the all-outputs-high
+    control rejected with 4024 failures.
+  caveat: >
+    The reference was developed against SIX legal implementations rather than
+    fitted to the anchor, and it found two defects in this task's own
+    specification while being written -- B2's length rule and B4's burst rule.
+    That is a stronger provenance than a ceiling reached by extending a
+    reference until it met the mutants, which is how v_ca03 and v_ca05 reached
+    theirs.
+
+second_dut:
+  status: WIRED
+  file: dut2/dw_downsizer_alt.sv
+  note: >
+    An independent implementation written from the spec alone. It does not
+    instantiate the golden and shares no code with it.
+  differences:
+    - "A4/L2: holds ONE transaction at a time per direction. MAX_READS is an
+       upper bound, not an obligation. The anchor keeps four adapters busy."
+    - "L1: every path registered, so its latencies differ throughout."
+    - "L4: buffers a WHOLE upstream W beat before emitting any downstream beat
+       of it. The anchor forwards as it goes."
+    - "X2: drives a fixed pattern on payload outputs while their valid is low."
+    - "L6: always drives INCR on a single-beat downstream burst, where the
+       anchor forwards FIXED unchanged. Both conform -- this is what made B4
+       too strong, and L6 exists because of it."
+
+conformant_perturbations:
+  - {id: dwc_c1_extra_latency, licence: "L1, L2", reference_tb_verdict: PASS,
+     change: "every design-driven ready gated, four cycles on and four off"}
+  - {id: dwc_c2_admission_throttled, licence: "A4, L2", reference_tb_verdict: PASS,
+     change: "upstream address admission gated eight on and eight off"}
+  - {id: dwc_c3_downstream_w_spilled, licence: "L1, L5", reference_tb_verdict: PASS,
+     change: "skid buffer on the downstream W channel -- later, and gapped"}
+  - {id: dwc_c4_garbage_when_invalid, licence: X2, reference_tb_verdict: PASS,
+     change: "a recognisable junk pattern on every payload while its valid is low"}
+  - {id: dwc_c5_response_intake_slow, licence: L2, reference_tb_verdict: PASS,
+     change: "slow to accept downstream responses, two cycles on and two off"}
+  built_before_the_mutants: >
+    Deliberate ordering. The re-grade showed the strongest submissions lost their
+    score to REJECTING A LEGAL VARIANT, not to missing a defect, so the legal
+    implementations were written first and the reference developed against six of
+    them rather than fitted to one.
+  gating_discipline: >
+    Every knob is a ready the DESIGN drives, a payload while its own valid is
+    low, or a skid buffer. None gates a valid low once asserted. Masking a ready
+    ALONE is not a legal implementation of "this design is slow": the golden
+    asserts its ready and considers the transfer done while the master never
+    sees it and re-offers, so one request is accepted several times and the
+    PERTURBATION violates A2. Valid-in and ready-out carry the same gate.
+
+policy_derivation:
+  method: wrapper_pointed
+  what_was_done: >
+    Each mutant is a wrapper that reads its guards from the PORTS and delegates
+    to an implementation. The re-derivation is the SAME WRAPPER pointed at
+    dut2/dw_downsizer_alt.sv instead of the anchor.
+  strength: WEAKER -- read the caveat before quoting the number
+  what_it_establishes: >
+    One half only. The defects are contract-level: they remain detectable
+    against a design with different latency, different structure and different
+    scheduling, so the reference's detection is not relying on the anchor's
+    timing. That is real and it is what 5c exists to check.
+  what_it_does_NOT_establish: >
+    That the guards were stress-tested against an independent reading of the
+    contract. The guard logic is LITERALLY THE SAME CODE on both bases, so there
+    is nothing anchor-specific for the check to catch and the property holds BY
+    CONSTRUCTION. This method cannot fail the way in_source_rederivation can.
+  comparability: >
+    A 22/22 here is NOT equivalent to a 22/22 from in_source_rederivation, and a
+    results table that prints them in one column is comparing two different
+    claims. Report the method alongside the number.
+  why_not_in_source: >
+    A considered choice, not an omission. The ten guards are all expressed over
+    quantities dut2 genuinely has -- transactions accepted, refusals, beat
+    indices, downstream beats forwarded -- so there is no guard here whose
+    portability is in doubt. Hand-writing the ten defects into dut2's source
+    would cost about as much as writing dut2 again for evidence this set does
+    not need.
+  policy_independence: >
+    22 of 22: both clean implementations pass and every defect is caught on both
+    bases. Rerun with mutants/check_policy_independence.sh, whose "(clean)" lines
+    are rule-24 controls and which ABORTS on a failing control.
+
+mutants:
+  design: >
+    GUARDED, uniformly. Each defect is a wrong behaviour paired with a rare
+    predicate over contract-level state read from the PORTS.
+  weighting: >
+    Seven of the ten are ORDINAL or DEPTH conditions, on evidence from two
+    independent measurements rather than one. v_nw01 and the incognito v_ai02
+    submission show the same split: conditions that are a property of a SINGLE
+    transaction get caught -- a value, a last beat, a mode -- and ordinal or
+    depth conditions get missed.
+  injection_method: >
+    Address-transform defects modify the request PRESENTED TO THE GOLDEN, not the
+    golden's output. Rewriting an output leaves the golden servicing a downstream
+    burst inconsistent with what it computed, so it HANGS rather than fails --
+    and a hang is not a detection.
+  - {id: dw_m1_len_simple_formula_when_unaligned, violates: "B2",
+     guard: "the address is not aligned to its own size",
+     defect: "the downstream length divides the byte count instead of counting blocks spanned",
+     witness: "FAIL [B2] B:reads, UNALIGNED -- B2 follows bytes covered: downstream arlen 7, expected 5 (bytes covered, not beat count) (t=1525)"}
+  - {id: dw_m2_size_raised_when_narrow, violates: "B1",
+     guard: "the upstream size is narrower than the downstream bus",
+     defect: "the downstream size is forced to the downstream width instead of min(size, width)",
+     witness: "FAIL [B1] A:reads, aligned: downstream arsize 1, expected min(size,1)=0 (t=85)"}
+  - {id: dw_m3_len_short_from_eighth_read, violates: "B2",
+     guard: "the eighth read since reset and every read after it",
+     defect: "the downstream burst is one beat short",
+     witness: "FAIL [B2] A:reads, aligned: downstream arlen 2, expected 3 (bytes covered, not beat count) (t=525)"}
+  - {id: dw_m4_fixed_single_refused_from_second, violates: "C3",
+     guard: "the second FIXED single-beat request and every one after it",
+     defect: "a FIXED burst of exactly one beat is refused, where C3 says it is served",
+     witness: "FAIL [D5] C2:FIXED of ONE beat is SERVED: R beat 0 carries resp 10, expected OKAY (t=2355)"}
+  - {id: dw_m5_refused_served_from_third, violates: "C4",
+     guard: "the third refused burst and every one after it",
+     defect: "a refused burst is served instead: it issues a downstream transaction and answers OKAY",
+     witness: "FAIL [C4] C:refused reads: refused read, R beat 0 carries resp 0, expected SLVERR on EVERY beat (t=2145)"}
+  - {id: dw_m6_slverr_only_on_last_beat, violates: "C4",
+     guard: "the refused read is three beats or longer",
+     defect: "SLVERR appears only on the final beat; every earlier beat says OKAY",
+     witness: "FAIL [C4] C:refused reads: refused read, R beat 0 carries resp 0, expected SLVERR on EVERY beat (t=1985)"}
+  - {id: dw_m7_zero_strobe_beat_dropped_midburst, violates: "E3",
+     guard: "the unstrobed beat is neither the first nor the last of its burst",
+     defect: "an all-unstrobed downstream beat is suppressed instead of emitted",
+     witness: "FAIL [E3] F:writes, SPARSE strobes -- E2 and E3: downstream burst has 3 beats, expected exactly 4 -- an unstrobed beat is still a beat (t=4295)"}
+  - {id: dw_m8_strb_wrong_every_thirty_second, violates: "E2",
+     guard: "the thirty-second downstream write beat, counted since reset",
+     defect: "the beat carries the complement of its strobe",
+     witness: "FAIL [E2] E:writes, aligned: downstream beat 3 strb 0, expected 11 (t=4075)"}
+  - {id: dw_m9_rdata_lanes_swapped_deep_in_burst, violates: "D1",
+     guard: "the fifth upstream beat of a response and every beat after it",
+     defect: "two byte lanes of the upstream read data are exchanged",
+     witness: "FAIL [D1] D:long reads: R beat 4 data 8283808186878584, expected 8283808186878485 on the lanes it covers (t=2585)"}
+  - {id: dw_m10_rlast_withheld_from_sixteenth_read, violates: "D4",
+     guard: "the sixteenth read since reset and every read after it",
+     defect: "the final upstream beat of a response does not carry rlast",
+     witness: "FAIL [D4] A:reads, aligned: rlast is 0 on beat 2 of a 3-beat response (t=1295)"}
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness
+  witness_harness: mutants/witness.sh
+  witness_runner: mutants/witness.sh
+  rule24_record: mutants/RULE24.md
+  generator: mutants/gen_mutants.py
+  provenance_note: >
+    dw_m1 is the defect this task's own SPECIFICATION carried until the reference
+    caught it: dividing the byte count instead of counting blocks spanned. It is
+    exact on every aligned request, which is why the eight cases measured in
+    step 1 walked past it.
+  reference_reachability: >
+    The reference kills all ten. dw_m8 survived the first run and the reason was
+    the guard, not the testbench: it was keyed on a PER-BURST beat index that
+    resets with each AW, and no burst in the reference is thirty-two beats long,
+    so the guard could never fire. A cumulative counter now backs it.
+    Within-transaction and since-reset are different quantities and the wrong one
+    is silently unreachable.
+
+unscored_clauses:
+  WHY_THIS_EXISTS: >
+    D6 and E6 are contract clauses that NO MUTANT IS KEYED ON. Without this note
+    a reader comparing the clause list to the mutant list would reasonably assume
+    they are covered, because every other substantive clause is. They are not.
+    A submission cannot be scored on them in either direction: it is not rewarded
+    for checking them and not penalised for ignoring them.
+  clauses:
+    - id: D6
+      text: downstream read error precedence -- an error on any downstream R beat
+            must make the upstream response an error too
+      status: EXERCISED by the reference (phase M), NOT SCORED by any mutant
+    - id: E6
+      text: the same on the write side -- an error on the downstream B must make
+            the upstream B an error
+      status: EXERCISED by the reference (phase M), NOT SCORED by any mutant
+    - id: D7
+      text: the error CODE is preserved -- SLVERR stays SLVERR, DECERR stays
+            DECERR, neither normalised to the other
+      status: NEW, added when D6 was measured. EXERCISED, NOT SCORED
+  rebaseline: >
+    The full set was re-run against the extended reference, all ten, because
+    the mutants are untouched but the environment they run in is not.
+    NEWLY KILLED: none -- all ten were killed before and after, so the new
+    stimulus revealed no mutant that had been in the set but unscoreable.
+    REDUNDANT: none. A signature scan flagged dw_m6 as a subset of dw_m5,
+    but at clause-and-phase granularity only: dw_m5 also fires in phase H,
+    the refused WRITES, where dw_m6 cannot because it is a read-only defect.
+    They separate a real submission -- one checking only the LAST beat's resp
+    kills dw_m5, whose refused burst is served so every beat is OKAY, and
+    misses dw_m6, whose last beat IS SLVERR. Neither is removable.
+    WHAT THE EXTENSION DID CATCH was a defect in dut2, a LEGAL
+    implementation: it forced SLVERR for any downstream error rather than
+    preserving the code, so it violated D7 the moment D7 could be observed.
+    The analogue of an unscoreable clause on this side turned out to be a
+    wrong second source, not a hidden mutant.
+  history: >
+    Found by Agent 3, who noticed m_rresp and m_bresp were pinned to OKAY in the
+    reference and raised it as a candidate rather than a finding. The pinning was
+    a stimulus gap; that two contract clauses depended on it and no mutant was
+    keyed on either made it a FAIRNESS gap. Error GENERATION is well covered --
+    dw_m6 turns on the SLVERR the unit manufactures for a refused burst -- it is
+    error PROPAGATION, downstream error in and upstream error out, that had never
+    run.
+  decision: >
+    The reference was extended to drive downstream errors, which costs no
+    task_text_hash bump because the hash covers spec/ and PASTE.md but not tb/.
+    The mutant question is DEFERRED: adding one breaks the freeze on the scored
+    set, and that asymmetry -- stimulus gaps are always cheaper to close than
+    coverage gaps -- is the reason the two halves were split rather than done
+    together.
+  A4:
+    text: at most MAX_READS reads outstanding at once
+    status: closed by a CONTROL, not a mutant -- see negative_controls
+    note: >
+      A4 is an UPPER bound and its permissive half says a further address "need
+      not be accepted until one retires", so a design accepting FEWER than four
+      is conforming -- dut2 accepts one and passes. The only way to violate A4 is
+      to accept MORE than four. The control is therefore capability-INCREASED,
+      which inverts the capability-reduced shape Agent 3 described for a task
+      whose bound was a minimum. Same idea, opposite direction, and worth saying
+      so rather than copying the shape.
+
+negative_controls:
+  over_outstanding_dut:
+    status: PASS -- caught, and it fails on A4 ALONE
+    detail: >
+      negctl/over_outstanding_dut.sv is the same design with room for SIX
+      outstanding reads where A4 allows four, ports at full width and every other
+      clause untouched. It produces 26 failures, every one of them A4, and zero
+      on any other clause. That is what makes it a control rather than a mutant:
+      it demonstrates the A4 check DISCRIMINATES rather than merely passes.
+      Capability-INCREASED, because A4 is an upper bound whose permissive half
+      makes a design accepting fewer conforming -- dut2 accepts one and passes.
+      The golden reaches a peak of exactly 4 outstanding under the same stimulus,
+      so the check is pressured to the bound and not beyond it.
+  null_testbench:
+    status: PASS -- rejected
+    detail: >
+      negctl/null_tb.sv declares the module, drives nothing, never instantiates
+      the design and prints RESULT: PASS. The harness runs a gate-mutant with
+      every output tied high and requires a submission to REJECT it; this cannot,
+      so it is reported INVALID and EXCLUDED FROM SCORING.
+  stuck_high_dut:
+    status: PASS -- caught
+    detail: >
+      negctl/stuck_high_dut.sv ties all 29 outputs high. The reference reports
+      4024 failures.
+  reset_polarity_dut:
+    status: PASS -- caught
+    detail: >
+      negctl/reset_polarity_dut.sv treats rst_ni as active high, so the design is
+      held in reset exactly when it should run. Caught on A3 and A2 -- no
+      upstream beats and no downstream address -- not by the watchdog.
+
+watchdog:
+  tb_sim_time_limit: 40ms
+  harness_sim_timeout_s: 120

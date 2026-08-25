@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Assert that a COMMIT'S RESULTING TREE passes check_rule_linkage.py.
+# Assert that a COMMIT'S RESULTING TREE passes the document-level checks:
+# check_rule_linkage.py (rule/finding graph) and check_witness_sync.py
+# (structural: every mutant has a witness, every rule-24 control recorded).
 #
 # WHY A TREE AND NOT A FILE STATE
 # -------------------------------
@@ -47,8 +49,25 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   d="$(mktemp -d)"
   git -C "$REPO" archive "$t" 2>/dev/null | tar -x -C "$d" 2>/dev/null || {
     echo "cannot extract tree $t"; rm -rf "$d"; return 2; }
+  # Two document-level invariants, both cheap enough for a commit gate:
+  #   check_rule_linkage.py    the rule/finding graph, both directions
+  #   check_witness_sync.py    every mutant has a witness, every control is
+  #                            recorded (rule 24's second half)
+  # check_witness_sync.py runs in its STRUCTURAL mode here. Its --fresh mode
+  # re-runs every witness runner and is the one that can catch a string that is
+  # stale rather than missing; that takes tens of minutes and belongs in the
+  # audit path, not in a gate. Same split, and the same reason, as this file's
+  # own: a gate too slow to run gets routed around.
   ( cd "$d" && python3 scripts/check_rule_linkage.py 2>&1 )
   rc=$?
+  # A tree that PREDATES this check is not a failing tree. --audit walks history,
+  # and treating "the checker did not exist yet" as a violation would report every
+  # commit before it as broken -- which is how a gate earns a reputation for
+  # crying wolf and gets bypassed.
+  if [ -f "$d/scripts/check_witness_sync.py" ]; then
+    ( cd "$d" && python3 scripts/check_witness_sync.py 2>&1 )
+    [ $? -ne 0 ] && rc=1
+  fi
   rm -rf "$d"
   return $rc
 }
