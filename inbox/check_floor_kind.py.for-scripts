@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""Does a coverage floor count the ATTEMPT or the CONDITION?
+
+A floor over STIMULUS answers "did the harness try". A floor over the CONDITION
+answers "was the clause exercised". THEY READ IDENTICALLY IN SOURCE and diverge
+exactly where the design controls whether the state is reached -- which is what
+every latitude clause grants it.
+
+WHY THIS EXISTS. v_ca07's floor for clause H4 read:
+
+    cov_defer++;                       // unconditional
+    if (cov_defer < 1) fail("FLOOR", "a second request during a transition was
+                                      never DRIVEN -- H4 untested");
+
+Against a conforming design that resumes in one cycle, the request WAS driven,
+the floor counted it, H4's antecedent was empty, and the mutant that violates H4
+SURVIVED. The floor asserted the clause was tested at the exact moment it was
+vacuous. Two more of the same were found on v_ca04 (A3) and v_nw02 (W2).
+
+THE TEST, and it is mechanical:
+
+  1. A counter is a CONDITION counter if its increment is guarded by an
+     expression mentioning a signal the DESIGN drives -- an `output` in the
+     task's spec/*_iface.sv. Only the design can make such a guard false.
+  2. A counter is an ATTEMPT counter otherwise: the increment is reached by the
+     testbench's own control flow, or guarded by a value the testbench chose.
+  3. The DEFECT is an ATTEMPT counter whose floor MESSAGE claims a clause was
+     exercised -- "untested", "never judged", "so A3 is". An attempt counter
+     cannot support that claim.
+
+An attempt counter with an honest message ("was not driven", "the probe did not
+run") is CORRECT and is not flagged: most floors are, and should be, stimulus
+floors. The claim is what must match the counter.
+
+CALIBRATED ON REAL DATA, against the three defects found by hand on 2026-08-25
+and the tree immediately before they were fixed (31e2c38):
+
+    FOUND    v_ca04 cov_lockin_probe  -- A3, set by the probe itself
+    FOUND    v_ca07 cov_defer         -- H4, unconditional increment
+    MISSED   v_nw02 cov_filled_bound  -- W2
+
+    plus four flags a hand pass had judged CORRECT: cov_same, cov_en,
+    cov_bigdrop, cov_multibeat -- all cases where the stimulus fully determines
+    the condition, which this tool cannot know.
+
+  RECALL 2 of 3. PRECISION 2 of 6 at that revision. Work the list; do not count it.
+
+THREE BUGS IN THIS CLASSIFIER WERE FOUND BY RUNNING IT, not by reading it, and
+each was a FALSE NEGATIVE -- the direction that matters:
+
+  1. a bare increment following a guarded one INHERITED the guard, so a demoted
+     counter read as a condition counter. Caught by the self-test.
+  2. a guard over a REGISTERED COPY of a DUT output read as a testbench value.
+     Caught by running it on a tree where the answer was known: it flagged the
+     two condition counters written that morning to fix this very defect.
+  3. a DUT output RENAMED at the port binding -- `.out_valid_o(out_valid)` --
+     meant the interface name never appeared in the testbench at all.
+
+After all three, the same two known defects are still found and the three
+hand-written condition counters are no longer flagged.
+
+WHY IT MISSED THE THIRD, because the shape recurs. cov_filled_bound's message was
+"the write bound was never DRIVEN to its limit". The word "driven" reads as a
+stimulus claim, and the claim regex passed it. But REACHING A LIMIT is not
+something a harness drives -- it is something that happens, and whether it does
+depends on the design's admission policy. A message can claim a design state in
+words that look like stimulus, and no lexical test separates those.
+
+CANDIDATE LIST, NOT A VERDICT. Two shapes it cannot judge:
+  - a counter guarded by a testbench-computed predicate over a value the
+    testbench chose (`if (sz < MSIZE)`) reads as ATTEMPT and usually is one,
+    correctly -- but if the stimulus fully determines the condition, the claim
+    may be sound anyway. Read the clause.
+  - whether a LATITUDE clause sits between the stimulus and the condition is
+    the real question and this tool cannot read prose. It reports where to look.
+
+  usage:  check_floor_kind.py [task_dir ...]     default: all verification tasks
+          check_floor_kind.py --self-test
+"""
+import os, re, sys, glob
+
+FLOOR   = re.compile(r'if\s*\(\s*!?\s*(cov_\w+)[^)]*\)\s*\n?\s*fail\(\s*"([^"]*)"\s*,\s*(?:\$sformatf\(\s*)?"([^"]*)"', re.M)
+INC     = re.compile(r'\b(cov_\w+)\s*(?:\+\+|\+=|=\s*1\'b1|<=\s*1\'b1)')
+CLAIM   = re.compile(r"untested|unexercised|never (?:judged|exercised|reached)|is untested|so [A-Z]\d+\b|cannot be revealed", re.I)
+
+def dut_outputs(task_dir):
+    """Signals the DESIGN drives. Only these can make a guard false on their own."""
+    ifc = glob.glob(os.path.join(task_dir, "spec", "*_iface.sv"))
+    if not ifc:
+        return None
+    txt = open(ifc[0], encoding="utf-8").read()
+    return set(re.findall(r"^\s*output\s+(?:logic|wire|reg)?\s*(?:\[[^\]]*\]\s*)?(\w+)", txt, re.M))
+
+def design_derived(src, outs):
+    """DUT outputs PLUS anything the testbench assigns from one, to a fixpoint.
+
+    A checker almost never guards on a raw output: it guards on a REGISTERED
+    COPY -- `pv[j] <= out_valid_o[j] && !out_ready_i[j]` -- and then tests `pv`.
+    Matching only literal output names calls that a testbench value and reports
+    a genuine condition counter as an attempt counter. Found by running this on
+    a tree where the answer was known: it flagged the two condition counters
+    that had just been written to fix the very defect it exists to find."""
+    d = set(outs)
+    # THE PORT BINDING. A testbench connects `.out_valid_o(out_valid)`, so the
+    # interface's name may never appear in the testbench at all and every guard
+    # over that signal reads as a testbench value. Named connections first,
+    # then `.name` shorthand which binds a local of the same name.
+    for m in re.finditer(r"\.(\w+)\s*\(\s*([\w\[\]:.\-+ ]+?)\s*\)", src):
+        if m.group(1) in outs:
+            d.add(re.split(r"[\[.]", m.group(2).strip())[0])
+    for m in re.finditer(r"\.(\w+)\s*(?=[,)\n])", src):
+        if m.group(1) in outs: d.add(m.group(1))
+    lines = src.split("\n")
+    for _ in range(4):                     # bounded; two levels is the deepest seen
+        grew = False
+        for i, line in enumerate(lines):
+            m = re.match(r"\s*(?:assign\s+)?(\w+)(?:\s*\[[^\]]*\])?\s*(?:<=|=)\s*([^;]+);", line)
+            if not m: continue
+            lhs, rhs = m.group(1), m.group(2)
+            if lhs in d: continue
+            hit = any(re.search(r"\b%s\b" % re.escape(x), rhs) for x in d)
+            if not hit:
+                # CONTROL dependence, not only value dependence. A flag SET under
+                # a design-dependent condition -- `if (div_valid && div_ready)
+                # h4_busy <= 1'b1;` -- carries the design's state even though its
+                # right-hand side is a literal. Value tracing alone reported such
+                # a flag as a testbench value and called a genuine condition
+                # counter an attempt counter; found by running this against a
+                # counter written that morning to fix this very defect.
+                ctx = " ".join(lines[max(0, i-3):i])
+                for g in re.finditer(r"if\s*\(([^)]*)\)", ctx):
+                    if any(re.search(r"\b%s\b" % re.escape(x), g.group(1)) for x in d):
+                        hit = True; break
+            if hit:
+                d.add(lhs); grew = True
+        if not grew: break
+    return d
+
+def guard_of(lines, i):
+    """The enclosing single-line `if` for an increment, if there is one.
+
+    The previous line supplies a guard ONLY if it opens a block -- ends with
+    `begin`. A previous `if` whose body is on its own line has already been
+    consumed, and treating it as an enclosing guard makes a BARE increment
+    following a guarded one inherit the guard. That is a false negative in
+    exactly the direction that matters, and the self-test caught it before this
+    ran on anything."""
+    l = lines[i]
+    m = re.match(r"\s*if\s*\((.*)\)\s*\S", l)      # guard AND body on this line
+    if m: return m.group(1)
+    if i:
+        prev = lines[i-1].rstrip()
+        if prev.endswith("begin") or re.match(r"\s*if\s*\(.*\)\s*$", prev):
+            m = re.match(r"\s*(?:end\s*)?else\s*if\s*\((.*?)\)|\s*if\s*\((.*?)\)", prev)
+            if m: return m.group(1) or m.group(2) or ""
+    return ""
+
+def analyse(task_dir, outs):
+    tb = glob.glob(os.path.join(task_dir, "tb", "*_tb.sv"))
+    if not tb: return None
+    src = open(tb[0], encoding="utf-8").read()
+    outs = design_derived(src, outs)
+    lines = src.split("\n")
+    kind = {}
+    for i, l in enumerate(lines):
+        if l.strip().startswith("//"): continue
+        for m in INC.finditer(l):
+            cov = m.group(1)
+            g = guard_of(lines, i)
+            saw_out = any(re.search(r"\b%s\b" % re.escape(o), g) for o in outs)
+            # a counter is CONDITION only if EVERY increment is design-guarded
+            kind[cov] = ("condition" if saw_out else "attempt") if cov not in kind \
+                        else ("condition" if (kind[cov] == "condition" and saw_out) else "attempt")
+    rows = []
+    for m in FLOOR.finditer(src):
+        cov, clause, msg = m.group(1), m.group(2), m.group(3)
+        k = kind.get(cov, "attempt")
+        claims = bool(CLAIM.search(msg))
+        rows.append((cov, k, claims, msg))
+    return rows
+
+def report(task_dir):
+    name = os.path.basename(task_dir.rstrip("/"))
+    outs = dut_outputs(task_dir)
+    if outs is None:
+        print(f"  {name:<32} NO CONCLUSION -- no spec/*_iface.sv, so no way to")
+        print(f"  {'':<32} tell a design-driven guard from a testbench one")
+        return None
+    rows = analyse(task_dir, outs)
+    if rows is None:
+        print(f"  {name:<32} NO CONCLUSION -- no tb/*_tb.sv"); return None
+    bad = [r for r in rows if r[1] == "attempt" and r[2]]
+    print(f"  {name:<32} {len(rows):>3} floor(s), {sum(1 for r in rows if r[1]=='condition'):>2} condition, "
+          f"{len(bad)} SUSPECT")
+    for cov, k, claims, msg in bad:
+        print(f"       SUSPECT  {cov}: counts the ATTEMPT, claims \"{msg[:74]}\"")
+    return len(bad)
+
+def self_test():
+    """Exercised, not assumed. A classifier that cannot flag is worse than none."""
+    import tempfile
+    cases, bad = [], 0
+    def mk(iface, tb):
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "spec")); os.makedirs(os.path.join(d, "tb"))
+        open(os.path.join(d, "spec", "x_iface.sv"), "w").write(iface)
+        open(os.path.join(d, "tb", "x_tb.sv"), "w").write(tb)
+        return d
+    IF = "module x (\n  input logic clk_i,\n  output logic out_valid_o,\n  output logic ack_o\n);\nendmodule\n"
+    d = mk(IF, 'cov_a++;\nif (cov_a < 1) fail("FLOOR", "never driven -- A3 is untested");')
+    cases.append(("an unconditional counter claiming a clause is SUSPECT", analyse(d, dut_outputs(d))[0][1] == "attempt" and analyse(d, dut_outputs(d))[0][2]))
+    d = mk(IF, 'if (out_valid_o && !rdy) cov_b++;\nif (cov_b < 1) fail("FLOOR", "A3 never judged");')
+    cases.append(("a counter guarded by a DUT OUTPUT is a condition counter", analyse(d, dut_outputs(d))[0][1] == "condition"))
+    d = mk(IF, 'cov_c++;\nif (cov_c < 1) fail("FLOOR", "the probe was not driven");')
+    cases.append(("an attempt counter with an HONEST message is not flagged", not analyse(d, dut_outputs(d))[0][2]))
+    d = mk(IF, 'if (out_valid_o) cov_d++;\ncov_d++;\nif (cov_d < 1) fail("FLOOR", "D1 is untested");')
+    cases.append(("one unguarded increment demotes the whole counter", analyse(d, dut_outputs(d))[0][1] == "attempt"))
+    d = mk(IF, 'pv <= out_valid_o && !rdy;\nif (pv) cov_e++;\nif (cov_e < 1) fail("FLOOR", "A3 never judged");')
+    cases.append(("a guard over a REGISTERED COPY of a DUT output is a condition counter", analyse(d, dut_outputs(d))[0][1] == "condition"))
+    d = mk(IF, "if (ack_o) begin\n  busy <= 1'b1;\nend\nif (busy) cov_f++;\n" + 'if (cov_f < 1) fail("FLOOR", "D1 never judged");')
+    cases.append(("a flag SET under a design-dependent condition is design-derived", analyse(d, dut_outputs(d))[0][1] == "condition"))
+    d = mk(IF, ".out_valid_o(ov),\npv <= ov && !rdy;\nif (pv) cov_g++;\n" + 'if (cov_g < 1) fail("FLOOR", "A3 never judged");')
+    cases.append(("a DUT output RENAMED at the port binding is followed", analyse(d, dut_outputs(d))[0][1] == "condition"))
+    d = tempfile.mkdtemp(); os.makedirs(os.path.join(d, "tb"))
+    open(os.path.join(d, "tb", "x_tb.sv"), "w").write("cov_e++;")
+    cases.append(("no iface is NO CONCLUSION, not clean", dut_outputs(d) is None))
+    for n, ok in cases:
+        print(f"  {'ok    ' if ok else 'FAILED'}  {n}")
+        if not ok: bad += 1
+    print(f"\n{len(cases)} case(s) exercised, {bad} failure(s)")
+    return 1 if bad else 0
+
+def main(argv):
+    if "--self-test" in argv: return self_test()
+    roots = [a for a in argv[1:] if not a.startswith("-")] or sorted(glob.glob("domains/*/verification/v_*"))
+    print("CANDIDATE LIST, NOT A VERDICT -- an attempt counter with an honest")
+    print("message is correct and is not flagged. See the header.\n")
+    tot, nc = 0, 0
+    for d in roots:
+        r = report(d)
+        if r is None: nc += 1
+        else: tot += r
+    print(f"\n{len(roots)-nc} task(s) read, {tot} suspect floor(s). {nc} NO CONCLUSION.")
+    return 2 if nc else 0
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
