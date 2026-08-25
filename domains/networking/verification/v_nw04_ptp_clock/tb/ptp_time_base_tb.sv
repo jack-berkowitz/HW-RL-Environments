@@ -246,6 +246,7 @@ module ptp_time_base_tb;
 
   // ---------------- coverage, on STIMULUS only ----------------
   int cov_periods = 0, cov_adjusts = 0, cov_neg_adjusts = 0, cov_drifts = 0;
+  int cov_ns_drifts = 0, cov_neg_drifts = 0;
   int cov_sets = 0; bit cov_wrap_driven = 0, cov_reset_mid = 0;
 
   initial begin
@@ -271,6 +272,27 @@ module ptp_time_base_tb;
     // -- 3. a new drift, and a new rate ---------------------------------------
     set_drift(0, 48, 3); cov_drifts++; quiet(60);
     set_drift(0, 7, 11); cov_drifts++; quiet(80);
+
+    // -- 3b. drift with a NON-ZERO nanosecond field, and a NEGATIVE one -------
+    // D3 makes `{drift_ns_i, drift_fns_i}` a SIGNED 20-bit quantity, and the
+    // sign bit is drift_ns_i's MSB. A run that leaves drift_ns_i at zero cannot
+    // reach the negative half of D3 AT ALL: drift_fns_i is only the low 16 bits,
+    // so no other input can get there. It also cannot reach any drift of one
+    // nanosecond or more.
+    //
+    // Steps 5 and 6 below already drive adj_ns_i to 4'hF and 4'hE. The identical
+    // signed-concatenation pattern was therefore exercised on the ADJUSTMENT
+    // side and not on the DRIFT side, inside one testbench -- which is what
+    // makes this an inconsistency rather than a judgement call about depth.
+    //
+    // The period in force here is 3 ns + 0xC000 fns = 3.75 ns, so a drift of
+    // -2 ns leaves the increment at 1.75 ns and the accumulators never run
+    // backwards.
+    set_drift(1,    16'h0000, 7); cov_drifts++; cov_ns_drifts++;  quiet(80);
+    set_drift(4'hF, 16'hF830, 5); cov_drifts++; cov_neg_drifts++; quiet(80);
+    set_drift(4'hE, 16'h0000, 9); cov_drifts++; cov_neg_drifts++;
+                                  cov_ns_drifts++;                quiet(90);
+    set_drift(0,    16'd48,   3); cov_drifts++;                   quiet(60);
 
     // -- 4. a counted POSITIVE offset adjustment ------------------------------
     start_adjust(0, 700, 12); cov_adjusts++;
@@ -332,6 +354,10 @@ module ptp_time_base_tb;
     if (cov_adjusts < 3)     fail("COVERAGE", $sformatf("only %0d counted adjustments driven", cov_adjusts));
     if (cov_neg_adjusts < 2) fail("COVERAGE", $sformatf("only %0d NEGATIVE adjustments driven -- A5 is untested without one", cov_neg_adjusts));
     if (cov_drifts < 2)      fail("COVERAGE", $sformatf("only %0d drift changes driven", cov_drifts));
+    // The same floor the adjustment side has had all along. D3's signed half is
+    // unreachable without a negative drift, and nothing else can reach it.
+    if (cov_neg_drifts < 2)  fail("COVERAGE", $sformatf("only %0d NEGATIVE drifts driven -- D3's signed half is untested without one", cov_neg_drifts));
+    if (cov_ns_drifts < 2)   fail("COVERAGE", $sformatf("only %0d drifts of a whole nanosecond or more driven -- drift_ns_i stays at zero without them", cov_ns_drifts));
     if (cov_sets < 3)        fail("COVERAGE", $sformatf("only %0d timestamp sets driven", cov_sets));
     if (!cov_wrap_driven)    fail("COVERAGE", "the one-second wrap was never driven -- W1 and W3 are untested");
     if (!cov_reset_mid)      fail("COVERAGE", "reset was never asserted mid-run -- R2 is untested");

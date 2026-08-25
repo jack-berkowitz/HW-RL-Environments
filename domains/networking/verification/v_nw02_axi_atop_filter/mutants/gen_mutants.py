@@ -215,6 +215,19 @@ POLICY = {
 }
 
 os.makedirs(os.path.join(TASK, "mutants", "policy"), exist_ok=True)
+# THE GENERATOR OWNS THE DIRECTORY THE 5c RUNNER ENUMERATES. That runner globs
+# policy/*.sv and grades every file it finds, so a file left behind by an
+# earlier naming is graded exactly like a current one and nothing in the output
+# distinguishes them. On v_ca07 that happened and turned a reported 22/22 into a
+# real 21/22. Wiping first means a failed generation leaves a file MISSING --
+# which the runner counts and refuses on -- rather than STALE, which it cannot
+# see.
+_POL = os.path.join(TASK, "mutants", "policy")
+os.makedirs(_POL, exist_ok=True)
+for _f in os.listdir(_POL):
+    if _f.endswith(".sv"):
+        os.remove(os.path.join(_POL, _f))
+
 for tag, edits in POLICY.items():
     txt = sub1(conf, A_RBEAT, ALT_HELPERS, "policy/%s helpers" % tag)
     for old, new in edits:

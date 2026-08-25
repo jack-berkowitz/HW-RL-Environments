@@ -85,15 +85,53 @@ module atop_filter_tb;
     .m_rid_i(m_rid), .m_rdata_i(m_rdata), .m_rresp_i(m_rresp), .m_rlast_i(m_rlast),
     .m_ruser_i(m_ruser), .m_rvalid_i(m_rvalid), .m_rready_o(m_rready));
 
+  // ---- pass-through stimulus: values, not constants --------------------------
+  // P1 to P4 say "unmodified" about eleven AW fields, three W fields, ten AR
+  // fields and three B fields. Every one of them except id, addr, len and data
+  // was driven at a SINGLE VALUE for the whole run, and a field held constant
+  // cannot distinguish a design that forwards it from one that ignores it.
+  //
+  // Worse, and this is the half the frozen-input sweep could not see: with every
+  // field constant, a CHECKER that ignores those fields is indistinguishable
+  // from one that compares them. The stimulus gap was hiding a checker gap, so
+  // varying alone would have bought nothing -- the comparisons below are the
+  // other half of the same fix.
+  //
+  // The response values are a function of the ID so the STIMULUS and the
+  // RESPONDER agree on them without a side channel: the expectation is raised at
+  // issue time, and the responder decides the value cycles later.
+  function automatic logic [1:0] resp_of(input int id);
+    return (id % 3 == 0) ? 2'b00 : ((id % 3 == 1) ? 2'b10 : 2'b11);   // OKAY / SLVERR / DECERR
+  endfunction
+  function automatic logic bu_of(input int id); return id[0]; endfunction
+  function automatic logic ru_of(input int id); return id[1]; endfunction
+
+  int sb_ctr = 0;      // writes
+  int sb_ar  = 0;      // reads -- SEPARATE, and the reason is measured.
+  // Sharing one counter across both paths left s_arsize, s_arburst and s_arlock
+  // still FROZEN after this fix, because every AR happened to land on an even
+  // sb_ctr with sb_ctr mod 3 == 2. The expressions varied; the values they were
+  // evaluated at did not. A stride correlated with the call site is a constant
+  // wearing an expression, and only re-running the variation check found it --
+  // reading the code, it looks like it varies.
+  // One packed word per transaction, so the comparison is a single equality and
+  // cannot silently omit a field the way an enumerated list of ifs can.
+  function automatic int pack_aw(input logic [2:0] sz, input logic [1:0] bt, input logic lk,
+                                 input logic [3:0] ca, input logic [2:0] pr,
+                                 input logic [3:0] qo, input logic [3:0] rg, input logic us);
+    return int'({us, rg, qo, pr, ca, lk, bt, sz});
+  endfunction
+
   // =========================== THE MODEL ======================================
   // Expected forwarded AW (non-atomic writes only), in issue order.
-  int fa_id [$], fa_addr [$], fa_len [$];
+  int fa_id [$], fa_addr [$], fa_len [$], fa_sb [$];
   // Expected forwarded W beats, in issue order.
-  int fw_data [$], fw_strb [$]; bit fw_last [$];
+  int fw_data [$], fw_strb [$], fw_user [$]; bit fw_last [$];
   // Expected upstream B: manufactured (SLVERR) and forwarded, matched by id+resp.
-  int eb_id [$]; int eb_resp [$]; int eb_due [$]; bit eb_made [$];
+  int eb_id [$]; int eb_resp [$]; int eb_due [$]; bit eb_made [$]; int eb_user [$];
   // Expected upstream R beats, per id, in order.
-  int er_id [$]; int er_resp [$]; bit er_last [$]; int er_due [$]; bit er_made [$];
+  int er_id [$]; int er_resp [$]; bit er_last [$]; int er_due [$]; bit er_made [$]; int er_user [$];
+  int fr_id [$], fr_addr [$], fr_len [$], fr_sb [$];   // expected forwarded AR
   int debt = 0, peak_debt = 0;
   int n_maw = 0, n_mwlast = 0;
   // COVERAGE COUNTERS -- these count STIMULUS, never DUT responses. A counter
@@ -119,7 +157,16 @@ module atop_filter_tb;
         if (int'(m_awid) != fa_id[0] || int'(m_awaddr) != fa_addr[0] || int'(m_awlen) != fa_len[0])
           fail("P1", $sformatf("forwarded AW altered: got id=%0d addr=%08x len=%0d, expected id=%0d addr=%08x len=%0d",
                                m_awid, m_awaddr, m_awlen, fa_id[0], fa_addr[0], fa_len[0]));
+        // P1 says EVERY field, and this is the other eight of the eleven.
+        if (pack_aw(m_awsize, m_awburst, m_awlock, m_awcache, m_awprot,
+                    m_awqos, m_awregion, m_awuser) != fa_sb[0])
+          fail("P1", $sformatf("forwarded AW sideband altered: got size=%0d burst=%b lock=%b cache=%b prot=%b qos=%b region=%b user=%b, packed %0d, expected packed %0d",
+                               m_awsize, m_awburst, m_awlock, m_awcache, m_awprot,
+                               m_awqos, m_awregion, m_awuser,
+                               pack_aw(m_awsize, m_awburst, m_awlock, m_awcache, m_awprot,
+                                       m_awqos, m_awregion, m_awuser), fa_sb[0]));
         void'(fa_id.pop_front()); void'(fa_addr.pop_front()); void'(fa_len.pop_front());
+        void'(fa_sb.pop_front());
       end
     end
     if (m_wvalid && m_wready) begin
@@ -130,10 +177,13 @@ module atop_filter_tb;
       if (fw_data.size() == 0)
         fail("F2", $sformatf("a W beat reached the master port that belongs to no forwarded write -- data=%08x (cycle %0d). The W beats of a filtered write must be absorbed.", m_wdata, cyc));
       else begin
-        if (int'(m_wdata) != fw_data[0] || int'(m_wstrb) != fw_strb[0] || m_wlast !== fw_last[0])
-          fail("P2", $sformatf("forwarded W beat altered: got data=%08x strb=%h last=%b, expected data=%08x strb=%h last=%b",
-                               m_wdata, m_wstrb, m_wlast, fw_data[0], fw_strb[0], fw_last[0]));
+        if (int'(m_wdata) != fw_data[0] || int'(m_wstrb) != fw_strb[0] || m_wlast !== fw_last[0]
+            || int'(m_wuser) != fw_user[0])
+          fail("P2", $sformatf("forwarded W beat altered: got data=%08x strb=%h last=%b user=%b, expected data=%08x strb=%h last=%b user=%0d",
+                               m_wdata, m_wstrb, m_wlast, m_wuser,
+                               fw_data[0], fw_strb[0][3:0], fw_last[0], fw_user[0]));
         void'(fw_data.pop_front()); void'(fw_strb.pop_front()); void'(fw_last.pop_front());
+        void'(fw_user.pop_front());
       end
     end
   end
@@ -151,11 +201,19 @@ module atop_filter_tb;
         fail("F3", $sformatf("B mismatch: got id=%0d resp=%b; oldest outstanding expects id=%0d resp=%b (cycle %0d)",
                              s_bid, s_bresp, eb_id[0], eb_resp[0][1:0], cyc));
       // consume the oldest so one defect does not cascade into every later beat
-      void'(eb_id.pop_front()); void'(eb_resp.pop_front()); void'(eb_due.pop_front()); void'(eb_made.pop_front());
+      void'(eb_id.pop_front()); void'(eb_resp.pop_front()); void'(eb_due.pop_front());
+      void'(eb_made.pop_front()); void'(eb_user.pop_front());
     end else begin
       if (eb_made[k] && cyc > eb_due[k])
         fail("X4", $sformatf("manufactured B for id=%0d arrived at cycle %0d, deadline was %0d", s_bid, cyc, eb_due[k]));
-      eb_id.delete(k); eb_resp.delete(k); eb_due.delete(k); eb_made.delete(k);
+      // P4 by NAME, and on the field nothing looked at. The resp half was
+      // already compared -- as part of the match key, reported under F3 -- but
+      // with m_bresp_i frozen at OKAY that comparison could not fail, and buser
+      // was never read at all.
+      if (eb_user[k] >= 0 && int'(s_buser) != eb_user[k])
+        fail("P4", $sformatf("B for id=%0d returned user=%b, expected %b -- a forwarded B is returned unmodified, user alike (cycle %0d)",
+                             s_bid, s_buser, eb_user[k], cyc));
+      eb_id.delete(k); eb_resp.delete(k); eb_due.delete(k); eb_made.delete(k); eb_user.delete(k);
     end
   end
 
@@ -176,7 +234,11 @@ module atop_filter_tb;
                              s_rid, s_rlast, er_last[k], cyc));
       if (er_made[k] && cyc > er_due[k])
         fail("X4", $sformatf("manufactured R beat for id=%0d arrived at cycle %0d, deadline was %0d", s_rid, cyc, er_due[k]));
-      er_id.delete(k); er_resp.delete(k); er_last.delete(k); er_due.delete(k); er_made.delete(k);
+      if (er_user[k] >= 0 && int'(s_ruser) != er_user[k])
+        fail("P3", $sformatf("R beat for id=%0d returned user=%b, expected %b -- R beats are returned unmodified (cycle %0d)",
+                             s_rid, s_ruser, er_user[k], cyc));
+      er_id.delete(k); er_resp.delete(k); er_last.delete(k); er_due.delete(k);
+      er_made.delete(k); er_user.delete(k);
     end
   end
 
@@ -211,6 +273,25 @@ module atop_filter_tb;
   always @(posedge clk) if (rst_n) begin
     if (m_awvalid && m_awready) begin dq_id.push_back(int'(m_awid)); dq_t.push_back(cyc + BLAG); end
     if (m_arvalid && m_arready) begin rq_id.push_back(int'(m_arid)); rq_n.push_back(int'(m_arlen) + 1); end
+    // P3 -- "AR is forwarded unmodified" -- had NO field comparison anywhere in
+    // this reference. The clause was carried by "an AR was offered and accepted"
+    // alone, which a design that rewrites every field passes.
+    if (checking && m_arvalid && m_arready) begin
+      if (fr_id.size() == 0)
+        fail("P3", $sformatf("an AR reached the master port that no read asked for -- id=%0d (cycle %0d)", m_arid, cyc));
+      else begin
+        if (int'(m_arid) != fr_id[0] || int'(m_araddr) != fr_addr[0] || int'(m_arlen) != fr_len[0]
+            || pack_aw(m_arsize, m_arburst, m_arlock, m_arcache, m_arprot,
+                       m_arqos, m_arregion, m_aruser) != fr_sb[0])
+          fail("P3", $sformatf("forwarded AR altered: got id=%0d addr=%08x len=%0d sideband-packed %0d, expected id=%0d addr=%08x len=%0d sideband-packed %0d",
+                               m_arid, m_araddr, m_arlen,
+                               pack_aw(m_arsize, m_arburst, m_arlock, m_arcache, m_arprot,
+                                       m_arqos, m_arregion, m_aruser),
+                               fr_id[0], fr_addr[0], fr_len[0], fr_sb[0]));
+        void'(fr_id.pop_front()); void'(fr_addr.pop_front());
+        void'(fr_len.pop_front()); void'(fr_sb.pop_front());
+      end
+    end
     if (m_bvalid && m_bready) begin void'(dq_id.pop_front()); void'(dq_t.pop_front()); end
     if (m_rvalid && m_rready) begin
       if (rq_n[0] <= 1) begin void'(rq_id.pop_front()); void'(rq_n.pop_front()); end
@@ -219,10 +300,14 @@ module atop_filter_tb;
   end
   always_comb begin
     m_bvalid = (dq_id.size() > 0) && (cyc >= dq_t[0]);
-    m_bid = 4'(dq_id.size() ? dq_id[0] : 0); m_bresp = 2'b00; m_buser = 1'b0;
+    m_bid = 4'(dq_id.size() ? dq_id[0] : 0);
+    m_bresp = dq_id.size() ? resp_of(dq_id[0]) : 2'b00;
+    m_buser = dq_id.size() ? bu_of(dq_id[0])   : 1'b0;
     m_rvalid = (rq_id.size() > 0);
     m_rid = 4'(rq_id.size() ? rq_id[0] : 0);
-    m_rdata = 32'hFEED_0000 + 32'(rq_id.size()); m_rresp = 2'b00; m_ruser = 1'b0;
+    m_rdata = 32'hFEED_0000 + 32'(rq_id.size());
+    m_rresp = rq_id.size() ? resp_of(rq_id[0]) : 2'b00;
+    m_ruser = rq_id.size() ? ru_of(rq_id[0])   : 1'b0;
     m_rlast = (rq_id.size() > 0) && (rq_n[0] <= 1);
   end
   // The forwarded B and R expectations are raised by the STIMULUS, at issue
@@ -240,16 +325,35 @@ module atop_filter_tb;
     // cycle it accepts it, and a model updated afterwards is a cycle behind the
     // thing it is checking.
     n_fa = 0; n_eb = 0; n_er = 0;
+    // A fresh sideband per transaction, driven BEFORE the expectation is raised
+    // so the two cannot disagree.
+    sb_ctr++;
+    s_awsize   = 3'(sb_ctr % 3);                        // 0..2 on a 4-byte bus
+    s_awburst  = (sb_ctr % 4 == 3) ? 2'b00 : 2'b01;     // FIXED and INCR
+    s_awlock   = sb_ctr[0];
+    s_awcache  = 4'(sb_ctr * 5);
+    s_awprot   = 3'(sb_ctr);
+    s_awqos    = 4'(sb_ctr * 3);
+    s_awregion = 4'(sb_ctr * 7);
+    s_awuser   = sb_ctr[1];
     if (atop[5:4] == 2'b00) begin
       fa_id.push_back(id); fa_addr.push_back(addr); fa_len.push_back(len); n_fa = 1;
-      // this responder answers every forwarded write with OKAY, after BLAG
-      eb_id.push_back(id); eb_resp.push_back(2'b00);
+      fa_sb.push_back(pack_aw(s_awsize, s_awburst, s_awlock, s_awcache,
+                              s_awprot, s_awqos, s_awregion, s_awuser));
+      // the responder answers a forwarded write with resp_of(id), after BLAG
+      eb_id.push_back(id); eb_resp.push_back(int'(resp_of(id)));
+      eb_user.push_back(int'(bu_of(id)));
       eb_due.push_back(0); eb_made.push_back(1'b0); n_eb = 1;
     end else begin
       eb_id.push_back(id); eb_resp.push_back(2'b10);
+      // A MANUFACTURED B is the design's own, not a forwarded one, so P4 says
+      // nothing about its user field. -1 means "not compared" rather than a
+      // value, so the check below cannot invent a requirement the spec lacks.
+      eb_user.push_back(-1);
       eb_due.push_back(cyc + RESP_DEADLINE + 8*(len+1)); eb_made.push_back(1'b1); n_eb = 1;
       if (atop[5]) for (int b = 0; b <= len; b++) begin
         er_id.push_back(id); er_resp.push_back(2'b10); er_last.push_back(b == len);
+        er_user.push_back(-1);        // manufactured: not a forwarded field
         er_due.push_back(cyc + RESP_DEADLINE + 8*(len+1)); er_made.push_back(1'b1); n_er++;
       end
     end
@@ -269,9 +373,12 @@ module atop_filter_tb;
     if (!accepted) begin
       // nothing was accepted, so nothing this call queued can have been
       // consumed; the entries are still the newest in each queue.
-      repeat (n_fa) begin void'(fa_id.pop_back()); void'(fa_addr.pop_back()); void'(fa_len.pop_back()); end
-      repeat (n_eb) begin void'(eb_id.pop_back()); void'(eb_resp.pop_back()); void'(eb_due.pop_back()); void'(eb_made.pop_back()); end
-      repeat (n_er) begin void'(er_id.pop_back()); void'(er_resp.pop_back()); void'(er_last.pop_back()); void'(er_due.pop_back()); void'(er_made.pop_back()); end
+      repeat (n_fa) begin void'(fa_id.pop_back()); void'(fa_addr.pop_back()); void'(fa_len.pop_back());
+                          void'(fa_sb.pop_back()); end
+      repeat (n_eb) begin void'(eb_id.pop_back()); void'(eb_resp.pop_back()); void'(eb_due.pop_back());
+                          void'(eb_made.pop_back()); void'(eb_user.pop_back()); end
+      repeat (n_er) begin void'(er_id.pop_back()); void'(er_resp.pop_back()); void'(er_last.pop_back());
+                          void'(er_due.pop_back()); void'(er_made.pop_back()); void'(er_user.pop_back()); end
     end
   endtask
 
@@ -284,14 +391,18 @@ module atop_filter_tb;
   // Sends a W burst. `filtered` says whether these beats belong to a filtered
   // write, in which case they must NOT appear on the master port.
   task automatic send_w(input int n, input bit filtered);
+    logic [3:0] stb; logic usr;
     for (int i = 0; i < n; i++) begin
       wdata_ctr++; cov_wbeats++;
       @(negedge clk);
-      s_wdata = 32'hC0DE_0000 + 32'(wdata_ctr); s_wstrb = 4'hF;
+      stb = 4'(wdata_ctr * 7); usr = wdata_ctr[0];
+      s_wdata = 32'hC0DE_0000 + 32'(wdata_ctr); s_wstrb = stb;
+      s_wuser = usr;
       s_wlast = (i == n - 1); s_wvalid = 1'b1;
       if (!filtered) begin
         fw_data.push_back(int'(32'hC0DE_0000 + 32'(wdata_ctr)));
-        fw_strb.push_back(4'hF); fw_last.push_back(i == n - 1);
+        fw_strb.push_back(int'({28'b0, stb})); fw_last.push_back(i == n - 1);
+        fw_user.push_back(int'({31'b0, usr}));
       end
       begin
         bit took; int t;
@@ -315,11 +426,26 @@ module atop_filter_tb;
 
   task automatic issue_ar(input int id, input int addr, input int len);
     for (int b = 0; b <= len; b++) begin
-      er_id.push_back(id); er_resp.push_back(2'b00); er_last.push_back(b == len);
+      er_id.push_back(id); er_resp.push_back(int'(resp_of(id))); er_last.push_back(b == len);
+      er_user.push_back(int'(ru_of(id)));
       er_due.push_back(0); er_made.push_back(1'b0);
     end
     @(negedge clk);
+    sb_ar++;
+    s_arsize   = 3'(sb_ar % 3);
+    s_arburst  = (sb_ar % 4 == 3) ? 2'b00 : 2'b01;
+    s_arlock   = sb_ar[0];
+    s_arcache  = 4'(sb_ar * 5);
+    s_arprot   = 3'(sb_ar);
+    s_arqos    = 4'(sb_ar * 3);
+    s_arregion = 4'(sb_ar * 7);
+    s_aruser   = sb_ar[1];
     s_arid = 4'(id); s_araddr = 32'(addr); s_arlen = 8'(len); s_arvalid = 1'b1;
+    // P3 forbids altering the read address path, so every AR offered is an AR
+    // that must arrive unchanged. A read is never filtered, whatever its address.
+    fr_id.push_back(id); fr_addr.push_back(addr); fr_len.push_back(len);
+    fr_sb.push_back(pack_aw(s_arsize, s_arburst, s_arlock, s_arcache,
+                            s_arprot, s_arqos, s_arregion, s_aruser));
     begin
       bit took; int t;
       took = 1'b0;
@@ -402,7 +528,21 @@ module atop_filter_tb;
     end
 
     // -- 6. reads pass through untouched, alongside a filtered atomic ---------
+    // ONE read is not a test of a pass-through clause. P3 says AR is forwarded
+    // unmodified and that a read is never filtered WHATEVER ITS ADDRESS, and a
+    // single AR at one address with one sideband pattern cannot show either.
+    // The coverage floor below is what turned this from an assumption into a
+    // failure -- it reported "1 read sideband pattern driven" and the frozen-
+    // input check agreed, after a first fix that only LOOKED like it varied.
     issue_ar(7, 32'h3000, 1); settle(20);
+    issue_ar(1, 32'h4400, 0); settle(14);
+    issue_ar(2, 32'h4800, 3); settle(22);
+    issue_ar(3, 32'h5C00, 1); settle(14);
+    issue_ar(4, 32'h6000, 2); settle(18);
+    issue_ar(5, 32'h7400, 0); settle(14);
+    issue_ar(6, 32'h8800, 4); settle(26);
+    issue_ar(9, 32'h9C00, 1); settle(20);
+    expect_quiet("P3", "after the read sweep");
     issue_aw(8, 32'h3100, 2, 6'b110000); send_w(3, 1'b1); settle(60);
     expect_quiet("P3/F4", "after a read alongside an atomic load");
 
@@ -428,10 +568,11 @@ module atop_filter_tb;
     repeat (6) @(posedge clk);
     @(negedge clk) rst_n = 1'b1;
     settle(4);
-    fa_id.delete(); fa_addr.delete(); fa_len.delete();
-    fw_data.delete(); fw_strb.delete(); fw_last.delete();
-    eb_id.delete(); eb_resp.delete(); eb_due.delete(); eb_made.delete();
-    er_id.delete(); er_resp.delete(); er_last.delete(); er_due.delete(); er_made.delete();
+    fa_id.delete(); fa_addr.delete(); fa_len.delete(); fa_sb.delete();
+    fw_data.delete(); fw_strb.delete(); fw_last.delete(); fw_user.delete();
+    eb_id.delete(); eb_resp.delete(); eb_due.delete(); eb_made.delete(); eb_user.delete();
+    er_id.delete(); er_resp.delete(); er_last.delete(); er_due.delete(); er_made.delete(); er_user.delete();
+    fr_id.delete(); fr_addr.delete(); fr_len.delete(); fr_sb.delete();
     dq_id.delete(); dq_t.delete(); rq_id.delete(); rq_n.delete();
     checking = 1'b1;
     issue_aw(13, 32'h6000, 1, 6'b100000); send_w(2, 1'b1); settle(60);
@@ -446,6 +587,11 @@ module atop_filter_tb;
     if (!cov_backpressure) fail("COVERAGE", "the response channels were never backpressured");
     if (!cov_reset)        fail("COVERAGE", "reset was never asserted mid-stream");
     if (!cov_filled_bound) fail("COVERAGE", "the write bound was never driven to its limit");
+    // The floor for the fields this run exists to exercise. A pass-through
+    // clause tested at one value per field is not tested, and the only way to
+    // know the values moved is to count them.
+    if (sb_ctr < 8 || sb_ar < 8)
+      fail("COVERAGE", $sformatf("only %0d write and %0d read sideband patterns driven -- P1 and P3 are pass-through clauses and a field held constant cannot show a design that ignores it", sb_ctr, sb_ar));
 
     if (errors == 0) $display("RESULT: PASS");
     else $display("RESULT: FAIL (%0d violation%s)", errors, (errors == 1) ? "" : "s");

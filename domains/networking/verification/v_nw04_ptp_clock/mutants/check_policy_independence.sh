@@ -30,7 +30,7 @@ run_one() {   # $1 label, $2 expected, $3.. files
 echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
 echo "         implementation must PASS. Each defect line is the positive half."
 echo
-echo "reference testbench vs the GOLDEN base and its ten defects"
+echo "reference testbench vs the GOLDEN base and its $(grep -cE '^module pt_m[0-9]+_' "$T/mutants/mutants.sv") defects"
 _r24=$fails
 run_one "golden (clean)" PASS "$T/dut/ptp_clock.sv" "$T/dut/ptp_time_base.sv"
 if [ "$fails" -ne "$_r24" ]; then
@@ -49,7 +49,19 @@ open('$W/$M.sv','w').write(b.replace('module $M','module ptp_time_base',1))"
 done
 
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and the same eight defects"
+# The two halves must be the SAME SET. This runner globs policy/*.sv, so a
+# generation that failed part way leaves fewer files and every row still reads
+# "as expected" -- a short set is indistinguishable from a complete one in the
+# output. Paired with the generator wiping the directory first, a miscount is
+# now the loud failure and a stale file is impossible.
+n_anchor=$(grep -cE "^module pt_m[0-9]+_" "$T/mutants/mutants.sv")
+n_policy=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | wc -l | tr -d ' ')
+if [ "$n_anchor" -ne "$n_policy" ]; then
+  echo "  RULE24: $n_anchor defects on the anchor but $n_policy re-derivations."
+  echo "          The two halves are not the same set. Re-run gen_mutants.py."
+  exit 2
+fi
+echo "reference testbench vs the POLICY-DIVERGENT base and the same $(grep -cE '^module pt_m[0-9]+_' "$T/mutants/mutants.sv") defects"
 sed 's/module pt_c1_zero_latency/module ptp_time_base/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean_policy.sv"
 _r24=$fails

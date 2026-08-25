@@ -227,3 +227,35 @@ watchdog:
   tb_sim_time_limit: 3ms
   reference_wall_measured_s: 0.01
   harness_sim_timeout_s: 60
+
+stimulus_rebaseline:
+  date: 2026-08-24
+  trigger: >
+    A frozen-input sweep reported drift_ns_i pinned at zero. It is a DEFECT by
+    the standing rule -- a frozen input is one when no other varying input can
+    reach the clause it governs. D3 makes {drift_ns_i, drift_fns_i} a SIGNED
+    20-bit quantity and the sign bit is drift_ns_i's MSB, so NEGATIVE drift was
+    unreachable and drift_fns_i, being the low 16 bits, could not get there. The
+    anchor implements it: $signed({drift_ns_reg, drift_fns_reg}).
+  what_made_it_sharp: >
+    adj_ns_i DID vary -- steps 5 and 6 drive it to 4'hF and 4'hE. The identical
+    signed-concatenation pattern was exercised on the ADJUSTMENT side and not on
+    the DRIFT side, inside one testbench. An inconsistency, not a judgement call
+    about depth.
+  change: >
+    STIMULUS ONLY, so no task_text_hash bump. Three drift steps added: +1 ns,
+    -2000 fns and -2 ns, at a period of 3.75 ns so the accumulators never run
+    backwards. Two coverage FLOORS added beside them, mirroring the one the
+    adjustment side has had all along -- cov_neg_drifts and cov_ns_drifts.
+  result: >
+    Frozen inputs 1 of 17 -> ZERO of 17, confirmed by re-running the same tool.
+    Kill table: every verdict IDENTICAL, before and after. Ten of ten killed,
+    5c 22 of 22, gate-mutant rejected, conformant PASS, dut2 PASS, ACCEPTED.
+    NO kill count moved, so nothing needed explaining.
+  apparatus_hardened_at_the_same_time: >
+    The generator now WIPES mutants/policy/ before writing and the 5c runner
+    REFUSES on a size mismatch -- the two defects found on v_ca07. Applied here
+    because a re-baseline run through a runner with a known count hole is not a
+    re-baseline. Regeneration is byte-identical, so this changed the guarantees
+    and not the content. The runner's header also said "the same eight defects"
+    where there are ten; it now derives the count.

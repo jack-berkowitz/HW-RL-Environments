@@ -33,7 +33,19 @@ run_one() {  # $1 = label, $2 = dut file, $3 = expected (PASS|FAIL)
 echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
 echo "         implementation must PASS. Each defect line is the positive half."
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and its ten defects"
+# The two halves must be the SAME SET. This runner globs policy/*.sv, so a
+# generation that failed part way leaves fewer files and every row still reads
+# "as expected" -- a short set is indistinguishable from a complete one in the
+# output. Paired with the generator wiping the directory first, a miscount is
+# now the loud failure and a stale file is impossible.
+n_anchor=$(grep -cE "^module af_m[0-9]+_" "$T/mutants/mutants.sv")
+n_policy=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | wc -l | tr -d ' ')
+if [ "$n_anchor" -ne "$n_policy" ]; then
+  echo "  RULE24: $n_anchor defects on the anchor but $n_policy re-derivations."
+  echo "          The two halves are not the same set. Re-run gen_mutants.py."
+  exit 2
+fi
+echo "reference testbench vs the POLICY-DIVERGENT base and the same $(grep -cE '^module af_m[0-9]+_' "$T/mutants/mutants.sv") defects"
 sed 's/module af_c1_b_before_r/module atop_filter/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean.sv"
 _r24=$fails

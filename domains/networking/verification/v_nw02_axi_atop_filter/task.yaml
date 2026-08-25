@@ -240,3 +240,49 @@ negative_controls:
       this task's boundary. The harness now runs a gate-mutant with every output
       tied high and requires a submission to REJECT it; the null testbench is
       reported INVALID and EXCLUDED FROM SCORING. Re-verified on this task.
+
+stimulus_rebaseline:
+  date: 2026-08-24
+  trigger: >
+    A frozen-input sweep reported 25 of 47 inputs frozen. Twenty were AXI
+    sideband fields held at one value each, and P1 to P4 are PASS-THROUGH clauses
+    over exactly those fields. A field's pass-through can only be tested by
+    varying that field, so no other input could reach them.
+  the_half_the_sweep_could_not_see: >
+    The stimulus gap was sitting on top of a CHECKER gap, and hiding it. P1 says
+    "every field unmodified" and the checker compared THREE of eleven. P3 says
+    "AR is forwarded unmodified" and had NO field comparison anywhere -- the
+    clause was carried by "an AR was offered and accepted", which a design that
+    rewrites every field passes. P4 never appeared in a fail() call at all. With
+    every field constant, a checker that ignores them is indistinguishable from
+    one that compares them, so varying alone would have bought nothing.
+  change: >
+    STIMULUS AND CHECKERS, both tb/ only, so no task_text_hash bump. A fresh
+    sideband per transaction on AW and AR; W beats carry a moving strobe and
+    user; the downstream responder returns a resp and user that are a function of
+    the ID, so the expectation raised at issue time and the value returned cycles
+    later agree without a side channel. P1 now compares all eleven AW fields as
+    one packed word, P2 compares user, P3 compares the whole forwarded AR, and P4
+    has an instrument for the first time. A manufactured B or R carries a -1
+    sentinel rather than a value, so the check cannot invent a requirement the
+    spec does not make of the design's own responses.
+  two_defects_in_the_fix_itself: >
+    Both found by RE-RUNNING the sweep against the fix, neither visible in
+    review. (1) The AR sideband expressions varied but their argument did not:
+    sb_ctr was shared with the write path and every read landed on an even
+    sb_ctr with sb_ctr mod 3 == 2, so three fields stayed at their old values.
+    (2) With a separate counter it still failed, and the new coverage floor said
+    why -- the reference issued exactly ONE AR in the whole run. P3's "a read is
+    never filtered, whatever its address" was carried by one read at one address.
+    Eight reads now.
+  result: >
+    Frozen inputs 25 of 47 -> THREE of 47, and all three are m_arready_i,
+    m_awready_i and m_wready_i -- the testbench-side backpressure axis, held
+    deliberately pending a separate decision on whether the criterion extends to
+    reachability. Kill table: every verdict IDENTICAL. Ten of ten killed, 5c 11
+    of 11 on the policy base, gate-mutant rejected, conformant PASS, dut2 PASS,
+    ACCEPTED. NO kill count moved.
+  apparatus_hardened_at_the_same_time: >
+    Generator wipes mutants/policy/ before writing; 5c runner refuses on a size
+    mismatch; both headers derive their count instead of hard-coding it.
+    Regeneration is byte-identical.

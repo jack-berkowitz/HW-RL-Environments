@@ -345,11 +345,26 @@ one cycle and it was the only cycle that mattered.
 
 ---
 
-## Candidate — a stale label acquires a mechanism, and the mechanism crosses an agent boundary as fact
+## Candidate — a status label is not evidence, and a second agent citing it is not a second opinion
+
+**The general form first, because the instance is only how it was found.**
+
+> When a status label and a measurement disagree, **the measurement wins and the
+> label gets checked**. A label is a claim someone wrote down at a moment that has
+> since passed. It is not an observation, it does not age with the artefact it
+> describes, and it must never be cited as corroboration for a measurement — it
+> is the thing the measurement adjudicates.
+
+The second half is what makes it expensive. **A second agent's confirmation reads
+as independent when it is the same error propagating.** Two artefacts agreeing
+is the ordinary reason to believe something; two artefacts agreeing because one
+was *fitted to* the other is indistinguishable from that at the point of
+reading.
 
 **A second instance of "a mechanism constructed to explain a measurement is a
 reason to re-measure", and a more useful one than the first, because this time
-the construction and the consumption were done by different agents.**
+the construction and the consumption were done by different agents — so the
+error acquired the appearance of independent confirmation on the way across.**
 
 **The instance.** A stimulus-variation sweep reported v_ca06 with frozen inputs,
 and the report explained: *"read half of the contract cannot complete.
@@ -427,3 +442,54 @@ grep for: `\?\s*"[^"]*"\s*:\s*"[^"]*"`.
 
 The narrower rule is not enough. "Don't put a ternary in the RESULT line" would
 have caught one of the three; the construct is the thing.
+
+---
+
+## Candidate — a stride correlated with the call site is a constant wearing an expression
+
+**Found by re-running the check after the fix, which is the only reason it was
+found at all. The code reads as obviously varying.**
+
+**The instance.** v_nw02 had twenty AXI sideband fields frozen at one value each,
+against four pass-through clauses that say those exact fields are forwarded
+unmodified. The fix drove them from a counter:
+
+```systemverilog
+  s_arsize  = 3'(sb_ctr % 3);
+  s_arburst = (sb_ctr % 4 == 3) ? 2'b00 : 2'b01;
+  s_arlock  = sb_ctr[0];
+```
+
+Three expressions that plainly vary. Re-running the frozen-input check reported
+`s_arsize`, `s_arburst` and `s_arlock` **still frozen**, at the values they had
+before the fix.
+
+`sb_ctr` was shared with the write path. Every read happened to land on an *even*
+`sb_ctr` with `sb_ctr mod 3 == 2`, so all three expressions evaluated to the same
+value every time. **The expressions varied. The arguments they were evaluated at
+did not.**
+
+**Then the second layer.** Giving reads their own counter did not fix it either,
+and the coverage floor added alongside said why: *"only 1 read sideband pattern
+driven"*. The reference issued exactly **one** AR in the entire run. No counter
+scheme can vary a field across a single call, and the clause being tested — *"AR
+is forwarded unmodified, and a read is never filtered, whatever its address"* —
+was carried by one read at one address.
+
+**Two rules, and the first is the general one.**
+
+- **A varying expression is not varying stimulus.** Variation is a property of
+  the *values a signal takes*, which depends on the expression, the counter, the
+  call sites and their stride together. Any of the four can flatten it, and three
+  of them are invisible at the point where the expression is written. Only
+  measurement at the port distinguishes them.
+- **A fix to a coverage gap is not evidence of coverage.** Re-run the check that
+  found the gap, against the fix. Both layers here were found that way and
+  neither was visible in review — the first fix looked correct and was inert, the
+  second looked correct and was starved.
+
+**On the floor that caught the second layer.** It was added in the same change as
+the fix, on the principle that a count a reader can do is a claim you have made.
+It converted an invisible gap into a *failing run* on the first execution. That
+is the argument for writing the floor at the same time as the stimulus rather
+than after it is believed to work: the floor is what disagrees with you.
