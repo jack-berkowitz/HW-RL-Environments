@@ -345,11 +345,24 @@ Everything normative is in the interface below.
 //     observable schedule -- it sets both the chain latency and the operand
 //     skew -- so it is the parameterised axis; WIDTH is pure replication.
 //
-// P2. The scored configuration is HEIGHT=8, WIDTH=8, which is also the default.
-//     The cap is synthesis feasibility rather than anything in the contract:
-//     one computing element measures 23,034 um^2 on sky130hd, so a 16x16 array
-//     would be roughly 5.9 mm^2, about 2.8x the largest design this repository
-//     has ever built. See MEASUREMENTS.md section 5.
+// P2. THE SCORED CONFIGURATION IS HEIGHT=4, WIDTH=8.
+//     The cap is PHYSICAL FEASIBILITY rather than anything in the contract, and
+//     it is MEASURED rather than estimated. At HEIGHT=8 detailed routing does not
+//     close on sky130hd: 76,253 to 83,445 violations across three separate
+//     floorplans. At HEIGHT=4 it closes clean -- 0 violations, 710,752 um^2 at
+//     33% utilisation. Both were routed at the SAME 50 ns constraint, so the
+//     comparison is like-for-like and is about the geometry.
+//
+//     THIS IS NOT A CLAIM THAT HEIGHT=4 CLOSES AT THE SCORED PERIOD. 50 ns is the
+//     most RELAXED constraint this task allows and G1 records the pinned period as
+//     not yet set. A failure at 50 ns would have been decisive; a pass is
+//     NECESSARY AND NOT SUFFICIENT, because the pin will be tighter and closure is
+//     bought with area -- so the routed design at the pin will exceed 710,752 um^2
+//     and must be re-checked before any PPA number is published from it.
+//
+//     HEIGHT=8 REMAINS LEGAL under P1 and T3 STILL REQUIRES A SUBMISSION TO HOLD
+//     AT BOTH. What moved is which geometry carries the PPA comparison, not which
+//     geometries a design must implement. See MEASUREMENTS.md section 5.
 //
 // -----------------------------------------------------------------------------
 // T -- SCORING
