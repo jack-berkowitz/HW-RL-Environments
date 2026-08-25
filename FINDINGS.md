@@ -4707,6 +4707,43 @@ output not-ready, offer frames on every input, and count beats accepted before
 backpressure. A conforming design accepts about `2 * M_COUNT` frames; `nc_h`
 accepts roughly four times that. One phase, one counter, no new observable.
 
+### Instance 2: the same clause, unenforced on the task that produced F62
+
+`d_nw01`'s C3 says a design may hold **at most 4 R beats and 4 W beats per
+master port**, and that "storage beyond that is NON-CONFORMING, not a design
+choice." `controls/nc_i_overbuffered_r.sv` is the vendored reference verbatim
+with a **64-deep FIFO** on each master's R channel — sixteen times the
+allowance, ports full width, every transaction routed and ordered and returned
+to its issuer, per-ID order preserved because a FIFO cannot reorder. **It passes
+both `MAX_TRANS` configurations with zero failures.**
+
+This is worse than the `d_nw03` instance for three reasons.
+
+**It is F62's own task.** C3 is not a clause copied from a pattern; it is the
+clause written in direct response to what happened here. Its text names the
+incident: "a 256-entry per-master read buffer, 2 x 256 x ~40 bits of
+flip-flops, which is 14x the reference's total area on a design that is
+otherwise correct on every axis."
+
+**The submission it was written to reject would pass today.** That design is no
+longer on disk — the candidate was re-solicited after C3 was added and the
+current `chat.sv` buffers `NUM_MST * MAX_TRANS` — but nothing in the harness
+would stop it being resubmitted. The clause added to close the gap closed
+nothing.
+
+**The floor beside it is checked, thoroughly.** C1's outstanding-capacity floor
+has a dedicated phase, a stated tolerance of `ceil(MAX_TRANS/2)` with the
+reasoning for the gap, measurements at both settings, and a CAPABILITY-class
+mutant. The two clauses sit adjacent in the same specification, written by the
+same hand — one enforced with care, the other not at all. **The difference is
+direction: C1 is a floor and every instrument here tests floors.**
+
+A smaller thing found alongside: `d_nw01`'s specification has **two clauses
+numbered C3** — the buffering ceiling at line 177 and "Both hold at every legal
+NUM_MST / NUM_SLV / MAX_TRANS combination" at line 216. A duplicate identifier in
+a contract makes "fails C3" ambiguous in exactly the place a submission would
+need it to be precise.
+
 ### Resolved by enforcing, and the transition is the evidence
 
 Of the three options — enforce, drop, or mark unenforced — only enforcing keeps

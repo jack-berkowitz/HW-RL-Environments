@@ -324,3 +324,63 @@ controls:
       source is judged only on whether it disagrees with the checker, and it
       passed 4290/4290 after three defects that all adjudicated to the second
       source under rule 5.
+
+# =============================================================================
+capability_controls:
+  stimulus_variation:
+    status: CLEAN
+    measured: "4 of 5 contract inputs vary; addr_map constant and CORRECT"
+    addr_map_note: >
+      A frozen input is a defect only when no other varying input can reach the
+      clause it governs. addr_map is static configuration, and D2's decode-error
+      clause is reached anyway because the ADDRESSES vary -- the testbench drives
+      UNMAPPED = 0x8000_0000 deliberately, and mutants mD2 and mD3 are keyed on
+      that path. See F72.
+    tool: scripts/check_stimulus_variation.py
+  outstanding_capacity:
+    covers: C1
+    status: ENFORCED, and well
+    detail: >
+      A dedicated capacity phase holds r_ready and b_ready low, lets the slave
+      side accept, and counts what each master got in before the crossbar stopped
+      accepting. Floor is ceil(MAX_TRANS/2), not MAX_TRANS, and the gap is stated
+      tolerance rather than slack: observable capacity depends on pipeline depth
+      as well as queue depth, so requiring the full parameter would fail a correct
+      crossbar for being less pipelined. Backed by a CAPABILITY-class mutant.
+  response_buffering_ceiling:
+    control: controls/nc_i_overbuffered_r.sv
+    covers: C3 (the ceiling at spec line 177)
+    status: NOT ENFORCED
+    verdict: "PASSES at MAX_TRANS=8 and MAX_TRANS=2, zero failures"
+    finding: F80
+    detail: >
+      The vendored reference verbatim with a 64-deep FIFO on each master's R
+      channel -- sixteen times C3's allowance. Ports full width, every
+      transaction routed, ordered and returned to its issuer, per-ID order
+      preserved because a FIFO cannot reorder. Nothing in tb/ counts beats held:
+      grepping for an occupancy counter finds only a comment inside C1's FLOOR
+      about pipeline-depth tolerance.
+      .
+      THE PREDICTION THAT IT WOULD PASS is in the control's header, written
+      before it ran.
+      .
+      THIS IS F62'S OWN TASK. C3 is the clause written in response to a
+      submission here that buffered 2 x 256 x ~40 bits and came out at 14x the
+      reference's area. That design is no longer on disk -- chat.sv was
+      re-solicited after C3 was added -- but nothing would stop it being
+      resubmitted.
+    owed: >
+      ENFORCE, by direct analogy with d_nw03's B1, which was the same clause with
+      the same gap and is now enforced. The shape ports over: hold r_ready and
+      b_ready low, let the slave side answer, and count R beats the crossbar
+      accepts before it stops -- the SAME phase C1 already runs, reading the
+      ceiling instead of the floor. nc_i must flip from PASS to FAIL and the
+      reference must stay passing; that transition is the evidence, exactly as
+      nc_h's flip was for B1. Not landed here: reported under instruction.
+  spec_defect:
+    issue: "two clauses numbered C3"
+    where: "spec/axi4_xbar_iface.sv:177 (buffering ceiling) and :216 (holds at every combination)"
+    consequence: >
+      A duplicate identifier makes "fails C3" ambiguous in exactly the place a
+      submission needs precision. Reported, not renumbered -- renumbering moves
+      task_text_hash and belongs in a deliberate boundary.
