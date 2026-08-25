@@ -349,6 +349,49 @@ negative_controls:
   - {name: nc_g_height_blind_depth,  targets: "P1 HEIGHT is load-bearing",
      kind: capacity-reduced, at_HEIGHT_4: PASS, at_HEIGHT_8: FAIL,
      z_kills_at_8: 3208, status_kills_at_8: 3189, isolated: true}
+  scored_path_remeasurement:
+    when: 2026-08-25
+    why: >
+      EVERY NUMBER ABOVE WAS AN AD-HOC RUN. d_ai01 could not execute through the
+      scored path at all until this date -- four independent gaps, see F88 -- so
+      it has zero sim records and every control verdict, the reference result and
+      the nc_g discrimination result were produced by hand-built invocations.
+      Re-run through scripts/sim_candidate.sh, both geometries.
+    verdicts_reproduce: >
+      ALL OF THEM. reference PASS 2/2. nc_a..nc_f FAIL at both geometries.
+      nc_g PASS at HEIGHT=4 and FAIL at HEIGHT=8 -- the discrimination result the
+      scored geometry rests on, reproduced through the path that will score
+      submissions.
+    kill_counts_do_NOT_reproduce: >
+      Every count is LOWER, and the cause is a boundary this file already
+      declares behavioural. The recorded counts were taken at 54a7745
+      (2026-08-23 13:59), BEFORE df82446 narrowed C3 and C4 at 17:12 -- the
+      boundary version_boundary lists as `behavioural: true`. Narrowing made the
+      C2/C3 transition windows UNSCORED: 3400 cycles driven, 2937 checked at
+      HEIGHT=8, 463 excluded. The old counts include kills inside those windows.
+      The record said results do not carry across that boundary, and these
+      carried anyway.
+    measured:
+      - {name: nc_a_stuck_output,        z_was: 3399, z_now: 2936, status_was: 0,    status_now: 0}
+      - {name: nc_b_extra_pipe_stage,    z_was: 2784, z_now: 2368, status_was: 0,    status_now: 0}
+      - {name: nc_c_flush_subnormal,     z_was: 84,   z_now: 80,   status_was: 0,    status_now: 0}
+      - {name: nc_d_overflow_always_inf, z_was: 230,  z_now: 167,  status_was: 0,    status_now: 0}
+      - {name: nc_e_positive_zero_only,  z_was: 132,  z_now: 132,  status_was: 0,    status_now: 0}
+      - {name: nc_f_reversed_chain,      z_was: 3203, z_now: 2746, status_was: 3057, status_now: 2572}
+      - {name: nc_g_height_blind_depth,  z_was: 3208, z_now: 2752, status_was: 3189, status_now: 2725}
+    nc_e_is_the_confirmation_not_the_exception: >
+      nc_e is the ONLY control whose count is unchanged, at exactly 132, and that
+      is a prediction this file already made: nc_e_is_why_the_floor_exists
+      records that every one of its 132 kills lands at cycle 3031 or later --
+      outside the transition windows entirely. The one control whose kills all
+      fall in scored cycles is the one that did not move. That is what makes the
+      explanation a measurement rather than a story fitted to a delta.
+    what_this_does_and_does_not_invalidate: >
+      No verdict changes and no clause is affected. What changes is the
+      DISCRIMINATION ARITHMETIC: this file calls nc_c at 84 and nc_d at 230 the
+      useful controls because they fire narrowly. Those figures are 80 and 167,
+      and nc_d moved 27%. Any statement of the form "n kills out of 3400" was
+      computed against a denominator the contract no longer scores.
   discrimination_note: >
     nc_c at 84 and nc_e at 132 out of 3400 are the useful ones: they fire only on
     the behaviour their clause describes, so passing them is evidence about that

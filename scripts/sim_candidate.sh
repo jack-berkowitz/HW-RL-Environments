@@ -65,7 +65,29 @@ else
     exit 2; }
 fi
 
-DUT_MOD="$(grep -m1 '^module' "$TASK_DIR"/spec/*_iface.sv | sed 's/^module \([A-Za-z0-9_]*\).*/\1/')"
+# --- resolve the DUT module name --------------------------------------------
+# Primary source is the spec's own `module` declaration, which is authoritative.
+#
+# THE FALLBACK EXISTS BECAUSE ONE SPEC SHIPS NO CODE. d_ai01's
+# spec/fp16_gemm_array_iface.sv is 492 lines and every one of them is a comment:
+# the ports are described in a table rather than declared. The grep returned an
+# empty string, TB resolved to `tb/_tb.sv`, and the runner refused -- correctly,
+# but the effect was that d_ai01 had NEVER been runnable through the scored path
+# and has zero sim records, while carrying seven controls, a reference result and
+# a HEIGHT discrimination result, all from ad-hoc runs. See F88.
+#
+# The fallback derives the module from the task directory, which is named
+# <id>_<module> by convention. It DOES NOT SILENTLY SUBSTITUTE: the source is
+# printed, because a spec that declares no module is a defect in the spec and a
+# fallback that hides it would convert a loud failure into a quiet one -- which
+# is the whole subject of F87 and rule 36.
+DUT_MOD="$(grep -m1 '^module' "$TASK_DIR"/spec/*_iface.sv 2>/dev/null | sed 's/^module \([A-Za-z0-9_]*\).*/\1/')"
+DUT_MOD_SRC="spec"
+if [ -z "$DUT_MOD" ]; then
+  DUT_MOD="$(basename "$TASK_DIR" | sed -E 's/^[a-z]+_[a-z0-9]+_//')"
+  DUT_MOD_SRC="TASK DIRECTORY -- spec/*_iface.sv declares no module"
+  echo "note: DUT module '$DUT_MOD' derived from the $DUT_MOD_SRC." >&2
+fi
 
 # --- select the SCORING testbench -------------------------------------------
 # This was `ls tb/*_tb.sv | head -1`, which picks alphabetically. d_nw01 has
@@ -99,6 +121,14 @@ case "$TASK_NAME" in
   d_ca04_async_fifo_cdc)
       CFGS=(); for w in 8 32 64; do for l in 2 3 4; do for y in 2 3; do
         CFGS+=("DATA_W=$w LOG_DEPTH=$l SYNC_STAGES=$y"); done; done; done ;;
+  d_ai01_fp16_gemm_array)
+      # TWO configs, matching `configs:` in task.yaml exactly: HEIGHT 4 and 8 at
+      # WIDTH 8. HEIGHT is the parameterised axis because it changes the
+      # OBSERVABLE SCHEDULE -- chain latency D*(H-1)+2 and the per-stage operand
+      # skew -- while WIDTH is pure replication (spec P1). T3 REQUIRES a
+      # submission to hold at BOTH, so running only the scored geometry would
+      # score a clause the task explicitly declines to rest on.
+      CFGS=("+HH=4" "+HH=8") ;;
   d_dsp02_fp32_fma_ii1)
       # EXACTLY ONE config, and one BY CONSTRUCTION rather than by omission --
       # the distinction the refusal below exists to enforce. fp32_fma_ii1
@@ -242,14 +272,29 @@ run_one() {
     tag="$(echo "$cfg" | tr ' =' '__')"
     if [ "$SIM" = "icarus" ]; then
       local pargs=""
-      for kv in $cfg; do pargs="$pargs -P${TB_MOD}.${kv%%=*}=${kv##*=}"; done
+      for kv in $cfg; do
+        case "$kv" in
+          +*) pargs="$pargs -D${kv#+}" ;;
+          *)  pargs="$pargs -P${TB_MOD}.${kv%%=*}=${kv##*=}" ;;
+        esac
+      done
       rm -f "/tmp/cand_${tag}.vvp"
       cerr="$(iverilog -g2012 -o "/tmp/cand_${tag}.vvp" $pargs ${EXTRA[@]+"${EXTRA[@]}"} "$TB" "$cand" 2>&1)"
       if [ -f "/tmp/cand_${tag}.vvp" ]; then out="$(timeout 600 vvp "/tmp/cand_${tag}.vvp" 2>&1)"
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -viE "warning" | grep -m1 . | cut -c1-90)"; fi
     else
       local gargs="" d="obj_cand_${tag}"
-      for kv in $cfg; do gargs="$gargs -G$kv"; done
+      # A token written `+NAME=value` is a DEFINE, not a parameter. Most tasks
+      # sweep elaboration parameters, but a testbench whose recorded-vector type
+      # is sized by a macro cannot: d_ai01's `rec_t` is `[`VW-1:0][`VH-1:0]`, so
+      # the geometry must be fixed BEFORE elaboration and -G arrives too late.
+      # Two geometries are two elaborations there, not two parameterisations.
+      for kv in $cfg; do
+        case "$kv" in
+          +*) gargs="$gargs -D${kv#+}" ;;
+          *)  gargs="$gargs -G$kv" ;;
+        esac
+      done
       rm -rf "$d"
       cerr="$(verilator --binary --timing -j 0 -Wno-fatal --x-assign unique --x-initial unique \
         --top-module "$TB_MOD" $gargs ${EXTRA[@]+"${EXTRA[@]}"} "$TB" "$cand" -o sim --Mdir "$d" 2>&1)"

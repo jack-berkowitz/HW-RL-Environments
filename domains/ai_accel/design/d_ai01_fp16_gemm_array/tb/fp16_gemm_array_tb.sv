@@ -16,6 +16,21 @@
 // occurred" from "this condition was never measured". Reporting the first as
 // the second is how a broken detector reads as a clean run.
 
+// GEOMETRY IS A DEFINE HERE AND CANNOT BE A PARAMETER, which is why this task
+// could not be swept by the scored runner and had ZERO SIM RECORDS (F88).
+//
+// `rec_t` in fp16_gemm_array_vec.svh is sized by `VH and `VW -- the recorded
+// vector width IS the geometry -- so the record type must be fixed before
+// elaboration. A parameter arrives too late: passing -GHEIGHT=4 leaves rec_t at
+// the HEIGHT=8 width and the comparison fails on a width mismatch rather than on
+// anything about the design. The two geometries are two ELABORATIONS, not two
+// parameterisations, and the runner selects them with `+HH=<n>` config tokens.
+//
+// Tried and reverted rather than left unstated: parameterising this module and
+// sweeping with -G. It compiles at HEIGHT=8 and fails at HEIGHT=4 with
+// "Operator NEQCASE expects 40 bits on the LHS, but LHS's SEL generates 20" --
+// status[rr] is H*5 bits and r.status[rr] is still 40. The failure is loud, but
+// only because the widths happen to differ; the pairing it protects is not.
 `ifndef HH
  `define HH 8
 `endif
@@ -108,8 +123,25 @@ module fp16_gemm_array_tb;
     prev_acc = 1'b0; prev_gate = {W{1'b1}};
     for (int gi = 0; gi < W; gi++) gate_left[gi] = 0;
 
-    if (!$value$plusargs("vec=%s", vfile)) vfile = "vectors.hex";
+    // THE VECTOR FILE IS DERIVED FROM THE GEOMETRY, not passed in beside it.
+    // There are two sets, vectors_h4.hex and vectors_h8.hex, and they are not
+    // interchangeable: each records what the reference delivered at THAT
+    // HEIGHT. The default used to be a bare "vectors.hex" that does not exist,
+    // with the real file supplied by hand on the command line -- so an ad-hoc
+    // run could pair -DHH=8 with the h4 vectors and score the wrong comparison
+    // without a word. Deriving it from HEIGHT makes that pairing unrepresentable.
+    // The plusarg still overrides, for the capture rig and for deliberate
+    // cross-geometry experiments.
+    if (!$value$plusargs("vec=%s", vfile))
+      vfile = $sformatf("vectors/vectors_h%0d.hex", H);
     $readmemh(vfile, recs);
+    if (recs[0] === 'x) begin
+      // $readmemh on a missing file warns and leaves the array X. A run that
+      // compares against X vectors reports mismatches on everything, which
+      // reads as a catastrophically wrong design rather than a missing file.
+      $display("TEST_RESULT: FAIL: vector file %s did not load", vfile);
+      $finish;
+    end
 
     rst_n = 1'b0;
     rnd = 3'd0; accumulate = 1'b0; flush = 1'b0; reg_enable = 1'b1; row_gate = '1;
@@ -228,8 +260,13 @@ module fp16_gemm_array_tb;
     $display("  (%0d cycles unscored: C2 flush / C3 accumulate transition windows, %0d enabled ticks;",
              skipped, REFILL_W);
     $display("   C4 gate-transition exclusion is per row and does not remove whole cycles)");
-    if (errs_z == 0 && errs_st == 0) $display("RESULT: PASS");
-    else                             $display("RESULT: FAIL");
+    // TEST_RESULT, not RESULT. The runner and rule 24 both read the token
+    // TEST_RESULT; this rig emitted a bare RESULT, so every scored-path run
+    // returned NO_VERDICT while the run itself had passed and said so in a
+    // word a human reads identically. Fourth of the four gaps that kept
+    // d_ai01 off the scored path, and the one that survived the other three.
+    if (errs_z == 0 && errs_st == 0) $display("TEST_RESULT: PASS");
+    else                             $display("TEST_RESULT: FAIL");
     $finish;
   end
 
@@ -243,7 +280,7 @@ module fp16_gemm_array_tb;
         // An unfilled record is worse than no record: say so plainly rather
         // than printing zeros that read like measured absence.
         $display("COVERAGE: NOT MEASURED -- no cycle was ever tallied.");
-        $display("RESULT: FAIL");
+        $display("TEST_RESULT: FAIL");
         $finish;
       end
 
