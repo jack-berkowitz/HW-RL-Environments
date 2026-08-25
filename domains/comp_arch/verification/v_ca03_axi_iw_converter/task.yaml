@@ -288,7 +288,8 @@ e1_boundary:
     No mutant was added for the new half. iw_m8_bresp_wrong_when_full already
     perturbs bresp and is killed; whether the new clause needs a mutant keyed on
     CODE PRESERVATION rather than on a wrong response is the D6/D7 question in
-    this task's terms, and it is not decided here.
+    this task's terms. DECIDED AND CLOSED the same day: iw_m11 keys E1 alone,
+    56 failures, and the set is at eleven.
 
 e1_mutant:
   id: iw_m11_decerr_normalised_to_slverr_from_second
