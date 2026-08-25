@@ -232,3 +232,33 @@ negative_controls:
 watchdog:
   tb_sim_time_limit: 2ms
   harness_sim_timeout_s: 60
+
+condition_floor:
+  date: 2026-08-25
+  clause: A3
+  defect: >
+    The floor for A3 counted cov_lockin_probe, which my own probe SETS. It
+    reported "A3 is untested" when I forgot to run the probe and never when the
+    design declined to enter the state. A3's antecedent is out_valid_o high while
+    out_ready_i is low -- out_valid_o is a DESIGN output, so a conforming design
+    that offers only into a ready sink keeps the antecedent false for the whole
+    run and A3 is never judged.
+  fix: >
+    The antecedent is now counted IN THE CHECKER, where it can be seen:
+    cov_a3_held increments on every cycle pv[j] && !pr[j] holds. The stimulus
+    floor stays and claims only what it counts -- "the A3 probe was not driven".
+  control: negctl/a3_offers_only_when_ready_dut.sv
+  measured: >
+    The SAME control PASSES against the committed testbench and FAILS against
+    this one, with cov_a3_held == 0. It suppressed and it passed: both halves
+    measured, neither assumed.
+  verdict: >
+    A3 is UNFALSIFIABLE. The evasion is conforming -- nothing in the contract
+    forbids out_valid_o depending on out_ready_i -- so the floor makes it
+    VISIBLE WITHOUT MAKING IT NON-CONFORMING. A submission failing this way can
+    correctly argue it satisfies A3, and the failure is the harness saying it
+    cannot tell. The mirror clause is the fix and it moves the hash, so it is
+    not landed here. Same clause shape as d_dsp02's H3 on a different bus.
+  rebaseline: >
+    Ten of ten killed, gate-mutant rejected, conformant PASS, dut2 PASS,
+    ACCEPTED. Every verdict identical to the committed baseline.

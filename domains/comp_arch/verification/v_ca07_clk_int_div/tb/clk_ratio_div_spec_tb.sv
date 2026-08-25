@@ -141,6 +141,23 @@ module clk_ratio_div_tb;
   endtask
 
   int cov_div = 0, cov_change = 0, cov_same = 0, cov_defer = 0, cov_en = 0;
+  // H4's ANTECEDENT, counted at the ports rather than in the floor block. How
+  // long a transition lasts is L2 latitude, so whether a request I DRIVE ever
+  // LANDS in one is the design's to decide. cov_defer counts that I drove it.
+  int cov_defer_condition = 0;
+  // The divisor in force is tracked from the HANDSHAKE, not from a testbench
+  // variable, so this counts what the design actually took.
+  logic h4_busy = 1'b0, h4_clk_q = 1'b0, h4_arm = 1'b0; logic [3:0] h4_div_q = 4'd0;
+  always @(posedge clk) if (rst_n) begin
+    h4_clk_q <= clk_o;
+    if (div_valid && div_ready && (div != h4_div_q)) begin
+      h4_div_q <= div; h4_busy <= 1'b1;
+    end else if (div_valid && div_ready) h4_div_q <= div;
+    else if (clk_o && !h4_clk_q)         h4_busy <= 1'b0;
+    // scoped to the phase that exercises H4, and to a request that is
+    // PENDING AND UNACCEPTED while a previously accepted change still gates
+    if (h4_arm && h4_busy && div_valid && !div_ready) cov_defer_condition++;
+  end
   int cov_reset = 0, cov_g1 = 0, cov_pass = 0, cov_odd = 0, cov_bigdrop = 0;
 
   // G1: the gap from ACCEPTANCE to the first rising edge, bounded by 3x the new
@@ -305,10 +322,12 @@ module clk_ratio_div_tb;
       // there IS one immediately after acceptance is not.
       // H2 is satisfied: div_i was stable for the whole of the first offer, and
       // div_ready_o has already risen before it changes.
+      h4_arm = 1'b1;
       @(negedge clk); div = 4'd3;
       acc2 = -1;
       for (t = 0; t < 600; t++) begin @(posedge clk); if (div_ready) begin acc2 = t; break; end end
       @(negedge clk) div_valid = 0;
+      h4_arm = 1'b0;
       if (acc2 < 0)
         fail("H4", "a second request during a transition was never accepted in 600 cycles");
       cov_defer++;
@@ -440,7 +459,12 @@ module clk_ratio_div_tb;
     if (cov_change < 8)  fail("FLOOR", $sformatf("only %0d reconfigurations driven", cov_change));
     if (cov_g1 < 8)      fail("FLOOR", $sformatf("the gating bound was measured %0d times", cov_g1));
     if (cov_same < 1)    fail("FLOOR", "a same-value request was never driven -- H3 untested");
-    if (cov_defer < 1)   fail("FLOOR", "a second request during a transition was never driven -- H4 untested");
+    // TWO facts, and the first cannot support the second.
+    if (cov_defer < 1)   fail("FLOOR", "a second request during a transition was never DRIVEN -- the H4 stimulus did not run");
+    $display("  [coverage] H4 antecedent held on %0d cycle(s); driven %0d time(s)",
+             cov_defer_condition, cov_defer);
+    if (cov_defer_condition == 0)
+      fail("FLOOR", "H4's antecedent never held: no offered request was ever pending while a change was still gating, so H4 was never judged. A design that resumes in one cycle empties this window while conforming -- see negctl/g2h4_instant_resume_dut.sv");
     if (cov_en < 1)      fail("FLOOR", "en_i was never exercised");
     if (cov_reset < 2)   fail("FLOOR", $sformatf("reset was asserted %0d time(s) mid-run; R2 must hold on every one", cov_reset));
     if (cov_bigdrop < 3) fail("FLOOR", "pass-through was never reached FROM a large divisor -- an ordered ladder only ever arrives there from 0");

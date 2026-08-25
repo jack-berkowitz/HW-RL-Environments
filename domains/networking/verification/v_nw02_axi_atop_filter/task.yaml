@@ -286,3 +286,26 @@ stimulus_rebaseline:
     Generator wipes mutants/policy/ before writing; 5c runner refuses on a size
     mismatch; both headers derive their count instead of hard-coding it.
     Regeneration is byte-identical.
+
+condition_floor:
+  date: 2026-08-25
+  clause: W2
+  defect: >
+    cov_filled_bound is set by my stimulus and the floor said "the write bound
+    was never driven to its limit". Whether the debt REACHES the bound depends
+    on the design's admission policy, which L4 partly frees.
+  fix: >
+    peak_debt, already tracked in the checker from the downstream AW handshake,
+    is now reported every run and floored at MAXW. The stimulus floor stays and
+    claims only that enough writes were OFFERED.
+  measured: "golden peak 4 of 4; dut2 peak 4 of 4. Both conforming, both pressured to the bound."
+  exposure_stated: >
+    This floor GATES on a condition the design partly controls, which is a
+    stronger action than the flag used where no clause names the state. It is
+    defensible because W3 compels reaching the bound given enough offered
+    writes -- "while the debt is strictly below MAX_WRITE_TXNS, this bound alone
+    does not stall a non-atomic AW" -- so W2's antecedent is largely FORCED
+    rather than unfalsifiable. But L4 leaves some stalling free and I have TWO
+    data points, not a proof. The failure message names L4 so a submission that
+    trips it is told what to check rather than silently rejected.
+  rebaseline: "Ten of ten killed, ACCEPTED, every verdict identical."

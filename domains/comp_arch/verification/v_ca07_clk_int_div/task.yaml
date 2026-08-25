@@ -306,3 +306,30 @@ counting_basis:
 watchdog:
   tb_sim_time_limit: 40ms
   harness_sim_timeout_s: 120
+
+condition_floor:
+  date: 2026-08-25
+  clause: H4
+  defect: >
+    cov_defer++ was unconditional and the floor said "never DRIVEN -- H4
+    untested". Driven is not landed-in-the-window. How long a transition lasts
+    is L2 latitude, so whether a request I drive ever arrives during one is the
+    design's to decide.
+  fix: >
+    cov_defer_condition counts cycles on which an offered, unaccepted request is
+    pending while a previously accepted change is still gating, SCOPED to the
+    phase that exercises H4.
+  first_attempt_was_wrong_and_measured_wrong: >
+    The first version counted any pending different-valued request while busy,
+    which includes the natural overlap in the divisor sweep. It read 10 on a
+    base whose H4 window is EMPTY -- a counter whose name and claim outran what
+    it counted, which is this finding's own defect one level in. Caught by
+    printing the number instead of reading the pass/fail pair.
+  control: negctl/g2h4_instant_resume_dut.sv
+  measured: "anchor 9 cycles and PASS; control 0 cycles and FAIL. It discriminates."
+  verdict: >
+    H4 is UNFALSIFIABLE, and the strong evidence is not the control but the
+    MUTANT: cd_p5 re-derived on the fast-resume base SURVIVES. A defect
+    undetectable against a conforming design proves the clause cannot be scored.
+    The floor makes the evasion visible, not non-conforming.
+  rebaseline: "Ten of ten killed, ACCEPTED, every verdict identical."

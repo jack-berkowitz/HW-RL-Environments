@@ -586,7 +586,13 @@ module atop_filter_tb;
     if (cov_wbeats < 20)   fail("COVERAGE", $sformatf("only %0d W beats sent", cov_wbeats));
     if (!cov_backpressure) fail("COVERAGE", "the response channels were never backpressured");
     if (!cov_reset)        fail("COVERAGE", "reset was never asserted mid-stream");
-    if (!cov_filled_bound) fail("COVERAGE", "the write bound was never driven to its limit");
+    // STIMULUS and CONDITION, separated. Whether the debt REACHES MAXW is the
+    // design's to decide -- L4 frees how long a subsequent AW may be stalled --
+    // so "I offered enough writes" cannot support "the bound was reached".
+    if (!cov_filled_bound) fail("COVERAGE", "enough writes to fill the bound were never OFFERED -- the W2 stimulus did not run");
+    $display("  [coverage] peak downstream write debt = %0d against a bound of %0d", peak_debt, MAXW);
+    if (peak_debt < MAXW)
+      fail("COVERAGE", $sformatf("the downstream write debt peaked at %0d against a bound of %0d: W2 was never pressured to its limit. A design admitting one write at a time conforms and never reaches it", peak_debt, MAXW));
     // The floor for the fields this run exists to exercise. A pass-through
     // clause tested at one value per field is not tested, and the only way to
     // know the values moved is to count them.

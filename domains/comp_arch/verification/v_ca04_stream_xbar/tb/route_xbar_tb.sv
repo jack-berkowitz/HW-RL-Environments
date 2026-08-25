@@ -10,6 +10,8 @@
 // independently of what out_idx_o claims, which is what makes R3 checkable at
 // all rather than self-certifying.
 module route_xbar_tb;
+  // A3's antecedent counter, declared here because the checker below uses it.
+  int  cov_a3_held = 0;
   localparam int N_IN = 4, N_OUT = 4, DW = 32, SW = 2, IW = 2;
   localparam int LIVE = 32;                 // clause X3
 
@@ -79,6 +81,14 @@ module route_xbar_tb;
 
     for (int unsigned j = 0; j < N_OUT; j++) begin
       // ---- A3: an offered beat may not be withdrawn or re-aimed ----
+      // A3's ANTECEDENT, counted HERE, where it can be seen. The floor block
+      // cannot see it: whether an offer is ever held against a low ready is the
+      // DESIGN's to decide, and a design that asserts out_valid_o only when
+      // out_ready_i is already high keeps this false for the whole run. The old
+      // floor counted cov_lockin_probe, which my own probe sets, so it reported
+      // "A3 is untested" when I forgot to run the probe and never when the
+      // design declined to enter the state.
+      if (pv[j] && !pr[j]) cov_a3_held++;
       if (pv[j] && !pr[j]) begin
         if (!out_valid[j])
           fail("A3", $sformatf("cycle %0d: out_valid_o[%0d] was withdrawn without a transfer", cyc, j));
@@ -338,7 +348,12 @@ module route_xbar_tb;
     if (cov_beats < 250)        fail("COVERAGE", $sformatf("only %0d beats offered", cov_beats));
     if (cov_contend_phases < 2) fail("COVERAGE", "fewer than two phases with several inputs contending for one output");
     if (cov_stall_phases < 1)   fail("COVERAGE", "no output was ever stalled");
-    if (!cov_lockin_probe)      fail("COVERAGE", "the contender set was never changed while an output was stalled -- A3 is untested");
+    // TWO floors, because they are two different facts and the first cannot
+    // support the second. STIMULUS: did the harness try. CONDITION: was the
+    // clause exercised. They diverge exactly where the design controls
+    // whether the state is reached, and A3 is such a clause.
+    if (!cov_lockin_probe)      fail("COVERAGE", "the contender set was never CHANGED while an output was stalled -- the A3 probe was not driven");
+    if (cov_a3_held == 0)       fail("COVERAGE", "A3's antecedent never held: out_valid_o was never high while out_ready_i was low, so A3 was never judged. A design that offers only into a ready sink satisfies A3 by never entering it -- see negctl/a3_offers_only_when_ready_dut.sv");
     if (!cov_reset_mid)         fail("COVERAGE", "reset was never asserted mid-stream");
     for (int j = 0; j < N_OUT; j++)
       if (!cov_all_outputs[j])  fail("COVERAGE", $sformatf("output %0d was never selected", j));
