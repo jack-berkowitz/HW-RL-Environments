@@ -5362,7 +5362,82 @@ invisible and harmless, so nothing prompted the rule.
 the same mirror may be needed on other tasks. Recorded in `d_dsp02`'s task.yaml
 and sent for a decision.
 
-**Rules:** 32
+### The generalisation: a clause satisfied by suppressing its antecedent is unfalsifiable
+
+`H3` and `R1` are instances. The class is every conditional clause in the
+catalog.
+
+A clause of the form **"if P then Q"** is satisfied by **not P**. If a conforming
+design can make P never occur, the clause has no force: no test can fail it, no
+mutant can violate it, and a submission that never satisfies P scores exactly as
+one that satisfies P and honours Q. **The defect is not that a design cheats —
+it is that the clause constrains nothing, and reads as though it does.**
+
+The test is one question per clause:
+
+> **Can a conforming design make the antecedent never occur? If yes, name the
+> clause that forces it. If there is no such clause, the conditional is
+> decorative.**
+
+### Why rule 36 does not already cover this
+
+Rule 36 makes a zero firing count visible. It does not say what the zero means,
+and **the zero has two causes that need opposite remedies**:
+
+| cause | what the count says | remedy |
+|---|---|---|
+| the harness never creates P | 0, and the design is not implicated | fix the STIMULUS |
+| a conforming design suppresses P | 0, and the design is conforming | fix the CONTRACT |
+
+`d_dsp02` had both at once, which is why they were hard to separate. `out_ready`
+was frozen high (stimulus), and once it was unfrozen, a control that gated
+`out_valid` on `out_ready` drove the count back to zero **while conforming to
+every clause** (contract). Rule 36 reports zero in both cases and is silent on
+which.
+
+**The negative control is what separates them**, and this is a procedure rather
+than an observation:
+
+1. Instrument the conditional check with a firing count — rule 36.
+2. Build a control that suppresses the antecedent and is otherwise conformant.
+3. **It passes** → the clause is unfalsifiable → the contract needs a forcing or
+   mirror clause.
+4. **It fails** → the clause has force, and a zero count is a stimulus gap.
+
+That is exactly how this finding was produced. The first `nc_h3_drops_valid`
+gated `out_valid & out_ready` and passed the entire suite; the second registered
+the drop and failed H3 as intended. The passing version was not a broken control
+— **it was the measurement**, and it was nearly discarded as a mistake.
+
+### Scope of the catalog-wide sweep
+
+`AGENT-VERIF-A2` has flagged that their stability clauses may carry the same
+shape and has not checked. That is not a per-task observation to be made by
+whoever notices next; it is a sweep with a denominator, and it is scoped here so
+it can be assigned:
+
+* **Denominator:** every conditional normative clause in all 19 task specs.
+  A first-pass grep for conditional markers (`while`, `when`, `whenever`,
+  `until`, `unless`, `so long as`, `holds ... while`) gives per-task counts in
+  the low single digits, so this is tens of clauses, not hundreds.
+* **Verdict per clause:** `FORCED` (another clause, or the scored surface,
+  compels the antecedent) / `UNFALSIFIABLE` (a conforming design controls the
+  antecedent and nothing compels it) / `UNCONDITIONAL` (not applicable).
+* **Evidence for `UNFALSIFIABLE`:** the suppressing control, built and run. A
+  clause is not declared unfalsifiable by reading it — that is how the d_ca01
+  and v_ca06 accusations went wrong. It is declared by a control that passes.
+* **Deliverable:** a proposed forcing clause per hit, **written and not landed**.
+  Clause changes move the task hash, so they batch into ONE boundary per task
+  rather than arriving one at a time.
+* **Owners:** the 8 design specs are `AGENT-DESIGN-43a92055`'s; the 11
+  verification specs are `AGENT-VERIF-A2`'s. `d_dsp01` is withdrawn under F54
+  and is out of scope.
+
+The two known hits are `d_dsp02` H3 and `d_ca01` R1, both design-side, both with
+text written and held. Neither has been counted against the denominator yet,
+because the denominator does not exist until the sweep runs.
+
+**Rules:** 32, 36
 
 
 ---
