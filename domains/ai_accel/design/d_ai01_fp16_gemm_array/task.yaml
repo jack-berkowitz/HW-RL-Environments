@@ -122,12 +122,36 @@ anchor_conformance:
 spec: [spec/fp16_gemm_array_iface.sv]
 measurements: MEASUREMENTS.md
 probe: probe/PASTE.md
-task_text_hash: 86b7d95729381055
+# STALE BY THREE BOUNDARIES until 2026-08-25 and nothing said so. The value
+# below is the live one; 86b7d95729381055 was recorded on 08-23 and three
+# spec-wide commits moved it on 08-24 without this field being touched. See
+# missed_boundaries. Recompute with scripts/task_text_hash.py at the point of use.
+task_text_hash: 2b7c36c5b08e7965
 
 version_boundary:
   changed_on: 2026-08-23
   pre_bump_task_text_hash:  9a93e4502979efc9
   post_bump_task_text_hash: 86b7d95729381055
+  missed_boundaries:
+    note: >
+      THREE BOUNDARIES CROSSED THIS FIELD WITHOUT UPDATING IT. Recorded now, in
+      order, so the current hash has a traceable predecessor chain rather than a
+      gap. All three are repository-wide spec edits confined to the G section --
+      diffed clause by clause, no A/L/P/T clause moved -- so they are
+      NON-BEHAVIOURAL for correctness and the candidates solicited at 16:28 on
+      08-24 are current, not stale.
+      .
+      The defect is not that the boundaries were wrong. It is that a field
+      asserting "this is the question that was asked" went three revisions out of
+      date while reading as authoritative, and the only thing that caught it was
+      a hand recompute during unrelated work.
+    crossed:
+      - {commit: f19cd10, at: "2026-08-24 14:54", post: cf2509a6982f29c3,
+         what: "grading scheme stated in every prompt, all nine tasks", behavioural: false}
+      - {commit: 28803d8, at: "2026-08-24 15:44", post: d030c6c9089dffeb,
+         what: "timing slack is a gate, not a compared axis", behavioural: false}
+      - {commit: 4045b56, at: "2026-08-24 15:58", post: 2b7c36c5b08e7965,
+         what: "Fmax consistency sweep; pinned period declared not-yet-set", behavioural: false}
   what_changed_this_boundary: >
     GRADING CRITERIA ADDED to the shipped contract, as clauses G1-G4. The text
     previously specified WHAT to build and said nothing about how a submission

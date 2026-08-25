@@ -292,6 +292,19 @@
 //       makes unlimited spending conforming.
 //
 //   H1. `in_ready` MUST NOT depend combinationally on `in_valid`.
+//   H1b. `out_valid` MUST NOT depend combinationally on `out_ready`. The
+//       consumer may hold `out_ready` low indefinitely, and a design that waits
+//       for it before asserting `out_valid` deadlocks against a consumer that
+//       waits for `out_valid` before asserting `out_ready`.
+//
+//       This is H1's rule with the roles swapped, and it is stated because H3
+//       is otherwise satisfiable by NEVER OFFERING: a result that is never
+//       presented to a stalled consumer cannot be withdrawn from one. H3
+//       constrains what happens once a result is offered; H1b is what makes H3
+//       reachable. Measured, not argued -- `controls/nc_h3_evades_antecedent.sv`
+//       gates `out_valid` on `out_ready`, satisfies every clause as the contract
+//       stood before this one, and drives the H3 checker's firing count to zero.
+//       AUTHORITY: stated task intent.
 //   H2. Once `in_valid` is asserted the producer holds it, and holds the
 //       operands stable, until accepted. The checker honours this.
 //   H3. When `out_valid` is high and `out_ready` is low, `out_valid` must
