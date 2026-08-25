@@ -5382,8 +5382,10 @@ Every `task.yaml` in the repository, measured at `b43f2a6^`:
 | design (8) | 6 of 8 | 1 (`d_ai01`) | **5 of 8** |
 | verification (11) | **0 of 11** | not reachable | 0 of 11 |
 
-Nineteen files. **Five were readable.** The verification files are not mine —
-reported to their owner, not touched.
+Nineteen files. **Five were readable by a YAML parser** — see the correction
+below for what that did and did not cost, because it is less than this table
+implies. The verification files are not mine — reported to their owner, not
+touched.
 
 `d_ca01` had *both* defects, and the sweep could not see its duplicate key until
 the parse error was fixed. That is not an artefact of the tooling; it is the
@@ -5443,20 +5445,60 @@ revision**, and has been discarding its current-boundary narrative since
 commit. I added a new `what_changed_this_boundary` above the existing one and did
 not rename the old one, and nothing objected, because nothing was looking.
 
-### Why this is not just tidiness
+### Correction, made before this finding was an hour old: nothing was reading these as YAML
 
-Rule 8 says **collection reads only those records**. Ten of `d_dsp02`'s eleven
-revisions did not parse; the file has been unreadable to any tool since it was
-created, including for both records I added this week and the whole candidate-set
-mapping. Any collection over these files has been reporting on five of nineteen
-tasks and saying so nowhere.
+The paragraph that stood here claimed collection had been "reporting on five of
+nineteen tasks". **That was wrong, and it was wrong in the direction that
+flatters the finding.** Checked afterwards, which is the wrong order:
 
-It is the shape of F82 and F85 again, in the record layer rather than the check
-layer: **the artefact a human reads reports success while the mechanism that
-consumes it sees nothing**, and the absence is silent in both directions. Rule 36
-fixed it for checks by demanding a firing count. The record layer needs the
-equivalent: a parse is not evidence a file was read, because a duplicate key
-parses.
+Every consumer of `task.yaml` in `scripts/` parses it by regex or line-scan, on
+purpose. `collect_results.py` says so in its own docstring — *"Parsed without a
+YAML library: pyyaml is not installed in this environment and the block is a
+fixed shape."* `report_table.py` and `mutant_evidence.py` do the same. So the
+parse failures cost **nothing**. `mutant_evidence.py` reads `d_ca01`'s seven
+mutants and their `bmc_cex` depths correctly *out of the unparseable file*, and
+reads all nineteen tasks including the eleven verification ones. **No number in
+this repository is wrong because of any of this.** The damage is latent, not
+realised.
+
+Which is precisely why nothing noticed. The file has the *form* of a
+machine-readable record and is consumed as unstructured text, so "does this
+parse?" was a question no consumer ever asked. The cost falls on whoever first
+reaches for a real parser — which is what happened here.
+
+### The live hazard is not the parse. It is first-wins against last-wins.
+
+A duplicate key is resolved in **opposite directions** by the two kinds of reader
+now pointed at these files, and this is measured, not argued. For `d_ca01`'s
+duplicated `mutants:`, at the pre-fix commit:
+
+    mutant_evidence.py  (regex, first match)  ->  7 mutants, every cex_depth
+    a YAML parser       (last wins)           ->  status: NOT_STARTED
+
+Same file, same moment, opposite answers, neither reader warning. `report_table`'s
+`_derive_scored_cfg` has the same first-wins shape — `re.search` on
+`^scored_configuration:` with `re.M`. Any duplicate key is a disagreement waiting
+for the first tool that uses a parser, and *the parser is the one that gets the
+stale answer.*
+
+**And the mutant table is correct by one whitespace detail.** `mutants_for()`
+matches `^mutants:\s*$` — the word, a colon, nothing else. The stale stub was
+written inline as `mutants:         {status: NOT_STARTED, ...}`, so it failed to
+match and the real block was found. Had the stub been written across two lines,
+it would have matched, the `break` on the next top-level key would have fired
+immediately, and `d_ca01` would have reported **zero mutants** — which that
+function's own comment names as the exact failure it exists to prevent: *"a
+parser that finds nothing looks identical to a task with no mutants"*.
+
+Rule 8 says collection reads only those records. It holds here. What this adds is
+that a record can be well-formed to one reader and empty to another, with no
+error from either, and that the two readers already coexist in `scripts/`.
+
+It is the shape of F82 and F85 in the record layer rather than the check layer:
+**the artefact a human reads looks complete while a mechanism that consumes it
+sees something else**, and the divergence is silent in both directions. Rule 36
+fixed that for checks by demanding a firing count. The record layer's equivalent
+is that a parse is not evidence a file was read, because a duplicate key parses.
 
 ### What was done
 
