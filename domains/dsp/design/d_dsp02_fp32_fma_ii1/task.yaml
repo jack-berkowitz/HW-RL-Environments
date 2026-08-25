@@ -151,7 +151,13 @@ mutants:
   - {id: mA5,   class: signed-zero,     defect: zero result always positive,      witness: "vector 87"}
   - {id: mA6,   class: tininess,        defect: underflow detected before rounding, witness: "vector 0"}
   - {id: mA7,   class: flags,           defect: inexact dropped on subnormal,     witness: "vector 118"}
-  all_killed_through_scored_path: true
+
+# Was indented as though it were a member of the `mutants:` sequence above, which
+# is not valid YAML -- a mapping key cannot sit at the same indentation as the
+# `- ` items of a sequence under the same parent. The file has therefore not
+# parsed since it was written, so nothing machine-reading it saw ANY of these
+# fields. Promoted to a top-level key; the value is unchanged.
+mutants_all_killed_through_scored_path: true
 
 second_source:
   file: tb/audit/fp32_fma_ii1_second_source.sv
@@ -234,10 +240,13 @@ candidate_set:
     - prior: qwen
       head_artefact: candidates/d_dsp02/qwen.sv @ f20425b287b0dcca
       disposition: WITHDRAWN
-    unaccounted_for: none
-    footnote: >
-      An even earlier chat submission (5b821c2b2e0ea818) was superseded before
-      HEAD and is not part of the five-to-three boundary.
+  # Same defect as the mutants block: these two were indented as members of the
+  # `mapping_prior_to_current` sequence. Promoted to siblings of it; values
+  # unchanged.
+  unaccounted_for: none
+  footnote: >
+    An even earlier chat submission (5b821c2b2e0ea818) was superseded before
+    HEAD and is not part of the five-to-three boundary.
 
   withdrawn:
     models: [deepseek, qwen]
@@ -470,3 +479,28 @@ stimulus_variation:
     the two tasks differed did not survive checking -- both pin the stability
     behaviour and both leave the input-side response to a stalled output
     unpinned. Both fixes are tb-only and can land as ONE boundary.
+
+# =============================================================================
+# PROPOSED, NOT LANDED. It moves task_text_hash, and the same mirror may be
+# needed on other tasks -- sent for a decision rather than applied. See F86.
+proposed_clause_h1b:
+  problem: >
+    H3 can be satisfied VACUOUSLY. A design that gates out_valid on out_ready
+    never presents a result to a stalled consumer, so H3's antecedent is never
+    true and there is nothing to check. Demonstrated: a control built that way
+    PASSES the whole suite. H1 forbids the input-side version of exactly this
+    dependency and there is no mirror on the output side.
+  text: |
+    H1b. `out_valid` MUST NOT depend combinationally on `out_ready`. The
+         consumer may hold `out_ready` low indefinitely, and a design that
+         waits for it before asserting `out_valid` deadlocks against a
+         consumer that waits for `out_valid` before asserting `out_ready`.
+         This is H1's rule with the roles swapped, and it is stated because
+         H3 is otherwise satisfiable by never offering: a result that is
+         never presented to a stalled consumer cannot be withdrawn from one.
+  also_affects: >
+    d_ca01 has the same hole from the other direction. Its L5 deliberately
+    PERMITS req_ready_o to depend combinationally on req_valid_i, with a stated
+    reason, and says nothing about rsp_valid_o and rsp_ready_i -- those two names
+    appear only in R1's stability sentence and the port list. Any mirror clause
+    should be decided for both tasks at once.

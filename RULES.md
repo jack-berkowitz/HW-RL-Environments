@@ -994,4 +994,28 @@ defects. It runs with the regression.
 
     **From:** F81
 
+36. **A check that never fires must FAIL, not pass quietly.** Report the count of
+    times a guarded check's antecedent was true, and gate on it being non-zero,
+    so that "did this run?" is answered by the same artefact that answers "did it
+    pass?" Two questions with one signal cannot disagree with each other.
+
+    An unexercised check and a satisfied one are indistinguishable in a verdict.
+    `d_dsp02` carried a correct H3 checker whose guard was never true, under a
+    clause, a labelled phase and a green run, for the whole life of the task —
+    and every candidate was scored against it.
+
+    **The rule is not hypothetical, and the repository already had the pattern.**
+    `d_ca04` fails its own H1 check when the conditions make it vacuous:
+    "H1 check was vacuous -- FIFO was full, wr_ready could not move either way".
+    The vacuous case fails rather than passes.
+
+    **What makes it worth a rule is who it catches.** Repairing the d_dsp02
+    defect meant writing the missing phase, and the first version — written by
+    the person who had just filed the finding about unexercised checks —
+    exercised zero cycles, because it ran after the last vector had drained. The
+    run said PASS. Printing the count caught it; reading the verdict did not.
+    Nobody is outside this rule by having understood it.
+
+    **From:** F82, F85
+
 ---

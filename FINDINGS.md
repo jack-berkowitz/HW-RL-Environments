@@ -5235,6 +5235,34 @@ artefacts were labels; here they are a clause, a checker and a banner. Same
 structure: several signals of coverage, one underlying fact, and the fact
 unchecked. Recorded as instance 5 of F74.
 
+### The sharpest instance: the repairer wrote the defect a second time
+
+Repairing F82 meant writing the H3 phase that had never existed. Placed after the
+streaming loop, **it exercised zero cycles** — `in_valid` is `issue_idx < n_vec`,
+so once the last vector issues the pipeline drains and `out_valid` never rises
+again. The run reported PASS. A clause, a repaired checker, a real phase with
+real statements in it, and a green verdict: four artefacts now, and the guard
+still never fired.
+
+It was caught by printing the count, not by reading the verdict. **The person who
+had just written the finding about unexercised checks wrote an unexercised check,
+in the act of fixing one**, and the verdict said what it had always said.
+
+**The generalisable fix is to make the count part of the verdict.** A check that
+never fires must FAIL rather than pass quietly, so that "did this run?" is
+answered by the same artefact that answers "did it pass?" — collapsing the two
+questions into one signal that cannot disagree with itself.
+
+That is not a new idea in this repository. `d_ca04` already does it:
+
+```
+if (ready_before !== 1'b1 && ready_after !== 1'b1)
+    note_fail("H1 check was vacuous -- FIFO was full, wr_ready could not move either way");
+```
+
+The vacuous case fails rather than passes. `d_ca01` and `d_dsp02` now do the
+same, reporting `r1_guard_true` and `h3_guard_true` and failing at zero.
+
 **Where this recurs.** Anywhere the answer to "is X handled?" is assembled from
 separate artefacts — a clause plus a check, a check plus a coverage flag, a
 metric plus a phase name, a record plus a log line. The more places X is
@@ -5283,4 +5311,56 @@ this diff" used to characterise a codebase. The scoping is usually invisible in
 the write-up, which reports what was found rather than what was reachable.
 
 **Rules:** 29
+
+---
+
+## F86. A stability clause with no companion clause on combinational dependency can be satisfied by never offering
+
+`d_dsp02`'s H3 requires that a result already offered is not withdrawn:
+
+> When `out_valid` is high and `out_ready` is low, `out_valid` must remain high
+> and the result and flags must remain stable.
+
+A negative control built to violate it **passed**. It gated the output valid on
+the consumer's ready:
+
+```
+assign out_valid = inner_out_valid & out_ready;
+```
+
+That never violates H3's consequent. It makes H3's ANTECEDENT UNSATISFIABLE —
+`out_valid` is never high while `out_ready` is low, so there is no cycle for the
+check to examine. The design simply never offers a result to a stalled consumer.
+
+### Nothing in either contract forbids it
+
+`d_dsp02`'s **H1** says "`in_ready` MUST NOT depend combinationally on
+`in_valid`". There is no mirror on the output side. `d_ca01` is the same shape
+from the other direction: its **L5** deliberately PERMITS `req_ready_o` to depend
+combinationally on `req_valid_i`, with a stated reason — "the harness never
+derives `req_valid_i` from `req_ready_o`, so a design that gates ready on valid
+cannot deadlock against it" — and says nothing at all about `rsp_valid_o` and
+`rsp_ready_i`. Checked: those two names appear only in R1's stability sentence
+and in the port list.
+
+So **both tasks have the hole, and it is live to any submission today.** A design
+that gates its output valid on the consumer's ready satisfies the stability
+clause vacuously, and no other clause objects.
+
+### Why the input-side rule does not cover it
+
+The input-side ban exists to prevent a deadlock: if the producer waits for
+`ready` before asserting `valid` and the consumer waits for `valid` before
+asserting `ready`, neither moves. The output side has the same failure mode with
+the roles swapped, and it was never written down — most likely because the
+harness always holds the output ready, so the deadlock could not occur and the
+question never arose. **The missing clause and the frozen input have the same
+cause**: with `out_ready` pinned high, an output-side combinational dependency is
+invisible and harmless, so nothing prompted the rule.
+
+**The proposed clause text is written and NOT landed** — it moves the hash, and
+the same mirror may be needed on other tasks. Recorded in `d_dsp02`'s task.yaml
+and sent for a decision.
+
+**Rules:** 32
 
