@@ -4897,8 +4897,21 @@ exercised at all**. R1 says a valid, once asserted, "remains asserted, with the
 payload held stable, until the transfer completes… Responses use the same
 discipline on `rsp_valid_o` / `rsp_ready_i`" — and with `rsp_ready_i` never low,
 `rsp_valid_o` is accepted the cycle it rises, every time. The clause is not
-weakly tested; it is **structurally unexercisable**, which is worse than L3's
-position. L3 at least gets 25% random stall.
+weakly tested; it is **STRUCTURALLY UNEXERCISABLE**, and the distinction is worth
+the word. An under-exercised clause has a test that could fail and usually does
+not. R1's response half has **no test that could ever fail** — at any seed, under
+any stimulus this testbench can produce — because the condition it names cannot
+occur. L3 is under-exercised: 25% random stall, never sustained. R1's response
+half is not tested at all.
+
+**And the two remedies are the same move twice, in one testbench.** Gating
+`mem_rd_valid` with `mem_data_stall` and pinning `rsp_ready` to a constant are
+both correctly-reasoned fixes to real symptoms that traded away a property
+nothing was checking. One traded protocol legality — narrowly avoided, by a
+guard added for an unrelated reason — and the other traded a clause's
+exercisability outright. **Two independent instances in one file is what makes
+this a mechanism rather than an anecdote**: same author, same file, the same move
+reached for twice, neither of them a lapse.
 
 The variation check finds it immediately — `rsp_ready_i` is the single frozen
 input of thirteen — and `d_ca01` was not in the sweep, because the sweep covered
