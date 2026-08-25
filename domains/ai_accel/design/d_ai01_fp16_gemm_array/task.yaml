@@ -816,3 +816,92 @@ difficulty_assessment: >
   requires the operand pairs to be presented STAGGERED, and a design with the
   right arithmetic and the wrong skew fails on ordinary vectors -- nc_b kills
   2784 of 3400 while changing no delivered value at all.
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED: the directory is where they live, this is what they are.
+# `measured_by` is mandatory on this side because most of these verdicts are hand
+# runs, and a hand run is a measurement whose instrument was never wired -- the
+# defect the contract exists to close. It is stated per control rather than per
+# task so a mixed set cannot read as uniform.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_a_stuck_output.sv
+    kind: negative
+    expect: fail
+    clause: any
+    measured_by: scored_path
+    result: "0/2 -- fails at both geometries; 2936 z mismatches at H=8"
+    note: the floor case, every output stuck
+  - file: controls/nc_b_extra_pipe_stage.sv
+    kind: negative
+    expect: fail
+    clause: L3
+    measured_by: scored_path
+    result: "0/2; and it now FIRES THE L3 LATENCY FLOOR at H=4 -- 16 ticks against 15"
+    note: >
+      Since the latency floor landed this control is reported AS a latency defect
+      rather than inferred from a mismatch count. It is the only control that
+      gives HEIGHT=4 latency evidence of its own.
+  - file: controls/nc_c_flush_subnormal.sv
+    kind: negative
+    expect: fail
+    clause: F1
+    exclusive: true
+    measured_by: scored_path
+    result: "0/2; 80 z mismatches at H=8, narrow by construction"
+  - file: controls/nc_d_overflow_always_inf.sv
+    kind: negative
+    expect: fail
+    clause: A5
+    exclusive: true
+    measured_by: scored_path
+    result: "0/2; 167 z mismatches at H=8"
+  - file: controls/nc_e_positive_zero_only.sv
+    kind: negative
+    expect: fail
+    clause: A6
+    exclusive: true
+    measured_by: scored_path
+    result: "0/2; 132 z mismatches at H=8, ALL at cycle 3031 or later"
+  - file: controls/nc_f_reversed_chain.sv
+    kind: negative
+    expect: fail
+    clause: A2
+    measured_by: scored_path
+    result: "0/2; 2746 z and 2572 status mismatches at H=8"
+  - file: controls/nc_g_height_blind_depth.sv
+    kind: negative
+    expect: PER_CONFIG            # SCHEMA GAP -- see controls_schema_gap below
+    passes_at: ["+HH=4"]
+    fails_at:  ["+HH=8"]
+    clause: P1
+    measured_by: scored_path
+    result: "1/2 -- PASSES at the SCORED geometry and fails only at HEIGHT=8"
+    note: >
+      ITS POLARITY POINTS AWAY FROM THE SCORED GEOMETRY since P2 moved to
+      HEIGHT=4. At HEIGHT=4 it is not a wrong design, it is a right one that
+      happens to be inflexible. Latency 15 at BOTH heights is what the L3 floor
+      reads off it, and that is the evidence of inflexibility.
+
+controls_schema_gap:
+  field: "expect: PER_CONFIG with passes_at / fails_at"
+  status: PROPOSED EXTENSION -- not in contract revision 2
+  why: >
+    The contract's `expect:` is scalar, pass or fail. FOUR OF THE TWENTY-FIVE
+    DESIGN CONTROLS HAVE A CONFIG-DEPENDENT VERDICT BY CONSTRUCTION, because that
+    is what a CAPABILITY-REDUCED control is: it is correct at the setting whose
+    capability it lacks and wrong at the setting that needs it.
+      d_ai01 nc_g_height_blind_depth   PASS at HEIGHT=4,  FAIL at HEIGHT=8
+      d_ca03 nc_g_itlb_one_entry       PASS at ITLB=16,   FAIL at ITLB=1
+      d_dsp03 nc_b_two_lanes           PASS at WIDTH=32,  FAIL at WIDTH=64
+      d_nw03 nc_b_outputs_serialised   FAILS only at S_COUNT=M_COUNT=4
+    Declaring any of them `expect: fail` makes the runner report a false mismatch
+    on every configuration where the control is CORRECT. Declaring `expect: pass`
+    inverts it. Neither is the fact.
+  why_it_matters_beyond_bookkeeping: >
+    A capability-reduced control's whole evidentiary value is the SPLIT -- it
+    passes where the capability is not needed and fails where it is, and that pair
+    is what proves the capability is scored. A schema that cannot express the
+    split cannot express the evidence.
+  sent_to: AGENT-VERIF-A2, for contract revision 3

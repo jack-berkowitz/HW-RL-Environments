@@ -335,7 +335,13 @@ ppa_historical_20ns:
 # The second source exists to FAIL. It is internally authored, so folding it
 # into the baseline would judge candidates against our own engineering quality
 # rather than against the contract. It is recorded here and nowhere else.
-controls:
+# RENAMED from `controls:` on 2026-08-25. It never held controls -- it holds the
+# SECOND SOURCE's PPA record -- and the name collided with the control-enumeration
+# contract, which reserves `controls:` for a LIST of control declarations. A runner
+# reading y["controls"] and finding a mapping here gets a type error at best and
+# silently skips the task at worst, which is the "no controls vs the directory
+# moved" confusion the contract exists to prevent, arriving through the key name.
+apparatus:
   second_source:
     file: tb/audit/axi4_xbar_second_source.sv
     purpose: falsifier for the checker; never an oracle, never an envelope point
@@ -516,3 +522,30 @@ capability_controls:
       numbering: its text contrasts with C1 directly -- "C1 says how much the
       design must be able to do at once; this says how much it may SPEND doing
       it." Keep the position when renumbering.
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED. `measured_by` is mandatory on this side because most of
+# these verdicts are hand runs, and a hand run is a measurement whose instrument
+# was never wired -- the defect the contract exists to close.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_i_overbuffered_r.sv
+    kind: negative
+    expect: fail
+    clause: C3
+    measured_by: hand_run
+    expectation_is_currently_violated: true
+    result: >
+      IT PASSES, AND THAT IS THE FINDING. The reference verbatim plus a 64-deep R
+      FIFO per master -- far beyond C3's ceiling of 4 R beats per master port --
+      and it passes BOTH MAX_TRANS configurations. C3 IS NOT ENFORCED.
+    note: >
+      DECLARED expect: fail BECAUSE THAT IS WHAT THE CONTRACT REQUIRES, not what
+      the harness does. A runner reading this will report a mismatch on every run,
+      and it should: the mismatch IS the open defect. Silencing it by declaring
+      expect: pass would record the gap as intended behaviour, which is how an
+      unenforced clause becomes a permanent one.
+      .
+      This is the only control in the design set whose declaration and whose
+      measurement disagree, and the disagreement is deliberate.

@@ -224,3 +224,64 @@ capability_controls:
       verdict is the same at both. The two configurations are run to show the
       result is not a configuration artefact.
     unaffected: "nc_a still fails on delivery (23 checks), nc_b still fails on C1 (1)"
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED: the directory is where they live, this is what they are.
+# `measured_by` is mandatory on this side because most of these verdicts are hand
+# runs, and a hand run is a measurement whose instrument was never wired -- the
+# defect the contract exists to close. It is stated per control rather than per
+# task so a mixed set cannot read as uniform.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_a_reset_polarity.sv
+    kind: negative
+    expect: fail
+    clause: any
+    measured_by: hand_run
+    result: "0/8 -- phase 1: input 0 never delivered a frame to output 0"
+  - file: controls/nc_b_outputs_serialised.sv
+    kind: negative
+    expect: PER_CONFIG            # SCHEMA GAP -- see controls_schema_gap below
+    fails_at:  ["S_COUNT=4 M_COUNT=4"]
+    passes_at: ["all other configurations"]
+    clause: C1
+    exclusive: true
+    measured_by: hand_run
+    result: "6/8 -- fails exactly and only where C1 is enforced; 486 beats / 601 cycles against a floor of 2.0"
+    note: >
+      Its first version held an output's turn until the frame completed, which
+      deadlocked under backpressure and made it fail C2 instead of C1. A CONTROL
+      THAT TRIPS THE WRONG CHECK VALIDATES NEITHER -- which is assertion 3 in the
+      contract, found here before the contract existed.
+  - file: controls/nc_h_overbuffered.sv
+    kind: negative
+    expect: fail
+    clause: B1
+    measured_by: hand_run
+    result: >
+      FAIL at 4x4 and 2x2, 1 check each. It PASSED BOTH before B1 was enforced --
+      144 and 72 beats held against a ceiling of 16 per output. The flip from
+      PASS/PASS to FAIL/FAIL is what shows B1 acquired force.
+
+controls_schema_gap:
+  field: "expect: PER_CONFIG with passes_at / fails_at"
+  status: PROPOSED EXTENSION -- not in contract revision 2
+  why: >
+    The contract's `expect:` is scalar, pass or fail. FOUR OF THE TWENTY-FIVE
+    DESIGN CONTROLS HAVE A CONFIG-DEPENDENT VERDICT BY CONSTRUCTION, because that
+    is what a CAPABILITY-REDUCED control is: it is correct at the setting whose
+    capability it lacks and wrong at the setting that needs it.
+      d_ai01 nc_g_height_blind_depth   PASS at HEIGHT=4,  FAIL at HEIGHT=8
+      d_ca03 nc_g_itlb_one_entry       PASS at ITLB=16,   FAIL at ITLB=1
+      d_dsp03 nc_b_two_lanes           PASS at WIDTH=32,  FAIL at WIDTH=64
+      d_nw03 nc_b_outputs_serialised   FAILS only at S_COUNT=M_COUNT=4
+    Declaring any of them `expect: fail` makes the runner report a false mismatch
+    on every configuration where the control is CORRECT. Declaring `expect: pass`
+    inverts it. Neither is the fact.
+  why_it_matters_beyond_bookkeeping: >
+    A capability-reduced control's whole evidentiary value is the SPLIT -- it
+    passes where the capability is not needed and fails where it is, and that pair
+    is what proves the capability is scored. A schema that cannot express the
+    split cannot express the evidence.
+  sent_to: AGENT-VERIF-A2, for contract revision 3

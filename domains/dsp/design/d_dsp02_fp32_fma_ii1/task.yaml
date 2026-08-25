@@ -508,3 +508,37 @@ proposed_clause_h1b:
     reason, and says nothing about rsp_valid_o and rsp_ready_i -- those two names
     appear only in R1's stability sentence and the port list. Any mirror clause
     should be decided for both tasks at once.
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED: the directory is where they live, this is what they are.
+# `measured_by` is mandatory on this side because most of these verdicts are hand
+# runs, and a hand run is a measurement whose instrument was never wired -- the
+# defect the contract exists to close. It is stated per control rather than per
+# task so a mixed set cannot read as uniform.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_h3_drops_valid.sv
+    kind: negative
+    expect: fail
+    clause: H3
+    exclusive: true
+    measured_by: scored_path
+    result: "FAIL at phase=h3 -- out_valid dropped while stalled. The CONSEQUENT violated."
+  - file: controls/nc_h3_evades_antecedent.sv
+    kind: suppressing
+    expect: fail
+    clause: H1b
+    exclusive: true
+    antecedent_counter: h3_guard_true
+    expect_count: 0
+    measured_by: scored_path
+    result: >
+      FAIL at phase=final -- "H3 was never exercised". The ANTECEDENT suppressed.
+      Under the contract before H1b it passed the entire suite, which is what made
+      it the measurement rather than a broken control.
+    note: >
+      THE PAIR IS THE POINT. These two differ only in where they land, and the
+      landing place is the diagnostic: phase=<clause> means the consequent was
+      violated and the clause has force; phase=final means the antecedent was
+      suppressed. A runner that records only pass/fail loses the distinction.

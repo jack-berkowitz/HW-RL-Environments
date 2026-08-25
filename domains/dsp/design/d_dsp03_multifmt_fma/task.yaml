@@ -340,3 +340,79 @@ scored_metrics:
   - {metric: latency_min,                 label: "lat.min", role: choice}
   - {metric: latency_max,                 label: "lat.max"}  # worst case, not a choice
   - {metric: throughput_ops_per_1000cyc,  label: "ops/1k",  role: capability}
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED: the directory is where they live, this is what they are.
+# `measured_by` is mandatory on this side because most of these verdicts are hand
+# runs, and a hand run is a measurement whose instrument was never wired -- the
+# defect the contract exists to close. It is stated per control rather than per
+# task so a mixed set cannot read as uniform.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_a_stuck_output.sv
+    kind: negative
+    expect: fail
+    clause: any
+    measured_by: hand_run
+    result: "0/2 -- vec 0/1, FP32 scalar: result 0 against a non-zero expected value"
+    note: >
+      WRONG RESET POLARITY WAS TRIED FIRST AND PASSED AT BOTH WIDTHS. Not a hole
+      in the checker: the reference binds NumPipeRegs=0 and is purely
+      combinational, so it has no state for a reset to hold. The control was
+      VACUOUS, not the checker blind -- and that control is standard equipment
+      here and is inert against every combinational DUT in this project.
+  - file: controls/nc_b_two_lanes.sv
+    kind: negative
+    expect: PER_CONFIG            # SCHEMA GAP -- see controls_schema_gap below
+    passes_at: ["WIDTH=32"]
+    fails_at:  ["WIDTH=64"]
+    clause: P1
+    exclusive: true
+    measured_by: hand_run
+    result: "1/2 -- capability-reduced; only the lane count can fail (rule 16)"
+  - file: controls/nc_c_flush_to_zero.sv
+    kind: negative
+    expect: fail
+    clause: A3
+    exclusive: true
+    measured_by: hand_run
+    result: "0/2 -- 158/299/271 subnormal results per format at WIDTH=32, 284/358/265 at WIDTH=64"
+  - file: controls/nc_d_band_unbounded_tininess.sv
+    kind: negative
+    expect: fail
+    clause: A7
+    exclusive: true
+    measured_by: hand_run
+    result: NOT RECORDED IN task.yaml -- see controls_unverified below
+
+controls_schema_gap:
+  field: "expect: PER_CONFIG with passes_at / fails_at"
+  status: PROPOSED EXTENSION -- not in contract revision 2
+  why: >
+    The contract's `expect:` is scalar, pass or fail. FOUR OF THE TWENTY-FIVE
+    DESIGN CONTROLS HAVE A CONFIG-DEPENDENT VERDICT BY CONSTRUCTION, because that
+    is what a CAPABILITY-REDUCED control is: it is correct at the setting whose
+    capability it lacks and wrong at the setting that needs it.
+      d_ai01 nc_g_height_blind_depth   PASS at HEIGHT=4,  FAIL at HEIGHT=8
+      d_ca03 nc_g_itlb_one_entry       PASS at ITLB=16,   FAIL at ITLB=1
+      d_dsp03 nc_b_two_lanes           PASS at WIDTH=32,  FAIL at WIDTH=64
+      d_nw03 nc_b_outputs_serialised   FAILS only at S_COUNT=M_COUNT=4
+    Declaring any of them `expect: fail` makes the runner report a false mismatch
+    on every configuration where the control is CORRECT. Declaring `expect: pass`
+    inverts it. Neither is the fact.
+  why_it_matters_beyond_bookkeeping: >
+    A capability-reduced control's whole evidentiary value is the SPLIT -- it
+    passes where the capability is not needed and fails where it is, and that pair
+    is what proves the capability is scored. A schema that cannot express the
+    split cannot express the evidence.
+  sent_to: AGENT-VERIF-A2, for contract revision 3
+
+controls_unverified:
+  note: >
+    STATED RATHER THAN LEFT BLANK. d_dsp03's nc_d_band_unbounded_tininess is
+    declared above because the file exists, and its verdict is NOT RECORDED in
+    this task.yaml. The declaration carries the expectation and no result. Under
+    the contract that renders as a control whose verdict the runner must produce,
+    not as one that passed -- which is the correct reading and the reason the
+    field is present and empty rather than absent.

@@ -415,3 +415,32 @@ ppa_note: >
   Agent 1 owns PPA for this task and it has not been built. ABSENT is the
   honest value; a placeholder number is not. When it is built, config.mk needs
   -DYOSYS for the slang read of the basejump closure -- see NOTES.md.
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED: the directory is where they live, this is what they are.
+# `measured_by` is mandatory on this side because most of these verdicts are hand
+# runs, and a hand run is a measurement whose instrument was never wired -- the
+# defect the contract exists to close. It is stated per control rather than per
+# task so a mixed set cannot read as uniform.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_r1_evades_antecedent.sv
+    kind: suppressing
+    expect: fail
+    clause: R1b
+    exclusive: true
+    antecedent_counter: r1_hits
+    expect_count: 0
+    measured_by: scored_path
+    result: >
+      0/16, and the ONLY distinct failure across all sixteen configurations is
+      "R1 was never exercised". It does not fail R1 and it does not fail anything
+      else.
+    note: >
+      DECLARED `expect: fail` AND `kind: suppressing`, which the contract's table
+      pairs with `expect: pass`. Both are true here and the difference is a
+      version boundary: under the contract as it stood BEFORE R1b it passed
+      everything, which is what made it evidence. The vacuity floor now fails it.
+      Recorded rather than smoothed -- a suppressing control that fails is one the
+      harness has learned to see, and the contract should be able to say so.
