@@ -97,14 +97,44 @@ if [ -n "${TASK_DIR}" ]; then
   TASK_NAME="$(basename "${TASK_DIR}")"
   DUT="${2:-}"
   if [ -z "${DUT}" ]; then
-    N_REF="$(ls "${TASK_DIR}"/ref/*_ref.sv 2>/dev/null | wc -l | tr -d ' ' || true)"
-    N_REF="${N_REF:-0}"
-    if [ "${N_REF}" -gt 1 ]; then
-      echo "REJECTED: ${TASK_DIR} has ${N_REF} ref/*_ref.sv files; naming one is required." >&2
-      ls "${TASK_DIR}"/ref/*_ref.sv | sed 's|.*/|  |' >&2
-      exit 2
+    # THE REFERENCE IS THE FILE THAT DECLARES THE CONTRACT MODULE, not the one
+    # whose NAME ends _ref.sv. On a two-file shim those are different files and
+    # the filename picks the wrong one: d_ai01 ships fp16_gemm_array_ref.sv
+    # (declaring fp16_gemm_array_ref_inner) beside fp16_gemm_array_top.sv
+    # (declaring fp16_gemm_array). Exactly one matches *_ref.sv, so the count
+    # guard below passed and this took the INNER module -- the Fmax sweep then
+    # died at its own simulation gate with "declares 'fp16_gemm_array_ref_inner',
+    # expected 'fp16_gemm_array'". d_ca03 has the same shape.
+    #
+    # Fourth site of this defect: reference_ppa.sh gated whatever its glob picked,
+    # report_table.py rendered d_ai01's reference as an ordinary submission, the
+    # tb/*_tb.sv pick silently scored d_nw01's read-only liveness rig at 8/8.
+    # Identifying a thing by its filename rather than by what it declares.
+    _DN="$(awk '/^[[:space:]]*export[[:space:]]+DESIGN_NAME[[:space:]]*[:?]?=/{sub(/^[^=]*=/,"");gsub(/[[:space:]]/,"");print;exit}' "${TASK_DIR}/orfs/config.mk" 2>/dev/null || true)"
+    DUT=""
+    if [ -n "${_DN}" ]; then
+      _HITS="$(grep -l "^module ${_DN}\b" "${TASK_DIR}"/ref/*.sv 2>/dev/null || true)"
+      _NH="$(printf '%s\n' "${_HITS}" | grep -c . || true)"
+      if [ "${_NH}" -gt 1 ]; then
+        echo "REJECTED: ${_NH} files under ${TASK_DIR}/ref/ declare module '${_DN}':" >&2
+        printf '  %s\n' ${_HITS} >&2
+        echo "Naming one is required; a glob must not choose." >&2
+        exit 2
+      fi
+      [ "${_NH}" = "1" ] && DUT="${_HITS}"
     fi
-    DUT="$(ls "${TASK_DIR}"/ref/*_ref.sv 2>/dev/null | head -1 || true)"
+    if [ -z "${DUT}" ]; then
+      # No DESIGN_NAME, or nothing declares it -- fall back to the filename
+      # convention, and REFUSE on more than one rather than taking the first.
+      N_REF="$(ls "${TASK_DIR}"/ref/*_ref.sv 2>/dev/null | wc -l | tr -d ' ' || true)"
+      N_REF="${N_REF:-0}"
+      if [ "${N_REF}" -gt 1 ]; then
+        echo "REJECTED: ${TASK_DIR} has ${N_REF} ref/*_ref.sv files; naming one is required." >&2
+        ls "${TASK_DIR}"/ref/*_ref.sv | sed 's|.*/|  |' >&2
+        exit 2
+      fi
+      DUT="$(ls "${TASK_DIR}"/ref/*_ref.sv 2>/dev/null | head -1 || true)"
+    fi
     WHAT="reference"
     if [ -z "${DUT}" ]; then
       echo "ERROR: ${TASK_NAME} has no ref/*_ref.sv and no candidate was given." >&2

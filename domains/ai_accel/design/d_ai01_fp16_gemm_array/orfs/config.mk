@@ -1,13 +1,38 @@
 # ORFS design config for d_ai01 fp16_gemm_array.
 #
-# SYNTHESISED AT THE SCORED CONFIGURATION, and it gets there by DEFAULT rather
-# than by an override: the shim declares HEIGHT=8, WIDTH=8. Nothing on this
-# line pins it, so if the shim default ever drifts from `scored_configuration:`
-# in task.yaml, the PPA number silently stops being the scored one. Both must
-# move together. (Same failure mode d_dsp03's config.mk documents.)
+# SYNTHESISED AT THE SCORED CONFIGURATION, AND IT GETS THERE BY AN EXPLICIT
+# OVERRIDE THAT NAMES ITS AUTHORITY -- see VERILOG_TOP_PARAMS below.
+#
+# It used to get there by DEFAULT: the shim declared HEIGHT=8, WIDTH=8 and
+# nothing on this line pinned it, so this comment warned that if the shim default
+# ever drifted from `scored_configuration:` in task.yaml the PPA number would
+# silently stop being the scored one.
+#
+# IT DULY DRIFTED. Jack moved P2 to HEIGHT=4 on 2026-08-25 (34f1d43) because
+# HEIGHT=8 does not route on sky130hd -- 76,253 to 83,445 detailed-routing
+# violations across three floorplans -- and the shim still defaults to 8. An ORFS
+# run in that window would have synthesised 8x8, labelled it the scored number,
+# and failed for a reason that is no longer the scored question. The comment is
+# why it was caught; AGENT-DESIGN-43a92055 read it and checked.
+#
+# The pin is an override rather than a change to the shim default, because the
+# spec now states that its declared defaults are NOT normative and P2 is the sole
+# authority on geometry. Moving the default would put the scored configuration
+# back in two places.
 export PLATFORM        = sky130hd
 export DESIGN_NAME     = fp16_gemm_array
 export DESIGN_NICKNAME = d_ai01_fp16_gemm_array
+
+# THE SCORED GEOMETRY, pinned. task.yaml `scored_configuration:` is the authority
+# (HEIGHT 4, WIDTH 8); this line must equal it and nothing else may set it.
+# For SYNTH_HDL_FRONTEND=slang these become `-G HEIGHT=4 -G WIDTH=8` on
+# read_slang, applied in ORFS's synth_preamble.tcl. It is a Tcl dict: flat
+# key-value pairs, not `KEY=VALUE`.
+#
+# build_config_hash.py hashes this field whenever it is set, so a 4x8 build and
+# an 8x8 build of this task can no longer collide on one hash and be declared
+# comparable under rule 17.
+export VERILOG_TOP_PARAMS = HEIGHT 4 WIDTH 8
 
 # FLOORPLAN AND PLACEMENT, matching every other design task in this repo.
 # Without CORE_UTILIZATION or an explicit DIE_AREA/CORE_AREA, ORFS stops at

@@ -47,15 +47,58 @@ source and reporting on behaviour.
 
 Usage: vcdvary.py <spec_iface.sv> <dump.vcd> <dut_scope_name>
 """
-import re, sys, collections
+import os, re, sys, collections
 
 spec, vcd, dut = sys.argv[1], sys.argv[2], sys.argv[3]
 
-# ---- input port names, from the module header only (not the clause comments) --
-txt = open(spec, errors="replace").read()
-m = re.search(r"^module\s+\w+.*?\((.*?)^\);", txt, re.S | re.M)
+# ---- WHERE THE PORT LIST LIVES IS A PROPERTY OF THE TASK, NOT OF THIS TOOL ----
+#
+# This read spec/*_iface.sv and nothing else. v_ca05_id_queue has no iface file:
+# its port map lives in probe/PASTE.md, which is CORRECT for a verification task
+# -- the hash covers PASTE.md and it is the document a submitter is actually
+# shown -- and was invisible here. The sweep reported v_ca05 SKIPPED every time
+# it ran, and a reader scanning the results cannot tell SKIPPED from "measured,
+# nothing frozen". Those are opposite conclusions: one says the inputs vary, the
+# other says nobody looked.
+#
+# A task whose port map lives where the submitter sees it is not doing anything
+# wrong, so the instrument learns to read it rather than the task growing a file
+# to satisfy the instrument -- which would also move its task_text_hash and
+# invalidate a solicitation to fix a tooling gap.
+#
+# It NAMES the file it took the ports from, on every run. A fallback that
+# substitutes silently has answered a different question than the one asked.
+def _module_header(path):
+    try:
+        t = open(path, errors="replace").read()
+    except OSError:
+        return None
+    return re.search(r"^module\s+\w+.*?\((.*?)^\);", t, re.S | re.M)
+
+
+m = _module_header(spec)
+src = spec
 if not m:
-    sys.exit(f"could not find the module header in {spec}")
+    # spec/<x>_iface.sv -> <task>/probe/PASTE.md
+    task_dir = os.path.dirname(os.path.dirname(os.path.abspath(spec)))
+    for cand in (os.path.join(task_dir, "probe", "PASTE.md"),
+                 os.path.join(task_dir, "probe", "BLIND_TB_TASK.md")):
+        m = _module_header(cand)
+        if m:
+            src = cand
+            break
+if not m:
+    print(f"NOT MEASURABLE: no module header in {spec}", file=sys.stderr)
+    print("  and none in the task's probe/PASTE.md or probe/BLIND_TB_TASK.md.",
+          file=sys.stderr)
+    print("  NOTHING WAS READ. This is not the same answer as 'no input is",
+          file=sys.stderr)
+    print("  frozen' -- report it as NOT MEASURABLE, never as a clean result.",
+          file=sys.stderr)
+    sys.exit(3)
+if src != spec:
+    print(f"note: port list read from {os.path.relpath(src)} "
+          f"-- {os.path.relpath(spec)} declares no module header.")
 ports, cur = [], None
 for line in m.group(1).splitlines():
     line = re.sub(r"//.*", "", line)
@@ -105,11 +148,21 @@ with open(vcd, errors="replace") as f:
             seen[vid].add(val)
 
 # ---- report -----------------------------------------------------------------
-byname = {}
-for vid, binds in ids.items():
-    for sc, nm in binds:
-        if nm in ports and (sc.endswith(dut) or dut in sc.split(".")):
-            byname.setdefault(nm, set()).update(seen.get(vid, set()))
+# Prefer a scope named by the caller; fall back to ANY scope if that name is not
+# present. Instantiation names vary and a multi-line instantiation defeats a
+# regex, so requiring the caller to know the instance name loses tasks silently.
+def collect(scope_filter):
+    out = {}
+    for vid, binds in ids.items():
+        for sc, nm in binds:
+            if nm in ports and scope_filter(sc):
+                out.setdefault(nm, set()).update(seen.get(vid, set()))
+    return out
+
+byname = collect(lambda sc: sc.endswith(dut) or dut in sc.split("."))
+if not byname or len(byname) < len(ports) // 2:
+    byname = collect(lambda sc: True)
+    print(f"  (no scope named '{dut}' carried the ports; matched across all scopes)")
 
 missing = [p for p in ports if p not in byname]
 frozen  = sorted(n for n, v in byname.items() if len(v) <= 1)

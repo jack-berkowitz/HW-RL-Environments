@@ -307,11 +307,24 @@
 //     observable schedule -- it sets both the chain latency and the operand
 //     skew -- so it is the parameterised axis; WIDTH is pure replication.
 //
-// P2. The scored configuration is HEIGHT=8, WIDTH=8, which is also the default.
-//     The cap is synthesis feasibility rather than anything in the contract:
-//     one computing element measures 23,034 um^2 on sky130hd, so a 16x16 array
-//     would be roughly 5.9 mm^2, about 2.8x the largest design this repository
-//     has ever built. See MEASUREMENTS.md section 5.
+// P2. THE SCORED CONFIGURATION IS HEIGHT=4, WIDTH=8.
+//     The cap is PHYSICAL FEASIBILITY rather than anything in the contract, and
+//     it is MEASURED rather than estimated. At HEIGHT=8 detailed routing does not
+//     close on sky130hd: 76,253 to 83,445 violations across three separate
+//     floorplans. At HEIGHT=4 it closes clean -- 0 violations, 710,752 um^2 at
+//     33% utilisation. Both were routed at the SAME 50 ns constraint, so the
+//     comparison is like-for-like and is about the geometry.
+//
+//     THIS IS NOT A CLAIM THAT HEIGHT=4 CLOSES AT THE SCORED PERIOD. 50 ns is the
+//     most RELAXED constraint this task allows and G1 records the pinned period as
+//     not yet set. A failure at 50 ns would have been decisive; a pass is
+//     NECESSARY AND NOT SUFFICIENT, because the pin will be tighter and closure is
+//     bought with area -- so the routed design at the pin will exceed 710,752 um^2
+//     and must be re-checked before any PPA number is published from it.
+//
+//     HEIGHT=8 REMAINS LEGAL under P1 and T3 STILL REQUIRES A SUBMISSION TO HOLD
+//     AT BOTH. What moved is which geometry carries the PPA comparison, not which
+//     geometries a design must implement. See MEASUREMENTS.md section 5.
 //
 // -----------------------------------------------------------------------------
 // T -- SCORING
@@ -490,3 +503,50 @@
 //     can be read as the trade it is rather than as a verdict.
 //
 // =============================================================================
+
+// =============================================================================
+// THE INTERFACE, DECLARED
+// =============================================================================
+// V1 above states the ports in a table. This is the same interface as a
+// DECLARATION, so that it is authoritative rather than described -- a table and
+// a port list can drift and nothing would report it.
+//
+// THE PARAMETER DEFAULTS BELOW ARE NOT NORMATIVE. P2 is the sole authority on
+// the scored configuration. HEIGHT=8 here is the reference's default, reproduced
+// so that this module elaborates standalone, and it carries no claim about what
+// is scored. If P2 ever names a different geometry, P2 is right and this line is
+// stale -- it is not a second statement of the scored configuration.
+//
+// WHY DEFAULTS ARE PRESENT AT ALL, since the contract does not need them: P1
+// makes HEIGHT legal at 4 and 8, T3 requires a submission to hold at BOTH, and
+// every rig supplies both parameters explicitly, so a default is unnecessary on
+// the merits. It is here because DECLARING THE PARAMETERS WITHOUT DEFAULTS
+// CRASHES THE SYNTHESIS FRONTEND. Measured, not assumed: yosys `read_slang
+// --top fp16_gemm_array` on an otherwise-passing submission with
+// `parameter int unsigned HEIGHT` and no default exits 133 with a
+// trace/breakpoint trap and EMITS NO ERROR MESSAGE, where the same file with
+// `= 8` exits 0 clean. A submission copying this declaration verbatim would
+// have produced "slang did not run" instead of a verdict, and T5 makes that
+// worth more than tidiness.
+//
+// A submission REPLACES this module. It is reproduced here to be copied, not
+// instantiated.
+
+module fp16_gemm_array #(
+  parameter int unsigned HEIGHT = 8,
+  parameter int unsigned WIDTH  = 8
+) (
+  input  logic                                     clk_i,
+  input  logic                                     rst_ni,
+  input  logic [WIDTH-1:0][HEIGHT-1:0][15:0]       x_i,
+  input  logic            [HEIGHT-1:0][15:0]       w_i,
+  input  logic [WIDTH-1:0]            [15:0]       y_i,
+  output logic [WIDTH-1:0]            [15:0]       z_o,
+  input  logic [2:0]                               rnd_i,
+  input  logic                                     accumulate_i,
+  input  logic [WIDTH-1:0]                         row_clk_gate_en_i,
+  input  logic                                     reg_enable_i,
+  input  logic                                     flush_i,
+  output logic [WIDTH-1:0][HEIGHT-1:0][4:0]        status_o
+);
+endmodule

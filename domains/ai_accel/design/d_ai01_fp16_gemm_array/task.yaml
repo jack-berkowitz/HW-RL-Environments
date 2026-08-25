@@ -126,7 +126,91 @@ probe: probe/PASTE.md
 # below is the live one; 86b7d95729381055 was recorded on 08-23 and three
 # spec-wide commits moved it on 08-24 without this field being touched. See
 # missed_boundaries. Recompute with scripts/task_text_hash.py at the point of use.
-task_text_hash: 2b7c36c5b08e7965
+task_text_hash: 2f2c4cd76f582ae1
+
+interface_boundary:
+  changed_on: 2026-08-25
+  pre_bump_task_text_hash:  2b7c36c5b08e7965
+  post_bump_task_text_hash: 2f2c4cd76f582ae1
+  intermediate_hash_no_candidate_saw: 2cf1ff4be7bf693a
+  one_boundary_not_two: >
+    The interface declaration landed first, at 2cf1ff4be7bf693a, and P2's move to
+    HEIGHT=4 landed on top of it before any candidate was solicited at the
+    intermediate value. Recorded as ONE boundary because that is what a submission
+    experiences -- two would imply a solicitation that never happened. The
+    intermediate hash is named rather than dropped so the chain has no gap.
+  behavioural: PARTLY -- see p2_is_behavioural_for_PPA
+  what_changed: >
+    THE INTERFACE IS NOW DECLARED. spec/fp16_gemm_array_iface.sv was 492 lines
+    of which every one was a comment -- the only design spec in the repository
+    shipping no module declaration. V1 stated the ports as a TABLE. 45 lines
+    added, none removed; probe/PASTE.md regenerated and byte-identical to the
+    spec (30756 bytes each, check_paste_sync 0 of 9 out of sync).
+    .
+    Checked field by field against V1's table before landing: every width, every
+    packed dimension, every direction agrees. No requirement changes. What
+    changes is that the declaration is AUTHORITATIVE rather than described -- a
+    table and a port list can drift and nothing would report it.
+  why_it_mattered: >
+    scripts/sim_candidate.sh derives the DUT module by grepping `^module` in the
+    spec. It got an empty string, resolved the testbench to tb/_tb.sv and
+    refused -- correctly, but the effect was that d_ai01 could not run through
+    the scored path at all. That was gap 1 of the four in F88. The runner
+    fallback made the task runnable; this makes the defect go away at its source,
+    and the fallback's "derived from the TASK DIRECTORY" note is now silent for
+    this task.
+  parameter_defaults_are_not_normative: >
+    HEIGHT=8 WIDTH=8 appear as defaults and CARRY NO CLAIM ABOUT WHAT IS SCORED.
+    P2 is the sole authority on the scored configuration; if P2 ever names a
+    different geometry, P2 is right and the default is stale.
+    .
+    THE DEFAULTS ARE PRESENT BECAUSE OMITTING THEM CRASHES THE SYNTHESIS
+    FRONTEND, measured rather than assumed. `parameter int unsigned HEIGHT` with
+    no default makes yosys `read_slang --top fp16_gemm_array` exit 133 with a
+    trace/breakpoint trap and NO ERROR MESSAGE; the same file with `= 8` exits 0
+    clean. Reproduced twice through the runner and once directly in the
+    container. A submission copying the declaration verbatim would have received
+    "slang did not run" instead of a verdict.
+    .
+    Recorded because the no-defaults form was RECOMMENDED AND AGREED before it
+    was tested, on the reasoning that one statement of the scored geometry is
+    safer than two. The reasoning was sound and the answer was wrong. The drift
+    it worried about is closed by naming which statement governs instead.
+  p2_is_behavioural_for_PPA: >
+    The interface declaration changes no requirement. P2's move DOES change one:
+    which geometry carries the PPA comparison. No CORRECTNESS verdict moves --
+    P1 and T3 are untouched and the runner already swept both geometries -- but no
+    PPA number measured at HEIGHT=8 is comparable to one measured at HEIGHT=4, and
+    d_ai01 has no PPA numbers yet, so nothing is invalidated.
+
+  # ---------------------------------------------------------------------------
+  # OUT-OF-PATH OBSERVATION. THIS IS NOT A VERDICT AND MUST NOT BE READ AS ONE.
+  # ---------------------------------------------------------------------------
+  gemini_out_of_path_observation:
+    IS_NOT_A_SCORED_VERDICT: true
+    scored_status: TOOLFAIL -- build_status=slang_tool_error, NO correctness verdict
+    observation: "2755 z mismatches, 2725 status mismatches over 2937 scored cycles at HEIGHT=8"
+    provenance: >
+      PRODUCED BY A HAND-BUILT VERILATOR INVOCATION, outside scripts/sim_candidate.sh.
+      The scored path will not produce it: TOOLFAIL records no correctness verdict
+      and does not fall through to Verilator.
+    why_it_is_recorded_this_way: >
+      Jack's ruling. A Verilator correctness verdict is NOT recordable as a scored
+      verdict when slang has failed -- the scored path defines what counts, and
+      admitting an out-of-path number because it happens to exist is how the
+      boundary erodes. That is F22's argument and it was mine. But the measurement
+      is real and should not disappear: it tells us something about this submission
+      that TOOLFAIL alone does not, namely that the design also fails on OUTPUT and
+      not only at the frontend.
+    verdict_count: >
+      d_ai01 is 2 OF 3 MEASURED, not 3 of 3. I reported 3 of 3 and was wrong;
+      AGENT-PPA-2381f2fe caught it and was right to refer the policy question
+      rather than decide it.
+
+  candidates: >
+    RE-SOLICITATION REQUIRED for chat, claude and gemini. The shipped text
+    changes, and the hash is what asserts "same question". Nothing is re-scored
+    for correctness -- no behaviour required of a submission changes.
 
 version_boundary:
   changed_on: 2026-08-23
@@ -243,8 +327,89 @@ version_boundary:
   candidates_affected: NONE -- no candidate has ever been scored against this task.
 
 scored_configuration:
-  HEIGHT: 8
+  HEIGHT: 4
   WIDTH: 8
+  moved_from_HEIGHT_8_on: 2026-08-25
+  moved_because: >
+    HEIGHT=8 DOES NOT ROUTE ON sky130hd. Measured, not estimated: 76,253 to
+    83,445 detailed-routing violations across three separate floorplans -- CORE
+    UTILIZATION 10 and 30, PLACE_DENSITY 0.50 and 0.35. HEIGHT=4 closes clean at
+    0 violations, 710,752 um^2, 33% utilisation. Both at the SAME 50 ns
+    constraint, so the comparison is like-for-like and is about the geometry.
+  necessary_not_sufficient: >
+    50 ns is the most RELAXED constraint this task allows and the pinned period is
+    NOT YET SET (spec G1). A failure at 50 ns would have been decisive; this pass
+    is NECESSARY AND NOT SUFFICIENT. The pin will be tighter, closure is bought
+    with area, and the routed design at the pin will exceed 710,752 um^2 -- it
+    must be re-checked before any PPA number publishes from it.
+  what_did_NOT_move: >
+    P1 still makes HEIGHT legal at 4 AND 8, and T3 still requires a submission to
+    hold at BOTH. What moved is which geometry carries the PPA comparison, not
+    which geometries a design must implement. The runner sweeps both.
+  consequence_for_nc_g_discrimination: >
+    THE SCORED GEOMETRY IS NOW THE ONE WHERE nc_g CANNOT DISCRIMINATE, and that is
+    recorded rather than left to be discovered. nc_g_height_blind_depth pins the
+    chain depth to the literal 4: it PASSES at HEIGHT=4 and FAILS at HEIGHT=8.
+    With HEIGHT=4 scored, a run of the SCORED CONFIGURATION ALONE would not catch
+    it.
+    .
+    The task is not weakened, because T3 requires a submission to hold at BOTH
+    legal heights and scripts/sim_candidate.sh sweeps both -- correctness is
+    scored across the pair, not at the scored geometry. Re-verified after the
+    move: reference 2/2, nc_g 1/2 failing at +HH=8.
+    .
+    WHAT THIS DOES CHANGE is that T3 is now load-bearing for a discrimination it
+    was previously redundant with. Anyone running only the scored configuration --
+    a PPA-only flow, for instance -- gets no evidence about HEIGHT at all.
+  second_capacity_control_owed:
+    status: SCOPED, NOT BUILT
+    the_gap: >
+      THERE IS NOW NO CAPACITY-CLASS CONTROL THAT FAILS AT THE SCORED GEOMETRY.
+      nc_g_height_blind_depth is the only capacity control and its polarity points
+      away from HEIGHT=4: it pins the chain depth to the literal 4, which is
+      CORRECT at HEIGHT=4, so it passes there and fails only at HEIGHT=8. The six
+      controls that fail at both heights -- nc_a stuck output, nc_b extra pipe
+      stage, nc_c flush subnormal, nc_d overflow always inf, nc_e positive zero
+      only, nc_f reversed chain -- are arithmetic and ordering controls. None of
+      them tests that HEIGHT is load-bearing.
+    why_this_is_the_gap_nc_g_EXISTED_to_close: >
+      d_nw01 recorded that no capability check discriminates at MAX_TRANS=2 and
+      that A PASS AT THE LOW SETTING IS NOT CAPABILITY EVIDENCE. That lesson is
+      cited in d_ca01's own scored_configuration rationale as the reason
+      MAX_MISSES=8 was chosen over 2. THE SCORED SETTING HERE IS NOW THE LOW ONE:
+      4 of the two legal heights. So the PPA number will be taken at the geometry
+      where the capacity claim is least tested, which is the shape the repository
+      already recorded as a mistake not to repeat.
+    the_shape_of_the_control: >
+      THE MIRROR OF nc_g -- chain depth pinned to the literal 8. Correct at
+      HEIGHT=8, wrong at HEIGHT=4, so it would FAIL at the scored geometry and
+      PASS at the other. Together the pair would give one failing capacity control
+      at each legal height and neither geometry would be blind.
+    open_question_before_building: >
+      IS IT A PLAUSIBLE DESIGN OR ONLY A CONSTRUCTIBLE ONE? nc_g is plausible --
+      a submission reading P1 and building for the smaller legal height is a real
+      mistake a model makes. Pinning depth to 8 while the port is HEIGHT-wide
+      means indexing stages 4..7 of a [3:0] array, which SystemVerilog resolves to
+      X rather than an elaboration error, so it CONSTRUCTS. Whether any submission
+      would ever write it is a different question, and a control nobody would
+      write measures the checker rather than the contract. That is the question to
+      settle before building, not after.
+    cheaper_alternative_to_weigh_first: >
+      A capacity FLOOR at the scored geometry may cover the same ground: assert
+      that the design's observed latency at HEIGHT=4 is D*(H-1)+2 = 14 and that it
+      is DERIVED rather than constant, by comparing the two geometries' measured
+      latencies within one run. That is rule 36's shape -- a firing count rather
+      than a control -- and it needs no new plausible-design argument.
+    not_built: >
+      Scoped on instruction and deliberately not built. Recorded here rather than
+      in a note because the gap is live from the moment P2 moved.
+  the_prediction_this_refuted: >
+    The failure signature -- 80% of violations on met1, mass shorts directly above
+    the cells, global route clean, antennas driven to zero -- was read as PIN
+    ESCAPE, which is LOCAL, and that predicted ~35,000-40,000 violations at 4x8:
+    roughly half of 76,253. The measured answer is ZERO. Halving the array did not
+    halve the violations, it eliminated them, which is congestion-like and not
+    pin-access-like. The reading was endorsed here and the measurement refutes it.
   rationale: >
     Capped by SYNTHESIS FEASIBILITY, not by the anchor and not by the contract.
     Measured on sky130hd: one redmule_ce is 23,034.59 um^2, and redmule_engine at

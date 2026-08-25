@@ -96,6 +96,48 @@ negative_controls:
     correct_reference: PASS with 2283 cross-ID switches
     reorder_mutant: mD1 -> killed by the per-(master,ID) comparison
 
+# ---------------------------------------------------------------------------
+# L3 / C3 -- STATE CHANGED. No longer parked on the anchor.
+# ---------------------------------------------------------------------------
+l3_c3_state:
+  status: OURS_TO_EXPLAIN
+  was: PARKED_ON_A_SUSPECTED_ANCHOR_DEFECT
+  changed_on: 2026-08-25
+  reproducer: tb/audit/axi_demux_lockin_repro_tb.sv
+  result: >
+    locked_cycles=200, r_beats_served=8, LOCKIN VIOLATIONS = 0. Under legal,
+    indefinite AXI read-response backpressure the anchor's arbiter does NOT
+    deassert an unserved request. TWO INDEPENDENT OBSERVERS AGREE: a counter
+    reading the arbiter's own req_i and gnt_i directly, and the ANCHOR'S OWN
+    ASSUME, which was confirmed compiled into the model -- the string
+    "disallowed to deassert" is present in the built object -- and did not fire.
+  both_floors_fire: >
+    Either floor alone would let a clean run mean nothing, so both are gated: the
+    arbiter must actually have been LOCKED (200 cycles, not 0) and the R channel
+    must actually have CARRIED TRAFFIC once released (8 beats, not 0). A rig that
+    never reached the read channel would otherwise have reported PASS.
+  what_is_refuted: >
+    THE SIMPLEST FORM OF THE HYPOTHESIS, and only that. Two masters, one demux,
+    one outstanding read per port, legal indefinite r_ready backpressure.
+  what_is_not_refuted: >
+    The hypothesis itself. The original symptom was the companion ASSERT
+    (idx_o == $past(idx_o)) firing 10 ns after stall RELEASE in the FULL
+    crossbar, with more masters and nested demuxes; this rig checks the ASSUME's
+    condition directly in a single demux. Related, not identical.
+  consequence: >
+    L3 and C3 are no longer blocked on an external question. Their untestability
+    is this task's to explain, and the explanation is not yet written. Recorded as
+    a state change rather than as a closed item -- the clauses are still
+    untestable and nothing about that improved.
+  upstream: >
+    NOTHING TO REPORT. On this evidence there is no upstream report to make,
+    which is the outcome an upstream report needed to be checked for first.
+  scaling_the_rig_is_a_DECISION_not_a_next_step: >
+    Scaling toward the failing configuration -- more masters, nested demuxes,
+    interleaved ids, the ASSERT rather than the ASSUME -- is a separate piece of
+    work with its own cost, and it is not automatic. Costed and referred rather
+    than started.
+
 mutants:
   # "witness" records HOW non-equivalence was demonstrated. Witnessing through
   # the checker -- it passes the reference and fails the mutant under identical
@@ -404,6 +446,12 @@ capability_controls:
       the simultaneous-release artefact is ruled out. A genuine anchor defect is
       the reading most consistent with the evidence and it is NOT established.
       Proving it needs a minimal reproducer against axi_demux alone.
+      .
+      *** SUPERSEDED 2026-08-25. THE REPRODUCER WAS BUILT AND DOES NOT
+      REPRODUCE. See l3_c3_state below: the reading above is no longer the one
+      most consistent with the evidence, and L3/C3's untestability is OURS TO
+      EXPLAIN rather than parked on the anchor. The paragraph is kept because it
+      is what was believed and on what grounds. ***
       .
       SO THE BLOCKER IS NOT THE HARNESS. rr_arb_tree at LockIn=1
       carries an ASSUME beside its ASSERT -- "it is disallowed to deassert

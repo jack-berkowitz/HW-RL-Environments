@@ -12,18 +12,18 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | notes |
 |---|---|---|---|---|---|
-| `chat` | 0/2 FAIL | — | — | — |  |
-| `claude` | 0/2 FAIL | — | — | — |  |
-| `claude_nodefault` | **did not build** | **0** | **0** | **0** | **build failure** — slang tool error: TOOLFAIL exit 133 -- host/tool failure, NOT a verdict |
 | **reference** | **2/2 pass** | — | — | — |  |
-| `gemini` | **did not build** | **0** | **0** | **0** | **build failure** — 7 error(s); first: sanitised_gemini.sv:83:24: error: internal error: evaluation does not resolve to a constant in design initialization  |
-| `nc_a_stuck_output` — *negative control, expected to fail* | 0/2 FAIL | — | — | — |  |
-| `nc_b_extra_pipe_stage` — *negative control, expected to fail* | 0/2 FAIL | — | — | — |  |
-| `nc_c_flush_subnormal` — *negative control, expected to fail* | 0/2 FAIL | — | — | — |  |
-| `nc_d_overflow_always_inf` — *negative control, expected to fail* | 0/2 FAIL | — | — | — |  |
-| `nc_e_positive_zero_only` — *negative control, expected to fail* | 0/2 FAIL | — | — | — |  |
-| `nc_f_reversed_chain` — *negative control, expected to fail* | 0/2 FAIL | — | — | — |  |
 | `nc_g_height_blind_depth` — *negative control, expected to fail* | 1/2 FAIL | — | — | — |  |
+| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
+| `Claude Opus 5` | *not scored against this prompt* | — | — | — | last run answered task text `2cf1ff4be7bf693a`; the task text is now `2f2c4cd76f582ae1` |
+| `claude_nodefault` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
+| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | last run answered task text `2cf1ff4be7bf693a`; the task text is now `2f2c4cd76f582ae1` |
+| `nc_a_stuck_output` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
+| `nc_b_extra_pipe_stage` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
+| `nc_c_flush_subnormal` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
+| `nc_d_overflow_always_inf` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
+| `nc_e_positive_zero_only` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
+| `nc_f_reversed_chain` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
 
 ## d_ca01 — non-blocking data cache
 
@@ -42,7 +42,7 @@ capability, and nothing here establishes those weights.
 |---|---|---|---|---|---|
 | `chat` | **1/1 pass** | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
 | `claude` | 0/1 FAIL | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
-| `gemini` | 0/1 FAIL | — | — | — |  |
+| `gemini` | **did not build** | **0** | **0** | **0** | **build failure** — 10 error(s); first: sanitised_gemini.sv:113:5: error: declaration must come before all statements in the block  |
 | **reference** | **1/1 pass** | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
 
 ## d_ca04 — asynchronous CDC FIFO
@@ -207,14 +207,14 @@ prompt is a different question and is not listed.
 
 ## v_ca06 — AXI data-width downsizer
 
-Rows below answer task text `ca63302d6b23df46` (spec + the prompt the
+Rows below answer task text `c1de26c772eb754d` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| **reference testbench** | yes | yes | yes | 5/5 | **10/10** | establishes the ceiling |
-| `Claude Opus 5` | **no** | **no** | yes | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `dw_downsizer_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `ca63302d6b23df46` |
+| `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `ca63302d6b23df46` |
 
 ## v_ca07 — Glitch-free integer clock divider
 

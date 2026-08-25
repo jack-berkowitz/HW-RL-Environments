@@ -5994,3 +5994,225 @@ which falsely flagged `d_dsp03` — a task being scored that same night — as
 having no testbench.
 
 **Rules:** 8, 36
+
+## F91. A field with no reader cannot be wrong, which is not the same as being right
+
+Found jointly with AGENT-VERIF-A2, who stated the class, and AGENT-DESIGN-43a92055,
+whose measurement supplied the sharpest instance.
+
+Every instrument in this repo works by finding a DISAGREEMENT. A hash against a
+recomputed hash. A witness against a fresh runner. A record against the flow
+directory it claims to describe. A reference against its own testbench. **A field
+that nothing consults produces no disagreement anywhere**, so a wrong value in it
+is indistinguishable from a right one, permanently, and no amount of care at the
+moment of writing changes that.
+
+### Lead with the one where the field was correct
+
+`version_boundary`'s `behavioural: true` in d_ai01's `task.yaml` recorded, truly,
+that results do not carry across that boundary. **The results carried anyway** —
+seven control kill counts, taken before the boundary and quoted after it, every
+one of them wrong by the time anyone re-ran them (F89). Nothing reads the flag.
+
+This is the instance to lead with precisely because **the annotation was not
+mistaken**. It was present, accurate, and inert. A wrong field and an unread
+field fail identically, which means correctness of the field was never what was
+protecting anything — and anyone reassured by seeing the annotation there was
+reassured by a thing that had no mechanism behind it.
+
+The other two named instances:
+
+* **`task_statement`** — three `task.yaml` files declared a prompt document that
+  does not exist. No script reads the field, so nothing disagreed. A2 went in
+  expecting `task_text_hash.py`'s tolerance for two filenames to be the cause;
+  it was not, because that tolerance NAMES the file it accepted and REFUSES when
+  neither exists. Leniency did not hide this. Absence of a reader did.
+* **`pinned_period_ns`** — written into fmax records by `find_fmax.py`; **one of
+  thirty-one** records carries it, and nothing in `scripts/` reads any of them.
+  The pins that actually bind are the ones stated in the specs, which is why
+  `check_pin.py` (794d57e) checks the spec and not the field.
+
+### The sweep, and the one that bit
+
+`scripts/check_unread_fields.py` compares every field the recorders write against
+every script that could read it. **Nine of forty-two run-record fields have no
+reader at all**, across 734 records:
+
+    git_sha  faults_hung  kind_note  coverage  per_config
+    configs_no_verdict  synth_area_um2  task_text_hash_source  rd_clk_period_ns
+
+`configs_no_verdict` is the one that bit. It is nonzero on exactly **six**
+records — all of them d_ai01 runs where the testbench printed `RESULT: PASS`,
+the scored path read `TEST_RESULT:`, and the config came back NO_VERDICT (F90).
+**The field that would have named the defect was written on every affected
+record and consulted by nothing.** The defect was found instead by a person
+reading NO_VERDICT off a terminal, which is the least durable instrument
+available.
+
+`coverage` is the one that stings: 177 records carry a value, nothing reads it,
+and I had spent that same day improving what it records (60c70ad) without
+checking whether anything downstream would ever look.
+
+**UNREAD IS NOT THE SAME AS USELESS, and the sweep says so on every run.**
+`git_sha` is unread *and* uninformative — it ends `-dirty` on 600 of 602 records,
+so it could not discriminate even if something read it. Those are two separate
+defects and only the second is fatal; giving it a reader would fix nothing.
+`faults_hung` is unread and has never once been non-zero, which is the
+never-fired-branch shape rather than this one.
+
+### The tool made this mistake about itself, first run
+
+It reported seven unread fields where the answer was nine: its own docstring
+names `git_sha` and `configs_no_verdict` as examples, the scan found those
+strings under `scripts/*.py`, and **it counted itself as their reader**. It now
+excludes itself. Left alone it would have quietly shrunk its own findings every
+time someone added an example to the header — a tool answering a question about
+what it discusses rather than what the code consults.
+
+**Rules:** 30
+
+## F92. A fix chain that terminates at the record and never reaches the artefact people read
+
+**The measurement was corrected four times. The thing anyone actually looks at
+was never corrected once.**
+
+`slang` failing on the host rather than on the design has been fixed at the point
+of measurement four separate times: F56 established that a non-zero exit with
+zero errors is the tool; the `controls/` exemption stopped refusing task-shipped
+files; the internal-error partition stopped counting slang's own crashes as
+diagnostics against a submission; the corroboration tier made an uncorroborated
+rejection a `TOOLFAIL`. Every one of those was correct and every one of them
+stopped at the run record.
+
+`report_table.py` rendered `build_status=slang_tool_error` as
+
+    | claude_nodefault | **did not build** | **0** | **0** | **0** |
+
+**A tool failure, scored zero under rule 19, in the published table** — the exact
+harm all four fixes existed to prevent, reappearing at the point of DISPLAY. The
+committed table carried it the day this was found.
+
+### Why this is its own finding and not a bug
+
+A correct measurement rendered as a scored zero **is the same harm as measuring
+it wrong**. The reader cannot reach the record; the table is what they have. So a
+defect that lives only in the renderer is indistinguishable, from the outside,
+from a defect in the instrument — and it is cheaper to introduce, because nobody
+reviewing a measurement fix looks at the formatter.
+
+**The operational form: a fix is not complete until it reaches the artefact its
+audience reads.** Ask, of any correction to a measurement, *what renders this,
+and does the renderer know?* Four fixes in a row failed to ask it.
+
+Now: `no scored verdict (tool failure)`, with dashes rather than zeros — a zero
+is a SCORE and nothing was scored — and the out-of-path observation displayed
+inside that row, labelled and provenanced, per Jack's ruling that the scored path
+defines what counts while an obtainable-but-unrecorded measurement is an absence
+that reads like a fact (F91).
+
+### Two defects found while fixing it, both mine, both in the fix
+
+**`2>/dev/null` turned a crash into a truncated artefact.** The NameError that
+exposed all of this produced a SHORT TABLE — rows missing, no error visible,
+because every caller redirects stderr. **A truncated artefact is worse than a
+crash**: a crash tells the reader something is wrong, and a table missing four
+designs tells them those designs were not run. This is the blank-reporting
+principle — NO CONCLUSION, CANDIDATE LIST, NOT MEASURABLE — that this repo's
+checkers apply to their own subjects, violated by the harness of the file that
+publishes them. Output is now buffered and **discarded** on any exception, with a
+loud stderr statement and exit 3.
+
+**The out-of-path extractor rendered the row with the observation absent.** It
+located the YAML block with a `(?=^\s*\w+:)` lookahead, which matched the block's
+own first child, captured a single newline, and produced exactly the silent
+omission the row exists to prevent — **inside the code that prevents it.** This is
+the sixth instrument this week to find its first defect in its own author's work,
+after the linkage checker, the duplicate-key checker, the emittability tool, the
+unread-field sweep (which counted its own docstring as a reader), and the pin
+checker. The pattern is consistent enough to plan around: **the first thing a new
+instrument should be pointed at is the code that just wrote it.**
+
+**Rules:** 19, 30
+
+## F93. Rule 17 could not tell two geometries of the same task apart
+
+`build_config_hash` asserts comparability mechanically: two PPA numbers may be
+compared only if their build configurations hash identically. `TRACKED` listed
+ten variables. **`VERILOG_TOP_PARAMS` was not one of them.**
+
+d_ai01's scored configuration moved to `HEIGHT=4, WIDTH=8` because HEIGHT=8 does
+not route on sky130hd. The fix is an explicit top-parameter pin. Untracked, **a
+4×8 build and an 8×8 build of the same task would have carried the same
+`build_config_hash`**, and rule 17 would have declared two physically different
+designs comparable — on the one parameter the task is scored at, in the task
+whose whole grading question is whether the design is parameterised.
+
+The defect is worse than the drift that exposed it. The drift was visible the
+moment someone read `scored_configuration:` beside the shim default; a hash
+collision between two geometries is visible to nobody, and it would have
+outlived the drift.
+
+### Added conditionally, and the reason is the same rule
+
+Putting it in `TRACKED` would append `VERILOG_TOP_PARAMS=<unset>` to every
+digest and **move every hash in the corpus**, making the six design rows finished
+this week incomparable with everything built after — breaking rule 17 in order to
+fix rule 17. It is hashed only when set.
+
+**Confirmed rather than asserted.** All eight design tasks recompute to exactly
+their previous digests:
+
+    d_ca01 5c881e802a1b17f8   d_ca03 eb65d2b90033a873   d_ca04 75d6f7859a5ee203
+    d_dsp02 4fb50f1b01461fdd  d_dsp03 130952e64611dda4  d_nw01 acaa345eeea944de
+    d_nw03 f5f6f887bd7e4196
+
+and only d_ai01 moves, `146f859451c4ae3a` → `e3bc15f8c4884a89`, with
+`VERILOG_TOP_PARAMS=HEIGHT 4 WIDTH 8` now in its digest.
+
+The pin was also verified to REACH SYNTHESIS rather than merely to appear in
+`config.mk`: a synthesis-only build produces 80,139 cells and 643,044 µm²,
+cell-for-cell identical to the HEIGHT=4 probe. A config that sets a parameter the
+frontend ignores looks exactly like one that works.
+
+**Rules:** 17
+
+## F94. A guard against ambiguity is not a guard against wrongness
+
+`build_and_score.sh` selected the reference implementation with
+`ls ref/*_ref.sv | head -1`, and it **already had a guard**: refuse when more than
+one file matches, because a glob must not choose between candidates.
+
+d_ai01 ships `fp16_gemm_array_ref.sv` (declaring `fp16_gemm_array_ref_inner`)
+beside `fp16_gemm_array_top.sv` (declaring the contract module). **Exactly one
+matches `*_ref.sv`.** The guard passed cleanly and handed over the inner module.
+The d_ai01 Fmax sweep — the first ever possible for that task — died in under a
+second at its own simulation gate.
+
+**The guard was answering "is the choice ambiguous?" when the question was "is
+the choice correct?"** Those come apart precisely when there is one wrong
+candidate, which is the case a count can never detect.
+
+### Fourth site of one defect, and the fourth fix was cosmetic
+
+* `reference_ppa.sh` gated whatever its glob picked, and wrote
+  `correctness_gate: UNVERIFIED` onto a reference that had passed 1/1.
+* `report_table.py` rendered d_ai01's reference as an ordinary submission row, in
+  the table whose entire purpose is comparing submissions against it.
+* the `tb/*_tb.sv` pick silently scored d_nw01's read-only liveness rig at 8/8 —
+  a weaker checker substituted without a word.
+* `build_and_score.sh`, above.
+
+All four are one thing: **identifying an artefact by its filename rather than by
+what it is.** All four are now property-based — the file that declares
+`DESIGN_NAME`, or the file that lives in the task's `ref/` directory — refusing
+on zero or multiple matches rather than choosing.
+
+The fourth fix is the one worth recording. In `report_table.py` I did not replace
+the filename match; I **added `endswith("_top.sv")` to it** — extending an
+enumeration in the same session in which I was replacing three others with
+properties, and writing commit messages criticising enumeration while doing it.
+It was corrected only when Jack asked whether the other three sites had the same
+shape. **Recognising a pattern is not the same as applying it, and the gap
+between them is invisible from inside.**
+
+**Rules:** 24

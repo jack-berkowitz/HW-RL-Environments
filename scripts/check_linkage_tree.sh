@@ -58,19 +58,80 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   # stale rather than missing; that takes tens of minutes and belongs in the
   # audit path, not in a gate. Same split, and the same reason, as this file's
   # own: a gate too slow to run gets routed around.
+  # WHICH checker failed is emitted as a marker line, because check_tree runs
+  # inside a command substitution and cannot set a variable the caller sees.
+  # The caller strips the markers and uses them to print advice that applies.
   ( cd "$d" && python3 scripts/check_rule_linkage.py 2>&1 )
   rc=$?
+  [ $rc -ne 0 ] && echo "__FAILED__ rule_linkage"
   # A tree that PREDATES this check is not a failing tree. --audit walks history,
   # and treating "the checker did not exist yet" as a violation would report every
   # commit before it as broken -- which is how a gate earns a reputation for
   # crying wolf and gets bypassed.
   if [ -f "$d/scripts/check_witness_sync.py" ]; then
     ( cd "$d" && python3 scripts/check_witness_sync.py 2>&1 )
-    [ $? -ne 0 ] && rc=1
+    if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ witness_sync"; fi
   fi
   rm -rf "$d"
   return $rc
 }
+
+short () { git -C "$REPO" rev-parse --short "$1" 2>/dev/null || echo "$1"; }
+
+# WHAT THIS FUNCTION EXISTS TO PREVENT
+# ------------------------------------
+# Every failure used to end with the same two paragraphs -- "the usual cause is
+# committing a finding without the rule it cites ... stage both", then the
+# LINKAGE_OVERRIDE instructions -- whatever had actually failed. A reader
+# reported reading exactly those lines, seeing the commit succeed, and shipping
+# a mutant with no witness: the informative output was four lines from the top
+# and the last line said something about rules and findings that was not true of
+# their failure and pointed at the wrong file.
+#
+# A TRAILING LINE THAT DOES NOT VARY WITH THE OUTCOME TRAINS THE READER TO STOP
+# READING IT. That is a property of the tool, not of the reader, and no amount
+# of "read the whole output" fixes an output whose last line is uninformative by
+# construction -- the last line is where the eye lands.
+#
+# So: generic remedies print only when they apply, and the LAST line names THIS
+# run's cause. It also names WHICH TREE was read, because this script reads the
+# COMMITTED tree by default -- a reader fixed a defect, re-ran, saw it still
+# fail, and briefly concluded the fix had not worked, when the check was reading
+# a tree the fix was not in. A check whose scope you have not established is a
+# check whose answer you cannot interpret.
+report_failure () {   # $1 = checker output (with markers)  $2 = what was read
+  local out="$1" what="$2" body fails
+  fails="$(printf '%s\n' "$out" | sed -n 's/^__FAILED__ //p' | tr '\n' ' ')"
+  body="$(printf '%s\n' "$out" | grep -v '^__FAILED__ ')"
+  echo "CHECK FAILED on $what:"
+  printf '%s\n' "$body" | sed 's/^/  /'
+  case " $fails " in
+    *" rule_linkage "*)
+      echo
+      echo "The usual cause of a RULE/FINDING failure is committing a finding"
+      echo "without the rule it cites, or a rule without its finding. They are"
+      echo "ONE UNIT -- stage both."
+      echo
+      echo "To proceed anyway, re-run with a reason and paste the trailer:"
+      echo "    LINKAGE_OVERRIDE=\"why\" $0 ${1:+--staged}" ;;
+  esac
+  echo
+  # THE LAST LINE. It names what failed in THIS run and nothing else.
+  case " $fails " in
+    *" rule_linkage "*" witness_sync "*|*" witness_sync "*" rule_linkage "*)
+      echo "FAILED: rule/finding linkage AND witness sync, on $what." ;;
+    *" witness_sync "*)
+      echo "FAILED: WITNESS SYNC on $what -- a mutant or rule-24 control has no"
+      echo "        witness recorded in its task.yaml. This is NOT a rule/finding"
+      echo "        problem and RULES.md/FINDINGS.md are not the files to look at." ;;
+    *" rule_linkage "*)
+      echo "FAILED: RULE/FINDING LINKAGE on $what -- see the lines above for the"
+      echo "        specific rule or finding whose counterpart is missing." ;;
+    *)
+      echo "FAILED on $what -- see the output above; no checker reported which," ;;
+  esac
+}
+
 
 case "${1:---staged}" in
   --audit)
@@ -88,7 +149,10 @@ case "${1:---staged}" in
           printf '  OVERRIDDEN %s  %s\n             %s\n' "$short" "$subj" "$why"
         else
           printf '  BROKEN     %s  %s\n' "$short" "$subj"
-          echo "$out" | sed 's/^/               /'
+          # the __FAILED__ markers are for report_failure, not for a reader
+          _f="$(printf '%s\n' "$out" | sed -n 's/^__FAILED__ //p' | tr '\n' ' ')"
+          printf '               (failed: %s)\n' "${_f:-unspecified}"
+          printf '%s\n' "$out" | grep -v '^__FAILED__ ' | sed 's/^/               /'
           bad=$((bad+1))
         fi
       fi
@@ -105,14 +169,10 @@ case "${1:---staged}" in
   --staged)
     tree="$(git -C "$REPO" write-tree)" || { echo "cannot write-tree"; exit 2; }
     if out="$(check_tree "$tree")"; then
-      echo "linkage ok for the tree the index would commit"
+      echo "ok -- read THE TREE THE INDEX WOULD COMMIT (tree $(short "$tree"))"
       exit 0
     fi
-    echo "LINKAGE WOULD BREAK IN THE COMMITTED TREE:"
-    echo "$out" | sed 's/^/  /'
-    echo
-    echo "The usual cause is committing a finding without the rule it cites, or"
-    echo "a rule without its finding. They are ONE UNIT -- stage both."
+    report_failure "$out" "the tree the index would commit (tree $(short "$tree"))"
     if [ -n "${LINKAGE_OVERRIDE:-}" ]; then
       echo
       echo "Override accepted. PASTE THIS INTO THE COMMIT MESSAGE -- this script"
@@ -122,11 +182,12 @@ case "${1:---staged}" in
       echo "    $TRAILER ${LINKAGE_OVERRIDE}"
       exit 0
     fi
-    echo
-    echo "To proceed anyway, re-run with a reason and paste the trailer it prints:"
-    echo "    LINKAGE_OVERRIDE=\"why\" $0 --staged"
     exit 1 ;;
   *)
-    if out="$(check_tree "$1")"; then echo "linkage ok for $1"; exit 0; fi
-    echo "LINKAGE BROKEN in $1:"; echo "$out" | sed 's/^/  /'; exit 1 ;;
+    if out="$(check_tree "$1")"; then
+      echo "ok -- read THE COMMITTED TREE at $1 ($(short "$1"))"
+      exit 0
+    fi
+    report_failure "$out" "the committed tree at $1 ($(short "$1"))"
+    exit 1 ;;
 esac

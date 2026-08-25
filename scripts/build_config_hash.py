@@ -112,6 +112,24 @@ def main():
             val = overrides[var]
         fields.append(f"{var}={val}")
 
+    # TOP-LEVEL PARAMETERS CHANGE THE DESIGN, so they must change the hash --
+    # but ONLY WHEN SET. d_ai01's scored geometry moved to HEIGHT=4 while its
+    # shim still defaults to 8, and the fix is an explicit VERILOG_TOP_PARAMS
+    # pin. Untracked, a 4x8 build and an 8x8 build of the same task would carry
+    # the SAME build_config_hash and rule 17 would declare two different designs
+    # comparable -- the exact failure the hash exists to prevent, on the one
+    # parameter the task is scored at.
+    #
+    # ADDED CONDITIONALLY, and that is deliberate. Putting it in TRACKED would
+    # append `VERILOG_TOP_PARAMS=<unset>` to every blob and move every hash in
+    # the corpus, making this week's finished design rows incomparable with
+    # everything after. No config sets it today, so a config that does not set it
+    # hashes exactly as it did before; a config that does gets it in the digest.
+    m_top = re.search(r"^export\s+VERILOG_TOP_PARAMS\s*:?=\s*(.*)$", cfg, re.M)
+    if m_top and m_top.group(1).strip():
+        _tp = " ".join(m_top.group(1).split())
+        fields.append(f"VERILOG_TOP_PARAMS={_tp}")
+
     for p in clock_periods(sdc_path):
         fields.append(f"sdc.{p}")
     for k, v in sorted(overrides.items()):

@@ -22,7 +22,9 @@ invite a reader to average them.
 import functools
 import glob
 import json
+import io
 import os
+import traceback
 import re
 import subprocess
 import sys
@@ -402,6 +404,74 @@ def _label_period(label):
     return float(m.group(1)) if m else None
 
 
+_OOP_CACHE = {}
+
+
+def _out_of_path(task, sub):
+    """A task.yaml `*_out_of_path_observation` for this submission, or None.
+
+    Recorded by the task owner, guarded with IS_NOT_A_SCORED_VERDICT, and shown
+    here ONLY inside a row that already says there is no scored verdict.
+    """
+    key = (task, sub)
+    if key in _OOP_CACHE:
+        return _OOP_CACHE[key]
+    model = os.path.basename(sub or "")[:-3]
+    out = None
+    for d in glob.glob(os.path.join(REPO, "domains", "*", "design", task)):
+        y = os.path.join(d, "task.yaml")
+        if not os.path.exists(y):
+            continue
+        txt = open(y, errors="replace").read()
+        # A YAML BLOCK ENDS WHERE THE INDENTATION RETURNS, not at the next line
+        # that looks like a key. The first form of this used a `(?=^\s*\w+:)`
+        # lookahead, which matched the block's OWN first child and captured a
+        # single newline -- so it found the block, extracted nothing, and
+        # rendered a row with the observation silently missing. That is the
+        # failure this row exists to prevent, inside the code that prevents it.
+        lines = txt.splitlines()
+        key = f"{model}_out_of_path_observation:"
+        for i, ln in enumerate(lines):
+            if ln.strip().startswith(key):
+                base = len(ln) - len(ln.lstrip())
+                body = []
+                for nxt in lines[i + 1:]:
+                    if nxt.strip() and (len(nxt) - len(nxt.lstrip())) <= base:
+                        break
+                    body.append(nxt)
+                blob = "\n".join(body)
+                obs = re.search(r'observation:\s*"?([^"\n]+)', blob)
+                if obs:
+                    out = (obs.group(1).strip()
+                           + " (hand-built invocation outside the scored path)")
+                break
+        break
+    _OOP_CACHE[key] = out
+    return out
+
+
+_REFDIR_CACHE = {}
+
+
+def _is_reference_file(task, sub):
+    """True when `sub` names a file in this task's ref/ directory.
+
+    A GUARD ON COUNT IS NOT A GUARD ON CORRECTNESS -- build_and_score.sh refused
+    on more than one ref/*_ref.sv and still handed over the inner module of a
+    two-file shim, because there was exactly one. So this asks where the file
+    lives rather than how many match a pattern: references live in ref/,
+    submissions live in candidates/, and nothing else is in either.
+    """
+    if task not in _REFDIR_CACHE:
+        names = set()
+        for d in glob.glob(os.path.join(REPO, "domains", "*", "design", task)) + \
+                 glob.glob(os.path.join(REPO, "domains", "*", "verification", task)):
+            for f in glob.glob(os.path.join(d, "ref", "*.sv")):
+                names.add(os.path.basename(f))
+        _REFDIR_CACHE[task] = names
+    return os.path.basename(sub or "") in _REFDIR_CACHE[task]
+
+
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from task_text_hash import task_text_hash
@@ -552,10 +622,17 @@ def main():
             # Same defect as reference_ppa.sh picking `ls ref/*_ref.sv | head -1`
             # and gating the file it picked: identifying the reference by its
             # filename rather than by what it is. Third site.
-            is_ref = (not is_alt_ref) and (
-                "_ref" in sub or sub.endswith("_top.sv")
-                or sub.startswith("async_fifo")
-                or sub.startswith("axi4_xbar") or sub.startswith("fp32_fma"))
+            # IDENTIFIED BY WHAT IT IS, NOT BY WHAT IT IS CALLED. This read
+            # `"_ref" in sub` plus three hardcoded prefixes, and when d_ai01's
+            # two-file shim broke it I added `endswith("_top.sv")` -- extending
+            # the enumeration rather than replacing it, in the same session in
+            # which I was fixing three other sites by property. A fifth pattern
+            # would have been added the next time a task named a file something
+            # else.
+            #
+            # The property: a reference lives in the task's own ref/ directory.
+            # Nothing else does -- submissions live under candidates/.
+            is_ref = (not is_alt_ref) and _is_reference_file(task, sub)
             # A NEGATIVE CONTROL THAT FAILS IS THE CONTROL WORKING, and it was
             # rendering as `0/2 FAIL` in the same column, same words, as a model
             # that failed. The table's stated policy is that every design which
@@ -591,6 +668,36 @@ def main():
             # one; the map is kept only for submissions that predate that.
             bf = BUILD_FAILURES.get(key)
             _bs = (sim or {}).get("build_status")
+            if _bs == "slang_tool_error":
+                # A TOOL FAILURE IS NOT A BUILD FAILURE AND MUST NOT SCORE ZERO.
+                # This fell through to the generic branch below and rendered
+                # "did not build" with 0/0/0 under rule 19 -- blaming the
+                # submission for the host, which is the exact defect F56 and the
+                # whole slang gate exist to prevent, reappearing at the point of
+                # DISPLAY after being fixed at the point of measurement.
+                #
+                # The scored answer is that there is no scored verdict. The row
+                # says so, in those words, and carries dashes rather than zeros:
+                # a zero is a SCORE and nothing was scored.
+                _oop = _out_of_path(task, sub)
+                notes.append(
+                    "**no scored verdict — synthesis frontend tool failure**, not "
+                    "a statement about this design: "
+                    + str((sim or {}).get("build_error") or "")[:160])
+                if _oop:
+                    # Jack's ruling: a Verilator verdict is NOT recordable as a
+                    # scored verdict when slang has failed -- the scored path
+                    # defines what counts. But "no verdict" where one is
+                    # obtainable is an absence that reads like a fact (F91), so
+                    # the out-of-path measurement is shown, labelled, with its
+                    # provenance, in a form that cannot be read as a verdict.
+                    notes.append("*out-of-path observation, NOT A SCORED VERDICT* — "
+                                 + _oop)
+                print("| " + " | ".join(
+                    [name, "*no scored verdict (tool failure)*", "—", "—", "—"]
+                    + ["—"] * len(mets)
+                    + ["; ".join(notes)]) + " |")
+                continue
             if _bs == "slang_rejected":
                 bf = ((sim or {}).get("build_error")
                       or "rejected by slang, the synthesis frontend")
@@ -1020,5 +1127,44 @@ def main():
     return 0
 
 
+def _guarded_main():
+    """Emit the table ONLY if it was generated in full.
+
+    A NameError inside the row loop used to leave a SHORT TABLE: rows silently
+    missing, exit status ignored, and every caller in this repo invoking the
+    script as `report_table.py 2>/dev/null` so the traceback never appeared. A
+    truncated artefact is worse than a crash -- a crash tells the reader
+    something is wrong, and a table missing four rows tells them those designs
+    were not run.
+
+    That is the blank-reporting principle this file applies to its own subject,
+    violated by its own harness: NO CONCLUSION rather than silence, CANDIDATE
+    LIST rather than a bare count, "not measurable" rather than "nothing
+    frozen". A partial table is a silence.
+
+    So output is buffered and released only on success. On any exception the
+    buffer is DISCARDED -- not flushed, because half a table is the thing being
+    prevented -- and the failure goes to stderr with a non-zero exit.
+    """
+    buf = io.StringIO()
+    real = sys.stdout
+    try:
+        sys.stdout = buf
+        rc = main()
+    except BaseException:
+        sys.stdout = real
+        sys.stderr.write(
+            "\nreport_table.py FAILED -- NO TABLE WAS WRITTEN.\n"
+            "The partial output was discarded deliberately: a table missing rows\n"
+            "reads as 'those designs were not run', which is a different claim\n"
+            "from 'the generator crashed'.\n\n")
+        traceback.print_exc()
+        return 3
+    finally:
+        sys.stdout = real
+    real.write(buf.getvalue())
+    return rc
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_guarded_main())

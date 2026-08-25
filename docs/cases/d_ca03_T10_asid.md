@@ -150,6 +150,32 @@ front, with the file and line**, instead of letting it surface later as an
 unexplained missing PPA number. T5's value here is in **when** the failure was
 named, not in catching an asymmetry that was not present.
 
+### Re-checked: this rejection is genuine, and the check is not the obvious one
+
+A later case — `d_ai01`, same model — looked identical from the runner's output
+and **was not a rejection at all**: the frontend crashed on it. So this verdict
+was re-examined rather than left standing on its first reading. The two are
+distinguishable, and **the exit code is not what distinguishes them**:
+
+| | `d_ca03` gemini | `d_ai01` gemini |
+|---|---|---|
+| slang exit | **133**, trace/breakpoint trap | **133**, trace/breakpoint trap |
+| error count | 10 | 7 |
+| errors saying `internal error` | **0** | **7 — all of them** |
+| a sample diagnostic | *"declaration must come before all statements in the block"* | *"internal error: evaluation does not resolve to a constant"* |
+| independent frontend | **Verilator rejects it too**, same construct, line 113 | **Verilator accepts and runs it** |
+| verdict | **genuine rejection** | **tool failure** |
+
+**Both exit 133**, which is the emulation fault class F56 names — so an exit-code
+rule alone would have called this one a host failure and thrown away a correct
+result. What separates them is the **error text**, corroborated by asking a second
+frontend. Here slang emits real language diagnostics and Verilator independently
+rejects the same construct at the same line; there, slang emits only its own
+`internal error` and Verilator runs the file to a measured verdict.
+
+So the verdict below stands: `gemini` did not fail T10, it never ran, and the
+reason it never ran is a defect in the submission.
+
 **Scored honestly, `gemini` did not fail A10 or T10** — it never ran. Recording
 it as a T10 failure would be counting a compile error as a functional result.
 

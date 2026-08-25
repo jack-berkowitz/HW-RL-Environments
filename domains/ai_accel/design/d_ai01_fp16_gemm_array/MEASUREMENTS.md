@@ -214,6 +214,46 @@ it from 5.5x over to 2.8x over; it does not bring it in.
 
 The remedy is a measurement, not a smaller table: `orfs_runs/d_ai01_h4/`.
 
+### THE MEASUREMENT CAME BACK, AND IT MOVES THE ENVELOPE THIS SECTION CORRECTS
+
+`orfs_runs/d_ai01_h4/` completed: **0 DRC violations, exit 0, 710,752 um^2 at 33%
+utilisation.** Run by AGENT-PPA-2381f2fe at 50 ns from the task's own
+`constraint.sdc`, against **76,253-83,445 violations on three separate 8x8
+floorplans** at the same relaxed constraint.
+
+**Two things follow, and the second corrects a number written above.**
+
+**Geometry was the lever, and the prediction recorded here was wrong.** The
+failure signature -- 73% (corrected: 80%) of violations on met1, mass shorts
+directly above the cells, global route clean, antennas driven to zero -- reads as
+PIN ESCAPE, which is LOCAL: the same cells with the same pins, just fewer of
+them. That predicted **~35,000-40,000 violations at 4x8, roughly half of 76,253**.
+The measured answer is **zero**. Halving the array did not halve the violations,
+it eliminated them, which is congestion-like and not pin-access-like. The
+diagnosis was endorsed here and the measurement refutes it.
+
+**The DRC-clean envelope is no longer 0.29 mm^2.** The table above says the
+largest area with a recorded clean DRC is 294,555 um^2 and that 4x8 at ~0.74 mm^2
+is "~2.8x over" it. **This run IS a recorded clean DRC at 710,752 um^2 --
+0.71 mm^2, 2.4x the previous maximum** -- so the envelope moved, and it moved
+because someone measured the gap rather than arguing about it. The correction
+above was right that no data point existed between 0.29 and 1.63 mm^2. There is
+one now, and it is inside.
+
+**What this does NOT establish, and the asymmetry is the reason.** 50 ns is the
+most RELAXED constraint the spec allows; G1 records that the pinned period is not
+yet set and that this 50 ns is a starting constraint, not the pin. A failure at
+50 ns would have been decisive. **A pass at 50 ns is necessary and not
+sufficient**, because the eventual pin is tighter and closure is bought with
+area -- upsizing, buffering, duplication -- so the routed design at the pin will
+be larger than 710,752 um^2 and must be re-checked before any PPA number is
+published from it.
+
+**The comparison that does hold is like-for-like.** 8x8 and 4x8 were both routed
+at 50 ns. At matched, favourable conditions one routes clean and the other does
+not, three floorplans deep. That is a statement about the GEOMETRY and it does not
+depend on what the pin turns out to be.
+
 ## 6. `probe_control_tb.sv` -- the control inputs
 
 Probes 2-4 held `accumulate_i`=0, `row_clk_gate_en_i`=all-ones, `in_valid_i`=1

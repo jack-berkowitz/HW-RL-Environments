@@ -68,13 +68,21 @@ fi
 # --- resolve the DUT module name --------------------------------------------
 # Primary source is the spec's own `module` declaration, which is authoritative.
 #
-# THE FALLBACK EXISTS BECAUSE ONE SPEC SHIPS NO CODE. d_ai01's
-# spec/fp16_gemm_array_iface.sv is 492 lines and every one of them is a comment:
-# the ports are described in a table rather than declared. The grep returned an
-# empty string, TB resolved to `tb/_tb.sv`, and the runner refused -- correctly,
-# but the effect was that d_ai01 had NEVER been runnable through the scored path
-# and has zero sim records, while carrying seven controls, a reference result and
-# a HEIGHT discrimination result, all from ad-hoc runs. See F88.
+# THE FALLBACK EXISTS BECAUSE ONE SPEC SHIPPED NO CODE -- PAST TENSE, AND THE
+# FALLBACK STAYS. d_ai01's spec/fp16_gemm_array_iface.sv was 492 lines of which
+# every one was a comment: the ports were described in a table rather than
+# declared. The grep returned an empty string, TB resolved to `tb/_tb.sv`, and the
+# runner refused -- correctly, but the effect was that d_ai01 had NEVER been
+# runnable through the scored path and had zero sim records while carrying seven
+# controls, a reference result and a HEIGHT discrimination result, all from ad-hoc
+# runs. See F88.
+#
+# THAT SPEC NOW DECLARES ITS INTERFACE (64e3da6) and this fallback no longer fires
+# for d_ai01. The mechanism is kept because the defect it catches is a property of
+# specs in general rather than of that one task -- but the example above is now
+# history, and a comment in the PRESENT TENSE about a file that has since changed
+# is the same shape as the config.mk line that stated the invariant it existed to
+# protect and stated it wrongly.
 #
 # The fallback derives the module from the task directory, which is named
 # <id>_<module> by convention. It DOES NOT SILENTLY SUBSTITUTE: the source is
@@ -350,13 +358,40 @@ slang_check() {   # $1 = design file (host path); echoes a reason on failure
   # "0 error(s); first: exit 133", and 133 is 128+5, SIGTRAP, the same
   # emulation fault class that forces LEC_CHECK=0 at clock-tree synthesis.
   # Reporting it as a rejection blames the submission for the host (F56).
+  #
+  # F56 EXTENDED: SLANG CAN EMIT N>0 ERRORS THAT ARE ALL THE TOOL FAILING.
+  # Counting errors is not enough, because the tool reports its own crashes as
+  # diagnostics against the file. Both of these exit 133, measured:
+  #
+  #   d_ai01/gemini   7 errors, ALL SEVEN "internal error: evaluation does not
+  #                   resolve to a constant" -> the HOST. Verilator accepts the
+  #                   same bytes and runs it to a measured verdict.
+  #   d_ca03/gemini  10 errors, ZERO "internal error" -- "declaration must come
+  #                   before all statements", "cannot refer to automatic
+  #                   variable from static initializer" -> a GENUINE rejection,
+  #                   and Verilator rejects the same construct at the same line.
+  #
+  # SO THE EXIT CODE IS NOT THE DISCRIMINATOR. A rule keyed on 133 would have
+  # discarded a correct d_ca03 verdict. The error TEXT is: an error the tool
+  # emits about ITSELF is not a statement about the design.
+  #
+  # Errors are partitioned rather than counted. All internal -> TOOLFAIL. Any
+  # real diagnostic present -> a rejection even alongside internal ones, since
+  # one genuine syntax error is a genuine rejection whatever else crashed.
+  #
+  # If slang's phrasing ever moves, the durable form of this test is the one the
+  # runner already performs moments later: a rejection that no independent
+  # frontend corroborates deserves TOOLFAIL rather than a verdict.
   docker run --rm --platform linux/amd64 -v "$REPO:/work" $mnt "$SLANG_IMG" \
     bash -c "yosys -p 'read_slang --top $DUT_MOD$pkgs $rel' >/tmp/slang.log 2>&1; \
              rc=\$?; if [ \$rc -ne 0 ]; then \
                n=\$(grep -cE ': error:' /tmp/slang.log); \
+               ni=\$(grep -cE ': error: internal error' /tmp/slang.log); \
                first=\$(grep -m1 -E ': error:' /tmp/slang.log | sed 's|.*/||'); \
+               freal=\$(grep -E ': error:' /tmp/slang.log | grep -v ': error: internal error' | head -1 | sed 's|.*/||'); \
                if [ \"\$n\" -eq 0 ]; then echo \"TOOLFAIL exit \$rc\"; \
-               else echo \"\$n error(s); first: \$first\"; fi; fi" 2>/dev/null
+               elif [ \"\$ni\" -eq \"\$n\" ]; then echo \"TOOLFAIL exit \$rc -- all \$n diagnostic(s) are slang internal errors, not statements about the design; first: \$first\"; \
+               else echo \"\$n error(s); first: \$freal\"; fi; fi" 2>/dev/null
 }
 if [ "$SLANG" = "1" ] && ! docker info >/dev/null 2>&1; then
   echo "note: docker unavailable -- SKIPPING the slang synthesis-frontend gate."
@@ -489,7 +524,32 @@ for cand in "${CANDS[@]}"; do
                "build_error=$slang_why -- host/tool failure, NOT a verdict" >/dev/null || true
              NSLANG=$((NSLANG+1)); continue ;;
          esac
+         # AUTHORITY TIER: A REJECTION NO INDEPENDENT FRONTEND CORROBORATES IS A
+         # TOOL FAILURE, NOT A VERDICT.
+         #
+         # The text match above is a FAST PATH -- it saves a build when slang
+         # names its own crash. It is not the basis of the decision, because it
+         # depends on slang's phrasing staying stable. This is the durable form,
+         # and it costs almost nothing: verilator --lint-only on the same bytes.
+         #
+         # THE EXIT CODE CANNOT DO THIS JOB. Both of the measured cases exit 133:
+         #   d_ai01/gemini  7 internal errors  -> verilator lint rc=0, 0 errors
+         #                                     -> UNCORROBORATED -> TOOLFAIL
+         #   d_ca03/gemini 10 real diagnostics -> verilator lint rc=1, 4 errors
+         #                                     -> CORROBORATED -> rejection stands
+         # A rule keyed on 133 would have discarded d_ca03's correct result.
          if [ -n "$slang_why" ]; then
+           if verilator --lint-only -Wno-fatal -Wno-lint -Wno-style "$runfile" \
+                >/dev/null 2>&1; then
+             slang_why="TOOLFAIL slang rejected this and verilator --lint-only accepts the same bytes; an uncorroborated rejection is not a verdict -- ${slang_why}"
+             printf '%-26s %-9s %s\n' "$name" "TOOLFAIL" "$(echo "$slang_why" | cut -c1-72)"
+             tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+             python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+               "$(basename "$cand" .sv)" "task_text_hash=$tt" \
+               "build_status=slang_tool_error" \
+               "build_error=$slang_why" >/dev/null || true
+             NSLANG=$((NSLANG+1)); continue
+           fi
            printf '%-26s %-9s %s\n' "$name" "SLANG" "$(echo "$slang_why" | cut -c1-72)"
            # A FRONTEND REJECTION IS A RESULT, AND IT MUST LEAVE A RECORD.
            # This used to `continue` straight past the record writer, so a
