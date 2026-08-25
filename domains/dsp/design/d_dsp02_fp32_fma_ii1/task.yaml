@@ -405,3 +405,53 @@ ppa:
     Any comparison against another binding -- a pipelined one, for instance --
     must name the axis under rule 17. A pipelined FMA is a different
     configuration, not a better result for this one.
+
+# =============================================================================
+stimulus_variation:
+  status: ONE FROZEN INPUT
+  tool: scripts/check_stimulus_variation.py
+  measured: "8 contract inputs, 7 vary; out_ready pinned to 1"
+  finding: F82
+  h3_unexercisable:
+    clause: "H3 -- out_valid and payload stable while out_ready is low"
+    measured: "out_ready low for 0 cycles; H3 guard true 0 times, on a passing run"
+    why_it_looks_covered: >
+      The H3 checker EXISTS and is correctly written -- it latches the previous
+      valid, result and flags and reports either a dropped out_valid or a changed
+      payload. And a phase banner reading "H3 phase: backpressure on the result
+      side" sits at line 367, immediately followed by `phase = "final"`. THE
+      BANNER SURVIVED; THE PHASE DOES NOT. So an audit finds a clause, a check
+      and a labelled phase, none of which needed the stimulus to exist.
+  consequence_for_candidates: >
+    PROVISIONAL ON H3, NOT INVALID. Every candidate was scored with H3
+    unexercised, so no submission has been tested for result stability under
+    backpressure and a design dropping out_valid when the consumer stalls would
+    have scored clean. The other ten clauses are unaffected; nothing suggests
+    they were mis-scored. Re-scoring is only needed if H3 matters to the result
+    being claimed.
+  clauses_depending_on_output_backpressure: >
+    EXACTLY ONE, and it is the unexercisable one. C3 defines itself at out_ready
+    high -- "with operands offered continuously and results always accepted" --
+    so II=1 is unaffected. S1, H4, H1 and H2 are independent.
+  fix_shape:
+    scope: TESTBENCH ONLY -- no hash bump, no re-solicitation
+    reason: >
+      H3 already pins the required behaviour, so exercising it needs no new
+      clause. task_text_hash covers spec/ and probe/PASTE.md; this is tb/.
+    trap: >
+      S1 pins latency at "exactly 3 clocks after the operands are accepted", and
+      a held result makes that ambiguous. THE BACKPRESSURE WINDOW MUST SIT
+      OUTSIDE THE LATENCY AND II MEASUREMENT or a correct design fails S1 for
+      being stalled. A constraint on where the phase goes, not a reason to write
+      a clause.
+    unpinned_latitude_that_is_harmless: >
+      Nothing says what in_ready must do while the output is stalled. A design
+      may deassert immediately or buffer; both satisfy H3, both are legal, and
+      neither is measured -- C3 and S1 are both defined at out_ready high. So the
+      latitude is invisible on every scored surface, which is the same argument
+      T2 makes elsewhere: do not score what reports an implementation choice.
+  same_shape_elsewhere: >
+    d_ca01's R1 response half, rsp_ready_i pinned to 1. An initial reading that
+    the two tasks differed did not survive checking -- both pin the stability
+    behaviour and both leave the input-side response to a stalled output
+    unpinned. Both fixes are tb-only and can land as ONE boundary.

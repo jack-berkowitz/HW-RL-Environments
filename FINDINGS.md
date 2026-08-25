@@ -5026,3 +5026,72 @@ STIMULUS at least as often as about the design.
 
 **Rules:** 35
 
+---
+
+## F82. d_dsp02: candidate results scored against a check that could not fail, under a comment banner that says it ran
+
+`d_dsp02` is marked SCOREABLE, has a three-model candidate set and a recorded
+Fmax. Its H3 clause says:
+
+> When `out_valid` is high and `out_ready` is low, `out_valid` must remain high
+> and the result and flags must remain stable.
+
+**`out_ready` is assigned in exactly one place in the whole testbench:**
+
+```
+line 352:  rst_n = 1'b0; out_ready = 1'b1; phase = "init";
+```
+
+It is never driven low. Measured on a passing run: **`out_ready` low for 0
+cycles, H3 guard true 0 times.**
+
+### The check is real, and that is what makes it dangerous
+
+This is not a missing check. The H3 checker exists and is correctly written —
+it latches the previous valid, result and flags, and on `pv && !out_ready`
+reports either `out_valid` dropping or the payload changing. A reviewer asking
+"is H3 checked?" finds a guard, two distinct failure messages and a `note_fail`.
+
+And thirty lines further on:
+
+```
+// --- H3 phase: backpressure on the result side -----------------------
+phase = "final";
+```
+
+**The phase banner survives; the phase does not.** The next statement moves to
+the final results. So the audit trail shows a clause, a check, and a labelled
+phase — three pieces of corroborating evidence, none of which required the
+stimulus to exist.
+
+### What it means for numbers already published
+
+Every d_dsp02 candidate was scored with H3 unexercised. Those results are
+**provisional on H3, not wrong** — the clause is one of eleven, and nothing
+suggests the other ten were mis-scored. But no submission has been tested for
+result stability under backpressure, and a design that drops `out_valid` the
+moment the consumer stalls would have scored clean.
+
+### Two more things the scoping turned up
+
+**Only one clause depends on output backpressure, and it is the unexercisable
+one.** C3 defines itself at `out_ready` high — "with operands offered
+continuously and results always accepted" — so II=1 is not affected. S1, H4 and
+the input-side handshake clauses are independent.
+
+**Fixing it is testbench-only, with one trap.** The behaviour H3 requires is
+already pinned, so exercising it needs no new clause. But S1 pins latency at
+"exactly 3 clocks after the operands are accepted", and a held result makes that
+reading ambiguous — so **the backpressure window must sit outside the latency
+and II measurement**, or a correct design will fail S1 for being stalled. That is
+a constraint on where the phase goes, not a reason to write a clause.
+
+**The same shape sits in `d_ca01`** — R1's response half, `rsp_ready_i` pinned to
+1 — and an initial reading that the two differed did not survive checking: both
+pin the stability behaviour, and both leave the input-side response to a stalled
+output unpinned. That latitude is invisible on any scored surface, so it is
+harmless by the same argument T2 makes elsewhere: do not score what reports an
+implementation choice.
+
+**Rules:** 32
+
