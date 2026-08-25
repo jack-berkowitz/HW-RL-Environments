@@ -393,12 +393,24 @@ negative_controls:
       and nc_d moved 27%. Any statement of the form "n kills out of 3400" was
       computed against a denominator the contract no longer scores.
   discrimination_note: >
-    nc_c at 84 and nc_e at 132 out of 3400 are the useful ones: they fire only on
-    the behaviour their clause describes, so passing them is evidence about that
-    clause rather than about the harness. nc_d at 230 is the bug a plausible
-    submission actually writes -- delivering infinity on every overflow is what
-    falls out of reading a general rounding clause without A5's table -- and it is
-    caught in the random body of the set at cycle 18.
+    RESTATED ON SCORED-PATH NUMBERS. The figures this argument was built on --
+    nc_c at 84, nc_e at 132, nc_d at 230, all "out of 3400" -- were ad-hoc counts
+    taken before the C3/C4 narrowing, over a denominator the contract no longer
+    scores. See scored_path_remeasurement. The conclusion survives; the arithmetic
+    under it did not, and an argument about which controls are sharp should not
+    rest on numbers that moved.
+    .
+    nc_c at 80 and nc_e at 132 OUT OF 2937 SCORED CYCLES are the useful ones: they
+    fire only on the behaviour their clause describes, so passing them is evidence
+    about that clause rather than about the harness. nc_d at 167 is the bug a
+    plausible submission actually writes -- delivering infinity on every overflow
+    is what falls out of reading a general rounding clause without A5's table --
+    and it is caught in the random body of the set at cycle 18.
+    .
+    nc_d moved the most in relative terms, 230 to 167, a 27% drop, so about a
+    quarter of what was cited as its discriminating power was firing inside
+    windows the contract had already stopped scoring. It remains narrow enough for
+    the argument; it is less narrow than the record claimed.
   nc_e_is_why_the_floor_exists: >
     MEASURED, not argued: every one of nc_e's 132 kills lands at cycle 3031 or
     later, entirely inside the directed tail. Against the pre-tail vector set --
