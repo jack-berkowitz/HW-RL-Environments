@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Does a checker compare the design against something the design cannot change?
+
+Two instances, three days apart, in different tasks, found by different routes:
+
+  v_nw01   local_ip_i / local_mac_i / subnet_mask_i / gateway_ip_i were bound to
+           `localparam LIP`, `LMAC` ... and the CHECKERS COMPARED AGAINST THOSE
+           SAME SYMBOLS. Port and expectation were one name. A design that
+           hardcoded the identity and ignored the ports entirely passed.
+
+  v_ca03   the responder drove `m_rresp = 2'b00` and the checker compared
+           `s_rresp !== 2'b00`. Port and expectation were one literal. A design
+           that rewrote every response code passed.
+
+In each the comparison is X == X. It runs, it passes, it is reported as a clause
+being checked, and NO IMPLEMENTATION CAN MAKE IT FAIL.
+
+INVISIBLE TO EVERYTHING ELSE. A variation sweep sees a frozen port with nothing
+behind it to disagree with. Mutation sees every mutant killed, because none can
+fail a comparison that cannot fail. Emittability sees the clause emitted. The
+only signal is structural: the expectation and the stimulus share a source.
+
+TWO SHAPES:
+
+  SHARED SYMBOL   a symbol bound to a DUT INPUT also appears on the expected
+                  side of a fail() comparison, and is never reassigned. If it IS
+                  reassigned -- reprogrammed across a reset, say -- the two
+                  become independent claims and it is NOT flagged.
+  SHARED LITERAL  a DUT input is driven at a constant, and a fail() comparison
+                  expects that same constant on a DUT output.
+
+THE REMEDY IS NOT "VARY THE INPUT". Varying converts X == X into X == Y only if
+the two are INDEPENDENTLY PRODUCED. Derive the port value and the expectation
+from something neither controls, so they are computed at different times from a
+shared premise rather than from each other -- v_ca03's resp_of(address), raised at
+issue time and recomputed by the responder cycles later, with the DUT between.
+
+VALIDATED AGAINST THE DEFECT AND AGAINST THE REPAIR, which are two different
+tests and only the pair distinguishes a detector from a thing that shouts:
+
+    DEFECT   the tree before each fix -> found both. v_nw01's LIP and LMAC as
+             shared symbols, v_ca03's 2'b00 as a shared literal on two ports.
+    REPAIR   the tree after -> zero on both. v_ca03's resp_of(address) and
+             v_nw01's reprogrammed identity are recognised as independent.
+
+Two bugs in this tool were found that way, both FALSE NEGATIVES:
+
+  1. the comparison is usually NOT inside fail() -- it is in the enclosing `if`.
+     Reading only the fail() arguments found the message and missed the test,
+     which is the whole subject here. Both self-test positives failed that way.
+  2. `reassigned` was line-anchored, so four reassignments on one line counted
+     as one. It recognised v_ca03's repair and went on flagging v_nw01's, which
+     had been written in exactly that shape.
+
+The second was found ONLY by running against the repair. Finding the defect
+shows a tool can fire; recognising the fix shows it fires on the right thing.
+
+CANDIDATE LIST, NOT A VERDICT. A shared symbol is legitimate where the value is
+genuinely a testbench constant the contract never asks the design to read -- a
+clock period, a parameter the design is compiled with. Read the clause.
+
+  usage:  check_expect_independence.py [task_dir ...]
+          check_expect_independence.py --self-test
+"""
+import os, re, sys, glob
+
+LIT  = re.compile(r"\d+'[bhdoBHDO][0-9a-fA-FxzXZ_]+|\b\d+\b")
+FAIL = re.compile(r"fail\(", re.M)
+
+def iface_ports(task_dir):
+    ifc = glob.glob(os.path.join(task_dir, "spec", "*_iface.sv"))
+    if not ifc: return None, None
+    t = open(ifc[0], encoding="utf-8").read()
+    ins  = set(re.findall(r"^\s*input\s+(?:logic|wire|reg)?\s*(?:\[[^\]]*\]\s*)?(\w+)", t, re.M))
+    outs = set(re.findall(r"^\s*output\s+(?:logic|wire|reg)?\s*(?:\[[^\]]*\]\s*)?(\w+)", t, re.M))
+    return ins, outs
+
+def bound_to_inputs(src, ins):
+    """symbol -> the DUT input it is bound to, from named port connections."""
+    b = {}
+    for m in re.finditer(r"\.(\w+)\s*\(\s*([\w\[\]:.\-+' ]+?)\s*\)", src):
+        if m.group(1) in ins:
+            sym = re.split(r"[\[.]", m.group(2).strip())[0]
+            if re.match(r"^[A-Za-z_]\w*$", sym): b[sym] = m.group(1)
+    for m in re.finditer(r"\.(\w+)\s*(?=[,)\n])", src):
+        if m.group(1) in ins: b[m.group(1)] = m.group(1)
+    return b
+
+def reassigned(src, sym):
+    """Is it ever given a new value after declaration? A localparam never is.
+
+    NOT LINE-ANCHORED. Four reassignments on one line -- `LMAC = LMAC2; LIP =
+    LIP2; GWIP = GWIP2; MASK = MASK2;` -- is ordinary, and a line-anchored matcher
+    sees the first and misses the other three. Found by running this against the
+    REPAIR: it recognised v_ca03's fix and went on flagging v_nw01's, which had
+    been made in exactly that shape."""
+    if re.search(r"^\s*localparam\b[^;]*\b%s\b" % re.escape(sym), src, re.M): return False
+    for m in re.finditer(r"(?:^|[;\s{])%s\s*(?:<=|=)\s*[^=]" % re.escape(sym), src, re.M):
+        # a declaration with an initialiser is not a reassignment
+        line = src[src.rfind("\n", 0, m.start()) + 1: m.start() + 40]
+        if re.match(r"\s*(?:logic|wire|reg|bit|int|localparam|parameter)\b", line): continue
+        return True
+    return False
+
+def fail_contexts(src):
+    """The text of each fail(...) call AND the condition that guards it.
+
+    THE COMPARISON IS USUALLY NOT INSIDE fail(). It is in the enclosing `if`:
+
+        if (s_rresp !== 2'b00) fail("E1", "...")
+
+    Reading only the fail() arguments finds the message and misses the test,
+    which is the whole subject of this tool. Both self-test positives failed
+    that way before this was fixed."""
+    out = []
+    for m in FAIL.finditer(src):
+        i, depth = m.end() - 1, 0
+        body = ""
+        for j in range(i, min(len(src), i + 1400)):
+            if src[j] == "(": depth += 1
+            elif src[j] == ")":
+                depth -= 1
+                if depth == 0: body = src[i:j]; break
+        # walk back for the nearest guarding condition
+        head = src[max(0, m.start() - 500):m.start()]
+        conds = re.findall(r"if\s*\(((?:[^()]|\([^()]*\))*)\)", head)
+        out.append(body + " " + (conds[-1] if conds else ""))
+    return out
+
+def const_driven_inputs(src, binds):
+    """DUT inputs whose testbench-side symbol is only ever a constant literal."""
+    out = {}
+    for sym, port in binds.items():
+        vals = set()
+        ok = True
+        for m in re.finditer(r"^\s*%s\s*(?:<=|=)\s*([^;]+);" % re.escape(sym), src, re.M):
+            rhs = m.group(1).strip()
+            if LIT.fullmatch(rhs): vals.add(rhs)
+            else: ok = False
+        for m in re.finditer(r"\b%s\s*=\s*(\d+'[bh][0-9a-fA-F_]+)\s*[;,]" % re.escape(sym), src):
+            vals.add(m.group(1))
+        if ok and len(vals) == 1: out[port] = vals.pop()
+    return out
+
+def analyse(task_dir):
+    ins, outs = iface_ports(task_dir)
+    if ins is None: return None
+    tb = glob.glob(os.path.join(task_dir, "tb", "*_tb.sv"))
+    if not tb: return None
+    src = open(tb[0], encoding="utf-8").read()
+    binds = bound_to_inputs(src, ins)
+    ctxs  = fail_contexts(src)
+    hits = []
+    for sym, port in sorted(binds.items()):
+        if reassigned(src, sym): continue                    # independent again
+        if sym in ("clk", "clk_i", "rst", "rst_n", "rst_ni"): continue
+        n = sum(1 for c in ctxs if re.search(r"\b%s\b" % re.escape(sym), c))
+        if n: hits.append(("shared symbol", sym, port, n))
+    # the clock and reset are excluded on BOTH paths, not only the symbol one.
+    # `logic clk = 1'b0;` is a clock initialiser, and 1'b0 turning up in some
+    # unrelated fail() message is not a shared expectation. Excluding them by
+    # name on one path and not the other flagged two tasks for their clock.
+    for port, lit in sorted(const_driven_inputs(src, binds).items()):
+        if port in ("clk", "clk_i", "rst", "rst_n", "rst_ni", "rst_i"): continue
+        n = sum(1 for c in ctxs if re.search(re.escape(lit), c))
+        if n: hits.append(("shared literal", lit, port, n))
+    return hits
+
+def report(task_dir):
+    name = os.path.basename(task_dir.rstrip("/"))
+    r = analyse(task_dir)
+    if r is None:
+        print(f"  {name:<32} NO CONCLUSION -- no spec/*_iface.sv or no tb")
+        print(f"  {'':<32} the scan did not look; it did not pass")
+        return None
+    print(f"  {name:<32} {len(r)} suspect comparison(s)")
+    for kind, what, port, n in r:
+        print(f"       {kind:<15} {what!r} drives {port} and appears in {n} fail() context(s)")
+    return len(r)
+
+def self_test():
+    import tempfile
+    IF = ("module x (\n  input logic clk_i,\n  input logic [31:0] local_ip_i,\n"
+          "  input logic [1:0] m_resp_i,\n  output logic [31:0] spa_o,\n"
+          "  output logic [1:0] s_resp_o\n);\nendmodule\n")
+    def mk(tb):
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "spec")); os.makedirs(os.path.join(d, "tb"))
+        open(os.path.join(d, "spec", "x_iface.sv"), "w").write(IF)
+        open(os.path.join(d, "tb", "x_tb.sv"), "w").write(tb)
+        return d
+    cases, bad = [], 0
+    d = mk("localparam LIP = 32'hC0A80101;\n.local_ip_i(LIP),\n"
+           'if (spa_o !== LIP) fail("Q2", "SPA wrong");')
+    cases.append(("a localparam bound to an input and compared against is flagged",
+                  any(k == "shared symbol" for k, *_ in analyse(d))))
+    d = mk("logic [31:0] LIP = 32'hC0A80101;\n.local_ip_i(LIP),\n"
+           "LIP = 32'h0A000507;\n" + 'if (spa_o !== LIP) fail("Q2", "SPA wrong");')
+    cases.append(("REASSIGNED -- reprogrammed across a reset -- is NOT flagged",
+                  not any(k == "shared symbol" for k, *_ in analyse(d))))
+    d = mk("logic [1:0] mr;\n.m_resp_i(mr),\nmr = 2'b00;\n"
+           'if (s_resp_o !== 2\'b00) fail("E1", "resp wrong");')
+    cases.append(("a constant driven in and expected out is flagged",
+                  any(k == "shared literal" for k, *_ in analyse(d))))
+    d = mk("logic [1:0] mr;\n.m_resp_i(mr),\nmr = resp_of(a);\n"
+           'if (s_resp_o !== resp_of(a)) fail("E1", "resp wrong");')
+    cases.append(("derived from a shared premise, not from each other, is NOT flagged",
+                  not analyse(d)))
+    d = tempfile.mkdtemp(); os.makedirs(os.path.join(d, "tb"))
+    open(os.path.join(d, "tb", "x_tb.sv"), "w").write("x")
+    cases.append(("no iface is NO CONCLUSION, not clean", analyse(d) is None))
+    for n, ok in cases:
+        print(f"  {'ok    ' if ok else 'FAILED'}  {n}")
+        if not ok: bad += 1
+    print(f"\n{len(cases)} case(s) exercised, {bad} failure(s)")
+    return 1 if bad else 0
+
+def main(argv):
+    if "--self-test" in argv: return self_test()
+    roots = [a for a in argv[1:] if not a.startswith("-")] or sorted(glob.glob("domains/*/verification/v_*"))
+    print("CANDIDATE LIST, NOT A VERDICT -- a shared symbol is legitimate where the")
+    print("contract never asks the design to read it. See the header.\n")
+    tot, nc = 0, 0
+    for d in roots:
+        r = report(d)
+        if r is None: nc += 1
+        else: tot += r
+    print(f"\n{len(roots)-nc} task(s) read, {tot} suspect comparison(s). {nc} NO CONCLUSION.")
+    return 2 if nc else 0
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -59,12 +59,30 @@ each was a FALSE NEGATIVE -- the direction that matters:
 After all three, the same two known defects are still found and the three
 hand-written condition counters are no longer flagged.
 
-WHY IT MISSED THE THIRD, because the shape recurs. cov_filled_bound's message was
-"the write bound was never DRIVEN to its limit". The word "driven" reads as a
-stimulus claim, and the claim regex passed it. But REACHING A LIMIT is not
-something a harness drives -- it is something that happens, and whether it does
-depends on the design's admission policy. A message can claim a design state in
-words that look like stimulus, and no lexical test separates those.
+THE SECOND BUG IS THE SHARPEST VALIDATION ARGUMENT HERE AND IT GENERALISES:
+
+    RUN A NEW INSTRUMENT FIRST AGAINST THE REPAIR, NOT ONLY AGAINST THE DEFECT.
+
+Finding the defect shows the tool can fire. Recognising the fix shows it fires on
+the right thing. A classifier that flags a hand-written condition counter -- one
+written that morning to fix the very defect the classifier exists to find -- is
+not a classifier, however many true positives it also produces. The defect and
+the repair are two different tests and only the pair distinguishes a detector
+from a thing that shouts.
+
+THIS TOOL'S STATED BLIND SPOT, and you need it before you trust a clean result:
+
+    A MESSAGE CAN CLAIM A DESIGN STATE IN WORDS THAT LOOK LIKE STIMULUS, AND NO
+    LEXICAL TEST SEPARATES THEM.
+
+The miss above is that, exactly. cov_filled_bound's message was "the write bound
+was never DRIVEN to its limit". The word "driven" reads as a stimulus claim and
+the regex passed it -- but REACHING A LIMIT is not something a harness drives. It
+is something that happens, and whether it does depends on the design's admission
+policy. The claim was about the design and the vocabulary was about the harness.
+
+So a clean row from this tool means "no floor claimed a clause in words this
+regex recognises". It does not mean no floor overclaims.
 
 CANDIDATE LIST, NOT A VERDICT. Two shapes it cannot judge:
   - a counter guarded by a testbench-computed predicate over a value the
