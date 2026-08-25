@@ -154,6 +154,10 @@ mutants:
      guard: "sixteen write responses have already been delivered",
      defect: "an extra write response appears for a transaction that is not outstanding",
      witness: "FAIL [C2] write response for slave id 2 with none outstanding (t=27795)"}
+  - {id: iw_m11_decerr_normalised_to_slverr_from_second, violates: "E1",
+     guard: "the second DECERR since reset and every one after it -- the first is preserved correctly",
+     defect: "a DECERR arriving on the master port is presented upstream as SLVERR -- an error, of the wrong kind, so only the CODE is wrong",
+     witness: "FAIL [E1] read beat of slave id 0 carries resp 10, expected 11 -- the subordinate's code is forwarded unmodified (t=1975)"}
   all_have_nonequivalence_witnesses: true
   evidence_type: witness
   witness_runner: mutants/witness.sh

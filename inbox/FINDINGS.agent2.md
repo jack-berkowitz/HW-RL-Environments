@@ -1057,6 +1057,38 @@ It is the same shape as *having a favourite failure mode makes you fast and make
 you wrong*, one step further along: the favourite diagnosis is now not merely
 available but freshly rehearsed.
 
+### A fourth instance, and it is the strongest: I broke the gate in the commit that proposed it
+
+**The commit that filed this finding also committed through a failing check.**
+
+`check_linkage_tree.sh --staged` returned:
+
+    v_ca03_axi_iw_converter: mutant iw_m11_... has no witness in task.yaml
+
+I had recorded the new mutant under a fresh `e1_mutant:` key instead of in the
+`mutants:` list where the checker looks. The check said so. I did not read it —
+I read the **last line of its output**, which is the generic advice about
+`LINKAGE_OVERRIDE`, saw the commit succeed, and moved on.
+
+That is the same defect as reading a build log for completions rather than for
+refusals: the answer was on screen, in a check that ran, that I had invoked
+myself for exactly this purpose. And it happened in the commit whose message
+argues that writing a rule down does not install it.
+
+Three further specifics worth keeping, because each is separately actionable:
+
+- **The failure was in the RECORD, not the artefact.** The mutant was correct,
+  measured and fired on E1 alone. What was missing was its witness in the place
+  the machine reads. A defect that only a machine can see is exactly the kind a
+  human reviewer signs off.
+- **The check reads the COMMITTED tree by default.** Running it after the fix
+  still failed, and for a moment that looked like the fix not working. It was
+  reading a tree the fix was not in yet. *A check whose scope you have not
+  established is a check whose answer you cannot interpret.*
+- **Reading the tail of a tool's output is not reading its output.** The
+  informative lines were four from the top; the last four lines were boilerplate
+  that is printed whether the cause is a witness, a rule, or a finding.
+
 ### The proposed rule, and it is a gate rather than an exhortation
 
 > **A newly written rule is applied to the commit that introduces it, before that
@@ -1068,8 +1100,11 @@ the counters this commit adds. "Evidence must be a passing suppressing control"
 → check that this commit's own claims are backed by one. "A caveat must be in the
 output" → check this commit's own tool output.
 
-All three instances above would have been caught by their own rule, at a cost of
+All four instances above would have been caught by their own rule, at a cost of
 minutes, by the only person who at that moment fully understood what to look for.
+The fourth would have been caught by simply **reading the output of the check
+already being run**, which is the cheapest form the rule can take and still the
+one that was skipped.
 
 ---
 
