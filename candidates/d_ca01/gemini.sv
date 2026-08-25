@@ -1,3 +1,7 @@
+// =============================================================================
+// Task: nonblocking_dcache
+// =============================================================================
+
 module nonblocking_dcache #(
   parameter int unsigned DATA_W     = 32,   // {32, 64}
   parameter int unsigned SETS       = 16,   // {8, 16}
@@ -40,343 +44,351 @@ module nonblocking_dcache #(
 );
 
   localparam int unsigned BLOCK_WORDS = 4;
+  localparam int unsigned BYTE_BITS   = $clog2(DATA_W / 8);
+  localparam int unsigned OFFSET_BITS = BYTE_BITS + $clog2(BLOCK_WORDS);
+  localparam int unsigned SET_BITS    = $clog2(SETS);
+  localparam int unsigned TAG_BITS    = 32 - SET_BITS - OFFSET_BITS;
+  localparam int unsigned WAY_BITS    = $clog2(WAYS);
 
-  // --------------------------------------------------------------------------
-  // Address Slicing Constants
-  // --------------------------------------------------------------------------
-  localparam BYTE_OFFSET_BITS = $clog2(DATA_W / 8);
-  localparam WORD_IDX_BITS    = $clog2(BLOCK_WORDS);
-  localparam OFFSET_BITS      = BYTE_OFFSET_BITS + WORD_IDX_BITS;
-  localparam INDEX_BITS       = $clog2(SETS);
-  localparam TAG_BITS         = 32 - OFFSET_BITS - INDEX_BITS;
+  // ---------------------------------------------------------------------------
+  // Types
+  // ---------------------------------------------------------------------------
+  typedef struct packed {
+    logic valid;
+    logic dirty;
+    logic [TAG_BITS-1:0] tag;
+  } tag_t;
 
-  // --------------------------------------------------------------------------
-  // Type Definitions
-  // --------------------------------------------------------------------------
   typedef enum logic [1:0] {
-      ST_WAIT_MEM,
-      ST_FILLING,
-      ST_DONE_WAIT_RSP
-  } mshr_state_t;
+    R_IDLE,
+    R_ISSUE,
+    R_MISS,
+    R_DONE
+  } req_state_t;
+
+  typedef struct packed {
+    logic valid;
+    logic [4:0] seq;
+    logic op;
+    logic [31:0] addr;
+    logic [DATA_W-1:0] data;
+    logic [(DATA_W/8)-1:0] mask;
+    req_state_t state;
+    logic [DATA_W-1:0] rsp_data;
+  } req_entry_t;
 
   typedef enum logic [2:0] {
-      MEM_IDLE,
-      MEM_FILL_REQ,
-      MEM_FILL_DATA,
-      MEM_INSTALL,
-      MEM_WB_REQ,
-      MEM_WB_DATA
+    M_IDLE,
+    M_EVICT_REQ,
+    M_EVICT_DATA,
+    M_FILL_REQ,
+    M_FILL_DATA,
+    M_FILL_WRITE_CACHE
   } mem_state_t;
 
-  // --------------------------------------------------------------------------
-  // Variable Declarations (Placed before ANY procedural blocks)
-  // --------------------------------------------------------------------------
-  logic [DATA_W-1:0]   data_array [SETS][WAYS][BLOCK_WORDS];
-  logic [TAG_BITS-1:0] tag_array  [SETS][WAYS];
-  logic                valid_array[SETS][WAYS];
-  logic                dirty_array[SETS][WAYS];
-  int unsigned         rr_ptr     [SETS];
+  // ---------------------------------------------------------------------------
+  // Helper Functions
+  // ---------------------------------------------------------------------------
+  function automatic logic [SET_BITS-1:0] get_set(input logic [31:0] addr);
+    return (addr >> OFFSET_BITS) & ((1 << SET_BITS) - 1);
+  endfunction
 
-  logic [MAX_MISSES-1:0]      mshr_valid;
-  mshr_state_t                mshr_state      [MAX_MISSES];
-  logic [31:0]                mshr_addr       [MAX_MISSES];
-  logic [3:0]                 mshr_id         [MAX_MISSES];
-  logic                       mshr_op         [MAX_MISSES];
-  logic [WORD_IDX_BITS-1:0]   mshr_word_idx   [MAX_MISSES];
-  logic [DATA_W-1:0]          mshr_data       [MAX_MISSES];
-  logic [(DATA_W/8)-1:0]      mshr_mask       [MAX_MISSES];
+  function automatic logic [TAG_BITS-1:0] get_tag(input logic [31:0] addr);
+    return (addr >> (OFFSET_BITS + SET_BITS));
+  endfunction
 
-  mem_state_t mem_state;
-  int active_mshr_idx;
-  int mem_word_cnt;
+  function automatic logic [31-OFFSET_BITS:0] get_block(input logic [31:0] addr);
+    return (addr >> OFFSET_BITS);
+  endfunction
 
-  logic [DATA_W-1:0] fill_buffer [BLOCK_WORDS];
-  logic [DATA_W-1:0] wb_buffer   [BLOCK_WORDS];
-  logic [31:0]       wb_addr_reg;
+  function automatic logic is_older(input logic [4:0] a, input logic [4:0] b);
+    logic [4:0] diff;
+    diff = b - a;
+    return (diff > 0) && (diff <= 16);
+  endfunction
 
-  logic rsp_buf_valid;
-  logic [3:0] rsp_buf_id;
-  logic [DATA_W-1:0] rsp_buf_data;
+  function automatic logic [31:0] make_addr(input logic [TAG_BITS-1:0] tag, input logic [SET_BITS-1:0] set);
+    logic [31:0] res;
+    res = '0;
+    res = (tag << (SET_BITS + OFFSET_BITS)) | (set << OFFSET_BITS);
+    return res;
+  endfunction
 
-  logic [INDEX_BITS-1:0]    req_set;
-  logic [TAG_BITS-1:0]      req_tag;
-  logic [OFFSET_BITS-1:0]   req_offset;
-  logic [WORD_IDX_BITS-1:0] req_word_idx;
-  logic [31:0]              req_block_addr;
+  // ---------------------------------------------------------------------------
+  // State Elements
+  // ---------------------------------------------------------------------------
+  tag_t tags [SETS][WAYS];
+  logic [BLOCK_WORDS*DATA_W-1:0] data_array [SETS][WAYS];
+  logic [WAY_BITS-1:0] rr_ptr [SETS];
 
-  logic is_hit;
-  int hit_way_idx;
+  req_entry_t req_q [16];
+  logic [4:0] seq_counter;
 
-  logic mshr_match;
-  logic mshr_full;
-  int free_mshr_idx;
+  mem_state_t mem_fsm;
+  logic [3:0] mem_req_id;
+  logic [SET_BITS-1:0] mem_miss_set;
+  logic [TAG_BITS-1:0] mem_miss_tag;
+  logic [WAY_BITS-1:0] mem_victim_way;
+  logic mem_victim_dirty;
+  logic [31:0] mem_victim_addr;
+  logic [BLOCK_WORDS*DATA_W-1:0] mem_victim_data;
+  logic [BLOCK_WORDS*DATA_W-1:0] mem_fill_data;
+  logic [1:0] word_count;
 
-  logic rsp_q_full;
-  logic mshr_wants_rsp;
-  int mshr_rdy_idx;
+  // ---------------------------------------------------------------------------
+  // Logic
+  // ---------------------------------------------------------------------------
 
-  logic push_rsp;
-  logic [3:0] push_id;
-  logic [DATA_W-1:0] push_data;
+  // Acceptance logic
+  assign req_ready_o = !req_q[req_id_i].valid;
 
-  logic [INDEX_BITS-1:0] inst_set_idx;
-  logic [TAG_BITS-1:0]   inst_tag_val;
-  int                    inst_vic_way;
-
-  // --------------------------------------------------------------------------
-  // Combinational Assignments
-  // --------------------------------------------------------------------------
-  assign req_offset     = req_addr_i[OFFSET_BITS-1:0];
-  assign req_set        = req_addr_i[OFFSET_BITS +: INDEX_BITS];
-  assign req_tag        = req_addr_i[32-1 : 32-TAG_BITS];
-  assign req_word_idx   = req_addr_i[BYTE_OFFSET_BITS +: WORD_IDX_BITS];
-  assign req_block_addr = {req_addr_i[31:OFFSET_BITS], {OFFSET_BITS{1'b0}}};
-
-  assign inst_set_idx = mshr_addr[active_mshr_idx][OFFSET_BITS +: INDEX_BITS];
-  assign inst_tag_val = mshr_addr[active_mshr_idx][32-1 : 32-TAG_BITS];
-  assign inst_vic_way = rr_ptr[inst_set_idx];
-
-  assign rsp_valid_o = rsp_buf_valid;
-  assign rsp_id_o    = rsp_buf_id;
-  assign rsp_data_o  = rsp_buf_data;
-  
-  // Pipeline response queues dynamically
-  assign rsp_q_full  = rsp_buf_valid && !rsp_ready_i;
-
-  // Cache is ready when there's no structural hazard preventing request acceptance
-  assign req_ready_o = !rsp_q_full && !mshr_match && (mem_state != MEM_INSTALL) &&
-                       (is_hit ? !mshr_wants_rsp : !mshr_full);
-
-  // --------------------------------------------------------------------------
-  // Combinational Logic Blocks
-  // --------------------------------------------------------------------------
+  // Safe to Issue / Ordering Check
+  logic [15:0] safe_to_issue;
   always_comb begin
-      is_hit = 0;
-      hit_way_idx = 0;
-      for (int w = 0; w < WAYS; w++) begin
-          if (valid_array[req_set][w] && tag_array[req_set][w] == req_tag) begin
-              is_hit = 1;
-              hit_way_idx = w;
+    for (int i = 0; i < 16; i++) begin
+      safe_to_issue[i] = 1'b1;
+      for (int j = 0; j < 16; j++) begin
+        if (req_q[j].valid && (req_q[j].state == R_ISSUE || req_q[j].state == R_MISS) && (i != j)) begin
+          if (get_block(req_q[i].addr) == get_block(req_q[j].addr)) begin
+            if (is_older(req_q[j].seq, req_q[i].seq)) begin
+              safe_to_issue[i] = 1'b0;
+            end
           end
+        end
       end
+    end
   end
 
+  // Best Issue Arbitration
+  logic [15:0] issue_cands;
+  logic [3:0] best_issue_id;
+  logic has_issue;
   always_comb begin
-      mshr_match = 0;
-      for (int i = 0; i < MAX_MISSES; i++) begin
-          if (mshr_valid[i] && mshr_addr[i] == req_block_addr) begin
-              mshr_match = 1;
-          end
+    has_issue = 1'b0;
+    best_issue_id = '0;
+    for (int i = 0; i < 16; i++) begin
+      issue_cands[i] = req_q[i].valid && (req_q[i].state == R_ISSUE) && safe_to_issue[i];
+    end
+    for (int i = 0; i < 16; i++) begin
+      if (issue_cands[i]) begin
+        if (!has_issue || is_older(req_q[i].seq, req_q[best_issue_id].seq)) begin
+          has_issue = 1'b1;
+          best_issue_id = i[3:0];
+        end
       end
+    end
   end
 
-  always_comb begin
-      mshr_full = 1;
-      free_mshr_idx = 0;
-      for (int i = 0; i < MAX_MISSES; i++) begin
-          if (!mshr_valid[i]) begin
-              mshr_full = 0;
-              free_mshr_idx = i;
-              break;
-          end
-      end
-  end
+  // Cache Access Signals
+  logic [SET_BITS-1:0] issue_set;
+  logic [TAG_BITS-1:0] issue_tag;
+  logic [1:0]          issue_word;
+  logic                issue_hit;
+  logic [WAY_BITS-1:0] issue_hit_way;
 
   always_comb begin
-      mshr_wants_rsp = 0;
-      mshr_rdy_idx = 0;
-      for (int i = 0; i < MAX_MISSES; i++) begin
-          if (mshr_valid[i] && mshr_state[i] == ST_DONE_WAIT_RSP) begin
-              mshr_wants_rsp = 1;
-              mshr_rdy_idx = i;
-              break;
-          end
+    issue_set  = get_set(req_q[best_issue_id].addr);
+    issue_tag  = get_tag(req_q[best_issue_id].addr);
+    issue_word = (req_q[best_issue_id].addr >> BYTE_BITS) & 2'b11;
+
+    issue_hit = 1'b0;
+    issue_hit_way = '0;
+    for (int w = 0; w < WAYS; w++) begin
+      if (tags[issue_set][w].valid && tags[issue_set][w].tag == issue_tag) begin
+        issue_hit = 1'b1;
+        issue_hit_way = w[WAY_BITS-1:0];
       end
+    end
   end
 
+  // Store RMW calculation (combinational)
+  logic [BLOCK_WORDS*DATA_W-1:0] next_data_array_line;
   always_comb begin
-      push_rsp  = 0;
-      push_id   = '0;
-      push_data = '0;
-
-      if (!rsp_q_full) begin
-          if (mshr_wants_rsp) begin
-              push_rsp  = 1;
-              push_id   = mshr_id[mshr_rdy_idx];
-              push_data = mshr_data[mshr_rdy_idx];
-          end else if (req_valid_i && req_ready_o && is_hit) begin
-              push_rsp = 1;
-              push_id  = req_id_i;
-              if (req_op_i == 0) begin // Load
-                  push_data = data_array[req_set][hit_way_idx][req_word_idx];
-              end // Store responses carry unconstrained data natively here
-          end
+    logic [DATA_W-1:0] wdata_comb;
+    next_data_array_line = data_array[issue_set][issue_hit_way];
+    wdata_comb = next_data_array_line[issue_word * DATA_W +: DATA_W];
+    for (int b = 0; b < DATA_W/8; b++) begin
+      if (req_q[best_issue_id].mask[b]) begin
+        wdata_comb[b*8 +: 8] = req_q[best_issue_id].data[b*8 +: 8];
       end
+    end
+    if (has_issue && issue_hit && req_q[best_issue_id].op == 1'b1) begin
+      next_data_array_line[issue_word * DATA_W +: DATA_W] = wdata_comb;
+    end
   end
 
-  // --------------------------------------------------------------------------
-  // Main Sequential Block
-  // --------------------------------------------------------------------------
+  // Memory Miss Arbitration
+  logic [3:0] best_miss_id;
+  logic       has_miss;
+  always_comb begin
+    has_miss = 1'b0;
+    best_miss_id = '0;
+    for (int i = 0; i < 16; i++) begin
+      if (req_q[i].valid && (req_q[i].state == R_MISS)) begin
+        if (!has_miss || is_older(req_q[i].seq, req_q[best_miss_id].seq)) begin
+          has_miss = 1'b1;
+          best_miss_id = i[3:0];
+        end
+      end
+    end
+  end
+
+  // Pipeline Arbitration
+  logic mem_wants_write;
+  logic mem_wants_read;
+  logic pipeline_en;
+  assign mem_wants_write = (mem_fsm == M_FILL_WRITE_CACHE);
+  assign mem_wants_read  = (mem_fsm == M_IDLE && has_miss);
+  assign pipeline_en     = has_issue && !mem_wants_write && !mem_wants_read;
+
+  // Output / Response Arbitration
+  logic [3:0] best_done_id;
+  logic       has_done;
+  always_comb begin
+    has_done = 1'b0;
+    best_done_id = '0;
+    for (int i = 0; i < 16; i++) begin
+      if (req_q[i].valid && req_q[i].state == R_DONE) begin
+        if (!has_done || is_older(req_q[i].seq, req_q[best_done_id].seq)) begin
+          has_done = 1'b1;
+          best_done_id = i[3:0];
+        end
+      end
+    end
+  end
+
+  assign rsp_valid_o = has_done;
+  assign rsp_id_o    = best_done_id;
+  assign rsp_data_o  = req_q[best_done_id].rsp_data;
+
+  // Memory interface combinational bindings
+  logic [31:0] mem_miss_addr;
+  assign mem_miss_addr   = make_addr(mem_miss_tag, mem_miss_set);
+  assign mem_req_valid_o = (mem_fsm == M_EVICT_REQ) || (mem_fsm == M_FILL_REQ);
+  assign mem_req_we_o    = (mem_fsm == M_EVICT_REQ);
+  assign mem_req_addr_o  = (mem_fsm == M_EVICT_REQ) ? mem_victim_addr : mem_miss_addr;
+  assign mem_wr_valid_o  = (mem_fsm == M_EVICT_DATA);
+  assign mem_wr_data_o   = mem_victim_data[word_count * DATA_W +: DATA_W];
+  assign mem_rd_ready_o  = (mem_fsm == M_FILL_DATA);
+
+  // ---------------------------------------------------------------------------
+  // Sequential Logic
+  // ---------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin
-      if (!rst_ni) begin
-          mem_state <= MEM_IDLE;
-          mem_req_valid_o <= 0;
-          mem_rd_ready_o <= 0;
-          mem_wr_valid_o <= 0;
-          rsp_buf_valid <= 0;
-          
-          for (int i = 0; i < MAX_MISSES; i++) mshr_valid[i] <= 0;
-          for (int s = 0; s < SETS; s++) begin
-              rr_ptr[s] <= 0;
-              for (int w = 0; w < WAYS; w++) begin
-                  valid_array[s][w] <= 0;
-                  dirty_array[s][w] <= 0;
-              end
-          end
-      end else begin
-          
-          // 1. Response Queue Consumption
-          if (rsp_buf_valid && rsp_ready_i) begin
-              rsp_buf_valid <= 0;
-          end
-
-          // 2. Response Allocation
-          if (push_rsp) begin
-              rsp_buf_valid <= 1;
-              rsp_buf_id    <= push_id;
-              rsp_buf_data  <= push_data;
-              if (mshr_wants_rsp) begin
-                  mshr_valid[mshr_rdy_idx] <= 0;
-              end
-          end
-
-          // 3. Front-End Incoming Requests
-          if (req_valid_i && req_ready_o) begin
-              if (is_hit) begin
-                  if (req_op_i == 1) begin // Store logic
-                      dirty_array[req_set][hit_way_idx] <= 1;
-                      for (int b = 0; b < DATA_W/8; b++) begin
-                          if (req_mask_i[b]) begin
-                              data_array[req_set][hit_way_idx][req_word_idx][b*8 +: 8] <= req_data_i[b*8 +: 8];
-                          end
-                      end
-                  end
-              end else begin 
-                  // Miss -> Allocate MSHR
-                  mshr_valid[free_mshr_idx]    <= 1;
-                  mshr_state[free_mshr_idx]    <= ST_WAIT_MEM;
-                  mshr_addr[free_mshr_idx]     <= req_block_addr;
-                  mshr_id[free_mshr_idx]       <= req_id_i;
-                  mshr_op[free_mshr_idx]       <= req_op_i;
-                  mshr_word_idx[free_mshr_idx] <= req_word_idx;
-                  mshr_data[free_mshr_idx]     <= req_data_i;
-                  mshr_mask[free_mshr_idx]     <= req_mask_i;
-              end
-          end
-
-          // 4. Back-End Memory Controller
-          case (mem_state)
-              MEM_IDLE: begin
-                  for (int i = 0; i < MAX_MISSES; i++) begin
-                      if (mshr_valid[i] && mshr_state[i] == ST_WAIT_MEM) begin
-                          active_mshr_idx <= i;
-                          mshr_state[i]   <= ST_FILLING;
-                          mem_state       <= MEM_FILL_REQ;
-                          mem_req_valid_o <= 1;
-                          mem_req_we_o    <= 0;
-                          mem_req_addr_o  <= mshr_addr[i];
-                          break;
-                      end
-                  end
-              end
-              MEM_FILL_REQ: begin
-                  if (mem_req_ready_i && mem_req_valid_o) begin
-                      mem_req_valid_o <= 0;
-                      mem_state       <= MEM_FILL_DATA;
-                      mem_rd_ready_o  <= 1;
-                      mem_word_cnt    <= 0;
-                  end
-              end
-              MEM_FILL_DATA: begin
-                  if (mem_rd_valid_i && mem_rd_ready_o) begin
-                      fill_buffer[mem_word_cnt] <= mem_rd_data_i;
-                      if (mem_word_cnt == BLOCK_WORDS - 1) begin
-                          mem_rd_ready_o <= 0;
-                          mem_state      <= MEM_INSTALL;
-                      end else begin
-                          mem_word_cnt <= mem_word_cnt + 1;
-                      end
-                  end
-              end
-              MEM_INSTALL: begin
-                  // Wait to identify an eviction victim upon installing a fill, completely resolving capacity limits
-                  if (valid_array[inst_set_idx][inst_vic_way] && dirty_array[inst_set_idx][inst_vic_way]) begin
-                      wb_addr_reg <= {tag_array[inst_set_idx][inst_vic_way], inst_set_idx, {OFFSET_BITS{1'b0}}};
-                      for (int w = 0; w < BLOCK_WORDS; w++) begin
-                          wb_buffer[w] <= data_array[inst_set_idx][inst_vic_way][w];
-                      end
-                      mem_state       <= MEM_WB_REQ;
-                      mem_req_valid_o <= 1;
-                      mem_req_we_o    <= 1;
-                      mem_req_addr_o  <= {tag_array[inst_set_idx][inst_vic_way], inst_set_idx, {OFFSET_BITS{1'b0}}};
-                  end else begin
-                      mem_state <= MEM_IDLE;
-                  end
-
-                  // Install and tag cache block
-                  valid_array[inst_set_idx][inst_vic_way] <= 1;
-                  dirty_array[inst_set_idx][inst_vic_way] <= (mshr_op[active_mshr_idx] == 1);
-                  tag_array[inst_set_idx][inst_vic_way]   <= inst_tag_val;
-
-                  for (int w = 0; w < BLOCK_WORDS; w++) begin
-                      if (w == mshr_word_idx[active_mshr_idx] && mshr_op[active_mshr_idx] == 1) begin
-                          for (int b = 0; b < DATA_W/8; b++) begin
-                              if (mshr_mask[active_mshr_idx][b]) begin
-                                  data_array[inst_set_idx][inst_vic_way][w][b*8 +: 8] <= mshr_data[active_mshr_idx][b*8 +: 8];
-                              end else begin
-                                  data_array[inst_set_idx][inst_vic_way][w][b*8 +: 8] <= fill_buffer[w][b*8 +: 8];
-                              end
-                          end
-                      end else begin
-                          data_array[inst_set_idx][inst_vic_way][w] <= fill_buffer[w];
-                      end
-                  end
-
-                  // Update MSHR state allowing downstream responses
-                  mshr_state[active_mshr_idx] <= ST_DONE_WAIT_RSP;
-                  if (mshr_op[active_mshr_idx] == 0) begin
-                      mshr_data[active_mshr_idx] <= fill_buffer[mshr_word_idx[active_mshr_idx]];
-                  end
-
-                  if (rr_ptr[inst_set_idx] == WAYS - 1) begin
-                      rr_ptr[inst_set_idx] <= 0;
-                  end else begin
-                      rr_ptr[inst_set_idx] <= rr_ptr[inst_set_idx] + 1;
-                  end
-              end
-              MEM_WB_REQ: begin
-                  if (mem_req_ready_i && mem_req_valid_o) begin
-                      mem_req_valid_o <= 0;
-                      mem_state       <= MEM_WB_DATA;
-                      mem_wr_valid_o  <= 1;
-                      mem_word_cnt    <= 0;
-                      mem_wr_data_o   <= wb_buffer[0];
-                  end
-              end
-              MEM_WB_DATA: begin
-                  if (mem_wr_ready_i && mem_wr_valid_o) begin
-                      if (mem_word_cnt == BLOCK_WORDS - 1) begin
-                          mem_wr_valid_o <= 0;
-                          mem_state      <= MEM_IDLE;
-                      end else begin
-                          mem_word_cnt  <= mem_word_cnt + 1;
-                          mem_wr_data_o <= wb_buffer[mem_word_cnt + 1];
-                      end
-                  end
-              end
-              default: mem_state <= MEM_IDLE;
-          endcase
+    if (!rst_ni) begin
+      for (int s = 0; s < SETS; s++) begin
+        for (int w = 0; w < WAYS; w++) begin
+          tags[s][w].valid <= 1'b0;
+        end
+        rr_ptr[s] <= '0;
       end
+      for (int i = 0; i < 16; i++) begin
+        req_q[i].valid <= 1'b0;
+      end
+      seq_counter <= '0;
+      mem_fsm     <= M_IDLE;
+      word_count  <= '0;
+    end else begin
+
+      // 1. Memory FSM
+      case (mem_fsm)
+        M_IDLE: begin
+          if (has_miss) begin
+            logic [SET_BITS-1:0] m_set;
+            logic [WAY_BITS-1:0] m_way;
+            m_set = get_set(req_q[best_miss_id].addr);
+            m_way = rr_ptr[m_set];
+
+            mem_req_id <= best_miss_id;
+            mem_miss_set <= m_set;
+            mem_miss_tag <= get_tag(req_q[best_miss_id].addr);
+
+            mem_victim_way <= m_way;
+            mem_victim_dirty <= tags[m_set][m_way].valid && tags[m_set][m_way].dirty;
+            mem_victim_addr <= make_addr(tags[m_set][m_way].tag, m_set);
+            mem_victim_data <= data_array[m_set][m_way];
+
+            rr_ptr[m_set] <= rr_ptr[m_set] + 1'b1;
+
+            if (tags[m_set][m_way].valid && tags[m_set][m_way].dirty) begin
+              mem_fsm <= M_EVICT_REQ;
+            end else begin
+              mem_fsm <= M_FILL_REQ;
+            end
+          end
+        end
+        M_EVICT_REQ: begin
+          if (mem_req_ready_i) mem_fsm <= M_EVICT_DATA;
+        end
+        M_EVICT_DATA: begin
+          if (mem_wr_ready_i) begin
+            if (word_count == BLOCK_WORDS - 1) begin
+              word_count <= '0;
+              mem_fsm <= M_FILL_REQ;
+            end else begin
+              word_count <= word_count + 1'b1;
+            end
+          end
+        end
+        M_FILL_REQ: begin
+          if (mem_req_ready_i) mem_fsm <= M_FILL_DATA;
+        end
+        M_FILL_DATA: begin
+          if (mem_rd_valid_i) begin
+            mem_fill_data[word_count * DATA_W +: DATA_W] <= mem_rd_data_i;
+            if (word_count == BLOCK_WORDS - 1) begin
+              word_count <= '0;
+              mem_fsm <= M_FILL_WRITE_CACHE;
+            end else begin
+              word_count <= word_count + 1'b1;
+            end
+          end
+        end
+        M_FILL_WRITE_CACHE: begin
+          data_array[mem_miss_set][mem_victim_way] <= mem_fill_data;
+          tags[mem_miss_set][mem_victim_way].valid <= 1'b1;
+          tags[mem_miss_set][mem_victim_way].dirty <= 1'b0;
+          tags[mem_miss_set][mem_victim_way].tag   <= mem_miss_tag;
+
+          req_q[mem_req_id].state <= R_ISSUE;
+          mem_fsm <= M_IDLE;
+        end
+      endcase
+
+      // 2. Cache Pipeline Execute
+      if (pipeline_en) begin
+        if (issue_hit) begin
+          if (req_q[best_issue_id].op == 1'b0) begin // LOAD
+            req_q[best_issue_id].rsp_data <= next_data_array_line[issue_word * DATA_W +: DATA_W];
+          end else begin // STORE
+            data_array[issue_set][issue_hit_way] <= next_data_array_line;
+            tags[issue_set][issue_hit_way].dirty <= 1'b1;
+            req_q[best_issue_id].rsp_data <= '0;
+          end
+          req_q[best_issue_id].state <= R_DONE;
+        end else begin
+          req_q[best_issue_id].state <= R_MISS;
+        end
+      end
+
+      // 3. Retire Responses
+      if (rsp_valid_o && rsp_ready_i) begin
+        req_q[best_done_id].valid <= 1'b0;
+      end
+
+      // 4. Accept New Requests
+      if (req_valid_i && req_ready_o) begin
+        req_q[req_id_i].valid <= 1'b1;
+        req_q[req_id_i].seq   <= seq_counter;
+        seq_counter           <= seq_counter + 1'b1;
+        req_q[req_id_i].op    <= req_op_i;
+        req_q[req_id_i].addr  <= req_addr_i;
+        req_q[req_id_i].data  <= req_data_i;
+        req_q[req_id_i].mask  <= req_mask_i;
+        req_q[req_id_i].state <= R_ISSUE;
+      end
+
+    end
   end
 
 endmodule

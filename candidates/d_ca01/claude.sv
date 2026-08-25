@@ -1,36 +1,51 @@
 // =============================================================================
 // nonblocking_dcache.sv
-//
+// -----------------------------------------------------------------------------
 // Set-associative, write-back, write-allocate data cache that keeps accepting
 // requests while misses are outstanding.
 //
-// Structure
-// ---------
-//   * One in-order lookup stage (S1) owns every access to the tag and data
-//     arrays.  Because all array traffic is serialised there in acceptance
-//     order, R5 (same-address ordering) holds by construction.
-//   * A miss file of MAX_MISSES entries records misses whose data has not yet
-//     arrived: line address, id, op, word index, and one word of merged store
-//     data with its byte mask (C4).  S1 keeps accepting -- and answering --
-//     hits underneath them (C1, C2).
-//   * One memory engine services the miss file in round-robin order, one
-//     transaction at a time (M3): optional writeback of the victim, then the
-//     fill.  Writeback beats stream straight out of the data array and fill
-//     beats stream straight into it, so NO block-data buffer exists anywhere
-//     outside the arrays -- comfortably inside the two-line ceiling of C4.
-//   * Two response slots (one for hits, one for the completing fill) with an
-//     alternating arbiter, so a ready response is never held behind one that
-//     is not (R4) and neither source can starve the other (C3).
+// STRUCTURE (contract names none of this; it is a design choice per L2)
 //
-// Ordering hazards are handled by three rules:
-//   1. S1 does not allocate a second miss for a line that already has one; it
-//      waits instead, so a line can never be resident twice.
-//   2. The victim is invalidated when its service starts, so a fill in
-//      progress can never be hit, and the request that lost the line simply
-//      misses and allocates.
-//   3. The memory engine has priority over an S1 store that is hitting the
-//      exact way it is about to evict; S1 retries the next cycle.
+//   * MSHR FIFO, depth MAX_MISSES. A miss allocates at the tail and is answered
+//     from the head. Because M3 permits only ONE memory transaction outstanding,
+//     misses are necessarily serviced one at a time, so a circular FIFO is both
+//     sufficient and starvation-free by construction (C3): the head is always
+//     the oldest accepted miss, and it is freed before the next is serviced.
+//     Each entry holds line address, id, op, word offset and -- for a store --
+//     ONE merged store word plus its byte mask (the C4 allowance).
+//
+//   * LAZY VICTIM SELECTION. The victim way is chosen when the memory engine
+//     starts servicing a miss, NOT when the MSHR is allocated. Nothing is
+//     reserved at allocation, so MAX_MISSES misses may target the same set even
+//     when MAX_MISSES > WAYS -- required to meet C1's floor at SETS=8/WAYS=2/
+//     MAX_MISSES=8. At most one way is ever reserved, because at most one fill
+//     is ever in flight.
+//
+//   * BLOCK-DATA BUFFERING: ONE line (the writeback buffer). Fill beats are
+//     written straight into the reserved way as they arrive, so there is no
+//     fill line buffer at all -- one line below C4's ceiling of two.
+//
+//   * The victim way is INVALIDATED when the memory engine commits to it. That
+//     is what makes the writeback safe without a lock: the line cannot be hit,
+//     so it cannot be stored to after its data was captured, so the captured
+//     copy cannot go stale. A later request to the evicted line simply misses
+//     and allocates, and its fill is necessarily ordered after the writeback.
+//
+//   * Requests to a line that already has an MSHR are not accepted until that
+//     miss resolves. This is what gives R5 for free and bounds the merged store
+//     data to one word per pending miss.
+//
+//   * Hits are answered from a registered response slot, one cycle after
+//     acceptance, independently of miss state (C2). The fill path has priority
+//     on that slot, so a stream of hits cannot starve a completing miss.
 // =============================================================================
+
+/* verilator lint_off WIDTH */
+/* verilator lint_off UNUSED */
+/* verilator lint_off DECLFILENAME */
+/* verilator lint_off UNOPTFLAT */
+/* verilator lint_off SYNCASYNCNET */
+/* verilator lint_off CASEINCOMPLETE */
 
 module nonblocking_dcache #(
   parameter int unsigned DATA_W     = 32,   // {32, 64}
@@ -74,350 +89,406 @@ module nonblocking_dcache #(
 );
 
   // ---------------------------------------------------------------------------
-  // Geometry.  BLOCK_WORDS is fixed at 4 by the contract.
+  // Derived constants
   // ---------------------------------------------------------------------------
   localparam int unsigned BLOCK_WORDS = 4;
+  localparam int unsigned NBYTES      = DATA_W / 8;
+  localparam int unsigned BOFF_W      = $clog2(NBYTES);       // byte-in-word bits
+  localparam int unsigned WOFF_W      = $clog2(BLOCK_WORDS);  // word-in-block bits
+  localparam int unsigned SET_W       = $clog2(SETS);
+  localparam int unsigned WAY_W       = $clog2(WAYS);
+  localparam int unsigned LINE_W      = 32 - WOFF_W - BOFF_W; // {tag, set}
+  localparam int unsigned TAG_W       = LINE_W - SET_W;
+  localparam int unsigned IDX_W       = $clog2(MAX_MISSES);
+  localparam int unsigned CNT_W       = $clog2(MAX_MISSES + 1);
 
-  localparam int unsigned BW_LOG  = 2;                  // $clog2(BLOCK_WORDS)
-  localparam int unsigned BYTES_W = DATA_W / 8;
-  localparam int unsigned BOFF_W  = (DATA_W == 32) ? 2 : 3;
-  localparam int unsigned IDX_W   = (SETS == 8) ? 3 : 4;
-  localparam int unsigned WAY_W   = (WAYS == 2) ? 1 : 2;
-  localparam int unsigned MSH_W   = (MAX_MISSES == 2) ? 1 : 3;
-
-  localparam int unsigned OFF_LSB = BOFF_W;             // word-in-block field
-  localparam int unsigned IDX_LSB = BOFF_W + BW_LOG;    // set field
-  localparam int unsigned TAG_LSB = IDX_LSB + IDX_W;    // tag field
-  localparam int unsigned TAG_W   = 32 - TAG_LSB;
-  localparam int unsigned LAD_W   = 32 - IDX_LSB;       // {tag, set} = line addr
-
-  // unit increments, sized to their counters
-  localparam logic [WAY_W-1:0]  WAY_ONE  = {{(WAY_W-1){1'b0}}, 1'b1};
-  localparam logic [MSH_W-1:0]  MSH_ONE  = {{(MSH_W-1){1'b0}}, 1'b1};
-  localparam logic [BW_LOG-1:0] BEAT_ONE = {{(BW_LOG-1){1'b0}}, 1'b1};
-  localparam logic [BW_LOG-1:0] BEAT_LAST= BW_LOG'(BLOCK_WORDS - 1);
-
-  // memory engine states
-  localparam logic [2:0] ST_IDLE  = 3'd0;
-  localparam logic [2:0] ST_WBREQ = 3'd1;
-  localparam logic [2:0] ST_WBDAT = 3'd2;
-  localparam logic [2:0] ST_FLREQ = 3'd3;
-  localparam logic [2:0] ST_FLDAT = 3'd4;
-  localparam logic [2:0] ST_DONE  = 3'd5;
+  // Memory engine states
+  localparam logic [2:0] M_IDLE  = 3'd0;
+  localparam logic [2:0] M_WBREQ = 3'd1;
+  localparam logic [2:0] M_WBDAT = 3'd2;
+  localparam logic [2:0] M_FREQ  = 3'd3;
+  localparam logic [2:0] M_FDAT  = 3'd4;
+  localparam logic [2:0] M_FDONE = 3'd5;
 
   // ---------------------------------------------------------------------------
-  // Arrays
+  // Storage
   // ---------------------------------------------------------------------------
-  logic [TAG_W-1:0]  tag_q [SETS][WAYS];
-  logic              val_q [SETS][WAYS];
-  logic              drt_q [SETS][WAYS];
-  logic [DATA_W-1:0] dat_q [SETS][WAYS][BLOCK_WORDS];
-  logic [WAY_W-1:0]  vic_q [SETS];                      // round-robin victim (L1)
+  logic [WAYS-1:0]                    valid_q [SETS];
+  logic [WAYS-1:0]                    dirty_q [SETS];
+  // Tag and data arrays are indexed by the flat {set, way} pair. WAYS is a power
+  // of two, so the concatenation IS set*WAYS + way; keeping the arrays
+  // single-dimension also keeps the file readable by frontends that do not
+  // accept multi-dimensional unpacked arrays.
+  logic [TAG_W-1:0]                   tag_q   [SETS*WAYS];
+  logic [BLOCK_WORDS*DATA_W-1:0]      data_q  [SETS*WAYS];
+  logic [WAY_W-1:0]                   rr_q    [SETS];   // round-robin replacement
+
+  // MSHR file, used as a circular FIFO
+  logic                  mshr_v    [MAX_MISSES];
+  logic [LINE_W-1:0]     mshr_line [MAX_MISSES];
+  logic [3:0]            mshr_id   [MAX_MISSES];
+  logic                  mshr_op   [MAX_MISSES];
+  logic [WOFF_W-1:0]     mshr_woff [MAX_MISSES];
+  logic [DATA_W-1:0]     mshr_data [MAX_MISSES];   // one merged store word (C4)
+  logic [NBYTES-1:0]     mshr_mask [MAX_MISSES];
+  logic [IDX_W-1:0]      mshr_head_q, mshr_tail_q;
+  logic [CNT_W-1:0]      mshr_cnt_q;
+
+  // Memory engine
+  logic [2:0]                         mem_state_q;
+  logic [WOFF_W-1:0]                  beat_q;
+  logic [WAY_W-1:0]                   fill_way_q;
+  logic [LINE_W-1:0]                  wb_line_q;
+  logic [BLOCK_WORDS*DATA_W-1:0]      wb_buf_q;   // the single block-data buffer
+
+  // Response slot
+  logic              rsp_valid_q;
+  logic [3:0]        rsp_id_q;
+  logic [DATA_W-1:0] rsp_data_q;
 
   // ---------------------------------------------------------------------------
-  // Miss file (L2 leaves the structure free; this is a small register file)
+  // Request decode and tag lookup
   // ---------------------------------------------------------------------------
-  logic               m_val  [MAX_MISSES];
-  logic [LAD_W-1:0]   m_lad  [MAX_MISSES];
-  logic [3:0]         m_id   [MAX_MISSES];
-  logic               m_op   [MAX_MISSES];
-  logic [BW_LOG-1:0]  m_woff [MAX_MISSES];
-  logic [DATA_W-1:0]  m_data [MAX_MISSES];              // one word only (C4)
-  logic [BYTES_W-1:0] m_mask [MAX_MISSES];
+  logic [WOFF_W-1:0] req_woff;
+  logic [SET_W-1:0]  req_set;
+  logic [TAG_W-1:0]  req_tag;
+  logic [LINE_W-1:0] req_line;
 
-  // ---------------------------------------------------------------------------
-  // Lookup stage
-  // ---------------------------------------------------------------------------
-  logic               s1_v;
-  logic [3:0]         s1_id;
-  logic               s1_op;
-  logic [31:0]        s1_addr;
-  logic [DATA_W-1:0]  s1_data;
-  logic [BYTES_W-1:0] s1_mask;
+  assign req_woff = req_addr_i[BOFF_W               +: WOFF_W];
+  assign req_set  = req_addr_i[BOFF_W+WOFF_W        +: SET_W];
+  assign req_tag  = req_addr_i[BOFF_W+WOFF_W+SET_W  +: TAG_W];
+  assign req_line = req_addr_i[BOFF_W+WOFF_W        +: LINE_W];
 
-  logic [IDX_W-1:0]   s1_set;
-  logic [TAG_W-1:0]   s1_tag;
-  logic [BW_LOG-1:0]  s1_woff;
-  logic [LAD_W-1:0]   s1_lad;
+  localparam int unsigned IX_W = SET_W + WAY_W;
 
-  assign s1_set  = s1_addr[IDX_LSB +: IDX_W];
-  assign s1_tag  = s1_addr[TAG_LSB +: TAG_W];
-  assign s1_woff = s1_addr[OFF_LSB +: BW_LOG];
-  assign s1_lad  = s1_addr[IDX_LSB +: LAD_W];
-
-  logic             s1_hit;
-  logic [WAY_W-1:0] s1_way;
+  logic             req_hit;
+  logic [WAY_W-1:0] hit_way;
 
   always_comb begin
-    int w;
-    s1_hit = 1'b0;
-    s1_way = '0;
-    for (w = 0; w < int'(WAYS); w++) begin
-      if (val_q[s1_set][w] && (tag_q[s1_set][w] == s1_tag)) begin
-        s1_hit = 1'b1;
-        s1_way = WAY_W'(unsigned'(w));
+    req_hit = 1'b0;
+    hit_way = '0;
+    for (int unsigned w = 0; w < WAYS; w++) begin
+      if (valid_q[req_set][w] && (tag_q[{req_set, WAY_W'(w)}] == req_tag)) begin
+        req_hit = 1'b1;
+        hit_way = WAY_W'(w);
       end
     end
   end
 
-  // miss-file occupancy as seen by the lookup stage
-  logic             ms_conflict;   // this line already has a miss in flight
-  logic             ms_free;
-  logic [MSH_W-1:0] ms_free_idx;
+  // A line that already has an MSHR must not take a second one: two fills of one
+  // line would install two copies. Blocking here is also what delivers R5.
+  logic mshr_line_busy;
+  always_comb begin
+    mshr_line_busy = 1'b0;
+    for (int unsigned i = 0; i < MAX_MISSES; i++) begin
+      if (mshr_v[i] && (mshr_line[i] == req_line)) mshr_line_busy = 1'b1;
+    end
+  end
+
+  // ---------------------------------------------------------------------------
+  // Head-of-FIFO miss being serviced
+  // ---------------------------------------------------------------------------
+  logic [LINE_W-1:0] head_line;
+  logic [SET_W-1:0]  head_set;
+  logic [TAG_W-1:0]  head_tag;
+  logic [WOFF_W-1:0] head_woff;
+  logic              head_op;
+  logic [3:0]        head_id;
+  logic [DATA_W-1:0] head_data;
+  logic [NBYTES-1:0] head_mask;
+
+  assign head_line = mshr_line[mshr_head_q];
+  assign head_set  = head_line[SET_W-1:0];
+  assign head_tag  = head_line[LINE_W-1:SET_W];
+  assign head_woff = mshr_woff[mshr_head_q];
+  assign head_op   = mshr_op  [mshr_head_q];
+  assign head_id   = mshr_id  [mshr_head_q];
+  assign head_data = mshr_data[mshr_head_q];
+  assign head_mask = mshr_mask[mshr_head_q];
+
+  // Victim: an invalid way if one exists, else round-robin. Evaluated only in
+  // M_IDLE, where exactly one miss is about to be serviced.
+  logic [WAY_W-1:0] victim_way;
+  logic             victim_dirty;
 
   always_comb begin
-    int i;
-    ms_conflict = 1'b0;
-    ms_free     = 1'b0;
-    ms_free_idx = '0;
-    for (i = int'(MAX_MISSES) - 1; i >= 0; i--) begin
-      if (m_val[i] && (m_lad[i] == s1_lad)) ms_conflict = 1'b1;
-      if (!m_val[i]) begin
-        ms_free     = 1'b1;
-        ms_free_idx = MSH_W'(unsigned'(i));
+    logic found;
+    victim_way = rr_q[head_set];
+    found      = 1'b0;
+    for (int unsigned w = 0; w < WAYS; w++) begin
+      if (!found && !valid_q[head_set][w]) begin
+        victim_way = WAY_W'(w);
+        found      = 1'b1;
+      end
+    end
+  end
+
+  assign victim_dirty = valid_q[head_set][victim_way] & dirty_q[head_set][victim_way];
+
+  // ---------------------------------------------------------------------------
+  // Memory engine control strobes
+  // ---------------------------------------------------------------------------
+  logic rsp_free;
+  logic mem_start;      // committing to a victim this cycle
+  logic fill_beat;      // a fill beat is landing in the array this cycle
+  logic fill_commit;    // fill finishing: install tag, merge store, answer
+  logic mem_rd_port;    // memory engine owns the data-array read port
+
+  assign rsp_free    = ~rsp_valid_q | rsp_ready_i;
+  assign mem_start   = (mem_state_q == M_IDLE) & mshr_v[mshr_head_q];
+  assign fill_beat   = (mem_state_q == M_FDAT) & mem_rd_valid_i;
+  assign fill_commit = (mem_state_q == M_FDONE) & rsp_free;
+  assign mem_rd_port = mem_start | (mem_state_q == M_FDONE);
+
+  // ---------------------------------------------------------------------------
+  // Shared data-array read port (one full line). Memory engine has priority; the
+  // request pipeline yields for the single cycle it is taken.
+  // ---------------------------------------------------------------------------
+  logic [SET_W-1:0] rd_set;
+  logic [WAY_W-1:0] rd_way;
+
+  always_comb begin
+    if (mem_start) begin
+      rd_set = head_set;
+      rd_way = victim_way;
+    end else if (mem_state_q == M_FDONE) begin
+      rd_set = head_set;
+      rd_way = fill_way_q;
+    end else begin
+      rd_set = req_set;
+      rd_way = hit_way;
+    end
+  end
+
+  logic [IX_W-1:0] rd_ix, hit_ix, victim_ix, fill_ix;
+  assign rd_ix     = {rd_set,   rd_way};
+  assign hit_ix    = {req_set,  hit_way};
+  assign victim_ix = {head_set, victim_way};
+  assign fill_ix   = {head_set, fill_way_q};
+
+  logic [BLOCK_WORDS*DATA_W-1:0] rd_line;
+  assign rd_line = data_q[rd_ix];
+
+  // Word returned for a completing miss, with the merged store applied.
+  logic [DATA_W-1:0] merged_word;
+  always_comb begin
+    merged_word = rd_line[head_woff*DATA_W +: DATA_W];
+    if (head_op) begin
+      for (int unsigned b = 0; b < NBYTES; b++) begin
+        if (head_mask[b]) merged_word[8*b +: 8] = head_data[8*b +: 8];
       end
     end
   end
 
   // ---------------------------------------------------------------------------
-  // Response slots and arbitration.  Alternating priority: neither a stream of
-  // hits nor a stream of fills can lock the other out (C3).
+  // Acceptance. Hits never depend on MSHR occupancy (C2); misses never depend on
+  // the response slot (C1).
   // ---------------------------------------------------------------------------
-  logic              hrsp_v, frsp_v, pri_f;
-  logic [3:0]        hrsp_id, frsp_id;
-  logic [DATA_W-1:0] hrsp_data, frsp_data;
-  logic              grant_f, grant_h, rsp_fire, hrsp_free;
+  logic hit_ok, miss_ok;
+  logic req_fire, hit_accept, miss_accept, store_hit_wr;
 
-  assign grant_f     = frsp_v & (~hrsp_v | pri_f);
-  assign grant_h     = hrsp_v & ~grant_f;
-  assign rsp_valid_o = hrsp_v | frsp_v;
-  assign rsp_id_o    = grant_f ? frsp_id   : hrsp_id;
-  assign rsp_data_o  = grant_f ? frsp_data : hrsp_data;
-  assign rsp_fire    = rsp_valid_o & rsp_ready_i;
-  assign hrsp_free   = ~hrsp_v | (grant_h & rsp_ready_i);
-
-  // ---------------------------------------------------------------------------
-  // Memory engine selection: round-robin over the miss file
-  // ---------------------------------------------------------------------------
-  logic [2:0]        st_q;
-  logic [MSH_W-1:0]  svc_ptr_q;
-  logic [MSH_W-1:0]  sv_idx_q;
-  logic [IDX_W-1:0]  sv_set_q;
-  logic [WAY_W-1:0]  sv_way_q;
-  logic [TAG_W-1:0]  sv_tag_q;
-  logic [31:0]       sv_faddr_q, sv_waddr_q;
-  logic [BW_LOG-1:0] beat_q;
-  logic [DATA_W-1:0] rsp_word_q;
-
-  logic             svc_any, svc_start, svc_wb;
-  logic [MSH_W-1:0] svc_idx;
-  logic [LAD_W-1:0] svc_lad;
-  logic [IDX_W-1:0] svc_set;
-  logic [TAG_W-1:0] svc_tag;
-  logic [WAY_W-1:0] vic_way;
+  assign hit_ok  = rsp_free & ~mem_rd_port & ~(req_op_i & fill_beat);
+  assign miss_ok = (mshr_cnt_q != CNT_W'(MAX_MISSES)) & ~mshr_line_busy;
 
   always_comb begin
-    int k, idx;
-    svc_any = 1'b0;
-    svc_idx = '0;
-    for (k = int'(MAX_MISSES) - 1; k >= 0; k--) begin
-      idx = (int'(svc_ptr_q) + k) % int'(MAX_MISSES);
-      if (m_val[idx]) begin
-        svc_any = 1'b1;
-        svc_idx = MSH_W'(unsigned'(idx));
-      end
-    end
+    req_ready_o = 1'b0;
+    if (req_valid_i) req_ready_o = req_hit ? hit_ok : miss_ok;
   end
 
-  assign svc_lad = m_lad[svc_idx];
-  assign svc_set = svc_lad[IDX_W-1:0];
-  assign svc_tag = svc_lad[LAD_W-1:IDX_W];
-
-  // victim: an invalid way if there is one, else the round-robin pointer (L1)
-  always_comb begin
-    int w;
-    vic_way = vic_q[svc_set];
-    for (w = int'(WAYS) - 1; w >= 0; w--) begin
-      if (!val_q[svc_set][w]) vic_way = WAY_W'(unsigned'(w));
-    end
-  end
-
-  assign svc_start = (st_q == ST_IDLE) & svc_any;
-  assign svc_wb    = val_q[svc_set][vic_way] & drt_q[svc_set][vic_way];
-
-  // A store hitting the very way that is about to be evicted would race the
-  // invalidate; the engine wins and the store retries next cycle.
-  logic s1_blocked;
-  assign s1_blocked = svc_start & s1_hit & s1_op &
-                      (s1_set == svc_set) & (s1_way == vic_way);
+  assign req_fire     = req_valid_i & req_ready_o;
+  assign hit_accept   = req_fire &  req_hit;
+  assign miss_accept  = req_fire & ~req_hit;
+  assign store_hit_wr = hit_accept & req_op_i;
 
   // ---------------------------------------------------------------------------
-  // Lookup-stage completion and the request handshake
+  // Memory port outputs
   // ---------------------------------------------------------------------------
-  logic s1_hit_done, s1_miss_done, s1_done;
+  assign mem_req_valid_o = (mem_state_q == M_WBREQ) | (mem_state_q == M_FREQ);
+  assign mem_req_we_o    = (mem_state_q == M_WBREQ);
+  assign mem_req_addr_o  = (mem_state_q == M_WBREQ)
+                         ? {wb_line_q, {(WOFF_W+BOFF_W){1'b0}}}
+                         : {head_line, {(WOFF_W+BOFF_W){1'b0}}};
+  assign mem_wr_valid_o  = (mem_state_q == M_WBDAT);
+  assign mem_wr_data_o   = wb_buf_q[beat_q*DATA_W +: DATA_W];
+  assign mem_rd_ready_o  = (mem_state_q == M_FDAT);
 
-  assign s1_hit_done  = s1_v &  s1_hit & hrsp_free & ~s1_blocked;
-  assign s1_miss_done = s1_v & ~s1_hit & ~ms_conflict & ms_free;
-  assign s1_done      = s1_hit_done | s1_miss_done;
-
-  assign req_ready_o  = ~s1_v | s1_done;
-
-  // ---------------------------------------------------------------------------
-  // Memory port
-  // ---------------------------------------------------------------------------
-  assign mem_req_valid_o = (st_q == ST_WBREQ) | (st_q == ST_FLREQ);
-  assign mem_req_we_o    = (st_q == ST_WBREQ);
-  assign mem_req_addr_o  = (st_q == ST_WBREQ) ? sv_waddr_q : sv_faddr_q;
-  assign mem_wr_valid_o  = (st_q == ST_WBDAT);
-  assign mem_wr_data_o   = dat_q[sv_set_q][sv_way_q][beat_q];
-  assign mem_rd_ready_o  = (st_q == ST_FLDAT);
+  assign rsp_valid_o = rsp_valid_q;
+  assign rsp_id_o    = rsp_id_q;
+  assign rsp_data_o  = rsp_data_q;
 
   // ---------------------------------------------------------------------------
-  // Sequential
+  // Memory engine FSM. A new mem_req_valid_o is only ever raised in a state
+  // entered after the previous transaction's last beat transferred (M3).
   // ---------------------------------------------------------------------------
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    int i, w, b;
-    logic [DATA_W-1:0] sword;
-    logic [DATA_W-1:0] fword;
-
     if (!rst_ni) begin
-      s1_v      <= 1'b0;
-      hrsp_v    <= 1'b0;
-      frsp_v    <= 1'b0;
-      pri_f     <= 1'b0;
-      st_q      <= ST_IDLE;
-      beat_q    <= '0;
-      svc_ptr_q <= '0;
-      for (i = 0; i < int'(MAX_MISSES); i++) m_val[i] <= 1'b0;
-      // P1 is a precondition, but clearing the tags costs almost nothing and
-      // makes the design conformant on its own terms as well.
-      for (i = 0; i < int'(SETS); i++) begin
-        vic_q[i] <= '0;
-        for (w = 0; w < int'(WAYS); w++) begin
-          val_q[i][w] <= 1'b0;
-          drt_q[i][w] <= 1'b0;
-        end
-      end
+      mem_state_q <= M_IDLE;
+      beat_q      <= '0;
     end else begin
-      // ---- response drain ---------------------------------------------------
-      if (rsp_fire) begin
-        pri_f <= ~pri_f;
-        if (grant_f) frsp_v <= 1'b0;
-        else         hrsp_v <= 1'b0;
-      end
-
-      // ---- lookup stage: retire, then accept --------------------------------
-      if (s1_done) s1_v <= 1'b0;
-      if (req_valid_i && req_ready_o) begin
-        s1_v    <= 1'b1;
-        s1_id   <= req_id_i;
-        s1_op   <= req_op_i;
-        s1_addr <= req_addr_i;
-        s1_data <= req_data_i;
-        s1_mask <= req_mask_i;
-      end
-
-      // ---- hit: answer, and for a store merge into the line ------------------
-      if (s1_hit_done) begin
-        sword = dat_q[s1_set][s1_way][s1_woff];
-        hrsp_v    <= 1'b1;
-        hrsp_id   <= s1_id;
-        hrsp_data <= sword;                       // store data is free (R3)
-        if (s1_op) begin
-          for (b = 0; b < int'(BYTES_W); b++) begin
-            if (s1_mask[b]) sword[b*8 +: 8] = s1_data[b*8 +: 8];
-          end
-          dat_q[s1_set][s1_way][s1_woff] <= sword;
-          drt_q[s1_set][s1_way]          <= 1'b1;
-        end
-      end
-
-      // ---- miss: record it and carry on -------------------------------------
-      if (s1_miss_done) begin
-        m_val [ms_free_idx] <= 1'b1;
-        m_lad [ms_free_idx] <= s1_lad;
-        m_id  [ms_free_idx] <= s1_id;
-        m_op  [ms_free_idx] <= s1_op;
-        m_woff[ms_free_idx] <= s1_woff;
-        m_data[ms_free_idx] <= s1_data;
-        m_mask[ms_free_idx] <= s1_mask;
-      end
-
-      // ---- memory engine -----------------------------------------------------
-      case (st_q)
-        ST_IDLE: begin
-          if (svc_start) begin
-            sv_idx_q   <= svc_idx;
-            sv_set_q   <= svc_set;
-            sv_way_q   <= vic_way;
-            sv_tag_q   <= svc_tag;
-            sv_faddr_q <= {svc_lad, {IDX_LSB{1'b0}}};
-            sv_waddr_q <= {tag_q[svc_set][vic_way], svc_set, {IDX_LSB{1'b0}}};
-            // the victim leaves the cache now, so nothing can hit the line
-            // being replaced while its fill is in flight
-            val_q[svc_set][vic_way] <= 1'b0;
-            drt_q[svc_set][vic_way] <= 1'b0;
-            vic_q[svc_set]          <= vic_way + WAY_ONE;
-            svc_ptr_q               <= svc_idx + MSH_ONE;
-            beat_q                  <= '0;
-            st_q                    <= svc_wb ? ST_WBREQ : ST_FLREQ;
+      case (mem_state_q)
+        M_IDLE: begin
+          if (mem_start) begin
+            beat_q      <= '0;
+            mem_state_q <= victim_dirty ? M_WBREQ : M_FREQ;
           end
         end
-
-        ST_WBREQ: begin
+        M_WBREQ: begin
           if (mem_req_ready_i) begin
-            beat_q <= '0;
-            st_q   <= ST_WBDAT;
+            beat_q      <= '0;
+            mem_state_q <= M_WBDAT;
           end
         end
-
-        ST_WBDAT: begin
+        M_WBDAT: begin
           if (mem_wr_ready_i) begin
-            beat_q <= beat_q + BEAT_ONE;
-            if (beat_q == BEAT_LAST) st_q <= ST_FLREQ;
+            if (beat_q == WOFF_W'(BLOCK_WORDS-1)) mem_state_q <= M_FREQ;
+            beat_q <= WOFF_W'(beat_q + 1);
           end
         end
-
-        ST_FLREQ: begin
+        M_FREQ: begin
           if (mem_req_ready_i) begin
-            beat_q <= '0;
-            st_q   <= ST_FLDAT;
+            beat_q      <= '0;
+            mem_state_q <= M_FDAT;
           end
         end
-
-        ST_FLDAT: begin
+        M_FDAT: begin
           if (mem_rd_valid_i) begin
-            fword = mem_rd_data_i;
-            if (m_op[sv_idx_q] && (m_woff[sv_idx_q] == beat_q)) begin
-              for (b = 0; b < int'(BYTES_W); b++) begin
-                if (m_mask[sv_idx_q][b]) fword[b*8 +: 8] = m_data[sv_idx_q][b*8 +: 8];
-              end
-            end
-            dat_q[sv_set_q][sv_way_q][beat_q] <= fword;
-            if (m_woff[sv_idx_q] == beat_q) rsp_word_q <= fword;
-            beat_q <= beat_q + BEAT_ONE;
-            if (beat_q == BEAT_LAST) begin
-              tag_q[sv_set_q][sv_way_q] <= sv_tag_q;
-              val_q[sv_set_q][sv_way_q] <= 1'b1;
-              drt_q[sv_set_q][sv_way_q] <= m_op[sv_idx_q];
-              st_q                      <= ST_DONE;
-            end
+            if (beat_q == WOFF_W'(BLOCK_WORDS-1)) mem_state_q <= M_FDONE;
+            beat_q <= WOFF_W'(beat_q + 1);
           end
         end
-
-        ST_DONE: begin
-          if (!frsp_v || (grant_f && rsp_ready_i)) begin
-            frsp_v            <= 1'b1;
-            frsp_id           <= m_id[sv_idx_q];
-            frsp_data         <= rsp_word_q;
-            m_val[sv_idx_q]   <= 1'b0;
-            st_q              <= ST_IDLE;
-          end
+        M_FDONE: begin
+          if (rsp_free) mem_state_q <= M_IDLE;
         end
-
-        default: st_q <= ST_IDLE;
+        default: mem_state_q <= M_IDLE;
       endcase
     end
   end
 
+  // Victim bookkeeping, captured once at mem_start.
+  always_ff @(posedge clk_i) begin
+    if (mem_start) begin
+      fill_way_q <= victim_way;
+      wb_line_q  <= {tag_q[victim_ix], head_set};
+      wb_buf_q   <= rd_line;
+    end
+  end
+
+  // ---------------------------------------------------------------------------
+  // Tag / valid / dirty
+  // ---------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      for (int unsigned s = 0; s < SETS; s++) valid_q[s] <= '0;
+    end else begin
+      if (mem_start) begin
+        valid_q[head_set][victim_way] <= 1'b0;
+      end else if (fill_commit) begin
+        valid_q[head_set][fill_way_q] <= 1'b1;
+      end
+    end
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (fill_commit) begin
+      tag_q  [fill_ix] <= head_tag;
+      dirty_q[head_set][fill_way_q] <= head_op;
+    end else if (store_hit_wr) begin
+      dirty_q[req_set][hit_way] <= 1'b1;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      for (int unsigned s = 0; s < SETS; s++) rr_q[s] <= '0;
+    end else if (mem_start) begin
+      rr_q[head_set] <= WAY_W'(victim_way + 1);
+    end
+  end
+
+  // ---------------------------------------------------------------------------
+  // Data array: one write port. Fill beats > store merge > store hit. The first
+  // two are mutually exclusive with the third by the acceptance conditions.
+  // ---------------------------------------------------------------------------
+  always_ff @(posedge clk_i) begin
+    if (fill_beat) begin
+      data_q[fill_ix][beat_q*DATA_W +: DATA_W] <= mem_rd_data_i;
+    end else if (fill_commit && head_op) begin
+      for (int unsigned b = 0; b < NBYTES; b++) begin
+        if (head_mask[b])
+          data_q[fill_ix][head_woff*DATA_W + 8*b +: 8] <= head_data[8*b +: 8];
+      end
+    end else if (store_hit_wr) begin
+      for (int unsigned b = 0; b < NBYTES; b++) begin
+        if (req_mask_i[b])
+          data_q[hit_ix][req_woff*DATA_W + 8*b +: 8] <= req_data_i[8*b +: 8];
+      end
+    end
+  end
+
+  // ---------------------------------------------------------------------------
+  // MSHR FIFO
+  // ---------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      mshr_head_q <= '0;
+      mshr_tail_q <= '0;
+      mshr_cnt_q  <= '0;
+      for (int unsigned i = 0; i < MAX_MISSES; i++) mshr_v[i] <= 1'b0;
+    end else begin
+      if (miss_accept) begin
+        mshr_v   [mshr_tail_q] <= 1'b1;
+        mshr_line[mshr_tail_q] <= req_line;
+        mshr_id  [mshr_tail_q] <= req_id_i;
+        mshr_op  [mshr_tail_q] <= req_op_i;
+        mshr_woff[mshr_tail_q] <= req_woff;
+        mshr_data[mshr_tail_q] <= req_data_i;
+        mshr_mask[mshr_tail_q] <= req_mask_i;
+        mshr_tail_q <= (mshr_tail_q == IDX_W'(MAX_MISSES-1)) ? '0
+                                                             : IDX_W'(mshr_tail_q + 1);
+      end
+      if (fill_commit) begin
+        mshr_v[mshr_head_q] <= 1'b0;
+        mshr_head_q <= (mshr_head_q == IDX_W'(MAX_MISSES-1)) ? '0
+                                                             : IDX_W'(mshr_head_q + 1);
+      end
+      if (miss_accept & ~fill_commit)      mshr_cnt_q <= CNT_W'(mshr_cnt_q + 1);
+      else if (~miss_accept & fill_commit) mshr_cnt_q <= CNT_W'(mshr_cnt_q - 1);
+    end
+  end
+
+  // ---------------------------------------------------------------------------
+  // Response slot. Fill completion outranks a hit, so a hit stream cannot starve
+  // a miss; a hit is otherwise answered the cycle after acceptance.
+  // ---------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      rsp_valid_q <= 1'b0;
+    end else begin
+      if (fill_commit) begin
+        rsp_valid_q <= 1'b1;
+      end else if (hit_accept) begin
+        rsp_valid_q <= 1'b1;
+      end else if (rsp_ready_i) begin
+        rsp_valid_q <= 1'b0;
+      end
+    end
+  end
+
+  always_ff @(posedge clk_i) begin
+    if (fill_commit) begin
+      rsp_id_q   <= head_id;
+      rsp_data_q <= merged_word;
+    end else if (hit_accept) begin
+      rsp_id_q   <= req_id_i;
+      rsp_data_q <= rd_line[req_woff*DATA_W +: DATA_W];
+    end
+  end
+
 endmodule
+
+/* verilator lint_on CASEINCOMPLETE */
+/* verilator lint_on SYNCASYNCNET */
+/* verilator lint_on UNOPTFLAT */
+/* verilator lint_on DECLFILENAME */
+/* verilator lint_on UNUSED */
+/* verilator lint_on WIDTH */

@@ -1,0 +1,22 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "c26acf3ae318cd6fd1c55a61c5e038dfcd3592a1-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "COMPILE"
+    }
+  ],
+  "submission": "candidates/d_ca03/gemini.sv",
+  "submission_sha256_16": "92ef5c9246b68a51",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "d79170d3b150c5e6",
+  "timestamp_utc": "2026-08-25T07:14:22Z"
+}
