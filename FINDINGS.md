@@ -5093,6 +5093,50 @@ output unpinned. That latitude is invisible on any scored surface, so it is
 harmless by the same argument T2 makes elsewhere: do not score what reports an
 implementation choice.
 
+### What writing the stimulus then exposed
+
+Three things, each found only because the previous one was fixed.
+
+**The checker was broken.** With the phase written, the REFERENCE failed H3 on
+the first run: `out_valid dropped while the result was unaccepted`. The guard
+read `pv && !out_ready` — a LATCHED previous valid against a FRESH ready — so a
+beat legally accepted at T-1 and followed by a stall at T was reported as a
+withdrawal. Both terms must be latched. **A frozen input conceals the state of
+every check downstream of it**, and this checker's own defect had never been
+exposed because it had never run.
+
+**The first negative control evaded the check rather than failing it.** Gating
+`out_valid` on `out_ready` combinationally makes H3's ANTECEDENT unsatisfiable —
+`out_valid` is never high while `out_ready` is low — so the control passed. That
+is a contract gap in its own right: **H1 forbids `in_ready` depending
+combinationally on `in_valid`, and there is no mirror clause on the output
+side.** A design can satisfy H3 by never offering a result to a stalled consumer.
+Rewritten to withdraw a beat it had already offered, the control fails H3 as
+intended.
+
+**The phase itself reached nothing.** Placed after the streaming loop it
+exercised zero cycles: `in_valid` is `issue_idx < n_vec`, so once the last vector
+issues the pipeline drains and `out_valid` never rises again. Measured — guard
+true 0 times, run reports PASS. **The same defect being repaired, written a
+second time by the person repairing it**, caught by counting rather than by
+reading the verdict. Moved inside the stream: guard true 60 times.
+
+The guard count is now printed AND gated, so a run that fails to exercise H3
+fails instead of passing quietly.
+
+### The answer, and it is a negative result
+
+With H3 live: **reference PASS, control FAIL, and zero of the three existing
+candidates fail H3.** `chat` and `claude` pass outright; `gemini` fails on
+vector 0 arithmetic — a subnormal — identically before and after the fix, so it
+is pre-existing and not an H3 failure.
+
+Nothing was hiding. Worth stating plainly rather than dressing up: the exercise
+cost one phase, one checker repair and one control, and what it bought was
+knowing the clause was never enforced and that no shipped candidate exploited it.
+The value is that the second half of that sentence is now checkable at all.
+
+
 **Rules:** 32
 
 
@@ -5141,3 +5185,102 @@ shape, and the reason the figure could sit unbacked as long as it did. And
 `6e39080`; the belief was a year of message-passing old and wrong.
 
 **Rules:** 24
+
+---
+
+## F84. Corroborating artefacts that share one point of failure are one piece of evidence, not three
+
+The missing stimulus in `d_dsp02` is F82. **This is the reason nobody noticed
+it**, and it generalises past testbenches.
+
+An audit asking *"is H3 checked?"* finds three things:
+
+1. **The clause.** H3 is in the specification, stated normatively, in the same
+   register as clauses that are enforced.
+2. **A working checker.** It latches the previous valid, result and flags, and
+   on `pv && !out_ready` reports either a dropped `out_valid` or a changed
+   payload — two distinct failure messages, correctly written.
+3. **A labelled phase.** `// --- H3 phase: backpressure on the result side ---`
+
+Three artefacts, each independently confirming the answer is yes. **All three are
+downstream of one fact — that `out_ready` is ever driven low — and it is false.**
+The banner is followed immediately by `phase = "final"`; the phase it names does
+not exist. The clause and the checker are real and describe something that never
+happens.
+
+### Why the count feels like evidence and is not
+
+Corroboration is only worth something when the corroborating facts can fail
+independently. Three artefacts sharing a single point of failure carry **exactly
+one artefact's worth of information**, and the reader who finds all three
+correctly concludes the question is settled — because in most systems, three
+independent confirmations would settle it. The error is not credulity. It is
+that the independence was assumed rather than checked, and nothing about the
+artefacts advertises that they are not independent.
+
+> **Corroborating artefacts that share a single point of failure are one piece
+> of evidence, not three. Before counting corroboration, ask what would have to
+> be true for all of it to be wrong at once — and check that thing.**
+
+Here the shared fact is one line, and checking it is one grep: is `out_ready`
+ever assigned anything but 1?
+
+### The same structure, one layer down
+
+Another agent found this in `v_nw02`, in a checker rather than a testbench: a
+clause-coverage map built from `fail()` string labels reported ten clauses
+uncovered when three were, because the label names the clause the author chose
+to cite rather than the clause the stimulus reaches. There the corroborating
+artefacts were labels; here they are a clause, a checker and a banner. Same
+structure: several signals of coverage, one underlying fact, and the fact
+unchecked. Recorded as instance 5 of F74.
+
+**Where this recurs.** Anywhere the answer to "is X handled?" is assembled from
+separate artefacts — a clause plus a check, a check plus a coverage flag, a
+metric plus a phase name, a record plus a log line. The more places X is
+mentioned, the more settled it looks, and the mentions are usually derived from
+one another rather than from independent observation.
+
+**Rules:** 32
+
+---
+
+## F85. A sample chosen by availability is not a sample
+
+The stimulus-variation sweep was first run on three tasks, chosen because they
+were the three whose rig I had just been working in and could build without
+setting anything up. All three came back clean or benign: `d_ca04` 7 of 7
+varying, `d_nw03` 8 of 8, and `d_nw01`'s single frozen input legitimate.
+
+The conclusion available at that point was that the instrument had found the
+problem in `d_ca03`, that the neighbouring tasks were fine, and that the class
+was narrow.
+
+Run across all twenty, **every genuine hit was in the fifteen not swept**:
+`d_ca01`'s `rsp_ready_i`, `d_dsp02`'s `out_ready` — which turned out to be F82,
+on a SCOREABLE task with a live candidate set — plus `v_ca07`, `v_nw04`,
+`v_ca03`, `v_ca06`, `v_nw01` and `v_nw02` at 25 frozen inputs of 47.
+
+**The three tasks swept first were the three cleanest, and they were cleanest
+for the same reason they were available**: they were the ones most recently
+worked on, so their stimulus had most recently been thought about. Availability
+and quality were correlated, and the correlation ran the wrong way for
+generalising.
+
+> **A sample chosen by availability is not a sample. When the reason a case was
+> easy to reach is related to the property being measured, the result does not
+> extend past the cases examined — and "these three were fine" is not evidence
+> about the rest.**
+
+The cost of the full sweep was one script and about ten minutes of wall clock,
+against a first pass that produced a clean bill of health for the population and
+was wrong about it. **The sweep was cheap per task and the narrow pass was not
+cheaper — it was the same work, stopped early, with a conclusion attached.**
+
+**Where this recurs.** Any audit scoped to "the tasks I have open", any
+regression run over "the tests that already build", any review of "the files in
+this diff" used to characterise a codebase. The scoping is usually invisible in
+the write-up, which reports what was found rather than what was reachable.
+
+**Rules:** 29
+

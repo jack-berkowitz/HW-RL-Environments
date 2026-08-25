@@ -408,7 +408,7 @@ ppa:
 
 # =============================================================================
 stimulus_variation:
-  status: ONE FROZEN INPUT
+  status: FIXED -- H3 is now exercised and gated
   tool: scripts/check_stimulus_variation.py
   measured: "8 contract inputs, 7 vary; out_ready pinned to 1"
   finding: F82
@@ -434,7 +434,22 @@ stimulus_variation:
     high -- "with operands offered continuously and results always accepted" --
     so II=1 is unaffected. S1, H4, H1 and H2 are independent.
   fix_shape:
-    scope: TESTBENCH ONLY -- no hash bump, no re-solicitation
+    scope: TESTBENCH ONLY -- LANDED. No hash bump, no re-solicitation.
+    landed_result: >
+      Reference PASS with h3_guard_true=60; controls/nc_h3_drops_valid.sv FAILS
+      H3; and ZERO of the three existing candidates fail H3 -- chat and claude
+      pass outright, gemini fails vector 0 arithmetic identically before and
+      after, so that is pre-existing and not an H3 failure. The guard count is
+      printed AND gated, so a run that fails to exercise H3 now fails.
+    defects_the_fix_exposed: >
+      The checker was broken -- its guard compared a LATCHED out_valid against a
+      FRESH out_ready, so a legally accepted beat followed by a stall read as a
+      withdrawal, and the REFERENCE failed H3 the first time it ran. The first
+      negative control EVADED the check by gating out_valid on out_ready
+      combinationally, which makes H3's antecedent unsatisfiable -- and nothing
+      in the contract forbids that, since H1's ban on a combinational
+      ready/valid dependency has no mirror on the output side. And the phase,
+      first written after the streaming loop, exercised zero cycles.
     reason: >
       H3 already pins the required behaviour, so exercising it needs no new
       clause. task_text_hash covers spec/ and probe/PASTE.md; this is tb/.

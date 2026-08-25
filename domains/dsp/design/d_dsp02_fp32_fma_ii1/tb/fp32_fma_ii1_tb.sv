@@ -47,6 +47,7 @@ module fp32_fma_ii1_tb #(
 
     int errors = 0, checks = 0;
     string fail_reason = "", phase = "init";
+    bit    h3_done = 1'b0;
     task automatic note_fail(input string why);
         errors++;
         if (fail_reason == "") fail_reason = why;
@@ -265,20 +266,35 @@ module fp32_fma_ii1_tb #(
     end
 
     // ---- H3: result stability under backpressure ---------------------------
-    logic        pv;
+    // THE GUARD NEEDS THE PREVIOUS out_ready, NOT THE CURRENT ONE. H3's
+    // antecedent is "out_valid high and out_ready low IN THE SAME CYCLE" -- a
+    // beat that WAS accepted may legally be followed by out_valid falling, and
+    // comparing a latched pv against a fresh out_ready reports exactly that
+    // legal case as a violation. The reference fails this check the first time
+    // it is ever run, which is how the defect surfaced: the stimulus was missing
+    // (F82) so the checker's own bug had never been exposed. A frozen input
+    // conceals the state of every check downstream of it.
+    // REPORTED, not merely checked. A guard count of 0 means the clause was not
+    // exercised, and that is exactly the state this check sat in for the whole
+    // life of the task while every run said PASS. Printing it makes "did this
+    // run?" answerable from the log instead of by instrumenting the testbench.
+    int          h3_guard_true = 0;
+    logic        pv, prdy;
     logic [31:0] pr;
     logic [3:0]  pf;
     always_ff @(posedge clk) begin
-        if (!rst_n) pv <= 1'b0;
+        if (!rst_n) begin pv <= 1'b0; prdy <= 1'b1; end
         else begin
-            if (pv && !out_ready) begin
+            if (pv && !prdy) h3_guard_true++;
+            if (pv && !prdy) begin
                 if (!out_valid)
                     note_fail("out_valid dropped while the result was unaccepted (H3)");
                 else if (result !== pr ||
                          {flag_invalid, flag_overflow, flag_underflow, flag_inexact} !== pf)
                     note_fail("result or flags changed under backpressure (H3)");
             end
-            pv <= out_valid;
+            pv   <= out_valid;
+            prdy <= out_ready;
             pr <= result;
             pf <= {flag_invalid, flag_overflow, flag_underflow, flag_inexact};
         end
@@ -358,13 +374,41 @@ module fp32_fma_ii1_tb #(
         // --- C3 phase: continuous offer, always accept -----------------------
         phase = "c3";
         guard = 0;
+        h3_done = 1'b0;
         while (retire_idx < n_vec && guard < 40*n_vec) begin
             @(posedge clk); guard++;
+
+            // ---- H3 WINDOW: backpressure with work IN FLIGHT ---------------
+            // It has to sit INSIDE the stream. A window after the loop reaches
+            // nothing: in_valid is `issue_idx < n_vec`, so once the last vector
+            // is issued the pipeline drains and out_valid never rises again.
+            // Measured that way first -- guard true 0 times, out_valid never
+            // high with out_ready low -- which is the same defect being repaired
+            // here, written a second time. Counting is what caught it; the run
+            // said PASS.
+            //
+            // PLACEMENT IS LOAD-BEARING, DO NOT MOVE IT:
+            //   * `phase` leaves "c3" for the window, because the C3 dead-cycle
+            //     counter is gated on `phase == "c3"`. C3 defines itself with
+            //     "results always accepted", so a stalled output is outside what
+            //     it constrains -- counting dead cycles here would fail a correct
+            //     design for being stalled.
+            //   * meas_latency latches the FIRST observation only, long before.
+            //   * meas_ii_min takes the MINIMUM interval, and backpressure only
+            //     lengthens intervals, so it cannot be lowered by this window.
+            if (!h3_done && retire_idx > (n_vec / 4)) begin
+                h3_done   = 1'b1;
+                phase     = "h3";
+                out_ready = 1'b0;
+                repeat (60) @(posedge clk);
+                out_ready = 1'b1;
+                phase     = "c3";
+                guard     = guard + 60;
+            end
         end
         if (retire_idx < n_vec)
             note_fail($sformatf("only %0d of %0d vectors retired (liveness)", retire_idx, n_vec));
 
-        // --- H3 phase: backpressure on the result side -----------------------
         phase = "final";
 
         $display("METRIC: vectors=%0d checks=%0d", n_vec, checks);
@@ -372,6 +416,9 @@ module fp32_fma_ii1_tb #(
                  cov_c3_offered, cov_c3_accepted, cov_c3_dead);
         $display("METRIC: latency_cycles=%0d init_interval=%0d",
                  meas_latency, meas_ii_min);
+        $display("METRIC: h3_guard_true=%0d (0 means H3 was not exercised)", h3_guard_true);
+        if (h3_guard_true == 0)
+            note_fail("H3 was never exercised -- out_valid was never high while out_ready was low");
 
         // C3 gate: no dead cycle while load was offered and results accepted.
         if (cov_c3_offered > 0 && cov_c3_dead > 0)

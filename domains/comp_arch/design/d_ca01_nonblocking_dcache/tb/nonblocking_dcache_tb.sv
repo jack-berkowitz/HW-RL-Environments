@@ -115,8 +115,43 @@ module nonblocking_dcache_tb #(
     ,.mem_wr_valid_o(mem_wr_valid), .mem_wr_ready_i(mem_wr_ready), .mem_wr_data_o(mem_wr_data)
   );
 
-  // Response is always taken. CONSTANT, not `rsp_valid` -- remedy 1.
-  assign rsp_ready = 1'b1;
+  // Response backpressure. This WAS `assign rsp_ready = 1'b1` -- "response is
+  // always taken", a remedy for a real symptom that traded away something
+  // nothing was checking: with rsp_ready never low, R1's response half
+  // ("Responses use the same discipline on `rsp_valid_o` / `rsp_ready_i`") was
+  // STRUCTURALLY UNEXERCISABLE, not merely under-tested. There was no test that
+  // could ever fail. See F81 and F82.
+  //
+  // r1_stall is raised only by the dedicated phase below, so every other phase
+  // sees the original always-ready behaviour and nothing else changes.
+  bit r1_stall = 1'b0;
+  assign rsp_ready = ~r1_stall;
+
+  // ---- R1: response stability under backpressure -------------------------
+  // Mirrors the guard d_dsp02 needed: the antecedent is "valid high AND ready
+  // low IN THE SAME CYCLE", so both terms must be latched. Comparing a latched
+  // valid against a fresh ready reports a legally accepted beat as a violation,
+  // which is exactly how d_dsp02's equivalent check failed its own reference the
+  // first time it was ever run.
+  logic              r1_pv, r1_prdy;
+  logic [ID_W-1:0]   r1_pid;
+  logic [DATA_W-1:0] r1_pdata;
+  int                r1_hits = 0;
+  final $display("METRIC: r1_guard_true=%0d (0 means R1 was not exercised)", r1_hits);
+  always_ff @(posedge clk) begin
+    if (!rst_n) begin r1_pv <= 1'b0; r1_prdy <= 1'b1; end
+    else begin
+      if (r1_pv && !r1_prdy) begin
+        r1_hits++;
+        if (!rsp_valid)
+          note_fail("rsp_valid dropped while the response was unaccepted (R1)");
+        else if (rsp_id !== r1_pid || rsp_data !== r1_pdata)
+          note_fail("rsp_id or rsp_data changed under backpressure (R1)");
+      end
+      r1_pv <= rsp_valid; r1_prdy <= rsp_ready;
+      r1_pid <= rsp_id;   r1_pdata <= rsp_data;
+    end
+  end
 
   // ---------------------------------------------------------------- rng
   // Explicit LFSR rather than $urandom: Verilator seeds $urandom per BINARY, so
@@ -544,6 +579,24 @@ module nonblocking_dcache_tb #(
     drain(60000);
 
     // ================= P5: conflict, eviction, writeback ==================
+    // ---- R1 phase: response backpressure with work in flight -------------
+    // The window has to overlap live traffic. A stall after everything has
+    // retired reaches nothing -- rsp_valid never rises, the guard is never true,
+    // and the run reports PASS having tested nothing. That was measured on
+    // d_dsp02's equivalent phase before it was moved inside the stream.
+    // Nothing here is gated on a phase number, so the window needs no special
+    // placement beyond having responses to stall.
+    phase = 5;
+    begin
+      int k;
+      for (i = 0; i < 6; i++)
+        send(ID_W'(i % 15 + 1), 1'b0, mk_addr(40 + i, 6, 0), '0, '1, acc);
+      r1_stall = 1'b1;
+      for (k = 0; k < 60; k++) @(negedge clk);
+      r1_stall = 1'b0;
+      drain(20000);
+    end
+
     phase = 5;
     // Drive WAYS+2 distinct lines into ONE set, all dirty, then revisit.
     // Stimulus-side: this harness chose the addresses. Whether the design
