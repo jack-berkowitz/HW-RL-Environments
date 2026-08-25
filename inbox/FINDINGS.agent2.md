@@ -544,3 +544,36 @@ evidence at all** about the checks behind it. Audit the checker before driving
 the field, or the fix silently converts an unexercised check into an absent one
 with nothing to show the difference.
 
+### The caveat above came true within a day, on v_nw01
+
+Agent 3 re-raised v_nw01's four frozen identity inputs — `local_ip_i`,
+`local_mac_i`, `subnet_mask_i`, `gateway_ip_i` — after I had cleared them. **They
+are right and the clearing was wrong**, and the way it was wrong is worth having.
+
+My argument was that Q3 branches on subnet membership and the varying `req_ip_i`
+crosses the boundary — `start_lookup(8.8.8.8)` against a 192.168.1.0/24 local
+subnet — so both branches are reached. That is true, and it is **not the same
+claim**:
+
+> Reaching both branches of a condition does not test that the **boundary is
+> where the configuration says it is.** A design that hardcodes /24 and
+> 192.168.1.1, ignoring the ports entirely, reaches both branches correctly for
+> this one configuration and is indistinguishable from a conforming one.
+
+And the checker half was there too, in the form the entry above predicts: the
+identity is wired to constants at the instantiation and **the checkers compare
+against those same constants**. Port and constant are the same symbol, so nothing
+in the run can tell a design that reads the port from one that does not.
+
+The spec settles it in one sentence, which I had read and not connected:
+*"`local_mac_i`, `local_ip_i`, `gateway_ip_i` and `subnet_mask_i` are **inputs,
+not constants**; hold them steady while the engine is running."* That is a clause,
+only these inputs can reach it, and it explicitly permits changing them while the
+engine is stopped.
+
+**The general form is the one already accepted for v_nw02's pass-through fields:
+a field's USE can only be tested by varying that field.** Configuration is not an
+exception to it — configuration is the case where it bites hardest, because a
+configured design and a hardcoded one agree on every run at the configured
+value.
+
