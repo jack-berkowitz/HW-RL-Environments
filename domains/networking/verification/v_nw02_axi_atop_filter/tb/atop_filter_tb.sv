@@ -244,12 +244,18 @@ module atop_filter_tb;
 
   // ---- X3: valid must not drop before ready ---------------------------------
   logic pv_b = 0, pv_r = 0, pv_maw = 0, pv_mw = 0;
+  int cov_x3 [4];                       // X3's antecedent, per channel (REPORTED)
+  int cov_bp_driven = 0;                // stall cycles the harness DROVE (GATED)
   logic [6:0]  pb; logic [39:0] pr;
   always @(posedge clk) if (rst_n && checking) begin
     if (pv_b && !s_bvalid) fail("X3", $sformatf("s_bvalid dropped without a handshake (cycle %0d)", cyc));
     if (pv_r && !s_rvalid) fail("X3", $sformatf("s_rvalid dropped without a handshake (cycle %0d)", cyc));
     if (pv_maw && !m_awvalid) fail("X3", $sformatf("m_awvalid dropped without a handshake (cycle %0d)", cyc));
     if (pv_mw && !m_wvalid) fail("X3", $sformatf("m_wvalid dropped without a handshake (cycle %0d)", cyc));
+    if (s_bvalid  && !s_bready)  cov_x3[0]++;
+    if (s_rvalid  && !s_rready)  cov_x3[1]++;
+    if (m_awvalid && !m_awready) cov_x3[2]++;
+    if (m_wvalid  && !m_wready)  cov_x3[3]++;
     pv_b   <= s_bvalid  && !s_bready;
     pv_r   <= s_rvalid  && !s_rready;
     pv_maw <= m_awvalid && !m_awready;
@@ -267,9 +273,55 @@ module atop_filter_tb;
   // W burst is distinguishable from a debt freed by a B arriving (clause W4).
   int dq_id [$], dq_t [$];
   int rq_id [$], rq_n [$];
-  assign m_awready = 1'b1;
-  assign m_wready  = 1'b1;
-  assign m_arready = 1'b1;
+  // DOWNSTREAM BACKPRESSURE. Held at 1, these three make TWO OF X3's FOUR
+  // CHANNELS UNREACHABLE: the checker's antecedent is `m_awvalid && !m_awready`,
+  // which can never hold, so a design that withdraws m_awvalid or m_wvalid
+  // before its ready is seen was undetectable. X3 says "on EVERY channel".
+  //
+  // Two cycles low in sixteen, phase-offset per channel so the three do not
+  // stall together. Bounded deliberately: X4's 64-cycle liveness bound applies
+  // "provided the receiving side holds its ready asserted", so a stall pattern
+  // long enough to eat that budget would convert a real X4 pass into a failure
+  // the clause does not licence.
+  // A FREE-RUNNING duty cycle does not work here, and the floor below said so on
+  // its first run: m_aw=0, m_w=1. The design asserts m_awvalid briefly and rarely,
+  // so a stall pattern that ignores valid almost never coincides with one. The
+  // stall has to REACT to valid to guarantee the antecedent.
+  //
+  // A ready that depends on valid is legal for a subordinate -- AXI permits it,
+  // and it is the mirror of the dependency H1b forbids on the VALID side, not
+  // the same thing. Two cycles, then release, then a cooldown so a slow channel
+  // is not stalled on every beat and X4's 64-cycle budget survives. The cooldown
+// started at 12 and the floor reported m_w=0: a W BURST fits inside a long
+// cooldown, so the channel that most needs stalling was the one never stalled.
+  // The ARM IS COMBINATIONAL on valid. Registering it put the stall one cycle
+  // AFTER valid rose -- and on a channel whose valid is high for a single cycle
+  // the beat had already been accepted, so the stall landed on nothing and the
+  // antecedent count came back at 1. Non-zero is not healthy: a guard keyed on
+  // the second occurrence would still be unreachable.
+  logic [2:0] st_aw = 0, st_w = 0, st_ar = 0;
+  logic [4:0] cd_aw = 0, cd_w = 0, cd_ar = 0;
+  wire arm_aw = m_awvalid && (st_aw == 0) && (cd_aw == 0);
+  wire arm_w  = m_wvalid  && (st_w  == 0) && (cd_w  == 0);
+  wire arm_ar = m_arvalid && (st_ar == 0) && (cd_ar == 0);
+  always @(posedge clk) if (!rst_n) begin
+    st_aw <= 0; st_w <= 0; st_ar <= 0; cd_aw <= 0; cd_w <= 0; cd_ar <= 0;
+  end else begin
+    if (st_aw != 0)      st_aw <= st_aw - 1;
+    else if (cd_aw != 0) cd_aw <= cd_aw - 1;
+    else if (arm_aw)     begin st_aw <= 3'd2; cd_aw <= 5'd3; end
+    if (st_w != 0)       st_w <= st_w - 1;
+    else if (cd_w != 0)  cd_w <= cd_w - 1;
+    else if (arm_w)      begin st_w <= 3'd2; cd_w <= 5'd3; end
+    if (st_ar != 0)      st_ar <= st_ar - 1;
+    else if (cd_ar != 0) cd_ar <= cd_ar - 1;
+    else if (arm_ar)     begin st_ar <= 3'd2; cd_ar <= 5'd3; end
+  end
+  always @(posedge clk) if (rst_n && (arm_aw || arm_w || arm_ar || st_aw != 0 || st_w != 0 || st_ar != 0))
+    cov_bp_driven <= cov_bp_driven + 1;
+  assign m_awready = (st_aw == 0) && !arm_aw;
+  assign m_wready  = (st_w  == 0) && !arm_w;
+  assign m_arready = (st_ar == 0) && !arm_ar;
   always @(posedge clk) if (rst_n) begin
     if (m_awvalid && m_awready) begin dq_id.push_back(int'(m_awid)); dq_t.push_back(cyc + BLAG); end
     if (m_arvalid && m_arready) begin rq_id.push_back(int'(m_arid)); rq_n.push_back(int'(m_arlen) + 1); end
@@ -596,6 +648,29 @@ module atop_filter_tb;
     // The floor for the fields this run exists to exercise. A pass-through
     // clause tested at one value per field is not tested, and the only way to
     // know the values moved is to count them.
+    $display("  [coverage] X3 antecedent held: s_b=%0d s_r=%0d m_aw=%0d m_w=%0d",
+             cov_x3[0], cov_x3[1], cov_x3[2], cov_x3[3]);
+    // THIS REPORTS AND DOES NOT GATE, and the reason is a mistake I made here.
+    //
+    // A first version failed the run when any channel's count was below four.
+    // It REJECTED dut2 AND A CONFORMANT PERTURBATION: on dut2 the upstream R
+    // channel never had s_rvalid high while s_rready was low, because whether a
+    // design's valid COINCIDES with my ready-low window is the DESIGN's timing,
+    // not my stimulus. I drove the backpressure; dut2 declined to be caught by
+    // it, conformingly.
+    //
+    // So a condition count is the right INSTRUMENT and the wrong GATE. It makes
+    // an unexercised clause VISIBLE; making it a failure converts visibility
+    // into non-conformance, which is what a mirror clause is for and what a
+    // floor must not do on its own authority.
+    //
+    // What IS gated is the stimulus half below: did the harness actually drive
+    // backpressure. That is mine and no design can decline it.
+    for (int c = 0; c < 4; c++)
+      if (cov_x3[c] == 0)
+        $display("  [flag] X3 was never judged on channel %0d -- valid was never high while its ready was low. Not a failure: whether a conforming design enters that state is its own timing. Recorded so the clause is not assumed tested.", c);
+    if (cov_bp_driven < 8)
+      fail("COVERAGE", $sformatf("downstream backpressure was driven only %0d time(s) -- X3's master-side channels cannot be judged without it, and that half is the harness's to provide", cov_bp_driven));
     if (sb_ctr < 8 || sb_ar < 8)
       fail("COVERAGE", $sformatf("only %0d write and %0d read sideband patterns driven -- P1 and P3 are pass-through clauses and a field held constant cannot show a design that ignores it", sb_ctr, sb_ar));
 

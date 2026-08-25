@@ -442,3 +442,22 @@ negative_controls:
 watchdog:
   tb_sim_time_limit: 40ms
   harness_sim_timeout_s: 120
+
+readies_criterion:
+  date: 2026-08-25
+  verdict: REACHABILITY GAP -- flagged, NOT gated
+  frozen: [m_arready, m_awready, m_wready, s_bready, s_rready]
+  test_applied: >
+    Does any check have an antecedent requiring one of these to be LOW? Measured
+    mechanically across the testbench: NONE does. And no clause in the spec
+    speaks about valid stability or ordering under stall -- there is no X3
+    equivalent here.
+  therefore: >
+    Not a defect by the criterion: a frozen ready is one when it gates a clause
+    about stability or ordering under stall, and no such clause exists to gate.
+    Flagged and not gated.
+  but_worth_saying: >
+    The absence is itself a contract gap of the E1 shape -- a design that
+    withdraws a valid before its ready is seen conforms to this specification AS
+    WRITTEN, because nothing forbids it. That is a clause question and a hash
+    move, not a testbench one, and it is not decided here.

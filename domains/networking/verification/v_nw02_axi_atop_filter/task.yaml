@@ -309,3 +309,38 @@ condition_floor:
     data points, not a proof. The failure message names L4 so a submission that
     trips it is told what to check rather than silently rejected.
   rebaseline: "Ten of ten killed, ACCEPTED, every verdict identical."
+
+readies_criterion:
+  date: 2026-08-25
+  verdict: DEFECT -- and it was the only one of four tasks with frozen readies
+  clause: X3
+  why: >
+    X3 says "on EVERY channel, once valid is asserted it remains asserted with a
+    stable payload until the corresponding ready is seen". The checker tracks
+    four channels. Two of them -- m_awvalid and m_wvalid -- had antecedents of
+    the form `valid && !ready` against readies held at 1'b1, so those two halves
+    of X3 COULD NEVER FIRE. A design withdrawing m_awvalid or m_wvalid before its
+    ready was seen was undetectable.
+  fix: >
+    Downstream backpressure driven on m_awready, m_wready and m_arready. The
+    stall ARM IS COMBINATIONAL on valid: a registered arm put the stall one cycle
+    after valid rose, and on a channel whose valid is high for a single cycle the
+    beat had already been accepted, so the antecedent count came back at 1.
+    Bounded at two cycles with a three-cycle cooldown, because X4's liveness
+    bound applies "provided the receiving side holds its ready asserted" and a
+    longer stall would convert a real X4 pass into a failure the clause does not
+    licence.
+  measured: "X3 antecedent held: s_b=30 s_r=35 m_aw=12 m_w=12, from 30/35/0/0"
+  the_gate_was_wrong_first: >
+    The condition count initially FAILED the run below four per channel. It
+    REJECTED dut2 and af_c1_b_before_r -- two conforming implementations -- because
+    on dut2 s_rvalid never coincided with the ready-low window. Whether a design's
+    valid overlaps my stall is the DESIGN's timing. The count now REPORTS per
+    channel and the GATE is on the stimulus half, cov_bp_driven, which no design
+    can decline. Caught by the conformant set, not by review; the mutants all
+    still died and a mutation-only view showed 10 of 10.
+  rebaseline: >
+    ACCEPTED, ten of ten killed, gate-mutant rejected, dut2 and the conformant
+    perturbation PASS, 5c 11 of 11. Every verdict identical to the committed
+    baseline.
+

@@ -298,3 +298,18 @@ declared_constants:
     this block as "backpressure is out of scope" would be reading more into X3
     than X3 says.
 
+readies_criterion:
+  date: 2026-08-25
+  verdict: LICENSED and flagged
+  frozen: [m_hdr_ready_i, m_payload_ready_i, resp_ready_i]
+  licensed_by: >
+    X3 states its liveness bound "with the response channel held ready". Holding
+    them ready is the condition the clause is measured under, so the constant is
+    the clause's own premise.
+  test_applied: >
+    No check has an antecedent requiring any of them low, measured mechanically,
+    and no clause speaks about stability under stall.
+  the_licence_is_specific: >
+    X3 licenses holding them ready FOR THE LIVENESS BOUND. It settles nothing
+    about whether backpressure should be exercised at all. Reading this block as
+    "backpressure is out of scope here" would read more into X3 than X3 says.

@@ -318,3 +318,18 @@ e1_mutant:
     conformant perturbations PASS, 5c OK on both bases with both clean controls
     passing.
 
+readies_criterion:
+  date: 2026-08-25
+  verdict: REACHABILITY GAP -- flagged, NOT gated
+  frozen: [m_arready, m_awready, m_wready, s_bready, s_rready]
+  test_applied: >
+    No check has an antecedent requiring any of them low, measured mechanically.
+    s_rready and s_bready ARE named in the spec -- but only inside A1's
+    DEFINITION of when a transaction is outstanding, as the transfer condition,
+    not as a stimulus axis. Holding them at 1 does not make A1 unreachable;
+    transfers still happen.
+  therefore: flagged, not gated -- same reasoning as v_ca06
+  but_worth_saying: >
+    Same absence as v_ca06: no clause here governs valid stability under stall
+    either. Two tasks with the same hole, which makes it a pattern in how these
+    specs were written rather than one omission.

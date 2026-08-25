@@ -1207,3 +1207,63 @@ fourth number went stale the same way inside a single message, where a peer
 quoted a control count taken before the control they described adding in the same
 message. The mechanism does not need an agent to depart. It only needs the copy
 to outlive the moment it was taken.
+
+
+---
+
+## FINDING — a condition count is the right instrument and the wrong gate
+
+**I built the thing I had spent the session prescribing, and it rejected two
+conforming implementations on first contact.**
+
+The preceding finding says a floor must count the **condition**, not the attempt.
+Applying it to v_nw02's X3 — *"on every channel, once `valid` is asserted it
+remains asserted until the corresponding `ready` is seen"* — I drove downstream
+backpressure, counted the antecedent per channel, and **failed the run** when any
+channel's count fell below four.
+
+Result: `dut2` **FAIL**, `af_c1_b_before_r` **FAIL**, task **REJECTED**. Two legal
+designs rejected by a reference, which under rule 16 makes every kill in that run
+carry no information.
+
+The cause was not a bug. On `dut2` the count was zero on the upstream R channel
+because **`s_rvalid` never coincided with my `s_rready`-low window**. I drove the
+backpressure; `dut2` declined to be caught by it, conformingly. *Whether a design's
+valid overlaps my ready-low is the design's timing, not my stimulus.*
+
+### The distinction the previous finding did not draw
+
+| | who determines it | may it gate? |
+| --- | --- | --- |
+| **the stimulus** — did the harness drive backpressure at all | **the harness.** No design can decline it. | **yes** |
+| **the condition** — did valid ever hold against a low ready | **the design**, jointly with the harness | **no** |
+
+A condition count makes an unexercised clause **visible**. Making it a failure
+converts visibility into **non-conformance** — which is what a mirror clause is
+for, and what a floor must not do on its own authority. The design side had
+already said this about their rule-36 gate: *it makes the evasion visible without
+making it non-conforming*. I filed that sentence and then wrote a gate that did
+the opposite.
+
+**So the pattern is three parts, not two:**
+
+1. **Gate the stimulus.** Countable by the harness alone.
+2. **Report the condition, always.** Named per channel, so an unexercised clause
+   is a line in the log rather than an absence.
+3. **Do not fail on the condition.** If reaching it must be compulsory, that is a
+   contract change, not a floor.
+
+### What caught it, and it was not review
+
+The conformant set. `dut2` and five perturbations exist to be **passed**, and two
+of them failed the moment the gate was too strong. The mutants all still died —
+a mutation-only view would have shown 10 of 10 and looked healthy.
+
+That is the pairing working as designed: the **floor** caught the stimulus not
+reaching far enough (`m_aw=0` on the first attempt), and the **conformant set**
+caught the gate reaching too far. Neither alone would have found both, and the
+error each caught was mine, in the same change, in opposite directions.
+
+**Rule:** before a floor gates, ask who can make its condition false. If a
+conforming implementation can, the floor may report and must not fail — and the
+conformant set, not the mutant set, is what tells you whether you got it wrong.
