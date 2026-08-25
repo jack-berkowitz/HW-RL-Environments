@@ -370,13 +370,24 @@ capability_controls:
       re-solicited after C3 was added -- but nothing would stop it being
       resubmitted.
     owed: >
-      ENFORCE, by direct analogy with d_nw03's B1, which was the same clause with
-      the same gap and is now enforced. The shape ports over: hold r_ready and
-      b_ready low, let the slave side answer, and count R beats the crossbar
-      accepts before it stops -- the SAME phase C1 already runs, reading the
-      ceiling instead of the floor. nc_i must flip from PASS to FAIL and the
-      reference must stay passing; that transition is the evidence, exactly as
-      nc_h's flip was for B1. Not landed here: reported under instruction.
+      ENFORCEMENT ATTEMPTED AND BLOCKED, not deferred. Four approaches measured;
+      see F80 instance 2. The blocker is not C3 and not the design: the slave
+      model drops r_valid via a rate counter while a beat is pending, which real
+      AXI forbids -- once RVALID is asserted it must hold until RREADY -- and the
+      anchor's rr_arb_tree asserts on exactly that assumption. So SUSTAINED
+      RESPONSE BACKPRESSURE IS ILLEGAL STIMULUS AGAINST THIS HARNESS.
+      .
+      A throttled stall at ~1 beat in 8 discriminates cleanly -- reference 0,
+      control 36 against a bound of 16, one failing check, isolated -- but the
+      assertion trips on a configuration-dependent subset and retuning only moves
+      which configuration trips. Reverted rather than landed: tuning a throttle
+      until the assertion happens not to fire is fitting to noise.
+      .
+      WHAT IT NEEDS: a protocol-correct slave responder holding r_valid stable
+      under backpressure. That is a harness rework rather than a check, and it
+      also fixes something else -- L3 says liveness holds under RESPONSE
+      BACKPRESSURE and is exercised only at ~25% random stall, never sustained,
+      blocked by the same defect. Doing it once buys both.
   spec_defect:
     issue: "two clauses numbered C3"
     where: "spec/axi4_xbar_iface.sv:177 (buffering ceiling) and :216 (holds at every combination)"

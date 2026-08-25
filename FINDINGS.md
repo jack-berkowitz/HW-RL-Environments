@@ -4744,6 +4744,48 @@ NUM_MST / NUM_SLV / MAX_TRANS combination" at line 216. A duplicate identifier i
 a contract makes "fails C3" ambiguous in exactly the place a submission would
 need it to be precise.
 
+### Instance 2 could NOT be enforced the same way, and the blocker is the anchor
+
+`d_nw03`'s B1 took one phase. `d_nw01`'s C3 does not, and four attempts were
+measured before stopping:
+
+1. **A dedicated stall phase**, the shape B1 uses. Trips an assertion inside the
+   ANCHOR — `rr_arb_tree.sv:169`, *"lock implies same arbiter decision in next
+   cycle if output is not ready"* — because fresh AR requests keep changing the
+   R-mux request vector while its output is stalled.
+2. **A passive high-water monitor**, beats accepted at the slave side minus beats
+   delivered at the master side, no new stimulus at all. Legal, and it does not
+   discriminate: under the existing ~25% random stall a 64-deep FIFO peaks at
+   **4**, comfortably under the bound of 16. A ceiling is invisible unless the
+   drain is held off long enough for the design to reach its own limit.
+3. **A total stall inside the scored phase.** Same assertion. Forcing the slave
+   model to present R continuously to avoid it corrupts the scoreboard — 21 data
+   failures, because `r.data` is combinational off state the model has not
+   advanced.
+4. **A throttled stall**, ~1 R beat in 16, then 1 in 8. This DISCRIMINATES
+   cleanly — reference 0, control 61/36/19 against a bound of 16, one failing
+   check, isolated — but the assertion still trips on a configuration-dependent
+   subset, and changing the throttle only moves WHICH configuration trips. At
+   that point tuning is fitting to noise, so it was reverted rather than landed.
+
+**The root cause is in the harness, and it is bigger than C3.** The slave model
+drops `r_valid` via a rate counter while a beat is still pending. Real AXI
+forbids that: once `RVALID` is asserted it must stay asserted until `RREADY`.
+The anchor's arbiter assumes the rule holds, so **sustained response
+backpressure is illegal stimulus against this harness** — not against the
+design.
+
+Which means L3, *"both hold under RESPONSE BACKPRESSURE"*, is exercised only at
+~25% random stall and has never been tested sustained. The clause that would
+have justified building the ceiling check is itself only partly exercised, by
+the same defect that blocks the check.
+
+**What C3 actually needs** is a protocol-correct slave responder that holds
+`r_valid` stable under backpressure. That is a harness rework, not a check, and
+it would strengthen L3 at the same time. Recorded rather than attempted: the
+control stands as proof the gap is real, and the enforcement is blocked on
+something worth fixing for its own sake.
+
 ### Resolved by enforcing, and the transition is the evidence
 
 Of the three options — enforce, drop, or mark unenforced — only enforcing keeps
