@@ -58,7 +58,7 @@ open(sys.argv[1],'w').write(re.sub(r'\bmodule dw_downsizer\b','module dw_downsiz
 echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
 echo "         implementation must PASS. Each defect line is the positive half."
 echo
-echo "reference testbench vs the GOLDEN base and its ten defects"
+echo "reference testbench vs the GOLDEN base and its $(grep -cE '^module dw_m[0-9]+_' "$T/mutants/mutants.sv") defects"
 r=$fails; run_one "golden (clean)" PASS $OTHER "$D/dw_downsizer.sv"; ctl "$r"
 for MM in $(grep -oE "^module dw_m[0-9]+_[A-Za-z0-9_]+" "$T/mutants/mutants.sv" | awk '{print $2}'); do
   python3 -c "
@@ -72,7 +72,7 @@ open('$W/$MM.sv','w').write(b)"
 done
 
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and the same ten defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same defects"
 # The two halves must be the SAME SET. This runner globs policy/*.sv, so a
 # generation that failed part way leaves fewer files and every row still reads
 # "as expected" -- a short set is indistinguishable from a complete one in the

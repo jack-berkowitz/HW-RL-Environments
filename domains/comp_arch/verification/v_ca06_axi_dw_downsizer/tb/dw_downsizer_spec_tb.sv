@@ -438,16 +438,51 @@ module dw_downsizer_tb;
   // be accepted until one retires", so accepting FEWER conforms -- dut2 accepts
   // one and passes. The only violation is accepting MORE, so this counts and
   // bounds rather than requiring.
+  //
+  // RETIREMENT IS COUNTED FROM WHAT THE TESTBENCH ASKED FOR, not from the
+  // design's s_rlast. Retiring on s_rlast gave this counter the SAME INPUT as
+  // dw_m10's defect, which withholds exactly that signal: the counter could
+  // never decrement, so A4 fired once per cycle for the rest of the run --
+  // 1,024,737 failures where the honest count is zero. A counter whose exit
+  // condition is the thing under test has no exit, and its "coverage" of that
+  // defect is D4's detection wearing A4's label.
+  //
+  // The expected beat count is pushed at AR acceptance, when the testbench is
+  // the one driving s_arlen. Beats are attributed by s_rid, which the design
+  // drives -- a residual coupling, stated rather than hidden. It is far weaker
+  // than the one it replaces: no mutant in this set perturbs rid, and D3
+  // independently checks that every beat carries an id of an outstanding read,
+  // so a design corrupting rid fails D3 whatever A4 does.
   int a4_live = 0, a4_peak = 0;
+  int a4_exp [16][$];                    // expected beats per id, in AR order
+  int a4_got [16];
+  bit a4_over = 0;                       // edge-triggered: see below
   always @(posedge clk) if (rst_n) begin
-    automatic int nxt = a4_live
-                      + ((s_arvalid && s_arready) ? 1 : 0)
-                      - ((s_rvalid && s_rready && s_rlast) ? 1 : 0);
+    automatic int ret = 0;
+    automatic int nxt;
+    if (s_rvalid && s_rready) begin
+      a4_got[s_rid] = a4_got[s_rid] + 1;
+      if (a4_exp[s_rid].size() > 0 && a4_got[s_rid] >= a4_exp[s_rid][0]) begin
+        a4_got[s_rid] = 0;
+        void'(a4_exp[s_rid].pop_front());
+        ret = 1;
+      end
+    end
+    if (s_arvalid && s_arready) a4_exp[s_arid].push_back(int'(s_arlen) + 1);
+    nxt = a4_live + ((s_arvalid && s_arready) ? 1 : 0) - ret;
     a4_live <= nxt;
     if (nxt > a4_peak) a4_peak <= nxt;
-    if (nxt > MAXR)
-      fail("A4", $sformatf("%s: %0d reads outstanding at once, the bound is %0d",
-                           phase, nxt, MAXR));
+    // EDGE-TRIGGERED. The condition is a LEVEL on a counter, and a level check
+    // on a counter that stops moving reports once per cycle forever whatever
+    // the cause. One line per episode, re-armed when the count returns inside
+    // the bound. This is the structural half of the fix and it holds even if
+    // some future defect finds another way to stall the count.
+    if (nxt > MAXR) begin
+      if (!a4_over)
+        fail("A4", $sformatf("%s: %0d reads outstanding at once, the bound is %0d",
+                             phase, nxt, MAXR));
+      a4_over <= 1'b1;
+    end else a4_over <= 1'b0;
   end
 
   // ---- X1: nothing originated while reset is low -------------------------

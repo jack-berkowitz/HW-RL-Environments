@@ -393,3 +393,37 @@ is a candidate list. Both caveats were honoured in the tool and lost in the
 report. **A caveat that lives only in the tool's docstring does not survive
 transport**; if the distinction matters it has to be in the output line, next to
 the number, where a reader who never opens the source will still meet it.
+
+---
+
+## Candidate — a ternary between two string literals is prohibited in any line a measurement is read from
+
+**Not a per-task bug. A construct-level ban, on evidence from two tasks and two
+different downstream failures.**
+
+SystemVerilog pads the shorter arm of a ternary between two string **literals**
+with NULs to the width of the longer. The NULs are invisible in a terminal and
+survive into any log the line is written to. Two instances, found independently:
+
+| where | the construct | what it broke downstream |
+| --- | --- | --- |
+| v_ca07, `RESULT:` line | `(n_fail==1)?"":"s"` | printed `RESULT: FAIL (1 failure )`. A profile parser pinned to the plural read it as **zero failures** and reported a control that WAS caught as `NOT CAUGHT`. |
+| v_ca06, a D5/D6 witness | `(want_r != 0) ? " -- an error is STICKY…" : ""` | padded **fifty NULs** into the middle of a rule-16 witness — the exact string a mutant record is checked against. |
+| v_ca06, `RESULT:` line | `(n_fail==1)?"":"s"` | same as v_ca07's, latent. |
+
+The two failure modes are unrelated to each other: one corrupted a **count**, the
+other corrupted an **identity string**. What they share is the construct. That is
+what makes it a ban rather than three fixes — a defect that produces a different
+symptom in every host is one you will never learn to recognise by its symptom.
+
+It is also nearly invisible in review. `(cond) ? "" : "s"` reads as obviously
+correct, the output looks right in a terminal, and the padding only surfaces when
+something downstream parses or compares the line.
+
+**Rule:** in any line a measurement is later read from — a `RESULT:` line, a
+witness string, a coverage line — a ternary between string literals is
+prohibited. Plain `if`/`else` with a complete `$display` per branch. Cheap to
+grep for: `\?\s*"[^"]*"\s*:\s*"[^"]*"`.
+
+The narrower rule is not enough. "Don't put a ternary in the RESULT line" would
+have caught one of the three; the construct is the thing.

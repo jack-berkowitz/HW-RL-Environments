@@ -57,11 +57,14 @@ scoring:
   fault_detection: reported PER MUTANT, never as a rate
 
 scoring_ceiling:
-  reference: 10 of 10
+  reference: 11 of 11
   licensed_by: >
     Observed run on 2026-08-24: golden PASS, dut2 PASS, all five conformant
-    perturbations PASS, all ten guarded mutants killed, and the all-outputs-high
-    control rejected with 4024 failures.
+    perturbations PASS, all ELEVEN guarded mutants killed with a named clause
+    failure each, and the all-outputs-high control rejected with 4024 failures.
+    Re-measured on 2026-08-24 at eleven, after the A4 retirement fix: witness
+    runner 11 of 11 with its negative control passing, 5c 24 of 24 on both
+    bases, check_witness_sync --fresh verbatim.
   caveat: >
     The reference was developed against SIX legal implementations rather than
     fitted to the anchor, and it found two defects in this task's own
@@ -140,7 +143,7 @@ policy_derivation:
     would cost about as much as writing dut2 again for evidence this set does
     not need.
   policy_independence: >
-    22 of 22: both clean implementations pass and every defect is caught on both
+    24 of 24: both clean implementations pass and every defect is caught on both
     bases. Rerun with mutants/check_policy_independence.sh, whose "(clean)" lines
     are rule-24 controls and which ABORTS on a failing control.
 
@@ -199,6 +202,10 @@ mutants:
      guard: "the sixteenth read since reset and every read after it",
      defect: "the final upstream beat of a response does not carry rlast",
      witness: "FAIL [D4] A:reads, aligned: rlast is 0 on beat 2 of a 3-beat response (t=1295)"}
+  - {id: dw_m11_downstream_error_dropped_from_second, violates: "D6, E6",
+     guard: "the second downstream error since reset and every one after it -- the first is propagated correctly",
+     defect: "a downstream error is not propagated: the upstream response says OKAY where the slave returned SLVERR or DECERR",
+     witness: "FAIL [D6] M:DOWNSTREAM ERRORS -- D6 is sticky, D7 preserves the code: R beat 0 carries resp 0, expected 10 -- an error is STICKY from the beat it occurs on (t=13885)"}
   all_have_nonequivalence_witnesses: true
   evidence_type: witness
   witness_harness: mutants/witness.sh
@@ -211,7 +218,7 @@ mutants:
     exact on every aligned request, which is why the eight cases measured in
     step 1 walked past it.
   reference_reachability: >
-    The reference kills all ten. dw_m8 survived the first run and the reason was
+    The reference kills all eleven. dw_m8 survived the first run and the reason was
     the guard, not the testbench: it was keyed on a PER-BURST beat index that
     resets with each AW, and no burst in the reference is thirty-two beats long,
     so the guard could never fire. A cumulative counter now backs it.
@@ -229,15 +236,23 @@ unscored_clauses:
     - id: D6
       text: downstream read error precedence -- an error on any downstream R beat
             must make the upstream response an error too
-      status: EXERCISED by the reference (phase M), NOT SCORED by any mutant
+      status: SCORED as of 2026-08-24 by dw_m11 -- 10 D6 failures
     - id: E6
       text: the same on the write side -- an error on the downstream B must make
             the upstream B an error
-      status: EXERCISED by the reference (phase M), NOT SCORED by any mutant
+      status: SCORED as of 2026-08-24 by dw_m11 -- 2 E6 failures, the SAME mutant
     - id: D7
       text: the error CODE is preserved -- SLVERR stays SLVERR, DECERR stays
             DECERR, neither normalised to the other
-      status: NEW, added when D6 was measured. EXERCISED, NOT SCORED
+      status: >
+        STILL UNSCORED, and this was MEASURED rather than assumed. dw_m11 was
+        run and its clause profile is D6 x10 and E6 x2 with ZERO D7. The reason
+        is structural, not a matter of tuning the guard: dw_m11 ERASES the
+        error, and a beat that carries no error cannot test which error it
+        carries. D6 and E6 fire first on the very beat that would have tested
+        D7. Closing D7 needs a mutant that reports AN error with the WRONG code
+        -- a disjoint behaviour, not a stronger version of this one -- and
+        whether the suite takes a twelfth is not this decision.
   rebaseline: >
     The full set was re-run against the extended reference, all ten, because
     the mutants are untouched but the environment they run in is not.
@@ -348,6 +363,25 @@ unscored_clauses:
   A4:
     text: at most MAX_READS reads outstanding at once
     status: closed by a CONTROL, not a mutant -- see negative_controls
+    retirement_defect_fixed: >
+      2026-08-24, and this landed BEFORE the eleventh mutant. The counter
+      retired on s_rlast -- exactly the signal dw_m10's defect withholds -- so
+      against that mutant it could never decrement. A4 then fired once per
+      cycle for the rest of the run: 1,024,737 failures where the honest count
+      is zero, dw_m10's phase coverage collapsed from seven phases to two, and
+      the "A4 coverage" of that mutant was D4's detection wearing A4's label.
+      A counter whose exit condition is the thing under test has no exit.
+      TWO CHANGES, and the second is the structural one. Retirement is now
+      counted from the beat count the TESTBENCH asked for, pushed at AR
+      acceptance and attributed by s_rid -- a residual coupling, stated not
+      hidden, and far weaker: no mutant here perturbs rid and D3 independently
+      checks it. And the report is EDGE-TRIGGERED, one line per episode, because
+      a level check on a counter that stops moving floods whatever the cause.
+      This was a SCORING hazard, not only a measurement one: any conforming
+      submission carrying its own A4 check produced the same million-line log.
+      MEASURED AFTER: golden PASS with zero A4 lines and peak 4 against a bound
+      of 4, unchanged. dw_m10 55 failures, ALL D4, zero A4. The control still
+      fires on A4 alone, peak 6 against a bound of 4, now in one line.
     note: >
       A4 is an UPPER bound and its permissive half says a further address "need
       not be accepted until one retires", so a design accepting FEWER than four
@@ -363,8 +397,9 @@ negative_controls:
     detail: >
       negctl/over_outstanding_dut.sv is the same design with room for SIX
       outstanding reads where A4 allows four, ports at full width and every other
-      clause untouched. It produces 26 failures, every one of them A4, and zero
-      on any other clause. That is what makes it a control rather than a mutant:
+      clause untouched. It produces 1 failure, on A4, and zero on any other
+      clause -- one line per episode since the check was edge-triggered, where
+      it previously produced 26 lines for the same single episode. That is what makes it a control rather than a mutant:
       it demonstrates the A4 check DISCRIMINATES rather than merely passes.
       Capability-INCREASED, because A4 is an upper bound whose permissive half
       makes a design accepting fewer conforming -- dut2 accepts one and passes.

@@ -18,7 +18,7 @@ A **total** defect fires on the first transaction of its class, so any testbench
 that exercises the class catches it whether or not it is checking the clause — it
 measures coverage, not checking.
 
-**Seven of these ten are ordinal or depth conditions**, and that weighting is
+**Eight of these eleven are ordinal or depth conditions**, and that weighting is
 measured rather than assumed. Two independent results — v_nw01, and the
 incognito v_ai02 submission — show the same split: conditions that are a property
 of a *single* transaction get caught (a value, a last beat, a mode), and ordinal
@@ -40,6 +40,32 @@ fifth-beat, five-beat-line, fourth-beat, 32nd-delivery and eight-cycle-stall.
 | `dw_m8_strb_wrong_every_thirty_second` | **E2** | the thirty-second downstream write beat, since reset | the beat carries the complement of its strobe |
 | `dw_m9_rdata_lanes_swapped_deep_in_burst` | **D1** | the fifth upstream beat of a response onward | two byte lanes of the upstream read data are exchanged |
 | `dw_m10_rlast_withheld_from_sixteenth_read` | **D4** | the sixteenth read since reset onward | the final upstream beat does not carry rlast |
+| `dw_m11_downstream_error_dropped_from_second` | **D6, E6** | the second downstream error since reset onward | the upstream response says OKAY where the slave returned SLVERR or DECERR |
+
+
+## The eleventh, and why it is here
+
+`dw_m11` was added on 2026-08-24 to close **D6 and E6** — two contract clauses
+the reference exercised and no mutant was keyed on, so a submission was neither
+rewarded for checking them nor penalised for ignoring them. **No mutant was
+swapped out for it.** The only redundancy relation in the set is `dw_m6`'s clause
+signature nesting inside `dw_m5`'s, and nesting in clause coverage is not
+redundancy in discrimination: `dw_m5` fires in phase H where `dw_m6` structurally
+cannot, and a submission checking only the last beat's `resp` kills `dw_m5` and
+misses `dw_m6`. Neither comes out, so the set is eleven and the outlier is
+documented rather than hidden.
+
+It keys on the error the **slave returned** — `m_rresp` / `m_bresp` on the
+downstream response channels — never on the SLVERR the design manufactures for a
+refused burst, which never appears there at all. That separation is what keeps it
+off `C4`'s ground, where `dw_m5` and `dw_m6` already live.
+
+**D7 is still unscored, and that was measured.** `dw_m11`'s clause profile is
+D6 ×10 and E6 ×2 with **zero D7**. The reason is structural: this mutant *erases*
+the error, and a beat carrying no error cannot test *which* error it carries —
+D6 and E6 fire first, on the very beat that would have tested D7. Closing D7
+needs a mutant that reports **an** error with the **wrong** code, which is a
+disjoint behaviour rather than a stronger version of this one.
 
 ## Non-equivalence witnesses — rule 16
 
