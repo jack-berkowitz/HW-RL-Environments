@@ -383,11 +383,33 @@ capability_controls:
       which configuration trips. Reverted rather than landed: tuning a throttle
       until the assertion happens not to fire is fitting to noise.
       .
-      WHAT IT NEEDS: a protocol-correct slave responder holding r_valid stable
-      under backpressure. That is a harness rework rather than a check, and it
-      also fixes something else -- L3 says liveness holds under RESPONSE
-      BACKPRESSURE and is exercised only at ~25% random stall, never sustained,
-      blocked by the same defect. Doing it once buys both.
+      A PROTOCOL-CORRECT RESPONDER WAS BUILT AND TESTED, AND IT DOES NOT FIX
+      THIS. The R channel was rewritten to mirror the B channel exactly -- a
+      presented flag set when a beat is offered, cleared only on handshake, the
+      rate counter gating when the NEXT beat is presented. Without a sustained
+      stall the reference passes with zero assertions, so the rewrite is sound.
+      With a sustained total stall it trips the same rr_arb_tree lock assertion
+      at ALL FOUR configurations, worse than the throttled attempt which tripped
+      on a subset. Reverted, not landed.
+      .
+      SO THE BLOCKER IS THE ANCHOR, NOT THE HARNESS. rr_arb_tree at LockIn=1
+      carries an ASSUME beside its ASSERT -- "it is disallowed to deassert
+      unserved request signals when LockIn is enabled" -- and in
+      axi_demux_simple the arbiter's req_i is mst_r_valids with gnt_i the
+      downstream r_ready. Those requests are INTERNAL TO THE ANCHOR. Holding
+      r_ready low is legal AXI, ready having no stability requirement; it locks
+      the arbiter, and something inside the anchor then deasserts an unserved
+      request.
+      .
+      CONSEQUENCE FOR THE TASK: sustained response backpressure is not
+      deliverable against this anchor at all. L3 cannot be tested in the
+      condition it names, and C3's ceiling cannot be enforced by backpressure.
+      Both are now properties of the ANCHOR rather than of the rig, which is a
+      different and larger decision than a harness fix -- it bears on whether
+      this anchor can carry a clause about response backpressure at all.
+      .
+      The F81 harness defect is still real and still worth repairing, and the
+      rewrite above is the repair. It just buys neither L3 nor C3.
   stimulus_legality:
     status: VIOLATION -- see F81
     where: "tb/axi4_xbar_tb.sv:299 and tb/axi4_xbar_liveness_tb.sv:135"

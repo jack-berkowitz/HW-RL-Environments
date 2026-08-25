@@ -4920,12 +4920,41 @@ the three tasks named rather than all of them.
 ### Blast radius, and it is not only the check that found it
 
 * **`d_nw01`'s L3** — "both hold under RESPONSE BACKPRESSURE" — has never been
-  tested in the condition it names. Only ~25% random stall has ever been applied,
-  because sustained backpressure trips the assertion. The clause is partly
-  unexercised, and the defect blocking it is the same one.
-* **`d_nw01`'s C3 ceiling check is blocked behind it.** Four approaches were
-  measured; the only one that discriminated cleanly also tripped the assertion on
-  a configuration-dependent subset. See F80 instance 2.
+  tested in the condition it names. Only ~25% random stall has ever been applied.
+* **`d_nw01`'s C3 ceiling check is blocked.** See F80 instance 2.
+
+**CORRECTION, MEASURED AFTERWARDS: this defect is NOT what blocks either of
+them.** The obvious reading was that the illegal `r_valid` withdrawal caused the
+arbiter assertion, so repairing the responder would unblock L3 and C3 together.
+It was tested rather than assumed.
+
+The R responder was rewritten to mirror the B channel exactly — a presented flag
+set when a beat is offered and cleared only on handshake, with the rate counter
+gating when the NEXT beat is presented. Without a sustained stall the reference
+passes with zero assertions, so the rewrite is sound. **With a sustained total
+stall it trips the same assertion at all four configurations** — worse than the
+throttled attempt, which tripped on a subset.
+
+So a protocol-correct responder does not fix it, and the two failures are
+independent. What the assertion actually reports is visible in
+`rr_arb_tree.sv` at `LockIn=1`, which carries an ASSERT and a companion ASSUME:
+
+```
+ASSERT(lock,     req_o && !gnt_i && !flush_i |=> idx_o == $past(idx_o))
+ASSUME(lock_req, lock_d |=> req_tmp == req_q)
+                 "It is disallowed to deassert unserved request signals
+                  when LockIn is enabled."
+```
+
+In `axi_demux_simple` the arbiter's `req_i` is `mst_r_valids` and its `gnt_i` is
+the downstream `r_ready`. **Those requests are internal to the anchor, not driven
+by the testbench.** So holding `r_ready` low — which AXI explicitly permits, ready
+having no stability requirement — locks the arbiter, and something inside the
+anchor then deasserts an unserved request.
+
+**This defect remains real and worth repairing on its own merits.** It is simply
+not the cause of L3's or C3's untestability, and the correction is recorded
+because the original claim was reasoned rather than measured.
 * **`d_ca01` carries the shape but NOT the violation, and I claimed otherwise
   before measuring.** Instrumented, it shows **zero illegal drops across 1,904
   legal handshakes** on a passing run. Both `mem_data_stall` sites are guarded by
