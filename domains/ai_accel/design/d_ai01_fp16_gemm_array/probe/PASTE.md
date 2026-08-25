@@ -528,4 +528,51 @@ Everything normative is in the interface below.
 //     can be read as the trade it is rather than as a verdict.
 //
 // =============================================================================
+
+// =============================================================================
+// THE INTERFACE, DECLARED
+// =============================================================================
+// V1 above states the ports in a table. This is the same interface as a
+// DECLARATION, so that it is authoritative rather than described -- a table and
+// a port list can drift and nothing would report it.
+//
+// THE PARAMETER DEFAULTS BELOW ARE NOT NORMATIVE. P2 is the sole authority on
+// the scored configuration. HEIGHT=8 here is the reference's default, reproduced
+// so that this module elaborates standalone, and it carries no claim about what
+// is scored. If P2 ever names a different geometry, P2 is right and this line is
+// stale -- it is not a second statement of the scored configuration.
+//
+// WHY DEFAULTS ARE PRESENT AT ALL, since the contract does not need them: P1
+// makes HEIGHT legal at 4 and 8, T3 requires a submission to hold at BOTH, and
+// every rig supplies both parameters explicitly, so a default is unnecessary on
+// the merits. It is here because DECLARING THE PARAMETERS WITHOUT DEFAULTS
+// CRASHES THE SYNTHESIS FRONTEND. Measured, not assumed: yosys `read_slang
+// --top fp16_gemm_array` on an otherwise-passing submission with
+// `parameter int unsigned HEIGHT` and no default exits 133 with a
+// trace/breakpoint trap and EMITS NO ERROR MESSAGE, where the same file with
+// `= 8` exits 0 clean. A submission copying this declaration verbatim would
+// have produced "slang did not run" instead of a verdict, and T5 makes that
+// worth more than tidiness.
+//
+// A submission REPLACES this module. It is reproduced here to be copied, not
+// instantiated.
+
+module fp16_gemm_array #(
+  parameter int unsigned HEIGHT = 8,
+  parameter int unsigned WIDTH  = 8
+) (
+  input  logic                                     clk_i,
+  input  logic                                     rst_ni,
+  input  logic [WIDTH-1:0][HEIGHT-1:0][15:0]       x_i,
+  input  logic            [HEIGHT-1:0][15:0]       w_i,
+  input  logic [WIDTH-1:0]            [15:0]       y_i,
+  output logic [WIDTH-1:0]            [15:0]       z_o,
+  input  logic [2:0]                               rnd_i,
+  input  logic                                     accumulate_i,
+  input  logic [WIDTH-1:0]                         row_clk_gate_en_i,
+  input  logic                                     reg_enable_i,
+  input  logic                                     flush_i,
+  output logic [WIDTH-1:0][HEIGHT-1:0][4:0]        status_o
+);
+endmodule
 ```

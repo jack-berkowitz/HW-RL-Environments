@@ -126,7 +126,53 @@ probe: probe/PASTE.md
 # below is the live one; 86b7d95729381055 was recorded on 08-23 and three
 # spec-wide commits moved it on 08-24 without this field being touched. See
 # missed_boundaries. Recompute with scripts/task_text_hash.py at the point of use.
-task_text_hash: 2b7c36c5b08e7965
+task_text_hash: 2cf1ff4be7bf693a
+
+interface_boundary:
+  changed_on: 2026-08-25
+  pre_bump_task_text_hash:  2b7c36c5b08e7965
+  post_bump_task_text_hash: 2cf1ff4be7bf693a
+  behavioural: false
+  what_changed: >
+    THE INTERFACE IS NOW DECLARED. spec/fp16_gemm_array_iface.sv was 492 lines
+    of which every one was a comment -- the only design spec in the repository
+    shipping no module declaration. V1 stated the ports as a TABLE. 45 lines
+    added, none removed; probe/PASTE.md regenerated and byte-identical to the
+    spec (30756 bytes each, check_paste_sync 0 of 9 out of sync).
+    .
+    Checked field by field against V1's table before landing: every width, every
+    packed dimension, every direction agrees. No requirement changes. What
+    changes is that the declaration is AUTHORITATIVE rather than described -- a
+    table and a port list can drift and nothing would report it.
+  why_it_mattered: >
+    scripts/sim_candidate.sh derives the DUT module by grepping `^module` in the
+    spec. It got an empty string, resolved the testbench to tb/_tb.sv and
+    refused -- correctly, but the effect was that d_ai01 could not run through
+    the scored path at all. That was gap 1 of the four in F88. The runner
+    fallback made the task runnable; this makes the defect go away at its source,
+    and the fallback's "derived from the TASK DIRECTORY" note is now silent for
+    this task.
+  parameter_defaults_are_not_normative: >
+    HEIGHT=8 WIDTH=8 appear as defaults and CARRY NO CLAIM ABOUT WHAT IS SCORED.
+    P2 is the sole authority on the scored configuration; if P2 ever names a
+    different geometry, P2 is right and the default is stale.
+    .
+    THE DEFAULTS ARE PRESENT BECAUSE OMITTING THEM CRASHES THE SYNTHESIS
+    FRONTEND, measured rather than assumed. `parameter int unsigned HEIGHT` with
+    no default makes yosys `read_slang --top fp16_gemm_array` exit 133 with a
+    trace/breakpoint trap and NO ERROR MESSAGE; the same file with `= 8` exits 0
+    clean. Reproduced twice through the runner and once directly in the
+    container. A submission copying the declaration verbatim would have received
+    "slang did not run" instead of a verdict.
+    .
+    Recorded because the no-defaults form was RECOMMENDED AND AGREED before it
+    was tested, on the reasoning that one statement of the scored geometry is
+    safer than two. The reasoning was sound and the answer was wrong. The drift
+    it worried about is closed by naming which statement governs instead.
+  candidates: >
+    RE-SOLICITATION REQUIRED for chat, claude and gemini. The shipped text
+    changes, and the hash is what asserts "same question". Nothing is re-scored
+    for correctness -- no behaviour required of a submission changes.
 
 version_boundary:
   changed_on: 2026-08-23

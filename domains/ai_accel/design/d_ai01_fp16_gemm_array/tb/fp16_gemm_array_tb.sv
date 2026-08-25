@@ -265,8 +265,14 @@ module fp16_gemm_array_tb;
     // returned NO_VERDICT while the run itself had passed and said so in a
     // word a human reads identically. Fourth of the four gaps that kept
     // d_ai01 off the scored path, and the one that survived the other three.
+    // THE REASON IS PART OF THE VERDICT. Converting the old bare `RESULT: FAIL`
+    // to TEST_RESULT left it with no reason string, so the runner reported
+    // "FAIL:" with nothing after it -- a correct verdict that cannot be acted
+    // on. A one-line failure with no reason is the same defect as a metric with
+    // no gate: it is read, and it says nothing.
     if (errs_z == 0 && errs_st == 0) $display("TEST_RESULT: PASS");
-    else                             $display("TEST_RESULT: FAIL");
+    else $display("TEST_RESULT: FAIL: %0d z mismatches, %0d status mismatches over %0d scored cycles (H=%0d)",
+                  errs_z, errs_st, checked, H);
     $finish;
   end
 
@@ -280,7 +286,7 @@ module fp16_gemm_array_tb;
         // An unfilled record is worse than no record: say so plainly rather
         // than printing zeros that read like measured absence.
         $display("COVERAGE: NOT MEASURED -- no cycle was ever tallied.");
-        $display("TEST_RESULT: FAIL");
+        $display("TEST_RESULT: FAIL: coverage floors not met -- see FLOOR FAIL lines above");
         $finish;
       end
 
