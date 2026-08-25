@@ -201,3 +201,12 @@ negative_controls:
 watchdog:
   tb_sim_time_limit: 2ms
   harness_sim_timeout_s: 60
+
+readies_criterion:
+  date: 2026-08-25
+  verdict: NO FROZEN READY -- nothing to adjudicate
+  measured: >
+    all 11 inputs vary, pop_ready_i included. Measured here rather than taken from the sweep that
+    reported this task clean: three of that sweep's rows were wrong when read
+    against my own tasks, and a clean row is the one nobody rechecks.
+

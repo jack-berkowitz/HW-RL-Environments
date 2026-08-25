@@ -8,6 +8,13 @@
 // The driver is an ALWAYS BLOCK so no rising edge goes unserviced, and it never
 // withdraws an offer, which is what clause H2 requires of the source.
 module stream_realign_tb;
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Plusarg-guarded, so
+  // a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, stream_realign_tb);
+  end
   localparam int LIVE = 16;             // clause X3
 
   int errors = 0;

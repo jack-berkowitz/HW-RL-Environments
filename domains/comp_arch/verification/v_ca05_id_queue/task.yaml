@@ -41,7 +41,13 @@ harness:
                                    # becomes a performance check
 
 spec: [spec/tag_tracker_spec.md]
-task_statement: probe/BLIND_TB_TASK.md
+task_statement: probe/PASTE.md
+task_statement_note: >
+  Was probe/BLIND_TB_TASK.md, which DOES NOT EXIST in this task and never
+  has. The prompt document on disk is probe/PASTE.md, and that is what
+  task_text_hash.py hashes -- it accepts either name, so the hash was
+  always right and only the pointer was wrong. A record naming an
+  artefact that is not there, which nothing read and nothing caught.
 
 scoring_ceiling:
   reference: 10 of 10
@@ -199,4 +205,23 @@ policy_derivation:
     A 22/22 here is NOT equivalent to a 22/22 from in_source_rederivation, and a
     results table that prints them in one column is comparing two different
     claims. Report the method alongside the number.
+
+readies_criterion:
+  date: 2026-08-25
+  verdict: NOT MEASURABLE by the variation instrument -- stated, not assumed clean
+  why: >
+    check_stimulus_variation.py reads the input port list from spec/*_iface.sv.
+    THIS TASK HAS NONE: its port map lives in probe/PASTE.md, which is correct
+    for a submission -- the hash covers it and a submitter sees it -- and
+    invisible to the tool. So v_ca05 has been reported as SKIPPED every time the
+    sweep has run, and will be, and that is not the same as clean.
+  what_would_fix_it: >
+    Either the tool learns to read a port list out of PASTE.md, or this task
+    ships a spec/*_iface.sv alongside it. The second moves the hash; the first
+    is AGENT-PPA's file. Neither is decided here, and until one happens this
+    task's readies -- and every other input -- are UNMEASURED rather than clean.
+  the_general_point: >
+    A task the instrument cannot read is reported in the same column as a task
+    with nothing wrong. "SKIPPED" and "none frozen" are different answers and a
+    reader scanning a table of eleven rows will not distinguish them.
 

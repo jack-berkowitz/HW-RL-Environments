@@ -262,3 +262,12 @@ condition_floor:
   rebaseline: >
     Ten of ten killed, gate-mutant rejected, conformant PASS, dut2 PASS,
     ACCEPTED. Every verdict identical to the committed baseline.
+
+readies_criterion:
+  date: 2026-08-25
+  verdict: NO FROZEN READY -- nothing to adjudicate
+  measured: >
+    all 6 inputs vary, out_ready_i included. Measured here rather than taken from the sweep that
+    reported this task clean: three of that sweep's rows were wrong when read
+    against my own tasks, and a clean row is the one nobody rechecks.
+

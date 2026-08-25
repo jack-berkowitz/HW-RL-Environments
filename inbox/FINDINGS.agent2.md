@@ -1213,6 +1213,11 @@ to outlive the moment it was taken.
 
 ## FINDING — a condition count is the right instrument and the wrong gate
 
+> **Gate the stimulus, which the harness alone determines. Report the condition,
+> per channel, always. Never fail on it.** Failing on a condition converts
+> *visibility* into *non-conformance*, and making an evasion non-conforming is a
+> mirror clause's job, not a floor's.
+
 **I built the thing I had spent the session prescribing, and it rejected two
 conforming implementations on first contact.**
 
@@ -1267,3 +1272,118 @@ error each caught was mine, in the same change, in opposite directions.
 **Rule:** before a floor gates, ask who can make its condition false. If a
 conforming implementation can, the floor may report and must not fail — and the
 conformant set, not the mutant set, is what tells you whether you got it wrong.
+
+### Two things that belong with it
+
+**1 — Mutation coverage and conformant acceptance are orthogonal detectors, and
+neither substitutes for the other.**
+
+Each of my two errors was **invisible to the instrument that caught the other**:
+
+| error | caught by | invisible to |
+| --- | --- | --- |
+| stimulus falling short (`m_aw=0`) | the **floor** | the conformant set — every legal design still passed |
+| the gate reaching too far (rejecting `dut2`) | the **conformant set** | the mutants — all ten still died, **10 of 10, and the run looked healthy** |
+
+A mutation-only view of the bad gate showed a perfect score. A conformant-only
+view of the short stimulus showed nothing wrong. They are not two strengths of
+one measurement; they are measurements of **different things** — *does the
+reference catch what it should* and *does it accept what it must*.
+
+**This is the argument for keeping conformant perturbations in the SCORED path**
+rather than running them once as a startup check. A startup check answers "was
+the reference sane when it was written". A scored one answers "is it sane now",
+and the gate that rejected two legal designs was written today, hours after the
+last time anyone would have run a startup check.
+
+**2 — "Non-zero" is not a floor when the antecedent is one cycle wide.**
+
+The registered stall arm produced a count of **1** on two channels. That passes a
+`== 0` floor and is useless: any defect not on the very first occurrence is still
+unreachable, and this suite deliberately weights its mutants toward *ordinal*
+conditions — the fourth toggle, the second DECERR, the sixteenth read — precisely
+the class a count of 1 cannot reach.
+
+> **A condition floor's threshold is argued from the antecedent's WIDTH, not from
+> zero.** How many cycles does the state last, how often can it recur, and what
+> is the highest ordinal any guard keyed on it uses? The threshold is the answer
+> to that, not the smallest number that is not zero.
+
+Here the antecedent is one to two cycles wide and recurs per beat, the counts
+came in at 30/35/12/12, and a threshold of four has margin — but the number that
+matters is *four because guards go up to the fourth occurrence*, not *four
+because it is more than zero*.
+
+---
+
+## FINDING — the missing handshake-stability clause: four tasks, both territories
+
+**A contract-gap class, not four coincidences.** Four tasks across two agents'
+territories are missing the same clause, and in each the consequence is identical:
+**a design that withdraws a `valid` before its `ready` is seen conforms to the
+specification as written.**
+
+| task | owner | the gap | status |
+| --- | --- | --- | --- |
+| **d_dsp02** | design | `out_valid` may depend combinationally on `out_ready`, so H3's antecedent is evadable | **closed** — H1b landed |
+| **d_ca01** | design | the same on `rsp_valid_o`/`rsp_ready_i`; L5 permits the *input*-side dependency and says nothing about the output side | **closed** — R1b landed |
+| **v_ca06** | verification | **no clause about valid stability under stall exists at all** | **open** |
+| **v_ca03** | verification | the same; `s_rready`/`s_bready` appear only inside A1's *definition* of "outstanding" | **open** |
+
+The design side found theirs by building a control that evaded H3's antecedent and
+watching it pass the whole suite. I found mine from the other direction — a
+frozen-ready sweep, then the mechanical question *does any check have an antecedent
+requiring this ready to be low?* On v_ca06 and v_ca03 the answer was **no check,
+and no clause either**. There is nothing to gate, because there is nothing to gate
+*for*.
+
+**Why it is a class rather than a coincidence.** Both design instances and both
+verification ones arise the same way: the AXI-family handshake makes stability a
+*convention* so universal that a spec author writing from the protocol will not
+think to state it, while a spec author writing a *contract* must, because the
+contract is what the submission is scored against. Two independent authors omitted
+it four times. It is a property of the writing situation, not of anyone's
+attention.
+
+**Why the verification side is worse than the design side.** On a design task the
+omission lets a bad submission through. On a verification task it lets a bad
+submission through **and** makes the reference unable to object: v_nw02, which
+*does* have the clause (X3), had two of its four channels unreachable until today
+— so even where the clause exists, the instrument behind it needs the stimulus
+that only backpressure provides. The gap and the vacuity compound.
+
+### Proposed text, written and NOT landed
+
+Both move a hash and both should be decided alongside whatever else moves them.
+
+**v_ca06** — as a new clause in *§1 Transaction correspondence*, where the other
+handshake obligations live, after A4:
+
+> **A5 — an offered beat is not withdrawn.** On every channel, once a `valid` is
+> asserted it remains asserted, with its payload unchanged, until the
+> corresponding `ready` is seen. `valid` **shall not** depend combinationally on
+> `ready`: a unit that offers only into a ready sink satisfies this clause by
+> never entering it, and deadlocks against a consumer that waits for `valid`
+> before asserting `ready`.
+> *Authority: AMBA AXI4 — a source may not withdraw an offer, and may not wait
+> for the sink before making one.*
+
+**v_ca03** — as a new clause in *§4 The master port*, after D4:
+
+> **D5 — an offered beat is not withdrawn.** On every channel of both ports, once
+> a `valid` is asserted it remains asserted, with its payload unchanged, until
+> the corresponding `ready` is seen. `valid` **shall not** depend combinationally
+> on `ready`. A converter that offers only into a ready sink satisfies this
+> clause by never entering it, which is not conformance.
+> *Authority: AMBA AXI4 — a converter alters identifiers and nothing else,
+> including the handshake discipline it forwards.*
+
+Both name the evasion explicitly rather than only the obligation, because that is
+what H1b and R1b had to do: the obligation alone is satisfiable by never entering
+the state, and a reader who has not met that failure will not infer the second
+sentence from the first.
+
+**Landing either requires the stimulus in the same boundary** — the two-halves
+rule, which this suite has now paid for five times. A stability clause with every
+ready held at 1 is a clause with an instrument that cannot fail, which is E1's
+read side exactly.
