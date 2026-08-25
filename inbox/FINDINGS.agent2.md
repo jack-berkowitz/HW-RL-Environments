@@ -1763,11 +1763,23 @@ observation is the same one. So the kill table reads 10 of 10, the clause list
 reads covered, and the score is higher than the work done.
 
 **This is the cleanest statement this project has of "testbench-only grading
-overstates correctness", and it is measured rather than argued.** The usual worry
-about grading a testbench is recognition — that a model may have seen the anchor.
-This is different and worse: it is a *systematic upward bias* that applies to
-every submission equally, that no amount of anchor decontamination touches, and
-that the reference itself exhibits.
+overstates correctness", and it is measured rather than argued.**
+
+The usual worry about grading a testbench is **recognition** — that a model may
+have seen the anchor — and every defence built so far attacks that: Class A
+anchors, decontaminated copies, the recognition probes, the incognito
+re-solicitation. This is a different thing and the difference is what matters:
+
+> **Decontamination does not touch it.** It is a systematic upward bias that
+> applies to **every submission equally**, including one that has never seen the
+> anchor, including the reference itself. There is no version of the task, no
+> cleaner anchor and no better-behaved model for which it goes away, because the
+> bias is in how the clauses were grouped under checks — not in what the
+> submission knows.
+
+That property is what separates it from every other finding in this document.
+The others describe ways a measurement can be wrong. This one describes a way
+the measurement is wrong *by construction*, in the same direction, for everyone.
 
 ## Detection, and why nothing else finds it
 
@@ -1849,10 +1861,22 @@ clean refutation, and I nearly reported it as one.
 | **v_ca07** | **C3 and G2 genuinely unchecked**, both confirmed | C3, G2 **grouped** — **wrong on both** |
 
 The proxy classified a candidate as *grouped* if any emittable clause shares its
-**section letter**. That is not "shares an observable". A section groups by
-**subject**, and one subject holds several observables: v_ca07's C1/C2 are the
-counter's *range* and C3 is the counter *after a change*; G1 is the gating
-*bound* and G2 the gating *level*. Same letter, different things to watch.
+**section letter**. That is not "shares an observable", and the distinction is the
+whole subject of this finding:
+
+> **A section groups by SUBJECT. A subject holds several observables.**
+>
+> v_ca07's `C1`/`C2` are the counter's **range**; `C3` is the counter **after a
+> change**. `G1` is the gating **bound**; `G2` is the gating **level**. Same
+> letter, different things to watch — and grouping is precisely about clauses
+> that share a *thing to watch*, not a heading.
+
+**No cheaper proxy for the real property is obvious**, and a reader should not
+assume one exists. "Shares an observable" means *the same signal, sampled at the
+same moment, under the same condition* — which is a fact about what the checker
+looks at, not about how the spec is organised. Recovering it mechanically would
+mean parsing each check's comparison and matching it against what each clause
+describes in prose, which is the hand work with extra steps.
 
 So the result is:
 
@@ -1877,3 +1901,74 @@ Registering the prediction is what made this visible. Had I measured first, 0 of
 over the same observable — which is the clause-by-clause work itself, on all
 seven. No proxy shortcuts it, and the two shapes are distinguishable only by
 reading what each check watches.
+
+**The registered prediction stays visible above, unedited, marked UNTESTED**, so
+it can be settled when the hand work is done rather than quietly dropped. A
+prediction removed after an inconclusive measurement is a prediction that was
+never registered.
+
+---
+
+## A5 on v_ca06 — built, measured, NOT LANDED, and the reason is a finding
+
+**The clause, the stimulus and the checker are all written and the golden passes
+them. The boundary is blocked because two CONFORMANT PERTURBATIONS violate the
+clause once the stimulus exists.**
+
+### What was built
+
+- **Clause A5** in §1, naming the evasion as well as the obligation: *once a
+  `valid` is asserted it remains asserted, with its payload unchanged, until the
+  corresponding `ready` is seen* — and *`valid` shall not depend combinationally
+  on `ready`*. Hash moved `ca63302d6b23df46` → `c1de26c772eb754d`.
+- **Stimulus**: reactive backpressure on all five readies, arm combinational on
+  valid, two cycles with a three-cycle cooldown. Ported from v_nw02, not
+  rediscovered.
+- **Checker**: per-channel held-offer tracker, withdrawal and payload change
+  reported separately, antecedent count **reported and never gating**.
+
+**Golden: PASS.** Antecedent held on all five channels — 177, 528, 153, 393, 209.
+Every one of the twelve mutants still killed, 5c still OK on both bases.
+
+### What blocked it
+
+`dwc_c1_extra_latency` and `dwc_c5_response_intake_slow` — two of the five
+conformant perturbations — **CRASH**, and the run is REJECTED. Reproduced:
+
+    FAIL [A5] channel 3: valid was withdrawn without a handshake (t=6605)
+    %Error: rr_arb_tree.sv:391: [ASSERT FAILED] lock_req:
+      It is disallowed to deassert unserved request signals when LockIn is enabled.
+
+**The anchor's own vendored RTL asserts the same property internally**, on the
+same event, one cycle later. A5 is not a clause I invented to fit a gap — the
+design it describes already believes it.
+
+### Why this is the D6/E6 shape again, from the same direction
+
+Both perturbations were written and verified as conformant **while every ready was
+held at 1**. They are conformant *at that stimulus*. Adding backpressure — the
+stimulus the clause needs in order to be falsifiable at all — reveals that they
+withdraw an offer, which the clause forbids and the anchor's own assertion
+forbids.
+
+This is the third time extending stimulus has caught a defect in a **legal**
+artefact rather than in a mutant: v_ca06's `dut2` violated D7 the moment D7 could
+be observed; v_ca07's `dut2` glitched across reconfiguration once the reference
+looked; now two conformant perturbations withdraw offers once anything stalls.
+
+> **A conformant artefact is conformant AT THE STIMULUS IT WAS VERIFIED UNDER.**
+> Extending stimulus does not only test submissions — it re-tests every artefact
+> the task ships, and the ones written to be legal are the least suspected.
+
+### State, and why the tree is clean
+
+**Reverted.** The spec and testbench changes are backed out and the hash is back
+at `ca63302d6b23df46`; `git status` is clean for the task. A REJECTED task left
+standing in the working tree is worse than an unlanded boundary — the numbers on
+it are void under rule 16 while it stands, and nothing in the tree would say so.
+
+**What landing it needs**: `dwc_c1` and `dwc_c5` made conformant under
+backpressure — holding valid and payload until ready is seen, while keeping the
+latency and slow-intake behaviour they exist to demonstrate. That is a change to
+the conformant set, which is a decision about what the task considers legal, and
+it is not one to make inside a boundary that was scoped as clause-plus-stimulus.

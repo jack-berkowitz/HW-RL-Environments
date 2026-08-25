@@ -252,6 +252,8 @@ module fp16_gemm_array_tb;
     end
 
     // ------------------------------------------------------------------
+    measure_latency();
+
     report_coverage();
 
     $display("");
@@ -270,11 +272,122 @@ module fp16_gemm_array_tb;
     // "FAIL:" with nothing after it -- a correct verdict that cannot be acted
     // on. A one-line failure with no reason is the same defect as a metric with
     // no gate: it is read, and it says nothing.
-    if (errs_z == 0 && errs_st == 0) $display("TEST_RESULT: PASS");
+    if (errs_z == 0 && errs_st == 0 && lat_ok) $display("TEST_RESULT: PASS");
+    else if (!lat_ok)
+      $display("TEST_RESULT: FAIL: L3 latency floor -- measured %0d ticks at HEIGHT=%0d, expected %0d (L3 D*(H-1)+2 = %0d plus one sampling edge)",
+               lat_meas, H, EXP_LAT, L3_LAT);
     else $display("TEST_RESULT: FAIL: %0d z mismatches, %0d status mismatches over %0d scored cycles (H=%0d)",
                   errs_z, errs_st, checked, H);
     $finish;
   end
+
+  // ---------------------------------------------------------------------------
+  // L3 LATENCY FLOOR -- the capacity evidence the scored geometry no longer has.
+  //
+  // WHY IT EXISTS. The scored geometry moved from HEIGHT=8 to HEIGHT=4 because
+  // 8x8 does not route. That reopened a gap this task had already closed:
+  // nc_g_height_blind_depth pins the chain depth to the literal 4, which is
+  // CORRECT at HEIGHT=4, so it passes there and fails only at HEIGHT=8. The
+  // scored geometry has no capacity-class control of its own. d_nw01 recorded
+  // the same shape once already -- no capability check discriminates at
+  // MAX_TRANS=2, and A PASS AT THE LOW SETTING IS NOT CAPABILITY EVIDENCE -- and
+  // the scored setting here is now the low one.
+  //
+  // WHAT IT ASSERTS. Total latency is L3's D*(H-1)+2: 14 enabled ticks at
+  // HEIGHT=4, 30 at HEIGHT=8. The value is DERIVED FROM H, so a design carrying a
+  // CONSTANT latency satisfies at most one of the two legal geometries and the
+  // pair catches it. The measurement is printed at both, so the derivation is
+  // readable across the pair rather than asserted.
+  //
+  // WHAT IT DOES NOT CLOSE, stated because the honest limit matters more than the
+  // floor. IT CANNOT DETECT nc_g AT HEIGHT=4 AND NOTHING CAN. At HEIGHT=4 nc_g is
+  // not a wrong design -- it is a right one that happens to be inflexible, and it
+  // is behaviourally identical to a conforming design at that geometry. The only
+  // evidence of inflexibility is the other geometry. What this floor adds is that
+  // a latency defect is now REPORTED AS A LATENCY DEFECT rather than inferred from
+  // a mismatch count, which is rule 36's shape: the measurement is visible instead
+  // of implied.
+  //
+  // VALIDATED BY FIRING IT, not by watching it pass. A floor that has only ever
+  // agreed with the reference is a floor nobody has seen discriminate:
+  //
+  //   reference   H=4  15  expected 15  PASS      H=8  31  expected 31  PASS
+  //   nc_g        H=4  15  expected 15  PASS      H=8  15  expected 31  FAIL
+  //   nc_b        H=4  16  expected 15  FAIL
+  //
+  // nc_g's row IS the test. Its latency is 15 at BOTH heights -- the same number
+  // for a geometry twice the size -- which is precisely what "constant rather
+  // than derived" looks like when you measure it instead of arguing about it. And
+  // it does NOT fire at H=4, where nc_g is a correct design, so the floor does not
+  // manufacture a failure at the geometry it cannot speak about.
+  //
+  // nc_b's row is the part that is new at the scored geometry: a latency defect
+  // now FIRES AT HEIGHT=4 and is reported as a latency defect rather than inferred
+  // from a mismatch count. Before this floor, HEIGHT=4 carried no latency evidence
+  // of its own at all.
+  //
+  // WHY NOT THE MIRROR CONTROL. The alternative was nc_g's mirror -- depth pinned
+  // to the literal 8, failing at HEIGHT=4. It CONSTRUCTS: indexing stages 4..7 of
+  // a [3:0] port resolves to X in SystemVerilog rather than erroring. That is
+  // exactly the sign it is CONSTRUCTIBLE AND NOT PLAUSIBLE. No submission builds
+  // for a height above the one it was given, and a control nobody would write
+  // measures the checker rather than the contract.
+  // THE CONVENTION IS +1 AND IT IS THE RIG, NOT THE DESIGN. First cut asserted
+  // L3's D*(H-1)+2 directly and the REFERENCE measured one tick more at BOTH
+  // geometries -- 15 against 14 at H=4, 31 against 30 at H=8. A UNIFORM offset
+  // across both is the signature of a counting convention, not of a design
+  // defect: this loop counts the edge at which the impulse is SAMPLED as tick 1,
+  // and L3 counts from the sample. MEASUREMENTS.md section 3 records probe_skew_tb
+  // making the identical mistake -- a uniform 2-cycle shortfall at every stage,
+  // formula wrong rather than instrument -- and the same test settled it, because
+  // the H-DEPENDENCE was intact: 31 - 15 = 16 = D*(8-4), exactly L3's slope.
+  //
+  // THE SLOPE IS THE REAL ASSERTION and it is what "derived rather than constant"
+  // means. One elaboration measures one geometry, so this floor asserts the
+  // absolute value under the stated convention and the PAIR carries the slope. A
+  // design with constant latency has slope 0 and fails at one of the two heights
+  // necessarily.
+  localparam int unsigned L3_LAT  = 4*(H-1) + 2;   // the contract's number
+  localparam int unsigned EXP_LAT = L3_LAT + 1;    // +1 for the sampling edge
+  int unsigned lat_meas;
+  bit          lat_ok;
+
+  task automatic measure_latency();
+    int unsigned t;
+    begin
+      lat_meas = 0;
+      lat_ok   = 1'b0;
+      // Quiesce: flush the chain, then hold a settled all-ones operand field so
+      // z is a known constant before the impulse.
+      flush = 1'b1; accumulate = 1'b0; reg_enable = 1'b1; row_gate = '1;
+      for (int rr = 0; rr < W; rr++) begin
+        y[rr] = 16'h0000;
+        for (int k = 0; k < H; k++) x[rr][k] = 16'h3C00;   // 1.0
+      end
+      for (int k = 0; k < H; k++) wt[k] = 16'h0000;        // 0.0 -> chain is a delay line
+      repeat (4) @(posedge clk);
+      flush = 1'b0;
+      repeat (EXP_LAT + 8) @(posedge clk);                  // let the flush drain
+
+      // IMPULSE AT STAGE 0, whose delay IS the total latency D*(H-1)+2.
+      wt[0] = 16'h3C00;                                     // 1.0 at stage 0 only
+      t = 0;
+      for (t = 1; t <= EXP_LAT + 20; t++) begin
+        @(posedge clk);
+        #1;
+        if (z[0] !== 16'h0000) begin
+          lat_meas = t;
+          break;
+        end
+      end
+      lat_ok = (lat_meas == EXP_LAT);
+      $display("METRIC: latency_ticks=%0d expected=%0d (L3 D*(H-1)+2=%0d, +1 sampling edge) H=%0d ok=%s",
+               lat_meas, EXP_LAT, L3_LAT, H, lat_ok ? "yes" : "NO");
+      if (lat_meas == 0)
+        $display("  L3 FLOOR: the impulse never emerged within %0d ticks -- not measured, not passed",
+                 EXP_LAT + 20);
+    end
+  endtask
 
   task automatic report_coverage();
     int unsigned of_hits, uf_hits, rnd_hits;

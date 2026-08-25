@@ -362,7 +362,76 @@ scored_configuration:
     was previously redundant with. Anyone running only the scored configuration --
     a PPA-only flow, for instance -- gets no evidence about HEIGHT at all.
   second_capacity_control_owed:
-    status: SCOPED, NOT BUILT
+    status: RESOLVED -- the L3 LATENCY FLOOR was built instead of the mirror control
+    resolution_date: 2026-08-25
+    what_was_built: >
+      A latency floor in tb/fp16_gemm_array_tb.sv. It measures total latency with a
+      directed impulse at stage 0 and asserts L3's D*(H-1)+2 -- 14 enabled ticks at
+      HEIGHT=4, 30 at HEIGHT=8 -- so the value is DERIVED FROM H and a design
+      carrying a CONSTANT latency satisfies at most one of the two legal
+      geometries.
+    validated_by_firing_it: >
+      A floor that has only ever agreed with the reference is a floor nobody has
+      seen discriminate. Measured:
+        reference  H=4 15/15 PASS   H=8 31/31 PASS
+        nc_g       H=4 15/15 PASS   H=8 15/31 FAIL
+        nc_b       H=4 16/15 FAIL
+      nc_g's row IS the test: its latency is 15 at BOTH heights, the same number
+      for a geometry twice the size, which is what "constant rather than derived"
+      looks like measured rather than argued. It does NOT fire at H=4 where nc_g
+      is a correct design, so the floor does not manufacture a failure at the
+      geometry it cannot speak about.
+    what_is_new_at_the_scored_geometry: >
+      nc_b now FIRES AT HEIGHT=4 and is reported as a latency defect rather than
+      inferred from a mismatch count. Before this floor HEIGHT=4 carried no
+      latency evidence of its own.
+    what_it_still_does_not_close: >
+      IT CANNOT DETECT nc_g AT HEIGHT=4 AND NOTHING CAN. At HEIGHT=4 nc_g is not a
+      wrong design, it is a right one that happens to be inflexible, and it is
+      behaviourally identical to a conforming design at that geometry. The only
+      evidence of inflexibility is the other geometry, which is why T3 is
+      load-bearing and why correctness must be read across the pair.
+    a_convention_error_the_floor_caught_in_itself: >
+      The first cut asserted D*(H-1)+2 directly and the REFERENCE measured one tick
+      more at BOTH geometries -- 15 against 14, 31 against 30. A UNIFORM offset
+      across both heights is the signature of a counting convention, not a design
+      defect, and the H-dependence was intact: 31 - 15 = 16 = D*(8-4), exactly
+      L3's slope. MEASUREMENTS.md section 3 records probe_skew_tb making the
+      identical mistake and being settled by the identical test. The convention is
+      now stated in the assertion rather than absorbed into a magic number.
+
+    WHY_THE_MIRROR_CONTROL_WAS_REJECTED:
+      verdict: CONSTRUCTIBLE BUT NOT PLAUSIBLE
+      the_candidate: >
+        nc_g's mirror -- chain depth pinned to the literal 8, correct at HEIGHT=8
+        and wrong at HEIGHT=4, so it would fail at the scored geometry and give
+        the pair one failing capacity control at each legal height.
+      why_it_constructs: >
+        Pinning depth to 8 while the port is HEIGHT-wide means indexing stages
+        4..7 of a [3:0] array. SystemVerilog resolves an out-of-range index to X
+        rather than raising an elaboration error, so the design compiles and runs
+        and produces wrong data.
+      why_that_is_the_objection_and_not_the_defence: >
+        IT CONSTRUCTS ONLY BECAUSE THE LANGUAGE DECLINES TO OBJECT. No submission
+        builds for a height ABOVE the one it was given -- the plausible mistake is
+        building for the smaller legal height, which is nc_g and which already
+        exists. A CONTROL NOBODY WOULD WRITE MEASURES THE CHECKER RATHER THAN THE
+        CONTRACT: it demonstrates that the testbench can detect a thing, without
+        evidence that the thing is a way designs fail.
+      the_distinction_generalises: >
+        CONSTRUCTIBLE means the artefact can be built and will exercise the
+        checker. PLAUSIBLE means it is a way a submission actually goes wrong.
+        Only the second makes a control evidence about the contract. "It
+        compiles" is not an argument for plausibility and, where it compiles only
+        because the language resolves an error to X, it is an argument against.
+      the_precedent_that_frames_it: >
+        d_nw01 recorded that no capability check discriminates at MAX_TRANS=2 and
+        that A PASS AT THE LOW SETTING IS NOT CAPABILITY EVIDENCE; d_ca01 cites
+        that as its reason for MAX_MISSES=8 over 2. THE SCORED SETTING HERE IS NOW
+        THE LOW ONE, which is what made a second capacity control owed at all. The
+        floor discharges that debt without needing a plausible-design argument,
+        because a floor asserts a contract quantity rather than impersonating a
+        submission.
     the_gap: >
       THERE IS NOW NO CAPACITY-CLASS CONTROL THAT FAILS AT THE SCORED GEOMETRY.
       nc_g_height_blind_depth is the only capacity control and its polarity points
