@@ -388,13 +388,21 @@ for cand in "${CANDS[@]}"; do
   # inside it. So the exemption is extended rather than worked around, on the
   # same terms:
   #
-  #   EXEMPT if the file is shipped BY THE TASK (ref/, mutants/, conformant/)
-  #   -- its dependency closure is the task's and slang is not given it here.
+  #   EXEMPT if the file is shipped BY THE TASK -- its dependency closure is
+  #   the task's and slang is not given it here.
   #   NOT EXEMPT if the file is a SUBMISSION -- self-containment is part of
   #   what is being measured, and ORFS synthesis uses slang, so a design
   #   slang rejects could never have produced a PPA number.
+  #
+  # The list below USED to read ref/|mutants/|conformant/, and controls/ was
+  # then found separately too -- every nc_* negative control in all eight design
+  # tasks was refused with "FAILED THE SYNTHESIS FRONTEND". Three instances found
+  # one at a time is the enumeration failing in exactly the way the paragraph
+  # above predicted it would. The test is now the property itself: anything
+  # inside the task directory is shipped by the task, and a submission never is
+  # -- submissions live under candidates/.
   case "$cand" in
-    "$TASK_DIR"/ref/*|"$TASK_DIR"/mutants/*|"$TASK_DIR"/conformant/*) ;;
+    "$TASK_DIR"/*) ;;
     *) if [ "$SLANG" = "1" ]; then
          slang_why="$(slang_check "$runfile")"
          # A TOOL FAILURE IS RETRIED ONCE before being believed. If it
