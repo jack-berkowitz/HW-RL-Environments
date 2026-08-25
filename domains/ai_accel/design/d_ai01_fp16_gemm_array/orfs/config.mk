@@ -1,7 +1,7 @@
 # ORFS design config for d_ai01 fp16_gemm_array.
 #
 # SYNTHESISED AT THE SCORED CONFIGURATION, and it gets there by DEFAULT rather
-# than by an override: the shim declares HEIGHT=16, WIDTH=16. Nothing on this
+# than by an override: the shim declares HEIGHT=8, WIDTH=8. Nothing on this
 # line pins it, so if the shim default ever drifts from `scored_configuration:`
 # in task.yaml, the PPA number silently stops being the scored one. Both must
 # move together. (Same failure mode d_dsp03's config.mk documents.)
