@@ -1620,17 +1620,28 @@ to 35, and a hand-worked sample on one task establishes the rate.
 | **tester obligation** | 9 | "an obligation on you, the source", "the submitted testbench shall terminate" |
 | **to review** | **35** | design obligations with no instrument that can name them |
 
-The two discriminators are worth stating separately because they answer different
-questions. **Mutant keying** answers *is the clause exercised at all* — cross-
-referencing `violates:` against the candidate list is free and it moved 20.
-**Clause-text classification** answers *is there anything here to violate* — and
-it is regex over prose, so it is the weaker of the two and will misfile.
+**The two discriminators are not equally good and the difference should be
+carried with the numbers, not left in a covering note.**
+
+> **Mutant keying is EXACT.** A mutant's `violates:` field is a declaration by
+> the person who wrote the defect, cross-referenced against a list derived from
+> the spec and the testbench. Both sides are structured. It moved 20 and every
+> one of those 20 is certain.
+>
+> **Clause-text classification is REGEX OVER PROSE and will misfile.** It reads
+> a clause's English and guesses whether there is anything to violate. It already
+> misfiled: "obligation on **you**" was missed where "obligation on YOU" matched,
+> and v_nw04's `R1` — a statement of reset polarity — came through as a design
+> obligation to review.
+
+A count that mixes the two reads as one measurement and is two. The 20 are a
+result; the 33 are a triage aid.
 
 ### The worked sample — v_ca06, six candidates
 
 | clause | verdict |
 | --- | --- |
-| **C1, C2** — WRAP and multi-beat FIXED are refused | **exercised, reported as C4.** The floor requires ≥8 refused bursts and every refusal failure reports `C4`. Not unchecked — but a submission that checks only the *response* to a refusal is credited with checking *which bursts are refused*. The D6/D7 shape. |
+| **C1, C2** — WRAP and multi-beat FIXED are refused | **exercised, reported as C4** — and this is the **D6/D7 family for the third time**, see below. |
 | **F1, F2, F3** — reset, post-reset idle, no stale response | **genuinely unchecked.** Phase L asserts reset, releases, waits four cycles, and then **nothing**. No `fail()` follows the release at all. Stimulus without a checker — E3's shape before E3 got an instrument. |
 | **D2** — lane placement | not yet read |
 
@@ -1638,10 +1649,74 @@ it is regex over prose, so it is the weaker of the two and will misfile.
 two halves need *different* fixes: C1/C2 need the message to name the clause it
 tests; F2/F3 need an instrument that does not exist.
 
+### C1/C2 is the third instance of one family, not a v_ca06 fact
+
+| task | the clause tested | the id reported | what a submission is credited with |
+| --- | --- | --- | --- |
+| **v_ca06** | D7 — the error *code* is preserved | **D6** | checking precedence, credited with checking preservation |
+| **v_ca03** | E1's `resp` half | folded into the same comparison | checking the response, credited with checking the code |
+| **v_ca06** | C1/C2 — *which bursts* are refused | **C4** | checking the *response* to a refusal, credited with checking *which bursts are refused* |
+
+**Three instances across two tasks and three clause groups is a pattern in how
+clauses get grouped under one reported id**, not three separate oversights. The
+mechanism is the same each time: several clauses share one observation — a
+response code, a refusal — so one check is written over that observation and one
+id is chosen for its message. Every clause in the group is genuinely exercised.
+Only one can ever be *named*, and a submission that tests any of them scores as
+though it tested all.
+
+**It is invisible to every count.** Mutation kills them, emittability sees the
+group's chosen id emitted, and the clause list looks covered because the subject
+matter is. The only signal is that a clause in the group has no `fail()` that can
+name it — which is exactly what this tool reports, and why its "checked under
+another id" family is the dangerous one rather than the benign one.
+
+### The second task was chosen because I know it LEAST well, and the estimate did not survive
+
+Doing the least-familiar task **second rather than last** was a deliberate check
+on the v_ca06 rate. It failed the check twice over.
+
+**First, five of v_dsp02's candidates were my tool's fault.** Its result checker
+selects the clause id in a `case` and passes the **variable** to `fail()`:
+
+```systemverilog
+  unique case (e.op)
+    OP_SGNJ:   cl = "S1";
+    OP_MINMAX: cl = (is_nan(a) && is_nan(b)) ? "S5" : (…? "S4" : "S3");
+    OP_CMP:    cl = "S7";
+  endcase
+  fail(cl, …);
+```
+
+The tool matched only `fail("LITERAL"`, so it reported six clauses the reference
+names on every run as unreportable. Fixed by taking the assignment **whole** and
+pulling every clause literal out of it — a first attempt enumerated the forms and
+still missed the nested two-line ternary, which is the same mistake one level
+down. Suite total 88 → **83**; v_dsp02 19 → 14.
+
+**Second, and this is the part that revises the estimate: v_dsp02's remaining
+profile is nothing like v_ca06's.**
+
+| | v_ca06 | v_dsp02 |
+| --- | --- | --- |
+| genuinely unchecked | **3** — F1/F2/F3, reset with no checker after release | **~0** |
+| grouped under one reported id | 2 — C1/C2 → C4 | **~8** — every flag clause (S2, S6, S11, S13) → **S14**; every comparison clause (S8, S9, S10) → **S7** |
+| definitions / permissions / tester | 1 | 6 |
+
+**"Roughly half real" does not transfer.** v_dsp02 has almost nothing missing and
+almost everything *grouped* — and the two need different fixes: an absent
+instrument must be built, a grouped id only needs its message to name the clause
+it tested. Had I worked the familiar tasks first and the unfamiliar ones last, I
+would have spent the block building instruments for a suite whose dominant defect
+is a naming one.
+
+**That makes the grouping family the fourth instance and the dominant one**, not
+a v_ca06 curiosity. Across two tasks it now accounts for ten of the reviewed
+candidates against three genuinely unchecked.
+
 ### What this does not claim
 
-The 35 are **triaged, not worked**. The sample is one task of eleven, chosen
-because I know it best — which is exactly the availability bias F85 names, so the
-rate it establishes is a starting estimate and not a measurement. The per-task
-worked lists are the remaining step, and they are cheaper now that the 20 keyed
-and 33 non-obligations are out of the way.
+The remaining candidates are **triaged, not worked**, and the rate is now known to
+vary by task rather than being a suite property. Two tasks of eleven are done —
+the one I know best and the one I know least — which is a deliberately chosen pair
+rather than a sample, and the spread between them is the result worth carrying.
