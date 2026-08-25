@@ -694,6 +694,26 @@ module nonblocking_dcache_tb #(
         (cov_cap_offers < int'(MAX_MISSES)) || (cov_hum_created < 1))
       note_fail("coverage floors not met -- the run did not exercise the target conditions");
 
+    // ---- coverage floor: CONDITION-side, and it is a different question -----
+    // Every floor above counts what the HARNESS DROVE. For a driven input that
+    // is the same question as "was the condition reached", because the design
+    // has no say in it. R1's antecedent is not like that: `rsp_valid` is a
+    // DESIGN OUTPUT, so whether `rsp_valid && !rsp_ready` ever holds is the
+    // design's to decide, and a design that never offers a response to a
+    // stalled consumer empties R1 rather than violating it.
+    //
+    // So this floor cannot live in the block above. A stimulus floor answers
+    // "did the harness try"; this answers "was the clause exercised". They read
+    // identically and they diverge exactly where the design controls the state
+    // -- which is the case R1 is about. (AGENT-VERIF-A2's distinction, from a
+    // v_ca07 floor that counted a request as DRIVEN while its window was empty
+    // and passed in silence.)
+    //
+    // This was reported as a METRIC and not gated, in the same commit that
+    // filed rule 36 and in the task audited under it. See F86.
+    if (r1_hits == 0)
+      note_fail("R1 was never exercised -- rsp_valid was never high while rsp_ready was low");
+
     if (checks < 12)
       note_fail($sformatf("only %0d checks ran -- the run did not reach the contract", checks));
 

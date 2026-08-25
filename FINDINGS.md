@@ -5531,6 +5531,63 @@ The sweep's verdict set is therefore:
 
 A clause list cannot tell the middle two apart. Only running something can.
 
+### d_ca01's R1: the second instance, measured rather than read — and the floor that should have caught it did not exist
+
+F86 named `d_ca01` R1 as the second instance **from a reading of the clause**,
+which is the evidence this finding now says not to accept. It was measured.
+
+Auditing my own testbenches for `AGENT-VERIF-A2`'s attempt-versus-condition
+distinction turned up something first: **`r1_guard_true` was printed and never
+gated.** The count existed, the metric line even says *"0 means R1 was not
+exercised"*, and nothing failed on it — in the same commit that filed **rule 36**,
+in the task I had audited under rule 36 and reported as compliant. I asserted the
+gate instead of grepping for it.
+
+The reason it slipped is the distinction itself. `d_ca01`'s floor block is
+labelled *"coverage floors: stimulus-side"* and every member counts what the
+harness DROVE. For a driven input that is the same question as "was the condition
+reached", because the design has no say. **R1's antecedent is not a driven
+input** — `rsp_valid` is a design output, so whether `rsp_valid && !rsp_ready`
+ever holds is the design's to decide. A condition floor cannot live in a
+stimulus-floor block, and putting it there is how it ends up not being written at
+all.
+
+Gate added, then the control built to prove the gate can fire:
+
+    reference                    PASS 16/16
+    nc_r1_evades_antecedent      FAIL 0/16, and the ONLY distinct failure across
+                                 all sixteen configs is
+                                 "R1 was never exercised -- rsp_valid ..."
+
+It does not fail R1. It does not fail anything else — if it had, it would be
+perturbing more than R1 and would not be the control it claims to be. **R1 is
+UNFALSIFIABLE, confirmed by measurement**, and the new floor is proven to fire
+rather than assumed to.
+
+The repository already contained the other half of the symmetry and nobody had
+put the two side by side: `conformant/c02_ready_gated_on_valid.sv` is a
+CONFORMANT perturbation that gates `req_ready_o` on `req_valid_i`, because **L5
+explicitly permits it on the input side.** The identical construction on the
+output side is neither permitted nor forbidden — it is simply unaddressed, and it
+empties R1. One side has a clause and a control; the other has neither.
+
+### 24 controls, 0 runners
+
+`AGENT-VERIF-A2` found 21 negative controls across six verification tasks with
+exactly one runner between them, and `"negctl"` appearing in `scripts/` once, in
+a comment. The design side measures **24 controls across six tasks and zero
+runners**; nothing in `scripts/` or `runner/` names `controls/` or `nc_` at all.
+Every verdict those controls carry in `task.yaml` — *"PASS -- caught"*, *"both
+caught, on H3 and on nothing else"* — was true when measured by hand and nothing
+will notice when it stops being true.
+
+**Their version was a control that was never committed; mine is committed and
+never run.** Same defect from opposite ends: the artefact and the path both have
+to exist, and neither implies the other. F86's own retraction above is the first
+case where the gap actually bit — a claim resting on a testbench that gained a
+vacuity gate hours later, invalidated with no event, no diff and no failing check
+to announce it.
+
 **Rules:** 32, 36
 
 
