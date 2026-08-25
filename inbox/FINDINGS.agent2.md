@@ -1383,7 +1383,145 @@ what H1b and R1b had to do: the obligation alone is satisfiable by never enterin
 the state, and a reader who has not met that failure will not infer the second
 sentence from the first.
 
+**This is the first time in this session a lesson has been applied BEFORE the
+fact rather than after.** Every other instance ran the other way — the duty rule,
+the D6/D7 collapse, the condition floors, the gate that rejected two conforming
+designs, four self-applications of rules filed in the commit that broke them.
+Each was written, measured, found wrong, and corrected. These two clauses are
+written with the evasion already named, from a failure that happened on someone
+else's task, before either has been offered to a submission.
+
+That is worth recording as the exception, because it says what the transfer
+actually required: **not the rule, but the worked instance.** "State the
+obligation and forbid the evasion" is a sentence nobody would have written from
+first principles. It became writable only after H3 and R1 were each satisfied by
+a control that never entered the antecedent — and it transferred across a
+territory boundary because that control was *built and run*, not described.
+
 **Landing either requires the stimulus in the same boundary** — the two-halves
 rule, which this suite has now paid for five times. A stability clause with every
 ready held at 1 is a clause with an instrument that cannot fail, which is E1's
 read side exactly.
+
+---
+
+## FINDING — a clean row is read once; a failing row is read twice
+
+**Three rows of another agent's sweep were wrong when read against my own tasks,
+and every one of them was wrong in the direction that produces no work.**
+
+| task | reported | measured |
+| --- | --- | --- |
+| v_ca06 | 7 frozen of 31 | **5** — and the accompanying mechanism claimed the read half could not complete, which the same tool refutes |
+| v_nw04 | 1 frozen | **0** |
+| v_nw02 | 25 frozen | **3** |
+
+The last two were stale because I had fixed them. The first was **wrong when
+measured** — and it had already produced a downstream cascade before anyone
+checked it.
+
+### The asymmetry
+
+> **A negative result carries no signal that would prompt verification.** A row
+> saying *frozen: 7* has a name attached and something to do about it, so someone
+> reads it twice. A row saying *none frozen* has nothing attached, so it is read
+> once and never again. The rows most likely to be wrong for longest are the ones
+> that report nothing wrong.
+
+This is **F85's shape from the other direction**. F85 — *a sample chosen by
+availability is not a sample* — concerns which cases get **looked at**: the ones
+most recently handled, because their stimulus was most recently thought about.
+This concerns which results get **looked at twice**: the ones with a finding
+attached. Both bias attention toward the interesting, and both leave the quiet
+majority carrying whatever error it acquired.
+
+They compound: a case that is unavailable *and* reports clean is examined zero
+times, and nothing about either fact is visible in a table.
+
+### The practice
+
+> **A clean result inherited from another agent's sweep is UNVERIFIED until
+> measured locally.** Not doubted — unverified. It goes in the record as
+> *reported clean, not measured here* until someone runs it, and the run is
+> cheap precisely because nothing is wrong.
+
+Applied: I re-measured the four tasks of mine that had been reported clean —
+v_ai02, v_ca04, v_nw03, v_dsp02 — and all four *were* clean, which is the point.
+The measurement cost minutes and converted four inherited assertions into four
+observations. Had one of them been wrong it would have been wrong since the sweep
+ran, with nothing in any table to suggest looking.
+
+---
+
+## FINDING — a field nothing reads cannot be wrong in a way anything notices
+
+**Three of my `task.yaml` files declared `task_statement: probe/BLIND_TB_TASK.md`.
+No such file exists in any of them. The prompt document on disk is
+`probe/PASTE.md`.**
+
+Nothing caught it, and the reason is precise: **no script reads
+`task_statement`.** `grep -rn task_statement scripts/` returns nothing. A field
+that no consumer reads has no observable correct value, so a wrong one produces
+no disagreement anywhere — and **every instrument in this repository works by
+finding a disagreement**: floor against outcome, control against reference, hash
+against tree, recomputation against record.
+
+### And the second half, which I initially got wrong
+
+I expected the cause to be a **tolerant reader**: `task_text_hash.py` accepts
+either `PASTE.md` or `BLIND_TB_TASK.md`, so I assumed it had swallowed the
+mismatch. Reading it, that is not what happened. It **names the file it took** in
+its output, and it **refuses loudly** when neither exists — its own comment
+records that this exact rename caused a defect once already and that the refusal
+is why. The tool is not the problem.
+
+The problem is that **no instrument owns the comparison** between what
+`task.yaml` says the prompt document is and what the prompt document actually is.
+The hash reads the directory; the record names a file; nothing puts the two
+side by side. *Leniency did not hide this. Absence of an owner did.*
+
+### The sweep of `scripts/`, since the question was asked
+
+Read-and-report; `scripts/` is AGENT-PPA's. Sorted by whether the leniency can
+hide a defect, which most of it cannot:
+
+| site | shape | assessment |
+| --- | --- | --- |
+| `check_ppa_record.py:69` `pdk = rec.get("pdk", "sky130hd")` | **default masks absence** | **worth changing.** A record that does not say which PDK becomes a record that says sky130hd. It then looks in the wrong flow directory and reports `SKIP (no surviving flow dir)` — an *unrecorded* field rendered as a *missing directory*. Same distinction as `-dirty` versus no marker, and as NO CONCLUSION versus clean. |
+| `seed_sweep.sh:57` `[ -f DUT ] \|\| DUT=..._top.sv` | **silent alternative** | **minor.** Bounded, and it hard-fails if neither exists — but it never says which of the two it took, so a module with both gets one chosen invisibly. |
+| `reference_ppa.sh:28` `ls ref/*_ref.sv \| head -1` | **first-match-wins** | **minor, and the same shape as the policy-directory glob that cost v_ca07 a real 21 of 22.** If two references ever exist, one is chosen and not named. |
+| ~40 sites of `2>/dev/null` on `ls`/`[ -f ]` | existence probes | **not defects.** Suppressing an error you are testing for is the idiom. |
+| ~30 sites of `.get(k, 0)` on counters | accumulators | **not defects.** |
+| `task_text_hash.py` `PROMPT_NAMES` | tolerant, **and reports** | **not a defect** — the case that prompted the sweep, and it is doing the right thing. |
+
+**The general form is narrower than "tolerance is bad".** Tolerance that
+**names what it accepted** is fine; tolerance that **substitutes silently** is a
+reader that has answered a different question than the one asked. And a field
+with no reader at all is worse than either, because there is nothing to be
+tolerant *with*.
+
+**Rule:** every declared field needs an owner — a consumer that would fail if the
+declaration were wrong. A field with no consumer should be deleted or given one;
+leaving it is recording a claim that nothing can ever contradict.
+
+
+### Scope of the two boundaries, measured
+
+Neither is landed. What each would cost, so the boundary can be decided against
+whatever else moves those hashes:
+
+| | **v_ca06 — proposed A5** | **v_ca03 — proposed D5** |
+| --- | --- | --- |
+| **checker half** | **does not exist.** Zero valid-stability tracking of any kind in the testbench. | **does not exist.** Same. |
+| **stimulus half** | five readies are `logic ... =1` initialisers, never driven again: `m_arready`, `m_awready`, `m_wready`, `s_bready`, `s_rready` | `m_awready`/`m_wready` are `assign … = 1'b1`; the upstream three likewise constant |
+| **what must be built** | a four-to-five-channel `pv`/`pr` tracker plus a per-channel antecedent counter, and reactive backpressure on each ready | the same, on both ports |
+| **re-baseline surface** | 12 mutants, 5 conformant perturbations, dut2, gate mutant, 5c on two bases | 11 mutants, 5 perturbations + a nonequiv tb, dut2, gate mutant, 5c |
+| **known hazard** | the v_nw02 lesson: the antecedent counter must **report, not gate**, or it rejects conforming designs — `dut2` and one perturbation failed exactly that way | same, and v_ca03 has *six* conformant artefacts to keep passing rather than five |
+| **stall shape** | must be **combinational on valid**; a registered arm produced a useless count of 1 | same |
+| **X4-equivalent risk** | none found — no liveness clause names ready-held here | none found |
+
+**Both are one boundary each, not two**: clause plus stimulus plus checker, per
+the rule this suite has now paid for five times. The estimate is that v_ca03 is
+the heavier of the two — more conformant artefacts to keep passing, and two ports
+rather than one — and that v_nw02's experience makes the shape of both known in
+advance rather than discovered.
