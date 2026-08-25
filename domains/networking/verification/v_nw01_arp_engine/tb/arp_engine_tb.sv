@@ -16,10 +16,34 @@ module arp_engine_tb;
     $dumpfile("dump.vcd");
     $dumpvars(0, arp_engine_tb);
   end
-  localparam logic [47:0] LMAC = 48'h02_00_00_00_00_01;
-  localparam logic [31:0] LIP  = 32'hC0A8_0101;      // 192.168.1.1
-  localparam logic [31:0] GWIP = 32'hC0A8_01FE;      // 192.168.1.254
-  localparam logic [31:0] MASK = 32'hFFFF_FF00;      // /24
+  // VARIABLES, not localparams, and the distinction is the whole point. The spec
+  // says these four "are inputs, not constants; hold them steady while the engine
+  // is running" -- so a design that hardcodes them is non-conforming, and only
+  // these ports can reach that clause.
+  //
+  // Held constant, the boundary Q3 branches on can be crossed from both sides and
+  // STILL not be tested: a design hardcoding /24 and 192.168.1.1 reaches both
+  // branches correctly at this configuration. Reaching both branches is not
+  // testing that the boundary sits where the configuration says it is.
+  //
+  // The checker half is why a variation sweep cannot find this on its own. These
+  // symbols feed the instantiation AND the expectations, so port and expectation
+  // are one symbol: it varies in neither place, and a sweep counting values per
+  // port sees a constant with nothing behind it to disagree with.
+  logic [47:0] LMAC = 48'h02_00_00_00_00_01;
+  logic [31:0] LIP  = 32'hC0A8_0101;      // 192.168.1.1
+  logic [31:0] GWIP = 32'hC0A8_01FE;      // 192.168.1.254
+  logic [31:0] MASK = 32'hFFFF_FF00;      // /24
+
+  // The second identity, taken up across the mid-stream reset in step 8. The
+  // mask WIDTH differs, which is what separates a design reading subnet_mask_i
+  // from one that hardcodes /24: 10.0.9.9 is inside 10.0.5.7/16 and outside
+  // 10.0.5.7/24, so the two answer Q3 differently for the same lookup.
+  localparam logic [47:0] LMAC2 = 48'h02_00_00_00_00_02;
+  localparam logic [31:0] LIP2  = 32'h0A00_0507;     // 10.0.5.7
+  localparam logic [31:0] GWIP2 = 32'h0A00_0001;     // 10.0.0.1
+  localparam logic [31:0] MASK2 = 32'hFFFF_0000;     // /16
+  int cov_identities = 1;
   localparam logic [47:0] BCAST = 48'hFF_FF_FF_FF_FF_FF;
   localparam int RETRIES = 4, GAP_LO = 64, GAP_HI = 80;
   localparam int TMO_LO = 256, TMO_HI = 300, HIT_MAX = 32;
@@ -417,12 +441,70 @@ module arp_engine_tb;
       cov_reset = 1'b1;
       @(negedge clk) rst = 1'b1;
       repeat (5) @(posedge clk);
+      // The identity is REPROGRAMMED here, while the engine is held in reset.
+      // The spec permits exactly this -- "hold them steady while the engine is
+      // running" -- and it is the only stimulus that can distinguish a design
+      // reading these ports from one that hardcoded their first values.
+      @(negedge clk) begin
+        LMAC = LMAC2; LIP = LIP2; GWIP = GWIP2; MASK = MASK2;
+        cov_identities = cov_identities + 1;
+      end
+      repeat (2) @(posedge clk);
       @(negedge clk) rst = 1'b0;
       known.delete(); txq.delete(); txbuf.delete();
       repeat (4) @(posedge clk);
-      send_frame(16'd2, 48'h0A_0B_0C_0D_0E_0F, 32'hC0A8_0140, LMAC, LIP);
+      send_frame(16'd2, 48'h0A_0B_0C_0D_0E_0F, 32'h0A00_0540, LMAC, LIP);
       repeat (10) @(posedge clk);
-      expect_hit(32'hC0A8_0140, "after a mid-stream reset the engine still learns");
+      expect_hit(32'h0A00_0540, "after a mid-stream reset the engine still learns");
+    end
+
+    // -- 8b. the SECOND identity is exercised, or reprogramming proves nothing
+    begin
+      // Q3, and this is the discriminating pair. Under /16 the first address is
+      // INSIDE the local subnet and is asked for directly; under a hardcoded /24
+      // it would be outside and the gateway would be asked for instead. The
+      // second is outside under both, so it separates the GATEWAY value too --
+      // a design holding the old gateway asks for 192.168.1.254.
+      txq.delete();
+      start_lookup(32'h0A00_0909);
+      cov_misses++;
+      repeat (80) @(posedge clk);
+      if (txq.size() < 1) fail("Q2", "a lookup after reprogramming transmitted no request");
+      else check_request(txq[0], 32'h0A00_0909,
+                         "in-subnet under the reprogrammed /16 -- a hardcoded /24 asks the gateway here");
+      repeat (700) @(posedge clk);
+
+      txq.delete();
+      start_lookup(32'hAC10_0101);
+      cov_misses++;
+      repeat (80) @(posedge clk);
+      if (txq.size() < 1) fail("Q2", "an off-subnet lookup after reprogramming transmitted no request");
+      else check_request(txq[0], GWIP2,
+                         "off-subnet after reprogramming -- the NEW gateway_ip_i");
+      repeat (700) @(posedge clk);
+
+      // A1 from both sides under the new identity. A design holding the old
+      // local IP answers the wrong one of these two and stays silent on the
+      // other, and each half alone would let one of those pass.
+      txq.delete();
+      send_frame(16'd1, 48'h11_22_33_44_55_67, 32'h0A00_0522, 48'd0, LIP2);
+      repeat (40) @(posedge clk);
+      if (txq.size() == 0)
+        fail("A1", "a request for the REPROGRAMMED local_ip_i was not answered -- local_ip_i is an input, not a constant");
+      else begin : chk_new_identity
+        frame_t f;
+        f = txq[0];
+        if (f.spa !== LIP2)
+          fail("A1", $sformatf("reply SPA %08x after reprogramming, expected the NEW local_ip_i %08x", f.spa, LIP2));
+        if (f.sha !== LMAC2)
+          fail("A1", $sformatf("reply SHA %012x after reprogramming, expected the NEW local_mac_i %012x", f.sha, LMAC2));
+      end : chk_new_identity
+
+      txq.delete();
+      send_frame(16'd1, 48'h11_22_33_44_55_68, 32'h0A00_0523, 48'd0, 32'hC0A8_0101);
+      repeat (40) @(posedge clk);
+      if (txq.size() != 0)
+        fail("A2", $sformatf("a request for the OLD local_ip_i produced %0d frame(s) after reprogramming -- the old value is not this engine's address any more", txq.size()));
     end
 
     // -- rule 4 floors, on STIMULUS only ------------------------------------
@@ -434,6 +516,10 @@ module arp_engine_tb;
     if (cov_timeouts < 1)    fail("COVERAGE", "no lookup was ever left unanswered -- Q4 and Q5 are untested");
     if (!cov_offsubnet)      fail("COVERAGE", "no off-subnet lookup was driven -- Q3 is untested");
     if (!cov_notforus)       fail("COVERAGE", "no request for another station was driven -- A2 is untested");
+    // These four are inputs, not constants, and only they can reach that clause.
+    // One configuration cannot distinguish a design that reads them from one
+    // that hardcoded their first values, however many addresses are looked up.
+    if (cov_identities < 2)  fail("COVERAGE", $sformatf("only %0d identity configuration(s) driven -- local_ip_i, local_mac_i, subnet_mask_i and gateway_ip_i are INPUTS, and a design that hardcodes them is indistinguishable at one configuration", cov_identities));
     if (!cov_nonarp)         fail("COVERAGE", "no non-ARP frame was driven -- A3 is untested");
     if (!cov_second_timeout) fail("COVERAGE", "only ONE lookup was ever left unanswered -- Q4's count is unchecked on any later one");
     if (!cov_busy_request)   fail("COVERAGE", "no ARP request arrived while one of our own lookups was outstanding");

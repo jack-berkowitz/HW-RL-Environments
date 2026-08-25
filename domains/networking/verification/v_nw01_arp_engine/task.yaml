@@ -220,3 +220,81 @@ negative_controls:
 watchdog:
   tb_sim_time_limit: 8ms
   harness_sim_timeout_s: 120
+
+stimulus_rebaseline:
+  date: 2026-08-24
+  trigger: >
+    A frozen-input sweep reported the engine's own identity -- local_ip_i,
+    local_mac_i, subnet_mask_i, gateway_ip_i -- held at one value. I cleared it
+    first and was WRONG, and the way it was wrong is the part worth keeping.
+  the_argument_that_failed: >
+    I established that Q3 branches on subnet membership and that the varying
+    req_ip_i CROSSES the boundary -- start_lookup(8.8.8.8) against a
+    192.168.1.0/24 local subnet -- so both branches are reached. True, and a
+    different claim from the one needed. REACHING BOTH BRANCHES IS NOT TESTING
+    THAT THE BOUNDARY SITS WHERE THE CONFIGURATION SAYS IT IS: a design that
+    hardcodes /24 and 192.168.1.1, ignoring the ports entirely, reaches both
+    branches correctly at this configuration.
+  the_checker_half: >
+    The identity was wired to localparams at the instantiation AND the checkers
+    compared against those same symbols, so port and expectation were one name.
+    A VARIATION SWEEP CANNOT SEE THIS: the symbol varies in neither place, so
+    the tool reports a constant port with nothing behind it to disagree with.
+    The stimulus half was findable by measurement; this half was not.
+  the_clause: >
+    The spec settles it in a sentence: local_mac_i, local_ip_i, gateway_ip_i and
+    subnet_mask_i "are inputs, not constants; hold them steady while the engine
+    is running". A clause, reachable only by those inputs, and one that
+    explicitly permits changing them while the engine is stopped.
+  change: >
+    STIMULUS ONLY, so no task_text_hash bump. The four are variables now, not
+    localparams, and are REPROGRAMMED inside the reset window step 8 already
+    had -- 10.0.5.7/16 with gateway 10.0.0.1, replacing 192.168.1.1/24 with
+    gateway 192.168.1.254. The MASK WIDTH differs deliberately: 10.0.9.9 is
+    inside /16 and outside /24, so the two configurations answer Q3 differently
+    for the same lookup and a hardcoded /24 asks the gateway where a conforming
+    design asks directly. Step 8b then exercises Q3 both ways under the new
+    mask, A1 for the new local IP, and A2 for the OLD one -- a design holding
+    the old value answers the wrong one of that pair and is silent on the other,
+    and each half alone would let one of those through. A coverage floor on
+    cov_identities fails the run if only one configuration is ever driven.
+  result: >
+    Frozen inputs 8 of 20 -> FOUR, and all four are declared below. Kill table:
+    every verdict IDENTICAL, before and after -- ten of ten killed, gate-mutant
+    rejected, conformant PASS, dut2 PASS, ACCEPTED, 5c OK on both bases with
+    both clean controls passing. NO kill count moved. The BEFORE table was taken
+    from the COMMITTED testbench extracted from git rather than from a run
+    started before the edit, because a build that reads a file mid-edit is
+    neither before nor after.
+
+declared_constants:
+  WHY_THIS_EXISTS: >
+    The variation check's own rule: a constant that IS legitimate must be
+    declared with the clause permitting it, because nothing in the source
+    distinguishes a deliberate constant from an overlooked one. Raised by Agent 3.
+  - id: m_hdr_ready_i
+    held: 1
+    licensed_by: >
+      X3, which states the liveness bound "with the response channel held
+      ready". Holding it ready is the condition the clause is measured under.
+  - id: m_payload_ready_i
+    held: 1
+    licensed_by: X3, same sentence -- each byte of a payload accepted within the bound
+  - id: resp_ready_i
+    held: 1
+    licensed_by: >
+      X3, same sentence -- a lookup accepted and answered within 32 cycles with
+      the response channel held ready.
+  - id: s_payload_user_i
+    held: 0
+    licensed_by: >
+      The spec excludes it BY NAME: it "says nothing about frames whose payload
+      is shorter or longer than 28 bytes, nor about s_payload_user_i".
+  caveat_that_belongs_with_it: >
+    X3 sanctions holding these ready FOR THE LIVENESS BOUND. It does not settle
+    the general question of whether backpressure on those channels should be
+    exercised at all -- a frozen ready governs no clause here and still gates
+    the REACHABILITY of others, and that question is open and reserved. Reading
+    this block as "backpressure is out of scope" would be reading more into X3
+    than X3 says.
+
