@@ -217,22 +217,35 @@ mutants:
     - {name: m03_fill_wrong_block,   clause: M1, evidence: bmc_cex, cex_depth: 14, configs_passed: 0, of: 16}
     - {name: m04_writeback_corrupted, clause: M2, evidence: bmc_cex, cex_depth: 14, configs_passed: 0, of: 16,
        note: "caught in simulation via the readback sweep"}
-    - {name: m05_blocking_on_miss,   clause: C2, evidence: bmc_cex, cex_depth: 14, configs_passed: 0, of: 16,
-       isolated: false,
-       overlap_resolved: >
-         REAL SEMANTIC OVERLAP, not a mutant defect. A design that refuses
-         requests during a memory transaction cannot hold more than one miss
-         outstanding, so it fails C1 by construction as well as C2. The converse
-         does not hold -- mCAP1 fails C1 and PASSES C2 -- so neither clause
-         subsumes the other. The interface's C2 text now states the overlap.
-         mCAP1 is what isolates C1.}
+    # block form, not {flow}: a folded scalar cannot appear inside a flow
+    # mapping, and these two entries carrying `>` made the whole file
+    # unparseable. Values unchanged.
+    - name: m05_blocking_on_miss
+      clause: C2
+      evidence: bmc_cex
+      cex_depth: 14
+      configs_passed: 0
+      of: 16
+      isolated: false
+      overlap_resolved: >
+        REAL SEMANTIC OVERLAP, not a mutant defect. A design that refuses
+        requests during a memory transaction cannot hold more than one miss
+        outstanding, so it fails C1 by construction as well as C2. The converse
+        does not hold -- mCAP1 fails C1 and PASSES C2 -- so neither clause
+        subsumes the other. The interface's C2 text now states the overlap.
+        mCAP1 is what isolates C1.
 
-    - {name: m06_responses_in_order, clause: C2, evidence: bmc_cex, cex_depth: 34,
-       configs_passed: 0, of: 16, isolated: true,
-       provenance: >
-         Built as a CONFORMANT perturbation under R4's original text and promoted
-         here when that text proved wrong. Fails C2 and nothing else, so it is
-         the cleanly isolated C2 mutant that m05 is not.}
+    - name: m06_responses_in_order
+      clause: C2
+      evidence: bmc_cex
+      cex_depth: 34
+      configs_passed: 0
+      of: 16
+      isolated: true
+      provenance: >
+        Built as a CONFORMANT perturbation under R4's original text and promoted
+        here when that text proved wrong. Fails C2 and nothing else, so it is
+        the cleanly isolated C2 mutant that m05 is not.
 
   cut_from_the_set: []      # none; every mutant obtained bmc_cex evidence
 
@@ -291,7 +304,11 @@ second_source:
        reason: "measured -- the anchor already fetches first and writes back after"}
   D3_prime: {claim: "strictly in-order responses", status: unmeasured, also_conformant: true,
              note: "replacement for D3, named openly; the failed claim is kept"}
-mutants:         {status: NOT_STARTED, planned: "5-7, each wrapping the anchor, incl. one CAPABILITY-class"}
+# (a stale `mutants: {status: NOT_STARTED, planned: "5-7 ..."}` stub stood here.
+#  It was a second top-level `mutants:` key, so on parse it REPLACED the real
+#  block above -- all seven mutants, their cex depths and the checker-hole
+#  record read as NOT_STARTED to any tool. Deleted; the built block is at
+#  `mutants:` above.)
 conformant:
   status: BUILT            # 2 survive; the third turned out not to be conformant
   gated: true              # re-run with the slang gate live once conformant/* was exempted

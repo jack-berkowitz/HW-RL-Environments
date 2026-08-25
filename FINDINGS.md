@@ -5364,3 +5364,110 @@ and sent for a decision.
 
 **Rules:** 32
 
+
+---
+
+## F87. Nineteen record files, five readable, and a parse check that cannot find the worse defect
+
+Repairing `d_dsp02`'s `task.yaml` was supposed to be a one-line YAML fix. Running
+the same parse over every `task.yaml` in the repository turned it into a survey,
+and the survey found two different defects with opposite signatures.
+
+### What the sweep found
+
+Every `task.yaml` in the repository, measured at `b43f2a6^`:
+
+| | parses | of those, silently lossy | clean |
+|---|---|---|---|
+| design (8) | 6 of 8 | 1 (`d_ai01`) | **5 of 8** |
+| verification (11) | **0 of 11** | not reachable | 0 of 11 |
+
+Nineteen files. **Five were readable.** The verification files are not mine —
+reported to their owner, not touched.
+
+`d_ca01` had *both* defects, and the sweep could not see its duplicate key until
+the parse error was fixed. That is not an artefact of the tooling; it is the
+finding, stated below.
+
+### Two defects, and only one of them announces itself
+
+**Class 1, a parse error.** Loud. Two distinct mistakes produced it:
+
+- a mapping key indented as a member of the sequence above it —
+  `all_killed_through_scored_path` under `mutants:`, `unaccounted_for` under
+  `mapping_prior_to_current:` (`d_dsp02`);
+- a folded scalar `>` inside a `{flow mapping}`, which YAML does not allow —
+  `overlap_resolved:` and `provenance:` inside two `- {name: m05...}` entries
+  (`d_ca01`).
+
+Both were invisible to a human reader. Both stopped *the entire file* from
+loading, so the cost was never proportional to the mistake: two bad lines in
+`d_ca01` cost all 350.
+
+**Class 2, a duplicate key. Valid YAML. No error. Last one wins.** This is the
+one worth the finding.
+
+- `d_ca01` carried a stale scaffold stub —
+  `mutants: {status: NOT_STARTED, planned: "5-7, ..."}` — 136 lines *below* the
+  real `mutants:` block. On parse the stub replaced it. All seven mutants, every
+  `cex_depth`, the CAPABILITY-class mutant's 8-of-16 survival, and the
+  `found_a_checker_hole` record read as **NOT_STARTED**.
+- `d_ai01` had two `what_changed_this_boundary` keys. The second describes the
+  *superseded* C3/C4 boundary. It won. The narrative for the boundary the file's
+  own `task_text_hash` points at was discarded.
+
+**In both cases the stale value is the one that survived**, and that is not
+chance. Stale content sits later in the file because scaffold tails are never
+cleaned and new material is inserted above; last-wins therefore selects for it
+systematically. A duplicate key does not merely lose data — it prefers the
+obsolete copy.
+
+### The dates say the loud defect masked the quiet one
+
+`d_ca01`, per revision:
+
+    9f77e1e  2026-08-17  parses   0 dupes    created, healthy
+    7575a41  2026-08-17  parses   1 dupe     mutants duplicated -- silently lossy
+    cc02035  2026-08-18  FAILS    -          `>` inside {flow} -- unparseable
+    ... seven further commits, all unparseable ...
+    (this fix)           parses   0 dupes
+
+One healthy commit. One silently lossy. Seven loud. **The duplicate arrived a day
+before the parse error and would have outlived it** — and once the file stopped
+parsing, no duplicate-key check could even run to find it. The defect that
+announces itself concealed the defect that does not.
+
+`d_ai01` is the same lesson without the noise: it **parsed at every single
+revision**, and has been discarding its current-boundary narrative since
+`f616803` — the commit that added the G1-G4 grading criteria. I wrote that
+commit. I added a new `what_changed_this_boundary` above the existing one and did
+not rename the old one, and nothing objected, because nothing was looking.
+
+### Why this is not just tidiness
+
+Rule 8 says **collection reads only those records**. Ten of `d_dsp02`'s eleven
+revisions did not parse; the file has been unreadable to any tool since it was
+created, including for both records I added this week and the whole candidate-set
+mapping. Any collection over these files has been reporting on five of nineteen
+tasks and saying so nowhere.
+
+It is the shape of F82 and F85 again, in the record layer rather than the check
+layer: **the artefact a human reads reports success while the mechanism that
+consumes it sees nothing**, and the absence is silent in both directions. Rule 36
+fixed it for checks by demanding a firing count. The record layer needs the
+equivalent: a parse is not evidence a file was read, because a duplicate key
+parses.
+
+### What was done
+
+Design files repaired: `d_dsp02` (two block promotions), `d_ca01` (two flow
+mappings converted to block form, stale `mutants:` stub deleted), `d_ai01` (the
+superseded narratives renamed to name the boundaries they describe). **No value
+was changed in any of them** — only the syntax carrying it. All eight design
+files now parse with no duplicate keys.
+
+The sweep is two checks, not one: parse, *then* walk the raw node tree for
+repeated keys before they collapse. A parse-only check passes `d_ai01` in every
+revision it has ever had.
+
+**Rules:** 8, 36

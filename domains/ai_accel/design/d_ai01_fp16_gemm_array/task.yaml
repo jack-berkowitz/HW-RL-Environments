@@ -156,7 +156,12 @@ version_boundary:
   earlier_boundaries:
     - {pre: 84950ba1d90be2d8, post: e43648a5afcacc53, what: "A10 pinned, C2 narrowed, T5 added", behavioural: true}
     - {pre: e43648a5afcacc53, post: 9a93e4502979efc9, what: "C3 and C4 narrowed", behavioural: true}
-  what_changed_this_boundary: >
+  # The two blocks below are the narratives for the boundaries listed in
+  # earlier_boundaries, each written while it was the current one and never
+  # renamed. The second was still called `what_changed_this_boundary`, a second
+  # copy of the key above it, so on parse the SUPERSEDED narrative replaced the
+  # current one. Renamed to name the boundary each describes; no text changed.
+  earlier_boundary_2_detail: >
     C3 and C4 narrowed, batched into ONE hash bump. Both are the SAME DEFECT AS
     C2 one level deeper: the contract specifies steady states and does not model
     the in-flight pipeline, so its silence about control TRANSITIONS read as a
@@ -174,7 +179,7 @@ version_boundary:
     Not modelled, deliberately: putting the pipeline into the contract would hand
     every submission a required microarchitecture, which is the freedom this task
     exists to measure.
-  what_changed: >
+  earlier_boundary_1_detail: >
     Three clause changes, all of them found by the second source and none of
     them visible to any of the seven negative controls.
     .
