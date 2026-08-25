@@ -577,3 +577,95 @@ exception to it — configuration is the case where it bites hardest, because a
 configured design and a hardcoded one agree on every run at the configured
 value.
 
+
+---
+
+## Candidate — a check that fires on the right input for the wrong reason, and the one instrument that sees it
+
+**No instrument we have detects this.** Variation says the input moved. Legality
+says the conformant variants pass. Mutation count says the defect was killed.
+Witness sync says the recorded string matches what the runner prints. **All four
+agree, and all four are consistent with the check testing a different property
+than the one it names.**
+
+### The instance
+
+v_ca06's read-side response check reported a **wrong error code** as a **D6**
+failure. D6 is *precedence* — an error is due and must appear. D7 is *code
+preservation* — the error that appears must be the one the slave returned. One
+branch covered both:
+
+```systemverilog
+  if (s_rresp !== want_r) begin
+    if (want_r == 2'b00) fail("D5", ...);
+    else                 fail("D6", ...);   // <- swallows D7
+  end
+```
+
+Every clause was checked. Every mutant was killed. The witness strings matched.
+And **D7 had no path to being reported at all** — a submission that checked only
+precedence would have been credited with checking preservation, because the two
+were indistinguishable in the output.
+
+It surfaced only because a mutant was written that violates D7 *and not D6*, and
+its witness came back tagged D6. **Without the disjoint mutant there was nothing
+to notice.** That is the general danger: the collapse is invisible until someone
+builds the case that separates the two clauses, and nobody builds that case
+unless they already suspect the collapse.
+
+### What would detect it
+
+The clause is stated in the spec and the check cannot name it. That is a **set
+difference**, and it needs no new measurement:
+
+> Every clause a spec states must be **emittable** by the reference. Take the
+> clause ids from `spec/*.md`, take the clause ids appearing in any `fail(...)`
+> in `tb/*.sv`, subtract. What remains is stated and unreportable.
+
+Run across all eleven verification tasks it returns **90 clause ids**. That is a
+**candidate list, not a verdict** — the same caveat the variation tool carries,
+and for the same reason. Calibrated by hand against v_ca07, where the answer is
+known:
+
+| clause | verdict |
+| --- | --- |
+| H2, P4 | **legitimate** — obligations on the *tester*, not the design; nothing to emit |
+| P3 | **legitimate and already documented** — the 0/1 distinction is explicitly unscored, and pass-through itself is checked under P1 |
+| **C3** | **real** — "after a change, `cycl_count_o` counts over the new divisor's range immediately". No check emits it, and the spec carries a *Measured:* line for it. The same shape as E3 before E3 was given an instrument. |
+| **G2** | **real** — "while gated, `clk_o` stays low". No check emits it. |
+
+Two of five real on a task I know well. The detector earns its place; the list it
+produces has to be worked clause by clause, not counted.
+
+**Why this detector and not a stricter one.** Comparing a mutant's `violates:`
+field against the clause its witness reports finds *precedence* — a mutant that
+breaks several clauses and trips an earlier one — which is usually benign and
+noisy. Four such pairs exist across the suite and all four look legitimate. The
+emittability difference finds the case that actually costs something: a clause
+that **can never be reported by anything**.
+
+**Rule:** a clause with no path to being reported is unscored no matter how many
+mutants cover its subject matter. Check emittability as a set difference, before
+trusting a kill table to mean the clauses were checked.
+
+---
+
+## Method note — a build that reads a file while you are editing it is neither before nor after
+
+Recorded because it nearly produced a wrong before/after table. A re-baseline
+compares two runs, and the run labelled "before" must be of a **committed
+state**, not of whatever the working tree happened to contain when a background
+build got round to opening it.
+
+While re-baselining v_nw01 I launched the baseline run and then edited the
+testbench. The build had not yet read the file. The result would have been
+labelled "before" and been neither — a mixture whose composition depends on
+process scheduling, and which no later inspection can reconstruct.
+
+**Take the baseline from `git show HEAD:<path>` into a scratch file and run
+against that.** It costs one command, it does not depend on timing, and the
+provenance is a commit id rather than a wall-clock coincidence.
+
+*Filed here rather than in `MEASUREMENTS.md` because no repository-level
+`MEASUREMENTS.md` exists — the only two are inside design task directories that
+are not this agent's. Needs a home decision.*
