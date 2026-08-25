@@ -1601,3 +1601,47 @@ the rule this suite has now paid for five times. The estimate is that v_ca03 is
 the heavier of the two — more conformant artefacts to keep passing, and two ports
 rather than one — and that v_nw02's experience makes the shape of both known in
 advance rather than discovered.
+
+---
+
+## Emittability across the eleven — the triage, and a worked sample
+
+**88 raw candidates is not a work list.** Two mechanical discriminators reduce it
+to 35, and a hand-worked sample on one task establishes the rate.
+
+### The funnel
+
+| | count | what it is |
+| --- | --- | --- |
+| raw candidates | **88** | clause ids no `fail()` in the reference can name |
+| **KEYED elsewhere** | 20 | a *mutant* is keyed on the clause, so it **is** exercised and reported under another id — the **D6/D7 family**, and the dangerous one |
+| **definition** | 13 | "a beat moves on…", "asserting X latches Y", format statements. Nothing to violate |
+| **permission** | 11 | "unconstrained", "may depend on", "not specified" — latitude in a non-L section |
+| **tester obligation** | 9 | "an obligation on you, the source", "the submitted testbench shall terminate" |
+| **to review** | **35** | design obligations with no instrument that can name them |
+
+The two discriminators are worth stating separately because they answer different
+questions. **Mutant keying** answers *is the clause exercised at all* — cross-
+referencing `violates:` against the candidate list is free and it moved 20.
+**Clause-text classification** answers *is there anything here to violate* — and
+it is regex over prose, so it is the weaker of the two and will misfile.
+
+### The worked sample — v_ca06, six candidates
+
+| clause | verdict |
+| --- | --- |
+| **C1, C2** — WRAP and multi-beat FIXED are refused | **exercised, reported as C4.** The floor requires ≥8 refused bursts and every refusal failure reports `C4`. Not unchecked — but a submission that checks only the *response* to a refusal is credited with checking *which bursts are refused*. The D6/D7 shape. |
+| **F1, F2, F3** — reset, post-reset idle, no stale response | **genuinely unchecked.** Phase L asserts reset, releases, waits four cycles, and then **nothing**. No `fail()` follows the release at all. Stimulus without a checker — E3's shape before E3 got an instrument. |
+| **D2** — lane placement | not yet read |
+
+**Roughly half the reviewed candidates on a task I know well are real**, and the
+two halves need *different* fixes: C1/C2 need the message to name the clause it
+tests; F2/F3 need an instrument that does not exist.
+
+### What this does not claim
+
+The 35 are **triaged, not worked**. The sample is one task of eleven, chosen
+because I know it best — which is exactly the availability bias F85 names, so the
+rate it establishes is a starting estimate and not a measurement. The per-task
+worked lists are the remaining step, and they are cheaper now that the 20 keyed
+and 33 non-obligations are out of the way.

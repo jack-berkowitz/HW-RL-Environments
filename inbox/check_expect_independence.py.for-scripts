@@ -15,10 +15,18 @@ Two instances, three days apart, in different tasks, found by different routes:
 In each the comparison is X == X. It runs, it passes, it is reported as a clause
 being checked, and NO IMPLEMENTATION CAN MAKE IT FAIL.
 
-INVISIBLE TO EVERYTHING ELSE. A variation sweep sees a frozen port with nothing
-behind it to disagree with. Mutation sees every mutant killed, because none can
-fail a comparison that cannot fail. Emittability sees the clause emitted. The
-only signal is structural: the expectation and the stimulus share a source.
+WHY THIS INSTRUMENT AND NOT ANOTHER. The defect is invisible to every other one:
+
+    VARIATION sees a frozen port with nothing behind it to disagree with.
+    MUTATION sees every mutant killed, because none can fail a comparison that
+      cannot fail.
+    EMITTABILITY sees the clause emitted.
+    THE ONLY SIGNAL IS STRUCTURAL: the expectation and the stimulus share a
+      source.
+
+That is the whole case for it. Four instruments agree the task is fine, and all
+four are consistent with a comparison no implementation can fail, because each
+of them measures something the defect does not disturb.
 
 TWO SHAPES:
 
@@ -54,6 +62,17 @@ Two bugs in this tool were found that way, both FALSE NEGATIVES:
 
 The second was found ONLY by running against the repair. Finding the defect
 shows a tool can fire; recognising the fix shows it fires on the right thing.
+
+AND THAT PRINCIPLE DEMONSTRATED ITSELF ON THE NEXT TOOL BUILT AFTER IT WAS
+STATED. It was written down while building the floor classifier, where a guard
+over a registered DUT output read as a testbench value -- caught because the
+classifier flagged two condition counters written that morning to fix the very
+defect it exists to find. One tool later, `reassigned` was line-anchored, and
+that bug was INVISIBLE AGAINST THE DEFECT and visible only against the fix.
+
+Two instruments in two days. That makes it standard practice rather than a
+lesson: A NEW INSTRUMENT IS RUN AGAINST THE REPAIR BEFORE IT IS TRUSTED, and a
+tool that has only ever been shown to find the defect has been half tested.
 
 CANDIDATE LIST, NOT A VERDICT. A shared symbol is legitimate where the value is
 genuinely a testbench constant the contract never asks the design to read -- a
