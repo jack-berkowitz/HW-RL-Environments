@@ -964,9 +964,18 @@ defects. It runs with the regression.
     whatever goes wrong is attributed to the design.
 
     **An assertion firing inside vendored RTL is evidence about the STIMULUS at
-    least as often as about the design.** That is the reading to reach for
-    first, because the other reading is free: a failing assertion in the DUT
-    already looks like a design defect and needs no argument to be believed.
+    least as often as about the design**, and the reason the wrong reading wins
+    is EFFORT, not likelihood.
+
+    Attributing the assertion to the design costs nothing and ends the
+    investigation: a failing assertion in the DUT already looks like a design
+    defect, needs no argument to be believed, and the next step is to fix the
+    design. Attributing it to the stimulus costs reading the protocol, finding
+    the responder, and establishing what it may and may not do — and it only
+    pays off if you were right. So the default is not the more probable reading;
+    it is the cheaper one, and it terminates the search before the alternative is
+    considered. Reach for the stimulus reading FIRST, precisely because nothing
+    else will make you.
 
     `d_nw01`'s slave model drops `r_valid` while a beat is pending, which AXI
     forbids and which the task's own H3 requires of submissions. The anchor's

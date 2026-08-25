@@ -4865,10 +4865,44 @@ testbench does this:
 assign mem_rd_valid = mrd_valid_r & ~mem_data_stall;
 ```
 
-The comment is the interesting half. The author hit the symptom, diagnosed it as
-a modelling nuisance, and worked around it by gating the output — which is
-precisely the illegal construction. **Nothing in the repository asks whether the
-stimulus is legal**, so there was nothing to say otherwise.
+**The comment is the mechanism, not an illustration of it.** Read what it says:
+the author diagnosed the situation CORRECTLY. `mem_data_stall` does gate the
+output and not the FSM's state, and dropping `mrd_valid_r` inside `M_FILL` and
+re-raising it did leave the model wedged. Every clause is true. The workaround
+stopped the wedge, and a stopped wedge is what a fix looks like from the inside.
+
+What it traded away was valid-stability, and nothing anywhere checked that.
+
+> **A workaround that resolves a symptom is indistinguishable from a fix unless
+> something independently checks the property the workaround traded away.**
+
+That is how this class survives review, and it is not a lapse in care — the
+author who wrote the workaround also wrote the comment explaining it, which is
+more diligence than most changes get. Reading the diff harder would not have
+helped, because the diff is correct about everything it claims. Only a check
+that asks a question the author was not asking can catch it, which is why the
+answer here had to be a tool rather than closer attention.
+
+**And `d_ca01` has a second instance of the same mechanism, which is what makes
+it a mechanism.** Its testbench pins the response channel:
+
+```
+// Response is always taken. CONSTANT, not `rsp_valid` -- remedy 1.
+assign rsp_ready = 1'b1;
+```
+
+Another remedy, correctly reasoned, that resolved a symptom by pinning a signal.
+What it traded away is that **R1's response-side stability can no longer be
+exercised at all**. R1 says a valid, once asserted, "remains asserted, with the
+payload held stable, until the transfer completes… Responses use the same
+discipline on `rsp_valid_o` / `rsp_ready_i`" — and with `rsp_ready_i` never low,
+`rsp_valid_o` is accepted the cycle it rises, every time. The clause is not
+weakly tested; it is **structurally unexercisable**, which is worse than L3's
+position. L3 at least gets 25% random stall.
+
+The variation check finds it immediately — `rsp_ready_i` is the single frozen
+input of thirteen — and `d_ca01` was not in the sweep, because the sweep covered
+the three tasks named rather than all of them.
 
 ### Blast radius, and it is not only the check that found it
 
@@ -4879,9 +4913,25 @@ stimulus is legal**, so there was nothing to say otherwise.
 * **`d_nw01`'s C3 ceiling check is blocked behind it.** Four approaches were
   measured; the only one that discriminated cleanly also tripped the assertion on
   a configuration-dependent subset. See F80 instance 2.
-* **`d_ca01` carries the same shape** and its consequences are not yet assessed.
-* `d_nw01`'s liveness testbench has it too, at `axi4_xbar_liveness_tb.sv:135`,
-  though masters there hold `r_ready` high so it rarely manifests.
+* **`d_ca01` carries the shape but NOT the violation, and I claimed otherwise
+  before measuring.** Instrumented, it shows **zero illegal drops across 1,904
+  legal handshakes** on a passing run. Both `mem_data_stall` sites are guarded by
+  `while (mstate != M_IDLE)`, so the stall only ever rises from quiescence and
+  `mrd_valid_r` is already low: the valid is **suppressed before the transfer
+  starts**, never withdrawn during one. Holding a valid low is legal; taking one
+  back is not. The scanner produced a candidate, the finding asserted a
+  violation, and nothing in between read the usage — the same error as reporting
+  a peer's read path dead from a grep. **Corrected here rather than left
+  standing.**
+* `d_nw01`'s liveness testbench has it too, at `axi4_xbar_liveness_tb.sv:135`.
+  **LATENT, not minor.** The construction is present and identical; it is masked
+  only because masters there hold `r_ready` permanently high, so the crossbar's
+  R output is never stalled and the illegal transition never coincides with a
+  locked arbiter. Any future change to `r_ready` behaviour — adding backpressure
+  to the liveness test, which is exactly what L3 would want — unmasks it with no
+  signal that anything changed. **A masked defect and an absent one look
+  identical in a passing run**, so it is recorded at the same weight as the
+  active site rather than as a footnote.
 
 **F80 instance 2 stands.** `nc_i`'s pass was measured on runs that completed
 without protocol error, so it remains valid evidence that C3 is unchecked. What
