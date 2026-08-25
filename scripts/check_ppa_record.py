@@ -66,12 +66,29 @@ def check(rec_path, verbose=True):
     if not nick:
         # Records do not currently carry the nickname; derive it from the task.
         nick = rec.get("task", "")
-    pdk = rec.get("pdk", "sky130hd")
+    # A RECORD THAT DOES NOT SAY WHICH PDK MUST NOT BE READ AS SAYING sky130hd.
+    # This defaulted, then looked under logs/sky130hd/, then reported "no
+    # surviving flow dir" -- so an UNRECORDED FIELD came out as a MISSING
+    # DIRECTORY. Two different facts, one message, and the message named the
+    # wrong one: nothing was missing, the record simply never said. Three of
+    # sixty-seven PPA records have no pdk, so this fired on real data.
+    #
+    # The two are now separate outcomes. There is only one PDK in this repo
+    # today, so the substituted value would have been right every time -- which
+    # is exactly why it had to change: a default that is always correct is
+    # indistinguishable from a field that is always read, until the day a second
+    # PDK exists and every silent substitution becomes a wrong answer.
+    pdk = rec.get("pdk")
+    if not pdk:
+        if verbose:
+            print(f"  NO PDK {os.path.basename(rec_path)}  "
+                  f"(record states no pdk; not checked, and not a pass)")
+        return "skip"
     j = os.path.join(FLOW, "logs", pdk, nick, "base", "6_report.json")
     if not os.path.isfile(j):
         if verbose:
             print(f"  SKIP  {os.path.basename(rec_path)}  "
-                  f"(no surviving flow dir for '{nick}')")
+                  f"(no surviving flow dir for '{nick}' under pdk '{pdk}')")
         return "skip"
 
     # ---- IDENTITY, before any comparison ------------------------------------
