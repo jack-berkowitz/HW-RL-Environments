@@ -18,10 +18,32 @@ export DESIGN_NICKNAME = d_ai01_fp16_gemm_array
 # anything. The gap only appeared when the reference Fmax sweep, which runs the
 # full flow, tried to.
 #
-# Values are the other six tasks' verbatim, not chosen for this design: a
-# floorplan target picked per-task would make area incomparable across the row,
-# which is the same reason SYNTH_MEMORY_MAX_BITS had to match.
-export CORE_UTILIZATION = 10
+# CORE_UTILIZATION IS 30 HERE AND 10 EVERYWHERE ELSE. That is deliberate.
+#
+# The first attempt used 10 to match the other tasks. This design is 1,631,831
+# um2 of cells -- 2.8x the next largest -- so 10% produced a 12,553,554 um2 core,
+# and detailed routing ended its first optimisation pass with 82,569 DRC
+# violations still open, moving 70,238 -> 67,540 -> 67,540 across the next 20%.
+# Not slow: not converging. That run was killed after 1h40m without completing
+# one of the seven place-and-route runs a sweep needs.
+#
+# 30 was chosen from measurement rather than convention: it puts this core at
+# 5,439,437 um2, which is 0.94x d_ca01's 5,780,320 -- the largest core that has
+# actually routed clean in this repo, at 37 minutes per run. The target is the
+# biggest thing known to work here, not a number from a textbook.
+#
+# THIS DOES NOT BREAK ANY COMPARISON. Nothing here compares area across tasks:
+# the specs say a submission is compared against its own task's reference and the
+# other submissions to that task, the results table is one table per task, and
+# d_dsp02's spec states outright that comparing across tasks was never
+# meaningful. Rule 17 requires matching configuration between numbers BEING
+# COMPARED, and every d_ai01 build -- reference and all candidates -- uses this
+# file. d_ai01 has ppa: ABSENT, so no recorded number is invalidated.
+#
+# SYNTH_MEMORY_MAX_BITS was a different case and had to match: there the
+# reference and the candidates of ONE task disagreed, which broke a comparison
+# actually being made.
+export CORE_UTILIZATION = 30
 export PLACE_DENSITY    = 0.50
 export TNS_END_PERCENT  = 100
 
