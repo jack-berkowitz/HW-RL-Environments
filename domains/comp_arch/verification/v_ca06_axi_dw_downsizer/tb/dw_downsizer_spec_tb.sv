@@ -17,6 +17,13 @@
 //     separate phase OFFERS concurrency and checks it only if it is taken.
 // =============================================================================
 module dw_downsizer_tb;
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
+  // plusarg so a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, dw_downsizer_tb);
+  end
   localparam int ADDR_W=32, ID_W=4, SW=64, MW=16, MAXR=4;
   localparam int SBY = SW/8, MBY = MW/8, MSIZE = 1;
 

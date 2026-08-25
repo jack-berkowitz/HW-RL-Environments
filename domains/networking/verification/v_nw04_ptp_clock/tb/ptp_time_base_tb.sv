@@ -14,6 +14,13 @@
 // VALUE for a settling window, and never stops checking the counted and
 // periodic obligations, which L1 explicitly does not relax.
 module ptp_time_base_tb;
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
+  // plusarg so a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, ptp_time_base_tb);
+  end
   localparam longint FNS_PER_NS = 65536;
   localparam longint NS_PER_S   = 1_000_000_000;
   localparam longint FNS_PER_S  = NS_PER_S * FNS_PER_NS;

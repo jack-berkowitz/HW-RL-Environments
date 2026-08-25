@@ -10,6 +10,13 @@
 // manufactured R beats (clause L1), nor any value on their data/user fields
 // (clause L2).
 module atop_filter_tb;
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
+  // plusarg so a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, atop_filter_tb);
+  end
   localparam int MAXW = 4;          // clause W2, spec section 0
   localparam int RESP_DEADLINE = 64; // clause X4
   localparam int BLAG = 20;         // downstream B lag: > any legal debt-free delay

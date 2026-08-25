@@ -9,6 +9,13 @@
 // only what C1 and C3 fix: the entry just taught is retrievable, and after a
 // clear nothing is.
 module arp_engine_tb;
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
+  // plusarg so a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, arp_engine_tb);
+  end
   localparam logic [47:0] LMAC = 48'h02_00_00_00_00_01;
   localparam logic [31:0] LIP  = 32'hC0A8_0101;      // 192.168.1.1
   localparam logic [31:0] GWIP = 32'hC0A8_01FE;      // 192.168.1.254

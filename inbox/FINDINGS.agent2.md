@@ -342,3 +342,54 @@ verdict alone, and the first explanation is cheap to construct for either.
 window whose length is latitude, the stimulus must enter the window at the
 earliest legal instant, not at a convenient one. Convenience here cost exactly
 one cycle and it was the only cycle that mattered.
+
+---
+
+## Candidate — a stale label acquires a mechanism, and the mechanism crosses an agent boundary as fact
+
+**A second instance of "a mechanism constructed to explain a measurement is a
+reason to re-measure", and a more useful one than the first, because this time
+the construction and the consumption were done by different agents.**
+
+**The instance.** A stimulus-variation sweep reported v_ca06 with frozen inputs,
+and the report explained: *"read half of the contract cannot complete.
+`s_arvalid` asserted at three sites, `m_rvalid` never driven, appears only in
+mutant port lists. Reads launch and no response ever returns."* It closed by
+tying this to the task's catalog row — *"row already says not yet scoreable —
+this is the mechanism behind that label."*
+
+Every load-bearing part of that is wrong, and **the same tool on the shipped
+reference says so**:
+
+- `m_rvalid` is in the VARIED list, with `m_rdata`, `m_rid`, `m_rlast`, `m_rresp`.
+- It is driven by a registered downstream responder, `assign m_rvalid =
+  m_rvalid_q`, off a request queue.
+- The golden's own coverage line reports **70 reads and 191 R beats**, a peak of
+  4 reads outstanding against a bound of 4, and downstream errors on both paths.
+- The frozen count is **5 of 31, not 7** — the two extra were read-path signals.
+
+**The catalog row was stale.** It read "not yet scoreable" because the correction
+to BUILT + SCOREABLE was being deliberately held pending a separate decision, not
+because anything was unscoreable. So the sequence was: a label goes stale, a
+sweep produces an ambiguous signal, a mechanism gets constructed that explains
+both — and the mechanism is then *reported as the finding*, with the stale label
+cited as corroboration.
+
+**Why the boundary matters.** When I did this to myself on v_ca07's duty rule, the
+argument and the measurement were in one head and one file, and re-measuring was
+one command away. Here the mechanism arrived as a **report from elsewhere**,
+already reconciled with a second artefact, in a format that invites action rather
+than re-measurement. Nothing in it is dishonest. It is simply much more expensive
+to disbelieve, because disbelieving it means re-running someone else's work.
+
+**Rule.** A peer report that arrives already explaining a second artefact has not
+been corroborated by that artefact — it has been *fitted* to it. Check the
+artefact's freshness before the report's plausibility. A stale label is a magnet
+for a mechanism, and the mechanism will be a good one.
+
+**Corollary, for the tool rather than the reporter.** This tool documents that an
+absent signal yields "cannot conclude" rather than "frozen", and that its output
+is a candidate list. Both caveats were honoured in the tool and lost in the
+report. **A caveat that lives only in the tool's docstring does not survive
+transport**; if the distinction matters it has to be in the output line, next to
+the number, where a reader who never opens the source will still meet it.

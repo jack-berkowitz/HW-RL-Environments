@@ -18,6 +18,13 @@
 
 module id_width_conv_tb;
 
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
+  // plusarg so a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, id_width_conv_tb);
+  end
   // ---- scored configuration (spec section 9) --------------------------------
   localparam int SLV_ID_W = 4, MST_ID_W = 2, ADDR_W = 32, DATA_W = 32;
   localparam int MAX_UNIQ = 4, MAX_TXN = 2;

@@ -16,6 +16,13 @@
 // grep-shaped, so the harness does not offer that surface at all.
 // =============================================================================
 module clk_ratio_div_tb;
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
+  // plusarg so a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, clk_ratio_div_tb);
+  end
   localparam int CP = 10;            // clk_i period in time units
 
   logic clk = 0; always #(CP/2) clk = ~clk;
