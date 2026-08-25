@@ -1,0 +1,131 @@
+{
+  "fmax_invalid_reason": null,
+  "design": "d_ca01_cand_claude_v2",
+  "tier": "candidate",
+  "pdk": "sky130hd",
+  "converged_period_ns": 9.0625,
+  "achieved_fmax_mhz": 110.34,
+  "wns_at_converged_ns": 0.09,
+  "confirming_rerun": {
+    "ran": true,
+    "passed": true,
+    "fell_back": false
+  },
+  "bracket": {
+    "seed_period_ns": 10.0,
+    "period_pass": 10.0,
+    "period_fail": 5.0,
+    "bracket_iterations": 2
+  },
+  "final_interval": {
+    "period_pass": 9.0625,
+    "period_fail": 8.75
+  },
+  "search_iterations": 4,
+  "resolution_ns": 0.5,
+  "search_trajectory": [
+    {
+      "iteration": 1,
+      "period_ns": 10.0,
+      "wns_ns": 0.07,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 2054.7,
+      "log": "fmax_results/d_ca01_cand_claude_v2_logs/d_ca01_cand_claude_v2_iter01_10.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 735056,
+      "provisional_power_mw": 0.176908
+    },
+    {
+      "iteration": 2,
+      "period_ns": 5.0,
+      "wns_ns": -3.71,
+      "tns_ns": -38327.07,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 2597.1,
+      "log": "fmax_results/d_ca01_cand_claude_v2_logs/d_ca01_cand_claude_v2_iter02_5.0000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 777710,
+      "provisional_power_mw": 0.38825
+    },
+    {
+      "iteration": 3,
+      "period_ns": 7.5,
+      "wns_ns": -1.29,
+      "tns_ns": -1882.57,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 2699.6,
+      "log": "fmax_results/d_ca01_cand_claude_v2_logs/d_ca01_cand_claude_v2_iter03_7.5000ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 759948,
+      "provisional_power_mw": 0.250328
+    },
+    {
+      "iteration": 4,
+      "period_ns": 8.75,
+      "wns_ns": -0.06,
+      "tns_ns": -0.17,
+      "drc": 0,
+      "pass": false,
+      "status": "timing_fail",
+      "wall_time_s": 2030.2,
+      "log": "fmax_results/d_ca01_cand_claude_v2_logs/d_ca01_cand_claude_v2_iter04_8.7500ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 747346,
+      "provisional_power_mw": 0.207346
+    },
+    {
+      "iteration": 5,
+      "period_ns": 9.375,
+      "wns_ns": 0.01,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 2114.6,
+      "log": "fmax_results/d_ca01_cand_claude_v2_logs/d_ca01_cand_claude_v2_iter05_9.3750ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 740804,
+      "provisional_power_mw": 0.191317
+    },
+    {
+      "iteration": 6,
+      "period_ns": 9.0625,
+      "wns_ns": 0.09,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 1914.4,
+      "log": "fmax_results/d_ca01_cand_claude_v2_logs/d_ca01_cand_claude_v2_iter06_9.0625ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 742126,
+      "provisional_power_mw": 0.198713
+    },
+    {
+      "iteration": 7,
+      "period_ns": 9.0625,
+      "wns_ns": 0.09,
+      "tns_ns": 0.0,
+      "drc": 0,
+      "pass": true,
+      "status": "pass",
+      "wall_time_s": 1916.3,
+      "log": "fmax_results/d_ca01_cand_claude_v2_logs/d_ca01_cand_claude_v2_iter07_9.0625ns.log",
+      "note": "metrics JSON missing; recovered from 6_finish.rpt and 5_route_drc.rpt -- flow had completed",
+      "provisional_area_um2": 742126,
+      "provisional_power_mw": 0.198713
+    }
+  ],
+  "total_wall_time_s": 15327.0,
+  "total_pnr_runs": 7,
+  "rtl_git_commit": "128bb73f65a895d348bf28db3b0b7a76d2b31e84-dirty",
+  "timestamp": "2026-08-24T23:10:33.819988+00:00",
+  "aborted_reason": null
+}
