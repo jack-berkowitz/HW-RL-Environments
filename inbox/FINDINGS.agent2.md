@@ -669,3 +669,126 @@ provenance is a commit id rather than a wall-clock coincidence.
 *Filed here rather than in `MEASUREMENTS.md` because no repository-level
 `MEASUREMENTS.md` exists — the only two are inside design task directories that
 are not this agent's. Needs a home decision.*
+
+---
+
+## Candidate — a correction has to be addressed to the artefact, not to its author
+
+**The author is the one component guaranteed not to persist.**
+
+A frozen-input table circulated from session `hw-rl-benchmark-92`. It carried a
+wrong row — v_ca06 at 7 frozen of 31, where the measured figure is 5 — and that
+row had already produced one downstream cascade. By the time the correction was
+ready, `ListAgents` no longer showed that session at all.
+
+> The artefact does not expire with the process that made it. **The table
+> survives; its author does not.** A correction addressed to a name resolves to
+> nothing once the name is gone, while the thing it corrects is still being read.
+
+This is the same failure that keeps appearing one layer down — a hash quoted in a
+message and stale by the time it is used, three times in one evening — except
+that a stale hash can be recomputed at the point of use and a departed session
+cannot be re-addressed at all.
+
+**The operational form**, which is the part worth keeping:
+
+- A correction is addressed to **the artefact and its consumers**, never to the
+  author. Consumers persist for as long as the artefact does; the author does not.
+- Which means the artefact has to **carry its own provenance** — what produced
+  it, against what tree, at what commit — because that is the only channel
+  through which a later correction can find its readers.
+- And a number in a message is **not** an artefact. It is a copy whose original
+  may already have moved. Recompute at the point of use, or cite the commit.
+
+*Attribution: raised as a structural property by AGENT-DESIGN-43a92055, who
+declined to write it up on the grounds that it was this agent's observation. The
+operational implication — address the artefact, not the author — is theirs.*
+
+---
+
+## Candidate — a measurement of a mutable artefact is a measurement of a TIME, and I reported one as a fact
+
+**A correction of my own correction, and the error is one step past the one I had
+already learned.**
+
+A peer claimed an uncommitted `PLACE_DENSITY = 0.35` sat in a file and built a
+rule-17 argument on it. A second peer said the claim was false. I checked
+myself — working tree `0.50`, HEAD `0.50`, porcelain empty — and **relayed it as
+false**, attributing the peer's error to my own earlier finding about mechanisms
+fitted to artefacts.
+
+Both parts of that were wrong.
+
+The original observation **was real**: `git diff` genuinely returned the `0.35`
+at the time it was taken, and a trap restored the file afterwards. Two readings
+of a mutable file, taken inside and outside a window in which it changes, were
+each correct when taken. My measurement established `not true now`; I reported
+`false`, which is a claim about the time the other reading was taken, and I had
+no measurement of that time at all.
+
+And the attribution was wrong too. The peer's failure was **inference past a
+correct measurement**, not a mechanism fitted to an artefact — a different defect
+that happens to be the one I keep finding, which is precisely why I reached for
+it.
+
+**Two rules.**
+
+- **A measurement of something that changes carries a timestamp, and its
+  conclusion may not outrun that timestamp.** "I looked and it is not there" does
+  not refute "I looked earlier and it was". Both are observations; neither is
+  about the other's moment. Where the artefact is mutable, the honest verdict is
+  *not true at T2*, and establishing *false at T1* needs evidence from T1 — a
+  reflog, a commit, a recorded diff.
+- **Having a favourite failure mode makes you fast and makes you wrong.** I have
+  filed "a mechanism constructed to explain a measurement" twice this session and
+  it fit this case beautifully. It was not what happened. A diagnosis that comes
+  to hand quickly because you wrote it down last week deserves the same
+  scepticism as one that comes from a peer.
+
+---
+
+## Candidate — the control passed and did not suppress, and passing was not the finding
+
+**Method note, and it retracts half of a verdict I had already reported.**
+
+Two clauses on v_ca07 were reported as unfalsifiable — satisfiable by a
+conforming design that keeps their antecedent empty:
+
+- **G2**, "while gated, `clk_o` stays low"
+- **H4**, "a request during a transition is DEFERRED, not refused"
+
+Both were called **by inspection**, from the observation that L2 explicitly frees
+how long gating lasts. A peer's method note (F86) says the evidence for
+*unfalsifiable* must be **a suppressing control that PASSES**, never a reading,
+because a clause declared vacuous by inspection is how two earlier accusations in
+this repo went wrong. So I built one: the fastest legal resume, no gated state.
+
+**It passed. And it did not suppress.** Its measured gap between acceptance and
+the first new edge was 1 to 8 cycles — never zero. Had I stopped at `RESULT:
+PASS` I would have confirmed a vacuity claim on a control whose two arms produce
+the same observable, which is a defect I filed myself earlier in this session and
+walked straight into.
+
+Measuring what the control actually did split the two clauses apart:
+
+| clause | verdict | evidence |
+| --- | --- | --- |
+| **H4** | **UNFALSIFIABLE — confirmed** | On the fastest legal resume the second request is accepted after **0 cycles**: there was no transition to arrive during. Stronger than a passing control — the *mutant* that violates H4 was re-derived on that base and **survives**. The defect is undetectable against a conforming design. |
+| **G2** | **FORCED — retracted** | The minimum gap across every transition is **1 cycle, never 0**. The counter restarts at acceptance, so the next rising edge cannot fall in the same cycle. There is always a gated cycle to judge, on every legal implementation. G2 has force. |
+
+G2 stays on the *emittability* list — no `fail()` in the reference can name it —
+but that is the **D7 class**, a clause with force and no instrument, and not the
+vacuity class at all. I had merged two different defects into one verdict.
+
+**Rules.**
+
+- A control earns a conclusion only if it is shown to **create the condition it
+  was built to create**. Passing is the second half; suppressing is the first,
+  and it is the half that is assumed.
+- The strong form of "unfalsifiable" is not a passing control but a **surviving
+  mutant**: a defect that violates the clause and is undetectable against a
+  conforming design proves the clause cannot be scored, which a passing control
+  only suggests.
+- *Unfalsifiable* and *unreportable* are different failures with different fixes
+  — a forcing clause versus an instrument — and they look identical from the
+  clause list.
