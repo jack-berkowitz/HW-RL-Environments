@@ -5994,3 +5994,79 @@ which falsely flagged `d_dsp03` — a task being scored that same night — as
 having no testbench.
 
 **Rules:** 8, 36
+
+## F91. A field with no reader cannot be wrong, which is not the same as being right
+
+Found jointly with AGENT-VERIF-A2, who stated the class, and AGENT-DESIGN-43a92055,
+whose measurement supplied the sharpest instance.
+
+Every instrument in this repo works by finding a DISAGREEMENT. A hash against a
+recomputed hash. A witness against a fresh runner. A record against the flow
+directory it claims to describe. A reference against its own testbench. **A field
+that nothing consults produces no disagreement anywhere**, so a wrong value in it
+is indistinguishable from a right one, permanently, and no amount of care at the
+moment of writing changes that.
+
+### Lead with the one where the field was correct
+
+`version_boundary`'s `behavioural: true` in d_ai01's `task.yaml` recorded, truly,
+that results do not carry across that boundary. **The results carried anyway** —
+seven control kill counts, taken before the boundary and quoted after it, every
+one of them wrong by the time anyone re-ran them (F89). Nothing reads the flag.
+
+This is the instance to lead with precisely because **the annotation was not
+mistaken**. It was present, accurate, and inert. A wrong field and an unread
+field fail identically, which means correctness of the field was never what was
+protecting anything — and anyone reassured by seeing the annotation there was
+reassured by a thing that had no mechanism behind it.
+
+The other two named instances:
+
+* **`task_statement`** — three `task.yaml` files declared a prompt document that
+  does not exist. No script reads the field, so nothing disagreed. A2 went in
+  expecting `task_text_hash.py`'s tolerance for two filenames to be the cause;
+  it was not, because that tolerance NAMES the file it accepted and REFUSES when
+  neither exists. Leniency did not hide this. Absence of a reader did.
+* **`pinned_period_ns`** — written into fmax records by `find_fmax.py`; **one of
+  thirty-one** records carries it, and nothing in `scripts/` reads any of them.
+  The pins that actually bind are the ones stated in the specs, which is why
+  `check_pin.py` (794d57e) checks the spec and not the field.
+
+### The sweep, and the one that bit
+
+`scripts/check_unread_fields.py` compares every field the recorders write against
+every script that could read it. **Nine of forty-two run-record fields have no
+reader at all**, across 734 records:
+
+    git_sha  faults_hung  kind_note  coverage  per_config
+    configs_no_verdict  synth_area_um2  task_text_hash_source  rd_clk_period_ns
+
+`configs_no_verdict` is the one that bit. It is nonzero on exactly **six**
+records — all of them d_ai01 runs where the testbench printed `RESULT: PASS`,
+the scored path read `TEST_RESULT:`, and the config came back NO_VERDICT (F90).
+**The field that would have named the defect was written on every affected
+record and consulted by nothing.** The defect was found instead by a person
+reading NO_VERDICT off a terminal, which is the least durable instrument
+available.
+
+`coverage` is the one that stings: 177 records carry a value, nothing reads it,
+and I had spent that same day improving what it records (60c70ad) without
+checking whether anything downstream would ever look.
+
+**UNREAD IS NOT THE SAME AS USELESS, and the sweep says so on every run.**
+`git_sha` is unread *and* uninformative — it ends `-dirty` on 600 of 602 records,
+so it could not discriminate even if something read it. Those are two separate
+defects and only the second is fatal; giving it a reader would fix nothing.
+`faults_hung` is unread and has never once been non-zero, which is the
+never-fired-branch shape rather than this one.
+
+### The tool made this mistake about itself, first run
+
+It reported seven unread fields where the answer was nine: its own docstring
+names `git_sha` and `configs_no_verdict` as examples, the scan found those
+strings under `scripts/*.py`, and **it counted itself as their reader**. It now
+excludes itself. Left alone it would have quietly shrunk its own findings every
+time someone added an example to the header — a tool answering a question about
+what it discusses rather than what the code consults.
+
+**Rules:** 30
