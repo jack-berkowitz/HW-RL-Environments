@@ -176,6 +176,44 @@ design ever built here, at 2.09 mm^2:
 
 The scored geometry is capped by synthesis feasibility, not by the anchor.
 
+### CORRECTION: "the proven envelope" is proven for SYNTHESIS, not for ROUTING
+
+The table above is sound on the axis it was written for and was then used for an
+axis it does not cover. Both numbers in "1.63 against 2.09" are yosys
+`synth -flatten` figures, and the comparison licenses one conclusion only: **8x8
+synthesises at a size this repo has synthesised before.** It says nothing about
+place-and-route, and it was subsequently cited as though it did.
+
+Counted across all 53 PPA records in `runs/`:
+
+* **6 records carry a `drc` field at all.** The other 47 do not, so for those the
+  question was never recorded either way.
+* The largest area with a **recorded clean DRC** is **294,555 um^2 --
+  0.29 mm^2** (`d_nw01_second_source`, `own_fmax_9ns`).
+* The 2.09 mm^2 figure is real and sourced -- `d_nw01_axi4_xbar [chat_at_9p0]`,
+  with `[chat_scored]` larger still at 2.14 mm^2 -- but **both carry no `drc`
+  field.** `status: completed` establishes that the flow finished, not that the
+  design routed clean.
+* The one `d_nw01_axi4_xbar` record that IS `drc = 0` is `config: CUT_ALL_AX`
+  at 154,245 um^2, a cut-down configuration.
+
+So the routing envelope this repository has actually demonstrated is **0.29
+mm^2**. On that axis:
+
+| geometry | area | vs the DRC-clean envelope |
+|---|---|---|
+| 8x8 | 1.63 mm^2 | **5.5x over** |
+| 4x8 | ~0.74 mm^2 | **~2.8x over** |
+
+This is stated as an absence of evidence, NOT as a claim that the 2.09 mm^2 runs
+were dirty -- nothing here measures that, and asserting it would be inventing a
+result from a missing field. What it does mean is that **no data point exists
+anywhere between 0.29 mm^2 and 1.63 mm^2**, so a geometry chosen to land inside
+a routing envelope has no measurement to land inside of. Halving the array moves
+it from 5.5x over to 2.8x over; it does not bring it in.
+
+The remedy is a measurement, not a smaller table: `orfs_runs/d_ai01_h4/`.
+
 ## 6. `probe_control_tb.sv` -- the control inputs
 
 Probes 2-4 held `accumulate_i`=0, `row_clk_gate_en_i`=all-ones, `in_valid_i`=1

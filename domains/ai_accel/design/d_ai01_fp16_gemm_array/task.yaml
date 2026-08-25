@@ -228,6 +228,26 @@ scored_configuration:
     d_nw01_axi4_xbar at 2.09 mm^2, so 8x8 at 1.63 mm^2 is inside the proven
     envelope while the catalog's 16x16 would be roughly 5.9 mm^2 -- about 2.8x
     anything built here.
+  envelope_correction: >
+    "INSIDE THE PROVEN ENVELOPE" ABOVE IS TRUE FOR SYNTHESIS AND UNSUPPORTED FOR
+    ROUTING, and the sentence does not say which. Both of 1.63 and 2.09 are yosys
+    synth-flatten figures, so the comparison licenses one conclusion: 8x8
+    synthesises at a size this repo has synthesised before.
+    .
+    On the routing axis, counted over all 53 PPA records in runs/: only SIX carry
+    a drc field at all, and the largest area with a recorded clean DRC is
+    294,555 um^2 -- 0.29 mm^2, d_nw01_second_source own_fmax_9ns. The 2.09 mm^2
+    record (d_nw01_axi4_xbar chat_at_9p0) carries NO drc field, so it establishes
+    that the flow completed, not that the design routed clean. The one
+    d_nw01_axi4_xbar record that is drc=0 is config CUT_ALL_AX at 154,245 um^2.
+    .
+    Stated as an ABSENCE of evidence, not as a claim that the 2.09 mm^2 runs were
+    dirty -- nothing measures that. What follows is that no data point exists
+    anywhere between 0.29 mm^2 and 1.63 mm^2. 8x8 is 5.5x over the demonstrated
+    routing envelope and 4x8 is still ~2.8x over it, so halving the array does
+    not bring it inside; it is a guess that the cliff sits between those two
+    points. See MEASUREMENTS.md section 5, and orfs_runs/d_ai01_h4/ for the
+    measurement that settles it.
   extrapolation_note: >
     The 8x8 figure is MEASURED, not scaled. Per-element scaling from one
     redmule_ce would have predicted 1.47 mm^2; the real number is 11% higher,
