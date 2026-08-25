@@ -5588,6 +5588,31 @@ case where the gap actually bit — a claim resting on a testbench that gained a
 vacuity gate hours later, invalidated with no event, no diff and no failing check
 to announce it.
 
+### The two forms of evidence are not two strengths of one thing
+
+Recorded verbatim, at Jack's direction:
+
+> A passing control with a measured zero firing count shows the antecedent CAN be
+> emptied. A surviving mutant shows a real defect goes undetected when it is.
+> Only the second makes a clause unscoreable rather than merely unreachable.
+
+Unreachable is a property of the stimulus and could be fixed by better stimulus.
+Unscoreable is a property of the contract and cannot.
+
+### This finding's founding instance was asserted, not measured
+
+**F86 named `d_ca01` R1 from a reading of the clause — the evidence this finding
+now says not to accept — and measured it only afterwards.** That is recorded here
+rather than quietly repaired, and not as self-criticism: it is the strongest
+available evidence that the rule is needed, because **the person who wrote the
+rule had already broken it before writing it**, in the same document.
+
+`AGENT-VERIF-A2` reports the same property from the other side: `v_ca07`'s G2 and
+H4 were both named by inspection, and **G2 was wrong** — its minimum gap is 1
+cycle on every transition, so there is always a gated cycle to judge and the
+clause has force. One of two inspected clauses survived measurement. That is the
+base rate this rule exists for.
+
 **Rules:** 32, 36
 
 
@@ -5737,5 +5762,87 @@ files now parse with no duplicate keys.
 The sweep is two checks, not one: parse, *then* walk the raw node tree for
 repeated keys before they collapse. A parse-only check passes `d_ai01` in every
 revision it has ever had.
+
+**Rules:** 8, 36
+
+---
+
+## F88. An apparatus defect that FABRICATES a finding, and the signature that catches it
+
+Every apparatus defect recorded here so far has **hidden** a result — a frozen
+input reporting a pass (F81, F85), a check that could not fail (F82), a record
+nothing could read (F87). `d_ca03` is the other direction, and it is worse:
+**the apparatus was about to manufacture a result that was not there.**
+
+All three `d_ca03` submissions returned FAIL in under one second, with **no run
+record written for any of them.** Collected, that enters the design results as
+*"every model failed d_ca03"* — which reads as a hard task discriminating well,
+which is the most flattering possible reading of a broken harness. Nothing about
+the row would look wrong. It would look like the benchmark working.
+
+The actual result, once the task could run at all: **chat PASS, claude FAIL on
+T10, gemini rejected by the synthesis frontend.** One of three, on a real
+functional defect. Not three of three on nothing.
+
+### Three gaps, none sufficient alone
+
+1. `sim_candidate.sh` had no `d_ca03_sv39_mmu` arm — refused before running.
+2. The testbench's own directory was not on the include path. `d_ca03`'s tb splits
+   across `sv39_mmu_seq.svh` and `sv39_mmu_harness.svh` and includes them by bare
+   name; only `testbenches/common` was on the path. No other task had split its
+   testbench, which is why this survived to the eighth.
+3. **No `ref/sim_flags_verilator.txt`. Mine.** The reference is a shim over
+   `cva6_mmu` — two `cva6_tlb`, a `cva6_shared_tlb`, a `cva6_ptw`, a `pmp`.
+   **Synthesis had that closure in `orfs/config.mk`; simulation had nothing at
+   all.**
+
+Gap 3 is the general one. **A task that declares its dependency closure
+separately in two paths can drift between them, and the drift is invisible
+exactly when only one path has ever been exercised.** `d_ca03` had been
+synthesised and never simulated, so the missing half was the half nobody could
+notice.
+
+### The signature is mechanical
+
+> **All candidates failing identically, instantly, with no run record written is
+> an APPARATUS verdict, not a set of design verdicts.**
+
+Every term is checkable without understanding the task:
+
+* **identically** — same failure text across submissions that do not share code;
+* **instantly** — sub-second, when the reference takes seconds to simulate;
+* **no run record** — the recorder never reached the point of writing one.
+
+A real design failure is none of those. Three independent models do not fail the
+same clause at the same nanosecond.
+
+### Two rules that follow
+
+**A task that has never been run on a path must not have results collected from
+that path.** `runs/<task>/` holding zero records for a path is not "no results
+yet" — it is "this path is unproven", and a first result from an unproven path is
+evidence about the path, not about the submission.
+
+**The second instance is already open.** `d_ai01` has **zero sim records** and
+cannot run through the scored path either:
+`spec/fp16_gemm_array_iface.sv` is 492 lines and **contains no code** — every
+line is a comment. `sim_candidate.sh` derives the DUT module by grepping
+`^module` in `spec/*_iface.sv`, gets an empty string, resolves the testbench to
+`tb/_tb.sv`, and refuses. It refuses *correctly*, declining rather than scoring
+whichever file sorts first, which is the only reason this surfaced.
+
+So every `d_ai01` number on record — the reference results, all seven controls'
+verdicts, the second source's 4/10 and 6/13 — came from ad-hoc runs outside the
+scored path. That is F22's defect, and F22 is cited in `d_dsp02`'s own
+`sim_flags_verilator.txt` as the reason that file exists. **Three candidates are
+waiting on this task right now.**
+
+### What is not claimed
+
+The `d_ca03` harness gaps did not corrupt any published number, because the
+fabricated row was caught before collection. This is a near miss recorded as one.
+The reason to file it anyway is that **nothing in the pipeline would have caught
+it** — the signature above did not exist until this happened, and the only thing
+that stopped it was a person looking at a log and finding one second implausible.
 
 **Rules:** 8, 36
