@@ -4947,10 +4947,39 @@ ASSUME(lock_req, lock_d |=> req_tmp == req_q)
 ```
 
 In `axi_demux_simple` the arbiter's `req_i` is `mst_r_valids` and its `gnt_i` is
-the downstream `r_ready`. **Those requests are internal to the anchor, not driven
-by the testbench.** So holding `r_ready` low — which AXI explicitly permits, ready
-having no stability requirement — locks the arbiter, and something inside the
-anchor then deasserts an unserved request.
+the downstream `r_ready`. Holding `r_ready` low is permitted — ready has no
+stability requirement in AXI — and it locks the arbiter.
+
+**WHAT IS AND IS NOT ESTABLISHED ABOUT THE ANCHOR.** An earlier draft of this
+paragraph said the arbiter's requests are "internal to the anchor, not driven by
+the testbench", and that overreached:
+`assign mst_r_valids[i] = mst_resps_i[i].r_valid` is a PASSTHROUGH of the
+response valid arriving from the stage below. At the outermost demux that stage
+is an internal mux rather than the testbench, but the wording claimed more than
+the code shows.
+
+Four things were checked before attributing anything to the anchor, because the
+alternative — encoding an anchor's behaviour as a property of the world — is the
+A8 mistake:
+
+* **Not a documented constraint.** `LockIn`'s own documentation says it exists
+  for exactly this case: "the request that wins the arbitration will be locked in
+  case the destination is not able to grant the request in the same cycle."
+  Backpressure is its designed-for condition. `doc/axi_demux.md` says nothing
+  about R backpressure or `r_valid` stability.
+* **Not a known issue.** The nearest open report concerns demux/mux pipelining
+  deadlock through W FIFOs — a different mechanism, and unresolved.
+* **The stimulus is legal.** With the responder repaired, `r_valid` falls only on
+  handshake, and the stall gates only master `r_ready`.
+* **It is not the sustained stall itself.** The assertion fires 10 ns AFTER the
+  stall is released, and a STAGGERED release — one master per 20 cycles, so no
+  two arbiters un-stall on one edge — trips it identically. The simultaneous
+  release was a stimulus artefact and it is ruled out.
+
+That leaves a genuine anchor defect as the reading most consistent with the
+evidence, **and it is not proven.** What would prove it is a minimal reproducer
+against `axi_demux` alone, protocol-correct, showing the ASSUME violated by the
+anchor's own internals — which is also what an upstream report would need.
 
 **This defect remains real and worth repairing on its own merits.** It is simply
 not the cause of L3's or C3's untestability, and the correction is recorded

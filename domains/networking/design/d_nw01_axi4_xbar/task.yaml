@@ -392,7 +392,20 @@ capability_controls:
       at ALL FOUR configurations, worse than the throttled attempt which tripped
       on a subset. Reverted, not landed.
       .
-      SO THE BLOCKER IS THE ANCHOR, NOT THE HARNESS. rr_arb_tree at LockIn=1
+      THE BLOCKER IS NOT PROVEN TO BE THE ANCHOR, AND THAT DISTINCTION IS KEPT
+      DELIBERATELY -- encoding an anchor's behaviour as a property of the world
+      is the A8 mistake, one task over. Checked: LockIn's own documentation says
+      it exists for the not-granted-same-cycle case, so backpressure is its
+      designed-for condition; doc/axi_demux.md states no constraint on R
+      backpressure or r_valid stability; the nearest open upstream issue is a
+      W-FIFO pipelining deadlock, a different mechanism. The stimulus is legal
+      and the assertion fires on RELEASE rather than during the stall, with a
+      staggered one-master-per-20-cycles release tripping it identically -- so
+      the simultaneous-release artefact is ruled out. A genuine anchor defect is
+      the reading most consistent with the evidence and it is NOT established.
+      Proving it needs a minimal reproducer against axi_demux alone.
+      .
+      SO THE BLOCKER IS NOT THE HARNESS. rr_arb_tree at LockIn=1
       carries an ASSUME beside its ASSERT -- "it is disallowed to deassert
       unserved request signals when LockIn is enabled" -- and in
       axi_demux_simple the arbiter's req_i is mst_r_valids with gnt_i the
