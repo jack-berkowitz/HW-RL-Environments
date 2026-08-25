@@ -207,14 +207,14 @@ prompt is a different question and is not listed.
 
 ## v_ca06 — AXI data-width downsizer
 
-Rows below answer task text `ca63302d6b23df46` (spec + the prompt the
+Rows below answer task text `c1de26c772eb754d` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| **reference testbench** | yes | yes | yes | 5/5 | **10/10** | establishes the ceiling |
-| `Claude Opus 5` | **no** | **no** | yes | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `dw_downsizer_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `ca63302d6b23df46` |
+| `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `ca63302d6b23df46` |
 
 ## v_ca07 — Glitch-free integer clock divider
 

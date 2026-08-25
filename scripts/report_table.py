@@ -22,7 +22,9 @@ invite a reader to average them.
 import functools
 import glob
 import json
+import io
 import os
+import traceback
 import re
 import subprocess
 import sys
@@ -448,6 +450,28 @@ def _out_of_path(task, sub):
     return out
 
 
+_REFDIR_CACHE = {}
+
+
+def _is_reference_file(task, sub):
+    """True when `sub` names a file in this task's ref/ directory.
+
+    A GUARD ON COUNT IS NOT A GUARD ON CORRECTNESS -- build_and_score.sh refused
+    on more than one ref/*_ref.sv and still handed over the inner module of a
+    two-file shim, because there was exactly one. So this asks where the file
+    lives rather than how many match a pattern: references live in ref/,
+    submissions live in candidates/, and nothing else is in either.
+    """
+    if task not in _REFDIR_CACHE:
+        names = set()
+        for d in glob.glob(os.path.join(REPO, "domains", "*", "design", task)) + \
+                 glob.glob(os.path.join(REPO, "domains", "*", "verification", task)):
+            for f in glob.glob(os.path.join(d, "ref", "*.sv")):
+                names.add(os.path.basename(f))
+        _REFDIR_CACHE[task] = names
+    return os.path.basename(sub or "") in _REFDIR_CACHE[task]
+
+
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from task_text_hash import task_text_hash
@@ -598,10 +622,17 @@ def main():
             # Same defect as reference_ppa.sh picking `ls ref/*_ref.sv | head -1`
             # and gating the file it picked: identifying the reference by its
             # filename rather than by what it is. Third site.
-            is_ref = (not is_alt_ref) and (
-                "_ref" in sub or sub.endswith("_top.sv")
-                or sub.startswith("async_fifo")
-                or sub.startswith("axi4_xbar") or sub.startswith("fp32_fma"))
+            # IDENTIFIED BY WHAT IT IS, NOT BY WHAT IT IS CALLED. This read
+            # `"_ref" in sub` plus three hardcoded prefixes, and when d_ai01's
+            # two-file shim broke it I added `endswith("_top.sv")` -- extending
+            # the enumeration rather than replacing it, in the same session in
+            # which I was fixing three other sites by property. A fifth pattern
+            # would have been added the next time a task named a file something
+            # else.
+            #
+            # The property: a reference lives in the task's own ref/ directory.
+            # Nothing else does -- submissions live under candidates/.
+            is_ref = (not is_alt_ref) and _is_reference_file(task, sub)
             # A NEGATIVE CONTROL THAT FAILS IS THE CONTROL WORKING, and it was
             # rendering as `0/2 FAIL` in the same column, same words, as a model
             # that failed. The table's stated policy is that every design which
@@ -1096,5 +1127,44 @@ def main():
     return 0
 
 
+def _guarded_main():
+    """Emit the table ONLY if it was generated in full.
+
+    A NameError inside the row loop used to leave a SHORT TABLE: rows silently
+    missing, exit status ignored, and every caller in this repo invoking the
+    script as `report_table.py 2>/dev/null` so the traceback never appeared. A
+    truncated artefact is worse than a crash -- a crash tells the reader
+    something is wrong, and a table missing four rows tells them those designs
+    were not run.
+
+    That is the blank-reporting principle this file applies to its own subject,
+    violated by its own harness: NO CONCLUSION rather than silence, CANDIDATE
+    LIST rather than a bare count, "not measurable" rather than "nothing
+    frozen". A partial table is a silence.
+
+    So output is buffered and released only on success. On any exception the
+    buffer is DISCARDED -- not flushed, because half a table is the thing being
+    prevented -- and the failure goes to stderr with a non-zero exit.
+    """
+    buf = io.StringIO()
+    real = sys.stdout
+    try:
+        sys.stdout = buf
+        rc = main()
+    except BaseException:
+        sys.stdout = real
+        sys.stderr.write(
+            "\nreport_table.py FAILED -- NO TABLE WAS WRITTEN.\n"
+            "The partial output was discarded deliberately: a table missing rows\n"
+            "reads as 'those designs were not run', which is a different claim\n"
+            "from 'the generator crashed'.\n\n")
+        traceback.print_exc()
+        return 3
+    finally:
+        sys.stdout = real
+    real.write(buf.getvalue())
+    return rc
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_guarded_main())
