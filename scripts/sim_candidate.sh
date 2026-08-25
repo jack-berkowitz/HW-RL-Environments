@@ -68,13 +68,21 @@ fi
 # --- resolve the DUT module name --------------------------------------------
 # Primary source is the spec's own `module` declaration, which is authoritative.
 #
-# THE FALLBACK EXISTS BECAUSE ONE SPEC SHIPS NO CODE. d_ai01's
-# spec/fp16_gemm_array_iface.sv is 492 lines and every one of them is a comment:
-# the ports are described in a table rather than declared. The grep returned an
-# empty string, TB resolved to `tb/_tb.sv`, and the runner refused -- correctly,
-# but the effect was that d_ai01 had NEVER been runnable through the scored path
-# and has zero sim records, while carrying seven controls, a reference result and
-# a HEIGHT discrimination result, all from ad-hoc runs. See F88.
+# THE FALLBACK EXISTS BECAUSE ONE SPEC SHIPPED NO CODE -- PAST TENSE, AND THE
+# FALLBACK STAYS. d_ai01's spec/fp16_gemm_array_iface.sv was 492 lines of which
+# every one was a comment: the ports were described in a table rather than
+# declared. The grep returned an empty string, TB resolved to `tb/_tb.sv`, and the
+# runner refused -- correctly, but the effect was that d_ai01 had NEVER been
+# runnable through the scored path and had zero sim records while carrying seven
+# controls, a reference result and a HEIGHT discrimination result, all from ad-hoc
+# runs. See F88.
+#
+# THAT SPEC NOW DECLARES ITS INTERFACE (64e3da6) and this fallback no longer fires
+# for d_ai01. The mechanism is kept because the defect it catches is a property of
+# specs in general rather than of that one task -- but the example above is now
+# history, and a comment in the PRESENT TENSE about a file that has since changed
+# is the same shape as the config.mk line that stated the invariant it existed to
+# protect and stated it wrongly.
 #
 # The fallback derives the module from the task directory, which is named
 # <id>_<module> by convention. It DOES NOT SILENTLY SUBSTITUTE: the source is
@@ -516,7 +524,32 @@ for cand in "${CANDS[@]}"; do
                "build_error=$slang_why -- host/tool failure, NOT a verdict" >/dev/null || true
              NSLANG=$((NSLANG+1)); continue ;;
          esac
+         # AUTHORITY TIER: A REJECTION NO INDEPENDENT FRONTEND CORROBORATES IS A
+         # TOOL FAILURE, NOT A VERDICT.
+         #
+         # The text match above is a FAST PATH -- it saves a build when slang
+         # names its own crash. It is not the basis of the decision, because it
+         # depends on slang's phrasing staying stable. This is the durable form,
+         # and it costs almost nothing: verilator --lint-only on the same bytes.
+         #
+         # THE EXIT CODE CANNOT DO THIS JOB. Both of the measured cases exit 133:
+         #   d_ai01/gemini  7 internal errors  -> verilator lint rc=0, 0 errors
+         #                                     -> UNCORROBORATED -> TOOLFAIL
+         #   d_ca03/gemini 10 real diagnostics -> verilator lint rc=1, 4 errors
+         #                                     -> CORROBORATED -> rejection stands
+         # A rule keyed on 133 would have discarded d_ca03's correct result.
          if [ -n "$slang_why" ]; then
+           if verilator --lint-only -Wno-fatal -Wno-lint -Wno-style "$runfile" \
+                >/dev/null 2>&1; then
+             slang_why="TOOLFAIL slang rejected this and verilator --lint-only accepts the same bytes; an uncorroborated rejection is not a verdict -- ${slang_why}"
+             printf '%-26s %-9s %s\n' "$name" "TOOLFAIL" "$(echo "$slang_why" | cut -c1-72)"
+             tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+             python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+               "$(basename "$cand" .sv)" "task_text_hash=$tt" \
+               "build_status=slang_tool_error" \
+               "build_error=$slang_why" >/dev/null || true
+             NSLANG=$((NSLANG+1)); continue
+           fi
            printf '%-26s %-9s %s\n' "$name" "SLANG" "$(echo "$slang_why" | cut -c1-72)"
            # A FRONTEND REJECTION IS A RESULT, AND IT MUST LEAVE A RECORD.
            # This used to `continue` straight past the record writer, so a
