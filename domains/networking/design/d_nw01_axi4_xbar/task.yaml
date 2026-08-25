@@ -388,6 +388,27 @@ capability_controls:
       also fixes something else -- L3 says liveness holds under RESPONSE
       BACKPRESSURE and is exercised only at ~25% random stall, never sustained,
       blocked by the same defect. Doing it once buys both.
+  stimulus_legality:
+    status: VIOLATION -- see F81
+    where: "tb/axi4_xbar_tb.sv:299 and tb/axi4_xbar_liveness_tb.sv:135"
+    what: >
+      slv_resp[s].r_valid = (s_rbeats[s] != 0) && (s_rdelay[s] == 0). r_valid
+      DROPS while a beat is still pending, which AXI forbids and which this
+      task's own H3 requires of submissions -- "a crossbar output holding valid
+      with ready low must keep valid high". The harness breaks the rule it
+      imposes.
+    consequence: >
+      The anchor's rr_arb_tree asserts that a locked decision stays stable while
+      its output is not ready, so sustained response backpressure is ILLEGAL
+      STIMULUS against this harness and the assertion reports the harness's
+      defect in the design's name. L3 -- liveness under RESPONSE BACKPRESSURE --
+      has therefore never been tested in the condition it names, only at ~25%
+      random stall. C3's ceiling check is blocked behind the same defect.
+    still_valid: >
+      nc_i_overbuffered_r's pass was measured on runs that completed without
+      protocol error, so F80 instance 2 stands: C3 is unchecked. What is blocked
+      is the fix, not the finding.
+
   spec_defect:
     issue: "two clauses numbered C3"
     where: "spec/axi4_xbar_iface.sv:177 (buffering ceiling) and :216 (holds at every combination)"
@@ -395,3 +416,20 @@ capability_controls:
       A duplicate identifier makes "fails C3" ambiguous in exactly the place a
       submission needs precision. Reported, not renumbered -- renumbering moves
       task_text_hash and belongs in a deliberate boundary.
+    rides: >
+      THE HARNESS-REWORK BOUNDARY, not a bump of its own. The C3 enforcement
+      bump it was going to ride did not happen, so it waits for the
+      protocol-correct slave responder that unblocks L3 and C3 together.
+    verified_safe_to_renumber: >
+      RECORDED SO IT DOES NOT HAVE TO BE RE-DERIVED. Every C3 reference in the
+      tree points at the CEILING at line 177, none at line 216: spec lines 44,
+      317 and 334; task.yaml under response_buffering_ceiling; and the whole
+      header of controls/nc_i_overbuffered_r.sv. So renaming LINE 216 to C4
+      breaks nothing. Do not renumber the ceiling instead -- and leave C1 and C2
+      alone, they carry 44 and 30 references respectively while C3 carries 17.
+      Line 258's "C1-C3" range becomes "C1-C4" in the same edit.
+    position_is_deliberate: >
+      The ceiling sits between C1 and C2 on purpose, not by accident of
+      numbering: its text contrasts with C1 directly -- "C1 says how much the
+      design must be able to do at once; this says how much it may SPEND doing
+      it." Keep the position when renumbering.

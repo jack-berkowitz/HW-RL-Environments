@@ -4816,3 +4816,92 @@ second source at 40 against 64.
 
 **Rules:** 25
 
+---
+
+## F81. Apparatus that drives the DUT ILLEGALLY, and reports its own defect as a design failure
+
+Every apparatus defect recorded so far measures the wrong thing: F74's
+instruments read a different observable, F75's checks cannot fire, F63's flags
+cannot be false. **This one is different in kind. The stimulus itself is outside
+the contract**, so the design under test is entitled to do anything at all, and
+whatever goes wrong is attributed to the design.
+
+### The defect
+
+`d_nw01`'s slave model drives the read-data channel like this:
+
+```
+slv_resp[s].r_valid = (s_rbeats[s] != 0) && (s_rdelay[s] == 0);
+```
+
+`s_rdelay` is a rate counter. So `r_valid` **drops while a beat is still
+pending** — the model announces data and then withdraws the offer. AXI forbids
+that: once `RVALID` is asserted it stays asserted until `RREADY`. The initiator
+may not take back an offer.
+
+The anchor assumes the rule, because real AXI hardware may. Its arbiter locks a
+decision while its output is stalled and asserts that the decision stays valid:
+
+```
+rr_arb_tree.sv:169  lock: Lock implies same arbiter decision in next cycle
+                          if output is not ready.
+```
+
+Hold the master side off long enough and the assertion fires. **It looks exactly
+like the design under test failing.** It is the harness reporting its own
+protocol violation, through the design's assertion, in the design's name.
+
+### Both specifications require the rule their testbenches break
+
+This is the part that makes it a class rather than a slip. `d_nw01`'s **H3** says
+"a crossbar output holding valid with ready low must keep valid high"; its own
+slave model does not. `d_ca01`'s spec says a valid, once "asserted it remains
+asserted, with the payload held stable, until the" handshake completes; its
+testbench does this:
+
+```
+// mem_data_stall gates the OUTPUT and never the FSM's own state. Dropping
+// mrd_valid_r inside M_FILL and re-raising it left the model wedged.
+assign mem_rd_valid = mrd_valid_r & ~mem_data_stall;
+```
+
+The comment is the interesting half. The author hit the symptom, diagnosed it as
+a modelling nuisance, and worked around it by gating the output — which is
+precisely the illegal construction. **Nothing in the repository asks whether the
+stimulus is legal**, so there was nothing to say otherwise.
+
+### Blast radius, and it is not only the check that found it
+
+* **`d_nw01`'s L3** — "both hold under RESPONSE BACKPRESSURE" — has never been
+  tested in the condition it names. Only ~25% random stall has ever been applied,
+  because sustained backpressure trips the assertion. The clause is partly
+  unexercised, and the defect blocking it is the same one.
+* **`d_nw01`'s C3 ceiling check is blocked behind it.** Four approaches were
+  measured; the only one that discriminated cleanly also tripped the assertion on
+  a configuration-dependent subset. See F80 instance 2.
+* **`d_ca01` carries the same shape** and its consequences are not yet assessed.
+* `d_nw01`'s liveness testbench has it too, at `axi4_xbar_liveness_tb.sv:135`,
+  though masters there hold `r_ready` high so it rarely manifests.
+
+**F80 instance 2 stands.** `nc_i`'s pass was measured on runs that completed
+without protocol error, so it remains valid evidence that C3 is unchecked. What
+is blocked is the fix, not the finding.
+
+### Why no existing instrument asks this
+
+The variation check asks whether an input MOVES. The capability controls ask
+whether a check DISCRIMINATES. Neither asks whether the stimulus is **legal**,
+and legality is not a property of any one signal — it is a relation between a
+signal and the protocol the contract names. A scan can flag a candidate: a
+`*_valid` whose driving expression mentions a delay, rate or stall term. Whether
+that gates the START of a transfer (legal) or an in-flight one (not) has to be
+read.
+
+**The check.** For every handshake the contract names, ask whether the harness
+obeys the same rule it imposes on the design. Where a spec says "once valid is
+asserted it holds until ready", the testbench's own responders are bound by that
+sentence too — and an assertion firing inside vendored RTL is evidence about the
+STIMULUS at least as often as about the design.
+
+**Rules:** 35
+

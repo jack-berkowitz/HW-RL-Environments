@@ -958,4 +958,31 @@ defects. It runs with the regression.
 
     **From:** F72, F77
 
+35. **A harness must obey the protocol it imposes on the design.** Apparatus
+    that drives the DUT outside its contract is not a weak test — it is an
+    invalid one, because a design given illegal stimulus may do anything, and
+    whatever goes wrong is attributed to the design.
+
+    **An assertion firing inside vendored RTL is evidence about the STIMULUS at
+    least as often as about the design.** That is the reading to reach for
+    first, because the other reading is free: a failing assertion in the DUT
+    already looks like a design defect and needs no argument to be believed.
+
+    `d_nw01`'s slave model drops `r_valid` while a beat is pending, which AXI
+    forbids and which the task's own H3 requires of submissions. The anchor's
+    arbiter asserts on exactly that assumption, so sustained response
+    backpressure is illegal stimulus against that harness — which leaves L3,
+    a clause about response backpressure, never tested in the condition it
+    names. `d_ca01` has the same construction, with a comment showing the author
+    hit the symptom and worked around it by gating the output.
+
+    **Ask it of every handshake the contract names**, in both directions: where
+    a spec says "once valid is asserted it holds until ready", the testbench's
+    own responders are bound by that sentence too. No instrument in this
+    repository asks this — the variation check asks whether an input moves, the
+    capability controls ask whether a check discriminates, and legality is a
+    relation between a signal and a protocol rather than a property of either.
+
+    **From:** F81
+
 ---
