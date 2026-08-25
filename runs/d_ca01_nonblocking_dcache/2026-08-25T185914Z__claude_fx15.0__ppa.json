@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=nonblocking_dcache; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=10000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0; override.CLK_PERIOD_NS=15.0;",
+  "build_config_hash": "661f17a87656710e",
+  "clk_period_ns": "15.0",
+  "correctness_gate": "passed:2026-08-25T065509Z__claude__sim.json",
+  "design_area_um2": "563403",
+  "git_sha": "600e0981b2d47b6880f74fa38590f165c11e7cbb-dirty",
+  "kind": "ppa",
+  "label": "claude_fx15.0",
+  "orfs_nickname": "d_ca01_cand_claude_fx15.0",
+  "pdk": "sky130hd",
+  "power_w": "9.45e-02",
+  "status": "completed",
+  "submission": "candidates/d_ca01/claude.sv",
+  "submission_sha256_16": "19c37fbc7a2ffc01",
+  "synth_area_um2": "445678.691200",
+  "task": "d_ca01_nonblocking_dcache",
+  "timestamp_utc": "2026-08-25T18:59:14Z",
+  "wns_ns": "2.64783"
+}
