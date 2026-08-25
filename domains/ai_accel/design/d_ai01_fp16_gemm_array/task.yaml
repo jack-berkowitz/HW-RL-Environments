@@ -361,6 +361,48 @@ scored_configuration:
     WHAT THIS DOES CHANGE is that T3 is now load-bearing for a discrimination it
     was previously redundant with. Anyone running only the scored configuration --
     a PPA-only flow, for instance -- gets no evidence about HEIGHT at all.
+  second_capacity_control_owed:
+    status: SCOPED, NOT BUILT
+    the_gap: >
+      THERE IS NOW NO CAPACITY-CLASS CONTROL THAT FAILS AT THE SCORED GEOMETRY.
+      nc_g_height_blind_depth is the only capacity control and its polarity points
+      away from HEIGHT=4: it pins the chain depth to the literal 4, which is
+      CORRECT at HEIGHT=4, so it passes there and fails only at HEIGHT=8. The six
+      controls that fail at both heights -- nc_a stuck output, nc_b extra pipe
+      stage, nc_c flush subnormal, nc_d overflow always inf, nc_e positive zero
+      only, nc_f reversed chain -- are arithmetic and ordering controls. None of
+      them tests that HEIGHT is load-bearing.
+    why_this_is_the_gap_nc_g_EXISTED_to_close: >
+      d_nw01 recorded that no capability check discriminates at MAX_TRANS=2 and
+      that A PASS AT THE LOW SETTING IS NOT CAPABILITY EVIDENCE. That lesson is
+      cited in d_ca01's own scored_configuration rationale as the reason
+      MAX_MISSES=8 was chosen over 2. THE SCORED SETTING HERE IS NOW THE LOW ONE:
+      4 of the two legal heights. So the PPA number will be taken at the geometry
+      where the capacity claim is least tested, which is the shape the repository
+      already recorded as a mistake not to repeat.
+    the_shape_of_the_control: >
+      THE MIRROR OF nc_g -- chain depth pinned to the literal 8. Correct at
+      HEIGHT=8, wrong at HEIGHT=4, so it would FAIL at the scored geometry and
+      PASS at the other. Together the pair would give one failing capacity control
+      at each legal height and neither geometry would be blind.
+    open_question_before_building: >
+      IS IT A PLAUSIBLE DESIGN OR ONLY A CONSTRUCTIBLE ONE? nc_g is plausible --
+      a submission reading P1 and building for the smaller legal height is a real
+      mistake a model makes. Pinning depth to 8 while the port is HEIGHT-wide
+      means indexing stages 4..7 of a [3:0] array, which SystemVerilog resolves to
+      X rather than an elaboration error, so it CONSTRUCTS. Whether any submission
+      would ever write it is a different question, and a control nobody would
+      write measures the checker rather than the contract. That is the question to
+      settle before building, not after.
+    cheaper_alternative_to_weigh_first: >
+      A capacity FLOOR at the scored geometry may cover the same ground: assert
+      that the design's observed latency at HEIGHT=4 is D*(H-1)+2 = 14 and that it
+      is DERIVED rather than constant, by comparing the two geometries' measured
+      latencies within one run. That is rule 36's shape -- a firing count rather
+      than a control -- and it needs no new plausible-design argument.
+    not_built: >
+      Scoped on instruction and deliberately not built. Recorded here rather than
+      in a note because the gap is live from the moment P2 moved.
   the_prediction_this_refuted: >
     The failure signature -- 80% of violations on met1, mass shorts directly above
     the cells, global route clean, antennas driven to zero -- was read as PIN

@@ -90,3 +90,56 @@ normalisation loop — nested inside a per-row and a per-stage loop exceeds that
 budget. Give every loop a small constant bound, or express the search as indexed
 logic. A bit-exact submission that trips this scores full correctness and
 produces **no PPA number at all**, with the cause surfacing much later.
+
+---
+
+## GRADING NOTE — the scored geometry moved, and one control stopped covering it
+
+**As of `34f1d43` the scored configuration is `HEIGHT=4, WIDTH=8`.** It was
+`HEIGHT=8`. The move is physical, measured, and not a contract change: at
+`HEIGHT=8` detailed routing does not close on sky130hd — 76,253 to 83,445
+violations across three separate floorplans — and at `HEIGHT=4` it closes clean
+at 0 violations, 710,752 µm². Both routed at the same 50 ns constraint.
+
+**`HEIGHT=8` is still legal (P1) and T3 still requires a submission to hold at
+BOTH.** What moved is which geometry carries the PPA comparison, not which
+geometries a design must implement. `sim_candidate.sh` sweeps both.
+
+### The part a reader will get wrong
+
+**At the scored geometry, `nc_g_height_blind_depth` cannot discriminate. If you
+assume it still covers HEIGHT at the scored config, you are wrong.**
+
+`nc_g` pins the chain depth to the literal 4. That is *correct behaviour* at
+`HEIGHT=4`, so it **PASSES** there, and it **FAILS** only at `HEIGHT=8`:
+
+    nc_g_height_blind_depth    1/2    passes at +HH=4, fails at +HH=8
+
+Two consequences, and the second is the one to act on:
+
+* **T3 now carries a discrimination it was previously redundant with.** When
+  `HEIGHT=8` was scored, the scored run alone caught a HEIGHT-blind design. It no
+  longer does. The pair does; the scored geometry alone does not.
+* **A PPA-only run at the scored configuration produces NO HEIGHT EVIDENCE.**
+  Any flow that elaborates only `HEIGHT=4` — which is what a synthesis or
+  place-and-route run does — is blind to whether the design uses HEIGHT at all.
+  A PPA number from such a run is a number about *a* design, not evidence that
+  the design is HEIGHT-parameterised.
+
+### Grading rule that follows
+
+**Correctness must be read across both configurations, never from the scored one
+alone.** `1/2` and `2/2` are different verdicts and only the second is a pass.
+The runner already enforces this — a candidate reported `1/2` has failed — but
+the failing geometry is worth reading, because **failing only at `+HH=8` is the
+`nc_g` signature**: a design that hardcoded the scored depth.
+
+### Known gap, scoped and not yet closed
+
+There is currently **no capacity-class control that fails at the scored
+geometry.** The six controls that fail at both heights are arithmetic and
+ordering controls; `nc_g` is the only capacity one and its polarity now points
+away from the scored config. This is `d_nw01`'s `MAX_TRANS=2` lesson in a new
+place — *a pass at the low setting is not capability evidence* — and the scored
+setting is now the low one. Scoped in `task.yaml` under
+`second_capacity_control_owed`; not built.
