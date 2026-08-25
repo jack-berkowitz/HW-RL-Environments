@@ -26,6 +26,56 @@ reference:
     finding `anchor-outside-drift-detection`. refs.lock is frozen; reported.
 
 spec: [spec/nonblocking_dcache_iface.sv]
+probe: probe/PASTE.md
+
+# THIS KEY DID NOT EXIST until R1b was landed. Every other design task carried
+# one; this task carried none, so nothing could state what question its three
+# candidates had been asked, and no boundary could name a predecessor. The
+# absence was not a stale value going unnoticed -- it was a field nobody had ever
+# filled, which is the harder kind to see because there is no wrong number to
+# catch. Recompute with scripts/task_text_hash.py at the point of use.
+task_text_hash: 51337b00b54b64c7    # spec/ + probe/PASTE.md
+
+version_boundary:
+  changed_on: 2026-08-25
+  pre_bump_task_text_hash:  aab70a4bfcf132e7
+  post_bump_task_text_hash: 51337b00b54b64c7
+  behavioural: false
+  what_changed: >
+    R1b ADDED. `rsp_valid_o` MUST NOT depend combinationally on `rsp_ready_i`.
+    R1's stability sentence was satisfiable by NEVER OFFERING -- a response never
+    presented to a stalled consumer cannot be withdrawn from one -- so a design
+    could empty R1's antecedent instead of honouring its consequent, and no
+    clause objected.
+    .
+    MEASURED, NOT ARGUED. controls/nc_r1_evades_antecedent.sv gates rsp_valid_o
+    on rsp_ready_i, is otherwise the reference verbatim, and under the contract as
+    it stood satisfied every clause while driving R1's firing count to zero at
+    all sixteen configurations. Its only distinct failure is the condition floor.
+    .
+    The asymmetry with L5 is the reason R1b names L5 explicitly. L5 PERMITS the
+    identical construction on the request side, and conformant/c02_ready_gated_on
+    _valid.sv is that permitted design -- it passes 16/16, including with the
+    condition floor live. One side of the same handshake had a clause and a
+    control; the other had neither.
+  prior_results_comparable: true
+  why: >
+    No behaviour required of a submission changes. R1b forbids a construction
+    that no current submission uses -- all three pass R1 with a non-zero firing
+    count -- so nothing is re-scored for correctness. The hash moves because the
+    SHIPPED TEXT moves, and the hash is what asserts "same question".
+  nothing_is_being_covered_up: >
+    ZERO OF THE THREE current submissions exploits the gap, and the same is true
+    of d_dsp02's three. This closes a live hole before anything walked through
+    it; it does not correct a scored result. Re-solicitation is the cost of
+    changing the question, not of hiding an answer.
+  enforceability_caveat: >
+    STATED PLAINLY BECAUSE IT IS A LIMIT, NOT A CAVEAT TO BURY. R1b forbids a
+    COMBINATIONAL DEPENDENCY, which the testbench cannot observe directly -- it
+    sees rsp_valid_o low and cannot distinguish "gated on ready" from "no
+    response yet". The condition floor catches the construction, but reports it as
+    "R1 was never exercised" rather than as an R1b violation. R1b is enforceable
+    by inspection and by control, and only partially by the harness.
 
 # RULE 18 -- PPA, latency and throughput are measured ONLY here.
 scored_configuration:

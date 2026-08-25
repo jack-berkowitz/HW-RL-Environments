@@ -10,6 +10,13 @@
 // independently of what out_idx_o claims, which is what makes R3 checkable at
 // all rather than self-certifying.
 module route_xbar_tb;
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Plusarg-guarded, so
+  // a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, route_xbar_tb);
+  end
   // A3's antecedent counter, declared here because the checker below uses it.
   int  cov_a3_held = 0;
   localparam int N_IN = 4, N_OUT = 4, DW = 32, SW = 2, IW = 2;

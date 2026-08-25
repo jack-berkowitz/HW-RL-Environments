@@ -208,7 +208,11 @@ second_source:
 
 candidate_set:
   status: RE-SOLICITED against PASTE.md, 2026-08-21
-  task_text_hash: 530f3e4189421457      # spec + probe/PASTE.md together
+  task_text_hash: 1302fbe6c552abdc      # spec + probe/PASTE.md together
+  # WAS 530f3e4189421457 and stale before R1b/H1b were written -- 4045b56's Fmax
+  # consistency sweep had already moved it to 8420f4393a0a930d and nothing
+  # updated this field. Two stale values in sequence, neither caught by anything
+  # but a hand recompute. Always recompute at the point of use.
   models: 3
   submissions: [chat, claude, gemini]
 

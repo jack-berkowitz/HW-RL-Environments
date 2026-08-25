@@ -96,6 +96,29 @@ def parse_sim(raw_dir):
                 body = line[len("// coverage:"):].strip()
                 for k, v in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(-?[\w. ]+?)(?=\s+[A-Za-z_]+\s*=|$)", body):
                     coverage.setdefault(cfg, {})[k] = v.strip()
+        # COVERAGE THAT WAS MEASURED, PRINTED, AND UNDERSTOOD BY NOTHING.
+        #
+        # Only `// coverage:` is parsed above. Three design testbenches print
+        # their coverage in other shapes -- d_ca03's `COVERAGE over N requests:
+        # hit=.. walk=.. superpage=..`, and d_dsp03's and d_ai01's own variants
+        # -- so their records carried `coverage: {}` while the tally was sitting
+        # in the log. An empty dict and "this task measures no coverage" are the
+        # same value, and they are not the same fact: the first is a parser that
+        # did not understand the output, the second is a task that produced none.
+        #
+        # This does NOT guess at the other formats. Guessing would put a number
+        # in a record on the strength of a regex nobody calibrated, which is
+        # worse than the gap. It records that coverage was emitted and not
+        # understood, so the absence is visible instead of silent -- the same
+        # move as NO CONCLUSION in the linkage checker and CANDIDATE LIST in the
+        # emittability check.
+        if not coverage.get(cfg):
+            for line in txt.splitlines():
+                st = line.strip()
+                if "COVERAGE" in st and not st.startswith("// coverage:") \
+                        and "COVERAGE HOLE" not in st:
+                    coverage.setdefault(cfg, {})["_unparsed"] = st[:160]
+                    break
     return configs, metrics, coverage
 
 

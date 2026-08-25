@@ -5845,6 +5845,52 @@ The reason to file it anyway is that **nothing in the pipeline would have caught
 it** — the signature above did not exist until this happened, and the only thing
 that stopped it was a person looking at a log and finding one second implausible.
 
+### CORRECTION, 2026-08-25: the second instance was four gaps, not one
+
+Filed above as one gap — a spec declaring no module. It was four, each
+sufficient alone to keep `d_ai01` off the scored path, and each one only
+discoverable after the previous had been cleared:
+
+    1. spec/*_iface.sv declares no module   -> the task could not be resolved
+    2. no ref/sim_flags_verilator.txt       -> closure declared for SYNTHESIS only
+    3. geometry is a preprocessor define    -> a -G parameter sweep is impossible
+    4. the tb printed RESULT:, not          -> NO_VERDICT on a run that PASSED
+       TEST_RESULT:
+
+Gap 2 is the same defect this finding already records against `d_ca03`, in a
+second task, found independently. Gap 3 is a necessity rather than a style
+choice: `rec_t` in `fp16_gemm_array_vec.svh` is sized ``[`VW-1:0][`VH-1:0]``, so
+the recorded-vector type is fixed by the preprocessor and a parameter arrives
+too late — the attempt compiles at HEIGHT=8 and fails at HEIGHT=4 with *"expects
+40 bits on the LHS, but LHS's SEL generates 20"*. Two geometries are two
+elaborations there.
+
+### The shape gap 4 demonstrates: a defect can be protected by defects upstream of it
+
+`RESULT: PASS` and `TEST_RESULT: PASS` are the same sentence to a person and
+different tokens to rule 24. That mismatch had been in the testbench the whole
+time. It survived because **gaps 1–3 each stopped execution before anything
+could reach the verdict line** — it was unreachable, therefore untestable,
+therefore intact. Not subtle; shielded.
+
+Every ad-hoc `d_ai01` run printed `RESULT: PASS` and was read by eye. The token
+only ever mattered to a reader that had never run — which is the same reason gap
+2 survived in `d_ca03`, where the dependency closure was missing from precisely
+the path nobody had exercised.
+
+**The operational consequence contradicts the intuition.** Fixing an apparatus
+defect does not reduce the defect count monotonically: a blocked path hides
+every defect behind the block, so the honest expectation after clearing one is
+*more* findings, not fewer. **A fix that yields a clean run on the first attempt
+deserves more suspicion than one that yields the next error.** Here each fix
+exposed the next, four times, which is what a genuinely blocked path looks like
+from the inside.
+
+The verdict-token gap was swept across all nine design tasks and is unique to
+`d_ai01`; see F90, which also records the two errors in that sweep. The kill
+counts that this task produced once it reached the scored path did not
+reproduce — see F89.
+
 **Rules:** 8, 36
 
 ## F89. A number carried across a boundary the record itself had marked as one it does not carry across

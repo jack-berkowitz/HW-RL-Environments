@@ -20,6 +20,13 @@
 
 module frame_arb_mux_tb;
 
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Plusarg-guarded, so
+  // a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, frame_arb_mux_tb);
+  end
   // ---- scored configuration (spec §8) ---------------------------------------
   localparam int S  = 4;
   localparam int DW = 32;

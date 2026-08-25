@@ -67,6 +67,18 @@ module id_width_conv_tb;
     .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready);
 
   int unsigned n_fail = 0;
+  // E1 now covers `resp` on BOTH response channels. A responder that returns
+  // only OKAY makes that half of the clause unfalsifiable: the checker compares
+  // against the constant its own responder drives, so port and expectation are
+  // the same symbol and nothing can disagree.
+  function automatic logic [1:0] resp_of(input logic [ADDR_W-1:0] a);
+    case (a[1:0])
+      2'b10:   return 2'b10;   // SLVERR
+      2'b11:   return 2'b11;   // DECERR
+      default: return 2'b00;   // OKAY
+    endcase
+  endfunction
+
   task automatic fail(input string cl, input string msg);
     n_fail = n_fail + 1;
     if (n_fail <= 40) $display("FAIL [%s] %s (t=%0t)", cl, msg, $time);
@@ -76,6 +88,8 @@ module id_width_conv_tb;
   int unsigned live_r [NID];          // A5: outstanding reads per slave id
   int unsigned live_w [NID];
   int unsigned addr_q [NID][$];       // B1: accepted read addrs, per id, in order
+  int unsigned waddr_q [NID][$];      // the same for WRITES -- E1's new half
+  int cov_err_r = 0, cov_err_b = 0;   // NON-OKAY responses actually returned
   int unsigned len_q  [NID][$];       // each accepted read's burst length
   int unsigned rbeat  [NID];          // beats seen so far of the head burst
   int unsigned map_of [NID];          // D1: master id assigned to a live slave id
@@ -118,7 +132,7 @@ module id_width_conv_tb;
     m_rid    = (mq_id.size() > 0) ? MST_ID_W'(mq_id[0]) : '0;
     m_rdata  = (mq_id.size() > 0) ? (mq_addr[0] + m_beat) : '0;
     m_rlast  = (mq_id.size() > 0) && (m_beat == mq_len[0]);
-    m_rresp  = 2'b00;
+    m_rresp  = (mq_id.size() > 0) ? resp_of(mq_addr[0]) : 2'b00;
   end
   always @(posedge clk) if (rst_n && m_rvalid && m_rready) begin
     if (m_beat == mq_len[0]) begin
@@ -131,16 +145,24 @@ module id_width_conv_tb;
   // completed at the master port; clause B3 puts the beats in address order, so
   // pairing the head of the AW queue with each m_wlast is exact.
   int unsigned awq [$], bq [$];
-  always @(posedge clk) if (rst_n && m_awvalid && m_awready) awq.push_back(m_awid);
+  int unsigned awq_a [$], bq_a [$];      // the address each carries, for resp_of
+  always @(posedge clk) if (rst_n && m_awvalid && m_awready) begin
+    awq.push_back(m_awid); awq_a.push_back(m_awaddr);
+  end
   always @(posedge clk) if (rst_n && m_wvalid && m_wready && m_wlast) begin
-    if (awq.size() > 0) begin bq.push_back(awq[0]); void'(awq.pop_front()); end
+    if (awq.size() > 0) begin
+      bq.push_back(awq[0]);   void'(awq.pop_front());
+      bq_a.push_back(awq_a[0]); void'(awq_a.pop_front());
+    end
   end
   always_comb begin
     m_bvalid = reply_en && (bq.size() > 0);
     m_bid    = (bq.size() > 0) ? MST_ID_W'(bq[0]) : '0;
-    m_bresp  = 2'b00;
+    m_bresp  = (bq_a.size() > 0) ? resp_of(ADDR_W'(bq_a[0])) : 2'b00;
   end
-  always @(posedge clk) if (rst_n && m_bvalid && m_bready) void'(bq.pop_front());
+  always @(posedge clk) if (rst_n && m_bvalid && m_bready) begin
+    void'(bq.pop_front()); void'(bq_a.pop_front());
+  end
 
   assign m_awready = 1'b1;
   assign m_wready  = 1'b1;
@@ -150,6 +172,7 @@ module id_width_conv_tb;
     if (!rst_n) begin
       for (int i = 0; i < NID; i++) begin
         live_r[i] <= 0; live_w[i] <= 0; addr_q[i].delete(); len_q[i].delete();
+        waddr_q[i].delete();
         rbeat[i] <= 0; map_valid[i] <= 1'b0;
       end
       for (int i = 0; i < (1<<MST_ID_W); i++) owner_valid[i] <= 1'b0;
@@ -180,8 +203,10 @@ module id_width_conv_tb;
           if (s_rdata !== exp_data[DATA_W-1:0])
             fail("E1", $sformatf("read beat %0d of slave id %0d carries %08x, expected %08x -- the data a beat carries follows from the address its transaction was issued with, which E1 forwards unmodified",
                                  rbeat[s_rid], s_rid, s_rdata, exp_data[DATA_W-1:0]));
-          if (s_rresp !== 2'b00)
-            fail("E1", $sformatf("read beat of slave id %0d carries resp %b, expected 00", s_rid, s_rresp));
+          if (s_rresp !== resp_of(ADDR_W'(addr_q[s_rid][0])))
+            fail("E1", $sformatf("read beat of slave id %0d carries resp %b, expected %b -- the subordinate's code is forwarded unmodified",
+                                 s_rid, s_rresp, resp_of(ADDR_W'(addr_q[s_rid][0]))));
+          if (resp_of(ADDR_W'(addr_q[s_rid][0])) != 2'b00) cov_err_r++;
           if (s_rlast !== exp_last)
             fail("D4", $sformatf("slave id %0d: rlast is %0b on beat %0d of a %0d-beat burst -- one accepted transaction produces exactly one response, of exactly its own length",
                                  s_rid, s_rlast, rbeat[s_rid], len_q[s_rid][0] + 1));
@@ -200,6 +225,7 @@ module id_width_conv_tb;
       // ---- the WRITE side ------------------------------------------------
       if (s_awvalid && s_awready) begin
         live_w[s_awid] <= live_w[s_awid] + 1;
+        waddr_q[s_awid].push_back(s_awaddr);
         n_aw++;
       end
       if (s_bvalid && s_bready) begin
@@ -208,9 +234,15 @@ module id_width_conv_tb;
           fail("C2", $sformatf("write response for slave id %0d with none outstanding", s_bid));
         else
           live_w[s_bid] <= live_w[s_bid] - 1;
-        if (s_bresp !== 2'b00)
-          fail("E1", $sformatf("write response for slave id %0d carries resp %b, expected 00 -- a converter alters identifiers and nothing else",
-                               s_bid, s_bresp));
+        if (waddr_q[s_bid].size() == 0)
+          fail("C2", $sformatf("write response for slave id %0d with no write outstanding", s_bid));
+        else begin
+          if (s_bresp !== resp_of(ADDR_W'(waddr_q[s_bid][0])))
+            fail("E1", $sformatf("write response for slave id %0d carries resp %b, expected %b -- a converter alters identifiers and nothing else",
+                                 s_bid, s_bresp, resp_of(ADDR_W'(waddr_q[s_bid][0]))));
+          if (resp_of(ADDR_W'(waddr_q[s_bid][0])) != 2'b00) cov_err_b++;
+          void'(waddr_q[s_bid].pop_front());
+        end
       end
     end
   end
@@ -423,7 +455,14 @@ module id_width_conv_tb;
 
     $display("METRIC: reads accepted %0d, master reads %0d, responses %0d", n_ar, n_mar, n_r);
     if (n_fail == 0) $display("RESULT: PASS");
-    else             $display("RESULT: FAIL (%0d failures)", n_fail);
+    else             // E1's new half is unfalsifiable if every response returned is OKAY: the
+    // checker would be comparing against the constant the responder drives.
+    if (cov_err_r < 4)
+      fail("COVERAGE", $sformatf("only %0d non-OKAY READ responses were returned -- E1's resp half is untested at OKAY alone", cov_err_r));
+    if (cov_err_b < 4)
+      fail("COVERAGE", $sformatf("only %0d non-OKAY WRITE responses were returned -- E1's new B-channel half is untested at OKAY alone", cov_err_b));
+    $display("  [coverage] non-OKAY responses returned: reads=%0d writes=%0d", cov_err_r, cov_err_b);
+    $display("RESULT: FAIL (%0d failures)", n_fail);
     $finish;
   end
 

@@ -374,6 +374,34 @@ for _td in sorted(glob.glob(os.path.join(REPO, "domains", "*", "design", "d_*"))
 SCORED_CFG["d_dsp02_fp32_fma_ii1"] = None   # single config, no parameters
 
 
+_PIN_RE = re.compile(r"pinned period is\s+([0-9]+(?:\.[0-9]+)?)\s*ns", re.I)
+_LABEL_PER_RE = re.compile(r"_fx([0-9]+(?:\.[0-9]+)?)$")
+_PIN_CACHE = {}
+
+
+def _spec_pin(task):
+    """The period the spec pins this task at, or None if it states none."""
+    if task in _PIN_CACHE:
+        return _PIN_CACHE[task]
+    val = None
+    for d in glob.glob(os.path.join(REPO, "domains", "*", "design", task)):
+        for f in sorted(glob.glob(os.path.join(d, "spec", "*.sv"))):
+            m = _PIN_RE.search(open(f, errors="replace").read())
+            if m:
+                val = float(m.group(1))
+                break
+        if val is not None:
+            break
+    _PIN_CACHE[task] = val
+    return val
+
+
+def _label_period(label):
+    """The period a `..._fx<N>` label was built at, or None."""
+    m = _LABEL_PER_RE.search(label or "")
+    return float(m.group(1)) if m else None
+
+
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from task_text_hash import task_text_hash
@@ -513,11 +541,33 @@ def main():
             # metrics and no PPA. Two rows with one name and no way to tell
             # which is the anchor is worse than either row alone.
             is_alt_ref = "_alt_ref" in sub
+            # `_top.sv` IS A REFERENCE TOO. d_ca03 and d_ai01 ship two-file
+            # shims -- <design>_ref.sv holding the inner module and
+            # <design>_top.sv declaring the contract module -- and it is the
+            # _top file the harness actually runs. Without this, d_ai01's
+            # reference rendered as a plain `fp16_gemm_array_top` row reading
+            # 2/2 pass, indistinguishable from a submission, in the same table
+            # whose whole purpose is comparing submissions AGAINST it.
+            #
+            # Same defect as reference_ppa.sh picking `ls ref/*_ref.sv | head -1`
+            # and gating the file it picked: identifying the reference by its
+            # filename rather than by what it is. Third site.
             is_ref = (not is_alt_ref) and (
-                "_ref" in sub or sub.startswith("async_fifo")
+                "_ref" in sub or sub.endswith("_top.sv")
+                or sub.startswith("async_fifo")
                 or sub.startswith("axi4_xbar") or sub.startswith("fp32_fma"))
+            # A NEGATIVE CONTROL THAT FAILS IS THE CONTROL WORKING, and it was
+            # rendering as `0/2 FAIL` in the same column, same words, as a model
+            # that failed. The table's stated policy is that every design which
+            # ran appears -- correct -- but a reader cannot tell an artefact
+            # BUILT TO FAIL from a submission that did, and the two mean opposite
+            # things about the task. Every control in the repo is named nc_*;
+            # there are 25 across seven design tasks.
+            is_control = sub.startswith("nc_")
             name = ("**reference**" if is_ref
                     else "**second source**" if is_alt_ref
+                    else f"`{sub[:-3]}` — *negative control, expected to fail*"
+                    if is_control
                     else f"`{sub[:-3]}`")
 
             cf = CORRECTNESS_FAILURES.get(key)
@@ -603,6 +653,23 @@ def main():
                 if not ppa.get("correctness_gate"):
                     notes.append("PPA predates the correctness interlock")
                     any_ungated = True
+                # A PPA NUMBER MEASURED AT A SUPERSEDED PIN IS AN ANSWER TO A
+                # QUESTION THE TASK NO LONGER ASKS. Every candidate for a task
+                # is built at one period, stated in the spec before
+                # solicitation, so that area cannot be bought by relaxing the
+                # clock -- that is what makes the column comparable at all.
+                # d_ca01's reference was publishing 578,032 um2 at 100 MHz from
+                # a reference_fx10.0 build while the spec pins the task at 15.0
+                # ns, with nothing in the row saying so, in a table whose other
+                # seven tasks are at their current pins.
+                _pin = _spec_pin(task)
+                _lab_per = _label_period(ppa.get("label", ""))
+                if _pin is not None and _lab_per is not None and \
+                        abs(_pin - _lab_per) > 1e-9:
+                    notes.append(
+                        f"**measured at a superseded pin** — built at "
+                        f"{_lab_per:g} ns; this task is pinned at {_pin:g} ns, "
+                        f"so this is not comparable with rows at the pin")
             f_mhz, f_per = fmax_for(task, sub)
             if f_mhz:
                 fmx = f"{f_mhz:.1f}"

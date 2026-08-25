@@ -25,7 +25,46 @@ LABEL="$3"         # e.g. reference_fx9.0
 TASK_DIR="$(dirname "$(dirname "$(find domains -path "*${TASK}_*/orfs/config.mk" | head -1)")")"
 CFG="$TASK_DIR/orfs/config.mk"
 TASK_NAME="$(basename "$TASK_DIR")"
-REF="$(ls "$TASK_DIR"/ref/*_ref.sv | head -1)"
+# THE REFERENCE IS THE FILE THAT DECLARES THE CONTRACT MODULE, not the first
+# name that sorts. This was `ls ref/*_ref.sv | head -1`, and REF feeds three
+# things: the display line, the CORRECTNESS GATE LOOKUP, and the submission
+# field of the run record. On a two-file shim it picked the wrong one and every
+# consequence was quiet.
+#
+# d_ca03 ships sv39_mmu_ref.sv (declaring sv39_mmu_ref_inner) and
+# sv39_mmu_top.sv (declaring the contract module sv39_mmu). head -1 took the
+# inner file, so the gate looked for a passing sim of a module the harness never
+# runs, found none, and wrote correctness_gate: UNVERIFIED onto a reference whose
+# contract module HAD passed. d_ai01 has the identical split and the identical
+# defect. Six of the eight tasks were unaffected, which is why it survived.
+#
+# Same first-match-wins shape as the policy-directory glob that cost v_ca07 a
+# real 21 of 22, and as the tb/*_tb.sv pick that silently scored d_nw01's
+# read-only liveness rig. A glob that selects silently has answered a question
+# nobody asked it.
+DESIGN_NAME_FOR_REF="$(awk '
+  $0 ~ /^[[:space:]]*export[[:space:]]+DESIGN_NAME[[:space:]]*[:?]?=/ {sub(/^[^=]*=/,"");gsub(/[[:space:]]/,"");print;exit}'   "$TASK_DIR/orfs/config.mk")"
+REF=""
+if [ -n "$DESIGN_NAME_FOR_REF" ]; then
+  _hits="$(grep -l "^module ${DESIGN_NAME_FOR_REF}\b" "$TASK_DIR"/ref/*.sv 2>/dev/null)"
+  _n="$(printf '%s\n' "$_hits" | grep -c . || true)"
+  if [ "$_n" = "1" ]; then
+    REF="$_hits"
+    echo "reference: $(basename "$REF") -- declares the contract module '$DESIGN_NAME_FOR_REF'"
+  elif [ "$_n" -gt 1 ] 2>/dev/null; then
+    echo "REFUSED: ${_n} files under $TASK_DIR/ref/ declare module '$DESIGN_NAME_FOR_REF':" >&2
+    printf '  %s\n' $_hits >&2
+    echo "Nothing was built. Pick one rather than letting a glob pick." >&2
+    exit 2
+  fi
+fi
+if [ -z "$REF" ]; then
+  echo "REFUSED: no file under $TASK_DIR/ref/ declares module '${DESIGN_NAME_FOR_REF:-<DESIGN_NAME unset>}'." >&2
+  echo "ref/ holds: $(ls "$TASK_DIR"/ref/*.sv 2>/dev/null | xargs -n1 basename | tr '\n' ' ')" >&2
+  echo "Nothing was built. The reference must be identified by what it declares," >&2
+  echo "not by filename, or the gate verifies a different file than the one built." >&2
+  exit 2
+fi
 NICK="$(awk '
   $0 ~ /^[[:space:]]*export[[:space:]]+DESIGN_NICKNAME[[:space:]]*[:?]?=/ {sub(/^[^=]*=/,"");gsub(/[[:space:]]/,"");n=$0}
   $0 ~ /^[[:space:]]*export[[:space:]]+DESIGN_NAME[[:space:]]*[:?]?=/      {sub(/^[^=]*=/,"");gsub(/[[:space:]]/,"");m=$0}

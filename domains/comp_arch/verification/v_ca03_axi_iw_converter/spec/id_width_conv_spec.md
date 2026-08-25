@@ -145,8 +145,9 @@ response.
 ## 5. Payload integrity
 
 **E1.** `addr` and `len` on the address channels, `data`, `strb` and `last` on
-the write data channel, and `data`, `resp` and `last` on the read data channel
-shall be forwarded unmodified in both directions.
+the write data channel, `data`, `resp` and `last` on the read data channel, and
+`resp` on the write response channel shall be forwarded unmodified in both
+directions.
 *Authority: AMBA AXI4 — a converter alters identifiers and nothing else.*
 
 ---

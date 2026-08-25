@@ -936,6 +936,35 @@ I had it right once, on the clause where I had thought about it, and wrote the
 other three from the floor block without thinking about it — which is exactly the
 mechanism above.
 
+### The third instance of an author breaking the rule inside the commit that files it
+
+**My first replacement counter for H4 was wrong in this finding's own way.** It
+counted any pending different-valued request while the design was busy — which
+includes the natural overlap in the divisor sweep, nothing to do with H4 — and
+**read 10 on a base whose H4 window is empty**. A counter whose name and claim
+outran what it counted, written into the commit that defines that defect.
+
+What caught it was not review. **Both bases passed**, and two passes is exactly
+what a useless counter looks like: the anchor passed because the antecedent held,
+the suppressing control passed because the counter was measuring something else,
+and the pair is indistinguishable from a working detector. It was caught by
+**printing the number** — 9 on the anchor, 10 on the control — instead of reading
+the pass/fail pair.
+
+That makes three in this session, and the pattern is worth more than any one:
+
+| | the rule | broken by its own author |
+| --- | --- | --- |
+| F86 | evidence for *unfalsifiable* must be a suppressing control that passes | its founding instance, R1, was named from a **reading** of the clause |
+| this | a floor must count the condition, not the attempt | the replacement counter **counted the wrong condition** |
+| earlier | the code was right and the prose describing it was wrong | my contract text said `[A-Z][0-9]+` while my own tool had always matched `[A-Z][0-9]+[a-z]?` |
+
+**The generalisation:** writing a rule down does not install it. All three were
+written by someone who had just finished explaining the defect, in the artefact
+that explains it, which is the moment of maximum confidence and therefore of
+minimum checking. A rule is worth having anyway — but the check it prescribes has
+to be run against the commit that introduces it, not only against future work.
+
 ### Rules
 
 - A floor may claim only what its counter observes. *"never driven"* is a claim
@@ -953,3 +982,622 @@ mechanism above.
   a failure at `phase=<clause>` means the consequent was violated and the clause
   has force; a failure at `phase=final` / "never exercised" means the antecedent
   was suppressed.
+
+
+---
+
+## FINDING — port and expectation as one symbol: a check that cannot disagree
+
+**Second instance, which makes it a class.** Both are in this agent's own work,
+found three days apart in different tasks by different routes.
+
+| | the port | the expectation | what passed |
+| --- | --- | --- | --- |
+| **v_nw01** | `local_ip_i`, `local_mac_i`, `subnet_mask_i`, `gateway_ip_i` wired to `localparam LIP`/`LMAC`/… | the checkers compare against **`LIP`/`LMAC`** | a design that hardcodes the identity and ignores the ports entirely |
+| **v_ca03** | responder drives `m_rresp = 2'b00` | the checker compares `s_rresp` against the literal **`2'b00`** | a design that rewrites **every** response code |
+
+In each, the value at the port and the value the checker expects **are the same
+symbol**. The comparison is `X == X`. It runs, it passes, it is reported as a
+clause being checked, and no implementation can make it fail.
+
+**Why a variation sweep cannot find it.** The symbol varies in neither place, so
+the tool reports a frozen port with nothing behind it to disagree with. A clean
+variation row means only that the tool had nothing to compare. It is also
+invisible to mutation: no mutant fails it, because none can.
+
+### The remedy, which is not "vary the input"
+
+Varying the input alone converts `X == X` into `X == Y` only if the two are
+**independently produced**. The general fix is:
+
+> **Derive the port value and the expectation from something neither of them
+> controls, so that the two are computed at different times from a shared
+> premise rather than from each other.**
+
+On v_ca03 that is `resp_of(address)`: the expectation is raised when the
+transaction is *issued*, the responder computes the same function when the
+response is *returned* cycles later, and neither reads the other. A disagreement
+is then possible, and the DUT is the only thing that can cause one. The address
+is the shared premise; the DUT sits between.
+
+On v_nw01 it is the identity being **reprogrammed across a reset** — the checkers
+read the current value, the design must read the port, and the second
+configuration is what makes those two different claims.
+
+**The test, cheap enough to apply everywhere:** trace the expectation back to its
+source. If the path reaches the same symbol the stimulus came from without
+passing through the design, the check cannot fail and is not a check.
+
+---
+
+## FINDING — writing a rule down does not install it
+
+**Four instances in one session, each by the author of the rule. The first is a
+GATE broken inside the filing commit; the other three are rules broken beside
+one.**
+
+### The instance that leads: I broke a GATE inside the commit that filed this finding
+
+**A gate broken inside the commit that files the rule is categorically different
+from a rule broken beside one.** The other three below are rules whose author
+did not apply them to adjacent work. This one is a check that ran, reported the
+defect, and was overridden by the person who had just written the rule saying
+not to do that.
+
+`check_linkage_tree.sh --staged` returned:
+
+    v_ca03_axi_iw_converter: mutant iw_m11_... has no witness in task.yaml
+
+I had recorded the new mutant under a fresh `e1_mutant:` key instead of in the
+`mutants:` list where the checker looks. The check said so. I did not read it —
+I read the **last line of its output**, which is the generic advice about
+`LINKAGE_OVERRIDE`, saw the commit succeed, and moved on.
+
+That is the same defect as reading a build log for completions rather than for
+refusals: the answer was on screen, in a check that ran, that I had invoked
+myself for exactly this purpose. And it happened in the commit whose message
+argues that writing a rule down does not install it.
+
+Three further specifics worth keeping, because each is separately actionable:
+
+- **The failure was in the RECORD, not the artefact.** The mutant was correct,
+  measured and fired on E1 alone. What was missing was its witness in the place
+  the machine reads. A defect that only a machine can see is exactly the kind a
+  human reviewer signs off.
+- **The check reads the COMMITTED tree by default.** Running it after the fix
+  still failed, and for a moment that looked like the fix not working. It was
+  reading a tree the fix was not in yet. *A check whose scope you have not
+  established is a check whose answer you cannot interpret.*
+- **Reading the tail of a tool's output is not reading its output.** The
+  informative lines were four from the top; the last four lines were boilerplate
+  that is printed whether the cause is a witness, a rule, or a finding.
+
+### And three more, each a rule broken beside its own commit
+
+| | the rule | how its own author broke it |
+| --- | --- | --- |
+| F86 (design side) | evidence for *unfalsifiable* must be a suppressing control that **passes**, never a reading | its founding instance, R1, was named **from a reading of the clause** and measured only afterwards |
+| condition floors | a floor must count the **condition**, not the attempt | the replacement counter for H4 **counted the wrong condition** — any pending request while busy — and read 10 on a base whose window is empty |
+| tool-vs-prose | a caveat that lives only in prose does not survive transport | my control contract stated clause ids as `[A-Z][0-9]+` while **my own tool** had always matched `[A-Z][0-9]+[a-z]?` |
+
+The third is the same shape as a comment asserting "ten defects" above code that
+counts them: **the code was right and the prose describing it was wrong**, in one
+author's work, in the same file.
+
+### The mechanism
+
+All three were written **immediately after explaining the defect**, by the person
+who had just explained it. That is the moment of **maximum confidence and minimum
+checking**. Having just articulated why a class of error happens, the author is
+least disposed to suspect the next thing they write of being in it — and the next
+thing they write is the fix, the tool, or the rule itself.
+
+It is the same shape as *having a favourite failure mode makes you fast and makes
+you wrong*, one step further along: the favourite diagnosis is now not merely
+available but freshly rehearsed.
+
+### The proposed rule, and it is a gate rather than an exhortation
+
+> **A newly written rule is applied to the commit that introduces it, before that
+> commit lands.** Self-application as a landing gate.
+
+Concretely: when a commit files a rule, the check that rule prescribes is run
+against that commit's own diff. "Count the condition, not the attempt" → check
+the counters this commit adds. "Evidence must be a passing suppressing control"
+→ check that this commit's own claims are backed by one. "A caveat must be in the
+output" → check this commit's own tool output.
+
+All four instances above would have been caught by their own rule, at a cost of
+minutes, by the only person who at that moment fully understood what to look for.
+The fourth would have been caught by simply **reading the output of the check
+already being run**, which is the cheapest form the rule can take and still the
+one that was skipped.
+
+---
+
+## FINDING — a name is not an address: identity by ownership set
+
+**Filed after socket addresses changed three times in one session, twice
+mid-delivery — and corrected immediately, because my first account of it was
+wrong in the way this document keeps describing.**
+
+**What I asserted:** three roster rotations, sessions ending, a correction
+outliving its author. **What was measured:** `ListAgents` stopped showing a name.
+Both peers then confirmed that **no session ended and no role changed hands** —
+`f6`, `b4` and the address before them are one design session; `e2` and `29` are
+one PPA session. The *names* moved. I inferred a departure from a name's
+disappearance, which is inferring a fact about a process from a fact about a
+label, in a finding about not doing that.
+
+So the evidence has to be restated to what it supports:
+
+| | observed | not observed |
+| --- | --- | --- |
+| a name held by **two processes at once** | yes — two sessions signed "Agent 3" for hours | |
+| a correction reaching **the wrong holder** of a name | yes — it went to the session that never produced the artefact | |
+| a name changing while the **role stayed put** | yes, three times | |
+| an author **departing** and a correction having nowhere to go | **yes — later the same session, see below** | |
+
+**And then I made the same inference again.** Some hours after writing the table
+above, both peer addresses stopped resolving and `ListAgents` returned **no
+reachable agents at all**. I recorded that as the hazard finally occurring — an
+author departing, a correction with nowhere to go — and wrote it up.
+
+**It was wrong, the same way, for the second time.** The PPA session replied from
+a third address: same session, scratchpad `2381f2fe`, never gone. The design
+session likewise. *The socket names keep changing under stable sessions.*
+
+So the observable, stated for the third time and now with a marker on how many
+attempts it took to state correctly:
+
+> **The address space went empty. Nothing about any session was observed.** An
+> empty `ListAgents` and a departed peer produce identical evidence, and I had
+> already written that sentence down before making the inference it forbids.
+
+What the episode does establish, and it is not nothing:
+
+- **The window is indistinguishable from the end while you are in it.** Retrying
+  happened to work. Had the sessions truly ended, retrying would have failed
+  forever with an identical message, and I would have had no way to tell which
+  case I was in.
+- **The undeliverable item was the one addressed to another agent's territory.**
+  Work I could do myself was unaffected. What could not survive the gap was
+  precisely what depended on another agent existing.
+- **The fix was to write it to a file.** `inbox/FOR_SCRIPTS_AND_TABLE.md` is
+  addressed to the *role and the artefact*, and it is what should have been done
+  first. The message was the optimisation; the file is the delivery. That part
+  holds whether or not anyone had actually departed — which is the argument for
+  it, since I cannot tell.
+
+**This is the fifth instance for the self-application finding, and the first
+REPEAT.** I inferred a departure from a name's disappearance; was corrected;
+wrote *"from the outside a rotated name and a departed author look identical"*;
+and then made the same inference again the first time `ListAgents` came back
+empty. Writing the correction down did not install it either. A rule broken once
+by its author is a lapse; a rule broken **twice, after being corrected, by the
+author who wrote the correction** is evidence that the rule was never the
+mechanism — the reflex is, and the reflex here is *treating absence of evidence
+as evidence*.
+
+### And the correction itself needs a caveat, which is the sharper hazard
+
+**Both peers told me the same thing, and I took two accounts as corroboration
+when one of them was a relay.** The design agent's message said the PPA agent was
+also unchanged — and said so on the PPA agent's authority, *"self-confirmed to me
+an hour ago"*, flagging it as a relay in the same breath and telling me to verify
+independently. I read the agreement before I read the caveat.
+
+What is actually first-hand is narrower and does hold:
+
+| claim | source | independent? |
+| --- | --- | --- |
+| design session unchanged, scratchpad `43a92055` | itself | **yes** |
+| PPA session unchanged, scratchpad `2381f2fe` | itself | **yes** |
+| *"neither of us is a successor"* | design agent, about both | **no — a relay** |
+
+The two self-identifications are genuine, distinct evidence and the conclusion
+survives. But the thing that made me *confident* was two messages agreeing, and
+that agreement carried no information beyond the one first-hand report I already
+had.
+
+**This is the v_ca06 label cascade again**, and it is a sharper instance than a
+real rotation would have produced: there, a stale label acquired a mechanism and
+the mechanism was cited as corroboration. Here, a first-hand report acquired a
+second voice and the second voice was counted as a second source. In both, the
+apparent corroboration is the same fact arriving twice.
+
+**Rule:** when two accounts agree, establish *how each one knows* before treating
+the agreement as evidence. A relay that is honestly labelled as a relay is still
+not a second source — and the label is easy to read past precisely because the
+conclusion it carries is the one you were hoping for.
+
+Ownership boundaries — which agent may commit where — are what prevent
+cross-territory edits. Carrying them on a name is **identity by position**, the
+same defect this benchmark's tasks are built to punish, at the agent layer.
+
+**The convention, and it is a convention now rather than a workaround:**
+
+- **Every cross-boundary message states its ownership set on the first line**,
+  explicitly, including what the sender does *not* own. Not a signature — a set.
+- **A message signed only by a name is unrouted** until the set is stated, and
+  should be treated as such rather than acted on.
+- **A request whose target is unknown is routed to the person who set the task**,
+  never forwarded on a guess. Guessing put a time-critical PPA item in this
+  agent's inbox and a v_ca06 correction in a session that had never touched it.
+
+### The consequence, stated as the hazard it is
+
+> **A correction addressed to a name resolves to nothing once that name moves**,
+> while the thing it corrects is still being read. Tonight the name moved and the
+> role did not, so the correction was recoverable by asking. It would not have
+> been if the role had moved too, and nothing in the setup guarantees which
+> happened — **from the outside, a rotated name and a departed author look
+> identical**, which is precisely why the address must be the ownership set.
+
+So a correction is addressed to **the artefact and its consumers**, and the
+artefact must **carry its own provenance** — what produced it, against what
+commit — because that is the only channel through which a later correction can
+find its readers. A number in a message is a copy whose original may already have
+moved: recompute at the point of use, or cite the commit.
+
+Three hashes went stale between being sent and being used in one evening — and a
+fourth number went stale the same way inside a single message, where a peer
+quoted a control count taken before the control they described adding in the same
+message. The mechanism does not need an agent to depart. It only needs the copy
+to outlive the moment it was taken.
+
+
+---
+
+## FINDING — a condition count is the right instrument and the wrong gate
+
+> **Gate the stimulus, which the harness alone determines. Report the condition,
+> per channel, always. Never fail on it.** Failing on a condition converts
+> *visibility* into *non-conformance*, and making an evasion non-conforming is a
+> mirror clause's job, not a floor's.
+
+**I built the thing I had spent the session prescribing, and it rejected two
+conforming implementations on first contact.**
+
+The preceding finding says a floor must count the **condition**, not the attempt.
+Applying it to v_nw02's X3 — *"on every channel, once `valid` is asserted it
+remains asserted until the corresponding `ready` is seen"* — I drove downstream
+backpressure, counted the antecedent per channel, and **failed the run** when any
+channel's count fell below four.
+
+Result: `dut2` **FAIL**, `af_c1_b_before_r` **FAIL**, task **REJECTED**. Two legal
+designs rejected by a reference, which under rule 16 makes every kill in that run
+carry no information.
+
+The cause was not a bug. On `dut2` the count was zero on the upstream R channel
+because **`s_rvalid` never coincided with my `s_rready`-low window**. I drove the
+backpressure; `dut2` declined to be caught by it, conformingly. *Whether a design's
+valid overlaps my ready-low is the design's timing, not my stimulus.*
+
+### The distinction the previous finding did not draw
+
+| | who determines it | may it gate? |
+| --- | --- | --- |
+| **the stimulus** — did the harness drive backpressure at all | **the harness.** No design can decline it. | **yes** |
+| **the condition** — did valid ever hold against a low ready | **the design**, jointly with the harness | **no** |
+
+A condition count makes an unexercised clause **visible**. Making it a failure
+converts visibility into **non-conformance** — which is what a mirror clause is
+for, and what a floor must not do on its own authority. The design side had
+already said this about their rule-36 gate: *it makes the evasion visible without
+making it non-conforming*. I filed that sentence and then wrote a gate that did
+the opposite.
+
+**So the pattern is three parts, not two:**
+
+1. **Gate the stimulus.** Countable by the harness alone.
+2. **Report the condition, always.** Named per channel, so an unexercised clause
+   is a line in the log rather than an absence.
+3. **Do not fail on the condition.** If reaching it must be compulsory, that is a
+   contract change, not a floor.
+
+### What caught it, and it was not review
+
+The conformant set. `dut2` and five perturbations exist to be **passed**, and two
+of them failed the moment the gate was too strong. The mutants all still died —
+a mutation-only view would have shown 10 of 10 and looked healthy.
+
+That is the pairing working as designed: the **floor** caught the stimulus not
+reaching far enough (`m_aw=0` on the first attempt), and the **conformant set**
+caught the gate reaching too far. Neither alone would have found both, and the
+error each caught was mine, in the same change, in opposite directions.
+
+**Rule:** before a floor gates, ask who can make its condition false. If a
+conforming implementation can, the floor may report and must not fail — and the
+conformant set, not the mutant set, is what tells you whether you got it wrong.
+
+### Two things that belong with it
+
+**1 — Mutation coverage and conformant acceptance are orthogonal detectors, and
+neither substitutes for the other.**
+
+Each of my two errors was **invisible to the instrument that caught the other**:
+
+| error | caught by | invisible to |
+| --- | --- | --- |
+| stimulus falling short (`m_aw=0`) | the **floor** | the conformant set — every legal design still passed |
+| the gate reaching too far (rejecting `dut2`) | the **conformant set** | the mutants — all ten still died, **10 of 10, and the run looked healthy** |
+
+A mutation-only view of the bad gate showed a perfect score. A conformant-only
+view of the short stimulus showed nothing wrong. They are not two strengths of
+one measurement; they are measurements of **different things** — *does the
+reference catch what it should* and *does it accept what it must*.
+
+**This is the argument for keeping conformant perturbations in the SCORED path**
+rather than running them once as a startup check. A startup check answers "was
+the reference sane when it was written". A scored one answers "is it sane now",
+and the gate that rejected two legal designs was written today, hours after the
+last time anyone would have run a startup check.
+
+**2 — "Non-zero" is not a floor when the antecedent is one cycle wide.**
+
+The registered stall arm produced a count of **1** on two channels. That passes a
+`== 0` floor and is useless: any defect not on the very first occurrence is still
+unreachable, and this suite deliberately weights its mutants toward *ordinal*
+conditions — the fourth toggle, the second DECERR, the sixteenth read — precisely
+the class a count of 1 cannot reach.
+
+> **A condition floor's threshold is argued from the antecedent's WIDTH, not from
+> zero.** How many cycles does the state last, how often can it recur, and what
+> is the highest ordinal any guard keyed on it uses? The threshold is the answer
+> to that, not the smallest number that is not zero.
+
+Here the antecedent is one to two cycles wide and recurs per beat, the counts
+came in at 30/35/12/12, and a threshold of four has margin — but the number that
+matters is *four because guards go up to the fourth occurrence*, not *four
+because it is more than zero*.
+
+---
+
+## FINDING — the missing handshake-stability clause: four tasks, both territories
+
+**A contract-gap class, not four coincidences.** Four tasks across two agents'
+territories are missing the same clause, and in each the consequence is identical:
+**a design that withdraws a `valid` before its `ready` is seen conforms to the
+specification as written.**
+
+| task | owner | the gap | status |
+| --- | --- | --- | --- |
+| **d_dsp02** | design | `out_valid` may depend combinationally on `out_ready`, so H3's antecedent is evadable | **closed** — H1b landed |
+| **d_ca01** | design | the same on `rsp_valid_o`/`rsp_ready_i`; L5 permits the *input*-side dependency and says nothing about the output side | **closed** — R1b landed |
+| **v_ca06** | verification | **no clause about valid stability under stall exists at all** | **open** |
+| **v_ca03** | verification | the same; `s_rready`/`s_bready` appear only inside A1's *definition* of "outstanding" | **open** |
+
+The design side found theirs by building a control that evaded H3's antecedent and
+watching it pass the whole suite. I found mine from the other direction — a
+frozen-ready sweep, then the mechanical question *does any check have an antecedent
+requiring this ready to be low?* On v_ca06 and v_ca03 the answer was **no check,
+and no clause either**. There is nothing to gate, because there is nothing to gate
+*for*.
+
+**Why it is a class rather than a coincidence.** Both design instances and both
+verification ones arise the same way: the AXI-family handshake makes stability a
+*convention* so universal that a spec author writing from the protocol will not
+think to state it, while a spec author writing a *contract* must, because the
+contract is what the submission is scored against. Two independent authors omitted
+it four times. It is a property of the writing situation, not of anyone's
+attention.
+
+**Why the verification side is worse than the design side.** On a design task the
+omission lets a bad submission through. On a verification task it lets a bad
+submission through **and** makes the reference unable to object: v_nw02, which
+*does* have the clause (X3), had two of its four channels unreachable until today
+— so even where the clause exists, the instrument behind it needs the stimulus
+that only backpressure provides. The gap and the vacuity compound.
+
+### Proposed text, written and NOT landed
+
+Both move a hash and both should be decided alongside whatever else moves them.
+
+**v_ca06** — as a new clause in *§1 Transaction correspondence*, where the other
+handshake obligations live, after A4:
+
+> **A5 — an offered beat is not withdrawn.** On every channel, once a `valid` is
+> asserted it remains asserted, with its payload unchanged, until the
+> corresponding `ready` is seen. `valid` **shall not** depend combinationally on
+> `ready`: a unit that offers only into a ready sink satisfies this clause by
+> never entering it, and deadlocks against a consumer that waits for `valid`
+> before asserting `ready`.
+> *Authority: AMBA AXI4 — a source may not withdraw an offer, and may not wait
+> for the sink before making one.*
+
+**v_ca03** — as a new clause in *§4 The master port*, after D4:
+
+> **D5 — an offered beat is not withdrawn.** On every channel of both ports, once
+> a `valid` is asserted it remains asserted, with its payload unchanged, until
+> the corresponding `ready` is seen. `valid` **shall not** depend combinationally
+> on `ready`. A converter that offers only into a ready sink satisfies this
+> clause by never entering it, which is not conformance.
+> *Authority: AMBA AXI4 — a converter alters identifiers and nothing else,
+> including the handshake discipline it forwards.*
+
+Both name the evasion explicitly rather than only the obligation, because that is
+what H1b and R1b had to do: the obligation alone is satisfiable by never entering
+the state, and a reader who has not met that failure will not infer the second
+sentence from the first.
+
+**This is the first time in this session a lesson has been applied BEFORE the
+fact rather than after.** Every other instance ran the other way — the duty rule,
+the D6/D7 collapse, the condition floors, the gate that rejected two conforming
+designs, four self-applications of rules filed in the commit that broke them.
+Each was written, measured, found wrong, and corrected. These two clauses are
+written with the evasion already named, from a failure that happened on someone
+else's task, before either has been offered to a submission.
+
+That is worth recording as the exception, because it says what the transfer
+actually required: **not the rule, but the worked instance.** "State the
+obligation and forbid the evasion" is a sentence nobody would have written from
+first principles. It became writable only after H3 and R1 were each satisfied by
+a control that never entered the antecedent — and it transferred across a
+territory boundary because that control was *built and run*, not described.
+
+**Landing either requires the stimulus in the same boundary** — the two-halves
+rule, which this suite has now paid for five times. A stability clause with every
+ready held at 1 is a clause with an instrument that cannot fail, which is E1's
+read side exactly.
+
+---
+
+## FINDING — a clean row is read once; a failing row is read twice
+
+**Three rows of another agent's sweep were wrong when read against my own tasks,
+and every one of them was wrong in the direction that produces no work.**
+
+| task | reported | measured |
+| --- | --- | --- |
+| v_ca06 | 7 frozen of 31 | **5** — and the accompanying mechanism claimed the read half could not complete, which the same tool refutes |
+| v_nw04 | 1 frozen | **0** |
+| v_nw02 | 25 frozen | **3** |
+
+The last two were stale because I had fixed them. The first was **wrong when
+measured** — and it had already produced a downstream cascade before anyone
+checked it.
+
+### The asymmetry
+
+> **A negative result carries no signal that would prompt verification.** A row
+> saying *frozen: 7* has a name attached and something to do about it, so someone
+> reads it twice. A row saying *none frozen* has nothing attached, so it is read
+> once and never again. The rows most likely to be wrong for longest are the ones
+> that report nothing wrong.
+
+This is **F85's shape from the other direction**. F85 — *a sample chosen by
+availability is not a sample* — concerns which cases get **looked at**: the ones
+most recently handled, because their stimulus was most recently thought about.
+This concerns which results get **looked at twice**: the ones with a finding
+attached. Both bias attention toward the interesting, and both leave the quiet
+majority carrying whatever error it acquired.
+
+They compound: a case that is unavailable *and* reports clean is examined zero
+times, and nothing about either fact is visible in a table.
+
+### The practice
+
+> **A clean result inherited from another agent's sweep is UNVERIFIED until
+> measured locally.** Not doubted — unverified. It goes in the record as
+> *reported clean, not measured here* until someone runs it, and the run is
+> cheap precisely because nothing is wrong.
+
+Applied: I re-measured the four tasks of mine that had been reported clean —
+v_ai02, v_ca04, v_nw03, v_dsp02 — and all four *were* clean, which is the point.
+The measurement cost minutes and converted four inherited assertions into four
+observations. Had one of them been wrong it would have been wrong since the sweep
+ran, with nothing in any table to suggest looking.
+
+---
+
+## FINDING — a field nothing reads cannot be wrong in a way anything notices
+
+**Three of my `task.yaml` files declared `task_statement: probe/BLIND_TB_TASK.md`.
+No such file exists in any of them. The prompt document on disk is
+`probe/PASTE.md`.**
+
+Nothing caught it, and the reason is precise: **no script reads
+`task_statement`.** `grep -rn task_statement scripts/` returns nothing. A field
+that no consumer reads has no observable correct value, so a wrong one produces
+no disagreement anywhere — and **every instrument in this repository works by
+finding a disagreement**: floor against outcome, control against reference, hash
+against tree, recomputation against record.
+
+### And the second half, which I initially got wrong
+
+I expected the cause to be a **tolerant reader**: `task_text_hash.py` accepts
+either `PASTE.md` or `BLIND_TB_TASK.md`, so I assumed it had swallowed the
+mismatch. Reading it, that is not what happened. It **names the file it took** in
+its output, and it **refuses loudly** when neither exists — its own comment
+records that this exact rename caused a defect once already and that the refusal
+is why. The tool is not the problem.
+
+The problem is that **no instrument owns the comparison** between what
+`task.yaml` says the prompt document is and what the prompt document actually is.
+The hash reads the directory; the record names a file; nothing puts the two
+side by side. *Leniency did not hide this. Absence of an owner did.*
+
+### The sweep of `scripts/`, since the question was asked
+
+Read-and-report; `scripts/` is AGENT-PPA's. Sorted by whether the leniency can
+hide a defect, which most of it cannot:
+
+| site | shape | assessment |
+| --- | --- | --- |
+| `check_ppa_record.py:69` `pdk = rec.get("pdk", "sky130hd")` | **default masks absence** | **worth changing.** A record that does not say which PDK becomes a record that says sky130hd. It then looks in the wrong flow directory and reports `SKIP (no surviving flow dir)` — an *unrecorded* field rendered as a *missing directory*. Same distinction as `-dirty` versus no marker, and as NO CONCLUSION versus clean. |
+| `seed_sweep.sh:57` `[ -f DUT ] \|\| DUT=..._top.sv` | **silent alternative** | **minor.** Bounded, and it hard-fails if neither exists — but it never says which of the two it took, so a module with both gets one chosen invisibly. |
+| `reference_ppa.sh:28` `ls ref/*_ref.sv \| head -1` | **first-match-wins** | **minor, and the same shape as the policy-directory glob that cost v_ca07 a real 21 of 22.** If two references ever exist, one is chosen and not named. |
+| ~40 sites of `2>/dev/null` on `ls`/`[ -f ]` | existence probes | **not defects.** Suppressing an error you are testing for is the idiom. |
+| ~30 sites of `.get(k, 0)` on counters | accumulators | **not defects.** |
+| `task_text_hash.py` `PROMPT_NAMES` | tolerant, **and reports** | **not a defect** — the case that prompted the sweep, and it is doing the right thing. |
+
+**The general form is narrower than "tolerance is bad".** Tolerance that
+**names what it accepted** is fine; tolerance that **substitutes silently** is a
+reader that has answered a different question than the one asked. And a field
+with no reader at all is worse than either, because there is nothing to be
+tolerant *with*.
+
+**Rule:** every declared field needs an owner — a consumer that would fail if the
+declaration were wrong. A field with no consumer should be deleted or given one;
+leaving it is recording a claim that nothing can ever contradict.
+
+### It is a class, and the other two instances came from the other territory
+
+AGENT-PPA recognised the shape immediately and supplied two more, from tools I
+have never read:
+
+| field | written by | read by | what it cost |
+| --- | --- | --- | --- |
+| `task_statement` | task authors | **nothing** | three tasks named a prompt document that does not exist |
+| `pinned_period_ns` | `find_fmax.py` | **nothing** | **one of thirty-one** fmax records even carries it, and nothing noticed the other thirty |
+| `version_boundary.behavioural: true` | boundary authors | **nothing** | correctly recorded that results do not carry across a boundary — **while the results carried anyway** |
+
+The third is the worst of the three and the clearest statement of the class: the
+field was **right**, and being right changed nothing, because the thing it was
+right about was decided elsewhere by something that never consulted it.
+
+### And the sharper argument, which is theirs
+
+On the `pdk` default I flagged — `rec.get("pdk", "sky130hd")` — they made the
+case I had not:
+
+> **There is one PDK in this repository, so the substituted value was correct
+> every single time it was used.** That is the reason to remove it, not a reason
+> to leave it. A default that is always right is indistinguishable from a field
+> that is always read, and the two only come apart on the day a second PDK exists
+> — at which point every silent substitution becomes a wrong answer with **no
+> event marking the change**.
+
+It fired on real data when they landed it: **three of sixty-seven** PPA records
+carry no `pdk` at all. Those three had been rendering as sky130hd, correctly, and
+would have gone on doing so until the day it mattered.
+
+This generalises past defaults. **A check that has never failed and a check that
+cannot fail are indistinguishable from their output**, and the distinguishing
+test is not "has it ever fired" but "what would make it fire, and has that been
+exercised". They fired the mismatch branch of their own new pin checker with a
+halved pin before landing it, on exactly that reasoning — *a pin checker that
+cannot fail would license every pin in the repo.*
+
+
+### Scope of the two boundaries, measured
+
+Neither is landed. What each would cost, so the boundary can be decided against
+whatever else moves those hashes:
+
+| | **v_ca06 — proposed A5** | **v_ca03 — proposed D5** |
+| --- | --- | --- |
+| **checker half** | **does not exist.** Zero valid-stability tracking of any kind in the testbench. | **does not exist.** Same. |
+| **stimulus half** | five readies are `logic ... =1` initialisers, never driven again: `m_arready`, `m_awready`, `m_wready`, `s_bready`, `s_rready` | `m_awready`/`m_wready` are `assign … = 1'b1`; the upstream three likewise constant |
+| **what must be built** | a four-to-five-channel `pv`/`pr` tracker plus a per-channel antecedent counter, and reactive backpressure on each ready | the same, on both ports |
+| **re-baseline surface** | 12 mutants, 5 conformant perturbations, dut2, gate mutant, 5c on two bases | 11 mutants, 5 perturbations + a nonequiv tb, dut2, gate mutant, 5c |
+| **known hazard** | the v_nw02 lesson: the antecedent counter must **report, not gate**, or it rejects conforming designs — `dut2` and one perturbation failed exactly that way | same, and v_ca03 has *six* conformant artefacts to keep passing rather than five |
+| **stall shape** | must be **combinational on valid**; a registered arm produced a useless count of 1 | same |
+| **X4-equivalent risk** | none found — no liveness clause names ready-held here | none found |
+
+**Both are one boundary each, not two**: clause plus stimulus plus checker, per
+the rule this suite has now paid for five times. The estimate is that v_ca03 is
+the heavier of the two — more conformant artefacts to keep passing, and two ports
+rather than one — and that v_nw02's experience makes the shape of both known in
+advance rather than discovered.

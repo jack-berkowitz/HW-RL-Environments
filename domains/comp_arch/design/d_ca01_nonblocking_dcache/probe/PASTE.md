@@ -155,6 +155,27 @@ checks them. Everything else is normative.
 //       contract and is stated so that stability is a contract term rather than
 //       an assumption.
 //
+//   R1b. `rsp_valid_o` MUST NOT depend combinationally on `rsp_ready_i`. The
+//       consumer may hold `rsp_ready_i` low indefinitely, and a design that
+//       waits for it before asserting `rsp_valid_o` deadlocks against a consumer
+//       that waits for `rsp_valid_o` before asserting `rsp_ready_i`.
+//
+//       L5 PERMITS THE MIRROR OF THIS ON THE REQUEST SIDE -- `req_ready_o` may
+//       depend combinationally on `req_valid_i` -- because the harness never
+//       derives `req_valid_i` from `req_ready_o`, so no deadlock is reachable
+//       there. The response side is not symmetric: the harness DOES derive
+//       `rsp_ready_i` from its own state, and R1's stability sentence is
+//       otherwise satisfiable by never offering, since a response never
+//       presented to a stalled consumer cannot be withdrawn from one.
+//
+//       The two constructions are identical in form and differ only in which
+//       side of the interface they sit on, so both are named rather than left to
+//       be inferred. `conformant/c02_ready_gated_on_valid.sv` is the PERMITTED
+//       one and passes; `controls/nc_r1_evades_antecedent.sv` is this one, and
+//       it satisfied every clause as the contract stood before R1b while driving
+//       R1's firing count to zero at all sixteen configurations.
+//       AUTHORITY: stated task intent.
+//
 //   R2. OPERATIONS. `req_op_i` is 1'b0 for LOAD, 1'b1 for STORE.
 //       LOAD returns the addressed word. STORE writes the bytes of
 //       `req_data_i` selected by `req_mask_i`; bytes whose mask bit is 0 are

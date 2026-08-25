@@ -154,6 +154,10 @@ mutants:
      guard: "sixteen write responses have already been delivered",
      defect: "an extra write response appears for a transaction that is not outstanding",
      witness: "FAIL [C2] write response for slave id 2 with none outstanding (t=27795)"}
+  - {id: iw_m11_decerr_normalised_to_slverr_from_second, violates: "E1",
+     guard: "the second DECERR since reset and every one after it -- the first is preserved correctly",
+     defect: "a DECERR arriving on the master port is presented upstream as SLVERR -- an error, of the wrong kind, so only the CODE is wrong",
+     witness: "FAIL [E1] read beat of slave id 0 carries resp 10, expected 11 -- the subordinate's code is forwarded unmodified (t=1975)"}
   all_have_nonequivalence_witnesses: true
   evidence_type: witness
   witness_runner: mutants/witness.sh
@@ -237,3 +241,96 @@ scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation
   fault_detection: reported PER MUTANT, never as a rate
+
+e1_boundary:
+  date: 2026-08-25
+  task_text_hash_before: a04f965ad7552b22
+  task_text_hash_after:  394f1f8fd51e8c2a
+  why_one_boundary: >
+    A spec amendment and a stimulus change that are only meaningful together.
+    Landing either alone leaves the other half asserting something it cannot
+    support, which is the two-halves problem this suite has now hit four times.
+  the_gap: >
+    E1 listed addr and len on the address channels, data/strb/last on W, and
+    data/resp/last on R. It never mentioned the WRITE RESPONSE channel. A
+    converter that normalised SLVERR to OKAY on B conformed to the specification
+    as written.
+  and_the_other_half: >
+    The READ side named resp and could not test it. The responder drove
+    m_rresp = 2'b00 and the checker compared s_rresp against the literal 2'b00 --
+    port and expectation were the same constant, so a design that rewrote every
+    response code passed. A clause with an instrument that cannot fail.
+  change:
+    spec: >
+      E1 gains "and `resp` on the write response channel". Eleven words, no
+      renumbering, no clause added.
+    stimulus: >
+      m_rresp and m_bresp are now a function of the transaction ADDRESS --
+      resp_of() -- so the responder and the expectation agree without a side
+      channel, the responder deciding cycles after the expectation is raised.
+      Addresses already carry a per-transaction counter in their low bits, so
+      the codes vary without new stimulus.
+    checkers: >
+      Both compare against what was DRIVEN. The write side needed bookkeeping
+      the read side already had: waddr_q per slave id, pushed at AW acceptance
+      and popped at B.
+    floor: >
+      At least four non-OKAY responses of each kind must be RETURNED, because
+      "the checker compares against what was driven" is satisfied trivially when
+      everything driven is OKAY.
+  measured: "non-OKAY responses returned: reads=105, writes=10"
+  rebaseline: >
+    Every verdict IDENTICAL. Ten of ten killed, gate-mutant rejected, dut2 PASS,
+    all five conformant perturbations PASS, ACCEPTED, 5c OK on both bases with
+    both clean controls passing. NO kill count moved. The BEFORE table was taken
+    from the committed testbench extracted from git.
+  what_did_not_change: >
+    No mutant was added for the new half. iw_m8_bresp_wrong_when_full already
+    perturbs bresp and is killed; whether the new clause needs a mutant keyed on
+    CODE PRESERVATION rather than on a wrong response is the D6/D7 question in
+    this task's terms. DECIDED AND CLOSED the same day: iw_m11 keys E1 alone,
+    56 failures, and the set is at eleven.
+
+e1_mutant:
+  id: iw_m11_decerr_normalised_to_slverr_from_second
+  violates: E1
+  guard: the second DECERR since reset and every one after it -- the first is preserved correctly
+  defect: >
+    a DECERR arriving on the master port is presented upstream as SLVERR -- an
+    error, of the wrong kind, so the response is still an error and only the
+    CODE is wrong
+  measured: >
+    56 failures, EVERY ONE E1, and nothing else fires. That is what makes it
+    disjoint from iw_m8 rather than a stronger version of it.
+  why_it_was_added: >
+    iw_m8_bresp_wrong_when_full is a WRONG RESPONSE mutant. CODE PRESERVATION is
+    a different property, and letting iw_m8 stand for both credits a submission
+    that checks "is this the right response" with checking "is this the right
+    KIND of error", which it does not. The same argument that decided D7 on
+    v_ca06; the dut2 evidence that decided it there has no equivalent here, but
+    the structural argument does, and the E1 boundary's new stimulus is what
+    makes the guard reachable at all.
+  reachability: >
+    Depends on the same boundary. Before it, every response returned was OKAY,
+    no DECERR existed, and this guard could never have fired -- a dw_m8 repeat.
+    The stimulus and the mutant had to land in that order.
+  at_eleven: >
+    ACCEPTED, 11 of 11 killed, gate-mutant rejected, dut2 PASS, all five
+    conformant perturbations PASS, 5c OK on both bases with both clean controls
+    passing.
+
+readies_criterion:
+  date: 2026-08-25
+  verdict: REACHABILITY GAP -- flagged, NOT gated
+  frozen: [m_arready, m_awready, m_wready, s_bready, s_rready]
+  test_applied: >
+    No check has an antecedent requiring any of them low, measured mechanically.
+    s_rready and s_bready ARE named in the spec -- but only inside A1's
+    DEFINITION of when a transaction is outstanding, as the transfer condition,
+    not as a stimulus axis. Holding them at 1 does not make A1 unreachable;
+    transfers still happen.
+  therefore: flagged, not gated -- same reasoning as v_ca06
+  but_worth_saying: >
+    Same absence as v_ca06: no clause here governs valid stability under stall
+    either. Two tasks with the same hole, which makes it a pattern in how these
+    specs were written rather than one omission.

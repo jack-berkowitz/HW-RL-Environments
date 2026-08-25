@@ -37,7 +37,13 @@ harness:
   sim_timeout_s: 25
 
 spec: [spec/frame_arb_mux_spec.md, spec/frame_arb_mux_iface.sv]
-task_statement: probe/BLIND_TB_TASK.md
+task_statement: probe/PASTE.md
+task_statement_note: >
+  Was probe/BLIND_TB_TASK.md, which DOES NOT EXIST in this task and never
+  has. The prompt document on disk is probe/PASTE.md, and that is what
+  task_text_hash.py hashes -- it accepts either name, so the hash was
+  always right and only the pointer was wrong. A record naming an
+  artefact that is not there, which nothing read and nothing caught.
 
 # ---- rule 18: ONE scored configuration, named, with its rationale ------------
 scored_configuration:
@@ -216,3 +222,12 @@ second_dut:
     status has no dut2/ -- but it never compiles the file and never adds a row for
     it. Every result above came from running the reference testbench by hand.
     NOTHING RUNS THIS AS A GATE. Do not assume it working.
+
+readies_criterion:
+  date: 2026-08-25
+  verdict: NO FROZEN READY -- nothing to adjudicate
+  measured: >
+    all 8 inputs vary, m_tready_i included. Measured here rather than taken from the sweep that
+    reported this task clean: three of that sweep's rows were wrong when read
+    against my own tasks, and a clean row is the one nobody rechecks.
+

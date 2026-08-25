@@ -21,6 +21,13 @@
 
 module fp_noncomp_tb;
 
+
+  // VCD on demand, for the rule-34 stimulus-variation check. Plusarg-guarded, so
+  // a normal scoring run is byte-for-byte unaffected.
+  initial if ($test$plusargs("vcd")) begin
+    $dumpfile("dump.vcd");
+    $dumpvars(0, fp_noncomp_tb);
+  end
   localparam logic [31:0] CANON_QNAN = 32'h7FC0_0000;
 
   // op_i encoding -- this task's own, see spec section 0
