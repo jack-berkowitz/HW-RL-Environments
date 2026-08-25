@@ -67,6 +67,23 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="${2:-}"
 LEC_CHECK="${LEC_CHECK:-0}"
 
+# MAKE PARALLELISM, OFF BY DEFAULT SO THIS CHANGES NOTHING UNTIL MEASURED.
+# `make` was invoked with no -j at all, so ORFS flow stages ran strictly
+# serially. The container is given no --cpus cap and reports nproc=10 on this
+# host, so the jobs were available and unused.
+#
+# Expect little. The stages are a sequential dependency chain -- synth, then
+# floorplan, then place, then route -- and -j cannot overlap a chain. The 3h22m
+# d_ai01 baseline is 52% detailed routing and 19% synthesis, both SINGLE stages;
+# OpenROAD's own internal threading is what parallelises inside them. -j is free
+# to turn on and must not be assumed to help.
+#
+# Default 1 reproduces today's behaviour exactly, so no existing measurement
+# moves. Set ORFS_MAKE_JOBS to compare, and RECORD WHICH VALUE PRODUCED WHICH
+# TIME -- a build time quoted without its job count is not comparable with one
+# taken at a different setting.
+ORFS_MAKE_JOBS="${ORFS_MAKE_JOBS:-1}"
+
 if [ -z "${DOCKER_PLATFORM_ARGS+x}" ]; then
   DOCKER_PLATFORM_ARGS="--platform linux/amd64"
 fi
@@ -128,4 +145,4 @@ docker run --rm ${DOCKER_PLATFORM_ARGS} \
   -v "${ORFS_FLOW_DIR}:/OpenROAD-flow-scripts/flow" \
   -v "${REPO_DIR}:/work" \
   openroad/orfs \
-  bash -c "source /OpenROAD-flow-scripts/env.sh && cd /OpenROAD-flow-scripts/flow && make LEC_CHECK=${LEC_CHECK} ${MAKE_PERIOD_ARG} DESIGN_CONFIG=$1 $TARGET"
+  bash -c "source /OpenROAD-flow-scripts/env.sh && cd /OpenROAD-flow-scripts/flow && make -j${ORFS_MAKE_JOBS} LEC_CHECK=${LEC_CHECK} ${MAKE_PERIOD_ARG} DESIGN_CONFIG=$1 $TARGET"
