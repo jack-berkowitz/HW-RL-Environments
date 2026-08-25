@@ -601,18 +601,20 @@ Everything normative is in the interface below.
 //        PERIOD rather than by sweeping for a maximum frequency, so every
 //        submission is compared at one frequency.
 //
-//        THE PINNED PERIOD FOR THIS TASK IS NOT YET SET. It is derived as 1.5x
-//        the reference implementation's own measured period, rounded up to the
-//        next 0.25 ns, from a single reference Fmax sweep; that sweep is queued
-//        and its result will be stated here before any submission is solicited.
-//        The 25 ns in orfs/constraint.sdc is a STARTING CONSTRAINT, not the pin,
-//        and the recorded areas taken at it are marked NOT FINAL for that reason.
+//        THE PINNED PERIOD IS 12.5 ns on sky130hd. It is derived as 1.5x the
+//        reference implementation's own measured period (8.2031 ns), rounded up
+//        to the next 0.25 ns, from a single reference Fmax sweep: eight
+//        place-and-route runs bracketing 25.0 pass, 12.5 pass, 6.25 fail, then
+//        converging on the interval [7.8125 fail, 8.2031 pass] with a confirming
+//        rerun that passed.
 //
-//        Whatever the number turns out to be, it does not move in response to
-//        what is submitted. An earlier scheme pinned the row at the slowest
-//        submission's own Fmax, which rewards a slow design by moving the
-//        measurement toward the period where its own area looks best. The period
-//        is THE SAME for every submission.
+//        The 25 ns in orfs/constraint.sdc is a STARTING CONSTRAINT, not the pin,
+//        and any area recorded at it is NOT comparable to a build at 12.5 ns.
+//
+//        It does not move in response to what is submitted. An earlier scheme
+//        pinned the row at the slowest submission's own Fmax, which rewards a
+//        slow design by moving the measurement toward the period where its own
+//        area looks best. The period is THE SAME for every submission.
 //
 // G2. WHAT IS COMPARED: area post-synthesis and post-place-and-route, power at
 //     the pinned period, and this task's own cycle axis.
