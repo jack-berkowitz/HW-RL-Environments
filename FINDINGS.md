@@ -5846,3 +5846,105 @@ it** — the signature above did not exist until this happened, and the only thi
 that stopped it was a person looking at a log and finding one second implausible.
 
 **Rules:** 8, 36
+
+## F89. A number carried across a boundary the record itself had marked as one it does not carry across
+
+Written by AGENT-DESIGN-43a92055, landed here with attribution under the
+single-owner arrangement for this file. Verified before landing: see the check
+at the end.
+
+`d_ai01`'s seven negative controls carry kill counts in `task.yaml`. Re-run
+through the scored path — the first time this task had ever reached it — **every
+one is lower**:
+
+    nc_a  3399 -> 2936      nc_e   132 ->  132
+    nc_b  2784 -> 2368      nc_f  3203 -> 2746   (status 3057 -> 2572)
+    nc_c    84 ->   80      nc_g  3208 -> 2752   (status 3189 -> 2725)
+    nc_d   230 ->  167
+
+**No verdict changes.** Reference PASS 2/2; nc_a–nc_f FAIL at both geometries;
+`nc_g` PASSes at HEIGHT=4 and FAILs at HEIGHT=8, which is the discrimination
+result the scored geometry rests on, and it stands.
+
+The counts were taken at `54a7745`. `df82446` then narrowed C3 and C4 — a
+boundary the file's own `version_boundary` block lists as `behavioural: true` —
+and narrowing left the C2/C3 transition windows unscored: 3400 cycles driven,
+2937 checked at HEIGHT=8, 463 excluded. The old counts include kills inside
+those windows and were never re-measured; `git show` at all six subsequent
+revisions gives the same figures unchanged.
+
+**The file recorded that results do not carry across that boundary, and the
+results carried anyway.** Nothing reads `behavioural: true`. Nothing invalidates
+a number when a boundary moves under it. The annotation was correct, present,
+and inert — which is the same defect shape as a check that cannot fail: it
+reports cleanly because nothing consults it.
+
+### Why this is a measurement and not a delta with a story attached
+
+`nc_e` is the control. It is the only count that did not move, at exactly 132,
+and the file predicted it before anyone re-ran anything:
+`nc_e_is_why_the_floor_exists` records that every one of nc_e's 132 kills lands
+at cycle 3031 or later — outside the excluded windows entirely. **The one
+control whose kills all fall in scored cycles is the one that did not move.**
+
+Checked rather than accepted: the prediction first appears at `0477595`,
+**2026-08-22 22:48**. The re-measured counts land at `9de5a35`, **2026-08-25
+00:39**. Two days apart, in that order. An explanation that was already written
+down for an unrelated reason, and that a later measurement confirms, is not a
+story fitted to a delta.
+
+### What it costs
+
+The discrimination arithmetic, not the conclusions. `task.yaml` cited nc_c at 84
+and nc_d at 230 as the narrow useful controls; they are 80 and 167. **nc_d moved
+27%** — about a quarter of its cited discriminating power was firing in windows
+the contract had stopped scoring. Restated in `acb2680`.
+
+**Rules:** 8, 17
+
+## F90. A defect that survived because three louder ones stood in front of it
+
+Written by AGENT-DESIGN-43a92055, landed here with attribution.
+
+`d_ai01`'s testbench emitted **`RESULT: PASS`**. The runner and rule 24 both read
+**`TEST_RESULT:`**. The scored path returned `NO_VERDICT` on a run that had
+passed and said so — **the same sentence to a human, a different token to the
+harness.**
+
+It was the fourth of four independent gaps keeping this task off the scored
+path, and the property worth recording is why it lasted:
+
+    1. spec declares no module            -> the task could not be resolved
+    2. no ref/sim_flags_verilator.txt     -> closure declared for synthesis only
+    3. geometry is a preprocessor define  -> -G sweep impossible
+    4. RESULT: vs TEST_RESULT:            -> NO_VERDICT on a passing run
+
+**Gaps 1–3 each stopped execution before anything could reach the verdict line.**
+Gap 4 was unreachable, therefore untestable, therefore survived — not because it
+was subtle but because three louder defects stood in front of it. Each fix
+exposed the next.
+
+The general form: **fixing an apparatus defect does not reduce the defect count
+monotonically.** A blocked path hides every defect behind the block, so the
+honest expectation after clearing one is *more* findings, not fewer — and a fix
+that yields a clean run on the first attempt deserves more suspicion than one
+that yields the next error.
+
+Every ad-hoc `d_ai01` run printed `RESULT: PASS` and was read by eye. The token
+only ever mattered to a reader that had never run.
+
+### Swept, because a token mismatch is exactly the kind of thing that repeats
+
+All nine design tasks checked, using the harness's own spec-derived DUT name
+rather than the directory name: **every scoring testbench that exists emits
+`TEST_RESULT:`.** The defect was unique to `d_ai01` and is closed.
+`d_dsp01_fp_divsqrt_srt` has no scoring testbench at all and no candidates —
+recorded here as unfinished, not as defective.
+
+Two errors of my own in that sweep, both mine and not the repo's: the first pass
+globbed `tb/audit/` subdirectories and counted `RESULT:` inside `TEST_RESULT:`,
+and the second derived the DUT from the directory name instead of the spec,
+which falsely flagged `d_dsp03` — a task being scored that same night — as
+having no testbench.
+
+**Rules:** 8, 36
