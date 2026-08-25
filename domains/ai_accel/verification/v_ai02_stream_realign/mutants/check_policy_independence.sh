@@ -30,10 +30,26 @@ run_one() {   # $1 label, $2 expected, $3.. files
   else printf '  %-34s %-4s BUT EXPECTED %s\n' "$label" "$got" "$expect"; fails=$((fails+1)); fi
 }
 
+# SET EQUALITY IS CHECKED BEFORE ANYTHING IS COMPILED. This runner globs
+# policy/*.sv, so a generation that failed part way leaves fewer files and every
+# row still reads "as expected" -- a short set is indistinguishable from a
+# complete one in the output, which is how a banner claiming ten sits above nine.
+#
+# It runs FIRST because it is free and the run is not. Placed after the golden
+# loop, as it was, a miscount costs eleven Verilator builds before it fires; the
+# control that proves this check works timed out at two minutes waiting for it.
+n_anchor=$(grep -cE "^module sr_m" "$T/mutants/mutants.sv")
+n_policy=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | wc -l | tr -d ' ')
+if [ "$n_anchor" -ne "$n_policy" ]; then
+  echo "  RULE24: $n_anchor defects on the anchor but $n_policy re-derivations."
+  echo "          The two halves are not the same set. Re-run the generator."
+  exit 2
+fi
+
 echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
 echo "         implementation must PASS. Each defect line is the positive half."
 echo
-echo "reference testbench vs the GOLDEN base and its ten defects"
+echo "reference testbench vs the GOLDEN base and its $(grep -cE '^module sr_m' "$T/mutants/mutants.sv") defects"
 _r24=$fails
 run_one "golden (clean)" PASS "${BASE[@]}" "$D/stream_realign.sv"
 if [ "$fails" -ne "$_r24" ]; then
@@ -52,7 +68,7 @@ open('$W/$M.sv','w').write(b.replace('module $M','module stream_realign',1))"
 done
 
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and the same ten defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same $n_anchor defects"
 sed 's/module sr_c1_first_beat_waits/module stream_realign/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean_policy.sv"
 _r24=$fails
@@ -69,7 +85,9 @@ done
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "OK: every defect is caught on BOTH bases, and both clean implementations"
+  echo "OK: $(( 2 * (n_anchor + 1) )) of $(( 2 * (n_anchor + 1) )) checks passed -- $n_anchor defects and one"
+  echo "    clean control on each of the GOLDEN and POLICY-DIVERGENT bases."
+  echo "    Every defect is caught on both, and both clean implementations"
   echo "    pass. No mutant is killed by the latitude choice."
 else
   echo "MISMATCH in $fails case(s) -- a mutant is sensitive to the policy choice."

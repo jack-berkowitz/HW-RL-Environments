@@ -42,7 +42,7 @@ failing control aborts the run rather than being counted alongside the defects.
 RULE 24: each "(clean)" line below is a CONTROL -- a conforming
          implementation must PASS. Each defect line is the positive half.
 
-reference testbench vs the GOLDEN base and its ten defects
+reference testbench vs the GOLDEN base and its 10 defects
   golden (clean)                     PASS as expected
   sr_m1_rotation_four_when_three     FAIL as expected
   sr_m2_first_beat_emitted_from_third_line FAIL as expected
@@ -55,7 +55,7 @@ reference testbench vs the GOLDEN base and its ten defects
   sr_m8_passthrough_rotates_after_realign FAIL as expected
   sr_m10_admission_withheld_after_long_stall FAIL as expected
 
-reference testbench vs the POLICY-DIVERGENT base and the same ten defects
+reference testbench vs the POLICY-DIVERGENT base and the same 10 defects
   policy base (clean)                PASS as expected
   sr_p10_admission_withheld_after_long_stall FAIL as expected
   sr_p1_rotation_four_when_three     FAIL as expected
@@ -68,22 +68,29 @@ reference testbench vs the POLICY-DIVERGENT base and the same ten defects
   sr_p8_passthrough_rotates_after_realign FAIL as expected
   sr_p9_extra_beat_on_late_empty_strobe FAIL as expected
 
-OK: every defect is caught on BOTH bases, and both clean implementations
+OK: 22 of 22 checks passed -- 10 defects and one
+    clean control on each of the GOLDEN and POLICY-DIVERGENT bases.
+    Every defect is caught on both, and both clean implementations
     pass. No mutant is killed by the latitude choice.
 ```
 
-**Counted from the output above, not from memory:** 11 checks on the golden
-base (1 clean PASS + 10 defects FAIL) and 11 on the policy-divergent base
-(1 clean PASS + 10 defects FAIL). **22 of 22, all as expected, exit 0.** This
-matches the `policy_independence` figure in `../task.yaml`, which had been
-asserted while this block read `(not yet run for this task)` -- the number was
-right and the reproduction licensing it was missing, which is the half of rule
-24 this file exists to carry.
+**The runner states its own count now.** It reads the defect count from
+`mutants.sv` for both banners, checks that `policy/` holds the same number
+before compiling anything, and closes with `22 of 22 checks passed` computed
+from that count rather than written into the string.
 
-Note for whoever reads the runner's summary: it prints "every defect is caught
-on BOTH bases" and **prints no count**. The 22 is arrived at by counting its
-lines. A summary that names a scope without stating the number it covered is
-the F67 shape, and it is what let a figure sit in task.yaml for as long as it
-did with nothing behind it. Count the lines; do not take the sentence.
+That replaces a note here telling readers to count the lines themselves. A
+banner reading "ten defects" above nine rows is the F67 shape -- a summary
+naming a scope it did not cover -- and a hard-coded number cannot be wrong
+loudly. Deriving it means a set change makes the banner move or the run abort;
+asking a reader to count means it stays right only while someone remembers.
 
-Run: 2026-08-24 20:55 local, tree 1964dc6-dirty.
+The set-equality check runs BEFORE any compilation. Placed after the golden
+loop, where it first went, a miscount costs eleven Verilator builds before it
+fires -- the control proving the check works timed out at two minutes waiting
+for it. Verified after the move: hiding one policy file aborts in 0 seconds
+with `10 defects on the anchor but 9 re-derivations`, exit 2.
+
+Run: 2026-08-24 21:38 local, tree bd0b89a-dirty.
+The figure matches `policy_independence` in `../task.yaml`, which had been
+asserted while this block read `(not yet run for this task)`.

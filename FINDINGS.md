@@ -5095,3 +5095,49 @@ implementation choice.
 
 **Rules:** 32
 
+
+## F83. An unlicensed true number is indistinguishable from an unlicensed false one until someone runs it
+
+`v_ai02`'s `task.yaml` asserted step 5c at **22 of 22**. The file whose entire job
+is to carry the reproduction licensing that figure, `mutants/RULE24.md`, read:
+
+    (not yet run for this task)
+
+Running it returned 22 of 22 — 11 checks on the golden base and 11 on the
+policy-divergent base, one clean control and ten defects each, all as expected,
+exit 0. **The number was right.**
+
+That is the uncomfortable half. Nothing about the document distinguished it from
+the case where the number was wrong, and nothing could have, because the
+distinguishing evidence is the run and the run had not happened. A reader
+checking the two files against each other learns only that one of them is
+unsupported; which way it resolves is not recoverable from the pair.
+
+So being right was luck in the sense that matters: the same review, applied to a
+false figure, would have produced the same reading and the same absence of alarm.
+Correctness is a property of the number, and what is at stake here is a property
+of the RECORD.
+
+**This generalises past rule 24.** Rule 24 is about apparatus reproducing a
+known-good answer, and this instance sits inside it. But the shape holds for any
+number on a surface someone else reads — a ceiling in a README, an area in a
+results table, a hash quoted in a message, a mutant count in a banner. The
+question is never only "is this right"; it is "what would tell me if it were
+not", and a figure whose licensing evidence is absent answers that with nothing
+whatever its value.
+
+**The resolution is measurement, not reconciliation.** Both documents could have
+been made consistent in a second by editing either one, and both edits would have
+destroyed the only information the contradiction carried: that nobody had
+checked. When two records disagree about a measured quantity, the disagreement is
+evidence and the measurement is the answer; agreement reached by editing is a
+record of a decision, not of a fact.
+
+Two things followed from taking it that way rather than the fast way. The
+runner's summary was found to print `every defect is caught on BOTH bases` and no
+count at all, so the 22 had been arrived at by counting output lines — the F67
+shape, and the reason the figure could sit unbacked as long as it did. And
+`v_nw02`, believed to have no count check, turned out to have had one since
+`6e39080`; the belief was a year of message-passing old and wrong.
+
+**Rules:** 24
