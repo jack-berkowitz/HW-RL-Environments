@@ -513,11 +513,33 @@ def main():
             # metrics and no PPA. Two rows with one name and no way to tell
             # which is the anchor is worse than either row alone.
             is_alt_ref = "_alt_ref" in sub
+            # `_top.sv` IS A REFERENCE TOO. d_ca03 and d_ai01 ship two-file
+            # shims -- <design>_ref.sv holding the inner module and
+            # <design>_top.sv declaring the contract module -- and it is the
+            # _top file the harness actually runs. Without this, d_ai01's
+            # reference rendered as a plain `fp16_gemm_array_top` row reading
+            # 2/2 pass, indistinguishable from a submission, in the same table
+            # whose whole purpose is comparing submissions AGAINST it.
+            #
+            # Same defect as reference_ppa.sh picking `ls ref/*_ref.sv | head -1`
+            # and gating the file it picked: identifying the reference by its
+            # filename rather than by what it is. Third site.
             is_ref = (not is_alt_ref) and (
-                "_ref" in sub or sub.startswith("async_fifo")
+                "_ref" in sub or sub.endswith("_top.sv")
+                or sub.startswith("async_fifo")
                 or sub.startswith("axi4_xbar") or sub.startswith("fp32_fma"))
+            # A NEGATIVE CONTROL THAT FAILS IS THE CONTROL WORKING, and it was
+            # rendering as `0/2 FAIL` in the same column, same words, as a model
+            # that failed. The table's stated policy is that every design which
+            # ran appears -- correct -- but a reader cannot tell an artefact
+            # BUILT TO FAIL from a submission that did, and the two mean opposite
+            # things about the task. Every control in the repo is named nc_*;
+            # there are 25 across seven design tasks.
+            is_control = sub.startswith("nc_")
             name = ("**reference**" if is_ref
                     else "**second source**" if is_alt_ref
+                    else f"`{sub[:-3]}` — *negative control, expected to fail*"
+                    if is_control
                     else f"`{sub[:-3]}`")
 
             cf = CORRECTNESS_FAILURES.get(key)
