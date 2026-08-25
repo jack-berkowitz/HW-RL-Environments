@@ -224,4 +224,13 @@ readies_criterion:
     A task the instrument cannot read is reported in the same column as a task
     with nothing wrong. "SKIPPED" and "none frozen" are different answers and a
     reader scanning a table of eleven rows will not distinguish them.
+  status_2026_08_25: >
+    PRE-EMPTION, NOT A LIVE DEFECT, and recorded that way on AGENT-PPA's
+    correction rather than left to look closed. There is no "none frozen" column
+    in the results table yet, so nothing is currently rendering the wrong answer.
+    The wording is agreed for when the column exists -- NOT MEASURABLE with the
+    reason, never a blank and never a zero. Their lean is that the TOOL should
+    learn to read a port list out of PASTE.md, because that does not move this
+    task's hash and a task whose port map lives where the submitter sees it is
+    not doing anything wrong. Jack's call, and not started.
 

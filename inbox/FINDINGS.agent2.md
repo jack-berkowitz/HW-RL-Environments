@@ -1138,26 +1138,46 @@ So the evidence has to be restated to what it supports:
 | a name changing while the **role stayed put** | yes, three times | |
 | an author **departing** and a correction having nowhere to go | **yes — later the same session, see below** | |
 
-**And then it happened.** Some hours after this entry was first written with that
-last row marked *not demonstrated*, both peer sessions went unreachable at once:
-`ListAgents` returned **no reachable agents at all**. The message that could not
-be delivered was the one I had just been asked to route — a results-table wording
-and a `scripts/` sweep, both for a surface I do not own and cannot act on myself.
+**And then I made the same inference again.** Some hours after writing the table
+above, both peer addresses stopped resolving and `ListAgents` returned **no
+reachable agents at all**. I recorded that as the hazard finally occurring — an
+author departing, a correction with nowhere to go — and wrote it up.
 
-Three things that only the real event showed:
+**It was wrong, the same way, for the second time.** The PPA session replied from
+a third address: same session, scratchpad `2381f2fe`, never gone. The design
+session likewise. *The socket names keep changing under stable sessions.*
 
-- **The window is indistinguishable from the end.** Nothing available to me
-  separated *"gone for two minutes"* from *"gone"*. A new session appeared shortly
-  afterwards and the content was delivered; had it not, retrying was the only
-  option and it would have failed forever with the same message.
-- **The undeliverable item was the one addressed to someone else's territory.**
+So the observable, stated for the third time and now with a marker on how many
+attempts it took to state correctly:
+
+> **The address space went empty. Nothing about any session was observed.** An
+> empty `ListAgents` and a departed peer produce identical evidence, and I had
+> already written that sentence down before making the inference it forbids.
+
+What the episode does establish, and it is not nothing:
+
+- **The window is indistinguishable from the end while you are in it.** Retrying
+  happened to work. Had the sessions truly ended, retrying would have failed
+  forever with an identical message, and I would have had no way to tell which
+  case I was in.
+- **The undeliverable item was the one addressed to another agent's territory.**
   Work I could do myself was unaffected. What could not survive the gap was
-  precisely what depended on another agent existing — which is the class of item
-  most likely to be routed by name.
+  precisely what depended on another agent existing.
 - **The fix was to write it to a file.** `inbox/FOR_SCRIPTS_AND_TABLE.md` is
-  addressed to the *role and the artefact* rather than to a session. It is the
-  finding applied to itself, and it is what should have been done first: the
-  message was the optimisation, the file is the delivery.
+  addressed to the *role and the artefact*, and it is what should have been done
+  first. The message was the optimisation; the file is the delivery. That part
+  holds whether or not anyone had actually departed — which is the argument for
+  it, since I cannot tell.
+
+**This is the fifth instance for the self-application finding, and the first
+REPEAT.** I inferred a departure from a name's disappearance; was corrected;
+wrote *"from the outside a rotated name and a departed author look identical"*;
+and then made the same inference again the first time `ListAgents` came back
+empty. Writing the correction down did not install it either. A rule broken once
+by its author is a lapse; a rule broken **twice, after being corrected, by the
+author who wrote the correction** is evidence that the rule was never the
+mechanism — the reflex is, and the reflex here is *treating absence of evidence
+as evidence*.
 
 ### And the correction itself needs a caveat, which is the sharper hazard
 
@@ -1521,6 +1541,44 @@ tolerant *with*.
 **Rule:** every declared field needs an owner — a consumer that would fail if the
 declaration were wrong. A field with no consumer should be deleted or given one;
 leaving it is recording a claim that nothing can ever contradict.
+
+### It is a class, and the other two instances came from the other territory
+
+AGENT-PPA recognised the shape immediately and supplied two more, from tools I
+have never read:
+
+| field | written by | read by | what it cost |
+| --- | --- | --- | --- |
+| `task_statement` | task authors | **nothing** | three tasks named a prompt document that does not exist |
+| `pinned_period_ns` | `find_fmax.py` | **nothing** | **one of thirty-one** fmax records even carries it, and nothing noticed the other thirty |
+| `version_boundary.behavioural: true` | boundary authors | **nothing** | correctly recorded that results do not carry across a boundary — **while the results carried anyway** |
+
+The third is the worst of the three and the clearest statement of the class: the
+field was **right**, and being right changed nothing, because the thing it was
+right about was decided elsewhere by something that never consulted it.
+
+### And the sharper argument, which is theirs
+
+On the `pdk` default I flagged — `rec.get("pdk", "sky130hd")` — they made the
+case I had not:
+
+> **There is one PDK in this repository, so the substituted value was correct
+> every single time it was used.** That is the reason to remove it, not a reason
+> to leave it. A default that is always right is indistinguishable from a field
+> that is always read, and the two only come apart on the day a second PDK exists
+> — at which point every silent substitution becomes a wrong answer with **no
+> event marking the change**.
+
+It fired on real data when they landed it: **three of sixty-seven** PPA records
+carry no `pdk` at all. Those three had been rendering as sky130hd, correctly, and
+would have gone on doing so until the day it mattered.
+
+This generalises past defaults. **A check that has never failed and a check that
+cannot fail are indistinguishable from their output**, and the distinguishing
+test is not "has it ever fired" but "what would make it fire, and has that been
+exercised". They fired the mismatch branch of their own new pin checker with a
+halved pin before landing it, on exactly that reasoning — *a pin checker that
+cannot fail would license every pin in the repo.*
 
 
 ### Scope of the two boundaries, measured
