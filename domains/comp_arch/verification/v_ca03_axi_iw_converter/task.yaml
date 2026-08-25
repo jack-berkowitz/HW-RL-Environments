@@ -286,3 +286,31 @@ e1_boundary:
     CODE PRESERVATION rather than on a wrong response is the D6/D7 question in
     this task's terms, and it is not decided here.
 
+e1_mutant:
+  id: iw_m11_decerr_normalised_to_slverr_from_second
+  violates: E1
+  guard: the second DECERR since reset and every one after it -- the first is preserved correctly
+  defect: >
+    a DECERR arriving on the master port is presented upstream as SLVERR -- an
+    error, of the wrong kind, so the response is still an error and only the
+    CODE is wrong
+  measured: >
+    56 failures, EVERY ONE E1, and nothing else fires. That is what makes it
+    disjoint from iw_m8 rather than a stronger version of it.
+  why_it_was_added: >
+    iw_m8_bresp_wrong_when_full is a WRONG RESPONSE mutant. CODE PRESERVATION is
+    a different property, and letting iw_m8 stand for both credits a submission
+    that checks "is this the right response" with checking "is this the right
+    KIND of error", which it does not. The same argument that decided D7 on
+    v_ca06; the dut2 evidence that decided it there has no equivalent here, but
+    the structural argument does, and the E1 boundary's new stimulus is what
+    makes the guard reachable at all.
+  reachability: >
+    Depends on the same boundary. Before it, every response returned was OKAY,
+    no DECERR existed, and this guard could never have fired -- a dw_m8 repeat.
+    The stimulus and the mutant had to land in that order.
+  at_eleven: >
+    ACCEPTED, 11 of 11 killed, gate-mutant rejected, dut2 PASS, all five
+    conformant perturbations PASS, 5c OK on both bases with both clean controls
+    passing.
+

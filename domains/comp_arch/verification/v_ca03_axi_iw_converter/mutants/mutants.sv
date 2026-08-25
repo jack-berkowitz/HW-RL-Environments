@@ -1748,3 +1748,194 @@ module iw_m10_extra_b_after_sixteen #(
       .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready
   );
 endmodule
+
+// --------------------------------------------------------------------------
+// iw_m11_decerr_normalised_to_slverr_from_second -- violates E1.
+//   defect: a DECERR arriving on the master port is presented upstream as SLVERR -- an error, of the wrong kind, so the response is still an error and only the CODE is wrong
+//   guard : fires only when the second DECERR since reset and every one after it -- the first is preserved correctly
+// --------------------------------------------------------------------------
+module iw_m11_decerr_normalised_to_slverr_from_second #(
+    parameter int unsigned SLV_ID_W        = 4,
+    parameter int unsigned MST_ID_W        = 2,
+    parameter int unsigned ADDR_W          = 32,
+    parameter int unsigned DATA_W          = 32,
+    parameter int unsigned MAX_UNIQ_IDS    = 4,
+    parameter int unsigned MAX_TXNS_PER_ID = 2
+) (
+    input  logic                    clk_i,
+    input  logic                    rst_ni,
+
+    // ---- slave (upstream) port ----
+    input  logic [SLV_ID_W-1:0]        s_awid,
+    input  logic [ADDR_W-1:0]        s_awaddr,
+    input  logic [7:0]               s_awlen,
+    input  logic                     s_awvalid,
+    output logic                     s_awready,
+
+    input  logic [DATA_W-1:0]        s_wdata,
+    input  logic [DATA_W/8-1:0]      s_wstrb,
+    input  logic                     s_wlast,
+    input  logic                     s_wvalid,
+    output logic                     s_wready,
+
+    output logic [SLV_ID_W-1:0]        s_bid,
+    output logic [1:0]               s_bresp,
+    output logic                     s_bvalid,
+    input  logic                     s_bready,
+
+    input  logic [SLV_ID_W-1:0]        s_arid,
+    input  logic [ADDR_W-1:0]        s_araddr,
+    input  logic [7:0]               s_arlen,
+    input  logic                     s_arvalid,
+    output logic                     s_arready,
+
+    output logic [SLV_ID_W-1:0]        s_rid,
+    output logic [DATA_W-1:0]        s_rdata,
+    output logic [1:0]               s_rresp,
+    output logic                     s_rlast,
+    output logic                     s_rvalid,
+    input  logic                     s_rready,
+    // ---- master (downstream) port ----
+    output logic [MST_ID_W-1:0]        m_awid,
+    output logic [ADDR_W-1:0]        m_awaddr,
+    output logic [7:0]               m_awlen,
+    output logic                     m_awvalid,
+    input  logic                     m_awready,
+
+    output logic [DATA_W-1:0]        m_wdata,
+    output logic [DATA_W/8-1:0]      m_wstrb,
+    output logic                     m_wlast,
+    output logic                     m_wvalid,
+    input  logic                     m_wready,
+
+    input  logic [MST_ID_W-1:0]        m_bid,
+    input  logic [1:0]               m_bresp,
+    input  logic                     m_bvalid,
+    output logic                     m_bready,
+
+    output logic [MST_ID_W-1:0]        m_arid,
+    output logic [ADDR_W-1:0]        m_araddr,
+    output logic [7:0]               m_arlen,
+    output logic                     m_arvalid,
+    input  logic                     m_arready,
+
+    input  logic [MST_ID_W-1:0]        m_rid,
+    input  logic [DATA_W-1:0]        m_rdata,
+    input  logic [1:0]               m_rresp,
+    input  logic                     m_rlast,
+    input  logic                     m_rvalid,
+    output logic                     m_rready
+);
+  // ---- occupancy and guard state -------------------------------------------
+  // Counted from the SLAVE PORT HANDSHAKES and the golden's own response
+  // stream. Nothing inside the golden's table is read, so these quantities are
+  // the contract's, not the implementation's, and every guard below can be
+  // restated against a different design.
+  localparam int unsigned NID = 1 << SLV_ID_W;
+  int unsigned rcnt [NID];
+  int unsigned wcnt [NID];
+  int unsigned g_fullage_r, g_fullage_w;   // cycles the table has been FULL
+  int unsigned g_rbeat_q;                  // read data beats delivered
+  int unsigned g_rbi_q;                    // beat index within the current burst
+  int unsigned g_bdone_q;                  // write responses delivered
+  int unsigned g_free_r_q;                 // cycles left in a retirement blackout
+  logic [SLV_ID_W-1:0] g_lastbid_q;
+  logic g_extra_q;
+
+  function automatic int unsigned n_distinct_r();
+    n_distinct_r = 0;
+    for (int i = 0; i < NID; i++) if (rcnt[i] != 0) n_distinct_r++;
+  endfunction
+  function automatic int unsigned n_distinct_w();
+    n_distinct_w = 0;
+    for (int i = 0; i < NID; i++) if (wcnt[i] != 0) n_distinct_w++;
+  endfunction
+
+  wire i_rdone = i_rvalid && s_rready && i_rlast;
+  wire i_bdone = i_bvalid && s_bready;
+
+  always_ff @(posedge clk_i) begin
+    if (!rst_ni) begin
+      for (int i = 0; i < NID; i++) begin rcnt[i] <= 0; wcnt[i] <= 0; end
+      g_fullage_r <= 0; g_fullage_w <= 0; g_rbeat_q <= 0; g_rbi_q <= 0;
+      g_bdone_q <= 0; g_free_r_q <= 0; g_lastbid_q <= '0; g_extra_q <= 1'b0;
+    end else begin
+      if (s_arvalid && s_arready)  rcnt[s_arid] <= rcnt[s_arid] + 1;
+      if (i_rdone)                 rcnt[i_rid]  <= rcnt[i_rid]  - 1;
+      if (s_awvalid && s_awready)  wcnt[s_awid] <= wcnt[s_awid] + 1;
+      if (i_bdone)                 wcnt[i_bid]  <= wcnt[i_bid]  - 1;
+
+      g_fullage_r <= (n_distinct_r() >= MAX_UNIQ_IDS) ? g_fullage_r + 1 : 0;
+      g_fullage_w <= (n_distinct_w() >= MAX_UNIQ_IDS) ? g_fullage_w + 1 : 0;
+
+      if (i_rvalid && s_rready) begin
+        g_rbeat_q <= g_rbeat_q + 1;
+        g_rbi_q   <= i_rlast ? 0 : g_rbi_q + 1;
+      end
+      // A retirement out of a BUSY table -- three or more identifiers were
+      // outstanding when this one completed.
+      if (i_rdone && (rcnt[i_rid] == 1) && (n_distinct_r() >= 3)) g_free_r_q <= 4;
+      else if (g_free_r_q != 0)                                   g_free_r_q <= g_free_r_q - 1;
+
+      g_extra_q <= 1'b0;
+      if (i_bdone) begin
+        g_bdone_q   <= g_bdone_q + 1;
+        g_lastbid_q <= i_bid;
+        if (g_bdone_q == 15) g_extra_q <= 1'b1;
+      end
+    end
+  end
+
+  wire blk_r = 1'b0;
+  wire blk_w = 1'b0;
+
+  wire g_arvalid = s_arvalid & ~blk_r;
+  wire g_awvalid = s_awvalid & ~blk_w;
+  wire g_arready, g_awready;
+  assign s_arready = g_arready & ~blk_r;
+  assign s_awready = g_awready & ~blk_w;
+
+  // the golden's slave-side response stream, before any transform
+  wire [SLV_ID_W-1:0] i_bid;  wire [1:0] i_bresp; wire i_bvalid;
+  wire [SLV_ID_W-1:0] i_rid;  wire [DATA_W-1:0] i_rdata;
+  wire [1:0] i_rresp; wire i_rlast; wire i_rvalid;
+
+  // E1's newest half: `resp` on BOTH response channels is forwarded
+  // unmodified. iw_m8 already perturbs bresp, but it produces a WRONG RESPONSE;
+  // CODE PRESERVATION is a different property, and letting iw_m8 stand for both
+  // credits a submission that checks "is this the right response" with checking
+  // "is this the right KIND of error", which it does not.
+  //
+  // This one leaves the response an ERROR and changes only which error, so a
+  // checker that only asks "did an error arrive" cannot see it.
+  int e_n = 0;
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) e_n <= 0;
+    else e_n <= e_n + ((i_rvalid && s_rready && (i_rresp == 2'b11)) ? 1 : 0)
+                    + ((i_bvalid && s_bready && (i_bresp == 2'b11)) ? 1 : 0);
+  wire dn = (e_n >= 1);
+  assign s_bid   = i_bid;
+  assign s_bresp = (dn && (i_bresp == 2'b11)) ? 2'b10 : i_bresp;
+  assign s_bvalid = i_bvalid;
+  assign s_rid   = i_rid;   assign s_rdata = i_rdata;
+  assign s_rresp = (dn && (i_rresp == 2'b11)) ? 2'b10 : i_rresp;
+  assign s_rlast = i_rlast; assign s_rvalid = i_rvalid;
+
+  id_width_conv #(
+      .SLV_ID_W(SLV_ID_W), .MST_ID_W(MST_ID_W), .ADDR_W(ADDR_W), .DATA_W(DATA_W),
+      .MAX_UNIQ_IDS(MAX_UNIQ_IDS), .MAX_TXNS_PER_ID(MAX_TXNS_PER_ID)
+  ) i_g (
+      .clk_i, .rst_ni,
+      .s_awid, .s_awaddr, .s_awlen, .s_awvalid(g_awvalid), .s_awready(g_awready),
+      .s_wdata, .s_wstrb, .s_wlast, .s_wvalid, .s_wready,
+      .s_bid(i_bid), .s_bresp(i_bresp), .s_bvalid(i_bvalid), .s_bready(s_bready),
+      .s_arid, .s_araddr, .s_arlen, .s_arvalid(g_arvalid), .s_arready(g_arready),
+      .s_rid(i_rid), .s_rdata(i_rdata), .s_rresp(i_rresp), .s_rlast(i_rlast),
+      .s_rvalid(i_rvalid), .s_rready(s_rready),
+      .m_awid, .m_awaddr, .m_awlen, .m_awvalid, .m_awready,
+      .m_wdata, .m_wstrb, .m_wlast, .m_wvalid, .m_wready,
+      .m_bid, .m_bresp, .m_bvalid, .m_bready,
+      .m_arid, .m_araddr, .m_arlen, .m_arvalid, .m_arready,
+      .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready
+  );
+endmodule

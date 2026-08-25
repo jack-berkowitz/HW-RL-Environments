@@ -982,3 +982,154 @@ to be run against the commit that introduces it, not only against future work.
   a failure at `phase=<clause>` means the consequent was violated and the clause
   has force; a failure at `phase=final` / "never exercised" means the antecedent
   was suppressed.
+
+
+---
+
+## FINDING — port and expectation as one symbol: a check that cannot disagree
+
+**Second instance, which makes it a class.** Both are in this agent's own work,
+found three days apart in different tasks by different routes.
+
+| | the port | the expectation | what passed |
+| --- | --- | --- | --- |
+| **v_nw01** | `local_ip_i`, `local_mac_i`, `subnet_mask_i`, `gateway_ip_i` wired to `localparam LIP`/`LMAC`/… | the checkers compare against **`LIP`/`LMAC`** | a design that hardcodes the identity and ignores the ports entirely |
+| **v_ca03** | responder drives `m_rresp = 2'b00` | the checker compares `s_rresp` against the literal **`2'b00`** | a design that rewrites **every** response code |
+
+In each, the value at the port and the value the checker expects **are the same
+symbol**. The comparison is `X == X`. It runs, it passes, it is reported as a
+clause being checked, and no implementation can make it fail.
+
+**Why a variation sweep cannot find it.** The symbol varies in neither place, so
+the tool reports a frozen port with nothing behind it to disagree with. A clean
+variation row means only that the tool had nothing to compare. It is also
+invisible to mutation: no mutant fails it, because none can.
+
+### The remedy, which is not "vary the input"
+
+Varying the input alone converts `X == X` into `X == Y` only if the two are
+**independently produced**. The general fix is:
+
+> **Derive the port value and the expectation from something neither of them
+> controls, so that the two are computed at different times from a shared
+> premise rather than from each other.**
+
+On v_ca03 that is `resp_of(address)`: the expectation is raised when the
+transaction is *issued*, the responder computes the same function when the
+response is *returned* cycles later, and neither reads the other. A disagreement
+is then possible, and the DUT is the only thing that can cause one. The address
+is the shared premise; the DUT sits between.
+
+On v_nw01 it is the identity being **reprogrammed across a reset** — the checkers
+read the current value, the design must read the port, and the second
+configuration is what makes those two different claims.
+
+**The test, cheap enough to apply everywhere:** trace the expectation back to its
+source. If the path reaches the same symbol the stimulus came from without
+passing through the design, the check cannot fail and is not a check.
+
+---
+
+## FINDING — writing a rule down does not install it
+
+**Three instances in one session, each by the author of the rule, inside or
+beside the commit that files it.**
+
+| | the rule | how its own author broke it |
+| --- | --- | --- |
+| F86 (design side) | evidence for *unfalsifiable* must be a suppressing control that **passes**, never a reading | its founding instance, R1, was named **from a reading of the clause** and measured only afterwards |
+| condition floors | a floor must count the **condition**, not the attempt | the replacement counter for H4 **counted the wrong condition** — any pending request while busy — and read 10 on a base whose window is empty |
+| tool-vs-prose | a caveat that lives only in prose does not survive transport | my control contract stated clause ids as `[A-Z][0-9]+` while **my own tool** had always matched `[A-Z][0-9]+[a-z]?` |
+
+The third is the same shape as a comment asserting "ten defects" above code that
+counts them: **the code was right and the prose describing it was wrong**, in one
+author's work, in the same file.
+
+### The mechanism
+
+All three were written **immediately after explaining the defect**, by the person
+who had just explained it. That is the moment of **maximum confidence and minimum
+checking**. Having just articulated why a class of error happens, the author is
+least disposed to suspect the next thing they write of being in it — and the next
+thing they write is the fix, the tool, or the rule itself.
+
+It is the same shape as *having a favourite failure mode makes you fast and makes
+you wrong*, one step further along: the favourite diagnosis is now not merely
+available but freshly rehearsed.
+
+### The proposed rule, and it is a gate rather than an exhortation
+
+> **A newly written rule is applied to the commit that introduces it, before that
+> commit lands.** Self-application as a landing gate.
+
+Concretely: when a commit files a rule, the check that rule prescribes is run
+against that commit's own diff. "Count the condition, not the attempt" → check
+the counters this commit adds. "Evidence must be a passing suppressing control"
+→ check that this commit's own claims are backed by one. "A caveat must be in the
+output" → check this commit's own tool output.
+
+All three instances above would have been caught by their own rule, at a cost of
+minutes, by the only person who at that moment fully understood what to look for.
+
+---
+
+## FINDING — a name is not an address: identity by ownership set
+
+**Filed after socket addresses changed three times in one session, twice
+mid-delivery — and corrected immediately, because my first account of it was
+wrong in the way this document keeps describing.**
+
+**What I asserted:** three roster rotations, sessions ending, a correction
+outliving its author. **What was measured:** `ListAgents` stopped showing a name.
+Both peers then confirmed that **no session ended and no role changed hands** —
+`f6`, `b4` and the address before them are one design session; `e2` and `29` are
+one PPA session. The *names* moved. I inferred a departure from a name's
+disappearance, which is inferring a fact about a process from a fact about a
+label, in a finding about not doing that.
+
+So the evidence has to be restated to what it supports:
+
+| | observed | not observed |
+| --- | --- | --- |
+| a name held by **two processes at once** | yes — two sessions signed "Agent 3" for hours | |
+| a correction reaching **the wrong holder** of a name | yes — it went to the session that never produced the artefact | |
+| a name changing while the **role stayed put** | yes, three times | |
+| an author **departing** and a correction having nowhere to go | | **not demonstrated tonight** |
+
+The last one remains a real hazard and is why the convention matters, but it is a
+hazard I reasoned to, not an event I saw. Recorded as such.
+
+Ownership boundaries — which agent may commit where — are what prevent
+cross-territory edits. Carrying them on a name is **identity by position**, the
+same defect this benchmark's tasks are built to punish, at the agent layer.
+
+**The convention, and it is a convention now rather than a workaround:**
+
+- **Every cross-boundary message states its ownership set on the first line**,
+  explicitly, including what the sender does *not* own. Not a signature — a set.
+- **A message signed only by a name is unrouted** until the set is stated, and
+  should be treated as such rather than acted on.
+- **A request whose target is unknown is routed to the person who set the task**,
+  never forwarded on a guess. Guessing put a time-critical PPA item in this
+  agent's inbox and a v_ca06 correction in a session that had never touched it.
+
+### The consequence, stated as the hazard it is
+
+> **A correction addressed to a name resolves to nothing once that name moves**,
+> while the thing it corrects is still being read. Tonight the name moved and the
+> role did not, so the correction was recoverable by asking. It would not have
+> been if the role had moved too, and nothing in the setup guarantees which
+> happened — **from the outside, a rotated name and a departed author look
+> identical**, which is precisely why the address must be the ownership set.
+
+So a correction is addressed to **the artefact and its consumers**, and the
+artefact must **carry its own provenance** — what produced it, against what
+commit — because that is the only channel through which a later correction can
+find its readers. A number in a message is a copy whose original may already have
+moved: recompute at the point of use, or cite the commit.
+
+Three hashes went stale between being sent and being used in one evening — and a
+fourth number went stale the same way inside a single message, where a peer
+quoted a control count taken before the control they described adding in the same
+message. The mechanism does not need an agent to depart. It only needs the copy
+to outlive the moment it was taken.
