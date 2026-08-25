@@ -1136,10 +1136,28 @@ So the evidence has to be restated to what it supports:
 | a name held by **two processes at once** | yes — two sessions signed "Agent 3" for hours | |
 | a correction reaching **the wrong holder** of a name | yes — it went to the session that never produced the artefact | |
 | a name changing while the **role stayed put** | yes, three times | |
-| an author **departing** and a correction having nowhere to go | | **not demonstrated tonight** |
+| an author **departing** and a correction having nowhere to go | **yes — later the same session, see below** | |
 
-The last one remains a real hazard and is why the convention matters, but it is a
-hazard I reasoned to, not an event I saw. Recorded as such.
+**And then it happened.** Some hours after this entry was first written with that
+last row marked *not demonstrated*, both peer sessions went unreachable at once:
+`ListAgents` returned **no reachable agents at all**. The message that could not
+be delivered was the one I had just been asked to route — a results-table wording
+and a `scripts/` sweep, both for a surface I do not own and cannot act on myself.
+
+Three things that only the real event showed:
+
+- **The window is indistinguishable from the end.** Nothing available to me
+  separated *"gone for two minutes"* from *"gone"*. A new session appeared shortly
+  afterwards and the content was delivered; had it not, retrying was the only
+  option and it would have failed forever with the same message.
+- **The undeliverable item was the one addressed to someone else's territory.**
+  Work I could do myself was unaffected. What could not survive the gap was
+  precisely what depended on another agent existing — which is the class of item
+  most likely to be routed by name.
+- **The fix was to write it to a file.** `inbox/FOR_SCRIPTS_AND_TABLE.md` is
+  addressed to the *role and the artefact* rather than to a session. It is the
+  finding applied to itself, and it is what should have been done first: the
+  message was the optimisation, the file is the delivery.
 
 ### And the correction itself needs a caveat, which is the sharper hazard
 
