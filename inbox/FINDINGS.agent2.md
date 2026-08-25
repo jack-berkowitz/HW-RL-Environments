@@ -445,51 +445,102 @@ have caught one of the three; the construct is the thing.
 
 ---
 
-## Candidate — a stride correlated with the call site is a constant wearing an expression
+---
 
-**Found by re-running the check after the fix, which is the only reason it was
-found at all. The code reads as obviously varying.**
+## Candidate — a frozen input conceals the state of every check downstream of it
 
-**The instance.** v_nw02 had twenty AXI sideband fields frozen at one value each,
-against four pass-through clauses that say those exact fields are forwarded
-unmodified. The fix drove them from a counter:
+**This changes how a frozen-input sweep is read.** A frozen input is normally
+filed as a stimulus gap: the field was not exercised, so drive it and move on.
+That reading is incomplete, and the incompleteness is the dangerous half.
+
+> While a field is held at one value, a checker that **ignores** that field and a
+> checker that **compares** it produce identical output on every run. The frozen
+> input is not only an unexercised input — it is a **blindfold over every check
+> downstream of it**. Varying it buys nothing until the checkers behind it have
+> been audited, because until then you do not know whether there were any.
+
+So a sweep hit does not mean "stimulus gap". It means **"the checking state
+behind this field is unknown"**, and the fix is two changes, not one.
+
+### The instance, and it was two gaps stacked
+
+v_nw02 had twenty AXI sideband fields frozen at one value each, against four
+pass-through clauses — P1 to P4 — that say those exact fields are forwarded
+unmodified. Driving them was the obvious fix. Auditing the checkers first is what
+the run actually needed:
+
+| clause | what it says | what was behind the frozen field |
+| --- | --- | --- |
+| **P1** | a non-atomic AW is forwarded with **every field** unmodified | compared **three of eleven** |
+| **P2** | W beats forwarded unmodified | `user` never compared |
+| **P3** | AR is forwarded unmodified | **no field comparison anywhere** — the clause was carried by "an AR was offered and accepted", which a design that rewrites every field passes |
+| **P4** | a B is returned unmodified, id, resp and user alike | **never appeared in a `fail()` call at all** |
+
+Every one of those was invisible while the fields were constant, and every one
+would have stayed invisible if the fix had been "vary the stimulus".
+
+### The same shape from the other side
+
+Agent 3 reports d_dsp02 as **a real check sitting behind a phase that was deleted
+while its comment banner survived** — the check exists, the stimulus that reaches
+it does not, and the banner asserts otherwise. *Recorded as reported; this is
+another agent's task and I have not measured it* — which is the discipline the
+entry above on **a status label is not evidence** exists to enforce, and the
+reason to say so rather than pass it on as established.
+
+Same mechanism, opposite starting point. Here the stimulus was frozen and the
+checks behind it were absent; there the check is present and the stimulus that
+would reach it is gone. In both, **the pairing is what fails, and neither half
+looks wrong on its own.**
+
+### My own fix contained two more of the same, and neither was visible in review
+
+**One — a varying expression is not varying stimulus.** The fix drove the AR
+sideband from a counter:
 
 ```systemverilog
-  s_arsize  = 3'(sb_ctr % 3);
-  s_arburst = (sb_ctr % 4 == 3) ? 2'b00 : 2'b01;
-  s_arlock  = sb_ctr[0];
+  s_arsize  = 3'(sb_ar_shared % 3);
+  s_arburst = (sb_ar_shared % 4 == 3) ? 2'b00 : 2'b01;
+  s_arlock  = sb_ar_shared[0];
 ```
 
-Three expressions that plainly vary. Re-running the frozen-input check reported
-`s_arsize`, `s_arburst` and `s_arlock` **still frozen**, at the values they had
-before the fix.
+Re-running the sweep reported all three **still frozen, at their old values**. The
+counter was shared with the write path and every read happened to land on an even
+value with `mod 3 == 2`. The expressions varied; the **arguments they were
+evaluated at** did not. Variation is a property of the values a port takes, and
+it depends on the expression, the counter, the call sites and their stride
+together — any of the four can flatten it and three are invisible where the
+expression is written.
 
-`sb_ctr` was shared with the write path. Every read happened to land on an *even*
-`sb_ctr` with `sb_ctr mod 3 == 2`, so all three expressions evaluated to the same
-value every time. **The expressions varied. The arguments they were evaluated at
-did not.**
+**Two — and this is the one worth the space.** A separate counter did not fix it
+either. The **coverage floor written in the same change** said why, on its first
+execution:
 
-**Then the second layer.** Giving reads their own counter did not fix it either,
-and the coverage floor added alongside said why: *"only 1 read sideband pattern
-driven"*. The reference issued exactly **one** AR in the entire run. No counter
-scheme can vary a field across a single call, and the clause being tested — *"AR
-is forwarded unmodified, and a read is never filtered, whatever its address"* —
-was carried by one read at one address.
+    FAIL COVERAGE: only 18 write and 1 read sideband patterns driven
 
-**Two rules, and the first is the general one.**
+The reference issued **exactly one AR in the entire run**. No counter scheme
+varies a field across a single call, and P3's *"a read is never filtered,
+whatever its address"* was being carried by one read at one address.
 
-- **A varying expression is not varying stimulus.** Variation is a property of
-  the *values a signal takes*, which depends on the expression, the counter, the
-  call sites and their stride together. Any of the four can flatten it, and three
-  of them are invisible at the point where the expression is written. Only
-  measurement at the port distinguishes them.
-- **A fix to a coverage gap is not evidence of coverage.** Re-run the check that
-  found the gap, against the fix. Both layers here were found that way and
-  neither was visible in review — the first fix looked correct and was inert, the
-  second looked correct and was starved.
+**A floor that contradicts its author immediately is the whole argument for
+writing floors alongside the stimulus rather than after it is believed to work.**
+Written afterwards, a floor is calibrated against a run you already trust, and it
+will agree with you — that is what "afterwards" means. Written at the same time,
+it is an independent statement of what the stimulus was *supposed* to achieve,
+and it is free to disagree. This one disagreed on the first run and was right
+both times.
 
-**On the floor that caught the second layer.** It was added in the same change as
-the fix, on the principle that a count a reader can do is a claim you have made.
-It converted an invisible gap into a *failing run* on the first execution. That
-is the argument for writing the floor at the same time as the stimulus rather
-than after it is believed to work: the floor is what disagrees with you.
+### The consequence for every hit not yet actioned
+
+Every remaining frozen-input hit is upgraded from *stimulus gap* to **checking
+state unknown**, and that includes the ones I cleared. When I called v_nw01's
+frozen configuration legitimate I verified the *clause was reachable* — the
+varying `req_ip_i` crosses the subnet boundary Q3 branches on — and I did **not**
+verify that a checker sits behind it. "Not a stimulus defect" does not imply "the
+clause is checked", and my not-defect calls established the first only.
+
+**Rule:** treat a frozen input as evidence about the *stimulus* and as **no
+evidence at all** about the checks behind it. Audit the checker before driving
+the field, or the fix silently converts an unexercised check into an absent one
+with nothing to show the difference.
+
