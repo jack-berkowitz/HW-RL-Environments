@@ -1,0 +1,33 @@
+# Extra Verilator arguments for d_ca03. One token per line; %REPO% expands to
+# the repository root. Blank lines and lines starting with # are ignored.
+#
+# THE VENDORED CVA6 CLOSURE. d_ca03's reference is a SHIM over cva6_mmu, which
+# instantiates two cva6_tlb, a cva6_shared_tlb, a cva6_ptw and a pmp. None of
+# that is self-contained, so simulation needs the same closure synthesis needs.
+# Without this file the task could not compile at all, and every submission came
+# back FAILED -- three models recorded as failing a task whose own reference had
+# never been run through the harness.
+#
+# GENERATED FROM orfs/config.mk's VERILOG_FILES, which is the authority on the
+# closure and on its ORDER (packages before the modules that import them). If
+# that list changes, this must change with it. sv39_mmu_top.sv is NOT listed
+# here: it is the file under test, and sim_candidate.sh supplies it.
+#
+# The include path is refs/common_cells/include -- cva6 and common_cells both
+# `include "common_cells/registers.svh"`.
++incdir+%REPO%/refs/common_cells/include
+%REPO%/refs/common_cells/src/cf_math_pkg.sv
+%REPO%/refs/cva6/core/include/riscv_pkg.sv
+%REPO%/refs/cva6/core/include/config_pkg.sv
+%REPO%/refs/cva6/core/include/cv64a6_imafdc_sv39_config_pkg.sv
+%REPO%/refs/cva6/core/include/build_config_pkg.sv
+%REPO%/refs/cva6/core/include/ariane_pkg.sv
+%REPO%/refs/common_cells/src/lzc.sv
+%REPO%/refs/common_cells/src/lfsr.sv
+%REPO%/refs/cva6/core/pmp/src/pmp_entry.sv
+%REPO%/refs/cva6/core/pmp/src/pmp.sv
+%REPO%/refs/cva6/core/cva6_mmu/cva6_tlb.sv
+%REPO%/refs/cva6/core/cva6_mmu/cva6_shared_tlb.sv
+%REPO%/refs/cva6/core/cva6_mmu/cva6_ptw.sv
+%REPO%/refs/cva6/core/cva6_mmu/cva6_mmu.sv
+%REPO%/domains/comp_arch/design/d_ca03_sv39_mmu/ref/sv39_mmu_ref.sv

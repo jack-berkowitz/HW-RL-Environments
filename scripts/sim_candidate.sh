@@ -119,6 +119,22 @@ case "$TASK_NAME" in
       # declaring it as a parameter would claim a flexibility nothing binds.
       CFGS=(); for dw in 32 64; do for st in 8 16; do for wy in 2 4; do for mm in 2 8; do
         CFGS+=("DATA_W=$dw SETS=$st WAYS=$wy MAX_MISSES=$mm"); done; done; done; done ;;
+  d_ca03_sv39_mmu)
+      # EXACTLY ONE config, BY CONSTRUCTION and not by omission. task.yaml's
+      # scored_configuration says the task does not parameterise geometry, and
+      # the reason is load-bearing rather than incidental: TRANSLATION STORAGE is
+      # NORMATIVE (spec P2), pinned at InstrTlbEntries 16 / DataTlbEntries 16 /
+      # UseSharedTlb 0 per rule 25 and F69. It is pinned because correctness never
+      # depends on TLB capacity -- the walk resolves every miss and A9 requires the
+      # two paths to agree -- so if capacity were free the dominant strategy would
+      # be ZERO ENTRIES: walk everything, satisfy every functional clause, take the
+      # smallest area. Sweeping capacity here would rank submissions by who read
+      # the capacity clause closely rather than by design quality.
+      #
+      # Coverage that would be configs elsewhere is in the stimulus instead. If a
+      # parameter is ever added, this list must grow with it or the sweep silently
+      # narrows -- the defect the *) branch refuses.
+      CFGS=("") ;;
   d_nw03_axis_switch_oq)
       # Full cross of the three swept parameters = 8 configs. Kept in step with
       # `configs:` in the task's task.yaml; if one changes the other must.
@@ -192,8 +208,15 @@ fi
 # and the Tier-Two memory models live there. Added unconditionally so a checker
 # that includes from it builds without every task restating the path; three more
 # v3 tasks (d_ca01, d_nw02, d_nw04) reuse the liveness monitor.
-if [ "$SIM" = "icarus" ]; then EXTRA=("-I$REPO/testbenches/common")
-else                          EXTRA=("+incdir+$REPO/testbenches/common"); fi
+# The TESTBENCH'S OWN DIRECTORY is on the include path too. A tb that splits
+# itself across .svh files includes them by bare name -- `include "x_seq.svh"` --
+# and the only directory that can resolve that is its own. d_ca03's tb does
+# exactly this and could not compile at all: "Cannot find include file:
+# 'sv39_mmu_seq.svh'", with the file sitting beside the tb that names it. No
+# other task had split its testbench yet, so the house include directory alone
+# had always been enough, which is why the gap survived to the eighth task.
+if [ "$SIM" = "icarus" ]; then EXTRA=("-I$REPO/testbenches/common" "-I$(dirname "$TB")")
+else                          EXTRA=("+incdir+$REPO/testbenches/common" "+incdir+$(dirname "$TB")"); fi
 FLAGFILE="$TASK_DIR/ref/sim_flags_${SIM}.txt"
 if [ -f "$FLAGFILE" ]; then
   while IFS= read -r line; do
