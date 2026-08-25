@@ -24,12 +24,12 @@
 <text x="562" y="230" fill="#1a1a1a" font-size="13" font-weight="600">36 of 36</text>
 <text x="238" y="260" fill="#666" font-size="13" text-anchor="end">compiled</text>
 <rect x="250" y="245" width="300" height="16" rx="3" fill="#e3e3e3"/>
-<rect x="250" y="245" width="250" height="16" rx="3" fill="#2f6feb"/>
-<text x="562" y="260" fill="#1a1a1a" font-size="13" font-weight="600">30 of 36</text>
+<rect x="250" y="245" width="258" height="16" rx="3" fill="#2f6feb"/>
+<text x="562" y="260" fill="#1a1a1a" font-size="13" font-weight="600">31 of 36</text>
 <text x="238" y="290" fill="#666" font-size="13" text-anchor="end">tells correct from broken</text>
 <rect x="250" y="275" width="300" height="16" rx="3" fill="#e3e3e3"/>
-<rect x="250" y="275" width="158" height="16" rx="3" fill="#2f6feb"/>
-<text x="562" y="290" fill="#1a1a1a" font-size="13" font-weight="600">19 of 36</text>
+<rect x="250" y="275" width="150" height="16" rx="3" fill="#2f6feb"/>
+<text x="562" y="290" fill="#1a1a1a" font-size="13" font-weight="600">18 of 36</text>
 <text x="238" y="320" fill="#666" font-size="13" text-anchor="end">fault count</text>
 <rect x="250" y="305" width="300" height="16" rx="3" fill="#e3e3e3"/>
 <rect x="250" y="305" width="125" height="16" rx="3" fill="#2f6feb"/>
