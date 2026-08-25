@@ -1,14 +1,17 @@
 # Control enumeration — a contract, for reconciliation across both territories
 
-**Status: PROPOSAL. Nothing wired.** Written by AGENT-VERIF-A2 for
-AGENT-DESIGN-43a92055 to reconcile against the design side, at Jack's direction,
-because this is one problem across two territories and should be one fix.
+**Status: RECONCILED, nothing wired.** Written by AGENT-VERIF-A2, reconciled
+with AGENT-DESIGN-43a92055, at Jack's direction, because this is one problem
+across two territories and should be one fix.
+
+**Revision 2** carries four amendments from the design side. Three of them
+changed the schema; the fourth changed a number I had wrong.
 
 ## The problem, stated as counts
 
 | | verification | design |
 | --- | --- | --- |
-| controls held | 21, across 6 tasks | 24 |
+| controls held | 21, across 6 tasks | **25, across 7 tasks** |
 | exercised by a runner | 5, in 1 task | 0 |
 | appearances of the control directory in `scripts/` | 1, and it is a comment | — |
 
@@ -32,12 +35,26 @@ Three kinds, and they need different assertions:
 | --- | --- | --- |
 | **negative** | violates something; must be caught | fails, **and on which clause** |
 | **positive** | conforms; must survive | passes, no clause failure |
-| **suppressing** | conforms *and* empties a clause's antecedent | passes, **and the antecedent count is zero** |
+| **suppressing** | conforms *and* empties a clause's antecedent | passes, **and the named antecedent counter reads zero** |
+| **axis** | conforms *and* moves a **scored non-correctness axis** | passes clean, **and the axis ratio is within tolerance** |
 
-The third is new and is why an enumeration contract is worth agreeing rather than
-each side inventing one: a suppressing control that passes proves nothing unless
-the zero is also recorded. A control that passes without suppressing is a control
-whose two arms produce the same observable.
+The third is why an enumeration contract is worth agreeing rather than each side
+inventing one: a suppressing control that passes proves nothing unless the zero is
+also recorded. A control that passes without suppressing is a control whose two
+arms produce the same observable.
+
+**The fourth is the design side's and it does not exist on the verification side
+at all.** `d_ca03` and `d_nw03` score cycles or area alongside correctness, and a
+control like `nc_b_serial_response` — PASS, zero failures, **cycles 2.58x** —
+must keep passing while the number it exists to protect is watched. It is not a
+positive control: a positive control asserts *nothing moved*, and the entire point
+of this one is that **something moved a lot, on an axis that is scored**. A runner
+filing it as positive reports it green while the protected number drifts unwatched.
+
+Verification scores fault detection per mutant, a validity gate and unpremised
+reliance; none of those is a continuous axis, so **this agent will declare zero
+`axis` controls**. The field is in the schema because the schema is shared, and a
+kind that arrives after a runner is written arrives as a migration.
 
 ## Discovery — declared, not globbed
 
@@ -69,8 +86,15 @@ declaration. The directory is where they live; the declaration is what they are.
       - file: negctl/g2h4_instant_resume_dut.sv
         kind: suppressing
         expect: pass
-        antecedent_counter: cov_defer_condition
+        antecedent_counter: cov_defer_condition   # NAMED, not "a zero was seen"
         expect_count: 0
+      # design side only -- see the fourth kind
+      - file: controls/nc_b_serial_response.sv
+        kind: axis
+        expect: pass
+        expect_axis: cycles
+        ratio: 2.58
+        tolerance: 0.05
 
 `module:` is optional and names one module inside a multi-module file.
 
@@ -87,10 +111,17 @@ declaration. The directory is where they live; the declaration is what they are.
 4. **`exclusive: true` asserts nothing else fired.** The two H3 controls on
    `v_ca07` fail on H3 and on nothing at all, one failure and two. That is what
    makes them a demonstration of *discrimination* rather than of a floor.
-5. **`antecedent_counter` / `expect_count` for suppressing controls.** The
-   counter must be one the testbench prints. Without it, "the control passed" is
-   the unmeasured claim that F86 was itself built on.
-6. **A declared control that is missing is `NO CONCLUSION` and exits non-zero.**
+5. **`antecedent_counter` / `expect_count` for suppressing controls, and the
+   counter is NAMED.** *From the design side, and it is the same principle as
+   assertion 3 one level down:* recording that "a zero was observed" cannot
+   distinguish a suppressed antecedent from a floor that happened to read zero
+   for an unrelated reason. `nc_h3_evades_antecedent` fails on
+   `h3_guard_true == 0` and `nc_r1_evades_antecedent` on `r1_hits == 0`; the
+   contract must carry which. Without any of this, "the control passed" is the
+   unmeasured claim F86 was itself built on.
+6. **`expect_axis` / `ratio` / `tolerance` for axis controls.** A pass alone is
+   not the assertion; the ratio is.
+7. **A declared control that is missing is `NO CONCLUSION` and exits non-zero.**
    Never "clean". *"Nothing failed"* and *"nothing was read"* must not print the
    same — the distinction `check_yaml_duplicate_keys.py` now makes, for the same
    reason.
@@ -103,18 +134,24 @@ declaration. The directory is where they live; the declaration is what they are.
 - It does not require a control per clause. A task with none declares none and
   that is a visible fact rather than an absence.
 
-## Open, for the design side to settle
+## Settled
 
-- **Where does it run?** A per-task runner (verification has `mutants/witness.sh`)
-  or one repo-wide script in `scripts/`. Repo-wide is one place to fix and one
-  place to break; per-task survives a task moving. I lean repo-wide reading the
-  per-task declaration, but `scripts/` is AGENT-PPA's and the design side may
-  have a constraint I cannot see.
-- **Do design controls have the same three kinds?** I have inferred `suppressing`
-  from F86's method. If the design side has a fourth, the schema should carry it
-  from the start rather than gain it later.
-- **`clause:` granularity.** Verification clause ids are `[A-Z][0-9]+`. If the
-  design side names clauses differently the field needs a shape both can parse.
+- **Repo-wide, reading a per-task declaration.** Decided by an argument from the
+  design side rather than by preference: `sim_candidate.sh` refuses a task whose
+  DUT-module derivation fails, and it does so **per task**. A repo-wide runner
+  reading per-task declarations produces *"d_ai01 declares 7 controls and ran
+  0"*. A per-task invocation can never surface that, because **nobody invokes the
+  task that is broken** — which is the "no controls vs the directory moved"
+  distinction this contract exists to preserve, arriving from the direction I had
+  not looked.
+- **Clause ids are `[A-Z][0-9]+[a-z]?`.** The design side needs the suffix for the
+  mirror clauses in flight, `H1b` and `R1b`. **So does mine, and my draft was
+  simply wrong:** `v_nw03` states `S5a` and `v_nw04` states `X2a`, `X2b`, `X2c`.
+  Worse, `scripts/check_clause_emittable.py` — my own tool — has always matched
+  `[A-Z][0-9]+[a-z]?`, so the contract text contradicted the code it describes.
+  That is the v_ca06 line-4 defect again: **the code was right and the prose
+  describing it was wrong**, and the prose is what the next reader builds against.
+- **A fourth kind, `axis`.** See the table. Verification declares none.
 
 ## Not landed
 
