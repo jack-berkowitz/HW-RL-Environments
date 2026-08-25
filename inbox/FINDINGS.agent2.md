@@ -879,3 +879,77 @@ is the path, and a path is invisible in every file you would think to open.
 **Rule:** a control belongs to whatever runs it, not to whatever directory holds
 it. If no runner enumerates it, its recorded verdict is a historical note about
 one afternoon, and should be written as one or wired into a runner.
+
+---
+
+## FINDING — a floor over stimulus answers "did the harness try"; a floor over the condition answers "was the clause exercised"
+
+**They read identically in source. They diverge exactly where the design controls
+whether the state is reached — which is what every latitude clause grants it.**
+
+Both agents found instances in their own work within an hour of the distinction
+being drawn, which is the argument for it being a class rather than two bugs.
+
+### The mechanism, and it is why the check ends up not written at all
+
+*From AGENT-DESIGN-43a92055:* **a condition floor cannot live in a stimulus-floor
+block.** Stimulus floors are written at the end of the run, next to each other,
+counting things the testbench did — beats driven, divisors swept, resets
+asserted. A condition floor has to observe the design *while it runs*, so it
+belongs in the checker, not in that block. An author working down the list of
+clauses in the floor block will write a stimulus floor for every one of them,
+because that is the only shape available in the place they are standing. **The
+wrong floor is not chosen over the right one; the right one has nowhere to go.**
+
+### The test
+
+> For each floor: **is there a latitude clause between the stimulus and the
+> condition?** If the stimulus fully determines the condition, the counter and
+> the claim are the same thing and the floor is correct. If a conforming design
+> can receive the stimulus and not enter the state, the floor asserts the clause
+> was exercised at the exact moment it was not.
+
+### The sweep — eleven verification specs, ~28 clause-claiming floors
+
+| task | floor | verdict |
+| --- | --- | --- |
+| **v_ca07** | `cov_defer` — *"a second request during a transition was never DRIVEN — H4 untested"* | **DEFECT, measured.** L2 frees transition length. Against the fastest-legal-resume base the request was driven, the floor counted it, the antecedent was empty, and the H4 mutant on that base **survived**. |
+| **v_ca04** | `cov_lockin_probe` — *"the contender set was never changed while an output was stalled — A3 is untested"* | **DEFECT.** Set by my probe. And A3's own antecedent is `out_valid_o` high while ready is low — `out_valid_o` is a **design output**, so this is the H1b shape as well: the same clause AGENT-DESIGN found on d_dsp02's H3. |
+| **v_nw02** | `cov_filled_bound` — *"the write bound was never driven to its limit"* | **DEFECT.** Whether the debt reaches the bound depends on the design's admission policy, which L4 frees. Same shape as v_ca06's A4. |
+| everything else | ~25 floors | **correct.** DECERR driven, off-subnet lookup driven, negative drift driven, non-ARP frame driven, reset asserted — in each the input is mine and no conforming design can decline to receive it. The counter and the claim are the same statement. |
+
+### The correct pattern already existed, in my own work, once
+
+`v_ca06`'s A4 floor:
+
+> *"more reads than the MAX_READS bound were never **OFFERED**, so A4 **has no
+> stimulus that could reveal** a design accepting too many"*
+
+It says **offered**, not exercised. It claims the **absence of stimulus**, not the
+presence of a test. And on the one clause where I had already recognised the
+design controls the condition, A4 was closed with a **capability-increased
+control** rather than with a floor at all.
+
+That is the fix in both halves: **word the floor to claim only what it counts,
+and close the design-controlled condition with a control that enters the state.**
+I had it right once, on the clause where I had thought about it, and wrote the
+other three from the floor block without thinking about it — which is exactly the
+mechanism above.
+
+### Rules
+
+- A floor may claim only what its counter observes. *"never driven"* is a claim
+  about the harness; *"untested"* is a claim about the design, and a stimulus
+  counter cannot support the second.
+- Where a latitude clause sits between the stimulus and the condition, the floor
+  cannot close the gap and **a control must**: build the conforming
+  implementation that declines to enter the state and see what the harness says.
+- A condition floor belongs **in the checker**, not in the floor block. Putting
+  it in the floor block is how it becomes a stimulus floor.
+- *Partial detector, from AGENT-DESIGN's correction to their own finding:* a
+  condition floor makes the evasion **visible without making it non-conforming**.
+  A submission failing that way can correctly argue it satisfies every clause,
+  and the failure is the harness objecting that it cannot tell. Their diagnostic:
+  a failure at `phase=<clause>` means the consequent was violated and the clause
+  has force; a failure at `phase=final` / "never exercised" means the antecedent
+  was suppressed.
