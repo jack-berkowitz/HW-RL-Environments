@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 28, compiled 1, correct 1, PPA measured 17. Verification: submitted 36, compiled 31, tells correct from broken 18, fault count 15." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 1, correct 1, PPA measured 15. Verification: submitted 30, compiled 28, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -22,8 +22,8 @@ design specifications were revised to state their grading criteria, so every
 design submission on record answers a prompt that no longer exists and renders
 as unscoreable until the tasks are re-solicited. See *Design results* below.
 
-Of 36 verification submissions, 5 do not compile; of the 31 that build,
-18 tell a correct design from a deliberately broken one, and 15 end with a
+Of 30 verification submissions, 2 do not compile; of the 28 that build,
+16 tell a correct design from a deliberately broken one, and 13 end with a
 fault count. **That gate is the binding constraint on this half.** A testbench that
 fails it returns the same verdict on correct and broken hardware, and every one that does so here rejects
 the correct design too, so it rejects everything and its fault count carries no
@@ -38,7 +38,7 @@ area and slower.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro 4 of 10. v_ca04: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 6 of 10; Gemini 3.1 Pro 0 of 10. v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (gate); DeepSeek V4 Pro not scoreable (nobuild); Gemini 3.1 Pro not scoreable (gate); Qwen 3.7 Plus not scoreable (nobuild). v_ca06: Claude Opus 5 not scoreable (invalid). v_dsp02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 10 of 10; DeepSeek V4 Pro 0 of 10; Gemini 3.1 Pro not scoreable (invalid); Qwen 3.7 Plus not scoreable (nobuild). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: _negctl_null 0 of 8; ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 10 of 10; Claude Opus 5 10 of 10; DeepSeek V4 Pro 4 of 10; Gemini 3.1 Pro not scoreable (invalid); Qwen 3.7 Plus not scoreable (invalid). v_nw04: _negctl_null not scoreable (invalid); ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro 4 of 10. v_ca04: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 6 of 10; Gemini 3.1 Pro 0 of 10. v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (gate); Gemini 3.1 Pro not scoreable (gate). v_ca06: Claude Opus 5 not scoreable (invalid). v_dsp02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 10 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw04: ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---
@@ -115,8 +115,6 @@ every seeded fault is findable.
 | ChatGPT 5.6 Sol | yes | yes (5/5) | 2/10 |
 | Claude Opus 5 | yes | yes (5/5) | **10/10** |
 | Gemini 3.1 Pro | **no** | **no** (1/5) | *withheld* |
-| DeepSeek V4 Pro | yes | yes (5/5) | 0/10 |
-| Qwen 3.7 Plus | did not compile | did not compile | |
 
 ### v_nw03: frame-arbitrating stream mux (ceiling 10/10)
 
@@ -125,8 +123,6 @@ every seeded fault is findable.
 | ChatGPT 5.6 Sol | yes | yes (5/5) | **10/10** |
 | Claude Opus 5 | yes | yes (5/5) | **10/10** |
 | Gemini 3.1 Pro | **no** | **no** (0/5) | *withheld* |
-| DeepSeek V4 Pro | yes | yes (5/5) | 4/10 |
-| Qwen 3.7 Plus | **no** | **no** (0/5) | *withheld* |
 
 ### v_ca05: tag tracker (ceiling 10/10)
 
@@ -135,8 +131,6 @@ every seeded fault is findable.
 | ChatGPT 5.6 Sol | yes | yes (4/4) | 6/10 |
 | Claude Opus 5 | yes | **partial** (3/4) | *withheld* |
 | Gemini 3.1 Pro | yes | **partial** (3/4) | *withheld* |
-| DeepSeek V4 Pro | did not compile | did not compile | |
-| Qwen 3.7 Plus | did not compile | did not compile | |
 
 ### v_nw01: ARP engine (ceiling 10/10)
 

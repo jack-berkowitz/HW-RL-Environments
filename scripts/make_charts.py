@@ -143,7 +143,16 @@ def is_submission(rec):
     # those duplicates were removed. Records are immutable, so the name check
     # stays HERE, where it filters history, and is gone from candidate_files(),
     # where it filtered the present.
-    return stem not in ("reference", "ref") and stem not in RT.WITHHELD_MODELS
+    if stem in ("reference", "ref") or stem in RT.WITHHELD_MODELS:
+        return False
+    # THE SUBMISSION MUST STILL BE ON DISK. A record whose .sv has been withdrawn
+    # is history, not a live row. Two chart paths disagreed on this: the funnel
+    # enumerates candidates/ and dropped the withdrawn deepseek and qwen files
+    # immediately, while this one iterates RECORDS and kept rendering them, so
+    # the same page carried tables without those models and a chart with them.
+    # candidate_files() already treats directory membership as the definition of
+    # a submission; this makes the record path agree.
+    return os.path.isfile(os.path.join(REPO, sub))
 
 
 def verification_rows():
