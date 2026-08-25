@@ -402,6 +402,52 @@ def _label_period(label):
     return float(m.group(1)) if m else None
 
 
+_OOP_CACHE = {}
+
+
+def _out_of_path(task, sub):
+    """A task.yaml `*_out_of_path_observation` for this submission, or None.
+
+    Recorded by the task owner, guarded with IS_NOT_A_SCORED_VERDICT, and shown
+    here ONLY inside a row that already says there is no scored verdict.
+    """
+    key = (task, sub)
+    if key in _OOP_CACHE:
+        return _OOP_CACHE[key]
+    model = os.path.basename(sub or "")[:-3]
+    out = None
+    for d in glob.glob(os.path.join(REPO, "domains", "*", "design", task)):
+        y = os.path.join(d, "task.yaml")
+        if not os.path.exists(y):
+            continue
+        txt = open(y, errors="replace").read()
+        # A YAML BLOCK ENDS WHERE THE INDENTATION RETURNS, not at the next line
+        # that looks like a key. The first form of this used a `(?=^\s*\w+:)`
+        # lookahead, which matched the block's OWN first child and captured a
+        # single newline -- so it found the block, extracted nothing, and
+        # rendered a row with the observation silently missing. That is the
+        # failure this row exists to prevent, inside the code that prevents it.
+        lines = txt.splitlines()
+        key = f"{model}_out_of_path_observation:"
+        for i, ln in enumerate(lines):
+            if ln.strip().startswith(key):
+                base = len(ln) - len(ln.lstrip())
+                body = []
+                for nxt in lines[i + 1:]:
+                    if nxt.strip() and (len(nxt) - len(nxt.lstrip())) <= base:
+                        break
+                    body.append(nxt)
+                blob = "\n".join(body)
+                obs = re.search(r'observation:\s*"?([^"\n]+)', blob)
+                if obs:
+                    out = (obs.group(1).strip()
+                           + " (hand-built invocation outside the scored path)")
+                break
+        break
+    _OOP_CACHE[key] = out
+    return out
+
+
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from task_text_hash import task_text_hash
@@ -591,6 +637,36 @@ def main():
             # one; the map is kept only for submissions that predate that.
             bf = BUILD_FAILURES.get(key)
             _bs = (sim or {}).get("build_status")
+            if _bs == "slang_tool_error":
+                # A TOOL FAILURE IS NOT A BUILD FAILURE AND MUST NOT SCORE ZERO.
+                # This fell through to the generic branch below and rendered
+                # "did not build" with 0/0/0 under rule 19 -- blaming the
+                # submission for the host, which is the exact defect F56 and the
+                # whole slang gate exist to prevent, reappearing at the point of
+                # DISPLAY after being fixed at the point of measurement.
+                #
+                # The scored answer is that there is no scored verdict. The row
+                # says so, in those words, and carries dashes rather than zeros:
+                # a zero is a SCORE and nothing was scored.
+                _oop = _out_of_path(task, sub)
+                notes.append(
+                    "**no scored verdict — synthesis frontend tool failure**, not "
+                    "a statement about this design: "
+                    + str((sim or {}).get("build_error") or "")[:160])
+                if _oop:
+                    # Jack's ruling: a Verilator verdict is NOT recordable as a
+                    # scored verdict when slang has failed -- the scored path
+                    # defines what counts. But "no verdict" where one is
+                    # obtainable is an absence that reads like a fact (F91), so
+                    # the out-of-path measurement is shown, labelled, with its
+                    # provenance, in a form that cannot be read as a verdict.
+                    notes.append("*out-of-path observation, NOT A SCORED VERDICT* — "
+                                 + _oop)
+                print("| " + " | ".join(
+                    [name, "*no scored verdict (tool failure)*", "—", "—", "—"]
+                    + ["—"] * len(mets)
+                    + ["; ".join(notes)]) + " |")
+                continue
             if _bs == "slang_rejected":
                 bf = ((sim or {}).get("build_error")
                       or "rejected by slang, the synthesis frontend")
