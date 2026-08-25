@@ -1720,3 +1720,160 @@ The remaining candidates are **triaged, not worked**, and the rate is now known 
 vary by task rather than being a suite property. Two tasks of eleven are done —
 the one I know best and the one I know least — which is a deliberately chosen pair
 rather than a sample, and the spread between them is the result worth carrying.
+
+---
+
+# FINDING — clause grouping is scoring INFLATION, not a coverage gap
+
+**Four appearances, ten candidates across two tasks against three genuinely
+unchecked, and the same mechanism every time. This is the dominant defect in the
+verification half.**
+
+## The mechanism
+
+Several clauses share **one observation** — a response code, a refusal, an
+exception-flag word. One check is written over that observation, because one
+observation needs one check. The check needs an id for its message, so **one id
+is chosen** from the group.
+
+Every clause in the group is **genuinely exercised**. Only one can ever be
+**named**.
+
+| task | clauses tested | id reported |
+| --- | --- | --- |
+| **v_ca06** | D7 — the error *code* is preserved | **D6** |
+| **v_ca03** | E1's `resp` half | folded into one comparison |
+| **v_ca06** | C1, C2 — *which* bursts are refused | **C4** |
+| **v_dsp02** | S2, S6, S11, S13 — flag behaviours | **S14** |
+| **v_dsp02** | S8, S9, S10 — comparison semantics | **S7** |
+
+## Why it is inflation and not a gap
+
+> **A submission that tests any one clause in the group scores as though it
+> tested all of them.**
+
+That is not a coverage hole — the subject matter *is* covered. It is a **scoring
+error in the submission's favour**, and it compounds with group size: on v_dsp02,
+a testbench that checks the exception-flag word alone is credited with S2, S6,
+S11, S13 and S14 — five clauses for one check.
+
+**It is invisible to mutation, and that is the load-bearing part.** Every mutant
+dies. A mutant keyed on S2 is killed by the check written for S14, because the
+observation is the same one. So the kill table reads 10 of 10, the clause list
+reads covered, and the score is higher than the work done.
+
+**This is the cleanest statement this project has of "testbench-only grading
+overstates correctness", and it is measured rather than argued.** The usual worry
+about grading a testbench is recognition — that a model may have seen the anchor.
+This is different and worse: it is a *systematic upward bias* that applies to
+every submission equally, that no amount of anchor decontamination touches, and
+that the reference itself exhibits.
+
+## Detection, and why nothing else finds it
+
+| instrument | what it sees |
+| --- | --- |
+| mutation | every mutant killed |
+| conformant acceptance | every legal variant passes |
+| variation | every input exercised |
+| witness sync | every recorded string matches |
+| **emittability** | **a clause in the spec that no `fail()` can name** |
+
+Only the last one fires, and only because it compares the *spec* against the
+*testbench* rather than watching a run. Every instrument that observes a run is
+blind to it, because at run time nothing is wrong.
+
+## The fix is not the same as the fix for a missing instrument
+
+They look identical on a clause list and cost different amounts:
+
+- **grouped id** → the check exists and works. Change the **message** to name the
+  clause it actually tested, splitting the branch where the group's members are
+  distinguishable. v_ca06's D6/D7 split is the worked example: three outcomes
+  where there had been two.
+- **genuinely unchecked** → **build an instrument.** v_ca06's F2/F3 have stimulus
+  and no checker at all.
+
+Mistaking the first for the second costs a build; mistaking the second for the
+first leaves a clause unscored.
+
+---
+
+## Working the remaining nine — predictions registered BEFORE measuring
+
+Two tasks is a chosen pair, not a sample: the one I know best and the one I know
+least. The spread between them is the result, and the open question is whether
+the split is **task-dependent** — a property of the subject matter — or
+**author-dependent**, a property of who wrote what and when.
+
+A count taken after the fact cannot answer that, because I would be classifying
+with the answer in view. So the prediction goes first.
+
+**The hypothesis:** grouping dominates where a task has **few distinct
+observables** and many clauses describing them, because one observation attracts
+one check. Genuinely-unchecked dominates where a task has **many separate
+observables** — reset, counters, protocol phases — because each needs its own
+instrument and one can simply be missing.
+
+| task | observables | **predicted dominant shape** |
+| --- | --- | --- |
+| `v_ai02` stream realign | output beat, strobe — few | **GROUPED** |
+| `v_nw02` atop filter | responses, debt — few, plus a bound | **GROUPED** |
+| `v_ca04` stream xbar | routing, fairness, backpressure, reset — many | **UNCHECKED** |
+| `v_ca07` clock divider | period, duty, gating, counter, reset — many | **UNCHECKED** |
+| `v_nw01` ARP engine | frames, cache, timeouts, config — many | **UNCHECKED** |
+| `v_nw03` arb mux | frames, arbitration, backpressure — many | **UNCHECKED** |
+| `v_nw04` PTP clock | timestamps, drift, adjust, wrap, reset — many | **UNCHECKED** |
+
+`v_ca05` and `v_dsp01` are NO CONCLUSION — no `spec/*_iface.sv`, so the emittability
+tool has no port list to read. They are not predictions and must not be counted
+as either outcome.
+
+**What each result would mean.** If the predictions hold, the split is
+task-dependent and a new task's shape is knowable from its spec before anything
+is built. If they do not, the split tracks something else — most likely *when*
+each task was written and by what habit — and the fix is a checklist rather than
+a design principle.
+
+### The prediction is UNTESTED, not refuted — the measurement failed its own validation
+
+The registered predictions came back **0 of 7**. Every task predicted GROUPED
+measured UNCHECKED or tie; every task predicted UNCHECKED measured GROUPED. A
+clean refutation, and I nearly reported it as one.
+
+**Then I validated the measurement against the two tasks already worked by hand.**
+
+| | by hand | proxy |
+| --- | --- | --- |
+| **v_ca06** | C1, C2 grouped · F1, F2, F3 unchecked | C1, C2, C3, D2 grouped · F1, F2, F3 unchecked — **agrees** |
+| **v_ca07** | **C3 and G2 genuinely unchecked**, both confirmed | C3, G2 **grouped** — **wrong on both** |
+
+The proxy classified a candidate as *grouped* if any emittable clause shares its
+**section letter**. That is not "shares an observable". A section groups by
+**subject**, and one subject holds several observables: v_ca07's C1/C2 are the
+counter's *range* and C3 is the counter *after a change*; G1 is the gating
+*bound* and G2 the gating *level*. Same letter, different things to watch.
+
+So the result is:
+
+> **I cannot distinguish "the hypothesis was wrong" from "the measurement was
+> wrong", and in the one place I can check, the measurement is wrong.** The
+> prediction stands unfalsified and untested. Reporting 0 of 7 would have been a
+> refutation manufactured by an instrument that disagrees with hand analysis
+> wherever hand analysis exists.
+
+**This is the run-against-the-repair principle in a third form**, and the
+generalisation is now broader than the tools it came from:
+
+> **Validate a classifier against the cases you have already worked, before
+> trusting it on the cases you have not.** The worked cases are the only ground
+> truth available, they are free, and they are the ones you are least inclined to
+> re-check because you already know the answer.
+
+Registering the prediction is what made this visible. Had I measured first, 0 of
+7 would have looked like a finding rather than like a reason to check the ruler.
+
+**What actually tests it**: the by-hand determination of whether a check exists
+over the same observable — which is the clause-by-clause work itself, on all
+seven. No proxy shortcuts it, and the two shapes are distinguishable only by
+reading what each check watches.
