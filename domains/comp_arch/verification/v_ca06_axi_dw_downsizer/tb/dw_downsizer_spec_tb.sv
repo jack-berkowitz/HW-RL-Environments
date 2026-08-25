@@ -246,11 +246,18 @@ module dw_downsizer_tb;
             if (want_err(a)
                 && (beat_lo(a, dsz(sz), err_beat_of(a)) < beat_hi(a, sz, j)))
               want_r = err_code_of(a);
-            if (s_rresp !== want_r)
-              fail(want_r == 2'b00 ? "D5" : "D6",
-                   $sformatf("%s: R beat %0d carries resp %0b, expected %0b%s",
-                             phase, j, s_rresp, want_r,
-                             (want_r != 2'b00) ? " -- an error is STICKY from the beat it occurs on" : ""));
+            // A ternary between two string LITERALS pads the shorter with NULs to
+            // the longer's width. The empty arm here printed FIFTY NULs into the
+            // middle of this message, and this message is a rule-16 WITNESS --
+            // the string the mutant record is checked against. Plain if/else.
+            if (s_rresp !== want_r) begin
+              if (want_r == 2'b00)
+                fail("D5", $sformatf("%s: R beat %0d carries resp %0b, expected %0b",
+                                     phase, j, s_rresp, want_r));
+              else
+                fail("D6", $sformatf("%s: R beat %0d carries resp %0b, expected %0b -- an error is STICKY from the beat it occurs on",
+                                     phase, j, s_rresp, want_r));
+            end
           end
           if ((s_rdata & lane_mask(a, sz, j)) !== (want & lane_mask(a, sz, j)))
             fail("D1", $sformatf("%s: R beat %0d data %016x, expected %016x on the lanes it covers",
@@ -608,7 +615,11 @@ module dw_downsizer_tb;
     if (cov_wbeats < 70)  fail("FLOOR", $sformatf("only %0d upstream W beats were driven", cov_wbeats));
 
     if (n_fail == 0) $display("RESULT: PASS");
-    else             $display("RESULT: FAIL (%0d failure%s)", n_fail, (n_fail==1)?"":"s");
+    // Same hazard, and this one is worse: the RESULT line is the COUNTING BASIS
+    // every downstream number is read from. It printed "(1 failure )" with an
+    // invisible NUL, and a parser pinned to the plural read that as no failures.
+    else if (n_fail == 1) $display("RESULT: FAIL (1 failure)");
+    else                  $display("RESULT: FAIL (%0d failures)", n_fail);
     $display("  [coverage] reads=%0d writes=%0d refused=%0d unaligned=%0d narrow=%0d size0=%0d",
              cov_reads, cov_writes, cov_refused, cov_unaligned, cov_narrow, cov_size0);
     $display("  [coverage] sparse=%0d zero-strb-beats=%0d fixed1=%0d long=%0d conc offered/taken=%0d/%0d",

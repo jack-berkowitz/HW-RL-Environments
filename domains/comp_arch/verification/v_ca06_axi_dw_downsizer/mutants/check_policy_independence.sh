@@ -73,6 +73,18 @@ done
 
 echo
 echo "reference testbench vs the POLICY-DIVERGENT base and the same ten defects"
+# The two halves must be the SAME SET. This runner globs policy/*.sv, so a
+# generation that failed part way leaves fewer files and every row still reads
+# "as expected" -- a short set is indistinguishable from a complete one in the
+# output. Paired with the generator wiping the directory first, a miscount is
+# now the loud failure and a stale file is impossible.
+n_anchor=$(grep -cE "^module dw_m[0-9]+_" "$T/mutants/mutants.sv")
+n_policy=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | wc -l | tr -d ' ')
+if [ "$n_anchor" -ne "$n_policy" ]; then
+  echo "  RULE24: $n_anchor defects on the anchor but $n_policy re-derivations."
+  echo "          The two halves are not the same set. Re-run gen_mutants.py."
+  exit 2
+fi
 sed 's/module dw_downsizer_alt/module dw_downsizer/' "$T/dut2/dw_downsizer_alt.sv" > "$W/clean_policy.sv"
 r=$fails; run_one "policy base (clean)" PASS $OTHER "$W/clean_policy.sv"; ctl "$r"
 for f in "$T"/mutants/policy/*.sv; do

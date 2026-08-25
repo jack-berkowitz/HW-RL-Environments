@@ -228,13 +228,34 @@ print("wrote mutants.sv: %d mutants" % len(M))
 # --------------------------------------------------------------------------
 POL = os.path.join(HERE, "policy")
 os.makedirs(POL, exist_ok=True)
+
+# THE GENERATOR OWNS THE DIRECTORY THE 5c RUNNER ENUMERATES.
+# check_policy_independence.sh globs policy/*.sv and grades every file it finds,
+# so a file left behind by an earlier naming is graded exactly like a current one
+# and nothing in the output distinguishes them. On v_ca07 that happened and it
+# turned a reported 22/22 into a real 21/22. It was never reachable HERE -- these
+# are wrappers that instantiate dw_downsizer_alt by name rather than embedding
+# it, and no mutant on this task was ever re-keyed -- but "not reachable today"
+# is a property of the history, not of the apparatus.
+#
+# Wiping first means a failed generation leaves a file MISSING, which the runner
+# counts and refuses on, rather than STALE, which it cannot see.
+for f in os.listdir(POL):
+    if f.endswith(".sv"):
+        os.remove(os.path.join(POL, f))
+
+# And every block is checked BEFORE anything is written, so one bad substitution
+# cannot stop the loop and leave the blocks after it unwritten.
+built = []
 for blk in M:
     name = re.search(r"^module (dw_m\d+_\w+)", blk, re.M).group(1)
     pid  = re.sub(r"^dw_m(\d+)_", r"dw_p\1_", name)
     t = re.sub(r"\bdw_downsizer(\s*)#\(", r"dw_downsizer_alt\1#(", blk)   # inner FIRST
     t = t.replace("module %s #(" % name, "module dw_downsizer #(", 1)     # then the decl
-    assert "dw_downsizer_alt #(" in t, name
-    assert t.count("module dw_downsizer #(") == 1, name
+    if "dw_downsizer_alt #(" not in t or t.count("module dw_downsizer #(") != 1:
+        raise SystemExit("policy/%s: substitution did not land as expected" % pid)
+    built.append((pid, t, name))
+for pid, t, name in built:
     open(os.path.join(POL, pid + ".sv"), "w", encoding="utf-8").write(
         "// step 5c: %s re-derived on the policy-divergent implementation.\n" % name + t)
-print("wrote policy/: %d re-derived defects" % len(M))
+print("wrote policy/: %d re-derived defects" % len(built))

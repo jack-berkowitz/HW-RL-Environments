@@ -174,7 +174,7 @@ mutants:
   - {id: dw_m4_fixed_single_refused_from_second, violates: "C3",
      guard: "the second FIXED single-beat request and every one after it",
      defect: "a FIXED burst of exactly one beat is refused, where C3 says it is served",
-     witness: "FAIL [D5] C2:FIXED of ONE beat is SERVED: R beat 0 carries resp 10, expected OKAY (t=2355)"}
+     witness: "FAIL [D5] C2:FIXED of ONE beat is SERVED: R beat 0 carries resp 10, expected 0 (t=2355)"}
   - {id: dw_m5_refused_served_from_third, violates: "C4",
      guard: "the third refused burst and every one after it",
      defect: "a refused burst is served instead: it issues a downstream transaction and answers OKAY",
@@ -254,6 +254,82 @@ unscored_clauses:
     preserving the code, so it violated D7 the moment D7 could be observed.
     The analogue of an unscoreable clause on this side turned out to be a
     wrong second source, not a hidden mutant.
+  exposure_assessment:
+    question: >
+      Was this task's mutant set produced by the pre-fix generator or graded by
+      the pre-fix runner, and if so was the failure reachable?
+    generator_half: >
+      The exposure was present -- no wipe, no validate-before-write -- but the
+      specific failure was NOT REACHABLE, for two independent reasons. These
+      policy files are WRAPPERS that instantiate dw_downsizer_alt by NAME; the
+      runner supplies dut2 at build time, so a file can never carry a stale copy
+      of dut2's source the way v_ca07's in-source re-derivations can. And no
+      mutant on this task was ever re-keyed: git records ten additions in one
+      commit and no delete or rename since.
+    runner_half: >
+      Same shape -- globbed policy/*.sv with no count check -- and the same
+      conclusion. Ten mutants, ten files, names paired, and the recorded 5c block
+      shows exactly ten policy rows.
+    decisive_check: >
+      Not inferred from history. The set was REGENERATED and byte-compared
+      against what was committed: identical, every file. Reasoning about what
+      could have happened is not the same as checking the bytes.
+    both_defences_now_present: true
+
+  rebaseline_under_fixed_apparatus:
+    date: 2026-08-24
+    why: >
+      The 605974d re-baseline was produced by a generator that did not own
+      mutants/policy/ and graded by a runner that globbed it without a count
+      check -- the two apparatus defects found on v_ca07, where they turned a
+      reported 22/22 into a real 21/22. Both are now fixed here. The specific
+      failure was NOT reachable on this task and the evidence is recorded under
+      exposure_assessment below, but "not reachable" was a property of this
+      task's history rather than of its apparatus, and that is not a thing to
+      re-derive every time a number is quoted.
+    verdicts: >
+      UNCHANGED. Ten of ten killed under the current reference and ten of ten
+      under the PRE-extension reference from 605974d^. NEWLY KILLED: none.
+      LOST: none. 5c re-run: 22 of 22, both clean controls pass -- and this was
+      its first run since dut2 changed at 605974d, so the previous figure was a
+      measurement whose base had moved.
+    what_DID_change:
+      - >
+        dw_m4's recorded WITNESS was stale. 605974d re-ran the table but did not
+        re-record the strings, and the extension had rewritten that message from
+        a literal "expected OKAY" to a formatted "expected %0b". Re-synced.
+      - >
+        Two ternaries between STRING LITERALS, both introduced by the extension,
+        both padding the shorter arm with NULs. One printed fifty NULs into the
+        middle of dw_m4's witness -- the string rule 16 licenses. The other
+        printed "RESULT: FAIL (1 failure )", and on v_ca07 that exact form made a
+        parser report a caught control as NOT CAUGHT. Both replaced with plain
+        if/else. No verdict moved; the strings did.
+      - >
+        dw_m10's FAILURE PROFILE degenerated. Pre-extension it produced 49
+        failures, all D4, across seven phases. Under the extension it produces
+        1,024,737, of which all but a handful are A4 in phase B, and its phase
+        coverage collapses to two. The A4 counter retires on s_rlast, which is
+        the signal dw_m10's defect withholds -- so A4 is not an independent
+        detection of it, it is D4's failure re-expressed through a counter that
+        can never decrement. Verdict unchanged, diagnostic value much worse, and
+        any submission with an A4 check will produce the same million-line log.
+    signature_analysis: >
+      Drawn from COMPLETE logs. The first pass was drawn from the reference's
+      40-line print cap and reported a coverage change for dw_m3, dw_m4 and
+      dw_m10 that was display truncation, not measurement. The four capped
+      mutants were re-run against an ANALYSIS COPY of each reference with the cap
+      lifted; the shipped testbench keeps its cap, which is right for a
+      submission-facing log and wrong for a signature comparison.
+    redundancy: >
+      One relation only, and it is the one already recorded: dw_m6's clause@phase
+      signature {C4@C, C4@J} is a strict subset of dw_m5's {C4@C, C4@H, C4@J}.
+      dw_m5 also fires in phase H, the refused WRITES, where dw_m6 cannot because
+      it is a read-only defect -- and a submission checking only the last beat's
+      resp kills dw_m5 and misses dw_m6. Neither is removable. No other pair is
+      equal or nested. dw_m3, dw_m4, dw_m7 and dw_m8 each gained a phase-M entry
+      from the extension without losing any.
+
   history: >
     Found by Agent 3, who noticed m_rresp and m_bresp were pinned to OKAY in the
     reference and raised it as a candidate rather than a finding. The pinning was

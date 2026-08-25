@@ -68,6 +68,32 @@ support for the measurement — it is a reason to re-measure. The order matters:
 argument derived after an observation cannot test that observation, and its
 persuasiveness is uncorrelated with the observation being right.
 
+### It happened a second time on the same module, which makes it a property
+
+**Clause E3, found later and independently.** E3 says disabling must not truncate
+a pulse. Written the way the specification stated it — one cycle of grace after
+`en_i` falls, then low on every input edge — the check **failed the anchor** at
+divisor 5. At an odd divisor the high phase is a half-integer, so its tail runs
+past any whole-cycle grace. The forty-edge figure in the spec had been
+generalised from an even-divisor observation, exactly as the duty rule had been.
+
+Same module, same quantisation, two different clauses, arrived at from opposite
+directions — P2 by an instrument that truncated, E3 by a bound expressed in the
+wrong units. Once is a mistake in a clause. **Twice is a property of the module**:
+this design's contract is half-integral wherever the divisor is odd, and any
+quantity written in whole `clk_i` cycles is wrong at half its domain and right
+everywhere an even divisor is used, which is everywhere one is likely to look
+first.
+
+The fix in both cases was to stop expressing the quantity in cycles. P2 became a
+comparison in raw time units; E3 became a **width** — the final high pulse is a
+full half-period — which is correct at every divisor and needs no constant.
+
+**Rule:** where a contract quantity can be half-integral, treat every
+whole-unit expression of it as a defect until measured at the odd cases. Not a
+clause-level review — a module-level one, because the hazard is in the domain,
+not in the sentence.
+
 ### The count, which is the least interesting part
 
 Three claims that the anchor's documentation was wrong were made about this one

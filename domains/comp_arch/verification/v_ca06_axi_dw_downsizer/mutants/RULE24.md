@@ -7,6 +7,13 @@ numbers are the `witness:` strings and the `policy_independence` figure in
 
 Regenerate with `./witness.sh` and `./check_policy_independence.sh`.
 
+**Both blocks below were re-measured on 2026-08-24**, under a generator that
+wipes `policy/` and validates every substitution before writing, and a 5c runner
+that refuses when the two halves are not the same size. The previous 5c block
+dated from `f5f8e45` and `dut2` changed at `605974d` — so it was a measurement
+whose base had moved underneath it. The re-run agrees with it, but it agrees now
+for a reason that can be checked.
+
 ## Witness runner
 
 The **negative** control is the golden through the same build-and-grep pipeline:
@@ -23,7 +30,7 @@ exits 2 without printing witnesses.
   dw_m1_len_simple_formula_when_unaligned : FAIL [B2] B:reads, UNALIGNED -- B2 follows bytes covered: downstream arlen 7, expected 5 (bytes covered, not beat count) (t=1525)
   dw_m2_size_raised_when_narrow : FAIL [B1] A:reads, aligned: downstream arsize 1, expected min(size,1)=0 (t=85)
   dw_m3_len_short_from_eighth_read : FAIL [B2] A:reads, aligned: downstream arlen 2, expected 3 (bytes covered, not beat count) (t=525)
-  dw_m4_fixed_single_refused_from_second : FAIL [D5] C2:FIXED of ONE beat is SERVED: R beat 0 carries resp 10, expected OKAY (t=2355)
+  dw_m4_fixed_single_refused_from_second : FAIL [D5] C2:FIXED of ONE beat is SERVED: R beat 0 carries resp 10, expected 0 (t=2355)
   dw_m5_refused_served_from_third : FAIL [C4] C:refused reads: refused read, R beat 0 carries resp 0, expected SLVERR on EVERY beat (t=2145)
   dw_m6_slverr_only_on_last_beat : FAIL [C4] C:refused reads: refused read, R beat 0 carries resp 0, expected SLVERR on EVERY beat (t=1985)
   dw_m7_zero_strobe_beat_dropped_midburst : FAIL [E3] F:writes, SPARSE strobes -- E2 and E3: downstream burst has 3 beats, expected exactly 4 -- an unstrobed beat is still a beat (t=4295)
