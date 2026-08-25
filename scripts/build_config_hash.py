@@ -123,6 +123,35 @@ def main():
     print(digest)
     for f in fields:
         print(f"  {f}")
+
+    # THE HASHED ABC VALUE IS NOT NECESSARILY THE ABC TARGET THE BUILD USED.
+    #
+    # run_orfs_build.sh puts ABC_CLOCK_PERIOD_IN_PS=<CLK_PERIOD_NS*1000> on the
+    # MAKE COMMAND LINE whenever CLK_PERIOD_NS is set, and a make-line variable
+    # beats the config. This script only ever sees the config.mk text resolved
+    # against the SDC, so it recorded ABC=10000 on d_ca01 builds whose real
+    # target was 15000 -- correctly measured numbers with a field beside them
+    # describing a different synthesis.
+    #
+    # THE NOTE IS PRINTED AFTER THE DIGEST AND IS NOT IN THE BLOB, deliberately.
+    # Folding the true value into the hash would be the more obvious fix and is
+    # the wrong one: every existing record was hashed without it, so every future
+    # build would become UNCOMPARABLE with the corpus under rule 17 -- including
+    # the six design rows finished this week. The digest is a comparability key,
+    # not a description; what was wrong here was the description.
+    if "CLK_PERIOD_NS" in overrides:
+        try:
+            runtime_abc = int(round(float(overrides["CLK_PERIOD_NS"]) * 1000))
+        except (TypeError, ValueError):
+            runtime_abc = None
+        if runtime_abc is not None:
+            hashed = next((f.split("=", 1)[1] for f in fields
+                           if f.startswith("ABC_CLOCK_PERIOD_IN_PS=")), None)
+            agrees = hashed is not None and hashed.strip() == str(runtime_abc)
+            print(f"  note.abc_runtime_target_ps={runtime_abc}"
+                  f"{'' if agrees else '  (make-line override; the hashed '
+                                       'ABC value above is the config.mk text '
+                                       'resolved against the SDC, not this)'}")
     return 0
 
 
