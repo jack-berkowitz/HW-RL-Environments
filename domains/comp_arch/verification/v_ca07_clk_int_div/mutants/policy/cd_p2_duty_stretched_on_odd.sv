@@ -1,5 +1,6 @@
+// step 5c: this defect re-derived IN dut2's OWN SOURCE, not as a wrapper.
 // v_ca07 SECOND DUT -- an independent implementation. MUST BE ACCEPTED.
-module clk_ratio_div_alt (
+module clk_ratio_div (
   input  logic       clk_i,
   input  logic       rst_ni,
   input  logic       en_i,
@@ -61,6 +62,44 @@ module clk_ratio_div_alt (
 
   // H3: a same-value offer is granted in the SAME cycle and does not gate.
   // L3: a real change is also granted immediately -- the anchor waits.
+  // ---- guard state, in this design's own terms ----------------------------
+  int p_nsame, p_nodd, p_ndefer, p_nen, p_nrst, p_nchange;
+  logic p_en_q, p_def_q;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      p_nsame<=0; p_nodd<=0; p_ndefer<=0; p_nen<=0; p_nchange<=0;
+      p_en_q<=1'b1; p_def_q<=1'b0;
+    end else begin
+      p_en_q <= en_i;
+      if (en_i != p_en_q) p_nen <= p_nen + 1;
+      if ((st == RUN) && div_valid_i) begin
+        if (same) p_nsame <= p_nsame + 1;
+        else begin
+          p_nchange <= p_nchange + 1;
+          if (div_i[0] && div_i >= 4'd3) p_nodd <= p_nodd + 1;
+        end
+      end
+      if ((st == GATE) && div_valid_i && !p_def_q) p_ndefer <= p_ndefer + 1;
+      p_def_q <= (st == GATE) && div_valid_i;
+    end
+  end
+  int p_nrst_q = 0;
+  always_ff @(negedge rst_ni) p_nrst_q <= p_nrst_q + 1;
+
+  // "in transition", READ FROM THE PORTS rather than from st. How long this
+  // design's own GATE state lasts is L2 latitude, and keying a defect on it
+  // made the defect UNREACHABLE here, because this design leaves GATE almost
+  // at once. The window from accepting a change to the first rising edge of
+  // the new clock is the CONTRACT's notion and both bases have it.
+  logic p_busy, p_clk_q;
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) begin p_busy <= 1'b0; p_clk_q <= 1'b0; end
+    else begin
+      p_clk_q <= clk_o;
+      if (div_valid_i && div_ready_o && !same) p_busy <= 1'b1;
+      else if (clk_o && !p_clk_q)              p_busy <= 1'b0;
+    end
+
   assign div_ready_o = (st == RUN) && div_valid_i;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -93,7 +132,8 @@ module clk_ratio_div_alt (
   // The output. G2 says gated means idle LOW, and E3 says disabling must not
   // truncate a pulse, so the enable is taken on the NEGATIVE edge -- it changes
   // while the output is low, in both the pass-through and the divided path.
-  wire divided  = odd ? (phase_p & phase_n) : phase_p;
+  wire divided  = odd ? ((p_nodd >= 3) ? (phase_p | phase_n) : (phase_p & phase_n))
+                     : phase_p;
   wire gate_src = pass ? clk_i : divided;
   logic run_en;
   always_ff @(negedge clk_i or negedge rst_ni)

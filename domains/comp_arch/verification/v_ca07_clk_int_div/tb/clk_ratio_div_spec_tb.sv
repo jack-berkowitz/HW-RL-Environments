@@ -139,6 +139,63 @@ module clk_ratio_div_tb;
   // G1: the gap from ACCEPTANCE to the first rising edge, bounded by 3x the new
   // period. L2 leaves the actual duration free, so only the bound is checked --
   // never a particular value.
+  // ---- E1/E2/E3 as three distinct observables ---------------------------
+  // E1 -- no rising edge while disabled                (counted from rise[])
+  // E2 -- the output returns when en_i returns          (counted from rise[])
+  // E3 -- disabling does not TRUNCATE a pulse, and the output does not idle
+  //       high afterwards. Two separate things, and neither is E1: an output
+  //       stuck HIGH has no rising edges at all, so E1 reports it clean.
+  //
+  // E3 is measured as a WIDTH, not as a deadline. The first version of this
+  // check allowed one cycle of grace and demanded low on every input edge after
+  // it -- and the ANCHOR failed it at divisor 5, because an odd divisor's high
+  // phase is a half-integer and its tail runs past a whole-cycle grace. The
+  // grace number was generalised from one even-divisor observation. The width
+  // of the final high pulse is the thing the clause is actually about and it
+  // needs no such number.
+  localparam int E3_EDGES = 40;
+  int dis_div[] = '{4, 5};
+  task automatic check_disable(input int d);
+    int nhigh, last_fall, last_rise, wid;
+    settle(d);
+    clear_edges(); repeat (per_of(d)*4 + 20) @(posedge clk);
+    if (rise.size() == 0) fail("E2", $sformatf("div %0d: no output while en_i is high", d));
+    clear_edges(); repeat (per_of(d)*2) @(posedge clk);   // one steady pulse, then
+    @(negedge clk) en = 0;                                // drop the enable
+    repeat (per_of(d)*3 + 8) @(posedge clk);              // and let it come to rest
+
+    if (fall.size() == 0 || rise.size() == 0 || rise[$] > fall[$]) begin
+      fail("E3", $sformatf("div %0d: the output never came to rest LOW after en_i fell", d));
+    end else begin
+      last_fall = fall[$];
+      last_rise = -1;
+      foreach (rise[i]) if (rise[i] < last_fall) last_rise = rise[i];
+      wid = last_fall - last_rise;
+      if (last_rise < 0)
+        fail("E3", $sformatf("div %0d: no complete pulse to measure at the stop", d));
+      else if (wid != (per_of(d)*CP)/2)
+        fail("E3", $sformatf("div %0d: the last pulse was %0d time units high, a full one is %0d -- truncated",
+                             d, wid, (per_of(d)*CP)/2));
+    end
+
+    clear_edges(); nhigh = 0;
+    for (int e = 0; e < E3_EDGES; e++) begin
+      @(clk);                                             // BOTH input edges
+      if (clk_o !== 1'b0) nhigh++;
+    end
+    if (nhigh != 0)
+      fail("E3", $sformatf("div %0d: clk_o high on %0d of %0d input edges once at rest",
+                           d, nhigh, E3_EDGES));
+    repeat (80) @(posedge clk);
+    if (rise.size() != 0)
+      fail("E1", $sformatf("div %0d: %0d rising edge(s) while en_i is low", d, rise.size()));
+    @(negedge clk) en = 1;
+    clear_edges(); repeat (per_of(d)*4 + 40) @(posedge clk);
+    if (rise.size() == 0)
+      fail("E2", $sformatf("div %0d: the output did not resume when en_i returned high", d));
+    cov_en++;
+  endtask
+
   task automatic check_change(input int from_d, input int to_d);
     int t, acc, first, gap;
     settle(from_d);
@@ -161,6 +218,16 @@ module clk_ratio_div_tb;
                            from_d, to_d, gap, 3*per_of(to_d)));
     if (gap < 0)
       fail("G1", $sformatf("%0d -> %0d: an edge appeared before acceptance", from_d, to_d));
+    // AND the divisor that actually landed. Measuring only the gap misses a
+    // defect that changes WHICH divisor takes effect: the gap can be perfectly
+    // legal while the period is wrong. Found by step 5c, where exactly such a
+    // defect passed on a base whose gating time does not vary.
+    for (int i = 1; i < rise.size(); i++)
+      if ((rise[i] - rise[i-1]) != per_of(to_d)*CP) begin
+        fail("P1", $sformatf("%0d -> %0d: settled at period %0d, expected %0d",
+                             from_d, to_d, (rise[i]-rise[i-1])/CP, per_of(to_d)));
+        break;
+      end
   endtask
 
   initial begin
@@ -222,8 +289,16 @@ module clk_ratio_div_tb;
       settle(2);
       @(negedge clk); div = 4'd8; div_valid = 1;
       for (t = 0; t < 400; t++) begin @(posedge clk); if (div_ready) break; end
-      @(negedge clk) div_valid = 0;
-      @(negedge clk); div = 4'd3; div_valid = 1;
+      // The second offer lands in the cycle AFTER acceptance, with div_valid_i
+      // held high throughout. Dropping it for a cycle first, which this phase
+      // used to do, spends the only cycle a fast implementation needs to finish
+      // its transition -- and then there is no transition left to offer during,
+      // so the phase quietly stops exercising H4 on exactly the implementations
+      // that make it hardest. How long a transition lasts is L2 latitude; that
+      // there IS one immediately after acceptance is not.
+      // H2 is satisfied: div_i was stable for the whole of the first offer, and
+      // div_ready_o has already risen before it changes.
+      @(negedge clk); div = 4'd3;
       acc2 = -1;
       for (t = 0; t < 600; t++) begin @(posedge clk); if (div_ready) begin acc2 = t; break; end end
       @(negedge clk) div_valid = 0;
@@ -235,22 +310,12 @@ module clk_ratio_div_tb;
     end
 
     phase = "E:enable";
-    begin
-      int t;
-      settle(4);
-      clear_edges(); repeat (60) @(posedge clk);
-      if (rise.size() == 0) fail("E2", "no output while en_i is high");
-      @(negedge clk) en = 0;
-      @(posedge clk);                       // one cycle of grace: E1 bounds the
-      clear_edges();                        // steady state, not the transition
-      repeat (80) @(posedge clk);
-      if (rise.size() != 0)
-        fail("E1", $sformatf("%0d rising edge(s) while en_i is low", rise.size()));
-      @(negedge clk) en = 1;
-      clear_edges(); repeat (80) @(posedge clk);
-      if (rise.size() == 0) fail("E2", "the output did not resume when en_i returned high");
-      cov_en++;
-    end
+    // E1 counts RISING EDGES. An output stuck HIGH has none, so E1 alone reports
+    // a clean disable for an output that never went low -- E3 is what sees that,
+    // and E3 had no instrument at all until step 5c asked for one. Both an even
+    // and an odd divisor: half-integer duty is a different output path, and a
+    // defect on it is invisible at div 4.
+    foreach (dis_div[i]) check_disable(dis_div[i]);
 
     phase = "F:the cycle counter";
     // C1 while the clock RUNS. L5 frees it while gated or disabled, so it is
@@ -407,7 +472,11 @@ module clk_ratio_div_tb;
     // the longer one's width with NULs and the line prints as nothing at all.
     if (selftest)        $display("RESULT: SELFTEST -- not a score");
     else if (n_fail == 0) $display("RESULT: PASS");
-    else                  $display("RESULT: FAIL (%0d failure%s)", n_fail, (n_fail==1)?"":"s");
+    // A ternary between two string LITERALS pads the shorter with NULs, so this
+    // printed "(1 failure )" with an invisible NUL where the "s" would be, and a
+    // parser pinned to "failures)" read it as no failures at all.
+    else if (n_fail == 1) $display("RESULT: FAIL (1 failure)");
+    else                  $display("RESULT: FAIL (%0d failures)", n_fail);
     $finish;
   end
 

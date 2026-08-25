@@ -34,6 +34,7 @@ harness:
   sim_timeout_s: 120
 
 spec: [spec/dw_downsizer_spec.md, spec/dw_downsizer_iface.sv]
+task_text_hash: ca63302d6b23df46
 
 scored_configuration:
   SLV_DATA_W: 64

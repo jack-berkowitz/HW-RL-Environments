@@ -283,7 +283,7 @@ endmodule
 // --------------------------------------------------------------------------
 // cd_m5_second_request_refused -- violates H4
 //   defect: a request offered during a transition is REFUSED rather than deferred: its ready never rises and the requester must offer again
-//   guard : fires only when the second deferral since reset, and every one after it
+//   guard : fires only when the fourth reconfiguration since reset, and every one after it
 // --------------------------------------------------------------------------
 module cd_m5_second_request_refused (
   input  logic       clk_i,
@@ -341,7 +341,7 @@ module cd_m5_second_request_refused (
   // the request must be made again.
   always_ff @(posedge clk_i or negedge rst_ni)
     if (!rst_ni) m_refuse <= 1'b0;
-    else if (div_valid_i && g_busy && !g_same && (g_ndefer >= 2)) m_refuse <= 1'b1;
+    else if (div_valid_i && g_busy && !g_same && (g_nchange >= 4)) m_refuse <= 1'b1;
     else if (!div_valid_i) m_refuse <= 1'b0;
   assign div_ready_o = g_ready & ~m_refuse;
   clk_ratio_div i_g (
@@ -436,11 +436,11 @@ module cd_m6_gate_over_bound_to_passthrough (
 endmodule
 
 // --------------------------------------------------------------------------
-// cd_m7_gate_idles_high_on_odd -- violates G2
-//   defect: while gated the output idles HIGH instead of low
-//   guard : fires only when the divisor in force is odd
+// cd_m7_idle_high_when_disabled_on_odd -- violates E3
+//   defect: while DISABLED the output idles HIGH instead of low
+//   guard : fires only when the divisor in force is odd -- an even divisor disables cleanly
 // --------------------------------------------------------------------------
-module cd_m7_gate_idles_high_on_odd (
+module cd_m7_idle_high_when_disabled_on_odd (
   input  logic       clk_i,
   input  logic       rst_ni,
   input  logic       en_i,
@@ -488,16 +488,11 @@ module cd_m7_gate_idles_high_on_odd (
   int g_nrst_q = 0;
   always_ff @(negedge rst_ni) g_nrst_q <= g_nrst_q + 1;
 
-  logic g_clk; logic m_gated, m_seen;
-  // gated is inferred from the ports: a change was accepted and no edge has
-  // arrived yet
-  always_ff @(posedge clk_i or negedge rst_ni)
-    if (!rst_ni) begin m_gated <= 1'b0; m_seen <= 1'b0; end
-    else begin
-      if (div_valid_i && div_ready_o && !g_same) begin m_gated <= 1'b1; m_seen <= 1'b0; end
-      if (g_clk) begin m_gated <= 1'b0; m_seen <= 1'b1; end
-    end
-  assign clk_o = (m_gated && g_div[0]) ? 1'b1 : g_clk;
+  logic g_clk;
+  // The DISABLED state, not the gated one: how long a gate lasts is L2 latitude,
+  // so a defect only visible during it is only visible on implementations that
+  // gate slowly. The testbench controls how long en_i stays low.
+  assign clk_o = (!en_i && g_div[0]) ? 1'b1 : g_clk;
   clk_ratio_div i_g (
     .clk_i(clk_i),
     .rst_ni(rst_ni),

@@ -131,10 +131,21 @@ was chosen rather than derived it is named as such.
 - **E1.** With `en_i` low the output is stopped: no rising edge occurs.
   *Measured: zero rising edges in 100 cycles.*
 - **E2.** With `en_i` returned high the output resumes at the configured divisor.
-- **E3.** Disabling does not truncate a pulse. `clk_o` is not observed high after
-  `en_i` falls.
-  *Measured at input-edge resolution: low on all 40 input edges after `en_i`
-  fell.*
+- **E3 — disabling does not truncate a pulse, and does not leave the output
+  high.** Two obligations, and neither is E1. When `en_i` falls, the high phase
+  in progress completes at its full width; the output then stays low.
+
+  **Do not write this as a deadline.** "Low on every input edge after `en_i`
+  falls" is the wrong shape, because at an **odd** divisor the high phase is a
+  half-integer and its tail runs past any whole-cycle grace you pick. The
+  quantity the clause is about is the **width of the final high pulse**, which is
+  half the period whatever the divisor. A number of cycles generalised from an
+  even divisor will fail a conforming unit.
+  *Measured: the final high pulse is a full half-period at divisors 4 and 5, and
+  `clk_o` is low on all 40 input edges once at rest.*
+
+  Note that **E1 cannot see the second half of this.** E1 counts rising edges,
+  and an output stuck high has none.
 
 ---
 

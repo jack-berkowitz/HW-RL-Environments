@@ -1,0 +1,308 @@
+title: Glitch-free integer clock divider
+id: v_ca07
+module: clk_ratio_div
+domain: comp_arch
+type: verification
+catalog: TASK_CATALOG.md
+tier: B
+
+oracle_class: A
+reference:
+  refs_lock_repo: pulp-platform/common_cells
+  licence: SHL-0.51
+  mode: vendor
+  file: refs/common_cells/src/clk_int_div.sv
+  also: refs/tech_cells_generic (tc_clk_gating)
+  golden: dut/clk_ratio_div.sv
+  note: >
+    SHIPS NO RTL. The task ships spec/clk_ratio_div_iface.sv (port map) and
+    spec/clk_ratio_div_spec.md only. dut/ holds the anchor VERBATIM plus a
+    Class A port shim, used for scoring and never given to a submission.
+  provenance_caveat: >
+    The files are present at the paths refs.manifest.yaml names, in a repo
+    refs.lock pins. Their CONTENTS have not been verified against upstream at
+    that SHA -- that needs network, egress is closed. Attests local state only.
+
+harness:
+  golden_top: clk_ratio_div
+  tb_module: clk_ratio_div_tb
+  conformant_prefix: cdc_c
+  mutant_prefix: cd_m
+  golden_file: dut/clk_ratio_div.sv
+  golden_support: [dut/clk_int_div.sv, dut/tc_clk.sv]
+  conformant_file: conformant/conformant_perturbations.sv
+  mutant_file: mutants/mutants.sv
+  sim_timeout_s: 120
+
+spec: [spec/clk_ratio_div_spec.md, spec/clk_ratio_div_iface.sv]
+task_text_hash: 0d5cc8575568fdb1
+
+scored_configuration:
+  DIV_VALUE_WIDTH: 4
+  DEFAULT_DIV_VALUE: 0
+  ENABLE_CLOCK_IN_RESET: 0
+  rationale: >
+    Divisors 0..15 covers the degenerate pair (0 and 1 both mean pass-through),
+    the smallest real division, the odd divisors where a 50% duty cycle is a
+    strong claim, and a range wide enough that a reconfiguration has somewhere
+    to go. The other two are pinned because neither is contract-interesting: one
+    is the reset value the contract already fixes, the other is a build-time
+    choice about behaviour while reset is asserted, which no clause depends on.
+
+scoring:
+  validity_gate: submission must PASS the golden DUT
+  unpremised_reliance: must PASS dut2 and all five conformant perturbations
+  fault_detection: reported PER MUTANT, never as a rate
+
+scoring_ceiling:
+  reference: 10 of 10
+  licensed_by: >
+    Observed run on 2026-08-24: anchor PASS, dut2 PASS, all five conformant
+    perturbations PASS, all ten guarded mutants killed with a named clause
+    failure each, both H3-violating controls rejected on H3 alone, and the
+    all-outputs-high control rejected with 181 failures. Reproduction record in
+    mutants/RULE24.md.
+  caveat: >
+    The reference was developed against SEVEN legal implementations rather than
+    fitted to the anchor, and it found three defects in this task's own material
+    while being written -- the duty rule in the specification, a glitch in dut2,
+    and two stimulus gaps of its own. That is a stronger provenance than a
+    ceiling reached by extending a reference until it met the mutants.
+
+second_dut:
+  status: WIRED
+  file: dut2/clk_ratio_div_alt.sv
+  note: >
+    An independent implementation written from the spec alone. It does not
+    instantiate the anchor and shares no code with it: a counter with a
+    half-cycle-delayed phase, where the anchor is a state machine driving a
+    clock-gate cell.
+  differences: >
+    It takes the OPPOSITE legal choice on all five latitude clauses -- L1 phase,
+    L2 gating length, L3 ready timing, L4 deferral length, L5 the counter while
+    gated or disabled.
+  defects_found_in_it_while_building: >
+    Three, and all three by full enumeration or by a reference extension rather
+    than by inspection. (1) A G1 violation, gap 4 against a bound of 3, because
+    a negedge enable register added a cycle silently. (2) A 4-bit overflow at
+    divisor 15, where div_q + 1 wraps to 0 -- found only by sweeping all
+    sixteen. (3) A GLITCH across reconfiguration: a half-cycle runt and then a
+    short pulse, because the output gate opened onto a phase that was already
+    high. The third was found in step 5c, by the reference extension that step
+    forced. See policy_derivation.
+
+conformant_perturbations:
+  - {id: cdc_c1_accept_window_4, licence: L3, reference_tb_verdict: PASS,
+     change: "div_ready_o admitted only in a 4-cycle window"}
+  - {id: cdc_c2_accept_window_8, licence: L3, reference_tb_verdict: PASS,
+     change: "the same window, 8 cycles -- a different latency, still legal"}
+  - {id: cdc_c3_extra_gating, licence: L2, reference_tb_verdict: PASS,
+     change: "the output gated for longer across a change, below G1's bound"}
+  - {id: cdc_c4_count_zero_when_disabled, licence: L5, reference_tb_verdict: PASS,
+     change: "cycl_count_o forced to 0 while the output is gated or disabled"}
+  - {id: cdc_c5_count_frozen_when_disabled, licence: L5, reference_tb_verdict: PASS,
+     change: "cycl_count_o frozen at its last value instead -- the opposite reading"}
+  L1_is_not_perturbable:
+    recorded_deliberately: true
+    detail: >
+      L1 -- the phase of clk_o relative to clk_i -- has NO conformant
+      perturbation, and that is a property of the latitude, not an omission.
+      Shifting the phase of an output clock means re-timing the clock itself;
+      any wrapper that does it either delays the output, which changes the
+      gating gap G1 measures, or re-registers it, which changes the duty P2
+      measures. There is no way to turn this knob ALONE from outside the design.
+      dut2 exercises L1 instead, by beginning its periods on a different input
+      edge from the anchor's -- which is the only place in this task where the
+      second implementation is doing work no perturbation could do.
+  gating_discipline: >
+    Every knob is div_ready_o, extra output gating, or the counter in a state L5
+    frees. None gates div_valid_i once asserted, and none touches the same-value
+    path -- see negative_controls, where the first drafts of c1 and c3 did
+    exactly that and were refused.
+
+policy_derivation:
+  method: in_source_rederivation
+  what_was_done: >
+    Each of the ten defects is written into dut2/clk_ratio_div_alt.sv's OWN
+    SOURCE, in that design's terms -- a counter and a half-cycle-delayed phase --
+    rather than as the same wrapper pointed at a second base.
+  strength: STRONG -- this is the method that CAN fail, and it did
+  what_it_establishes: >
+    That each guard is expressible over quantities an INDEPENDENT reading of the
+    contract also has. A guard that depends on something only the anchor has
+    cannot be written here and surfaces as a defect the divergent base does not
+    catch. Nothing holds by construction.
+  comparability: >
+    A 22/22 from this method is NOT the same claim as a 22/22 from
+    wrapper_pointed -- v_ca06's, for instance -- where the guard logic is
+    literally the same code on both bases and the property cannot fail. A
+    results table printing them in one column is comparing two different things.
+    Report the method alongside the number.
+  what_it_cost: >
+    Four mismatches on the first run and one that took three passes to diagnose.
+    Every one was a fault in this task's apparatus rather than a hard defect:
+    a reference that measured a gating gap but never the period the change
+    settled at; two guards keyed on how long a transition lasts, which is L2
+    latitude and not a contract quantity; an off-by-one; and a stimulus that
+    dropped div_valid_i for the one cycle that IS a fast implementation's whole
+    transition, so phase D stopped exercising H4 on exactly the implementations
+    that make it hardest. Full account in mutants/RULE24.md.
+  policy_independence: >
+    22 of 22: both clean implementations pass and every defect is caught on both
+    bases. Rerun with mutants/check_policy_independence.sh, whose "(clean)" lines
+    are rule-24 controls, which ABORTS on a failing control, and which now also
+    refuses when the two halves are not the same size.
+
+mutants:
+  design: >
+    GUARDED, uniformly. Each defect is a wrong behaviour paired with a rare
+    predicate over contract-level state read from the PORTS. Reading ports only
+    is what makes 5c possible: a guard reading an implementation-private
+    register cannot be re-derived in a design that has no such register.
+  weighting: >
+    Seven of the ten are ORDINAL or DEPTH conditions, on evidence from two
+    independent measurements. v_nw01 (5 of 10) and the incognito v_ai02 (4 of
+    10) split the same way: a condition that is a property of a single event
+    gets caught, and a condition on the nth occurrence gets missed.
+  - {id: cd_m1_period_short_on_large_divisors, violates: P1,
+     guard: "the divisor is 8 or more -- every smaller divisor is exact",
+     defect: "the period is one clk_i cycle shorter than the divisor asks for",
+     witness: "FAIL [P1] A:the divisor ladder: div=8 period 7, expected 8 clk_i cycles (cyc=1593)"}
+  - {id: cd_m2_duty_stretched_on_odd, violates: P2,
+     guard: "the divisor is odd AND it is the third odd divisor used or later",
+     defect: "the high phase is extended by half a clk_i cycle -- this is the WRONG DUTY RULE this task's own specification carried until the reference caught it",
+     witness: "FAIL [P2] A:the divisor ladder: div=11 high phase 60 time units, expected 55 (half of a 110-unit period) (cyc=2280)"}
+  - {id: cd_m3_one_not_passthrough_after_large, violates: P3,
+     guard: "the divisor in force when 1 is requested was 8 or more",
+     defect: "divisor 1 divides by two instead of passing through",
+     witness: "FAIL [G1] H:LARGE divisor down to pass-through: 8 -> 1: gated 4 cycles from acceptance, bound is 3 (cyc=8309)"}
+  - {id: cd_m4_same_value_gates_from_second, violates: H3,
+     guard: "the second same-value request since reset, and every one after it",
+     defect: "a same-value request gates the clock, where H3 says it must not",
+     witness: "FAIL [H3] C:a SAME-VALUE request is a no-op: a same-value request elongated a period to 5; it must not gate (cyc=6156)"}
+  - {id: cd_m5_second_request_refused, violates: H4,
+     guard: "the fourth reconfiguration since reset, and every one after it",
+     defect: "a request offered during a transition is REFUSED rather than deferred: its ready never rises and the requester must offer again",
+     witness: "FAIL [H4] D:a second request during a transition is DEFERRED, not refused: a second request during a transition was never accepted in 600 cycles (cyc=6884)"}
+  - {id: cd_m6_gate_over_bound_to_passthrough, violates: G1,
+     guard: "the change is TO pass-through, where the bound is exactly 3 and therefore tight -- every other transition has slack and hides it",
+     defect: "the clock is gated one clk_i cycle longer than G1 permits",
+     witness: "FAIL [G1] B:reconfiguration, the gating bound from acceptance: 4 -> 0: gated 4 cycles from acceptance, bound is 3 (cyc=4808)"}
+  - {id: cd_m7_idle_high_when_disabled_on_odd, violates: E3,
+     guard: "the divisor in force is odd -- an even divisor disables cleanly",
+     defect: "while DISABLED the output idles HIGH instead of low",
+     witness: "FAIL [E3] E:enable: div 5: the output never came to rest LOW after en_i fell (cyc=7120)"}
+  - {id: cd_m8_disable_late_after_four_toggles, violates: E1,
+     guard: "the fourth en_i transition since reset, and every one after it",
+     defect: "disabling takes two extra clk_i cycles, so edges appear after en_i falls",
+     witness: "FAIL [E1] J:REPEATED enable toggles: toggle 0: 1 rising edge(s) while en_i is low (cyc=10183)"}
+  - {id: cd_m9_counter_wraps_late_on_large, violates: C1,
+     guard: "the divisor in force is 6 or more",
+     defect: "cycl_count_o reaches div_i instead of wrapping at div_i - 1",
+     witness: "FAIL [C1] F:the cycle counter: div=6: cycl_count_o reached 6, range is 0..5 (cyc=7951)"}
+  - {id: cd_m10_reset_keeps_divisor_from_second, violates: R2,
+     guard: "the second reset since power-up, and every one after it",
+     defect: "reset leaves the last configured divisor in force instead of restoring the default",
+     witness: "FAIL [R2] G2:a SECOND reset: after the SECOND reset the period is 7, expected 1 -- reset restores the DEFAULT divisor every time, not only the first (cyc=10817)"}
+  all_have_nonequivalence_witnesses: true
+  evidence_type: witness
+  witness_runner: mutants/witness.sh
+  rule24_record: mutants/RULE24.md
+  generator: mutants/gen_mutants.py
+  reference_reachability: >
+    FIVE of the ten survived the first run and NONE was a difficulty result.
+    cd_m3's ladder was ordered, so a defect conditioned on coming DOWN from a
+    large divisor never saw one. cd_m5 was NOT A DEFECT: it gated div_valid_i
+    and div_ready_o together, which merely DEFERS, and H4 permits deferral --
+    the same discipline that keeps a conformant perturbation conformant also
+    neuters a mutant, and the two are indistinguishable by inspection. cd_m6's
+    countdown was one negedge short and raced the deassertion. cd_m8's two-cycle
+    delay was invisible inside a four-cycle period. cd_m10 wanted a second reset
+    and the reference issued one. Three were fixed in the reference and two in
+    the mutant. A survivor is a question about the apparatus.
+  generator_owns_its_output: >
+    gen_mutants.py WIPES mutants/policy/ before writing, and validates every
+    substitution before writing any file. Both because of a real failure: a
+    re-keyed mutant was renamed, both names were present in a directory the 5c
+    runner globs, and the stale copy had been built against a dut2 since
+    corrected -- and it was graded. A generator that writes into a directory a
+    runner enumerates must own that directory, or an orphan is indistinguishable
+    from a current artefact. The 22/22 measured before this was found is VOID
+    and was re-measured.
+
+unscored_clauses:
+  WHY_THIS_EXISTS: >
+    Stated so a reader comparing the clause list to the mutant list does not
+    assume coverage that is not there.
+  clauses:
+    - id: P3
+      text: 0 and 1 are a degenerate pair -- both mean pass-through
+      status: >
+        PARTLY UNSCOREABLE, and this is the same shape as v_ca06's D6/E6 rather
+        than a different thing. Pass-through ITSELF is scored -- cd_m3 breaks it
+        and is caught. What cannot be scored is any difference BETWEEN 0 and 1:
+        they are observationally identical, so no testbench can distinguish them
+        and no fault can be keyed on the distinction. A submission is neither
+        rewarded for checking it nor penalised for treating the two as one
+        value. The spec says so in the clause itself, so it is not left to be
+        inferred from silence.
+    - id: X1
+      text: nothing is required of any output while rst_ni is low
+      status: EXCLUSION, not a clause -- nothing to score in either direction
+    - id: X4
+      text: test_mode_en_i, pinned low
+      status: EXCLUSION -- pinned by the scored configuration, never exercised
+
+negative_controls:
+  null_testbench:
+    status: PASS -- rejected
+    detail: >
+      negctl/null_tb.sv declares the module, drives nothing, never instantiates
+      the design and prints RESULT: PASS. The harness runs a gate mutant with
+      every output tied high and requires a submission to REJECT it; this cannot,
+      so it is reported INVALID and EXCLUDED FROM SCORING.
+  stuck_high_dut:
+    status: PASS -- caught
+    detail: "181 failures across {C1, E2, E3, G1, P1}."
+  reset_polarity_dut:
+    status: PASS -- caught
+    detail: >
+      159 failures across {H1, P1} -- caught on clauses, not by the watchdog.
+  control_selection_note: >
+    stuck_high and reset_polarity fail on the SAME first line -- div=0 produced
+    no rising edges -- for two different reasons: an output stuck high has no
+    rising edges, and a design held in reset has no output. A first-failure line
+    alone would present them as one demonstration repeated. The PROFILES separate
+    them, and the witness runner reports the profile for that reason. Two
+    controls whose observables coincide are one control.
+  h3_violating_first_drafts:
+    status: PASS -- both caught, on H3 and on nothing else
+    file: negctl/h3_violating_perturbations.sv
+    detail: >
+      The strongest evidence on this task, and NEITHER WAS BUILT TO BE CAUGHT.
+      These are the first drafts of conformant perturbations c1 and c3, preserved
+      verbatim. Both were written as LEGAL variants turning latitude L3 and L2
+      genuinely leave free, and both broke H3 by failing to distinguish a real
+      change from a request for the value already in force. The reference refused
+      them -- 1 failure and 2 failures respectively, both on H3, no collateral.
+      A gate mutant with every output tied high demonstrates a FLOOR. This
+      demonstrates DISCRIMINATION: the reference accepts legal variants and
+      rejects artefacts constructed to be legal, on the clause they actually
+      broke. It cost nothing, because the two mistakes were already made, and it
+      is a stronger demonstration than the gate mutant for that reason.
+
+counting_basis:
+  policy: >
+    Every number the harness reports is counted from a RESULT LINE the testbench
+    emits, never from a text match in the log, and this is a property of the
+    runner rather than a thing to remember. Two mistakes forced it: a grep for
+    the word VIOLATION matched the harness's own explanatory prose and reported
+    one violation for every implementation INCLUDING the anchor; and a profile
+    that counted printed FAIL lines reported exactly 40 for two controls that
+    differ by 22 failures, because the testbench stops printing at 40 and keeps
+    counting. The runner now cross-checks two readings of the same run and
+    refuses if they disagree.
+
+watchdog:
+  tb_sim_time_limit: 40ms
+  harness_sim_timeout_s: 120
