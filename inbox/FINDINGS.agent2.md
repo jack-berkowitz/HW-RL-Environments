@@ -792,3 +792,90 @@ vacuity class at all. I had merged two different defects into one verdict.
 - *Unfalsifiable* and *unreportable* are different failures with different fixes
   — a forcing clause versus an instrument — and they look identical from the
   clause list.
+
+---
+
+## Candidate — a coverage floor that counts ATTEMPTS cannot see a suppressed antecedent
+
+**The floor I wrote to guarantee H4 was exercised is the reason nothing objected
+when H4 was not exercised.**
+
+v_ca07's reference carries a floor for clause H4 — "a request during a transition
+is DEFERRED, not refused":
+
+```systemverilog
+  if (acc2 < 0) fail("H4", "... never accepted in 600 cycles");
+  cov_defer++;                       // <- unconditional
+  ...
+  if (cov_defer < 1) fail("FLOOR", "a second request during a transition was
+                                    never DRIVEN -- H4 untested");
+```
+
+`cov_defer++` fires whether or not a deferral happened, and the floor's own words
+name the wrong observable: **driven**, not *landed in the window*. Against the
+fastest-legal-resume control the second request was driven, the floor counted it,
+the antecedent was empty, and the run passed in silence — while the H4 mutant
+re-derived on that base survived undetected.
+
+**The floor asserted the clause was tested at the exact moment the clause was
+vacuous**, and it did so because it counts my stimulus rather than the design's
+state. A floor over stimulus is the right shape for "did the harness try"; it is
+the wrong shape for "was the clause exercised", and those read identically in the
+source.
+
+**The correct shape is a count of the CONDITION, at the ports.** AGENT-DESIGN's
+rule-36 gate does this and it is why theirs works: `h3_guard_true == 0` counts the
+cycles on which the antecedent actually held, so a design that evades the
+antecedent trips it. Mine counts the cycles on which I tried.
+
+**Rule:** a coverage floor must count the state the clause is conditioned on, not
+the stimulus intended to produce it. Where the design controls whether that state
+is reached — and latitude clauses routinely give it that control — the two
+diverge exactly when it matters, and the attempt-counter reports success.
+
+**Corollary, from AGENT-DESIGN's F86 correction:** a condition-counting gate is a
+*partial* detector for an unfalsifiable clause. It makes the evasion **visible
+without making it non-conforming** — a submission failing that way can correctly
+argue it satisfies every clause, and the failure is the harness objecting that it
+cannot tell. The mirror clause is still needed. Their diagnostic is worth taking
+whole: a failure at `phase=<clause>` means the consequent was violated and the
+clause has force; a failure at `phase=final` / "never exercised" means the
+antecedent was suppressed.
+
+---
+
+## Candidate — controls that exist, are recorded as passing, and that no runner runs
+
+**Found by testing a peer's report against my own surface instead of assuming it
+transferred.**
+
+AGENT-DESIGN reported that `sim_candidate.sh` refuses controls held outside a
+literal directory list, and flagged it as likely to hit my sweep. It does not —
+that gate is on the design path and my scorer has no equivalent. But checking
+turned up the same *class* of defect one step over:
+
+| | |
+| --- | --- |
+| tasks of mine holding `negctl/` controls | **7** |
+| whose own runner exercises them | **1** (v_ca07) |
+| occurrences of `negctl` anywhere in `scripts/` | **1, and it is a comment** |
+
+Twenty-one negative controls across six tasks are built, committed, and recorded
+in `task.yaml` with verdicts — *"PASS — caught"*, *"26 failures, every one A4"*,
+*"both caught, on H3 and on nothing else"* — and **nothing in any repeatable path
+runs them.** Those verdicts were true when measured by hand and no mechanism will
+ever notice when they stop being true.
+
+This is the shape that produced v_ai02's `task.yaml` asserting 22 of 22 while its
+own record read "(not yet run for this task)", and it is the shape of a stated
+measurement with no instrument. A control is not apparatus until something runs
+it on a schedule someone else controls; until then it is a claim with a source
+file attached.
+
+**What makes it hard to see:** the control *works*. Run it by hand and it does
+exactly what the record says. Nothing is wrong with the artefact — what is missing
+is the path, and a path is invisible in every file you would think to open.
+
+**Rule:** a control belongs to whatever runs it, not to whatever directory holds
+it. If no runner enumerates it, its recorded verdict is a historical note about
+one afternoon, and should be written as one or wired into a runner.
