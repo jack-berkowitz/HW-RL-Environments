@@ -114,9 +114,23 @@ the line, and the reader sees a healthy number. If two things fire, they get two
 names.
 """
 import re
+
+# LEADING WHITESPACE IS ALLOWED, AND THE ANCHOR USED TO BE COLUMN 0.
+# Every regex in this file was `^`-anchored and every one of them was correct
+# only because its input happens to start at column 0 -- Verilator emits
+# warnings there, `$display` emits there, markdown tables and headings sit
+# there. That is a property of the INPUT, not of the method.
+#
+# It cost two rows in a corpus sweep: a `task_text_hash:` field indented by two
+# and another by four read as ABSENT, which is a legitimate state 14 tasks
+# occupy, so the miss landed in a plausible bucket instead of an implausible
+# one. AGENT-DESIGN-43a92055's parser had the same defect and their remedy is
+# the one taken here: not care, but A CASE LIST THAT FAILS WHEN THE SCOPE
+# NARROWS. The self-test below carries indented and tab-indented forms.
+
 import sys
 
-LINE = re.compile(r"^FIRED\s+([A-Za-z_][\w.:-]*)\s+(\d+)\s*$", re.M)
+LINE = re.compile(r"^[ \t]*FIRED\s+([A-Za-z_][\w.:-]*)\s+(\d+)\s*$", re.M)
 
 
 def scan(text):

@@ -87,11 +87,25 @@ Run it on both logs, or on one `--binary -Wall` build.
 """
 import os
 import re
+
+# LEADING WHITESPACE IS ALLOWED, AND THE ANCHOR USED TO BE COLUMN 0.
+# Every regex in this file was `^`-anchored and every one of them was correct
+# only because its input happens to start at column 0 -- Verilator emits
+# warnings there, `$display` emits there, markdown tables and headings sit
+# there. That is a property of the INPUT, not of the method.
+#
+# It cost two rows in a corpus sweep: a `task_text_hash:` field indented by two
+# and another by four read as ABSENT, which is a legitimate state 14 tasks
+# occupy, so the miss landed in a plausible bucket instead of an implausible
+# one. AGENT-DESIGN-43a92055's parser had the same defect and their remedy is
+# the one taken here: not care, but A CASE LIST THAT FAILS WHEN THE SCOPE
+# NARROWS. The self-test below carries indented and tab-indented forms.
+
 import sys
 
 REFUSE = ("UNDRIVEN", "MULTIDRIVEN", "UNOPTFLAT", "IMPLICIT", "LATCH",
           "BLKANDNBLK", "PINMISSING")
-WARN = re.compile(r"^%Warning-([A-Z0-9]+):\s*([^:]+):(\d+):\d*:\s*(.*)$", re.M)
+WARN = re.compile(r"^[ \t]*%Warning-([A-Z0-9]+):\s*([^:]+):(\d+):\d*:\s*(.*)$", re.M)
 
 
 def owned(path, task):

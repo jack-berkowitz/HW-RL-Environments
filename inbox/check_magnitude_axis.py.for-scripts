@@ -38,9 +38,23 @@ also a refusal -- an unstated axis cannot be checked against anything, and
 treating it as agreement is the defect one level up.
 """
 import re
+
+# LEADING WHITESPACE IS ALLOWED, AND THE ANCHOR USED TO BE COLUMN 0.
+# Every regex in this file was `^`-anchored and every one of them was correct
+# only because its input happens to start at column 0 -- Verilator emits
+# warnings there, `$display` emits there, markdown tables and headings sit
+# there. That is a property of the INPUT, not of the method.
+#
+# It cost two rows in a corpus sweep: a `task_text_hash:` field indented by two
+# and another by four read as ABSENT, which is a legitimate state 14 tasks
+# occupy, so the miss landed in a plausible bucket instead of an implausible
+# one. AGENT-DESIGN-43a92055's parser had the same defect and their remedy is
+# the one taken here: not care, but A CASE LIST THAT FAILS WHEN THE SCOPE
+# NARROWS. The self-test below carries indented and tab-indented forms.
+
 import sys
 
-ROW = re.compile(r"^\|\s*`?(\w+)`?\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|", re.M)
+ROW = re.compile(r"^[ \t]*\|\s*`?(\w+)`?\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|", re.M)
 NORM = re.compile(r"[^a-z]+")
 
 
