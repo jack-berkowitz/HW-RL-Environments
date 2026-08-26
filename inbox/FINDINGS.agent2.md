@@ -2948,3 +2948,134 @@ Two rows are worth pulling out because they show both signs:
 enumerated by hand.** The hand pass found 16 grouped clauses among 44
 *candidates*; the shared-block scan says the real population is elsewhere and
 larger, exactly as the founding case predicted.
+
+
+---
+
+## SCOPING — the timing-axis sweep, costed before building
+
+**Asked for a cost, not a build. Here it is, and the recommendation is not the
+instrument as specified.**
+
+### What it would be
+
+For each interval a task pins at its most permissive value, re-run the REFERENCE
+at other values and diff **the reference's own verdict**. Four axes, none of them
+a signal:
+
+| axis | state |
+|---|---|
+| 1. gap between consecutive beats on each source-driven channel | **the one that found D6.** Not instrumented anywhere |
+| 2. ready duty cycle on each sink-driven channel | **already built** — the free-running LFSR backpressure, landed on v_ca06 and v_ca03. Two of eleven |
+| 3. gap between transactions | not instrumented |
+| 4. transactions in flight | often bounded by the task's own parameters; not freely variable everywhere |
+
+### Why it costs what it costs, and it is not the running
+
+`check_fired.py` and `check_artefact_warnings.py` were cheap because **they read
+logs**. A timing sweep must *inject* timing into a testbench, and every testbench
+drives its stimulus differently. **There is no common hook and there cannot be
+one.** Every hour of this is per-task hand work.
+
+The measured precedent is v_ca06, where I did exactly this by hand:
+
+- adding `RGAP` to the downstream R responder: ~10 lines and one parameter — cheap
+- **widening the inter-phase drain from 40 cycles to 600 — expensive, and the
+  part that does not generalise.** A slow responder overruns whatever phase
+  structure a testbench has, and each testbench's structure breaks differently
+- the first reading came back **43 failures across seven clause ids** and looked
+  like "the anchor collapses under backpressure". It was the drain. Four of my
+  seven diagnostic runs on that task went into separating a real reference
+  failure from a phase-structure artefact
+
+> The cost is not the sweep. It is telling a reference defect apart from a
+> testbench that was never built to be slowed down, and that judgement does not
+> transfer between tasks.
+
+### The estimate
+
+| item | cost |
+|---|---|
+| axis 1 instrumentation, per task | 1–2 h, dominated by drain/phase diagnosis |
+| axis 3 instrumentation, per task | ~30 min |
+| axis 2 | done on 2 of 11; ~1 h each for the rest |
+| builds and runs | ~90 s per build; 4 settings per axis is 8 min per task |
+| **axes 1 and 3 across eleven** | **15–25 hours** |
+
+And the yield is unknown. **D6 is one instance.** I have no base rate, and a
+15–25 hour instrument justified by a single finding is exactly the sort of
+investment this file has been criticising all week.
+
+### What I would build instead, and why
+
+**A single perturbed rerun, not a sweep.** Run each reference once with every
+responder slowed by a fixed gap and every inter-transaction gap widened, and
+report only *did the reference still pass its own spec*. Then sweep for a
+threshold **only on the tasks where that one run fails.**
+
+    cheap detector  ->  expensive diagnostic  ->  run the diagnostic only where
+                                                  the detector fired
+
+Cost: the same per-task instrumentation for axis 1 (unavoidable), but **one build
+per task instead of N**, and no threshold-finding on tasks that do not need it.
+**~1.5–2 days** against 3–4 for the full sweep, and it finds every task that has
+a D6, differing only in that it does not immediately say at what depth.
+
+On v_ca06 this shape would have worked: the golden fails at `RGAP=4` and the
+threshold hunt (0,1,2,3,5,8,16) was seven extra builds that told me *three idle
+cycles* — a number that is interesting but was not needed to establish the defect.
+
+**One caution, from today.** The instrumentation is a testbench edit on all
+eleven, and a mechanical edit on all eleven is what broke v_ca07's build this
+afternoon — the insertion anchored on a line that was an `else if` and split the
+chain. **This one should be hand-done per task.** There is no anchor a script can
+trust, because the thing being edited is precisely each testbench's idiosyncratic
+stimulus structure.
+
+---
+
+## THE STATE OF THE APPARATUS, written down while it is true
+
+**The apparatus is now much better at NAMING its failure modes than at CATCHING
+them.**
+
+Seven defects were found this week. What found each:
+
+| | found by |
+|---|---|
+| the combinational loop through the DUT | Verilator — reported, diluted, unread. Caught because 26 identical failures appeared across four one-hot variants |
+| the inert conformant channel | Verilator lint — reported, diluted, unread. Surfaced only when a clause finally needed that channel |
+| D6's fast-path stickiness | nothing — varying a timing parameter no instrument names |
+| the dangling `else` and the double RESULT line | nothing — running eleven testbenches and counting RESULT lines by hand |
+| the negative control that passed | nothing — asking "did it fire", which nothing asked |
+| `ts_step_o` connected and never read | `grep -c` |
+| the counter race | backpressure happening to align two events |
+
+**Two had tooling that reported them and was not read. Five had no instrument at
+all.**
+
+After this week: two have tools — `check_fired.py`, `check_artefact_warnings.py`
+— and **neither is wired into the scoring path**, because they sit in
+`inbox/*.for-scripts` and `scripts/` is not mine. Two more have named-but-unbuilt
+instruments. `must_fire` is now declared on all eleven, which is the one item
+that moved from named to installed.
+
+> **A task can go from spec to scored verdicts today, unattended, and it will
+> emit verdicts that look exactly like correct ones whether or not they are.**
+> That is precisely the class this week established: *right by convergence*,
+> *green while inert*, *passed because it never ran*.
+
+**Five new classes appeared in five days and the rate is not visibly declining.**
+That, more than any checklist, is the answer to whether the pipeline can be left
+alone. A list of four remaining items implies the list is nearly finished; the
+observed rate says it is not.
+
+**The argument for having spent the week this way is that naming is what lets
+someone else catch them.** Every one of these was invisible until it had a name,
+and three of them were then found again by other agents within a day of the name
+existing — the compile-warning class on the PPA side, the `exclusive: true` mirror
+on the design side, the reset-clause habit on a third task. **That is the return,
+and it is real.**
+
+**It is not the same as being able to walk away from it**, and this file should
+not be read as claiming otherwise.

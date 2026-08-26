@@ -300,7 +300,8 @@ e1_mutant:
     error, of the wrong kind, so the response is still an error and only the
     CODE is wrong
   measured: >
-    56 failures, EVERY ONE E1, and nothing else fires. That is what makes it
+    56 failures, EVERY ONE E1, and nothing else fires AS OF 2026-08-25. That is
+    what makes it
     disjoint from iw_m8 rather than a stronger version of it.
   why_it_was_added: >
     iw_m8_bresp_wrong_when_full is a WRONG RESPONSE mutant. CODE PRESERVATION is

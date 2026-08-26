@@ -537,7 +537,7 @@ d6_narrowed_to_ownership:
     beat N cycles later -- no wrapper, no valid gating, unambiguously legal for
     a slave:
       0, 1, 2 idle cycles -> PASS (persists)
-      3, 4, 8 idle cycles -> FAIL, 9 x D6 and nothing else
+      3, 4, 8 idle cycles -> FAIL, 9 x D6 and nothing else AS OF 2026-08-25
     dut2 persists at every depth, so the clause was satisfiable; the reference
     just did not satisfy it. The task had never stalled that path.
   which_half: >
