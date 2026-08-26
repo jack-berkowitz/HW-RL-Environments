@@ -345,6 +345,35 @@ exact port list below. No package, no include, nothing outside the file.
 //   R3. Reset discards work in flight; no result from before reset may appear
 //       afterwards.
 // -----------------------------------------------------------------------------
+// TOOL REQUIREMENTS -- stated, because a submission cannot pass what it is not told
+// -----------------------------------------------------------------------------
+//   T1. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator.
+//       Simulation runs on Verilator; physical synthesis reads the same file
+//       with slang. They disagree about what is legal, so a file one accepts and
+//       the other rejects cannot be built -- and a submission that cannot be
+//       built produces NO PPA NUMBER AT ALL, recorded as a failure rather than
+//       as a missing measurement. One frontend accepting a file does not make
+//       it legal.
+//
+//       THIS TASK CARRIED NO SUCH CLAUSE UNTIL NOW, and it has two recorded
+//       deaths from a slang-only error while telling submitters nothing about
+//       slang being in the path. That is the defect this clause closes.
+//
+//   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at
+//       module scope, before any assignment, loop or $display in that block.
+//
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model, and TWO OF THE TEN ARE THIS TASK'S.
+//
+// -----------------------------------------------------------------------------
 // G. GRADING -- how a submission is judged, and against what
 // -----------------------------------------------------------------------------
 //   G1. THE ORDER. Correctness is a GATE, not a weighting.

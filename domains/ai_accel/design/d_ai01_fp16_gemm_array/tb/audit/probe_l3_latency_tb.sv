@@ -98,6 +98,26 @@ module probe_l3_latency_tb;
     end
   endtask
 
+  // Impulse at stage k, negedge-applied. L2 claims d(k) = D*(H-1-k)+2 and L3 is
+  // its k=0 case; if L3 is off by one, the question is whether the WHOLE FAMILY
+  // shifts or only the k=0 member. Correcting L3 alone would leave the spec
+  // internally inconsistent with L2, so this is measured before anything is
+  // written.
+  task automatic measure_stage(input int k, output int unsigned n);
+    int unsigned t;
+    begin
+      quiesce();
+      n = 0;
+      @(negedge clk);
+      wt[k] = 16'h3C00;
+      for (t = 1; t <= L3_LAT + 24; t++) begin
+        @(posedge clk); #1;
+        if (z[0] !== 16'h0000) begin n = t; break; end
+      end
+      wt[k] = 16'h0000;
+    end
+  endtask
+
   int unsigned n_pos, n_neg;
 
   initial begin
@@ -123,6 +143,17 @@ module probe_l3_latency_tb;
       $display("MEASURE: SAMPLING-EDGE-TO-OUTPUT depth is the same either way:");
       $display("MEASURE:   posedge-applied: sampled at edge N,   out at N+%0d  -> %0d edges", n_pos, n_pos);
       $display("MEASURE:   negedge-applied: sampled at edge N+1, out at N+%0d  -> %0d edges", n_neg, n_neg - 1);
+    end
+    $display("MEASURE: --- per-stage: is it the k=0 member or the whole family? ---");
+    begin
+      int unsigned nk;
+      for (int k = 0; k < H; k++) begin
+        measure_stage(k, nk);
+        // negedge-applied counts one edge before the sampling edge, so the
+        // delivered depth is nk-1.
+        $display("MEASURE:   stage %0d: lat=%0d -> depth %0d   L2 says d(%0d)=%0d, L2+1 says %0d",
+                 k, nk, nk - 1, k, 4*(H-1-k)+2, 4*(H-1-k)+3);
+      end
     end
     $display("TEST_RESULT: PROBE -- not a score");
     $finish;

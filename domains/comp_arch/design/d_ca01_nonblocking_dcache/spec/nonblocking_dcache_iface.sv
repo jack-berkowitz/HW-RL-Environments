@@ -363,11 +363,20 @@
 //       one frontend accepting a file does not make it legal.
 //
 //   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
-//       BLOCK. SystemVerilog forbids a declaration after a statement inside a
-//       block. This is stated explicitly because it is by a wide margin the
-//       most common way a submission here fails to compile, and the error text
-//       names neither declarations nor placement.
-//
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at module
+//       scope, before any assignment, loop or $display in that block.
+//   
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model. An earlier version of this clause called it
+//       "the most common compile failure here", which reads as though the failure
+//       is VISIBLE. Under Verilator it is not.
 //   T3. THE MODULE MUST BE NAMED `nonblocking_dcache` and must match the port
 //       list below exactly, including port names.
 //

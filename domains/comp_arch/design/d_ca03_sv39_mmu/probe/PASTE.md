@@ -464,6 +464,17 @@ Everything normative is in the interface below.
 //     A per-bit search nested inside a per-entry loop reaches it quickly. Give
 //     every loop a small constant bound. This is reproduced history: two earlier
 //     tasks in this repository hit that exact error.
+// 
+//     AND THE REJECTION THIS MOST OFTEN PRODUCES is a variable declared after a
+//     statement inside a begin/end block:
+//         error: declaration must come before all statements in the block
+//     slang enforces the LRM rule that every declaration in a block precedes
+//     every statement in it, and VERILATOR DOES NOT DIAGNOSE THE VIOLATION -- so
+//     the file simulates clean and then yields NO PPA NUMBER AT ALL, reading as a
+//     missing measurement rather than a rejected submission. Declare every
+//     variable at the top of the block that uses it, or at module scope, before
+//     any assignment, loop or $display in that block. Ten run records across four
+//     tasks here were killed by exactly that error, nine from one model.
 //
 // T7. A submission must pass every clause above; there is no partial credit.
 // T8. EVERY INPUT THIS CONTRACT GIVES MEANING TO MUST TAKE MORE THAN ONE VALUE

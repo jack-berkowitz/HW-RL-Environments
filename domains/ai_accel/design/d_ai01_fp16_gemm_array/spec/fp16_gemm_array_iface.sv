@@ -372,6 +372,17 @@
 //     synthesis frontend with this exact error, which is why that task carries
 //     the same clause. This task's own second source hit it again, on the same
 //     construct, before this clause existed.
+// 
+//     AND THE REJECTION THIS MOST OFTEN PRODUCES is a variable declared after a
+//     statement inside a begin/end block:
+//         error: declaration must come before all statements in the block
+//     slang enforces the LRM rule that every declaration in a block precedes
+//     every statement in it, and VERILATOR DOES NOT DIAGNOSE THE VIOLATION -- so
+//     the file simulates clean and then yields NO PPA NUMBER AT ALL, reading as a
+//     missing measurement rather than a rejected submission. Declare every
+//     variable at the top of the block that uses it, or at module scope, before
+//     any assignment, loop or $display in that block. Ten run records across four
+//     tasks here were killed by exactly that error, nine from one model.
 //
 // -----------------------------------------------------------------------------
 // G -- GRADING
