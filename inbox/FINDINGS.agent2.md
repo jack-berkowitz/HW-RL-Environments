@@ -2643,11 +2643,19 @@ CONCENTRATED, not spread.**
 | `v_ca04` | UNCHECKED | 3 | 0 | 0 | **no real candidates** | — |
 | | | **20** | **16** | **8** | | **3 / 6** |
 
-Three of six decidable. That is a coin. **The hypothesis — grouping dominates
-where a task has few observables, unchecked where it has many — carries no
-information**, and a new task's shape is not knowable from its spec. By the terms
-registered before measuring, the fix is a checklist rather than a design
-principle.
+Three of six decidable. That is a coin.
+
+> **REGISTERED IN ADVANCE:** *"If the predictions hold, the split is
+> task-dependent and a new task's shape is knowable from its spec before
+> anything is built. If they do not, the split tracks something else — most
+> likely when each task was written and by what habit — and the fix is a
+> checklist rather than a design principle."*
+>
+> **The predictions did not hold. THE HYPOTHESIS CARRIES NO INFORMATION.** A new
+> task's shape is not knowable from its spec, and the fix is a checklist.
+
+Recorded in those terms because they were fixed before the measurement, and
+because a hypothesis that is allowed to be re-read after the result is not one.
 
 `v_ca04` is excluded rather than scored: all three of its candidates are false
 positives, so it has no dominant shape to be right or wrong about. Counting it
@@ -2732,3 +2740,136 @@ another id *and* its antecedent may never be reached.
 *"answered from the cache under Q1"*. The clause **names the id that reports
 it**. That costs one clause of prose and removes the whole ambiguity, and it is
 the cheapest fix in this finding.
+
+
+---
+
+## FINDING — the check and the thing that disabled it were written together, in one helper, and neither looks wrong alone
+
+**v_nw04's S1 and S2 did not merely go unchecked. They ACCEPTED ARBITRARY
+BEHAVIOUR: a design that set the time base to any value at all passed, provided
+it kept incrementing legally afterwards.**
+
+### The helper
+
+    task automatic set_ts96(input longint unsigned s, input longint unsigned ns);
+      @(negedge clk); set96 = {48'(s), 2'b00, 30'(ns), 16'd0}; set96_v = 1'b1;
+      @(negedge clk) set96_v = 1'b0;
+      settle = SETTLE;  last_drift[0] = -1; last_drift[1] = -1;
+    endtask
+
+Four lines. The first three are the only stimulus in the task that exercises S1.
+The fourth raises `settle`, which suppresses the increment checker for the cycles
+that follow — legitimately, because a set is a discontinuity and the increment
+checker would report it as an illegal advance.
+
+**Neither half is wrong.** Driving a set is right. Suppressing an increment check
+across a discontinuity is right. What is wrong is that they are the same four
+lines, so:
+
+> **The only stimulus that reaches the clause is also the thing that turns off
+> the checking around it.** A reader auditing the stimulus sees a correct set. A
+> reader auditing the suppression sees a correct warm-up. The defect is in the
+> conjunction, and the conjunction has no reader.
+
+### Why it is not a coverage gap
+
+A coverage gap is silent: a clause that is never exercised reports nothing and a
+floor can catch it. This is louder and worse. The clause WAS exercised — four
+times, with `cov_sets >= 3` enforcing it — and the run reported PASS. **A floor on
+S1's stimulus would have been satisfied.** The apparatus had the antecedent, the
+stimulus and a passing verdict, and no comparison between the value written and
+the value read existed anywhere.
+
+An unchecked clause says nothing. This one said *yes*.
+
+### The field had already been audited once, for something else
+
+`settle`'s own comment records a previous correction:
+
+    int settle = 8;   // clause X2b: the warm-up the SPEC grants, and no more.
+                      // It was 20 -- an allowance the reference took and the
+                      // submission was not given, which is not a fair measurement.
+
+Somebody looked hard at this variable, found a real defect in its VALUE, fixed
+it, and wrote the reasoning down. What they were not looking at was **what the
+suppression window contained**. Scrutiny of a field is not scrutiny of what the
+field switches off.
+
+### The general shape, and where else to look for it
+
+> **A stimulus helper that both provokes a condition and suppresses the check for
+> it.** Search term: any assignment to a check-gating variable (`settle`,
+> `checking`, `reply_en`, an `if (armed)` guard) inside a task whose other job is
+> to drive stimulus. Each such site is a place where a clause may be exercised
+> into a window where nothing is watching.
+
+This is mechanically findable — it is a grep for check-gating writes inside
+stimulus tasks — and it is the third instrument this week whose defect the
+toolchain could have named. I have not built it.
+
+---
+
+## FINDING — grouped AND unexercised at once, and a one-sentence remedy for the whole grouping family
+
+**Two defects that are each visible on their own become invisible together.**
+
+### The pair
+
+`v_nw01`'s **C2** — *"the cache holds 4 entries; an insert never fails; when full
+it displaces an existing entry"* — is **grouped**: a failed insert surfaces as a
+missed lookup under **Q1**, so it is reportable, just not under its own name.
+
+It is also **unexercised**: `cov_hits >= 4` is the only floor near it and
+**nothing requires a fifth distinct insert**, so the antecedent that would make
+the displacement observable may never be reached.
+
+| | what it hides | how you would normally catch it |
+|---|---|---|
+| **grouping** | *which* clause was tested | read the failure message and see it names another id |
+| **unguarded antecedent** | *whether anything* was tested | a coverage floor reads zero |
+| **both** | — | **neither**: the floor that would read zero is on the OTHER clause, and it is satisfied |
+
+Grouping moves the reporting to Q1. Q1's floor is about lookups and is satisfied.
+C2 has no floor of its own because it has no checker of its own — that is what
+being grouped means. So **the two defects cover for each other**, and each alone
+would have been easier to see than the pair.
+
+### C1 is the honest opposite, and it costs one sentence
+
+`v_nw01`'s **C1** — same section, same author, same page — reads:
+
+> *"Every received ARP frame — request or reply — inserts the pair (`SPA`, `SHA`)
+> into the cache. **A lookup of that address afterwards is answered from the
+> cache under Q1.**"*
+
+**The clause names the id that reports it.** No instrument, no tooling, no run.
+One sentence of prose, and the ambiguity is gone: a reader knows C1 is grouped,
+knows where to look, and can check that Q1 exists.
+
+### Propose this as the general remedy for the grouping family
+
+The grouping family is the headline finding in this file — several clauses share
+one observation, one check and one reported id, so a submission testing any is
+credited with all. It is invisible to mutation (every mutant dies either way),
+untouched by decontamination, and this week it accounted for **16 of 44** worked
+candidates. Everything built against it so far has been an instrument.
+
+> **Every clause whose observation is shared should name, in its own text, the id
+> that reports it.**
+
+It is cheaper than every instrument built this week, by a wide margin, and it
+fixes the dominant defect class rather than detecting it.
+
+**And it turns prose into a declaration that can be checked.** `check_clause_
+emittable.py` currently subtracts the emittable set from the stated set and calls
+the remainder candidates. With this convention it can do better: a clause saying
+*"reported under Q1"* is a claim, and the tool can verify that `Q1` is in fact
+emittable — turning a hand judgement I made seven times this week into a
+mechanical one. That is the difference between an annotation and a comment.
+
+**Its limit, stated so it is not oversold:** it records grouping honestly, it
+does not remove it. C1 is still credited under Q1, and a submission that checks
+Q1 is still credited with C1. What changes is that the credit is *visible* and
+the scoring can decide deliberately, instead of the grouping being discovered by
+someone reading a failure message and noticing the wrong letter.
