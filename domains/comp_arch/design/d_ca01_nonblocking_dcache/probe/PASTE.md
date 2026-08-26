@@ -226,6 +226,12 @@ checks them. Everything else is normative.
 //       order in which they were ACCEPTED. A LOAD accepted after a STORE to the
 //       same word returns that stored value. Requests to different words carry
 //       no ordering guarantee whatsoever.
+//       REPORTED UNDER R3/R5. One scoreboard comparison observes both this
+//       clause and R3's "for a LOAD, `rsp_data_o` is the addressed word": a
+//       returned word is checked against the value the accepted order requires,
+//       so a violation of either arrives as the same failure. Recorded so the
+//       grouping is visible rather than discovered from the letter in a failure
+//       message.
 //       AUTHORITY: stated task intent. This is the memory contract the task
 //       needs; without it a store followed by a load is unspecified and no
 //       scoreboard is possible.
@@ -251,6 +257,11 @@ checks them. Everything else is normative.
 //       the victim's block-aligned address, followed by exactly BLOCK_WORDS
 //       beats on `mem_wr_*` in ascending word order. A clean victim is not
 //       written back.
+//       REPORTED UNDER M1/M2 for the beat count. The "exactly BLOCK_WORDS
+//       beats" half of this clause and the same half of M1 are observed by one
+//       check, because a memory transaction's beat count is counted once
+//       whichever direction it runs in. The block-aligned address and the
+//       ascending word order are reported under M2 alone.
 //       AUTHORITY: stated task intent -- write-back is stated in the task
 //       title; writing back a clean line is permitted but wasteful and is not
 //       checked either way.

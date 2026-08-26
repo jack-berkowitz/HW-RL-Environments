@@ -34,12 +34,36 @@ probe: probe/PASTE.md
 # absence was not a stale value going unnoticed -- it was a field nobody had ever
 # filled, which is the harder kind to see because there is no wrong number to
 # catch. Recompute with scripts/task_text_hash.py at the point of use.
-task_text_hash: 51337b00b54b64c7    # spec/ + probe/PASTE.md
+task_text_hash: f7a68c4dbec4a1b7    # spec/ + probe/PASTE.md
 
 version_boundary:
   changed_on: 2026-08-25
   pre_bump_task_text_hash:  aab70a4bfcf132e7
-  post_bump_task_text_hash: 51337b00b54b64c7
+  post_bump_task_text_hash: f7a68c4dbec4a1b7
+  intermediate_hash_no_candidate_saw: 51337b00b54b64c7
+  one_boundary_not_two: >
+    R1b landed first, at 51337b00b54b64c7, and the grouped-clause annotations
+    landed on top of it BEFORE any candidate was solicited at the intermediate
+    value. Recorded as ONE boundary because that is what a submission
+    experiences; two would imply a solicitation that never happened. The
+    intermediate hash is named rather than dropped so the chain has no gap. Same
+    handling as d_ai01's interface_boundary.
+  grouped_clause_annotations: >
+    R5 and M2 now NAME THE ID THAT REPORTS THEM -- "REPORTED UNDER R3/R5" and
+    "REPORTED UNDER M1/M2" -- per AGENT-VERIF-A2's convention.
+    .
+    THIS IS THE CHEAPEST CASE OF THAT CONVENTION AND THE REASON IS WORTH KEEPING:
+    both groupings were ALREADY COMBINED IN THE TESTBENCH'S ID FIELD. The checks
+    have always read "R3/R5: a LOAD returned the wrong value for its id" and
+    "M1/M2: a memory transaction did not carry BLOCK_WORDS beats". So the spec
+    edit DESCRIBES WHAT THE TESTBENCH ALREADY DOES rather than introducing a
+    convention -- the fact was established and only the spec was silent.
+    .
+    Found by grepping check MESSAGE STRINGS for two clause ids, which is a
+    different unit from the innermost begin/end block. On this corpus the block
+    unit is noise: d_ca01's own phase-7 results block is ONE begin emitting SEVEN
+    distinct ids as seven separate chk() calls. A block is a scoping accident; a
+    message is one observation reporting one verdict.
   behavioural: false
   what_changed: >
     R1b ADDED. `rsp_valid_o` MUST NOT depend combinationally on `rsp_ready_i`.
