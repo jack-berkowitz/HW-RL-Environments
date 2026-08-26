@@ -130,8 +130,8 @@ Everything normative is in the interface below.
 //         p[r][0] = fma( x_i[r][0](t-d(0)), w_i[0](t-d(0)), y_i[r](t-d(0)) )
 //         p[r][k] = fma( x_i[r][k](t-d(k)), w_i[k](t-d(k)), p[r][k-1] )
 //
-//     Stage 0 consumes the OLDEST operands, d(0) = D*(H-1)+2, and stage H-1 the
-//     newest, d(H-1) = 2. Successive stages are exactly D apart. The bias y_i
+//     Stage 0 consumes the OLDEST operands, d(0) = D*(H-1)+3, and stage H-1 the
+//     newest, d(H-1) = 3. Successive stages are exactly D apart. The bias y_i
 //     is sampled with stage 0's delay, d(0) -- measured, not assumed.
 //
 //     For H=8: d = 30, 26, 22, 18, 14, 10, 6, 2 for k = 0 .. 7.
@@ -275,10 +275,10 @@ Everything normative is in the interface below.
 //     THE FED-BACK VALUE IS SAMPLED ONE TICK EARLIER THAN STAGE 0's OPERANDS.
 //     Writing z_o[r](t - dfb) for the value used,
 //
-//       dfb = D*(H-1) + 3 = d(0) + 1
+//       dfb = D*(H-1) + 4 = d(0) + 1
 //
-//     so at HEIGHT=8 the feedback carries 31 enabled ticks and at HEIGHT=4 it
-//     carries 15. The extra tick over d(0) is because z_o is already a
+//     so at HEIGHT=8 the feedback carries 32 enabled ticks and at HEIGHT=4 it
+//     carries 16. The extra tick over d(0) is because z_o is already a
 //     registered value when the multiplexer selects it, so it is one register
 //     deeper into the past than an operand presented at the same edge.
 //
@@ -332,11 +332,23 @@ Everything normative is in the interface below.
 //     is not an implementation choice: it sets the operand skew of A3, so a
 //     different D delivers different results for the same input stream.
 //
-// L2. The delay from a stage's operands to z_o is d(k) = D*(H-1-k)+2 enabled
+// L2. The delay from a stage's operands to z_o is d(k) = D*(H-1-k)+3 enabled
 //     ticks, per A3.
 //
-// L3. Total latency from stage 0's operands to z_o is D*(H-1)+2 enabled ticks:
-//     30 at HEIGHT=8, 14 at HEIGHT=4.
+// L3. Total latency from stage 0's operands to z_o is D*(H-1)+3 enabled ticks:
+//     31 at HEIGHT=8, 15 at HEIGHT=4.
+//
+//     CORRECTED 2026-08-26 FROM D*(H-1)+2, WHICH WAS LOW BY ONE. The earlier
+//     constant failed a compliant submission: a design delivering the 14 this
+//     clause used to state was rejected by a testbench requiring 15, and the
+//     testbench was right. Measured two ways, on two hosts -- an impulse at every
+//     stage giving d(k) = D*(H-1-k)+3 for all k, and a recirculation period
+//     settling dfb at d(0)+1.
+//
+//     ONE CONSTANT WAS WRONG AND EVERY RELATION WAS RIGHT. Stages are D apart,
+//     the feedback is one tick deeper than stage 0's operands, and the reason
+//     given above for that extra tick is what the hardware does. A design built
+//     against the old text has the right structure and one stage too few.
 //
 // -----------------------------------------------------------------------------
 // P -- PARAMETERS
