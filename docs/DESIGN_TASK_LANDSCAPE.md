@@ -17,8 +17,8 @@ one survives as written.
 | `d_nw02` vc_router_alloc | basejump `bsg_wormhole_router.sv`, 268 | premise refuted — salvage possible |
 | `d_nw04` tcdm_log_interconnect | PULP `hci` | **DEAD** |
 | `d_ai03` dma_2d_chained | PULP `idma` | **DEAD** |
-| `d_ai02` gemm_tiler | NVDLA | **DEAD** |
-| `d_ai04` sdp_requant_pipeline | NVDLA | **DEAD** |
+| **`d_ai04`** sdp_requant_pipeline | NVDLA `SDP_CORE_Y_cvt`, 2,721 lines | **VIABLE — cleanest anchor audited** |
+| `d_ai02` gemm_tiler | NVDLA `cacc` 30k / `cdma` 103k lines | needs its own audit |
 
 Counting the two built rows whose premises also had to be corrected — `d_ai01`
 (RedMulE is two-level; the row's composition is exposed at no boundary) and
@@ -36,8 +36,30 @@ respectively.
 
 ## The four that are dead, and why
 
-**`d_ai02`, `d_ai04` — no anchor exists.** `refs/nvdla` contains **zero** `.sv` or
-`.v` files. Nothing to shim.
+**`d_ai02`, `d_ai04` — RETRACTED. THE ANCHOR EXISTS AND I CHECKED THE WRONG PATH.**
+
+I wrote that `refs/nvdla` contains zero RTL files. **The directory is
+`refs/nvdla_hw`, and it contains 107 of them**, including all three modules the
+two rows name: `NV_NVDLA_cacc.v`, `NV_NVDLA_cdma.v`, `NV_NVDLA_sdp.v`.
+
+The mechanism of the error is worth more than the correction. I ran
+
+    find refs/nvdla -name "*.sv" -o -name "*.v" | wc -l    2>/dev/null
+
+`find` on a path that does not exist prints an error and no results. **I
+suppressed the error and read the resulting zero as a measurement.** A missing
+directory and an empty directory produced the same output, and I reported the one
+as the other — then declared two catalog rows dead on it.
+
+That is the seventh instance of this week's error class and the only one that
+reached a conclusion someone else acted on. It is also the sharpest: the other
+six were the wrong population, the wrong timing model or the wrong signal
+identity, and **this one is a suppressed error read as data** — the same shape as
+every "clean because nothing looked" finding in `FINDINGS.md`, committed by the
+person cataloguing them. `2>/dev/null` on a discovery command is that shape
+exactly.
+
+See the re-audit below: `d_ai04` is now the strongest candidate in the set.
 
 **`d_ai03` — the anchor's children are code generators, not code.**
 `idma_backend_rw_axi.sv` is vendored and does not elaborate:
@@ -153,3 +175,84 @@ with `MODMISSING = 0` and a probe outstanding.
 `store_buffer`'s was built. It is a lint and it is the difference between *"the
 closure resolves"* and *"it elaborates"* — which is precisely the gap that made
 `d_ai03` look viable for a day.
+
+
+---
+
+# RE-AUDIT: `d_ai04` IS THE STRONGEST CANDIDATE IN THE SET
+
+## The boundary, and it is the cleanest anchor audited tonight
+
+    refs/nvdla_hw/vmod/nvdla/sdp/NV_NVDLA_SDP_CORE_Y_cvt.v
+
+    verilator --lint-only --top-module NV_NVDLA_SDP_CORE_Y_cvt
+      errors 0    MODMISSING 0    warnings 3
+
+**Zero external dependencies.** All eighteen modules it needs are in that one
+file; the top is at line 2661. No package to import, no struct types to
+transcribe, no shim probe required to find out. Compare: `store_buffer` needed a
+probe with two structs copied out of `cva6.sv`, and `d_ca05` still needs one.
+
+## The interface IS the task
+
+    input  [63:0]  chn_in_rsc_z          input channel data
+    input  [31:0]  cfg_offset_rsc_z      BIAS
+    input  [15:0]  cfg_scale_rsc_z       SCALE
+    input  [5:0]   cfg_truncate_rsc_z    SHIFT
+    input  [1:0]   cfg_precision_rsc_z   PRECISION MODE
+    input          cfg_nan_to_zero_rsc_z
+    input          cfg_bypass_rsc_z
+    output [127:0] chn_out_rsc_z
+
+`(x + offset) * scale >> truncate`, saturated per precision mode — which is the
+row's *"accumulate → bias → scale → requant → clamp"* almost word for word. **The
+row is right about this artefact**, which makes it the first one that has been.
+
+## Why it should discriminate, against the mechanisms the results show
+
+* **Mechanism A, four times over.** Offset, scale, truncate and precision all
+  interact, and the **saturation bound depends on the precision mode**. Order of
+  operations, rounding on the truncate, and where saturation is applied are each
+  a derived quantity that is invisible except at boundaries. That is `d_dsp02`
+  and `d_dsp03`'s family, and both discriminate.
+* **`cfg_precision_rsc_z` is a capability axis with a plausible mistake behind
+  it** — implement one mode, alias the others, pass at that mode. Exactly
+  `nc_b_two_lanes` on `d_dsp03`, which caught `chat` at 0/2.
+* **`cfg_nan_to_zero` is a conditional clause with a design-controlled
+  antecedent** — the F86 family, and a control for it is plausible rather than
+  merely constructible.
+* **64 in, 128 out** — the width change means per-element unpacking, and an
+  off-by-one there is invisible on aligned, uniform data.
+
+## The one real risk, stated plainly
+
+**It is Catapult HLS output.** `mgc_in_wire_wait_v1`, `mgc_shift_r_v4` and the
+rest are Mentor library modules, and the 2,721 lines are machine-generated.
+
+**The source is not readable as a specification.** That is not disqualifying here
+— this repository writes contracts from *measured* behaviour and audits the
+anchor before trusting it (F54, and `d_ai01`'s four probes). But it makes the
+step-0 conformance audit mandatory rather than advisable: **every clause must
+come from a probe, and none from reading the RTL.** If the anchor's rounding or
+saturation turns out not to match any stated convention, the task dies the way
+`d_dsp01` did — and that must be found in step 0.
+
+## Also never enumerated, and worth an audit before the next choice
+
+    ne16               21 RTL files      PULP neural engine -- ai_accel domain
+    hwpe-ctrl          11
+    verilog-axis        8
+    fpu_div_sqrt_mvp    8
+
+I listed `refs/` for the first time in this session while finding the error
+above. These four were never examined for any row.
+
+## Revised recommendation
+
+1. **`d_ai04`** — cleanest anchor, the row's premise is accurate, four
+   discriminating mechanisms, and no shim scaffolding needed to start.
+2. **`d_ca05`** — mechanism verified present, `MODMISSING 0`, probe outstanding.
+3. `store_buffer` — smaller, elaboration proven, scope already written.
+
+`d_ai02` needs its own audit: `cacc` is 30k lines over 13 files and `cdma` 103k
+over 25, so the boundary question there is real and unanswered.
