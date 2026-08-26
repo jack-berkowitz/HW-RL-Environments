@@ -16,6 +16,19 @@
 //     makes MAX_READS an upper bound and two of the six accept only one. A
 //     separate phase OFFERS concurrency and checks it only if it is taken.
 // =============================================================================
+// A WAIT COMMITS ON THE HANDSHAKE, NOT ON ONE SIDE OF IT.
+// These loops broke on the READY/GRANT alone. That is equivalent today -- the
+// valid is asserted before the wait and held throughout it -- so the defect was
+// unreachable and no run could distinguish the two forms.
+//
+// It becomes reachable the moment anything gates the valid: the design sees no
+// offer, the testbench sees a ready, and a beat that never moved is recorded as
+// moved. Measured on v_ca05, where the reference model then reported "full=0
+// with 8 entries" and the failure was attributed to the design.
+//
+// 24 sites across six tasks had this shape. Corrected everywhere rather than
+// where a perturbation happened to reach, because "correct only while nothing
+// gates the valid" is a property of the corpus and not of the code.
 module dw_downsizer_tb;
 
   // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
@@ -234,7 +247,7 @@ module dw_downsizer_tb;
 
     @(negedge clk); s_arid=id; s_araddr=a; s_arlen=8'(len); s_arsize=3'(sz);
                     s_arburst=burst; s_arvalid=1;
-    for (t=0; t<4000; t++) begin @(posedge clk); if (s_arready) break; end
+    for (t=0; t<4000; t++) begin @(posedge clk); if (s_arvalid && s_arready) break; end
     @(negedge clk) s_arvalid=0;
     if (t >= 4000) begin
       fail("A1", $sformatf("%s: read address never accepted in 4000 cycles", phase));
@@ -361,7 +374,7 @@ module dw_downsizer_tb;
 
     @(negedge clk); s_awid=id; s_awaddr=a; s_awlen=8'(len); s_awsize=3'(sz);
                     s_awburst=burst; s_awvalid=1;
-    for (t=0; t<4000; t++) begin @(posedge clk); if (s_awready) break; end
+    for (t=0; t<4000; t++) begin @(posedge clk); if (s_awvalid && s_awready) break; end
     @(negedge clk) s_awvalid=0;
     if (t >= 4000) begin
       fail("A1", $sformatf("%s: write address never accepted in 4000 cycles", phase));
@@ -379,7 +392,7 @@ module dw_downsizer_tb;
         end
       end
       s_wstrb = strb; s_wlast = (k == int'(len)); s_wvalid = 1;
-      for (t=0; t<8000; t++) begin @(posedge clk); if (s_wready) break; end
+      for (t=0; t<8000; t++) begin @(posedge clk); if (s_wvalid && s_wready) break; end
       if (t >= 8000) begin
         fail("A1", $sformatf("%s: write beat %0d never accepted in 8000 cycles", phase, k));
         @(negedge clk) s_wvalid=0; s_wlast=0; return;
@@ -710,7 +723,7 @@ module dw_downsizer_tb;
       int t; bit took;
       @(negedge clk); s_arid=4'hE; s_araddr=32'h8000; s_arlen=8'd1; s_arsize=3'd3;
                       s_arburst=2'b01; s_arvalid=1;
-      for (t=0; t<200; t++) begin @(posedge clk); if (s_arready) break; end
+      for (t=0; t<200; t++) begin @(posedge clk); if (s_arvalid && s_arready) break; end
       took = (t < 200);
       @(negedge clk) s_arvalid=0;
       cov_conc_offered++;
@@ -723,7 +736,7 @@ module dw_downsizer_tb;
           @(negedge clk); s_arid = 4'(e); s_araddr = 32'hC000 + ADDR_W'(e*64);
                           s_arlen = 8'd1; s_arsize = 3'd3; s_arburst = 2'b01;
                           s_arvalid = 1;
-          for (int t3 = 0; t3 < 24; t3++) begin @(posedge clk); if (s_arready) break; end
+          for (int t3 = 0; t3 < 24; t3++) begin @(posedge clk); if (s_arvalid && s_arready) break; end
           @(negedge clk) s_arvalid = 0;
         end
         cov_a4_offered++;
@@ -733,7 +746,7 @@ module dw_downsizer_tb;
         end
         @(negedge clk); s_arid=4'hF; s_araddr=32'h9000; s_arlen=8'd1; s_arsize=3'd3;
                         s_arburst=2'b01; s_arvalid=1;
-        for (t2=0; t2<64; t2++) begin @(posedge clk); if (s_arready) break; end
+        for (t2=0; t2<64; t2++) begin @(posedge clk); if (s_arvalid && s_arready) break; end
         took2 = (t2 < 64);
         @(negedge clk) s_arvalid=0;
         if (took2) cov_conc_taken++;

@@ -98,6 +98,20 @@ module tag_tracker_tb;   // name required by the scoring path
   endtask
 
   // ---- R4/R5: push, holding request until grant ---------------------------
+  // THE COMMENT SAID `req && gnt` AND THE CODE CHECKED `gnt` ALONE.
+  // R4 commits a push on a cycle where push_req_i && push_gnt_o are both high.
+  // These loops broke on the GRANT by itself, which is correct only while this
+  // testbench never withholds its own request -- and it never did, so the defect
+  // was unreachable and the comment beside it read as a description of the code.
+  //
+  // It became reachable the moment a perturbation gated the request: the design
+  // saw no request, the testbench saw a grant, and the reference model recorded
+  // a push that never happened -- "full=0 with 8 entries". The failure was
+  // attributed to the design.
+  //
+  // A latent defect whose only symptom appears under a stimulus the task does
+  // not generate is exactly the class this corpus keeps finding, and this one
+  // had its own correct specification written one column to the right.
   task automatic do_push(input logic [TAG_W-1:0] tg, input payload_t d,
                          input int timeout, output bit granted);
     int waited;
@@ -106,7 +120,7 @@ module tag_tracker_tb;   // name required by the scoring path
     push_tag = tg; push_data = d; push_req = 1'b1;
     while (waited < timeout) begin
       @(posedge clk);
-      if (push_gnt) begin           // R4: commit on req && gnt
+      if (push_req && push_gnt) begin           // R4: commit on req && gnt
         granted = 1'b1;
         ref_q[tg].push_back(d);     // R2: per-tag FIFO order
         ref_count++;
@@ -134,7 +148,7 @@ module tag_tracker_tb;   // name required by the scoring path
     pop_tag = tg; pop_en = remove; pop_req = 1'b1;
     while (waited < timeout) begin
       @(posedge clk);
-      if (pop_gnt) begin
+      if (pop_req && pop_gnt) begin
         exp_valid = (ref_q[tg].size() != 0);          // R8
         // R8: valid high iff an entry with this tag is present
         if (pop_data_valid !== exp_valid) begin
@@ -180,7 +194,7 @@ module tag_tracker_tb;   // name required by the scoring path
     match_data[0] = d; match_mask[0] = m; match_req[0] = 1'b1;
     while (waited < timeout) begin
       @(posedge clk);
-      if (match_gnt[0]) begin
+      if (match_req[0] && match_gnt[0]) begin
         if (m == '0 && ref_count > 0) cov_zero_mask++;  // R13's antecedent
         exp_hit = ref_match(d, m);                    // R12
         if (match_hit[0] !== exp_hit) begin

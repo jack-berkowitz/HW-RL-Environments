@@ -4229,3 +4229,129 @@ they recorded both in `MEASUREMENTS.md` beside the evidence table anyway —
 *"the same hand did the arithmetic in the table and a reader is entitled to that
 error rate."* That is a second channel on a human rather than an instrument, and
 it is the same principle.
+
+
+---
+
+## FINDING — gating a DUT-visible valid is unsound as a perturbation: it makes the testbench and the design disagree about whether a transfer occurred
+
+**The generic mechanism was attractive for one reason and wrong for the same
+reason: one instrument for eleven tasks, at the cost of changing what the
+testbench observes.**
+
+### Why it was attractive
+
+Eleven testbenches, eleven different stimulus structures, and a mechanism that
+touches none of them: intercept each TB-driven `valid` on its way to the design
+and hold it low for N cycles after every handshake. **One patcher, no per-task
+knowledge, no edit to any driving task.** The estimate it was avoiding was 1–2
+hours per task.
+
+### Why it is wrong
+
+The perturbation is applied **between the testbench and the design**, so the two
+no longer see the same signal. A testbench that commits on `ready` alone then
+records a beat the design never received:
+
+    v_ca06   for (t=0; ...) begin @(posedge clk); if (s_wready) break; end
+    v_ca05   if (push_gnt) begin              // R4: commit on req && gnt
+
+Everything downstream is then an artefact. `v_ca05` reported *"full=0 with 8
+entries"* — the reference model counting pushes the design never saw — **and the
+failure was attributed to the design.**
+
+### What the mechanism that found D6 did instead
+
+**It gated nothing.** It slowed the responder's own beat advance: `RGAP` idle
+cycles before presenting the next beat. The design and the testbench see the same
+`valid` at all times, and the testbench simply offers later — **which is what a
+slow master IS**.
+
+    gate the valid           creates a valid/ready disagreement; unsound wherever
+                             a testbench commits on one side
+    delay the source's own   no disagreement is possible; the source is late, and
+    advance                  lateness is the thing being tested
+
+> **A perturbation that changes what the testbench observes is not a perturbation
+> of the design.** The generic mechanism was a perturbation of the *measurement*,
+> and it was attractive precisely because it did not need to know how each
+> testbench drives — which is the same thing as not knowing what each testbench
+> would then mis-observe.
+
+Rebuilding on delay-the-advance, per task, at the cost the sweep was budgeted at.
+
+---
+
+## FINDING — a comment stating the correct condition beside code that checks the wrong one, 24 times
+
+`v_ca05`, found by the sweep:
+
+    if (push_gnt) begin           // R4: commit on req && gnt
+
+**The comment is right. The code is not.** R4 commits on `push_req_i &&
+push_gnt_o`; the loop broke on the grant alone.
+
+**Equivalent today**, because the request is asserted before the wait and held
+throughout it, so the defect is unreachable and no run can distinguish the two
+forms. The comment therefore reads as a description of the code, and has for the
+life of the task.
+
+### It is 24 sites across six tasks, not one
+
+Surveyed rather than assumed:
+
+    v_ca03   4 sites      v_ca06   6      v_ca07   7
+    v_dsp02  1 site       v_nw02   3      v_ca05   3
+
+**All corrected**, everywhere rather than where the perturbation happened to
+reach, because *"correct only while nothing gates the valid"* is a property of
+the corpus and not of the code. Every affected suite re-run: `v_ca03` 11/11,
+`v_ca06` 12/12, `v_ca07` 10/10, `v_dsp02` 10/10, `v_nw02` 10/10, `v_ca05` 10/10 —
+**all ACCEPTED, nothing moved.** The correction is behaviour-preserving today and
+makes the latent defect unreachable tomorrow.
+
+---
+
+## FINDING — a pattern-matched correction to a pattern-matched defect keeps missing variants
+
+My patcher rewrote `if (R) break;` to `if (V && R) break;`. **It did not match
+`if (R) begin`**, which is the form `v_ca05` uses — so `v_ca05` ran uncorrected
+and produced a failure I nearly attributed to the design.
+
+    corrected   if (s_wready) break;          v_ca06, matched
+    missed      if (push_gnt) begin           v_ca05, not matched
+
+**Same family as identifying an artefact by filename at four sites**: a fix
+expressed as a pattern covers the instances that share the pattern, and the
+instances that do not are exactly the ones nobody enumerated. The survey that
+found all 24 sites was written *after* the correction failed, and it found three
+spellings the correction had one of.
+
+> The remedy is not a better regex. It is that **a correction should be followed
+> by a census of the thing it corrects** — if the fix cannot state how many
+> instances exist, it does not know which ones it missed.
+
+---
+
+## The zsh word-split, fourth instance, and this time it produced a stale run
+
+`$CH` unquoted. zsh does not word-split, the whole channel list arrived as one
+argument, and the patcher raised.
+
+**The consequence is the part that matters.** The build step then ran against the
+**previous** patched files, still on disk from an earlier invocation, and printed
+results **byte-identical to the run before** — which I read as the corrected
+result and nearly reported as one.
+
+> A failed patch producing a stale run is the F88 shape: the step that failed is
+> not the step that reports, so the failure is invisible in the output. The
+> numbers were real, from a real simulation, of the wrong input.
+
+**Fixed unconditionally, not as a habit:** the runner deletes each output before
+patching and refuses to build if the file is absent afterwards. A patch that
+fails now cannot produce a run at all, which moves the failure from in-range to
+out-of-range.
+
+This is the fourth instance and it is written down as a constraint in this very
+file. **Writing a rule down does not install it** — fifth instance of that, and
+the first where the rule was mine and about the shell I was typing into.

@@ -15,6 +15,19 @@
 // faults on this task were miscounts of one kind or another, two of them
 // grep-shaped, so the harness does not offer that surface at all.
 // =============================================================================
+// A WAIT COMMITS ON THE HANDSHAKE, NOT ON ONE SIDE OF IT.
+// These loops broke on the READY/GRANT alone. That is equivalent today -- the
+// valid is asserted before the wait and held throughout it -- so the defect was
+// unreachable and no run could distinguish the two forms.
+//
+// It becomes reachable the moment anything gates the valid: the design sees no
+// offer, the testbench sees a ready, and a beat that never moved is recorded as
+// moved. Measured on v_ca05, where the reference model then reported "full=0
+// with 8 entries" and the failure was attributed to the design.
+//
+// 24 sites across six tasks had this shape. Corrected everywhere rather than
+// where a perturbation happened to reach, because "correct only while nothing
+// gates the valid" is a property of the corpus and not of the code.
 module clk_ratio_div_tb;
 
   // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
@@ -89,7 +102,7 @@ module clk_ratio_div_tb;
   task automatic settle(input int d);
     int t;
     @(negedge clk); div = 4'(d); div_valid = 1;
-    for (t = 0; t < 400; t++) begin @(posedge clk); if (div_ready) break; end
+    for (t = 0; t < 400; t++) begin @(posedge clk); if (div_valid && div_ready) break; end
     if (t >= 400) fail("H1", $sformatf("div=%0d was never accepted in 400 cycles", d));
     @(negedge clk) div_valid = 0;
     repeat (120) @(posedge clk);            // past any gating; L2 leaves it free
@@ -226,7 +239,7 @@ module clk_ratio_div_tb;
     clear_edges(); repeat (per_of(from_d)*3 + 10) @(posedge clk);
     @(negedge clk); div = 4'(to_d); div_valid = 1;
     acc = -1;
-    for (t = 0; t < 400; t++) begin @(posedge clk); if (div_ready) begin acc = cyc; break; end end
+    for (t = 0; t < 400; t++) begin @(posedge clk); if (div_valid && div_ready) begin acc = cyc; break; end end
     @(negedge clk) div_valid = 0;
     if (acc < 0) begin fail("H1", "a divisor change was never accepted"); return; end
     clear_edges();
@@ -289,7 +302,7 @@ module clk_ratio_div_tb;
       before_i = rise.size();
       @(negedge clk); div = 4'd4; div_valid = 1;
       acc = -1;
-      for (t = 0; t < 8; t++) begin @(posedge clk); if (div_ready) begin acc = t; break; end end
+      for (t = 0; t < 8; t++) begin @(posedge clk); if (div_valid && div_ready) begin acc = t; break; end end
       @(negedge clk) div_valid = 0;
       if (acc != 0)
         fail("H3", $sformatf("a same-value request was granted after %0d cycles, expected the same cycle", acc));
@@ -312,7 +325,7 @@ module clk_ratio_div_tb;
       int t, acc2;
       settle(2);
       @(negedge clk); div = 4'd8; div_valid = 1;
-      for (t = 0; t < 400; t++) begin @(posedge clk); if (div_ready) break; end
+      for (t = 0; t < 400; t++) begin @(posedge clk); if (div_valid && div_ready) break; end
       // The second offer lands in the cycle AFTER acceptance, with div_valid_i
       // held high throughout. Dropping it for a cycle first, which this phase
       // used to do, spends the only cycle a fast implementation needs to finish
@@ -325,7 +338,7 @@ module clk_ratio_div_tb;
       h4_arm = 1'b1;
       @(negedge clk); div = 4'd3;
       acc2 = -1;
-      for (t = 0; t < 600; t++) begin @(posedge clk); if (div_ready) begin acc2 = t; break; end end
+      for (t = 0; t < 600; t++) begin @(posedge clk); if (div_valid && div_ready) begin acc2 = t; break; end end
       @(negedge clk) div_valid = 0;
       h4_arm = 1'b0;
       if (acc2 < 0)
@@ -383,10 +396,10 @@ module clk_ratio_div_tb;
       for (int r = 0; r < 4; r++) begin
         settle(2);
         @(negedge clk); div = 4'd9; div_valid = 1;
-        for (t = 0; t < 400; t++) begin @(posedge clk); if (div_ready) break; end
+        for (t = 0; t < 400; t++) begin @(posedge clk); if (div_valid && div_ready) break; end
         @(negedge clk) div_valid = 0;
         @(negedge clk); div = 4'd5; div_valid = 1;
-        for (t = 0; t < 600; t++) begin @(posedge clk); if (div_ready) break; end
+        for (t = 0; t < 600; t++) begin @(posedge clk); if (div_valid && div_ready) break; end
         if (t >= 600)
           fail("H4", $sformatf("deferral %0d: a second request was never accepted", r));
         @(negedge clk) div_valid = 0;

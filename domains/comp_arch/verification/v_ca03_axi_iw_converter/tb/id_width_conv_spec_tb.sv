@@ -16,6 +16,19 @@
 // failure, run the failing case through the golden before changing a check.
 // =============================================================================
 
+// A WAIT COMMITS ON THE HANDSHAKE, NOT ON ONE SIDE OF IT.
+// These loops broke on the READY/GRANT alone. That is equivalent today -- the
+// valid is asserted before the wait and held throughout it -- so the defect was
+// unreachable and no run could distinguish the two forms.
+//
+// It becomes reachable the moment anything gates the valid: the design sees no
+// offer, the testbench sees a ready, and a beat that never moved is recorded as
+// moved. Measured on v_ca05, where the reference model then reported "full=0
+// with 8 entries" and the failure was attributed to the design.
+//
+// 24 sites across six tasks had this shape. Corrected everywhere rather than
+// where a perturbation happened to reach, because "correct only while nothing
+// gates the valid" is a property of the corpus and not of the code.
 module id_width_conv_tb;
 
 
@@ -366,7 +379,7 @@ module id_width_conv_tb;
     s_araddr = 32'h1000 + (id << 8) + n_ar; s_arlen = len[7:0];
     while (took < budget) begin
       @(posedge clk);
-      if (s_arready) begin acc = 1; break; end
+      if (s_arvalid && s_arready) begin acc = 1; break; end
       took++;
     end
     @(negedge clk) s_arvalid = 0;
@@ -380,7 +393,7 @@ module id_width_conv_tb;
     s_awaddr = 32'h5000 + (id << 8) + n_aw; s_awlen = len[7:0];
     while (took < budget) begin
       @(posedge clk);
-      if (s_awready) begin acc = 1; break; end
+      if (s_awvalid && s_awready) begin acc = 1; break; end
       took++;
     end
     @(negedge clk) s_awvalid = 0;
@@ -390,7 +403,7 @@ module id_width_conv_tb;
     for (int b = 0; b <= int'(len); b++) begin
       @(negedge clk); s_wvalid = 1; s_wdata = 32'hD000_0000 + b;
       s_wstrb = '1; s_wlast = (b == int'(len));
-      forever begin @(posedge clk); if (s_wready) break; end
+      forever begin @(posedge clk); if (s_wvalid && s_wready) break; end
     end
     @(negedge clk); s_wvalid = 0; s_wlast = 0;
   endtask
@@ -467,7 +480,7 @@ module id_width_conv_tb;
       int w = 0; bit wacc = 0;
       cov_mixed++;    // offered: a write while reads fill the table
       @(negedge clk); s_awvalid = 1; s_awid = 4'd9; s_awaddr = 32'h5000; s_awlen = 0;
-      while (w < 30) begin @(posedge clk); if (s_awready) begin wacc = 1; break; end w++; end
+      while (w < 30) begin @(posedge clk); if (s_awvalid && s_awready) begin wacc = 1; break; end w++; end
       @(negedge clk) s_awvalid = 0;
       if (!wacc) fail("A1", "a WRITE was refused while only READS occupied the table");
       // Send this write's data and let it retire. Accepting an address and
