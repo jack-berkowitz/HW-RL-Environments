@@ -576,3 +576,40 @@ controls:
       .
       This is the only control in the design set whose declaration and whose
       measurement disagree, and the disagreement is deliberate.
+
+compile_warning_audit:
+  audited_on: 2026-08-25
+  trigger: >
+    AGENT-VERIF-A2 reported a combinational loop -- ready driven from valid,
+    closing ready -> design -> valid -> arm -> ready -- which Verilator reported
+    as UNOPTFLAT and which was INVISIBLE BY DILUTION among ~30 warnings about the
+    vendored anchor under -Wno-fatal. On v_ca06 it converged and every verdict
+    was right; on v_ca03 it produced 26 failures across six clause ids, none a
+    design defect. The tell: four different one-hot variants gave the IDENTICAL
+    26 failures, and a defect that does not change when you change what provokes
+    it is a settle order, not a design defect.
+  result_here: CLEAN -- zero UNOPTFLAT on every design task audited
+  measured:
+    - {task: d_nw03_axis_switch_oq,     warnings: 18, unoptflat: 0}
+    - {task: d_nw01_axi4_xbar,          warnings: 43, unoptflat: 0}
+    - {task: d_ca01_nonblocking_dcache, warnings: 17, unoptflat: 0}
+    - {task: d_dsp02_fp32_fma_ii1,      warnings: 83, unoptflat: 0}
+  why_it_is_clean_and_it_is_not_luck: >
+    No testbench here drives a ready from a valid. Grepped all eight for an
+    assignment of a *ready* from a *valid* and found none. d_ca01's testbench
+    header states it as structural remedy 1 -- "NO COMBINATIONAL PATH FROM A DUT
+    OUTPUT TO A DUT INPUT. Every input this harness drives comes from a register
+    or a constant" -- written after two builds differing only by a debug process
+    disagreed about whether the design had deadlocked. The remedy predates the
+    hazard report and is why the hazard does not land.
+  BUT_THE_DETECTION_IS_WORSE_HERE_THAN_DILUTION: >
+    scripts/sim_candidate.sh captures the compile output in `cerr` and prints it
+    ONLY WHEN THE BUILD FAILS. On a successful build it reports ZERO warnings --
+    not diluted, SUPPRESSED. These counts come from building each task directly,
+    because the scored path cannot answer the question at all.
+    .
+    So the number above is not "the runner says clean". It is "the runner cannot
+    say, and a direct build says clean". A NEW UNOPTFLAT introduced tomorrow would
+    be invisible on this side by total suppression rather than by dilution, which
+    is strictly harder to notice than what AGENT-VERIF-A2 hit. Reported to the
+    owner of scripts/; not worked around.
