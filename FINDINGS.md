@@ -6216,3 +6216,57 @@ shape. **Recognising a pattern is not the same as applying it, and the gap
 between them is invisible from inside.**
 
 **Rules:** 24
+
+## F95. Three agents, one git index: the staged state would have reverted the fix that keeps the scored number honest
+
+Third staged-state incident today, and the first where the consequence is worth
+more than the mechanism.
+
+`domains/ai_accel/design/d_ai01_fp16_gemm_array/orfs/config.mk` read `MM` in
+porcelain — modified in the index AND in the working tree, differently. The
+working tree and `HEAD` both carried the geometry pin:
+
+    export VERILOG_TOP_PARAMS = HEIGHT 4 WIDTH 8
+
+**The index carried the version from before it.** Any commit taken from that
+index — by me, by either of the two agents also working in this tree, by a hook —
+would have silently removed the pin.
+
+### The consequence is the finding, not the drift
+
+That pin is what makes d_ai01's PPA number the scored number. Without it ORFS
+takes the shim's declared default of `HEIGHT=8`, which is the geometry that does
+**not route on sky130hd** — 76,253 to 83,445 detailed-routing violations across
+three floorplans. So the revert would not have produced a wrong number. It would
+have produced a **build failure at the scored configuration**, for a reason that
+is no longer the scored question, and the natural reading of that failure is
+"this design does not route" rather than "the config lost its pin".
+
+**A silent revert of a correctness-preserving pin is worse than a silent revert
+of a result**, because the failure it produces looks like a finding.
+
+### The two earlier instances today, for the shape
+
+* A staged **deletion** of `d_ca03/ref/sim_flags_verilator.txt` — the one file
+  that makes d_ca03 simulable at all. `HEAD` had it, the disk copy was
+  byte-identical, and a commit from that index would have removed it.
+* Staged **deletions** of the seven sim records the PC's correctness gate
+  depends on. Present in `HEAD` and on disk; a commit from that index would have
+  taken them out from under a machine that had already started building.
+
+All three share a structure: **`HEAD` is right, the working tree is right, and
+the thing that would be committed is wrong.** Every check any of us runs looks
+at `HEAD` or at the working tree. `check_linkage_tree.sh --staged` is the only
+instrument here that reads the index, and it checks document linkage, not
+content.
+
+### What it does not license
+
+Not a conclusion that shared trees cannot work — the explicit-path commit
+protocol (temp index, `read-tree HEAD`, name every path, CAS the ref,
+`cmp`-verify) contained all three: nothing was lost in any of them, because no
+commit was ever taken from the ambient index. The gap is **detection**, not
+containment. Nothing announces a divergent index; all three were found by
+reading porcelain for another reason.
+
+**Rules:** 17, 30

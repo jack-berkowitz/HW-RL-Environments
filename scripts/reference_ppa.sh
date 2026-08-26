@@ -153,8 +153,19 @@ for f in glob.glob("runs/*/*__sim.json"):
     if r.get("submission") != sub: continue
     if best is None or r.get("timestamp_utc","") >= best.get("timestamp_utc",""):
         best, best_f = r, f
-print(f"passed:{os.path.basename(best_f)}" if best and best.get("all_passed") is True
-      else "UNVERIFIED")
+# THE COUNT IS PART OF THE VERDICT, NOT DECORATION. all_passed is set only when
+# configs_passed == configs_total, so this gate was already a full-coverage gate
+# -- but it reported a bare "passed", and a pass over ONE configuration reads
+# identically to a pass over eighteen. If the registered config list ever
+# shrinks, every record after it still says "passed" and nothing says over what.
+# find_fmax refuses outright on a partial sweep; this one at least makes the
+# number travel with the verdict into the run record.
+if best and best.get("all_passed") is True:
+    _p, _t = best.get("configs_passed"), best.get("configs_total")
+    _cov = f" {_p}/{_t} configs" if _t is not None else " (no config count recorded)"
+    print(f"passed:{os.path.basename(best_f)}{_cov}")
+else:
+    print("UNVERIFIED")
 PY
 )"
 
