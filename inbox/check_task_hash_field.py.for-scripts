@@ -62,24 +62,57 @@ HASHER = os.path.join(REPO, "scripts", "task_text_hash.py")
 # AGENT-VERIF-A2 lost two rows to exactly this on the same field -- their scan
 # anchored at column 0, missed two indented declarations, and reported them
 # ABSENT. Same bucket, different cause.
-FIELD_LINE = re.compile(r"^\s*task_text_hash:\s*(.*)$", re.M)
-HASHVAL    = re.compile(r"^[0-9a-f]{8,}$")
+# TOP-LEVEL ONLY, AND REPORT WHICH LINE.
+#
+# The first version took the FIRST task_text_hash: in the file, at any nesting.
+# So did the script that fixed the stale values -- and the checker then read the
+# same line the fixer had written and reported ok. CIRCULAR: it could not
+# disagree with the thing it was supposed to check.
+#
+# It cost two files. d_dsp03 has no top-level field, so the fixer overwrote
+# version_boundary.prior_result.task_text_hash -- a record of which text a past
+# 13860/13860 measurement RAN AGAINST -- making the file claim that result was
+# produced against today's text, six lines below prose saying it is "not
+# comparable to any post-bump number". d_dsp02 lost candidate_set.task_text_hash
+# the same way, asserting a 2026-08-21 solicitation used a text that did not
+# exist until that morning. Both restored from git.
+#
+# A hash inside prior_result and a hash declaring the task are DIFFERENT
+# STATEMENTS. Only a top-level field is the task's own declaration; a nested one
+# is a historical record and must never be validated against current text.
+FIELD_ANY = re.compile(r"^([ \t]*)task_text_hash:[ \t]*(.*)$", re.M)
+HASHVAL   = re.compile(r"^[0-9a-f]{8,}$")
 
-MISSING, MALFORMED = object(), object()
+MISSING, MALFORMED, NESTED_ONLY = object(), object(), object()
+
+
+def _clean(raw):
+    raw = raw.split("#", 1)[0]
+    return raw.strip().strip(chr(34)).strip(chr(39)).strip()
 
 
 def recorded(task_dir):
-    """None-> no field. MALFORMED-> field present, value unparseable. else the hash."""
+    """Returns (state, line_no). State is None (no field), NESTED_ONLY,
+    MALFORMED, or the hash string. Only a TOP-LEVEL field counts."""
     p = os.path.join(task_dir, "task.yaml")
     if not os.path.isfile(p):
-        return None
-    m = FIELD_LINE.search(open(p, encoding="utf-8", errors="replace").read())
-    if not m:
-        return None
-    raw = m.group(1)
-    raw = raw.split("#", 1)[0]                  # drop a trailing comment
-    raw = raw.strip().strip(chr(34)).strip(chr(39)).strip()   # and YAML quoting
-    return raw if HASHVAL.match(raw) else MALFORMED
+        return None, 0
+    text = open(p, encoding="utf-8", errors="replace").read()
+    top, nested = None, []
+    for m in FIELD_ANY.finditer(text):
+        line = text[:m.start()].count("\n") + 1
+        if m.group(1) == "":
+            if top is None:
+                top = (_clean(m.group(2)), line)
+        else:
+            nested.append(line)
+    if top is None:
+        return (NESTED_ONLY, nested[0]) if nested else (None, 0)
+    val, line = top
+    return (val if HASHVAL.match(val) else MALFORMED), line
+
+
+
 
 
 def computed(task_dir):
@@ -93,9 +126,22 @@ def computed(task_dir):
 
 SELFTEST = [
     ("column 0",             "task_text_hash: aaaaaaaaaaaaaaaa\n",                  "aaaaaaaaaaaaaaaa"),
-    ("indent 2",             "  task_text_hash: bbbbbbbbbbbbbbbb\n",                "bbbbbbbbbbbbbbbb"),
-    ("indent 4",             "    task_text_hash: cccccccccccccccc\n",              "cccccccccccccccc"),
-    ("tab indent",           "\ttask_text_hash: dddddddddddddddd\n",                "dddddddddddddddd"),
+    # THESE THREE EXPECTATIONS CHANGED, AND THE CHANGE IS THE FINDING.
+    # They were written when INDENTATION-TOLERANCE was the goal -- AGENT-VERIF-A2
+    # had lost two rows to a scan anchored at column 0, so matching an indented
+    # field looked like the fix. It was the wrong model. An indented field is
+    # NESTED INSIDE SOMETHING, and what it is nested inside decides what it
+    # means: version_boundary.prior_result.task_text_hash records which text a
+    # past result ran against, and is not the task's declaration. Reading it as
+    # one is what overwrote two historical records on 2026-08-26.
+    #
+    # So tolerance was never the requirement -- DISCRIMINATION was. Recorded here
+    # rather than silently re-expected, because changing a test to match the code
+    # is the move that hides a defect, and this one only survives review if the
+    # reason is written down beside it.
+    ("indent 2 -> NESTED",   "  task_text_hash: bbbbbbbbbbbbbbbb\n",                "NESTED"),
+    ("indent 4 -> NESTED",   "    task_text_hash: cccccccccccccccc\n",              "NESTED"),
+    ("tab indent -> NESTED", "\ttask_text_hash: dddddddddddddddd\n",                "NESTED"),
     ("trailing comment",     "task_text_hash: eeeeeeeeeeeeeeee  # spec + prompt\n", "eeeeeeeeeeeeeeee"),
     ("double-quoted",        'task_text_hash: "ffffffffffffffff"\n',                "ffffffffffffffff"),
     ("single-quoted",        "task_text_hash: '1111111111111111'\n",                "1111111111111111"),
@@ -110,6 +156,12 @@ SELFTEST = [
     ("placeholder value",    "task_text_hash: TBD\n",                               "MALFORMED"),
     ("empty value",          "task_text_hash:\n",                                   "MALFORMED"),
     ("truncated hash",       "task_text_hash: abc\n",                               "MALFORMED"),
+    ("NESTED ONLY",          "version_boundary:\n  prior_result:\n"
+                             "    task_text_hash: 1234567812345678\n",                "NESTED"),
+    ("nested THEN top",      "  task_text_hash: 1111111111111111\n"
+                             "task_text_hash: 2222222222222222\n",                    "2222222222222222"),
+    ("top THEN nested",      "task_text_hash: 3333333333333333\n"
+                             "  task_text_hash: 4444444444444444\n",                  "3333333333333333"),
 ]
 
 
@@ -121,8 +173,9 @@ def selftest():
     for name, text, want in SELFTEST:
         with tempfile.TemporaryDirectory() as d:
             open(os.path.join(d, "task.yaml"), "w").write(text)
-            got = recorded(d)
-        gots = "MALFORMED" if got is MALFORMED else got
+            got, _line = recorded(d)
+        gots = ("MALFORMED" if got is MALFORMED else
+                "NESTED" if got is NESTED_ONLY else got)
         ok = (gots == want)
         bad += not ok
         print(f"  {'ok  ' if ok else 'FAIL'} {name:20s} got={str(gots):18s} want={want}")
@@ -149,21 +202,26 @@ def main():
     stale = missing = ok = 0
     for t in tasks:
         name = os.path.basename(t)
-        rec, cmp_ = recorded(t), computed(t)
+        rec, line = recorded(t)
+        cmp_ = computed(t)
         if cmp_ is None:
             print(f"  {name:34s} SKIP   the text does not hash (see task_text_hash.py)")
             continue
         if rec is MALFORMED:
-            print(f"  {name:34s} MALFORMED  field present, value is not a hash")
+            print(f"  {name:34s} MALFORMED  line {line}: value is not a hash")
             stale += 1
+        elif rec is NESTED_ONLY:
+            print(f"  {name:34s} NESTED     only a nested field (line {line}); "
+                  f"that is a historical record, not the task's declaration")
+            missing += 1
         elif rec is None:
             print(f"  {name:34s} —      no task_text_hash field")
             missing += 1
         elif rec == cmp_:
-            print(f"  {name:34s} ok     {rec}")
+            print(f"  {name:34s} ok     line {line}: {rec}")
             ok += 1
         else:
-            print(f"  {name:34s} STALE  records {rec}, text hashes to {cmp_}")
+            print(f"  {name:34s} STALE  line {line} records {rec}, text hashes to {cmp_}")
             stale += 1
 
     print(f"\n{len(tasks)} task(s): {ok} correct, {stale} stale, {missing} with no field")
