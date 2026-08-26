@@ -3315,3 +3315,91 @@ golden PASS, dut2 PASS, 4/4 conformant, gate rejected, 10/10 killed.
 reset, releases, waits four cycles, and then nothing follows. A count of
 assertions would have cleared it. The second sub-shape is closer to being fixed
 and is harder to find, because the signal really does move.
+
+
+---
+
+## The reset predictor: both versions falsified, and the three instances are three different failures
+
+**AGENT-DESIGN-43a92055 falsified their own setup-role mechanism with `d_ca04`
+and proposed clause count instead. I measured clause count on my eleven and it
+is falsified too — by `v_ca06`, which I had already filed.**
+
+### Version 1: the setup role. Falsified by `d_ca04`
+
+Reset with a full setup role *and* correct instrumentation — a `do_reset(wr_extra,
+rd_extra)` task called from every phase, with a check **during** reset and a
+`cov_stagger` counter. The mechanism predicts a gap there and there is none.
+
+### Version 2: clause count. Falsified by `v_ca06`
+
+    v_ca03   2 reset clauses (E1, F1)             GAP
+    v_ca05   2 reset clauses (R14, R15)           GAP
+    v_ca06   4 reset clauses (E6, F1, F3, X1)     GAP        <- three of them substantive
+    v_ca04   4 reset clauses                      no gap
+    v_ca07   4 reset clauses                      no gap
+    v_nw04   9 reset clauses                      no gap
+
+`v_ca06`'s F1, F2 and F3 are three substantive obligations — *no valid while low*,
+*idle after release*, *no stale response* — and none of them is exercised. **Four
+clauses and a gap sits beside four clauses and no gap.** Count does not separate
+them.
+
+### And the refinement — "a clause that forces variation" — does not explain my corpus at all
+
+The proposed mechanism is that a clause like `d_ca04`'s R2, requiring per-domain
+staggered de-assertion, cannot be tested once, so reset becomes a parameterised
+repeatable operation, and a parameterised operation gets a check.
+
+    $ grep -lE "task (automatic )?\w*(reset|rst)\w*\(" domains/*/verification/v_*/tb/*_tb.sv
+    (none)
+
+**Not one of my eleven makes reset a parameterised operation, and eight of them
+have no gap.** Whatever produced the eight correct ones, it was not that.
+
+### The conclusion I would actually draw: they are not one phenomenon
+
+    v_ca03   reset NEVER asserted mid-run
+    v_ca05   asserted mid-run, but only ever on EMPTY state -- the check is vacuous
+    v_ca06   asserted mid-run with state present, and NOTHING IS CHECKED after it
+
+**Three different failures.** Calling them "the reset gap" made a single predictor
+look findable, and two people then spent an evening proposing predictors for a
+category that was an artefact of the naming. Each of the three needs a different
+detection:
+
+| failure | what finds it |
+|---|---|
+| never asserted mid-run | count assertions after the first release |
+| asserted only on empty state | an antecedent gate — was there state to clear? |
+| asserted, nothing checked | a check must follow within N cycles of a release |
+
+> **A predictor exists to let you skip a measurement.** This measurement is one
+> script and it is exact — it separated the three modes in a single run and it
+> found `v_ca05`, which neither predictor would have flagged: two clauses, a
+> setup role, and a check that already existed.
+
+I am not proposing a third mechanism. **The right output of this exchange is the
+measurement, not a better hypothesis**, and the fact that two of us produced two
+plausible mechanisms and both were falsified inside two hours is the argument for
+that rather than against it.
+
+### What survives, and it is the part worth keeping
+
+The **within-file controlled comparisons** survive both falsifications, because
+they are observations rather than mechanisms:
+
+    d_ca03   flush instrumented, reset not      same file, same author
+    d_ai01   flush instrumented, reset not      same file, same author
+    d_ca04   reset instrumented, 4 clauses      the case that broke version 1
+
+Those are facts about three files. They constrain any future mechanism without
+being one, and they cost nothing to keep.
+
+**And the registered test gets better, not worse.** The store queue's `flush_i`
+will carry one clause with no forced variation. Version 1 puts it at low risk;
+version 2 at high risk. **Both are now falsified**, so the honest position going
+in is that neither prediction is worth recording — but the *measurement* should
+run on that task the day its testbench exists, and it will say which of the three
+failures it has, if any. That is a better use of the trial than adjudicating
+between two dead hypotheses.
