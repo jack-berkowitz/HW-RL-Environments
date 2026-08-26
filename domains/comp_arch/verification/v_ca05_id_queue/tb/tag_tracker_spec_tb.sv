@@ -38,6 +38,24 @@ module tag_tracker_tb;   // name required by the scoring path
 
   logic [TAG_W-1:0]  pop_tag;
   logic              pop_en, pop_req;
+  // ---- COVERAGE, and this testbench had NONE ------------------------------
+  // Measured: no cov_ counter and no fail("FLOOR") anywhere in this file, so
+  // nothing asserted that its own stimulus reached anything. Six clause ids are
+  // emittable of fifteen stated, and FOUR MORE are grouped -- R2, R9 and R10
+  // report under R8, R13 under R12 -- which means their antecedents are the only
+  // thing standing between those clauses and being unexercised, and no floor was
+  // watching them. Grouped plus unguarded is the pair that covers for itself:
+  // grouping hides WHICH clause was tested, an unguarded antecedent hides
+  // WHETHER ANYTHING was, and the floor that would read zero sits on the other
+  // clause and is satisfied.
+  //
+  // These four count the antecedents of the four grouped clauses. They are
+  // driven today -- by inspection of the source, not by measurement, which is
+  // exactly the gap: nothing would notice if an edit removed them.
+  int cov_peek = 0;        // R9  -- a pop with pop_en_i low on a PRESENT entry
+  int cov_pop_absent = 0;  // R10 -- a pop of a tag with no entries
+  int cov_zero_mask = 0;   // R13 -- an all-zero mask against a NON-EMPTY store
+  int cov_order = 0;       // R2  -- a pop from a tag holding two or more
   payload_t          pop_data;
   logic              pop_data_valid, pop_gnt;
 
@@ -122,7 +140,10 @@ module tag_tracker_tb;   // name required by the scoring path
           fail("R8", $sformatf("tag %0d: pop_data_valid=%0b expected %0b",
                                tg, pop_data_valid, exp_valid));
         end else ok();
+        if (!exp_valid) cov_pop_absent++;             // R10's antecedent
         if (exp_valid) begin
+          if (!remove)             cov_peek++;         // R9's antecedent
+          if (ref_q[tg].size() > 1) cov_order++;       // R2's antecedent
           exp_data = ref_q[tg][0];                    // R8: oldest entry
           if (pop_data !== exp_data) begin
             fail("R8", $sformatf("tag %0d: pop_data=%08h expected %08h",
@@ -159,6 +180,7 @@ module tag_tracker_tb;   // name required by the scoring path
     while (waited < timeout) begin
       @(posedge clk);
       if (match_gnt[0]) begin
+        if (m == '0 && ref_count > 0) cov_zero_mask++;  // R13's antecedent
         exp_hit = ref_match(d, m);                    // R12
         if (match_hit[0] !== exp_hit) begin
           fail("R12", $sformatf("data=%08h mask=%08h hit=%0b expected %0b",
@@ -370,9 +392,29 @@ module tag_tracker_tb;   // name required by the scoring path
       while (ref_q[t].size() != 0) do_pop(TAG_W'(t), 1'b1, 50);
     check_status("final drain");
 
+    // ---- FLOORS. The four clauses that report under another id ------------
+    // Gated on the STIMULUS half only -- each counts an event this testbench
+    // chooses to drive, and reads no design output, so none of them can reject
+    // correct hardware.
+    if (cov_peek < 2)
+      fail("FLOOR", $sformatf("only %0d peek(s) driven -- R9 says an entry inspected with pop_en_i low is NOT removed, and it reports under R8; without a peek there is nothing to report", cov_peek));
+    if (cov_pop_absent < 1)
+      fail("FLOOR", "no pop of an absent tag was driven -- R10's only checkable half, that pop_data_valid_o is low, reports under R8 and goes unexercised");
+    if (cov_zero_mask < 1)
+      fail("FLOOR", "no all-zero mask was driven against a non-empty store -- R13 reports under R12 and is untested without one");
+    if (cov_order < 2)
+      fail("FLOOR", $sformatf("only %0d pop(s) from a tag holding two or more -- R2's per-tag FIFO order reports under R8 and cannot be judged on a one-deep tag", cov_order));
+
     $display("");
     $display("checks passed : %0d", checks);
     $display("failures      : %0d", errors);
+    $display("  [coverage] peek=%0d pop-absent=%0d zero-mask=%0d multi-deep pop=%0d",
+             cov_peek, cov_pop_absent, cov_zero_mask, cov_order);
+    // ---- FIRED: see check_fired.py. Absent is not zero (rule 20).
+    $display("FIRED v_ca05.cov_peek %0d", cov_peek);
+    $display("FIRED v_ca05.cov_pop_absent %0d", cov_pop_absent);
+    $display("FIRED v_ca05.cov_zero_mask %0d", cov_zero_mask);
+    $display("FIRED v_ca05.cov_order %0d", cov_order);
     if (errors == 0) $display("RESULT: PASS");
     else             $display("RESULT: FAIL");
     $finish;

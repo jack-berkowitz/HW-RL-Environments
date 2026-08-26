@@ -2975,8 +2975,11 @@ one to keep:
 > **A block is a scoping accident; a message is one observation reporting one
 > verdict**, which is precisely what the convention is about.
 
-Implemented and run on my eleven. **18 message rows and 5 chain rows, 23 total**,
-and the two units find genuinely different things:
+Implemented and run. **On my eleven: 16 message rows and 5 chain rows, 21 total.
+Across the whole corpus: 18 and 5, 23.** I first recorded 18 as the figure for my
+eleven; it is the corpus number. AGENT-PPA-2381f2fe checked the scope before
+believing the difference meant anything, which is why the record is right.
+The two units find genuinely different things:
 
 **1 — My corpus already declares grouping in the id field, in eight places, and
 nobody had enumerated them.**
@@ -3017,3 +3020,120 @@ invisible to every pass before this one.
 message unit cannot see them; the `X/Y` population names two ids in one call, so
 the chain unit cannot see it. Both passes are needed and the tool now runs both,
 labelled `msg` and `chain` so a reader knows which question produced each row.
+
+
+---
+
+## FINDING — an input that changes only during initialisation is not a varied input, and no variation tool can tell
+
+**Three tasks, independently written, all with a reset clause stating what reset
+does to STATE, and none of them reaching it. Two are mine.**
+
+| task | the clause | why it is unreachable |
+|---|---|---|
+| `v_ca03` | **F1** — *no transaction outstanding before reset shall produce a response afterwards* | `rst_n` is assigned twice in the whole testbench: `0` at declaration, `1` at line 407. **Never asserted mid-run.** No F-clause `fail()`. No reset mutant |
+| `v_ca06` | **F1, F2, F3** — reset, post-reset idle, no stale response | phase L asserts reset, releases, waits four cycles, and then **nothing follows** |
+| `d_ca03` | **V2** — *`rst_ni` asserted low empties both TLBs* | reset happens only when the TLBs are already empty, so a design that ignores reset entirely is indistinguishable from a conforming one (AGENT-DESIGN-43a92055) |
+
+### The reading that makes it structural rather than a habit
+
+From AGENT-DESIGN-43a92055, and it is better than mine:
+
+> **Reset gets written as *initialisation*, because that is what a testbench
+> needs it for.** The clause that says what reset *does to state* is a different
+> requirement, and the initialisation path can never reach it. The two uses share
+> a signal and nothing else.
+
+A testbench author writes `rst_n = 0; ... rst_n = 1;` once, at the top, because
+the DUT must start somewhere. That code is correct, necessary, and satisfies
+every instinct that the signal has been handled. The clause needs the *other*
+use — assert reset onto a populated machine and check what survives — and nothing
+in the first use suggests the second is missing.
+
+### And the instrument says the input is fine
+
+This is the part that generalises past reset. `d_ca03`'s harness **does** track
+`rst_n` in its stimulus-variation instrument — `V_RST` at
+`sv39_mmu_harness.svh:179`, compared at 205.
+
+**It varies exactly once, at time zero, and the checker records it as VARIED. The
+row is clean.**
+
+> The check exists. The input moves. The requirement is unreachable. A
+> varied/constant bit cannot separate *this input takes both values* from *this
+> input took its other value once, before anything was in the machine*.
+
+That is this file's *"a clean row is read once"* arriving through a different
+door, and it is worse than the original, because here the instrument is
+**correct** — `rst_n` really did take both values — and still reports nothing
+useful.
+
+### The remedy, and it is an instrument change in my area
+
+**Count transitions AFTER reset release, not values over the whole run.**
+
+    varied/constant bit      -> "rst_n took both values"          useless here
+    transitions after t0     -> "rst_n asserted 0 times after
+                                 the run began"                    the fact
+
+That is a small change to `check_stimulus_variation.py` — a second number
+alongside the existing one, not a replacement, because for most inputs the
+existing question is the right one. It refuses nothing on its own; it makes
+`0 transitions after release` visible, which is the number that would have found
+all three of these.
+
+**Not built.** It is the fifth named-but-unbuilt instrument this week, and by the
+week's own standard that count matters more than any of the individual gaps.
+
+---
+
+## v_ca05 — the task both instruments were blind to, and what was under it
+
+AGENT-PPA-2381f2fe asked for a look before step 4, on the grounds that **two
+independent instruments could say nothing about this task for two unrelated
+reasons**: it has no coverage floor for `check_fired` to read, and its port map
+lives in `probe/PASTE.md` rather than `spec/*_iface.sv` so stimulus-variation
+could not parse it. That is a good reason to look and it was right.
+
+### What the hand pass found
+
+Nine emittability candidates: **five false positives** (`R3`, `R6` latitude;
+`R4`, `R7`, `R11` handshake definitions) and **four grouped**, none unchecked:
+
+    R2  per-tag FIFO order            -> reports under R8
+    R9  peek does not remove          -> reports under R8
+    R10 pop of an absent tag          -> reports under R8
+    R13 an all-zero mask matches all  -> reports under R12
+
+**And the testbench had no coverage counter and no `fail("FLOOR")` anywhere in
+it.** For a grouped clause the antecedent is the only thing standing between it
+and being unexercised — and nothing was watching any of the four. This is
+`v_nw01`'s C2 shape, **four times over in one task.**
+
+### Closed, on the half that costs nothing
+
+Four antecedent counters and four floors, gated on the **stimulus half only** —
+each counts an event the testbench chooses to drive and reads no design output,
+so none can reject correct hardware:
+
+    peek=6   pop-absent=401   zero-mask=1   multi-deep pop=14
+    golden PASS, dut2 PASS, 4/4 conformant, gate rejected, 10/10 killed
+
+**`zero-mask=1`.** R13's antecedent is reached exactly once in the whole run. The
+floor now makes an edit that deletes that single `do_match(0, 0, ...)` fail —
+which is what it is for — but R13 rests on one observation, and that is worth
+knowing rather than inferring from a green row.
+
+### Two mutants already covered two of the four, and that is not the same thing
+
+`tt_m8_peek_removes_last` (R9) and `tt_m9_zero_mask_no_hit` (R13) both die, so
+those antecedents were being reached.
+
+> A mutant dying is evidence **after the fact** that the stimulus happened to
+> exist. The floor is the guarantee that it still will. Nothing was keyed on R2's
+> or R10's antecedent either way.
+
+The spec annotations (`R2 -> R8`, `R9 -> R8`, `R10 -> R8`, `R13 -> R12`) are
+**held**: that is a clause-text edit, v_ca05's hash is not otherwise moving, and
+the agreed sequence is to batch those behind whatever moves it next. The floors
+are `tb/` only and cost nothing.
