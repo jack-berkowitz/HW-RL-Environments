@@ -418,3 +418,94 @@ clean under three independent mechanisms.
 widening and one has a depth I derived wrongly. **Neither is a statement about
 the design yet**, and by the pattern of this whole exercise the prior should be
 that they are not.
+
+
+---
+
+# FINAL — six clean, five not measurable, ZERO escalations standing
+
+## The standing result
+
+**Six of eleven tasks are measured clean on the inter-beat axis — the axis D6
+lives on — by a mechanism that gates nothing and cannot produce a phantom
+transfer.**
+
+| task | depth | drain | result |
+|---|---|---|---|
+| `v_ca06` | 9 | x10 | **CLEAN** |
+| `v_ca03` | 9 | x10 | **CLEAN** |
+| `v_nw02` | 9 | **x2** | **CLEAN** |
+| `v_ai02` | 6 | x7 | **CLEAN** |
+| `v_nw03` | 5 | x6 | **CLEAN** |
+| `v_ca04` | 4 | x5 | **CLEAN** |
+
+**`v_ca06` is clean at three times the depth the old sticky D6 broke at, under a
+third independent mechanism.** That result has now survived the gate, the
+task-top delay, and the per-task RGAP edit — three instruments with three
+different defects, agreeing.
+
+## Both escalations dissolved
+
+### `v_nw02` P3 — the widening never reached that phase
+
+The read sweep ends on `settle(20)`, `settle(14)`, … and my widening multiplied
+`repeat(N)`, `t < N` and `drain(N)`. **`settle(N)` was not in the list.**
+
+> *"The failure survived the widening"* was not evidence about the failure. It
+> was evidence that the widening had no effect on that phase. **An escalation
+> criterion that a widening never reached is not a criterion.**
+
+With `settle()` widened, P3 is gone.
+
+### And the drain multiplier has an UPPER bound, which my rule did not have
+
+Widening `settle()` by x10 then produced **4 x X4** — the deadline clause. A
+drain large enough to clear contamination is large enough to push events past a
+fixed deadline.
+
+    drain x1    P3 fails      not enough drain
+    drain x2    PASS          <-- both hold
+    drain x3    X4 fails      deadline stretched
+    drain x5    X4 fails
+    drain x10   X4 fails
+
+**My rule was "multiply by (1 + stall_depth)" — a single number, x10 here, which
+is outside the window where this task is measurable at all.** The discriminator
+needs a RANGE and a search, not a multiplier. `v_nw02` is clean at x2 and that
+is the whole of the escalation.
+
+### `v_nw01` Q6 — the magnitude was mine, and the axis has no depth
+
+Withdrawn as an escalation. Two separate things were wrong:
+
+1. **The magnitude.** 65 was justified as *"one past `REQUEST_RETRY_INTERVAL=64`"*
+   — a quantity about the gap **between requests** — and applied **between
+   payload bytes**. 28 bytes x 65 = 1820 cycles per frame against a
+   `REQUEST_TIMEOUT` of 256.
+2. **The rule has no operand here.** *"One past the deepest buffer on that
+   channel"* needs a buffer. Searched across **all** the ARP engine's sources —
+   `arp.sv`, `arp_eth_rx.sv`, `arp_eth_tx.sv`, `arp_cache.sv` — there is no FIFO,
+   no byte-indexed store, no per-frame buffer of any kind. **The design holds
+   PARSER STATE, not buffered beats.**
+
+*(`arp_engine.sv` alone has zero clocked processes — it is a wrapper. My first
+search read only the wrapper and concluded the design held nothing, which was
+right by accident. The four files that matter were not in scope.)*
+
+**`v_nw01` is NOT MEASURABLE on the inter-beat axis**, and reported as such rather
+than perturbed at a guessed depth. The design's own `REQUEST_TIMEOUT` spans a
+frame, so any inter-byte gap large enough to be interesting collides with a
+timeout that is **correct behaviour**, not a defect.
+
+## Not measurable — five, and that is a result
+
+| task | why |
+|---|---|
+| `v_nw01` | no buffer between beats; the design holds parser state. Depth rule has no operand |
+| `v_ca05` | no beats — single-beat req/gnt operations |
+| `v_ca07` | no beats — one value per handshake, output is a clock |
+| `v_dsp02` | no beats — one operand per handshake |
+| `v_nw04` | no handshake at all — pulse inputs, no ready |
+
+**Five honest rows beat five guessed depths.** Each would have produced a number,
+and each number would have been a clean row meaning untested.

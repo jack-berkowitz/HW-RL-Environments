@@ -4463,3 +4463,82 @@ and not of the code. Every affected suite re-run: **11/11, 12/12, 10/10, 10/10,
 > real, latent in six shipped tasks, and would have stayed unreachable until
 > something else disturbed a valid. That is worth saying plainly rather than
 > filing under the failure of the tool that found it.
+
+
+---
+
+## FINDING — a magnitude justified on one axis and applied on another is not justified
+
+**`v_nw01`'s perturbation depth was 65, justified as *"one past
+`REQUEST_RETRY_INTERVAL=64`, so a stall shorter than 64 never lets a retry
+fire"*. That is an argument about the gap BETWEEN REQUESTS. It was applied
+BETWEEN PAYLOAD BYTES.**
+
+    65 cycles x 28 bytes  =  1820 cycles per frame
+    REQUEST_TIMEOUT       =   256
+
+The frame took seven times the design's own lookup timeout, the lookup expired
+before the reply finished arriving, and Q6 — *a matching reply resolves the
+outstanding lookup* — reported a failure. There was no outstanding lookup left to
+resolve.
+
+### The family
+
+Same shape as the ABC units error and the wrong baseline: **a number correct
+somewhere, used somewhere else, and correct-looking in both places.**
+
+    ABC units       a real number in the wrong unit
+    wrong baseline  a real comparison against the wrong reference
+    this            a real justification for a different axis
+
+None of the three is a wrong number. Each is a **right number detached from what
+made it right**, and the detachment leaves no trace — the row still has a
+citation, the citation is still true, and it is about something else.
+
+**My own table is what makes this sharp.** Every row names the axis being
+perturbed *and* gives a reason for the magnitude, in adjacent columns. The two
+disagreed on one row and nothing compared them, because they are prose in a table
+I wrote to look rigorous.
+
+### The remedy is a column, not care
+
+> **Every magnitude states the axis its justification is about. A mismatch with
+> the axis being perturbed is a refusal.**
+
+    task     axis perturbed     magnitude   justified on axis   status
+    v_ca06   inter-beat gap     9           inter-beat gap      ok
+    v_nw01   inter-beat gap     65          inter-TRANSACTION   REFUSE
+
+One column, mechanically checkable, and it fires on exactly the row that was
+wrong. **The axis is already recorded per row — the justification simply does not
+carry it**, and that asymmetry is the whole defect. Care would not have caught
+it: I wrote both columns, in the same sitting, and read them as agreeing.
+
+---
+
+## FINDING — the drain discriminator needs a range, not a multiplier
+
+**A drain widening large enough to clear contamination can be large enough to
+break a clause with a fixed deadline.** `v_nw02`, at perturbation depth 9:
+
+    drain x1    P3 fails      beats still in flight at the phase boundary
+    drain x2    PASS          both hold
+    drain x3    X4 fails      a fixed deadline, stretched past
+    drain x10   X4 fails      my rule's value
+
+**My rule was a single number — multiply every drain by `(1 + stall_depth)` — and
+for this task that number is outside the window in which the task is measurable
+at all.** The task is clean, at x2, and the rule would never have found it.
+
+The discriminator was designed to answer *did this failure survive a wider
+drain*. It needs to answer *is there any drain at which nothing fails*, which is
+a search over a range with a floor (enough to drain) and a ceiling (before fixed
+deadlines break). Those two bounds come from different places — the ceiling from
+the task's own deadline clauses, which is the enumeration already filed.
+
+**And it doubles as the correction to my `settle()` miss.** The read sweep ended
+on `settle(N)`, which the multiplier did not cover, so the ×10 run left that
+phase un-widened. *"Survived the widening"* was not evidence about the failure;
+it was evidence the widening had not reached it. **An escalation criterion that a
+widening never reached is not a criterion**, and nothing in my failure definition
+required checking that the widening applied.
