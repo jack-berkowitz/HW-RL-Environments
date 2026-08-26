@@ -351,8 +351,23 @@ module fp16_gemm_array_tb;
   // absolute value under the stated convention and the PAIR carries the slope. A
   // design with constant latency has slope 0 and fails at one of the two heights
   // necessarily.
-  localparam int unsigned L3_LAT  = 4*(H-1) + 2;   // the contract's number
-  localparam int unsigned EXP_LAT = L3_LAT + 1;    // +1 for the sampling edge
+  // THE ARITHMETIC HERE IS RIGHT AND ITS OLD LABEL WAS WRONG, which is why this
+  // took a measurement to settle rather than a reading. EXP_LAT said
+  // "+1 for the sampling edge", implying a testbench counting artefact. It is
+  // not: it is A PIPELINE STAGE. tb/audit/probe_l3_latency_tb.sv drove the
+  // impulse at a posedge and at a negedge and got 15 and 16 at HEIGHT=4, which
+  // differ only in WHICH EDGE SAMPLES the operand -- both are 15 edges from the
+  // sampling edge to the output edge. 31 and 32 at HEIGHT=8, both 31 edges.
+  // Reproduced independently by AGENT-PPA on a second host.
+  //
+  // SO THE SPEC'S CONSTANT IS WRONG, NOT THIS NUMBER. L3 states D*(H-1)+2; the
+  // reference delivers D*(H-1)+3. The slope is right -- 31-15 = 16 = 4*(8-4) --
+  // and only the constant is off. Correcting the spec moves task_text_hash and
+  // forces re-solicitation, so it is HELD pending the user's ruling and this
+  // testbench is deliberately left requiring the value the reference actually
+  // has. L3_LAT keeps the spec's formula so the gap stays visible in the output.
+  localparam int unsigned L3_LAT  = 4*(H-1) + 2;   // what spec L3 STATES -- known low by 1
+  localparam int unsigned EXP_LAT = L3_LAT + 1;    // what the reference DELIVERS: a pipeline stage
   int unsigned lat_meas;
   bit          lat_ok;
   bit          floors_v2_ok = 1'b1;
@@ -386,7 +401,7 @@ module fp16_gemm_array_tb;
         end
       end
       lat_ok = (lat_meas == EXP_LAT);
-      $display("METRIC: latency_ticks=%0d expected=%0d (L3 D*(H-1)+2=%0d, +1 sampling edge) H=%0d ok=%s",
+      $display("METRIC: latency_ticks=%0d expected=%0d (spec L3 states %0d -- measured low by 1, see probe_l3_latency_tb) H=%0d ok=%s",
                lat_meas, EXP_LAT, L3_LAT, H, lat_ok ? "yes" : "NO");
       if (lat_meas == 0)
         $display("  L3 FLOOR: the impulse never emerged within %0d ticks -- not measured, not passed",
