@@ -1,0 +1,48 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 2,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "git_sha": "065102880e92dd6875bd26dc53e509c5597922d2",
+  "kind": "sim",
+  "label": "fp16_gemm_array_top",
+  "metrics": {
+    "+HH_4": {
+      "H": "4",
+      "expected": "15",
+      "latency_ticks": "15",
+      "ok": "yes"
+    },
+    "+HH_8": {
+      "H": "8",
+      "expected": "31",
+      "latency_ticks": "31",
+      "ok": "yes"
+    }
+  },
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "PASS"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/ref/fp16_gemm_array_top.sv",
+  "submission_sha256_16": "023cd4e46559334e",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2f2c4cd76f582ae1",
+  "timestamp_utc": "2026-08-26T04:29:49Z"
+}
