@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Refuse a build whose warnings name a TASK-OWNED artefact, ignoring the anchor.
+
+    check_artefact_warnings.py BUILDLOG --task TASKDIR [--report-only KIND ...]
+
+WHY THIS EXISTS
+---------------
+Two of this week's defects were reported by the toolchain, in the build log, on
+the exact line, and were read by nobody. Both times the reason was the same:
+the warning arrived in a stream of warnings about the VENDORED ANCHOR.
+
+  1. THE INERT CONFORMANT CHANNEL. v_ca06's `dwc_c1` and `dwc_c5` declared
+     themselves slow on the downstream response path. A double drive left
+     `g_rready` connected to nothing, so the channel was never slow, and both
+     perturbations passed every run for as long as they had existed. Measured on
+     the pre-repair source:
+
+         %Warning-UNDRIVEN:    extra.sv:108: Signal is not driven: 'g_rready'
+         %Warning-MULTIDRIVEN: extra.sv:90:  Bit [0] of signal 'm_rready' have
+                                             multiple combinational drivers.
+
+     Seven warnings named the perturbation. ONE HUNDRED AND TWENTY-EIGHT were in
+     the build.
+
+  2. THE COMBINATIONAL LOOP. A5's backpressure was armed on each channel's own
+     valid, closing ready -> design -> valid -> arm -> ready:
+
+         %Warning-UNOPTFLAT: Circular combinational logic:
+           'dw_downsizer_tb.m_arready'   (also m_awready, m_wready, s_bready)
+
+     Four of eighteen circular signals were the testbench's. The other fourteen
+     were the anchor's and predate the work. On v_ca06 the loop converged and
+     every verdict was right; on v_ca03 the same instrument produced 26 failures
+     across six clause ids, none of them a design defect.
+
+The harness builds with -Wno-fatal, which is CORRECT: a vendored anchor emits
+warnings the task cannot fix, and turning those into refusals makes every task
+unbuildable. The cost is that a warning about an artefact the task DOES own
+arrives in the same stream and is invisible by dilution.
+
+    A permanently noisy warning channel is not a warning channel.
+
+This does not turn the noise down. It separates the two populations by FILE and
+refuses only on the half the task is responsible for.
+
+WHAT COUNTS AS TASK-OWNED
+-------------------------
+Everything under the task directory EXCEPT `dut/`, plus the harness temporaries
+derived from them. `_verif_variant.py` writes `variant.sv` (the golden, renamed
+-- VENDORED) and `extra.sv` (the perturbation or mutant -- TASK-OWNED), so the
+two halves of a variant build are separable by filename even though both are
+temporaries.
+
+THE SUBMISSION IS NOT TASK-OWNED and is reported, never refused. A submitted
+testbench's warnings are the submitter's business; refusing on them would fail
+a submission for style rather than for what it measures.
+
+WHICH KINDS REFUSE, AND WHY EACH ONE
+------------------------------------
+Only kinds that mean "this artefact does not do what its source says":
+
+    UNDRIVEN     a signal the artefact reads is connected to nothing
+    MULTIDRIVEN  two drivers on one net; which one wins is not in the source
+    UNOPTFLAT    a combinational cycle; the result depends on a settle order
+    IMPLICIT     an undeclared name became a 1-bit wire, silently
+    LATCH        an incompletely assigned combinational block became state
+    BLKANDNBLK   blocking and non-blocking on one variable; ordering undefined
+    PINMISSING   an instantiation left a port unconnected
+
+Deliberately NOT refusing: WIDTHTRUNC, WIDTHEXPAND, UNUSEDSIGNAL, UNUSEDPARAM,
+DECLFILENAME, PINCONNECTEMPTY, CASEINCOMPLETE. Those are style or are routinely
+intentional, and a gate that fires on them is one that gets routed around --
+which is how the two defects above survived in the first place.
+
+IT TAKES TWO PASSES, AND FINDING THAT OUT COST A WRONG CELL IN ITS OWN
+VALIDATION TABLE. The two kinds come from different parts of Verilator:
+
+    UNDRIVEN / MULTIDRIVEN   need `-Wall`; the harness's default level is
+                             silent about them, which is what hid `g_rready`
+    UNOPTFLAT                needs a REAL BUILD; it is emitted by the scheduler,
+                             and `--lint-only` skips that pass entirely
+
+Validated on the armed testbench: `--lint-only -Wall` reported ZERO task-owned
+warnings on a netlist that provably contained four circular testbench signals.
+A gate run on either pass alone misses one of the two defects it exists for.
+Run it on both logs, or on one `--binary -Wall` build.
+"""
+import os
+import re
+import sys
+
+REFUSE = ("UNDRIVEN", "MULTIDRIVEN", "UNOPTFLAT", "IMPLICIT", "LATCH",
+          "BLKANDNBLK", "PINMISSING")
+WARN = re.compile(r"^%Warning-([A-Z0-9]+):\s*([^:]+):(\d+):\d*:\s*(.*)$", re.M)
+
+
+def owned(path, task):
+    """True if this file is an artefact the TASK is responsible for."""
+    base = os.path.basename(path)
+    if base in ("extra.sv",):            # perturbation or mutant, renamed
+        return True
+    if base in ("variant.sv", "golden_renamed.sv", "sub.sv", "gate_mutant.sv"):
+        return False                     # the golden, or the submission
+    try:
+        rel = os.path.relpath(os.path.abspath(path), os.path.abspath(task))
+    except ValueError:
+        return False
+    if rel.startswith(".."):
+        return False                     # outside the task entirely
+    return not rel.startswith("dut" + os.sep)
+
+
+def classify(text, task):
+    mine, theirs = [], 0
+    for kind, path, line, msg in WARN.findall(text):
+        if owned(path, task):
+            mine.append((kind, os.path.basename(path), line, msg.strip()))
+        else:
+            theirs += 1
+    return mine, theirs
+
+
+def main(argv):
+    if len(argv) < 3 or "--task" not in argv:
+        sys.exit(__doc__.strip().splitlines()[0])
+    log = argv[0]
+    task = argv[argv.index("--task") + 1]
+    report_only = set(argv[argv.index("--report-only") + 1:]) if "--report-only" in argv else set()
+    text = open(log, encoding="utf-8", errors="replace").read()
+    # A BUILD THAT DID NOT HAPPEN HAS NO WARNINGS, and reporting that as a clean
+    # build is this tool's own version of the defect it exists to find. Measured:
+    # on an empty file it printed "OK: no task-owned artefact drew a warning of a
+    # refusing kind" -- true, and useless. Same shape as a shell loop that never
+    # ran reporting the same zero as a history that is empty
+    # (AGENT-DESIGN-43a92055, macOS bash without `mapfile`).
+    #
+    # So the log must show that a build occurred. Any of these is enough; none of
+    # them is a warning, so a genuinely clean build still passes.
+    if not re.search(r"%Warning|%Error|[Vv]erilator|\bg\+\+|\bmake\b|Exiting due", text):
+        print("REFUSED: %s contains no build output at all." % log)
+        print("  A build that did not happen has no warnings, and this tool")
+        print("  cannot tell that from a clean build by counting warnings.")
+        print("  Absent is not zero (rule 20).")
+        return 2
+    mine, theirs = classify(text, task)
+
+    hard = [w for w in mine if w[0] in REFUSE and w[0] not in report_only]
+    soft = [w for w in mine if w not in hard]
+    print("  %d warning(s) name an artefact this task owns; %d name the anchor "
+          "or the submission." % (len(mine), theirs))
+    # NOTES ARE SUMMARISED, NOT LISTED. The free-running testbench draws 33 of
+    # them -- PROCASSINIT, BLKSEQ, UNUSEDSIGNAL -- all benign and all correct.
+    # Printing 33 lines above a two-line refusal rebuilds, inside this tool, the
+    # exact dilution it was written to undo.
+    if soft:
+        kinds = {}
+        for kind, _b, _l, _m in soft:
+            kinds[kind] = kinds.get(kind, 0) + 1
+        print("    notes (not refusing): " +
+              ", ".join("%s x%d" % (k, n) for k, n in sorted(kinds.items())))
+    for kind, base, line, msg in hard:
+        print("    REFUSE  %-12s %s:%s  %s" % (kind, base, line, msg[:70]))
+    if hard:
+        print("REFUSED: %d warning(s) say a task-owned artefact does not do what its"
+              " source says." % len(hard))
+        print("  These are not style. Each one means the netlist and the text")
+        print("  disagree, and every artefact affected is GREEN while broken.")
+        return 2
+    print("OK: no task-owned artefact drew a warning of a refusing kind.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

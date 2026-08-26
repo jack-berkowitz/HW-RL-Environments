@@ -48,6 +48,9 @@ be outstanding on the read side at any time, and at most `MAX_UNIQ_IDS` on the
 write side.
 *Authority: task intent — this bound is the property under test.*
 
+  *Exceeding the bound forces a master-identifier collision, so a violation is **reported under D1**. A submission that checks
+  D1 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
 **A3 — the boundary, and it is the point of this design.** When
 `MAX_UNIQ_IDS` distinct slave identifiers are already outstanding, an address
 request carrying an identifier **not among them** shall **not** be accepted —
@@ -87,6 +90,9 @@ request with that identifier shall not be accepted until one of them completes.
 return in the order in which their address requests were accepted.
 *Authority: AMBA AXI4 — transactions with the same ID must complete in order.*
 
+  *An out-of-order response carries the data of another transaction, so a violation is **reported under E1**. A submission that checks
+  E1 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
 **B2 — no ordering between identifiers.** The relative order of responses
 carrying **different** slave identifiers is **not specified** and shall not be
 checked.
@@ -99,6 +105,9 @@ the beats of one write shall not be interleaved with another's.
 *Authority: AMBA AXI4 — write data interleaving was removed in AXI4, so beats
 follow address order.*
 
+  *Misordered or interleaved write beats carry the wrong payload, so a violation is **reported under E1**. A submission that checks
+  E1 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
 ---
 
 ## 3. Identifier restoration
@@ -107,6 +116,9 @@ follow address order.*
 identifier of the transaction that produced it.
 *Authority: AMBA AXI4 — a response carries the identifier of its transaction.*
 
+  *A wrongly restored identifier appears as a beat for an id with none outstanding, so a violation is **reported under C2**. A submission that checks
+  C2 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
 **C2.** Every response beat presented on the slave port shall correspond to a
 transaction that is outstanding at that moment. A response for which no
 transaction is outstanding is a violation.
@@ -139,6 +151,27 @@ transaction shall produce exactly one master transaction, carrying the same
 `addr` and `len`, and each master response shall produce exactly one slave
 response.
 *Authority: task intent — this is a converter, not a splitter.*
+
+**D5 — an offered beat is not withdrawn.** On every channel of **both** ports
+that the design drives — `s_bvalid`, `s_rvalid`, `m_awvalid`, `m_wvalid`,
+`m_arvalid` — once a `valid` is asserted it shall remain asserted, with its
+payload unchanged, until the corresponding `ready` is seen.
+
+`valid` **shall not depend combinationally on `ready`.** A design that asserts
+`valid` only in cycles where `ready` happens to be high satisfies the letter of
+the sentence above and defeats it: nothing is ever withdrawn because nothing is
+ever offered into a stall.
+
+This binds the **design's outputs only**. It says nothing about the offers a
+testbench makes to the design: A3 and A4 permit a request not to be accepted,
+so a testbench that gives up on an offer after a bounded wait is doing what
+those clauses require of it, not violating this one.
+
+*Authority: AMBA AXI4 — `VALID` must remain asserted until the handshake
+completes, and the source may not wait for `READY` before asserting it. The
+anchor asserts the same property internally, on the same event:
+`dut/rr_arb_tree.sv:391` — "It is disallowed to deassert unserved request
+signals when LockIn is enabled."*
 
 ---
 

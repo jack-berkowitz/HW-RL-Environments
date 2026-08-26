@@ -508,3 +508,134 @@ proposed_clause_h1b:
     reason, and says nothing about rsp_valid_o and rsp_ready_i -- those two names
     appear only in R1's stability sentence and the port list. Any mirror clause
     should be decided for both tasks at once.
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED: the directory is where they live, this is what they are.
+# `measured_by` is mandatory on this side because most of these verdicts are hand
+# runs, and a hand run is a measurement whose instrument was never wired -- the
+# defect the contract exists to close. It is stated per control rather than per
+# task so a mixed set cannot read as uniform.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_h3_drops_valid.sv
+    kind: negative
+    expect: fail
+    clause: H3
+    exclusive: true
+    measured_by: scored_path
+    result: "FAIL at phase=h3 -- out_valid dropped while stalled. The CONSEQUENT violated."
+  - file: controls/nc_h3_evades_antecedent.sv
+    kind: suppressing
+    expect: fail
+    clause: H1b
+    exclusive: true
+    antecedent_counter: h3_guard_true
+    expect_count: 0
+    measured_by: scored_path
+    result: >
+      FAIL at phase=final -- "H3 was never exercised". The ANTECEDENT suppressed.
+      Under the contract before H1b it passed the entire suite, which is what made
+      it the measurement rather than a broken control.
+    note: >
+      THE PAIR IS THE POINT. These two differ only in where they land, and the
+      landing place is the diagnostic: phase=<clause> means the consequent was
+      violated and the clause has force; phase=final means the antecedent was
+      suppressed. A runner that records only pass/fail loses the distinction.
+
+# ---------------------------------------------------------------------------
+# HANDSHAKE MIRROR DECISION -- taken ACROSS FOUR TASKS AT ONCE, 2026-08-25.
+# Recorded identically in all four so a reader of any one sees the whole shape.
+# ---------------------------------------------------------------------------
+handshake_mirror_decision:
+  decided_on: 2026-08-25
+  the_question: >
+    A stability clause of the form "once valid is asserted it stays asserted
+    until the transfer completes" is satisfiable by NEVER OFFERING -- a beat or
+    result never presented to a stalled consumer cannot be withdrawn from one. So
+    a design may empty the antecedent instead of honouring the consequent. Does
+    the contract forbid that, permit it, or say nothing?
+  why_it_was_decided_together: >
+    SILENCE IS THE ONE STATE THAT IS NOT A DECISION. Before this, d_dsp02 and
+    d_ca01 had the gap, d_dsp03 had made the opposite decision deliberately, and
+    d_nw03 was simply silent. Deciding task by task would have produced four
+    positions that looked like an inconsistency; deciding once produces three
+    that forbid it and one that permits it FOR A STATED REASON, which is an
+    intentional asymmetry a reader can check.
+  outcome:
+    d_dsp02: FORBIDS -- clause H1b, landed 2026-08-25
+    d_ca01:  FORBIDS -- clause R1b, landed 2026-08-25
+    d_nw03:  FORBIDS -- clause R1b, landed 2026-08-25
+    d_dsp03: PERMITS -- clause L4, THE DELIBERATE EXCEPTION, unchanged
+  d_dsp03_is_the_exception_and_here_is_its_reason: >
+    QUOTED RATHER THAN SUMMARISED, because the point is that it was decided and
+    not overlooked. d_dsp03's L4 reads:
+    .
+      "L4. `in_ready_o` MAY DEPEND COMBINATIONALLY ON `in_valid_i`, and
+           `out_valid_o` may depend combinationally on `out_ready_i`. The harness
+           drives neither from the other, so a design that gates either way
+           cannot deadlock against it. A fully combinational unit is conformant."
+    .
+    The reason is task-specific and sound: d_dsp03's reference binds
+    NumPipeRegs=0 and is purely combinational, so requiring a registered valid
+    would exclude the reference's own shape. The other three tasks all have
+    buffering designs where the deadlock L4 rules out is reachable.
+  the_consequence_d_dsp03_carries: >
+    STATED SO IT IS NOT REDISCOVERED AS A DEFECT. L4 licenses the construction
+    that EMPTIES d_dsp03's own output stability clause, so on that task the
+    stability sentence is decorative rather than wrong -- a design gating
+    out_valid_o on out_ready_i never has valid high while ready is low, and it is
+    CONFORMING. Two coherent resolutions remain open and neither is taken here:
+    narrow L4 to the input side, or drop the output stability sentence as
+    non-normative. Doing neither leaves a clause that reads as a requirement and
+    is not one.
+  evidence_base: >
+    Every one of the three FORBIDS clauses cites a control that PASSED the
+    contract as it stood while driving the clause's firing count to zero:
+    nc_h3_evades_antecedent (d_dsp02), nc_r1_evades_antecedent (d_ca01, 0/16),
+    nc_r1_evades_antecedent (d_nw03, 0/8). None was declared unfalsifiable by
+    reading; F86's own founding instance was, and that is recorded in F86.
+  enforceability_caveat: >
+    ALL THREE CLAUSES FORBID A COMBINATIONAL DEPENDENCY, which no testbench here
+    can observe directly -- it sees valid low and cannot distinguish "gated on
+    ready" from "nothing ready yet". The condition floor catches the construction
+    but reports it as "the clause was never exercised", not as a violation of the
+    mirror clause. Enforceable by inspection and by control, only partially by
+    the harness. This is in each task's candidates README where a grader meets it.
+
+compile_warning_audit:
+  audited_on: 2026-08-25
+  trigger: >
+    AGENT-VERIF-A2 reported a combinational loop -- ready driven from valid,
+    closing ready -> design -> valid -> arm -> ready -- which Verilator reported
+    as UNOPTFLAT and which was INVISIBLE BY DILUTION among ~30 warnings about the
+    vendored anchor under -Wno-fatal. On v_ca06 it converged and every verdict
+    was right; on v_ca03 it produced 26 failures across six clause ids, none a
+    design defect. The tell: four different one-hot variants gave the IDENTICAL
+    26 failures, and a defect that does not change when you change what provokes
+    it is a settle order, not a design defect.
+  result_here: CLEAN -- zero UNOPTFLAT on every design task audited
+  measured:
+    - {task: d_nw03_axis_switch_oq,     warnings: 18, unoptflat: 0}
+    - {task: d_nw01_axi4_xbar,          warnings: 43, unoptflat: 0}
+    - {task: d_ca01_nonblocking_dcache, warnings: 17, unoptflat: 0}
+    - {task: d_dsp02_fp32_fma_ii1,      warnings: 83, unoptflat: 0}
+  why_it_is_clean_and_it_is_not_luck: >
+    No testbench here drives a ready from a valid. Grepped all eight for an
+    assignment of a *ready* from a *valid* and found none. d_ca01's testbench
+    header states it as structural remedy 1 -- "NO COMBINATIONAL PATH FROM A DUT
+    OUTPUT TO A DUT INPUT. Every input this harness drives comes from a register
+    or a constant" -- written after two builds differing only by a debug process
+    disagreed about whether the design had deadlocked. The remedy predates the
+    hazard report and is why the hazard does not land.
+  BUT_THE_DETECTION_IS_WORSE_HERE_THAN_DILUTION: >
+    scripts/sim_candidate.sh captures the compile output in `cerr` and prints it
+    ONLY WHEN THE BUILD FAILS. On a successful build it reports ZERO warnings --
+    not diluted, SUPPRESSED. These counts come from building each task directly,
+    because the scored path cannot answer the question at all.
+    .
+    So the number above is not "the runner says clean". It is "the runner cannot
+    say, and a direct build says clean". A NEW UNOPTFLAT introduced tomorrow would
+    be invisible on this side by total suppression rather than by dilution, which
+    is strictly harder to notice than what AGENT-VERIF-A2 hit. Reported to the
+    owner of scripts/; not worked around.

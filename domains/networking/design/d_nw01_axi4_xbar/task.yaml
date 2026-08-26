@@ -335,7 +335,13 @@ ppa_historical_20ns:
 # The second source exists to FAIL. It is internally authored, so folding it
 # into the baseline would judge candidates against our own engineering quality
 # rather than against the contract. It is recorded here and nowhere else.
-controls:
+# RENAMED from `controls:` on 2026-08-25. It never held controls -- it holds the
+# SECOND SOURCE's PPA record -- and the name collided with the control-enumeration
+# contract, which reserves `controls:` for a LIST of control declarations. A runner
+# reading y["controls"] and finding a mapping here gets a type error at best and
+# silently skips the task at worst, which is the "no controls vs the directory
+# moved" confusion the contract exists to prevent, arriving through the key name.
+apparatus:
   second_source:
     file: tb/audit/axi4_xbar_second_source.sv
     purpose: falsifier for the checker; never an oracle, never an envelope point
@@ -516,3 +522,94 @@ capability_controls:
       numbering: its text contrasts with C1 directly -- "C1 says how much the
       design must be able to do at once; this says how much it may SPEND doing
       it." Keep the position when renumbering.
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED. `measured_by` is mandatory on this side because most of
+# these verdicts are hand runs, and a hand run is a measurement whose instrument
+# was never wired -- the defect the contract exists to close.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_i_overbuffered_r.sv
+    kind: negative
+    expect: fail
+    clause: C3
+    measured_by: scored_path
+    expectation_is_currently_violated: true
+    liveness: MEASURED -- peak_r_occupancy = 64 over 4 masters, C3's ceiling is 4
+    liveness_note: >
+      A CONTROL THAT PASSES MAY BE INERT, and this was the only control in the
+      design set that never failed anywhere -- so its pass was the only one whose
+      meaning depended entirely on the control doing what its name claims. If the
+      64-deep queue had never exceeded C3's ceiling it would have passed for the
+      same reason a CONFORMING design passes, and "C3 is unenforced" would have
+      rested on nothing.
+      .
+      Measured rather than assumed: the queue FILLS TO 64, sixteen times the
+      ceiling, and the run still passes. The finding stands and now stands on a
+      number. AGENT-VERIF-A2's warning, from two v_ca06 perturbations whose R
+      channel had never been slow because a double drive left the gate connected
+      to nothing -- both passed every run for as long as they existed.
+    why_the_other_24_are_not_at_this_risk: >
+      An inert control is invisible only where it PASSES. Every other control in
+      the design set either FAILS somewhere -- which is proof it is live -- or is
+      an axis control carrying a measured ratio, which is the same proof by
+      another route: nc_b_serial_response's 2.58x cycles and nc_c_bloat_storage's
+      +4096 flops are liveness evidence, not just axis evidence.
+    it_had_never_run_through_the_scored_path: >
+      SEPARATELY AND WORSE: check_transport.py rejected this control outright,
+      because a COMMENT in it named the scoring testbench by filename and the
+      scanner matches that token in comments exactly as in code. So the recorded
+      verdict was not merely a hand run -- the scored path REFUSED the file. The
+      comment is reworded and it now runs: 16/16, sixteen configurations, not the
+      "both MAX_TRANS configs" the old record claimed.
+    result: >
+      IT PASSES, AND THAT IS THE FINDING. The reference verbatim plus a 64-deep R
+      FIFO per master -- far beyond C3's ceiling of 4 R beats per master port --
+      and it passes BOTH MAX_TRANS configurations. C3 IS NOT ENFORCED.
+    note: >
+      DECLARED expect: fail BECAUSE THAT IS WHAT THE CONTRACT REQUIRES, not what
+      the harness does. A runner reading this will report a mismatch on every run,
+      and it should: the mismatch IS the open defect. Silencing it by declaring
+      expect: pass would record the gap as intended behaviour, which is how an
+      unenforced clause becomes a permanent one.
+      .
+      This is the only control in the design set whose declaration and whose
+      measurement disagree, and the disagreement is deliberate.
+
+compile_warning_audit:
+  audited_on: 2026-08-25
+  trigger: >
+    AGENT-VERIF-A2 reported a combinational loop -- ready driven from valid,
+    closing ready -> design -> valid -> arm -> ready -- which Verilator reported
+    as UNOPTFLAT and which was INVISIBLE BY DILUTION among ~30 warnings about the
+    vendored anchor under -Wno-fatal. On v_ca06 it converged and every verdict
+    was right; on v_ca03 it produced 26 failures across six clause ids, none a
+    design defect. The tell: four different one-hot variants gave the IDENTICAL
+    26 failures, and a defect that does not change when you change what provokes
+    it is a settle order, not a design defect.
+  result_here: CLEAN -- zero UNOPTFLAT on every design task audited
+  measured:
+    - {task: d_nw03_axis_switch_oq,     warnings: 18, unoptflat: 0}
+    - {task: d_nw01_axi4_xbar,          warnings: 43, unoptflat: 0}
+    - {task: d_ca01_nonblocking_dcache, warnings: 17, unoptflat: 0}
+    - {task: d_dsp02_fp32_fma_ii1,      warnings: 83, unoptflat: 0}
+  why_it_is_clean_and_it_is_not_luck: >
+    No testbench here drives a ready from a valid. Grepped all eight for an
+    assignment of a *ready* from a *valid* and found none. d_ca01's testbench
+    header states it as structural remedy 1 -- "NO COMBINATIONAL PATH FROM A DUT
+    OUTPUT TO A DUT INPUT. Every input this harness drives comes from a register
+    or a constant" -- written after two builds differing only by a debug process
+    disagreed about whether the design had deadlocked. The remedy predates the
+    hazard report and is why the hazard does not land.
+  BUT_THE_DETECTION_IS_WORSE_HERE_THAN_DILUTION: >
+    scripts/sim_candidate.sh captures the compile output in `cerr` and prints it
+    ONLY WHEN THE BUILD FAILS. On a successful build it reports ZERO warnings --
+    not diluted, SUPPRESSED. These counts come from building each task directly,
+    because the scored path cannot answer the question at all.
+    .
+    So the number above is not "the runner says clean". It is "the runner cannot
+    say, and a direct build says clean". A NEW UNOPTFLAT introduced tomorrow would
+    be invisible on this side by total suppression rather than by dilution, which
+    is strictly harder to notice than what AGENT-VERIF-A2 hit. Reported to the
+    owner of scripts/; not worked around.

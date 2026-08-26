@@ -1,0 +1,146 @@
+title: SDP requantise / convert unit
+id: d_ai04
+module: sdp_requant
+domain: ai_accel
+type: design
+catalog: TASK_CATALOG.md
+
+# ORACLE. The expected values are anchor-measured: 44 of them came out of the
+# vendored NVDLA RTL by probe, and are quoted with their vectors in
+# MEASUREMENTS.md. The testbench does NOT co-simulate the anchor -- it carries
+# the captured values -- so the claim available here is "the contract was
+# derived from RTL nobody here wrote", which is weaker than d_dsp02's
+# "the testbench passed RTL nobody here wrote" and is stated as such rather
+# than rounded up.
+#
+# The 800-word sweep is checked against a MODEL BY THE SAME AUTHOR as the
+# reference, and can share a misreading with it. That is breadth, not oracle.
+oracle_class: A
+oracle_note: >
+  THE SCORING RIG IS A CAPTURED-VECTOR ORACLE, not co-simulation. Its 44 anchor
+  words are ground truth for the CONTRACT; its 800 swept words are coverage for
+  the IMPLEMENTATION, checked against a model by the same author as the
+  reference. The testbench header says which is which so a reader does not treat
+  844 checks as 844 independent confirmations.
+
+  SEPARATELY, tb/audit/sdp_requant_xcheck_tb.sv DOES co-simulate: it runs the
+  vendored NV_NVDLA_SDP_CORE_Y_cvt beside the reference and compared 1728 words
+  with 0 differences, over 60 random integer configurations, 40 float
+  configurations steered at the exponent corners, and every binary16 exponent.
+  That is the strong claim -- the reference agrees with RTL nobody here wrote on
+  inputs nobody chose in advance. It is an AUDIT rig and is NOT in the scored
+  path: submissions are graded by tb/sdp_requant_tb.sv alone.
+
+  The cross-check was validated against the controls before its zero was
+  believed: nc_a 832 differing words, nc_e 194, nc_f 121, nc_b 6. It reports 0
+  for nc_i_stale_config and that is correct rather than a gap -- it drains
+  between configuration changes, so it cannot see an A5 violation by
+  construction. See CONTROLS.md.
+
+reference:
+  refs_lock_repo: nvdla/hw
+  file: refs/nvdla_hw/vmod/nvdla/sdp/NV_NVDLA_SDP_CORE_Y_cvt.v
+  licence: NVIDIA Open NVDLA License and Agreement v1.0
+  mode: vendor
+  closure: []          # 18 modules, all in the one file; zero external deps
+  shim: ref/sdp_requant_ref.sv
+  shim_note: >
+    NOT a shim over the anchor. The anchor is Catapult HLS output and is used as
+    a MEASUREMENT TARGET only, never instantiated in the scored path. The
+    reference is written from the measured contract with a clean port list --
+    the anchor's Catapult _rsc_z naming is not inflicted on submissions.
+  why_this_boundary: >
+    NV_NVDLA_SDP_CORE_Y_cvt is self-contained: 2,721 lines, 18 modules in one
+    file, MODMISSING 0 and zero external dependencies. That is why it was chosen
+    over the wider SDP -- there is no closure to shim and no scaffolding needed
+    to start.
+
+# MANIFEST GAP, RECORDED HERE BECAUSE refs.manifest.yaml IS NOT MINE TO EDIT.
+# Its nvdla/hw row reads `tasks: [ai_v04, ai_d01, ai_d02]` and globs
+# `nv_small/vmod/nvdla/sdp/**`. Three problems, none of them blocking, all of
+# them for the manifest's owner:
+#   1. d_ai04 is not in that task list.
+#   2. the vendored tree is refs/nvdla_hw/vmod/, not nv_small/vmod/ -- the glob
+#      matches nothing that exists.
+#   3. none of ai_v04, ai_d01 or ai_d02 exist as task directories.
+manifest_status: row exists for nvdla/hw but does not name this task or this path
+
+spec: [spec/sdp_requant_iface.sv]
+
+# RULE 18 -- PPA is measured ONLY here.
+scored_configuration:
+  # EXACTLY ONE, by construction rather than by omission. sdp_requant declares
+  # no parameters: P1 pins four lanes and the 16b/32b widths, and every other
+  # axis is a runtime INPUT (cfg_precision, cfg_offset, cfg_scale, cfg_truncate,
+  # cfg_bypass, cfg_nan_to_zero) swept by the stimulus rather than by
+  # elaboration. If a parameter is ever added, the list in sim_candidate.sh must
+  # grow with it or the sweep silently narrows.
+  parameters: none
+  rationale: >
+    The coverage that would be configs elsewhere is in the stimulus: 44
+    anchor-measured words plus 800 swept words across both modes, both signs,
+    every subnormal boundary and truncate values to 47.
+
+scored_metrics:
+  - {metric: init_interval,   label: "II",       expect: 1, role: fixed}
+  - {metric: buffer_slots,    label: "slots",               role: choice}
+  - {metric: latency_cycles,  label: "lat(cyc)",            role: choice}
+  - {metric: area_um2,        label: "area",                role: choice}
+  - {metric: power_mw,        label: "power",               role: choice}
+  # NO CAPABILITY COLUMN, and that is a consequence of the contract rather than
+  # an omission -- P1 pins the lanes, P2 the arithmetic, A4 the throughput.
+  # There is no dimension along which a submission may do MORE. Spec G5.
+
+ppa_status: >
+  NO PPA MAY BE REPORTED YET. G1 pins the measurement period at 1.5x the
+  reference's own measured period, and THE REFERENCE Fmax SWEEP HAS NOT BEEN RUN.
+  Recorded as missing rather than filled with a plausible number.
+
+controls:
+  # Nine, each the reference with exactly one defect. Matrix in CONTROLS.md.
+  # All nine FAIL and the reference PASSES.
+  - {file: controls/nc_a_add_offset.sv,       clause: F3, exclusive: false}
+  - {file: controls/nc_b_round_half_up.sv,    clause: F4, exclusive_as_of: 2026-08-26}
+  - {file: controls/nc_c_narrow_product.sv,   clause: F5, exclusive: false}
+  - {file: controls/nc_d_single_register.sv,  clause: A3, exclusive_as_of: 2026-08-26}
+  - {file: controls/nc_e_flush_subnormals.sv, clause: F7, exclusive: false}
+  - {file: controls/nc_f_propagate_inf.sv,    clause: F8, exclusive_as_of: 2026-08-26}
+  - {file: controls/nc_g_alias_modes.sv,      clause: F2, exclusive: false}
+  - {file: controls/nc_h_bypass_in_float.sv,  clause: T4, exclusive_as_of: 2026-08-26}
+  - {file: controls/nc_i_stale_config.sv,     clause: A5, exclusive_as_of: 2026-08-26}
+  # `exclusive_as_of` rather than a bare `exclusive: true`, per AGENT-VERIF-A2 --
+  # a boolean with a date beside it gets read as a boolean. NOTHING PARSES THIS
+  # FIELD (one comment in check_clause_emittable.py is its only mention in
+  # scripts/), so the date buys legibility for a reader and not enforcement.
+  # The four marked `false` are broad by construction: cfg_offset participates in
+  # every integer vector and cfg_precision selects the whole float half, so a
+  # defect in either cannot be local to one clause.
+
+controls_note: >
+  nc_i_stale_config PASSED when first run, and T6 was the reason -- the check
+  changed configuration between words but let each flow straight through, so with
+  a one-deep pipeline the configuration at emit was always still the one at
+  accept. It reported an exercise count of 24 and tested nothing. T6 now stalls
+  the consumer, fills the buffer under two different configurations and moves to
+  a third before releasing. See CONTROLS.md.
+
+scored_path_verified: 2026-08-26
+scored_path_note: >
+  The reference was run through scripts/sim_candidate.sh end to end and returned
+  rc=0, 1/1 configs passed, compile warnings 0. F88's lesson is that a task whose
+  artefacts were never run through the SCORED path is not a task -- d_ai01
+  carried seven controls and a reference result while having never been runnable.
+  Reproduce with:
+
+      cp domains/ai_accel/design/d_ai04_sdp_requant/ref/sdp_requant_ref.sv /tmp/r.sv
+      scripts/sim_candidate.sh d_ai04 /tmp/r.sv
+
+  THE RUN RECORD FROM THAT VERIFICATION WAS DELETED ON PURPOSE. sim_candidate.sh
+  writes runs/<task>/<stamp>__<label>__sim.json with a "submission" field, so a
+  reference checked through the candidate path leaves an artefact that calls
+  itself a submission. It also captured a stale warning count from a dirty tree.
+  A sentence plus the command above is worth more than an artefact that
+  misrepresents what it is.
+
+submissions_status: >
+  NOT YET SOLICITED. No submission exists for this task.

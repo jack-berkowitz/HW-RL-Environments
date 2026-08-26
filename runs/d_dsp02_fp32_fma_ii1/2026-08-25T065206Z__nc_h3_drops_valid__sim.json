@@ -1,0 +1,12 @@
+{
+  "build_error": "12 error(s); first: nc_h3_drops_valid.sv:73:5: error: unknown class or package 'fpnew_pkg' ",
+  "build_status": "slang_rejected",
+  "git_sha": "84fa595e75fcd0303544528e41fe259b133a864a-dirty",
+  "kind": "sim",
+  "label": "nc_h3_drops_valid",
+  "submission": "domains/dsp/design/d_dsp02_fp32_fma_ii1/controls/nc_h3_drops_valid.sv",
+  "submission_sha256_16": "57c9dadbf2ae384b",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "8420f4393a0a930d",
+  "timestamp_utc": "2026-08-25T06:52:06Z"
+}

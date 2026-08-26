@@ -19,6 +19,19 @@
 // samples -- stimulus changes on the negative edge only.
 // =============================================================================
 
+// A WAIT COMMITS ON THE HANDSHAKE, NOT ON ONE SIDE OF IT.
+// These loops broke on the READY/GRANT alone. That is equivalent today -- the
+// valid is asserted before the wait and held throughout it -- so the defect was
+// unreachable and no run could distinguish the two forms.
+//
+// It becomes reachable the moment anything gates the valid: the design sees no
+// offer, the testbench sees a ready, and a beat that never moved is recorded as
+// moved. Measured on v_ca05, where the reference model then reported "full=0
+// with 8 entries" and the failure was attributed to the design.
+//
+// 24 sites across six tasks had this shape. Corrected everywhere rather than
+// where a perturbation happened to reach, because "correct only while nothing
+// gates the valid" is a property of the corpus and not of the code.
 module fp_noncomp_tb;
 
 
@@ -208,7 +221,7 @@ module fp_noncomp_tb;
     // so it cannot race ahead of the design.
     forever begin
       @(posedge clk);
-      if (in_ready) break;
+      if (in_valid && in_ready) break;
     end
     exp_q.push_back(e);
     n_issued = n_issued + 1;
@@ -371,6 +384,20 @@ module fp_noncomp_tb;
     $display("METRIC: ops_checked %0d", n_checked);
     $display("METRIC: cov snan=%0d qnan=%0d zeropair=%0d noncanon=%0d stalls=%0d",
              cov_snan, cov_qnan, cov_zero_pair, cov_noncanon_nan, cov_stall);
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_dsp02.cov_noncanon_nan %0d", cov_noncanon_nan);
+    $display("FIRED v_dsp02.cov_qnan %0d", cov_qnan);
+    $display("FIRED v_dsp02.cov_reset %0d", cov_reset);
+    $display("FIRED v_dsp02.cov_signed_zero_eq %0d", cov_signed_zero_eq);
+    $display("FIRED v_dsp02.cov_snan %0d", cov_snan);
+    $display("FIRED v_dsp02.cov_stall %0d", cov_stall);
+    $display("FIRED v_dsp02.cov_zero_pair %0d", cov_zero_pair);
 
     if (n_fail == 0) $display("RESULT: PASS");
     else             $display("RESULT: FAIL (%0d failures)", n_fail);

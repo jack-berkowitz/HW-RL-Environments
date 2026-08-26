@@ -1,8 +1,9 @@
+`timescale 1ns/1ps
+
 module fp32_fma_ii1 (
     input  logic        clk,
     input  logic        rst_n,
 
-    // ---- operand input ------------------------------------------------------
     input  logic        in_valid,
     output logic        in_ready,
     input  logic [31:0] a,
@@ -10,7 +11,6 @@ module fp32_fma_ii1 (
     input  logic [31:0] c,
     input  logic [2:0]  rnd_mode,
 
-    // ---- result output ------------------------------------------------------
     output logic        out_valid,
     input  logic        out_ready,
     output logic [31:0] result,
@@ -20,1050 +20,755 @@ module fp32_fma_ii1 (
     output logic        flag_inexact
 );
 
-    // -------------------------------------------------------------------------
-    // Combinational fused arithmetic.
-    //
-    // Return packing:
-    //   [31:0] result
-    //   [32]   invalid
-    //   [33]   overflow
-    //   [34]   underflow
-    //   [35]   inexact
-    //
-    // Finite operands are represented as
-    //
-    //     significand_integer * 2^unit_exponent
-    //
-    // where a normal FP32 operand has a 24-bit significand and a subnormal
-    // carries its fraction directly.
-    //
-    // The exact 48-bit product and the addend are aligned into a 96-bit
-    // sign-magnitude window.  Bits falling below that window are represented
-    // by a sticky indication.  The 96-bit window is deliberately much wider
-    // than the 24-bit destination precision, while remaining within the
-    // specification's 96-bit significand-datapath limit.
-    // -------------------------------------------------------------------------
+    localparam int IW  = 96;
+    localparam int TOP = 94;
 
-    function automatic logic [35:0] fma_compute (
+    typedef struct packed {
+        logic               special;
+        logic [31:0]        special_result;
+        logic               invalid;
+        logic [2:0]         rm;
+        logic               sp;
+        logic               sc;
+        logic [47:0]        prod_sig;
+        logic [23:0]        c_sig;
+        logic signed [11:0] exp_p;
+        logic signed [11:0] exp_c;
+        logic signed [11:0] top_p;
+        logic signed [11:0] top_c;
+        logic               prod_zero;
+        logic               c_zero;
+    } stage0_t;
+
+    typedef struct packed {
+        logic               special;
+        logic [31:0]        special_result;
+        logic               invalid;
+        logic [2:0]         rm;
+        logic               sr;
+        logic               exact_zero;
+        logic [95:0]        mag;
+        logic               tail;
+        logic signed [11:0] common_top;
+    } stage1_t;
+
+    typedef struct packed {
+        logic               special;
+        logic [31:0]        special_result;
+        logic               invalid;
+        logic [2:0]         rm;
+        logic               sr;
+        logic               exact_zero;
+        logic               tail_only;
+        logic               normal_path;
+        logic signed [11:0] etop;
+        logic [23:0]        q;
+        logic               guard_bit;
+        logic               lower_nonzero;
+        logic               rem_nonzero;
+    } stage2_t;
+
+    typedef struct packed {
+        logic [31:0] result;
+        logic        invalid;
+        logic        overflow;
+        logic        underflow;
+        logic        inexact;
+    } stage3_t;
+
+    stage0_t s0_q;
+    stage1_t s1_q;
+    stage2_t s2_q;
+    stage3_t s3_q;
+
+    logic s0_valid_q;
+    logic s1_valid_q;
+    logic s2_valid_q;
+    logic s3_valid_q;
+
+    logic s3_ready_c;
+    logic s2_ready_c;
+    logic s1_ready_c;
+    logic s0_ready_c;
+
+    function automatic integer msb24(input logic [23:0] v);
+        integer i;
+        begin
+            msb24 = -1;
+            for (i = 0; i < 24; i = i + 1) begin
+                if (v[i]) begin
+                    msb24 = i;
+                end
+            end
+        end
+    endfunction
+
+    function automatic integer msb48(input logic [47:0] v);
+        integer i;
+        begin
+            msb48 = -1;
+            for (i = 0; i < 48; i = i + 1) begin
+                if (v[i]) begin
+                    msb48 = i;
+                end
+            end
+        end
+    endfunction
+
+    function automatic integer msb96(input logic [95:0] v);
+        integer i;
+        begin
+            msb96 = -1;
+            for (i = 0; i < 96; i = i + 1) begin
+                if (v[i]) begin
+                    msb96 = i;
+                end
+            end
+        end
+    endfunction
+
+    function automatic logic any_low48(
+        input logic [47:0] v,
+        input integer      count
+    );
+        integer i;
+        begin
+            any_low48 = 1'b0;
+            for (i = 0; i < 48; i = i + 1) begin
+                if ((i < count) && v[i]) begin
+                    any_low48 = 1'b1;
+                end
+            end
+        end
+    endfunction
+
+    function automatic logic any_low96(
+        input logic [95:0] v,
+        input integer      count
+    );
+        integer i;
+        begin
+            any_low96 = 1'b0;
+            for (i = 0; i < 96; i = i + 1) begin
+                if ((i < count) && v[i]) begin
+                    any_low96 = 1'b1;
+                end
+            end
+        end
+    endfunction
+
+    function automatic logic [95:0] align48_to96(
+        input logic [47:0] sig,
+        input integer      base_exp,
+        input integer      common_top
+    );
+        integer sh;
+        logic [95:0] ext;
+        begin
+            ext = {48'b0, sig};
+            sh = TOP + base_exp - common_top;
+
+            if (sh >= 0) begin
+                if (sh >= 96) begin
+                    align48_to96 = 96'b0;
+                end
+                else begin
+                    align48_to96 = ext << sh;
+                end
+            end
+            else begin
+                sh = -sh;
+                if (sh >= 96) begin
+                    align48_to96 = 96'b0;
+                end
+                else begin
+                    align48_to96 = ext >> sh;
+                end
+            end
+        end
+    endfunction
+
+    function automatic logic align48_disc(
+        input logic [47:0] sig,
+        input integer      base_exp,
+        input integer      common_top
+    );
+        integer sh;
+        begin
+            sh = TOP + base_exp - common_top;
+            align48_disc = 1'b0;
+
+            if (sh < 0) begin
+                sh = -sh;
+                if (sh >= 48) begin
+                    align48_disc = |sig;
+                end
+                else begin
+                    align48_disc = any_low48(sig, sh);
+                end
+            end
+        end
+    endfunction
+
+    function automatic stage0_t make_stage0(
         input logic [31:0] aa,
         input logic [31:0] bb,
         input logic [31:0] cc,
         input logic [2:0]  rm
     );
+        stage0_t t;
 
-        logic        sign_a;
-        logic        sign_b;
-        logic        sign_c;
-        logic        prod_sign;
-        logic        sum_sign;
-        logic        zero_sign;
-
-        logic [7:0]  exp_a;
-        logic [7:0]  exp_b;
-        logic [7:0]  exp_c;
-
-        logic [22:0] frac_a;
-        logic [22:0] frac_b;
-        logic [22:0] frac_c;
-
-        logic        nan_a;
-        logic        nan_b;
-        logic        nan_c;
-
-        logic        snan_a;
-        logic        snan_b;
-        logic        snan_c;
-
-        logic        inf_a;
-        logic        inf_b;
-        logic        inf_c;
-
-        logic        zero_a;
-        logic        zero_b;
-        logic        zero_c;
-
-        logic        mul_invalid;
-        logic        prod_inf;
-        logic        prod_zero;
-        logic        inf_sub_invalid;
-
+        logic sa;
+        logic sb;
+        logic sc;
+        logic sp;
+        logic [7:0] ea;
+        logic [7:0] eb;
+        logic [7:0] ec;
+        logic [22:0] fa;
+        logic [22:0] fb;
+        logic [22:0] fc;
+        logic a_nan;
+        logic b_nan;
+        logic c_nan;
+        logic a_snan;
+        logic b_snan;
+        logic c_snan;
+        logic a_inf;
+        logic b_inf;
+        logic c_inf;
+        logic a_zero;
+        logic b_zero;
+        logic invalid_mul;
+        logic product_inf;
+        logic invalid_add;
         logic [23:0] sig_a;
         logic [23:0] sig_b;
         logic [23:0] sig_c;
-
-        logic [47:0] prod_sig;
-
-        integer      ea_u;
-        integer      eb_u;
-        integer      ec_u;
-        integer      ep_u;
-
-        integer      lead_p;
-        integer      lead_c;
-        integer      lead_sum;
-
-        integer      top_p;
-        integer      top_c;
-        integer      top_max;
-        integer      top_res;
-
-        integer      base_exp;
-        integer      shift_p;
-        integer      shift_c;
-        integer      rshift;
-        integer      cut;
-
-        logic [95:0] wide_tmp;
-        logic [95:0] mag_p;
-        logic [95:0] mag_c;
-        logic [95:0] sum_mag;
-
-        logic        lost_p;
-        logic        lost_c;
-        logic        tail_nonzero;
-
-        logic        found;
-
-        logic [24:0] q_val;
-        logic [24:0] q_round;
-        logic [23:0] q24;
-
-        logic        guard_bit;
-        logic        sticky_bit;
-        logic        rem_nonzero;
-        logic        round_inc;
-        logic        to_inf;
-
-        logic [7:0]  out_exp;
-
-        logic [31:0] res;
-
-        logic        inv;
-        logic        ov;
-        logic        uf;
-        logic        nx;
-
-        integer      i;
+        logic [47:0] prod;
+        integer exp_a_i;
+        integer exp_b_i;
+        integer exp_c_i;
+        integer exp_p_i;
+        integer mp;
+        integer mc;
 
         begin
+            t = '0;
 
-            // -----------------------------------------------------------------
-            // Defaults
-            // -----------------------------------------------------------------
+            sa = aa[31];
+            sb = bb[31];
+            sc = cc[31];
+            sp = sa ^ sb;
 
-            res = 32'h00000000;
+            ea = aa[30:23];
+            eb = bb[30:23];
+            ec = cc[30:23];
+            fa = aa[22:0];
+            fb = bb[22:0];
+            fc = cc[22:0];
 
-            inv = 1'b0;
-            ov  = 1'b0;
-            uf  = 1'b0;
-            nx  = 1'b0;
+            a_nan = (ea == 8'hff) && (fa != 23'b0);
+            b_nan = (eb == 8'hff) && (fb != 23'b0);
+            c_nan = (ec == 8'hff) && (fc != 23'b0);
 
-            sign_a = aa[31];
-            sign_b = bb[31];
-            sign_c = cc[31];
+            a_snan = a_nan && !fa[22];
+            b_snan = b_nan && !fb[22];
+            c_snan = c_nan && !fc[22];
 
-            exp_a  = aa[30:23];
-            exp_b  = bb[30:23];
-            exp_c  = cc[30:23];
+            a_inf = (ea == 8'hff) && (fa == 23'b0);
+            b_inf = (eb == 8'hff) && (fb == 23'b0);
+            c_inf = (ec == 8'hff) && (fc == 23'b0);
 
-            frac_a = aa[22:0];
-            frac_b = bb[22:0];
-            frac_c = cc[22:0];
+            a_zero = (ea == 8'b0) && (fa == 23'b0);
+            b_zero = (eb == 8'b0) && (fb == 23'b0);
 
-            prod_sign = sign_a ^ sign_b;
+            invalid_mul = (a_inf && b_zero) || (b_inf && a_zero);
+            product_inf = (a_inf || b_inf) && !invalid_mul && !a_nan && !b_nan;
+            invalid_add = product_inf && c_inf && (sp != sc);
 
-            // -----------------------------------------------------------------
-            // Classification
-            // -----------------------------------------------------------------
+            t.invalid = a_snan || b_snan || c_snan || invalid_mul || invalid_add;
+            t.rm = rm;
+            t.sp = sp;
+            t.sc = sc;
 
-            nan_a =
-                (exp_a == 8'hff) &&
-                (frac_a != 23'h000000);
-
-            nan_b =
-                (exp_b == 8'hff) &&
-                (frac_b != 23'h000000);
-
-            nan_c =
-                (exp_c == 8'hff) &&
-                (frac_c != 23'h000000);
-
-            snan_a = nan_a && !frac_a[22];
-            snan_b = nan_b && !frac_b[22];
-            snan_c = nan_c && !frac_c[22];
-
-            inf_a =
-                (exp_a == 8'hff) &&
-                (frac_a == 23'h000000);
-
-            inf_b =
-                (exp_b == 8'hff) &&
-                (frac_b == 23'h000000);
-
-            inf_c =
-                (exp_c == 8'hff) &&
-                (frac_c == 23'h000000);
-
-            zero_a =
-                (exp_a == 8'h00) &&
-                (frac_a == 23'h000000);
-
-            zero_b =
-                (exp_b == 8'h00) &&
-                (frac_b == 23'h000000);
-
-            zero_c =
-                (exp_c == 8'h00) &&
-                (frac_c == 23'h000000);
-
-            prod_zero = zero_a || zero_b;
-
-            // 0 * infinity is invalid.
-            mul_invalid =
-                (inf_a  && zero_b) ||
-                (zero_a && inf_b);
-
-            // A valid infinite product.
-            prod_inf =
-                (inf_a || inf_b) &&
-                !mul_invalid &&
-                !nan_a &&
-                !nan_b;
-
-            // Infinite product plus an infinity of the opposite sign.
-            inf_sub_invalid =
-                prod_inf &&
-                inf_c &&
-                (prod_sign != sign_c);
-
-            inv =
-                snan_a ||
-                snan_b ||
-                snan_c ||
-                mul_invalid ||
-                inf_sub_invalid;
-
-            // -----------------------------------------------------------------
-            // NaNs / invalid operations.
-            //
-            // All NaN results are exactly 7fc00000.
-            // -----------------------------------------------------------------
-
-            if (nan_a || nan_b || nan_c || inv) begin
-
-                res = 32'h7fc00000;
-
-                ov = 1'b0;
-                uf = 1'b0;
-                nx = 1'b0;
-
+            if (a_nan || b_nan || c_nan || invalid_mul || invalid_add) begin
+                t.special = 1'b1;
+                t.special_result = 32'h7fc00000;
             end
-
-            // -----------------------------------------------------------------
-            // Infinite product.
-            // -----------------------------------------------------------------
-
-            else if (prod_inf) begin
-
-                res = {
-                    prod_sign,
-                    8'hff,
-                    23'h000000
-                };
-
+            else if (product_inf) begin
+                t.special = 1'b1;
+                t.special_result = {sp, 8'hff, 23'b0};
             end
-
-            // -----------------------------------------------------------------
-            // Infinite addend.
-            // -----------------------------------------------------------------
-
-            else if (inf_c) begin
-
-                res = {
-                    sign_c,
-                    8'hff,
-                    23'h000000
-                };
-
+            else if (c_inf) begin
+                t.special = 1'b1;
+                t.special_result = {sc, 8'hff, 23'b0};
             end
-
-            // -----------------------------------------------------------------
-            // Both terms are exact zeros.
-            //
-            // Equal signs preserve that sign.
-            // Opposite signed zeros produce -0 only under RDN.
-            // -----------------------------------------------------------------
-
-            else if (prod_zero && zero_c) begin
-
-                if (prod_sign == sign_c)
-                    zero_sign = prod_sign;
-                else
-                    zero_sign = (rm == 3'd2);
-
-                res = {
-                    zero_sign,
-                    31'h00000000
-                };
-
-            end
-
-            // -----------------------------------------------------------------
-            // Zero product + finite nonzero c is exactly c.
-            // -----------------------------------------------------------------
-
-            else if (prod_zero) begin
-
-                res = cc;
-
-            end
-
-            // -----------------------------------------------------------------
-            // General finite fused path.
-            // -----------------------------------------------------------------
-
             else begin
+                t.special = 1'b0;
 
-                // -------------------------------------------------------------
-                // Decode finite significands.
-                //
-                // normal:
-                //     (1.frac) * 2^(exp-127)
-                //
-                // represented here as:
-                //     {1,frac} * 2^(exp-150)
-                //
-                // subnormal:
-                //     frac * 2^-149
-                // -------------------------------------------------------------
-
-                if (exp_a == 8'h00) begin
-                    sig_a = {1'b0, frac_a};
-                    ea_u  = -149;
+                if (ea == 8'b0) begin
+                    sig_a = {1'b0, fa};
+                    exp_a_i = -149;
                 end
                 else begin
-                    sig_a = {1'b1, frac_a};
-                    ea_u  = exp_a;
-                    ea_u  = ea_u - 150;
+                    sig_a = {1'b1, fa};
+                    exp_a_i = ea - 150;
                 end
 
-                if (exp_b == 8'h00) begin
-                    sig_b = {1'b0, frac_b};
-                    eb_u  = -149;
-                end
-                else begin
-                    sig_b = {1'b1, frac_b};
-                    eb_u  = exp_b;
-                    eb_u  = eb_u - 150;
-                end
-
-                if (exp_c == 8'h00) begin
-                    sig_c = {1'b0, frac_c};
-                    ec_u  = -149;
+                if (eb == 8'b0) begin
+                    sig_b = {1'b0, fb};
+                    exp_b_i = -149;
                 end
                 else begin
-                    sig_c = {1'b1, frac_c};
-                    ec_u  = exp_c;
-                    ec_u  = ec_u - 150;
+                    sig_b = {1'b1, fb};
+                    exp_b_i = eb - 150;
                 end
 
-                // Exact 24 x 24 -> 48-bit product.
-                prod_sig = sig_a * sig_b;
-                ep_u     = ea_u + eb_u;
-
-                // -------------------------------------------------------------
-                // Find the highest set bit of the exact product.
-                // -------------------------------------------------------------
-
-                lead_p = 0;
-                found  = 1'b0;
-
-                for (i = 47; i >= 0; i = i - 1) begin
-                    if (!found && prod_sig[i]) begin
-                        lead_p = i;
-                        found  = 1'b1;
-                    end
-                end
-
-                top_p = ep_u + lead_p;
-
-                // -------------------------------------------------------------
-                // Find the highest set bit of c.
-                //
-                // A zero c is given a deliberately very small top exponent so
-                // that the product determines the alignment window.
-                // -------------------------------------------------------------
-
-                if (sig_c != 24'h000000) begin
-
-                    lead_c = 0;
-                    found  = 1'b0;
-
-                    for (i = 23; i >= 0; i = i - 1) begin
-                        if (!found && sig_c[i]) begin
-                            lead_c = i;
-                            found  = 1'b1;
-                        end
-                    end
-
-                    top_c = ec_u + lead_c;
-
+                if (ec == 8'b0) begin
+                    sig_c = {1'b0, fc};
+                    exp_c_i = -149;
                 end
                 else begin
-
-                    lead_c = 0;
-                    top_c  = -1000000;
-
+                    sig_c = {1'b1, fc};
+                    exp_c_i = ec - 150;
                 end
 
-                // -------------------------------------------------------------
-                // Put the larger term's leading bit at bit 94.
-                //
-                // Bit 95 is left free for a same-sign addition carry.
-                // -------------------------------------------------------------
+                prod = sig_a * sig_b;
+                exp_p_i = exp_a_i + exp_b_i;
+                mp = msb48(prod);
+                mc = msb24(sig_c);
 
-                if (top_p >= top_c)
-                    top_max = top_p;
-                else
-                    top_max = top_c;
+                t.prod_sig = prod;
+                t.c_sig = sig_c;
+                t.exp_p = exp_p_i;
+                t.exp_c = exp_c_i;
+                t.prod_zero = (mp < 0);
+                t.c_zero = (mc < 0);
 
-                base_exp = top_max - 94;
-
-                // -------------------------------------------------------------
-                // Align exact product into the 96-bit window.
-                // -------------------------------------------------------------
-
-                wide_tmp       = 96'h0;
-                wide_tmp[47:0] = prod_sig;
-
-                shift_p = ep_u - base_exp;
-
-                mag_p  = 96'h0;
-                lost_p = 1'b0;
-
-                if (shift_p >= 0) begin
-
-                    mag_p = wide_tmp << shift_p;
-
+                if (mp < 0) begin
+                    t.top_p = -12'sd1024;
                 end
                 else begin
-
-                    rshift = -shift_p;
-
-                    if (rshift >= 96)
-                        mag_p = 96'h0;
-                    else
-                        mag_p = wide_tmp >> rshift;
-
-                    for (i = 0; i < 48; i = i + 1) begin
-                        if ((i < rshift) && prod_sig[i])
-                            lost_p = 1'b1;
-                    end
-
+                    t.top_p = exp_p_i + mp;
                 end
 
-                // -------------------------------------------------------------
-                // Align c into the same 96-bit window.
-                // -------------------------------------------------------------
-
-                wide_tmp       = 96'h0;
-                wide_tmp[23:0] = sig_c;
-
-                shift_c = ec_u - base_exp;
-
-                mag_c  = 96'h0;
-                lost_c = 1'b0;
-
-                if (sig_c == 24'h000000) begin
-
-                    mag_c  = 96'h0;
-                    lost_c = 1'b0;
-
-                end
-                else if (shift_c >= 0) begin
-
-                    mag_c = wide_tmp << shift_c;
-
+                if (mc < 0) begin
+                    t.top_c = -12'sd1024;
                 end
                 else begin
-
-                    rshift = -shift_c;
-
-                    if (rshift >= 96)
-                        mag_c = 96'h0;
-                    else
-                        mag_c = wide_tmp >> rshift;
-
-                    for (i = 0; i < 24; i = i + 1) begin
-                        if ((i < rshift) && sig_c[i])
-                            lost_c = 1'b1;
-                    end
-
+                    t.top_c = exp_c_i + mc;
                 end
-
-                // -------------------------------------------------------------
-                // Exact-sign addition/subtraction.
-                //
-                // At most the smaller widely-separated term can lose bits
-                // below bit zero of the 96-bit window.
-                //
-                // For subtraction of a discarded positive tail:
-                //
-                //      D - epsilon
-                //
-                // is represented as
-                //
-                //      (D - 1) + (1 - epsilon)
-                //
-                // so decrementing the integer window and setting a tail/sticky
-                // bit preserves every later rounding decision.
-                // -------------------------------------------------------------
-
-                sum_mag      = 96'h0;
-                tail_nonzero = 1'b0;
-                sum_sign     = prod_sign;
-
-                if (prod_sign == sign_c) begin
-
-                    sum_mag      = mag_p + mag_c;
-                    sum_sign     = prod_sign;
-                    tail_nonzero = lost_p || lost_c;
-
-                end
-                else begin
-
-                    if (mag_p > mag_c) begin
-
-                        sum_mag  = mag_p - mag_c;
-                        sum_sign = prod_sign;
-
-                        if (lost_p && !lost_c) begin
-
-                            tail_nonzero = 1'b1;
-
-                        end
-                        else if (lost_c && !lost_p) begin
-
-                            if (sum_mag != 96'h0)
-                                sum_mag = sum_mag - 96'd1;
-
-                            tail_nonzero = 1'b1;
-
-                        end
-
-                    end
-                    else if (mag_c > mag_p) begin
-
-                        sum_mag  = mag_c - mag_p;
-                        sum_sign = sign_c;
-
-                        if (lost_c && !lost_p) begin
-
-                            tail_nonzero = 1'b1;
-
-                        end
-                        else if (lost_p && !lost_c) begin
-
-                            if (sum_mag != 96'h0)
-                                sum_mag = sum_mag - 96'd1;
-
-                            tail_nonzero = 1'b1;
-
-                        end
-
-                    end
-                    else begin
-
-                        // With the chosen 96-bit alignment, equality when one
-                        // operand has discarded tail bits cannot occur: a term
-                        // that loses bits is necessarily far smaller than the
-                        // term defining bit 94.
-                        //
-                        // Therefore equal aligned magnitudes are an exact
-                        // cancellation.
-
-                        sum_mag      = 96'h0;
-                        tail_nonzero = 1'b0;
-                        sum_sign     = (rm == 3'd2);
-
-                    end
-
-                end
-
-                // -------------------------------------------------------------
-                // Exact cancellation.
-                //
-                // IEEE exact cancellation gives +0 except round-down, which
-                // gives -0.
-                // -------------------------------------------------------------
-
-                if ((sum_mag == 96'h0) && !tail_nonzero) begin
-
-                    zero_sign = (rm == 3'd2);
-
-                    res = {
-                        zero_sign,
-                        31'h00000000
-                    };
-
-                end
-                else begin
-
-                    // ---------------------------------------------------------
-                    // Locate the result's leading one.
-                    // ---------------------------------------------------------
-
-                    lead_sum = 0;
-                    found    = 1'b0;
-
-                    for (i = 95; i >= 0; i = i - 1) begin
-                        if (!found && sum_mag[i]) begin
-                            lead_sum = i;
-                            found    = 1'b1;
-                        end
-                    end
-
-                    top_res = base_exp + lead_sum;
-
-                    // ---------------------------------------------------------
-                    // Normal result path.
-                    // ---------------------------------------------------------
-
-                    if (top_res >= -126) begin
-
-                        // A finite exact value whose unbounded rounded exponent
-                        // is already above +127 necessarily overflows.
-
-                        if (top_res > 127) begin
-
-                            ov = 1'b1;
-                            nx = 1'b1;
-                            uf = 1'b0;
-
-                            case (rm)
-
-                                3'd0:
-                                    to_inf = 1'b1; // RNE
-
-                                3'd1:
-                                    to_inf = 1'b0; // RTZ
-
-                                3'd2:
-                                    to_inf = sum_sign; // RDN
-
-                                3'd3:
-                                    to_inf = !sum_sign; // RUP
-
-                                3'd4:
-                                    to_inf = 1'b1; // RMM
-
-                                default:
-                                    to_inf = 1'b1;
-
-                            endcase
-
-                            if (to_inf) begin
-                                res = {
-                                    sum_sign,
-                                    8'hff,
-                                    23'h000000
-                                };
-                            end
-                            else begin
-                                res = {
-                                    sum_sign,
-                                    8'hfe,
-                                    23'h7fffff
-                                };
-                            end
-
-                        end
-                        else begin
-
-                            // Keep 24 significant bits.
-                            cut = lead_sum - 23;
-
-                            q_val       = 25'h0;
-                            guard_bit   = 1'b0;
-                            sticky_bit  = tail_nonzero;
-                            rem_nonzero = 1'b0;
-                            round_inc   = 1'b0;
-
-                            if (cut >= 96)
-                                q_val = 25'h0;
-                            else if (cut >= 0)
-                                q_val = sum_mag >> cut;
-                            else
-                                q_val = sum_mag << (-cut);
-
-                            if (cut > 0) begin
-
-                                if ((cut - 1) < 96)
-                                    guard_bit = sum_mag[cut-1];
-
-                                for (i = 0; i < 96; i = i + 1) begin
-                                    if ((i < (cut - 1)) && sum_mag[i])
-                                        sticky_bit = 1'b1;
-                                end
-
-                            end
-
-                            rem_nonzero =
-                                guard_bit ||
-                                sticky_bit;
-
-                            // -------------------------------------------------
-                            // Runtime rounding mode.
-                            // -------------------------------------------------
-
-                            case (rm)
-
-                                // RNE: nearest, ties to even
-                                3'd0:
-                                    round_inc =
-                                        guard_bit &&
-                                        (sticky_bit || q_val[0]);
-
-                                // RTZ
-                                3'd1:
-                                    round_inc = 1'b0;
-
-                                // RDN
-                                3'd2:
-                                    round_inc =
-                                        sum_sign &&
-                                        rem_nonzero;
-
-                                // RUP
-                                3'd3:
-                                    round_inc =
-                                        !sum_sign &&
-                                        rem_nonzero;
-
-                                // RMM: nearest, ties away from zero
-                                3'd4:
-                                    round_inc = guard_bit;
-
-                                default:
-                                    round_inc =
-                                        guard_bit &&
-                                        (sticky_bit || q_val[0]);
-
-                            endcase
-
-                            if (round_inc)
-                                q_round = q_val + 25'd1;
-                            else
-                                q_round = q_val;
-
-                            // A rounding carry renormalizes the significand.
-                            if (q_round[24]) begin
-
-                                q24    = q_round[24:1];
-                                top_res = top_res + 1;
-
-                            end
-                            else begin
-
-                                q24 = q_round[23:0];
-
-                            end
-
-                            // ---------------------------------------------
-                            // Overflow after rounding.
-                            //
-                            // Overflow also raises inexact.
-                            // ---------------------------------------------
-
-                            if (top_res > 127) begin
-
-                                ov = 1'b1;
-                                nx = 1'b1;
-                                uf = 1'b0;
-
-                                case (rm)
-
-                                    3'd0:
-                                        to_inf = 1'b1;
-
-                                    3'd1:
-                                        to_inf = 1'b0;
-
-                                    3'd2:
-                                        to_inf = sum_sign;
-
-                                    3'd3:
-                                        to_inf = !sum_sign;
-
-                                    3'd4:
-                                        to_inf = 1'b1;
-
-                                    default:
-                                        to_inf = 1'b1;
-
-                                endcase
-
-                                if (to_inf) begin
-                                    res = {
-                                        sum_sign,
-                                        8'hff,
-                                        23'h000000
-                                    };
-                                end
-                                else begin
-                                    res = {
-                                        sum_sign,
-                                        8'hfe,
-                                        23'h7fffff
-                                    };
-                                end
-
-                            end
-                            else begin
-
-                                out_exp = top_res + 127;
-
-                                res = {
-                                    sum_sign,
-                                    out_exp,
-                                    q24[22:0]
-                                };
-
-                                ov = 1'b0;
-                                uf = 1'b0;
-                                nx = rem_nonzero;
-
-                            end
-
-                        end
-
-                    end
-
-                    // ---------------------------------------------------------
-                    // Subnormal / zero result path.
-                    //
-                    // The fixed binary32 subnormal quantum is 2^-149.
-                    // ---------------------------------------------------------
-
-                    else begin
-
-                        cut = -149 - base_exp;
-
-                        q_val       = 25'h0;
-                        guard_bit   = 1'b0;
-                        sticky_bit  = tail_nonzero;
-                        rem_nonzero = 1'b0;
-                        round_inc   = 1'b0;
-
-                        if (cut >= 96)
-                            q_val = 25'h0;
-                        else if (cut >= 0)
-                            q_val = sum_mag >> cut;
-                        else
-                            q_val = sum_mag << (-cut);
-
-                        if (cut > 0) begin
-
-                            if ((cut - 1) < 96)
-                                guard_bit = sum_mag[cut-1];
-
-                            for (i = 0; i < 96; i = i + 1) begin
-                                if ((i < (cut - 1)) && sum_mag[i])
-                                    sticky_bit = 1'b1;
-                            end
-
-                        end
-
-                        rem_nonzero =
-                            guard_bit ||
-                            sticky_bit;
-
-                        case (rm)
-
-                            // RNE
-                            3'd0:
-                                round_inc =
-                                    guard_bit &&
-                                    (sticky_bit || q_val[0]);
-
-                            // RTZ
-                            3'd1:
-                                round_inc = 1'b0;
-
-                            // RDN
-                            3'd2:
-                                round_inc =
-                                    sum_sign &&
-                                    rem_nonzero;
-
-                            // RUP
-                            3'd3:
-                                round_inc =
-                                    !sum_sign &&
-                                    rem_nonzero;
-
-                            // RMM
-                            3'd4:
-                                round_inc = guard_bit;
-
-                            default:
-                                round_inc =
-                                    guard_bit &&
-                                    (sticky_bit || q_val[0]);
-
-                        endcase
-
-                        if (round_inc)
-                            q_round = q_val + 25'd1;
-                        else
-                            q_round = q_val;
-
-                        nx = rem_nonzero;
-                        ov = 1'b0;
-
-                        // -----------------------------------------------------
-                        // Rounding can promote the largest subnormal to exactly
-                        // the smallest normal.
-                        //
-                        // Under the task's explicit UF rule this is NOT
-                        // underflow, because the delivered exponent field is 1.
-                        // -----------------------------------------------------
-
-                        if (q_round[23]) begin
-
-                            res = {
-                                sum_sign,
-                                8'h01,
-                                23'h000000
-                            };
-
-                            uf = 1'b0;
-
-                        end
-                        else begin
-
-                            res = {
-                                sum_sign,
-                                8'h00,
-                                q_round[22:0]
-                            };
-
-                            // Task-pinned underflow rule:
-                            //
-                            //     inexact &&
-                            //     delivered exponent field == 0
-                            uf = rem_nonzero;
-
-                        end
-
-                    end
-
-                end
-
             end
 
-            fma_compute = {
-                nx,
-                uf,
-                ov,
-                inv,
-                res
-            };
-
+            make_stage0 = t;
         end
-
     endfunction
 
+    function automatic stage1_t make_stage1(input stage0_t x);
+        stage1_t t;
+        logic [47:0] c_sig48;
+        logic [95:0] p_al;
+        logic [95:0] c_al;
+        logic p_disc;
+        logic c_disc;
+        integer common_i;
 
-    // =========================================================================
-    // Three-cycle, initiation-interval-one pipeline
-    // =========================================================================
-    //
-    // Arithmetic is calculated at acceptance and the completed result/flags are
-    // carried through three valid stages.
-    //
-    // With out_ready asserted continuously:
-    //
-    //     one new request can be accepted every clock
-    //     and one result can retire every clock.
-    //
-    // When the output is blocked, the pipeline freezes as a unit.  This keeps
-    // the visible output stable and applies backpressure at the input.
-    // =========================================================================
+        begin
+            t = '0;
+            t.special = x.special;
+            t.special_result = x.special_result;
+            t.invalid = x.invalid;
+            t.rm = x.rm;
 
-    logic [35:0] pipe_data_0;
-    logic [35:0] pipe_data_1;
-    logic [35:0] pipe_data_2;
+            if (x.special) begin
+                t.sr = x.special_result[31];
+            end
+            else if (x.prod_zero && x.c_zero) begin
+                t.exact_zero = 1'b1;
+                if (x.sp == x.sc) begin
+                    t.sr = x.sp;
+                end
+                else begin
+                    t.sr = (x.rm == 3'd2);
+                end
+            end
+            else begin
+                if ($signed(x.top_p) >= $signed(x.top_c)) begin
+                    common_i = $signed(x.top_p);
+                end
+                else begin
+                    common_i = $signed(x.top_c);
+                end
 
-    logic        pipe_valid_0;
-    logic        pipe_valid_1;
-    logic        pipe_valid_2;
+                t.common_top = common_i;
+                c_sig48 = {24'b0, x.c_sig};
 
-    logic        pipe_advance;
+                p_al = align48_to96(x.prod_sig, $signed(x.exp_p), common_i);
+                c_al = align48_to96(c_sig48, $signed(x.exp_c), common_i);
+                p_disc = align48_disc(x.prod_sig, $signed(x.exp_p), common_i);
+                c_disc = align48_disc(c_sig48, $signed(x.exp_c), common_i);
 
-    // Output stage.
-    always_comb begin
-
-        out_valid      = pipe_valid_2;
-
-        result         = pipe_data_2[31:0];
-        flag_invalid   = pipe_data_2[32];
-        flag_overflow  = pipe_data_2[33];
-        flag_underflow = pipe_data_2[34];
-        flag_inexact   = pipe_data_2[35];
-
-        // Freeze all three stages while an unconsumed result occupies the
-        // output stage.
-        pipe_advance = !pipe_valid_2 || out_ready;
-
-        // No combinational dependence on in_valid.
-        in_ready = rst_n && pipe_advance;
-
-    end
-
-
-    // Synchronous active-low reset.
-    always_ff @(posedge clk) begin
-
-        if (!rst_n) begin
-
-            pipe_valid_0 <= 1'b0;
-            pipe_valid_1 <= 1'b0;
-            pipe_valid_2 <= 1'b0;
-
-            pipe_data_0 <= 36'h0;
-            pipe_data_1 <= 36'h0;
-            pipe_data_2 <= 36'h0;
-
-        end
-        else if (pipe_advance) begin
-
-            // Stage 2
-            pipe_valid_2 <= pipe_valid_1;
-
-            if (pipe_valid_1)
-                pipe_data_2 <= pipe_data_1;
-
-            // Stage 1
-            pipe_valid_1 <= pipe_valid_0;
-
-            if (pipe_valid_0)
-                pipe_data_1 <= pipe_data_0;
-
-            // Stage 0
-            pipe_valid_0 <= in_valid && in_ready;
-
-            if (in_valid && in_ready) begin
-                pipe_data_0 <= fma_compute(
-                    a,
-                    b,
-                    c,
-                    rnd_mode
-                );
+                if (x.prod_zero) begin
+                    t.mag = c_al;
+                    t.tail = c_disc;
+                    t.sr = x.sc;
+                end
+                else if (x.c_zero) begin
+                    t.mag = p_al;
+                    t.tail = p_disc;
+                    t.sr = x.sp;
+                end
+                else if (x.sp == x.sc) begin
+                    t.mag = p_al + c_al;
+                    t.tail = p_disc || c_disc;
+                    t.sr = x.sp;
+                end
+                else if (p_al > c_al) begin
+                    t.mag = p_al - c_al;
+                    t.sr = x.sp;
+                    if (c_disc && !p_disc) begin
+                        t.mag = t.mag - 96'd1;
+                        t.tail = 1'b1;
+                    end
+                    else begin
+                        t.tail = p_disc || c_disc;
+                    end
+                end
+                else if (c_al > p_al) begin
+                    t.mag = c_al - p_al;
+                    t.sr = x.sc;
+                    if (p_disc && !c_disc) begin
+                        t.mag = t.mag - 96'd1;
+                        t.tail = 1'b1;
+                    end
+                    else begin
+                        t.tail = p_disc || c_disc;
+                    end
+                end
+                else begin
+                    if (!p_disc && !c_disc) begin
+                        t.exact_zero = 1'b1;
+                        t.sr = (x.rm == 3'd2);
+                    end
+                    else if (p_disc && !c_disc) begin
+                        t.mag = 96'b0;
+                        t.tail = 1'b1;
+                        t.sr = x.sp;
+                    end
+                    else if (c_disc && !p_disc) begin
+                        t.mag = 96'b0;
+                        t.tail = 1'b1;
+                        t.sr = x.sc;
+                    end
+                    else begin
+                        t.mag = 96'b0;
+                        t.tail = 1'b1;
+                        t.sr = (x.rm == 3'd2);
+                    end
+                end
             end
 
+            make_stage1 = t;
         end
+    endfunction
 
+    function automatic stage2_t make_stage2(input stage1_t x);
+        stage2_t t;
+        logic [95:0] trunc96;
+        integer m;
+        integer base_i;
+        integer etop_i;
+        integer sh;
+
+        begin
+            t = '0;
+            t.special = x.special;
+            t.special_result = x.special_result;
+            t.invalid = x.invalid;
+            t.rm = x.rm;
+            t.sr = x.sr;
+            t.exact_zero = x.exact_zero;
+
+            if (!x.special && !x.exact_zero) begin
+                m = msb96(x.mag);
+
+                if (m < 0) begin
+                    t.tail_only = x.tail;
+                end
+                else begin
+                    base_i = $signed(x.common_top) - TOP;
+                    etop_i = base_i + m;
+                    t.etop = etop_i;
+
+                    if (etop_i >= -126) begin
+                        t.normal_path = 1'b1;
+                        sh = m - 23;
+
+                        if (sh <= 0) begin
+                            if (sh == 0) begin
+                                t.q = x.mag[23:0];
+                            end
+                            else begin
+                                t.q = x.mag << (-sh);
+                            end
+                            t.guard_bit = 1'b0;
+                            t.lower_nonzero = x.tail;
+                            t.rem_nonzero = x.tail;
+                        end
+                        else begin
+                            trunc96 = x.mag >> sh;
+                            t.q = trunc96[23:0];
+
+                            if ((sh - 1) < 96) begin
+                                t.guard_bit = x.mag[sh-1];
+                            end
+
+                            if (sh <= 1) begin
+                                t.lower_nonzero = x.tail;
+                            end
+                            else if ((sh - 1) >= 96) begin
+                                t.lower_nonzero = (|x.mag) || x.tail;
+                            end
+                            else begin
+                                t.lower_nonzero = any_low96(x.mag, sh-1) || x.tail;
+                            end
+
+                            t.rem_nonzero = t.guard_bit || t.lower_nonzero;
+                        end
+                    end
+                    else begin
+                        t.normal_path = 1'b0;
+                        sh = -149 - base_i;
+
+                        if (sh <= 0) begin
+                            t.q = x.mag << (-sh);
+                            t.guard_bit = 1'b0;
+                            t.lower_nonzero = x.tail;
+                            t.rem_nonzero = x.tail;
+                        end
+                        else if (sh < 96) begin
+                            trunc96 = x.mag >> sh;
+                            t.q = trunc96[23:0];
+                            t.guard_bit = x.mag[sh-1];
+
+                            if (sh <= 1) begin
+                                t.lower_nonzero = x.tail;
+                            end
+                            else begin
+                                t.lower_nonzero = any_low96(x.mag, sh-1) || x.tail;
+                            end
+
+                            t.rem_nonzero = t.guard_bit || t.lower_nonzero;
+                        end
+                        else if (sh == 96) begin
+                            t.q = 24'b0;
+                            t.guard_bit = x.mag[95];
+                            t.lower_nonzero = any_low96(x.mag, 95) || x.tail;
+                            t.rem_nonzero = t.guard_bit || t.lower_nonzero;
+                        end
+                        else begin
+                            t.q = 24'b0;
+                            t.guard_bit = 1'b0;
+                            t.lower_nonzero = (|x.mag) || x.tail;
+                            t.rem_nonzero = t.lower_nonzero;
+                        end
+                    end
+                end
+            end
+
+            make_stage2 = t;
+        end
+    endfunction
+
+    function automatic stage3_t make_stage3(input stage2_t x);
+        stage3_t t;
+        logic round_inc;
+        logic overflow_to_inf;
+        logic [24:0] qext;
+        logic [23:0] qround;
+        integer etop_i;
+        integer biased_i;
+
+        begin
+            t = '0;
+            t.invalid = x.invalid;
+
+            if (x.special) begin
+                t.result = x.special_result;
+            end
+            else if (x.exact_zero) begin
+                t.result = {x.sr, 31'b0};
+            end
+            else if (x.tail_only) begin
+                t.result = {x.sr, 31'b0};
+                t.inexact = 1'b1;
+                t.underflow = 1'b1;
+            end
+            else begin
+                round_inc = 1'b0;
+
+                case (x.rm)
+                    3'd0: round_inc = x.guard_bit &&
+                                      (x.lower_nonzero || x.q[0]);
+                    3'd1: round_inc = 1'b0;
+                    3'd2: round_inc = x.sr && x.rem_nonzero;
+                    3'd3: round_inc = (!x.sr) && x.rem_nonzero;
+                    3'd4: round_inc = x.guard_bit;
+                    default: round_inc = 1'b0;
+                endcase
+
+                qext = {1'b0, x.q} +
+                       {{24{1'b0}}, round_inc};
+
+                t.inexact = x.rem_nonzero;
+
+                if (x.normal_path) begin
+                    etop_i = $signed(x.etop);
+
+                    if (qext[24]) begin
+                        qround = qext[24:1];
+                        etop_i = etop_i + 1;
+                    end
+                    else begin
+                        qround = qext[23:0];
+                    end
+
+                    if (etop_i > 127) begin
+                        t.overflow = 1'b1;
+                        t.inexact = 1'b1;
+
+                        overflow_to_inf = 1'b0;
+
+                        case (x.rm)
+                            3'd0: overflow_to_inf = 1'b1;
+                            3'd1: overflow_to_inf = 1'b0;
+                            3'd2: overflow_to_inf = x.sr;
+                            3'd3: overflow_to_inf = !x.sr;
+                            3'd4: overflow_to_inf = 1'b1;
+                            default: overflow_to_inf = 1'b1;
+                        endcase
+
+                        if (overflow_to_inf) begin
+                            t.result = {
+                                x.sr,
+                                8'hff,
+                                23'b0
+                            };
+                        end
+                        else begin
+                            t.result = {
+                                x.sr,
+                                8'hfe,
+                                23'h7fffff
+                            };
+                        end
+                    end
+                    else begin
+                        biased_i = etop_i + 127;
+
+                        t.result = {
+                            x.sr,
+                            biased_i[7:0],
+                            qround[22:0]
+                        };
+                    end
+                end
+                else begin
+                    qround = qext[23:0];
+
+                    if (qext[23]) begin
+                        t.result = {
+                            x.sr,
+                            8'h01,
+                            23'b0
+                        };
+                    end
+                    else begin
+                        t.result = {
+                            x.sr,
+                            8'h00,
+                            qround[22:0]
+                        };
+                    end
+
+                    t.underflow =
+                        t.inexact &&
+                        (t.result[30:23] == 8'h00);
+                end
+            end
+
+            make_stage3 = t;
+        end
+    endfunction
+
+    always_comb begin
+        s3_ready_c = (!s3_valid_q) || out_ready;
+        s2_ready_c = (!s2_valid_q) || s3_ready_c;
+        s1_ready_c = (!s1_valid_q) || s2_ready_c;
+        s0_ready_c = (!s0_valid_q) || s1_ready_c;
+
+        in_ready = rst_n && s0_ready_c;
+
+        out_valid = rst_n && s3_valid_q;
+        result = s3_q.result;
+
+        flag_invalid = s3_q.invalid;
+        flag_overflow = s3_q.overflow;
+        flag_underflow = s3_q.underflow;
+        flag_inexact = s3_q.inexact;
+    end
+
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            s0_valid_q <= 1'b0;
+            s1_valid_q <= 1'b0;
+            s2_valid_q <= 1'b0;
+            s3_valid_q <= 1'b0;
+
+            s0_q <= '0;
+            s1_q <= '0;
+            s2_q <= '0;
+            s3_q <= '0;
+        end
+        else begin
+            if (s3_ready_c) begin
+                s3_valid_q <= s2_valid_q;
+
+                if (s2_valid_q) begin
+                    s3_q <= make_stage3(s2_q);
+                end
+            end
+
+            if (s2_ready_c) begin
+                s2_valid_q <= s1_valid_q;
+
+                if (s1_valid_q) begin
+                    s2_q <= make_stage2(s1_q);
+                end
+            end
+
+            if (s1_ready_c) begin
+                s1_valid_q <= s0_valid_q;
+
+                if (s0_valid_q) begin
+                    s1_q <= make_stage1(s0_q);
+                end
+            end
+
+            if (s0_ready_c) begin
+                s0_valid_q <= in_valid;
+
+                if (in_valid) begin
+                    s0_q <= make_stage0(
+                        a,
+                        b,
+                        c,
+                        rnd_mode
+                    );
+                end
+            end
+        end
     end
 
 endmodule

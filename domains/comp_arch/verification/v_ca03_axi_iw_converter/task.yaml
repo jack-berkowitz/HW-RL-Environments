@@ -300,7 +300,8 @@ e1_mutant:
     error, of the wrong kind, so the response is still an error and only the
     CODE is wrong
   measured: >
-    56 failures, EVERY ONE E1, and nothing else fires. That is what makes it
+    56 failures, EVERY ONE E1, and nothing else fires AS OF 2026-08-25. That is
+    what makes it
     disjoint from iw_m8 rather than a stronger version of it.
   why_it_was_added: >
     iw_m8_bresp_wrong_when_full is a WRONG RESPONSE mutant. CODE PRESERVATION is
@@ -334,3 +335,152 @@ readies_criterion:
     Same absence as v_ca06: no clause here governs valid stability under stall
     either. Two tasks with the same hole, which makes it a pattern in how these
     specs were written rather than one omission.
+
+d5_handshake_stability:
+  date: 2026-08-25
+  status: LANDED
+  clause: >
+    D5 in section 4 -- on every channel of BOTH ports that the design drives
+    (s_bvalid, s_rvalid, m_awvalid, m_wvalid, m_arvalid), once a valid is
+    asserted it remains asserted, with its payload unchanged, until the
+    corresponding ready is seen; and valid shall not depend combinationally on
+    ready. It binds the design's OUTPUTS only: A3 and A4 permit a request not to
+    be accepted, so a testbench that gives up on an offer after a bounded wait is
+    obeying those clauses, not violating this one.
+  authority: >
+    AMBA AXI4, and the anchor asserts the same property internally at
+    dut/rr_arb_tree.sv:391.
+  stimulus: >
+    Free-running aperiodic backpressure on the five readies this testbench
+    drives, from a 16-bit LFSR with a different bit pair per channel, on for the
+    whole run. NOT armed on valid -- see backpressure_instrument in v_ca06's
+    task.yaml for why an armed stall is a combinational loop.
+  checker: >
+    Per-channel held-offer tracker, cleared on reset (F1 legitimately drops
+    valids). The payload signature is EXACT, not truncated: the widest channel is
+    42 bits, so every bit the clause speaks about is compared.
+  floor: >
+    cov_bp_driven counts cycles this testbench held a ready low -- harness
+    determined, reads no design output -- and is gated at 200. The per-channel
+    ANTECEDENT counts are reported and never gate.
+  hash: 394f1f8fd51e8c2a -> fc1baef44b90f91c
+  measured:
+    golden: PASS -- D5 antecedent held s_b=11 s_r=110 m_aw=8 m_w=18 m_ar=48
+    dut2: PASS
+    conformant: 5/5 PASS
+    mutants: 11/11 killed
+    gate_mutant: rejected
+    policy_independence: OK on both bases
+
+negative_controls:
+  nc_d5_withdraws_ar:
+    file: negctl/d5_withdraws_ar.sv
+    kind: negative
+    expect: fail
+    measured_by: hand_run
+    result: FAIL -- 11 x D5 on channel 4, and nothing else AS OF 2026-08-25
+    detail: >
+      Withdraws m_arvalid only on a cycle when m_arready is already low, so no
+      handshake is lost and the wrapped design sees a bit-identical environment.
+      The only observable difference is the one thing D5 forbids.
+    two_earlier_versions_were_wrong: >
+      (1) A version that also gated the design's ready hung the A4 phase and
+      reported A3, A4 and A5 -- and it had been assembled by copying iw_c3's
+      instantiation, which binds g_awvalid and g_arvalid, signals that do not
+      exist in this module. A control whose blast radius exceeds its clause
+      cannot license a claim about that clause.
+      (2) A version needing THREE consecutive stalled cycles PASSED, because
+      backpressure is aperiodic and the antecedent is entered rarely. A control
+      that passes is not evidence the clause holds; it is evidence the control
+      never ran.
+    not_a_control_for_d5: >
+      iw_c3 before its repair also withdraws a valid, but going INTO the design,
+      and it fails C2 twenty times rather than D5. D5 binds outputs.
+
+conformant_repairs:
+  date: 2026-08-25
+  ruling_applied: >
+    iw_c3_ready_withheld and iw_c5_channel_arbitration gated a valid on the way
+    INTO the design, which is a withdrawal. A gate may fall only while nothing
+    is pending; one flop per channel. Each keeps every cycle of the behaviour it
+    exists to demonstrate and gives up only the right to take an offer back.
+  unaffected: >
+    iw_c1 (permuted ids, no handshake change), iw_c2 (a proper register slice --
+    already non-withdrawing by construction) and iw_c4 (garbage only while valid
+    is low, latitude item 5) needed nothing.
+  measured: >
+    Before the repair iw_c3 FAILED and the task was REJECTED; iw_c5 passed but
+    can withdraw and was repaired on the same argument rather than on its
+    verdict.
+
+report_block_defect:
+  date: 2026-08-25
+  status: FIXED
+  what: >
+    A dangling `else`, separated from its `if` by two comment lines, bound to the
+    cov_err_r coverage check instead of to a FAIL display. Two consequences: the
+    READ-coverage floor ran only on a run that had ALREADY failed -- skipped
+    exactly when the run was otherwise clean -- and `RESULT: FAIL` printed
+    unconditionally, so every passing run of this testbench ended with a FAIL
+    line. Verdicts were right only because sim_verification.sh greps PASS before
+    FAIL, which is a property of a file this testbench does not control.
+  fix: >
+    Floors run before the verdict is computed; exactly one RESULT line is
+    printed.
+  swept: >
+    All eleven verification testbenches were run and their RESULT lines counted.
+    Ten produced exactly one; v_ca03 was the only instance. v_dsp01 is REJECTED
+    and ships no testbench.
+
+must_fire:
+  reference: [v_ca03.cov_boundary_long, v_ca03.cov_bp_driven, v_ca03.cov_depth, v_ca03.cov_err_b, v_ca03.cov_err_r, v_ca03.cov_full_new, v_ca03.cov_full_same, v_ca03.cov_longburst, v_ca03.cov_mixed, v_ca03.cov_mixed_w, v_ca03.cov_retire, v_ca03.cov_wfull, v_ca03.n_aw_issued, v_ca03.n_rbeat_exp]
+  iw_nc_d5_withdraws_ar: [nc_d5_withdraws_ar.drop]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once at the end of a run; check_fired.py REFUSES
+  on zero, and refuses ABSENT separately because absent is not zero (rule 20).
+  Declared here rather than globbed, so a deleted artefact is a refusal instead
+  of a shorter list, and keyed BY VARIANT: the negative-control run contains no
+  conformant perturbations and vice versa, so a flat per-task list would refuse
+  on every run that is not the union of all of them.
+
+exclusivity_is_dated:
+  date: 2026-08-25
+  claim_qualified: >
+    "D5 and nothing else" is a claim about THE SET OF CHECKS THAT EXISTED WHEN IT
+    WAS MEASURED, not about the control. Adding a check can retroactively falsify
+    an isolation claim made in good faith, and the claim reads as verified the
+    whole time. AGENT-DESIGN-43a92055's d_nw03 nc_b_outputs_serialised went from
+    6/8 exclusive to 0/8 within a day of an R1 stability check being added --
+    nothing in the control moved.
+  therefore: >
+    Every exclusivity claim in this task carries the date it was measured. Read
+    it as "exclusive with respect to the checks this task had on that date".
+    This one was measured on the day D5 and A5's checkers were added, which is
+    the least stale it will ever be and still not a permanent claim.
+
+grouping_declared:
+  date: 2026-08-25
+  convention: >
+    A clause whose observation is shared names, IN ITS OWN TEXT, the id that
+    reports it: "... is reported under X". check_clause_emittable.py reads that
+    as a declaration and VERIFIES the named id is emittable -- a clause annotated
+    into a hole reads as resolved and is worse than one left silent.
+  declared: A2 -> D1, B1 -> E1, B3 -> E1, C1 -> C2
+  effect: >
+    It records grouping honestly; it does not remove it. A submission checking
+    the named id is still credited with this clause. What changes is that the
+    credit is VISIBLE, so scoring can decide deliberately instead of the grouping
+    being found by someone reading a failure message and noticing the wrong
+    letter.
+  not_annotated_and_why: >
+    D2 is UNCHECKED: D1 catches a master identifier serving two slave ids at
+    once, but D2's own case -- reuse after the first stops being outstanding
+    and before it retires under A4 -- has no check. The clause text already
+    said why it was called out separately.
+    F1 is worse than unchecked. `rst_n` is assigned twice in the whole
+    testbench: 0 at declaration and 1 at line 407. RESET IS NEVER ASSERTED
+    MID-RUN, there is no F-clause fail(), and no mutant touches reset. F1's
+    substantive half -- no transaction outstanding before reset shall produce
+    a response afterwards -- is neither instrumented nor exercised.
+  hash_moved_for_this: true

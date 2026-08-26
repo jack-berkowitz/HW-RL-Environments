@@ -1,12 +1,11 @@
 module axis_switch_oq #(
-  parameter int unsigned S_COUNT = 4,   // {2, 4}
-  parameter int unsigned M_COUNT = 4,   // {2, 4}
-  parameter int unsigned DATA_W  = 32   // {8, 32}
+  parameter int unsigned S_COUNT = 4,
+  parameter int unsigned M_COUNT = 4,
+  parameter int unsigned DATA_W  = 32
 ) (
   input  logic                               clk_i,
   input  logic                               rst_ni,
 
-  // ---- input streams, concatenated port-major ------------------------------
   input  logic [S_COUNT-1:0]                 s_valid_i,
   output logic [S_COUNT-1:0]                 s_ready_o,
   input  logic [S_COUNT*DATA_W-1:0]          s_data_i,
@@ -14,7 +13,6 @@ module axis_switch_oq #(
   input  logic [S_COUNT-1:0]                 s_last_i,
   input  logic [S_COUNT*$clog2(M_COUNT)-1:0] s_dest_i,
 
-  // ---- output streams, concatenated port-major -----------------------------
   output logic [M_COUNT-1:0]                 m_valid_o,
   input  logic [M_COUNT-1:0]                 m_ready_i,
   output logic [M_COUNT*DATA_W-1:0]          m_data_o,
@@ -22,299 +20,264 @@ module axis_switch_oq #(
   output logic [M_COUNT-1:0]                 m_last_o
 );
 
-  localparam int unsigned KEEP_W  = DATA_W/8;
-  localparam int unsigned DEST_W  = $clog2(M_COUNT);
-  localparam int unsigned OWNER_W = $clog2(S_COUNT);
+  localparam int unsigned KEEP_W    = DATA_W / 8;
+  localparam int unsigned DEST_W    = $clog2(M_COUNT);
+  localparam int unsigned MAX_BEATS = 8;
+  localparam int unsigned SLOTS     = 2;
 
   // --------------------------------------------------------------------------
-  // Two complete-frame storage slots per output.
-  // Each slot holds at most 8 beats, giving exactly the permitted maximum
-  // buffering of 16 beats / two frames per output.
+  // Input-field views.
   // --------------------------------------------------------------------------
+  logic [DATA_W-1:0] s_data [0:S_COUNT-1];
+  logic [KEEP_W-1:0] s_keep [0:S_COUNT-1];
+  logic [DEST_W-1:0] s_dest [0:S_COUNT-1];
 
-  logic [DATA_W-1:0] data_mem
-      [0:M_COUNT-1][0:1][0:7];
-
-  logic [KEEP_W-1:0] keep_mem
-      [0:M_COUNT-1][0:1][0:7];
-
-  logic [3:0] frame_len
-      [0:M_COUNT-1][0:1];
-
-  logic frame_complete
-      [0:M_COUNT-1][0:1];
-
-  // FIFO pointers and number of reserved frames.  A frame is counted as soon
-  // as its first beat is accepted, so partially filled frames consume one of
-  // the two permitted frame slots.
-  logic       wr_ptr      [0:M_COUNT-1];
-  logic       rd_ptr      [0:M_COUNT-1];
-  logic [1:0] frame_count [0:M_COUNT-1];
-
-  // Current output beat position.
-  logic [2:0] out_index [0:M_COUNT-1];
+  genvar gv;
+  generate
+    for (gv = 0; gv < S_COUNT; gv = gv + 1) begin : g_input_views
+      assign s_data[gv] = s_data_i[gv*DATA_W +: DATA_W];
+      assign s_keep[gv] = s_keep_i[gv*KEEP_W +: KEEP_W];
+      assign s_dest[gv] = s_dest_i[gv*DEST_W +: DEST_W];
+    end
+  endgenerate
 
   // --------------------------------------------------------------------------
-  // Input-side state.
+  // Two frame slots per output, eight beats per slot.
   //
-  // Only one input at a time writes a particular output queue.  Once a frame
-  // begins, rx_active locks that output's ingress side to the same input until
-  // LAST, preserving the frame as one atomic queue entry.
+  // A slot is reserved on the first accepted beat of a frame.  The frame may
+  // then fill independently of the output.  Output transmission begins only
+  // after the slot is complete, which makes frame atomicity automatic.
   // --------------------------------------------------------------------------
+  logic [DATA_W-1:0] frame_data_q [0:M_COUNT-1][0:SLOTS-1][0:MAX_BEATS-1];
+  logic [KEEP_W-1:0] frame_keep_q [0:M_COUNT-1][0:SLOTS-1][0:MAX_BEATS-1];
+  logic              frame_last_q [0:M_COUNT-1][0:SLOTS-1][0:MAX_BEATS-1];
+  logic              frame_complete_q [0:M_COUNT-1][0:SLOTS-1];
 
-  logic                 rx_active [0:M_COUNT-1];
-  logic [OWNER_W-1:0]   rx_owner  [0:M_COUNT-1];
-  logic                 rx_slot   [0:M_COUNT-1];
-  logic [2:0]           rx_index  [0:M_COUNT-1];
+  logic              alloc_ptr_q [0:M_COUNT-1];
+  logic              drain_ptr_q [0:M_COUNT-1];
+  logic [1:0]        frame_count_q [0:M_COUNT-1];
+  logic [2:0]        out_beat_q [0:M_COUNT-1];
 
-  // Round-robin starting point for the next new frame targeting each output.
-  logic [OWNER_W-1:0] rr_ptr [0:M_COUNT-1];
+  // Round-robin first-beat arbitration is independent for every output.
+  logic [1:0]        alloc_rr_q [0:M_COUNT-1];
+  logic              alloc_grant_valid_c [0:M_COUNT-1];
+  logic [1:0]        alloc_grant_input_c [0:M_COUNT-1];
+  logic              alloc_fire_c [0:M_COUNT-1];
+  logic              drain_last_fire_c [0:M_COUNT-1];
 
-  // Combinational grant for a new frame.
-  logic [M_COUNT-1:0]       grant_valid;
-  logic [OWNER_W-1:0]       grant_idx [0:M_COUNT-1];
+  // Once an input owns a frame slot, all remaining beats of that frame go to
+  // that slot without any further arbitration.
+  logic              in_frame_q [0:S_COUNT-1];
+  logic [DEST_W-1:0] in_dest_q  [0:S_COUNT-1];
+  logic              in_slot_q  [0:S_COUNT-1];
+  logic [2:0]        in_beat_q  [0:S_COUNT-1];
+  logic              active_fire_c [0:S_COUNT-1];
 
-
-  // ==========================================================================
-  // INPUT ARBITRATION
-  // ==========================================================================
-  //
-  // Arbitration is completely independent for every output.  Consequently,
-  // inputs targeting different outputs may all transfer on the same cycle.
-  //
-  // While an output is receiving a multi-beat frame, its owner receives ready
-  // unconditionally; no other input can enter that output until LAST.
-  // ==========================================================================
-
-  always_comb begin : input_arb
-    integer m;
+  // --------------------------------------------------------------------------
+  // Fair per-output arbitration for the first beat of a new frame.
+  // Only one new frame is reserved per output in one cycle, while different
+  // outputs arbitrate completely independently and therefore proceed in
+  // parallel.
+  // --------------------------------------------------------------------------
+  always_comb begin : p_allocate
+    integer o;
     integer k;
     integer idx;
-    logic   found;
 
-    s_ready_o   = '0;
-    grant_valid = '0;
+    for (o = 0; o < M_COUNT; o = o + 1) begin
+      alloc_grant_valid_c[o] = 1'b0;
+      alloc_grant_input_c[o] = 2'b00;
 
-    for (m = 0; m < M_COUNT; m = m + 1) begin
-      grant_idx[m] = '0;
-    end
+      if (rst_ni && (frame_count_q[o] < SLOTS)) begin
+        for (k = 0; k < S_COUNT; k = k + 1) begin
+          idx = alloc_rr_q[o] + k;
+          if (idx >= S_COUNT) begin
+            idx = idx - S_COUNT;
+          end
 
-    if (rst_ni) begin
-      for (m = 0; m < M_COUNT; m = m + 1) begin
-
-        if (rx_active[m]) begin
-          // Once a frame has started, continue accepting only that input.
-          s_ready_o[rx_owner[m]] = 1'b1;
-
-        end else if (frame_count[m] < 2'd2) begin
-
-          // Select a new frame using round-robin arbitration.
-          found = 1'b0;
-
-          for (k = 0; k < S_COUNT; k = k + 1) begin
-            idx = (rr_ptr[m] + k) % S_COUNT;
-
-            if (!found &&
-                s_valid_i[idx] &&
-                (s_dest_i[idx*DEST_W +: DEST_W] == m)) begin
-
-              found          = 1'b1;
-              grant_valid[m] = 1'b1;
-              grant_idx[m]   = idx[OWNER_W-1:0];
-              s_ready_o[idx] = 1'b1;
-            end
+          if ((!alloc_grant_valid_c[o]) &&
+              (!in_frame_q[idx]) &&
+              s_valid_i[idx] &&
+              (s_dest[idx] == o[DEST_W-1:0])) begin
+            alloc_grant_valid_c[o] = 1'b1;
+            alloc_grant_input_c[o] = idx[1:0];
           end
         end
       end
     end
   end
 
-
-  // ==========================================================================
-  // OUTPUT DATAPATH
-  // ==========================================================================
+  // --------------------------------------------------------------------------
+  // Input ready generation.
   //
-  // Only completed frames are exposed to the output.  Once their first beat
-  // begins, rd_ptr remains fixed until the final beat transfers.
-  // ==========================================================================
+  // A frame that already owns a slot can always continue: its storage has been
+  // reserved through the last beat.  A new frame is ready exactly when its
+  // destination's independent allocator grants it a free frame slot.
+  // --------------------------------------------------------------------------
+  always_comb begin : p_input_ready
+    integer i;
+    integer o;
 
-  always_comb begin : output_mux
-    integer m;
+    s_ready_o = '0;
+
+    for (i = 0; i < S_COUNT; i = i + 1) begin
+      active_fire_c[i] = 1'b0;
+
+      if (rst_ni && in_frame_q[i]) begin
+        s_ready_o[i] = 1'b1;
+      end
+    end
+
+    for (o = 0; o < M_COUNT; o = o + 1) begin
+      alloc_fire_c[o] = 1'b0;
+
+      if (rst_ni && alloc_grant_valid_c[o]) begin
+        s_ready_o[alloc_grant_input_c[o]] = 1'b1;
+        alloc_fire_c[o] = s_valid_i[alloc_grant_input_c[o]];
+      end
+    end
+
+    for (i = 0; i < S_COUNT; i = i + 1) begin
+      active_fire_c[i] = rst_ni && in_frame_q[i] &&
+                         s_valid_i[i] && s_ready_o[i];
+    end
+  end
+
+  // --------------------------------------------------------------------------
+  // Output datapaths.  The head frame of each output is independent, so up to
+  // M_COUNT beats can transfer in the same cycle.  Storage is not modified once
+  // frame_complete_q is set, so a stalled VALID/payload remains stable.
+  // --------------------------------------------------------------------------
+  always_comb begin : p_outputs
+    integer o;
 
     m_valid_o = '0;
     m_data_o  = '0;
     m_keep_o  = '0;
     m_last_o  = '0;
 
-    if (rst_ni) begin
-      for (m = 0; m < M_COUNT; m = m + 1) begin
+    for (o = 0; o < M_COUNT; o = o + 1) begin
+      drain_last_fire_c[o] = 1'b0;
 
-        if ((frame_count[m] != 2'd0) &&
-            frame_complete[m][rd_ptr[m]]) begin
+      if (rst_ni &&
+          (frame_count_q[o] != 0) &&
+          frame_complete_q[o][drain_ptr_q[o]]) begin
+        m_valid_o[o] = 1'b1;
+        m_data_o[o*DATA_W +: DATA_W] =
+          frame_data_q[o][drain_ptr_q[o]][out_beat_q[o]];
+        m_keep_o[o*KEEP_W +: KEEP_W] =
+          frame_keep_q[o][drain_ptr_q[o]][out_beat_q[o]];
+        m_last_o[o] = frame_last_q[o][drain_ptr_q[o]][out_beat_q[o]];
 
-          m_valid_o[m] = 1'b1;
-
-          m_data_o[m*DATA_W +: DATA_W] =
-              data_mem[m][rd_ptr[m]][out_index[m]];
-
-          m_keep_o[m*KEEP_W +: KEEP_W] =
-              keep_mem[m][rd_ptr[m]][out_index[m]];
-
-          m_last_o[m] =
-              (({1'b0, out_index[m]} + 4'd1) ==
-               frame_len[m][rd_ptr[m]]);
-        end
+        drain_last_fire_c[o] = m_ready_i[o] && m_last_o[o];
       end
     end
   end
 
-
-  // ==========================================================================
-  // SEQUENTIAL STATE
-  // ==========================================================================
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin : state_update
-    integer m;
+  // --------------------------------------------------------------------------
+  // State and frame memories.
+  // --------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni) begin : p_state
+    integer i;
+    integer o;
+    integer sl;
+    integer b;
+    integer gi;
 
     if (!rst_ni) begin
-
-      for (m = 0; m < M_COUNT; m = m + 1) begin
-        wr_ptr[m]      <= 1'b0;
-        rd_ptr[m]      <= 1'b0;
-        frame_count[m] <= 2'd0;
-
-        out_index[m] <= 3'd0;
-
-        rx_active[m] <= 1'b0;
-        rx_owner[m]  <= '0;
-        rx_slot[m]   <= 1'b0;
-        rx_index[m]  <= 3'd0;
-
-        rr_ptr[m] <= '0;
-
-        frame_complete[m][0] <= 1'b0;
-        frame_complete[m][1] <= 1'b0;
-
-        frame_len[m][0] <= 4'd0;
-        frame_len[m][1] <= 4'd0;
+      for (i = 0; i < S_COUNT; i = i + 1) begin
+        in_frame_q[i] <= 1'b0;
+        in_dest_q[i]  <= '0;
+        in_slot_q[i]  <= 1'b0;
+        in_beat_q[i]  <= 3'b000;
       end
 
-    end else begin
+      for (o = 0; o < M_COUNT; o = o + 1) begin
+        alloc_ptr_q[o]   <= 1'b0;
+        drain_ptr_q[o]   <= 1'b0;
+        frame_count_q[o] <= 2'b00;
+        out_beat_q[o]    <= 3'b000;
+        alloc_rr_q[o]    <= 2'b00;
 
-      for (m = 0; m < M_COUNT; m = m + 1) begin
+        for (sl = 0; sl < SLOTS; sl = sl + 1) begin
+          frame_complete_q[o][sl] <= 1'b0;
+          for (b = 0; b < MAX_BEATS; b = b + 1) begin
+            frame_data_q[o][sl][b] <= '0;
+            frame_keep_q[o][sl][b] <= '0;
+            frame_last_q[o][sl][b] <= 1'b0;
+          end
+        end
+      end
+    end
+    else begin
+      // Continue frames whose slots were reserved on an earlier cycle.
+      for (i = 0; i < S_COUNT; i = i + 1) begin
+        if (active_fire_c[i]) begin
+          frame_data_q[in_dest_q[i]][in_slot_q[i]][in_beat_q[i]] <= s_data[i];
+          frame_keep_q[in_dest_q[i]][in_slot_q[i]][in_beat_q[i]] <= s_keep[i];
+          frame_last_q[in_dest_q[i]][in_slot_q[i]][in_beat_q[i]] <= s_last_i[i];
 
-        // --------------------------------------------------------------------
-        // Queue occupancy.
-        //
-        // New-frame acceptance reserves a slot immediately.
-        // Last-beat output transfer releases the head slot.
-        // Simultaneous reserve/release leaves the count unchanged.
-        // --------------------------------------------------------------------
+          if (s_last_i[i]) begin
+            frame_complete_q[in_dest_q[i]][in_slot_q[i]] <= 1'b1;
+            in_frame_q[i] <= 1'b0;
+            in_beat_q[i] <= 3'b000;
+          end
+          else begin
+            in_beat_q[i] <= in_beat_q[i] + 1'b1;
+          end
+        end
+      end
 
-        case ({
-          ((!rx_active[m]) && grant_valid[m]),
-          (m_valid_o[m] && m_ready_i[m] && m_last_o[m])
-        })
+      // Reserve slots and store first beats of newly accepted frames.
+      for (o = 0; o < M_COUNT; o = o + 1) begin
+        if (alloc_fire_c[o]) begin
+          gi = alloc_grant_input_c[o];
 
-          2'b10: begin
-            frame_count[m] <= frame_count[m] + 2'd1;
+          frame_data_q[o][alloc_ptr_q[o]][0] <= s_data[gi];
+          frame_keep_q[o][alloc_ptr_q[o]][0] <= s_keep[gi];
+          frame_last_q[o][alloc_ptr_q[o]][0] <= s_last_i[gi];
+          frame_complete_q[o][alloc_ptr_q[o]] <= s_last_i[gi];
+
+          if (!s_last_i[gi]) begin
+            in_frame_q[gi] <= 1'b1;
+            in_dest_q[gi] <= o[DEST_W-1:0];
+            in_slot_q[gi] <= alloc_ptr_q[o];
+            in_beat_q[gi] <= 3'd1;
+          end
+          else begin
+            in_frame_q[gi] <= 1'b0;
+            in_beat_q[gi] <= 3'b000;
           end
 
-          2'b01: begin
-            frame_count[m] <= frame_count[m] - 2'd1;
-          end
+          alloc_ptr_q[o] <= ~alloc_ptr_q[o];
 
-          default: begin
-            frame_count[m] <= frame_count[m];
+          if (gi == (S_COUNT-1)) begin
+            alloc_rr_q[o] <= 2'b00;
           end
+          else begin
+            alloc_rr_q[o] <= gi[1:0] + 1'b1;
+          end
+        end
+
+        // Advance within a completed head frame, or retire it on LAST.
+        if (m_valid_o[o] && m_ready_i[o]) begin
+          if (m_last_o[o]) begin
+            frame_complete_q[o][drain_ptr_q[o]] <= 1'b0;
+            drain_ptr_q[o] <= ~drain_ptr_q[o];
+            out_beat_q[o] <= 3'b000;
+          end
+          else begin
+            out_beat_q[o] <= out_beat_q[o] + 1'b1;
+          end
+        end
+
+        // Allocated-frame occupancy includes frames still being filled.  This
+        // is what makes the physical storage ceiling exactly two frames/output.
+        case ({alloc_fire_c[o], drain_last_fire_c[o]})
+          2'b10: frame_count_q[o] <= frame_count_q[o] + 1'b1;
+          2'b01: frame_count_q[o] <= frame_count_q[o] - 1'b1;
+          default: frame_count_q[o] <= frame_count_q[o];
         endcase
-
-
-        // --------------------------------------------------------------------
-        // OUTPUT CONSUMPTION
-        // --------------------------------------------------------------------
-
-        if (m_valid_o[m] && m_ready_i[m]) begin
-
-          if (m_last_o[m]) begin
-            // Finished the current frame.
-            frame_complete[m][rd_ptr[m]] <= 1'b0;
-            rd_ptr[m]                    <= ~rd_ptr[m];
-            out_index[m]                 <= 3'd0;
-
-          end else begin
-            out_index[m] <= out_index[m] + 3'd1;
-          end
-        end
-
-
-        // --------------------------------------------------------------------
-        // INPUT FRAME ALREADY IN PROGRESS
-        // --------------------------------------------------------------------
-
-        if (rx_active[m]) begin
-
-          if (s_valid_i[rx_owner[m]]) begin
-
-            data_mem[m][rx_slot[m]][rx_index[m]]
-              <= s_data_i[rx_owner[m]*DATA_W +: DATA_W];
-
-            keep_mem[m][rx_slot[m]][rx_index[m]]
-              <= s_keep_i[rx_owner[m]*KEEP_W +: KEEP_W];
-
-            if (s_last_i[rx_owner[m]]) begin
-              // The whole frame is now available to the output side.
-              frame_len[m][rx_slot[m]]
-                <= {1'b0, rx_index[m]} + 4'd1;
-
-              frame_complete[m][rx_slot[m]] <= 1'b1;
-
-              rx_active[m] <= 1'b0;
-              rx_index[m]  <= 3'd0;
-
-            end else begin
-              rx_index[m] <= rx_index[m] + 3'd1;
-            end
-          end
-
-
-        // --------------------------------------------------------------------
-        // START OF A NEW FRAME
-        // --------------------------------------------------------------------
-
-        end else if (grant_valid[m]) begin
-
-          data_mem[m][wr_ptr[m]][0]
-            <= s_data_i[grant_idx[m]*DATA_W +: DATA_W];
-
-          keep_mem[m][wr_ptr[m]][0]
-            <= s_keep_i[grant_idx[m]*KEEP_W +: KEEP_W];
-
-          // Reserve the slot immediately.  Because S_COUNT is always 2 or 4,
-          // truncation implements modulo-S_COUNT round-robin advancement.
-          wr_ptr[m] <= ~wr_ptr[m];
-          rr_ptr[m] <= grant_idx[m] + 1'b1;
-
-          if (s_last_i[grant_idx[m]]) begin
-
-            // Single-beat frame.
-            frame_len[m][wr_ptr[m]]      <= 4'd1;
-            frame_complete[m][wr_ptr[m]] <= 1'b1;
-
-            rx_active[m] <= 1'b0;
-            rx_index[m]  <= 3'd0;
-
-          end else begin
-
-            // Multi-beat frame: remember its input and reserved slot.
-            frame_complete[m][wr_ptr[m]] <= 1'b0;
-
-            rx_active[m] <= 1'b1;
-            rx_owner[m]  <= grant_idx[m];
-            rx_slot[m]   <= wr_ptr[m];
-            rx_index[m]  <= 3'd1;
-          end
-        end
       end
     end
   end

@@ -1,7 +1,3 @@
-// =============================================================================
-// axis_switch_oq  --  IMPLEMENTATION
-// =============================================================================
-
 module axis_switch_oq #(
   parameter int unsigned S_COUNT = 4,   // {2, 4}
   parameter int unsigned M_COUNT = 4,   // {2, 4}
@@ -26,184 +22,217 @@ module axis_switch_oq #(
   output logic [M_COUNT-1:0]                m_last_o
 );
 
+  // Derived by this contract, not parameters.
   localparam int unsigned KEEP_W = DATA_W/8;
   localparam int unsigned DEST_W = $clog2(M_COUNT);
+  localparam int unsigned S_W    = $clog2(S_COUNT);
 
-  // Depth of 16 beats precisely provides storage for up to 2 frames of 8 beats
-  // per output, bounded as per B1 requirement.
-  localparam int unsigned FIFO_DEPTH = 16;
-  localparam int unsigned FIFO_ADDR_W = 4;
+  // Cross-module signal to aggregate the `ready` outputs from each destination arbiter.
+  logic [M_COUNT-1:0][S_COUNT-1:0] out_granted_and_ready;
 
-  typedef enum logic { IDLE, LOCKED } state_t;
-  state_t state_q [M_COUNT];
-  state_t state_d [M_COUNT];
+  genvar m;
+  generate
+    for (m = 0; m < M_COUNT; m++) begin : gen_out
+      localparam logic [DEST_W-1:0] M_IDX = m[DEST_W-1:0];
 
-  logic [$clog2(S_COUNT)-1:0] locked_sel_q [M_COUNT];
-  logic [$clog2(S_COUNT)-1:0] locked_sel_d [M_COUNT];
+      // -----------------------------------------------------------------------
+      // Output-queued FIFO (depth 16 max, ensuring 2 frames bound B1)
+      // -----------------------------------------------------------------------
+      localparam int FIFO_DEPTH = 16;
+      localparam int FIFO_AW    = 4;
 
-  logic [$clog2(S_COUNT)-1:0] rr_ptr_q [M_COUNT];
-  logic [$clog2(S_COUNT)-1:0] rr_ptr_d [M_COUNT];
+      logic [DATA_W+KEEP_W:0] fifo_mem [FIFO_DEPTH];
+      logic [FIFO_AW:0]       fifo_wr_ptr;
+      logic [FIFO_AW:0]       fifo_rd_ptr;
 
-  logic [M_COUNT-1:0] grant_valid;
-  logic [$clog2(S_COUNT)-1:0] grant_sel [M_COUNT];
+      logic fifo_full;
+      logic fifo_empty;
+      logic fifo_ready;
+      logic fifo_push;
+      logic fifo_pop;
 
-  // Output FIFO storage and pointers
-  logic [DATA_W-1:0]   fifo_data [M_COUNT][FIFO_DEPTH];
-  logic [KEEP_W-1:0]   fifo_keep [M_COUNT][FIFO_DEPTH];
-  logic                fifo_last [M_COUNT][FIFO_DEPTH];
+      assign fifo_full  = (fifo_wr_ptr[FIFO_AW] != fifo_rd_ptr[FIFO_AW]) && 
+                          (fifo_wr_ptr[FIFO_AW-1:0] == fifo_rd_ptr[FIFO_AW-1:0]);
+      assign fifo_empty = (fifo_wr_ptr == fifo_rd_ptr);
+      assign fifo_ready = !fifo_full;
 
-  logic [FIFO_ADDR_W:0] fifo_wr_ptr [M_COUNT];
-  logic [FIFO_ADDR_W:0] fifo_rd_ptr [M_COUNT];
+      // -----------------------------------------------------------------------
+      // Per-Output Arbiter and Multiplexer State
+      // -----------------------------------------------------------------------
+      logic locked_q;
+      logic [S_COUNT-1:0] grant_oh_q;
+      logic [S_W-1:0]     rr_ptr;
 
-  logic [M_COUNT-1:0] fifo_full;
-  logic [M_COUNT-1:0] fifo_empty;
-  logic [M_COUNT-1:0] fifo_ready;
-  logic [M_COUNT-1:0] fifo_wr;
-  
-  logic [DATA_W-1:0]  fifo_din_data [M_COUNT];
-  logic [KEEP_W-1:0]  fifo_din_keep [M_COUNT];
-  logic               fifo_din_last [M_COUNT];
+      logic [S_COUNT-1:0] current_req;
+      logic [S_COUNT-1:0] mask;
+      logic [S_COUNT-1:0] req_masked;
+      logic [S_COUNT-1:0] pe_masked;
+      logic [S_COUNT-1:0] pe_raw;
+      logic [S_COUNT-1:0] grant_oh;
+      
+      logic [S_COUNT-1:0] active_grant_oh;
+      logic               active_valid;
+      logic               transfer_beat;
+      logic               is_last;
+      logic               transfer_last;
 
-  // 1. FIFO Status Logic
-  always_comb begin
-    int m;
-    for (m = 0; m < M_COUNT; m++) begin
-        fifo_full[m] = (fifo_wr_ptr[m][FIFO_ADDR_W] != fifo_rd_ptr[m][FIFO_ADDR_W]) &&
-                       (fifo_wr_ptr[m][FIFO_ADDR_W-1:0] == fifo_rd_ptr[m][FIFO_ADDR_W-1:0]);
-        fifo_empty[m] = (fifo_wr_ptr[m] == fifo_rd_ptr[m]);
-        fifo_ready[m] = ~fifo_full[m];
-    end
-  end
+      logic [DATA_W-1:0]  wdata;
+      logic [KEEP_W-1:0]  wkeep;
+      logic               wlast;
+      logic [S_W-1:0]     next_rr;
 
-  // 2. Round-Robin Output Arbiters
-  always_comb begin
-    int m;
-    int i;
-    int idx;
-    logic any_req;
-    logic [$clog2(S_COUNT)-1:0] first_req;
-    
-    for (m = 0; m < M_COUNT; m++) begin
-        state_d[m] = state_q[m];
-        locked_sel_d[m] = locked_sel_q[m];
-        rr_ptr_d[m] = rr_ptr_q[m];
+      // Ensure variable declarations precede the first statement inside procedural blocks.
+      always_comb begin
+        int s;
+        logic prev_masked_or;
+        logic prev_raw_or;
+        logic [31:0] s_plus_1;
+
+        current_req    = '0;
+        mask           = '0;
+        req_masked     = '0;
+        pe_masked      = '0;
+        pe_raw         = '0;
+        grant_oh       = '0;
+        prev_masked_or = 1'b0;
+        prev_raw_or    = 1'b0;
+        s_plus_1       = '0;
+        next_rr        = '0;
+        wdata          = '0;
+        wkeep          = '0;
+        wlast          = 1'b0;
+
+        // 1. Identify which inputs are valid and targeted at this specific output.
+        for (s = 0; s < S_COUNT; s++) begin
+          if (s_valid_i[s] && (s_dest_i[s*DEST_W +: DEST_W] == M_IDX)) begin
+            current_req[s] = 1'b1;
+          end
+          if (s >= rr_ptr) begin
+            mask[s] = 1'b1;
+          end
+        end
+
+        // 2. Round-Robin Arbitration Priority Encoders
+        req_masked = current_req & mask;
         
-        grant_valid[m] = 1'b0;
-        grant_sel[m] = '0;
+        for (s = 0; s < S_COUNT; s++) begin
+          pe_masked[s] = req_masked[s] & ~prev_masked_or;
+          prev_masked_or |= req_masked[s];
+        end
+        for (s = 0; s < S_COUNT; s++) begin
+          pe_raw[s] = current_req[s] & ~prev_raw_or;
+          prev_raw_or |= current_req[s];
+        end
         
-        if (state_q[m] == IDLE) begin
-            any_req = 1'b0;
-            first_req = '0;
-            
-            // Search for highest-priority valid request directed to this output
-            for (i = 0; i < S_COUNT; i++) begin
-                idx = (rr_ptr_q[m] + i) % S_COUNT;
-                if (s_valid_i[idx] && (s_dest_i[idx * DEST_W +: DEST_W] == m)) begin
-                    any_req = 1'b1;
-                    first_req = idx[$clog2(S_COUNT)-1:0];
-                    break;
-                end
-            end
-            
-            if (any_req) begin
-                grant_valid[m] = 1'b1;
-                grant_sel[m] = first_req;
-                
-                // Advance pointer and stay IDLE if it's the last beat; else lock.
-                if (fifo_ready[m] && s_valid_i[first_req] && s_last_i[first_req]) begin
-                    state_d[m] = IDLE;
-                    rr_ptr_d[m] = (first_req + 1) % S_COUNT;
-                end else begin
-                    state_d[m] = LOCKED;
-                    locked_sel_d[m] = first_req;
-                end
-            end
+        if (|req_masked) begin
+          grant_oh = pe_masked;
         end else begin
-            grant_valid[m] = 1'b1;
-            grant_sel[m] = locked_sel_q[m];
-            
-            // Unlock only when the final beat of the frame is successfully transferred
-            if (fifo_ready[m] && s_valid_i[locked_sel_q[m]] && s_last_i[locked_sel_q[m]]) begin
-                state_d[m] = IDLE;
-                rr_ptr_d[m] = (locked_sel_q[m] + 1) % S_COUNT;
-            end
+          grant_oh = pe_raw;
         end
-    end
-  end
 
-  // 3. FIFO Write Generation & Routing
-  always_comb begin
-    int m;
-    for (m = 0; m < M_COUNT; m++) begin
-        fifo_wr[m] = 1'b0;
-        fifo_din_data[m] = '0;
-        fifo_din_keep[m] = '0;
-        fifo_din_last[m] = 1'b0;
+        // 3. Atomicity Lock (hold ongoing frame uninterrupted)
+        if (locked_q) begin
+          active_grant_oh = grant_oh_q;
+        end else begin
+          active_grant_oh = grant_oh;
+        end
+
+        active_valid  = |(current_req & active_grant_oh);
+        transfer_beat = active_valid & fifo_ready;
         
-        if (grant_valid[m]) begin
-            fifo_wr[m] = s_valid_i[grant_sel[m]] && fifo_ready[m];
-            fifo_din_data[m] = s_data_i[grant_sel[m] * DATA_W +: DATA_W];
-            fifo_din_keep[m] = s_keep_i[grant_sel[m] * KEEP_W +: KEEP_W];
-            fifo_din_last[m] = s_last_i[grant_sel[m]];
-        end
-    end
-  end
+        is_last       = |(s_last_i & active_grant_oh);
+        transfer_last = transfer_beat & is_last;
 
-  // 4. Input Ready Backpressure
+        // 4. Multiplexing granted data
+        for (s = 0; s < S_COUNT; s++) begin
+          if (active_grant_oh[s]) begin
+            wdata |= s_data_i[s*DATA_W +: DATA_W];
+            wkeep |= s_keep_i[s*KEEP_W +: KEEP_W];
+            wlast |= s_last_i[s];
+            
+            s_plus_1 = s + 1;
+            if (s == S_COUNT - 1) begin
+              next_rr = '0;
+            end else begin
+              next_rr = s_plus_1[S_W-1:0];
+            end
+          end
+        end
+      end
+
+      // State transitions for round-robin pointer and frame lock
+      always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+          locked_q   <= 1'b0;
+          grant_oh_q <= '0;
+          rr_ptr     <= '0;
+        end else begin
+          if (!locked_q) begin
+            if (active_valid) begin
+              if (!transfer_last) begin
+                locked_q   <= 1'b1;
+                grant_oh_q <= active_grant_oh;
+              end else begin
+                rr_ptr <= next_rr;
+              end
+            end
+          end else begin
+            if (transfer_last) begin
+              locked_q <= 1'b0;
+              rr_ptr   <= next_rr;
+            end
+          end
+        end
+      end
+
+      // Feed granted ready assignments upward
+      assign out_granted_and_ready[m] = active_grant_oh & {S_COUNT{fifo_ready}};
+
+      // -----------------------------------------------------------------------
+      // Synchronous FIFO Memory & Pointers
+      // -----------------------------------------------------------------------
+      assign fifo_push = transfer_beat;
+      assign fifo_pop  = m_valid_o[m] & m_ready_i[m];
+      
+      assign m_valid_o[m] = !fifo_empty;
+
+      always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+          fifo_wr_ptr <= '0;
+          fifo_rd_ptr <= '0;
+        end else begin
+          if (fifo_push) fifo_wr_ptr <= fifo_wr_ptr + 1'b1;
+          if (fifo_pop)  fifo_rd_ptr <= fifo_rd_ptr + 1'b1;
+        end
+      end
+
+      // Unpacked array maps perfectly to FWFT LUTRAM semantics
+      always_ff @(posedge clk_i) begin
+        if (fifo_push) begin
+          fifo_mem[fifo_wr_ptr[FIFO_AW-1:0]] <= {wdata, wkeep, wlast};
+        end
+      end
+      
+      logic [DATA_W+KEEP_W:0] fifo_rdata;
+      assign fifo_rdata = fifo_mem[fifo_rd_ptr[FIFO_AW-1:0]];
+      
+      assign m_data_o[m*DATA_W +: DATA_W] = fifo_rdata[DATA_W+KEEP_W : KEEP_W+1];
+      assign m_keep_o[m*KEEP_W +: KEEP_W] = fifo_rdata[KEEP_W : 1];
+      assign m_last_o[m]                  = fifo_rdata[0];
+    end
+  endgenerate
+
+  // ---------------------------------------------------------------------------
+  // Global Ready aggregation - An input sees ready if its chosen output grants it
+  // ---------------------------------------------------------------------------
   always_comb begin
     int s;
-    int m;
+    int m_idx;
+    s_ready_o = '0;
     for (s = 0; s < S_COUNT; s++) begin
-        s_ready_o[s] = 1'b0;
-        for (m = 0; m < M_COUNT; m++) begin
-            if (grant_valid[m] && (grant_sel[m] == s) && (s_dest_i[s * DEST_W +: DEST_W] == m)) begin
-                s_ready_o[s] = fifo_ready[m];
-            end
-        end
-    end
-  end
-
-  // 5. FIFO Read Out
-  always_comb begin
-    int m;
-    logic [FIFO_ADDR_W-1:0] rd_idx;
-    for (m = 0; m < M_COUNT; m++) begin
-        rd_idx = fifo_rd_ptr[m][FIFO_ADDR_W-1:0];
-        m_valid_o[m] = ~fifo_empty[m];
-        m_data_o[m * DATA_W +: DATA_W] = fifo_data[m][rd_idx];
-        m_keep_o[m * KEEP_W +: KEEP_W] = fifo_keep[m][rd_idx];
-        m_last_o[m] = fifo_last[m][rd_idx];
-    end
-  end
-
-  // 6. Sequential State Updates
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    int m;
-    if (!rst_ni) begin
-        for (m = 0; m < M_COUNT; m++) begin
-            state_q[m] <= IDLE;
-            locked_sel_q[m] <= '0;
-            rr_ptr_q[m] <= '0;
-            fifo_wr_ptr[m] <= '0;
-            fifo_rd_ptr[m] <= '0;
-        end
-    end else begin
-        for (m = 0; m < M_COUNT; m++) begin
-            state_q[m] <= state_d[m];
-            locked_sel_q[m] <= locked_sel_d[m];
-            rr_ptr_q[m] <= rr_ptr_d[m];
-            
-            if (fifo_wr[m]) begin
-                fifo_data[m][fifo_wr_ptr[m][FIFO_ADDR_W-1:0]] <= fifo_din_data[m];
-                fifo_keep[m][fifo_wr_ptr[m][FIFO_ADDR_W-1:0]] <= fifo_din_keep[m];
-                fifo_last[m][fifo_wr_ptr[m][FIFO_ADDR_W-1:0]] <= fifo_din_last[m];
-                fifo_wr_ptr[m] <= fifo_wr_ptr[m] + 1;
-            end
-            
-            if (m_valid_o[m] && m_ready_i[m]) begin
-                fifo_rd_ptr[m] <= fifo_rd_ptr[m] + 1;
-            end
-        end
+      for (m_idx = 0; m_idx < M_COUNT; m_idx++) begin
+        s_ready_o[s] |= out_granted_and_ready[m_idx][s];
+      end
     end
   end
 

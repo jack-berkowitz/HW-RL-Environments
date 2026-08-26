@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=async_fifo_cdc; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=<unset>; ABC_CLOCK_PERIOD_IN_PS=5000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.rd_period=8; sdc.wr_period=5; override.CLK_PERIOD_NS=3.6562;",
+  "build_config_hash": "6cf7c5a1ac9a7f3b",
+  "clk_period_ns": "3.6562",
+  "correctness_gate": "passed:2026-08-16T195844Z__async_fifo_cdc_ref__sim.json",
+  "design_area_um2": "20007",
+  "git_sha": "4326ac07ea31ae8b200cda3ab8bd5250d8c64890-dirty",
+  "kind": "ppa",
+  "label": "reference_cc3.6562",
+  "orfs_nickname": "d_ca04_async_fifo_cdc",
+  "pdk": "sky130hd",
+  "power_w": "1.53e-02",
+  "status": "completed",
+  "submission": "domains/comp_arch/design/d_ca04_async_fifo_cdc/ref/async_fifo_cdc_ref.sv",
+  "submission_sha256_16": "a510dd8462d06100",
+  "synth_area_um2": "15360.982400",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-23T23:19:28Z",
+  "wns_ns": "0.144062"
+}

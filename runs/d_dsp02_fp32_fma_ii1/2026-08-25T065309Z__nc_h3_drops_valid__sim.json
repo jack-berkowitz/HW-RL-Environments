@@ -1,0 +1,52 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "RDN": "894",
+      "RMM": "847",
+      "RNE": "860",
+      "RTZ": "850",
+      "RUP": "889",
+      "disagree": "100",
+      "exact": "650",
+      "overflow": "486",
+      "qnan_a": "46",
+      "qnan_b": "42",
+      "snan": "31",
+      "subn_op": "1243",
+      "subn_res": "172",
+      "tiny_edge": "235",
+      "underflow": "127",
+      "zero_res": "48"
+    }
+  },
+  "git_sha": "84fa595e75fcd0303544528e41fe259b133a864a-dirty",
+  "kind": "sim",
+  "label": "nc_h3_drops_valid",
+  "metrics": {
+    "": {
+      "c3_accepted": "4340",
+      "c3_dead_cycles": "0",
+      "c3_offered": "4340",
+      "checks": "4339",
+      "h3_guard_true": "1",
+      "init_interval": "1",
+      "latency_cycles": "3",
+      "vectors": "4340"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "domains/dsp/design/d_dsp02_fp32_fma_ii1/controls/nc_h3_drops_valid.sv",
+  "submission_sha256_16": "57c9dadbf2ae384b",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "8420f4393a0a930d",
+  "timestamp_utc": "2026-08-25T06:53:09Z"
+}

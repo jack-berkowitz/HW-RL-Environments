@@ -276,7 +276,7 @@ negative_controls:
     them, and the witness runner reports the profile for that reason. Two
     controls whose observables coincide are one control.
   h3_violating_first_drafts:
-    status: PASS -- both caught, on H3 and on nothing else
+    status: PASS -- both caught, on H3 and on nothing else AS OF 2026-08-25
     file: negctl/h3_violating_perturbations.sv
     detail: >
       The strongest evidence on this task, and NEITHER WAS BUILT TO BE CAUGHT.
@@ -333,3 +333,32 @@ condition_floor:
     undetectable against a conforming design proves the clause cannot be scored.
     The floor makes the evasion visible, not non-conforming.
   rebaseline: "Ten of ten killed, ACCEPTED, every verdict identical."
+
+must_fire:
+  reference: [v_ca07.cov_bigdrop, v_ca07.cov_change, v_ca07.cov_defer, v_ca07.cov_defer_condition, v_ca07.cov_div, v_ca07.cov_en, v_ca07.cov_g1, v_ca07.cov_odd, v_ca07.cov_pass, v_ca07.cov_reset, v_ca07.cov_same]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20). Keyed BY
+  VARIANT: a negative-control run contains no conformant perturbations and vice
+  versa, so a flat per-task list would refuse on every run that is not the union
+  of all of them. Declared rather than globbed, so a deleted artefact is a
+  refusal instead of a shorter list.
+
+exclusivity_is_dated:
+  date: 2026-08-25
+  claim_qualified: >
+    "X and nothing else" is a claim about THE SET OF CHECKS THAT EXISTED WHEN IT
+    WAS MEASURED, not about the control. Adding a check can retroactively falsify
+    an isolation claim made in good faith, and the claim reads as verified the
+    whole time. AGENT-DESIGN-43a92055's d_nw03 nc_b_outputs_serialised went from
+    6/8 exclusive to 0/8 within a day of an R1 stability check being added --
+    nothing in the control moved.
+  therefore: >
+    Every exclusivity claim in this task carries the date it was measured. Read
+    it as "exclusive with respect to the checks this task had on that date".
+  h3_pair_specifically: >
+    The two H3 controls -- one failure and two, no collateral -- are the
+    strongest isolation claim anywhere in my eleven, and they carry exactly the
+    same asterisk as the weakest. Being the best evidence available does not make
+    a dated claim a standing one.

@@ -525,6 +525,27 @@ module arp_engine_tb;
     if (!cov_busy_request)   fail("COVERAGE", "no ARP request arrived while one of our own lookups was outstanding");
     if (!cov_clear)          fail("COVERAGE", "clear_cache_i was never asserted");
     if (!cov_reset)          fail("COVERAGE", "reset was never asserted mid-stream");
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_nw01.cov_busy_request %0d", cov_busy_request);
+    $display("FIRED v_nw01.cov_clear %0d", cov_clear);
+    $display("FIRED v_nw01.cov_hits %0d", cov_hits);
+    $display("FIRED v_nw01.cov_identities %0d", cov_identities);
+    $display("FIRED v_nw01.cov_lookups %0d", cov_lookups);
+    $display("FIRED v_nw01.cov_misses %0d", cov_misses);
+    $display("FIRED v_nw01.cov_nonarp %0d", cov_nonarp);
+    $display("FIRED v_nw01.cov_notforus %0d", cov_notforus);
+    $display("FIRED v_nw01.cov_offsubnet %0d", cov_offsubnet);
+    $display("FIRED v_nw01.cov_replies_in %0d", cov_replies_in);
+    $display("FIRED v_nw01.cov_requests_in %0d", cov_requests_in);
+    $display("FIRED v_nw01.cov_reset %0d", cov_reset);
+    $display("FIRED v_nw01.cov_second_timeout %0d", cov_second_timeout);
+    $display("FIRED v_nw01.cov_timeouts %0d", cov_timeouts);
 
     if (errors == 0) $display("RESULT: PASS");
     else $display("RESULT: FAIL (%0d violation%s)", errors, (errors == 1) ? "" : "s");

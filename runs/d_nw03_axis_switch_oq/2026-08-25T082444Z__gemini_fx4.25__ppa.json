@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=axis_switch_oq; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=10000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0; override.CLK_PERIOD_NS=4.25;",
+  "build_config_hash": "18b49a54846a0b8d",
+  "clk_period_ns": "4.25",
+  "correctness_gate": "passed:2026-08-25T065142Z__gemini__sim.json",
+  "design_area_um2": "132094",
+  "git_sha": "9de5a35b5f1bef41c136708d6578706883738e01-dirty",
+  "kind": "ppa",
+  "label": "gemini_fx4.25",
+  "orfs_nickname": "d_nw03_cand_gemini_fx4.25",
+  "pdk": "sky130hd",
+  "power_w": "1.02e-01",
+  "status": "completed",
+  "submission": "candidates/d_nw03/gemini.sv",
+  "submission_sha256_16": "29d2aee5862b04cd",
+  "synth_area_um2": "96263.574400",
+  "task": "d_nw03_axis_switch_oq",
+  "timestamp_utc": "2026-08-25T08:24:44Z",
+  "wns_ns": "-0.116001"
+}

@@ -234,3 +234,97 @@ readies_criterion:
     task's hash and a task whose port map lives where the submitter sees it is
     not doing anything wrong. Jack's call, and not started.
 
+
+must_fire:
+  reference: [v_ca05.cov_peek, v_ca05.cov_pop_absent, v_ca05.cov_zero_mask, v_ca05.cov_order, v_ca05.cov_reset_nonempty]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20).
+  WAS AN EXPLICIT EMPTY LIST, and the empty list was correct: this testbench had
+  no coverage counter and no floor anywhere in it. That is now closed.
+
+antecedent_floors:
+  date: 2026-08-25
+  was: >
+    No cov_ counter and no fail("FLOOR") anywhere in the file. Six clause ids
+    emittable of fifteen stated, and FOUR MORE grouped: R2, R9 and R10 report
+    under R8, R13 under R12. For a grouped clause the antecedent is the only
+    thing standing between it and being unexercised, and nothing was watching
+    any of the four.
+  why_that_pair_is_worse_than_either: >
+    Grouping hides WHICH clause was tested; an unguarded antecedent hides
+    WHETHER ANYTHING was. The floor that would read zero sits on the other
+    clause and is satisfied, so the two defects cover for each other. This is
+    v_nw01's C2 shape, four times over in one task.
+  now:
+    cov_peek: "R9 -- a pop with pop_en_i low on a PRESENT entry"
+    cov_pop_absent: "R10 -- a pop of a tag with no entries"
+    cov_zero_mask: "R13 -- an all-zero mask against a NON-EMPTY store"
+    cov_order: "R2 -- a pop from a tag holding two or more"
+  gated_on_the_stimulus_half_only: >
+    Each counts an event this testbench chooses to drive and reads no design
+    output, so none can reject correct hardware.
+  measured: >
+    peek=6, pop-absent=401, zero-mask=1, multi-deep pop=14. Golden PASS, dut2
+    PASS, 4/4 conformant, gate rejected, 10/10 killed.
+  zero_mask_is_one: >
+    R13's antecedent is reached EXACTLY ONCE in the whole run. The floor now
+    makes an edit that removes that single do_match(0, 0, ...) call fail, which
+    is what it is for -- but R13 rests on one observation and that is worth
+    knowing rather than inferring from a green row.
+  mutants_already_covered_two_of_the_four: >
+    tt_m8_peek_removes_last (R9) and tt_m9_zero_mask_no_hit (R13) both die, so
+    those antecedents were being reached. A mutant dying is evidence AFTER THE
+    FACT that the stimulus happened to exist; the floor is the guarantee that it
+    still will. Nothing keyed on R2's or R10's antecedent either way.
+  spec_annotation_held: >
+    R2 -> R8, R9 -> R8, R10 -> R8, R13 -> R12 are NOT annotated in the spec yet.
+    That is a clause-text edit and would move this task's hash, and v_ca05's hash
+    is not otherwise moving. Held for the next build per the agreed sequence;
+    the floors are tb/ only and cost nothing.
+
+r15_was_emittable_emitted_and_vacuous:
+  date: 2026-08-25
+  status: CLOSED
+  clause: >
+    R15 -- "while rst_ni is low the store shall be emptied; after release,
+    empty_o shall be high and full_o low."
+  what_was_wrong: >
+    Both halves were CHECKED. Lines 201-202 read empty_o and full_o immediately
+    after the initial reset and report under R15. The check was VACUOUS: the only
+    reset in this testbench happened on a store that had never held anything, so
+    a design that ignores rst_ni entirely passed it for the life of the task.
+  why_this_one_is_the_sharpest_of_the_five: >
+    R15 IS IN THE EMITTABLE SET. The emittability scan reports it as fine, and it
+    is fine in the only sense that scan can measure -- a fail() exists that can
+    name it. What the scan cannot see is that the observation behind it is empty.
+    A CLAUSE CAN BE EMITTABLE, EMITTED, AND UNEXERCISED, and the first two are
+    what make the third invisible.
+  found_by: >
+    Measuring mid-run reset assertions across all eleven rather than hand-checking
+    two. v_ca03 and v_ca06 were established by hand; the other nine were never
+    measured. v_ca05 is the only additional one, and it was found only because
+    AGENT-DESIGN-43a92055 found a fourth instance on d_ai01 by making the same
+    omission and saying so.
+  fix: >
+    A phase appended after the final drain -- no existing measurement moves.
+    Fill the store, ASSERT IT IS NON-EMPTY, reset four cycles, release, then
+    require empty_o high, full_o low, and a pop of a previously-present tag to
+    return nothing. Step 1 is the gate: if the store is not actually non-empty
+    the phase reports "R15 WAS NEVER EXERCISED" and FAILS rather than passing,
+    which is the state it sat in until now.
+  control_that_must_fail:
+    what: a design that sees the initial reset and ignores every later one
+    result: FAIL -- R15 "the store was not emptied", and R8 "pop_data_valid=1 expected 0"
+    exclusive_as_of: null
+    exclusive_note: >
+      DELIBERATELY NOT EXCLUSIVE. The R8 is intended: the phase pops a
+      previously-present tag to establish the entries are GONE rather than merely
+      uncounted, so a design that ignores reset fails both the status check and
+      the removal check. Two clauses, both correct, and no isolation claim is
+      made over it.
+    measured_by: hand_run
+  measured: >
+    cov_reset_nonempty=1. golden PASS, dut2 PASS, 4/4 conformant, gate rejected,
+    10/10 killed.

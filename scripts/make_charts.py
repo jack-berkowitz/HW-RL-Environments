@@ -363,11 +363,376 @@ def sync_readme_alt():
     return False
 
 
+# ---- design summary -------------------------------------------------------
+# WHAT THIS CHART IS ALLOWED TO SHOW. Area RELATIVE TO THE REFERENCE, and only
+# for submissions that closed timing at the task's pinned clock. Everything else
+# is marked rather than plotted:
+#
+#   missed timing  -> slack is bought with area, so a design that missed and one
+#                     that closed are not describing the same circuit (rule 22).
+#                     Plotting its bar next to a closing one compares two
+#                     different questions.
+#   fails correctness -> scores zero on every PPA axis (rule 19). A zero-height
+#                     bar would read as "very small", which is the opposite of
+#                     what it means, so it gets a marker and a word.
+#
+# The reference line at 1.0 is the anchor: below it is smaller than the
+# reference, above it is larger. Absolute µm² is in results_table.md; a ratio is
+# what makes five tasks of different sizes readable on one axis.
+DESIGN_PINS = [("d_ca04", "4.25", "async CDC FIFO"),
+               ("d_nw03", "4.25", "stream switch"),
+               ("d_dsp02", "19.25", "FP32 FMA"),
+               ("d_dsp03", "70.5", "multi-format FMA"),
+               ("d_nw01", "8.0", "AXI4 crossbar"),
+               ("d_ca01", "15.0", "non-blocking D-cache"),
+               ("d_ca03", "12.5", "Sv39 MMU")]
+DESIGN_MODELS = ("chat", "claude", "gemini")
+
+
+def design_rows():
+    """[(task, label, pin, ref_area, [(model, ratio|None, note)])] for finished tasks."""
+    out = []
+    for short, pin, label in DESIGN_PINS:
+        dirs = glob.glob(os.path.join(REPO, "domains", "*", "design", short + "_*"))
+        if not dirs:
+            continue
+        task = os.path.basename(dirs[0])
+        best = {}
+        for f in glob.glob(os.path.join(REPO, "runs", task, f"*_fx{pin}__ppa.json")):
+            try:
+                r = json.load(open(f))
+            except Exception:
+                continue
+            who = r.get("label", "").split("_fx")[0]
+            if who not in best or r.get("timestamp_utc", "") > best[who].get("timestamp_utc", ""):
+                best[who] = r
+        ref = best.get("reference")
+        if not ref or not ref.get("design_area_um2"):
+            continue
+        ref_a = float(ref["design_area_um2"])
+        ref_p = float(ref.get("power_w") or 0) or None
+        bars, pbars = [], []
+        for m in DESIGN_MODELS:
+            r = best.get(m)
+            if r is None:
+                bars.append((m, None, "no result"))
+                pbars.append((m, None, "no result"))
+                continue
+            wns = r.get("wns_ns")
+            if wns is not None and float(wns) < 0:
+                bars.append((m, None, "missed timing"))
+                pbars.append((m, None, "missed timing"))
+                continue
+            a = r.get("design_area_um2")
+            bars.append((m, float(a) / ref_a, "") if a else (m, None, "no area"))
+            pw = r.get("power_w")
+            pbars.append((m, float(pw) / ref_p, "") if (pw and ref_p)
+                         else (m, None, "no power"))
+        # A MODEL WITH NO PPA RECORD AT THE PIN IS NOT AUTOMATICALLY A
+        # CORRECTNESS FAILURE. It may never have compiled, which is a different
+        # fact about the model: "wrote wrong hardware" and "wrote something the
+        # synthesis frontend rejects" are not the same result, and labelling
+        # both "fails correctness" reported three build failures as functional
+        # ones. The sim record says which -- build_status is set only when the
+        # frontend refused it.
+        sims = {}
+        for f in glob.glob(os.path.join(REPO, "runs", task, "*__sim.json")):
+            try:
+                r = json.load(open(f))
+            except Exception:
+                continue
+            w = r.get("label", "")
+            if w not in sims or r.get("timestamp_utc", "") > sims[w].get("timestamp_utc", ""):
+                sims[w] = r
+        for m in DESIGN_MODELS:
+            if best.get(m) is None:
+                sm = sims.get(m) or {}
+                note = "did not build" if sm.get("build_status") else "fails correctness"
+                bars[DESIGN_MODELS.index(m)] = (m, None, note)
+                pbars[DESIGN_MODELS.index(m)] = (m, None, note)
+        out.append((task, label, pin, ref_a, bars, pbars))
+    return out
+
+
+def design_svg(theme, series="area"):
+    """series="area" or "power" -- same shape, same exclusions, different axis."""
+    c = THEMES[theme]
+    rows = design_rows()
+    W, x0, trackw = 900, 210, 480
+    grouph, barh = 86, 15
+    H = 84 + grouph * max(1, len(rows))
+    # the axis spans 0..max ratio, with 1.0 (the reference) always on scale
+    top = 1.0
+    for row in rows:
+        bars = row[4] if series == "area" else row[5]
+        for _, ratio, _ in bars:
+            if ratio:
+                top = max(top, ratio)
+    top = max(1.25, top * 1.08)
+    def x_of(v):
+        return x0 + trackw * (v / top)
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
+         f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">']
+    p.append(f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>')
+    p.append(f'<text x="20" y="26" fill="{c["fg"]}" font-size="15" font-weight="600">'
+             + ('Design area' if series == "area" else 'Total power')
+             + f' vs the reference, at each task\u2019s pinned clock</text>')
+    p.append(f'<text x="20" y="45" fill="{c["mute"]}" font-size="12">'
+             f'Lower is smaller. Only submissions that CLOSED TIMING are plotted \u2014 '
+             f'see the notes for the rest.</text>')
+    ytop, ybot = 58, H - 20
+    # reference line at 1.0
+    xr = x_of(1.0)
+    p.append(f'<line x1="{xr}" y1="{ytop}" x2="{xr}" y2="{ybot}" stroke="{c["rule"]}" '
+             f'stroke-width="1.5" stroke-dasharray="4 3"/>')
+    p.append(f'<text x="{xr + 5}" y="{ytop + 10}" fill="{c["rule"]}" font-size="11">'
+             f'reference (1.0\u00d7)</text>')
+    y = ytop + 20
+    for task, label, pin, ref_a, abars, pbars in rows:
+        bars = abars if series == "area" else pbars
+        p.append(f'<text x="20" y="{y + 10}" fill="{c["fg"]}" font-size="13" '
+                 f'font-weight="600">{esc(label)}</text>')
+        p.append(f'<text x="20" y="{y + 26}" fill="{c["mute"]}" font-size="11">'
+                 f'{esc(task.split("_")[0] + "_" + task.split("_")[1])} @ {esc(pin)} ns'
+                 f'</text>')
+        yy = y
+        for m, ratio, note in bars:
+            p.append(f'<text x="{x0 - 10}" y="{yy + 11}" fill="{c["mute"]}" font-size="11" '
+                     f'text-anchor="end">{esc(m)}</text>')
+            p.append(f'<rect x="{x0}" y="{yy}" width="{trackw}" height="{barh}" rx="2" '
+                     f'fill="{c["dead"]}" opacity="0.45"/>')
+            if ratio:
+                w = max(2, int(trackw * ratio / top))
+                fill = c["bar"] if ratio <= 1.0 else c["bar2"]
+                p.append(f'<rect x="{x0}" y="{yy}" width="{w}" height="{barh}" rx="2" '
+                         f'fill="{fill}"/>')
+                p.append(f'<text x="{x0 + w + 6}" y="{yy + 11}" fill="{c["fg"]}" '
+                         f'font-size="11">{ratio:.2f}\u00d7</text>')
+            else:
+                p.append(f'<text x="{x0 + 6}" y="{yy + 11}" fill="{c["mute"]}" '
+                         f'font-size="11" font-style="italic">{esc(note)}</text>')
+            yy += barh + 5
+        y += grouph
+    p.append("</svg>")
+    return "\n".join(p)
+
+
+# ---- area per unit of capability ------------------------------------------
+# THE QUESTION RAW AREA CANNOT ANSWER. A small design may be small because it
+# does less. Area per unit of what the design DELIVERS asks how much it paid for
+# what it provides, and it is the only one of the three charts where a submission
+# can lose by being small.
+#
+# Measured, not hypothetical: d_ca04's submissions are 25-27% smaller than the
+# reference at the same clock, and only 9-11% smaller per beat of FIFO capacity.
+# Most of the headline gap is two spill registers the reference has and they do
+# not. The raw number is true and answers a different question.
+#
+# ONLY TASKS THAT DECLARE A CAPABILITY METRIC APPEAR. d_dsp02 and d_ca03 declare
+# none, so they are absent rather than shown with an invented axis -- "more is
+# better and area buys it" is a claim about the contract, not something to infer
+# from a metric name.
+# ONE TASK DECLARES FOUR CAPABILITY METRICS AND THE ANSWER DEPENDS ON WHICH.
+# d_nw01's chat is 2.59x the reference per burst delivered, 2.72x per disjoint
+# pair, and 3.40x per outstanding transaction -- a 31% spread. Picking one and
+# labelling it made the choice visible but still made it silently; a reader had
+# no way to know that a different declared metric moves the number by a third.
+#
+# So a submission is drawn as a RANGE across every metric its task declares,
+# endpoints labelled. Tasks declaring one metric collapse to a point and read
+# exactly as before, which is three of the four here.
+#
+# The alternatives and why not: a geometric mean is a synthetic quantity no
+# contract defines and would smuggle in the combined score this project refuses;
+# worst-case-only penalises tasks for declaring MORE metrics, which is backwards
+# since declaring more is better spec hygiene; one row per metric lets a
+# four-metric task visually outweigh a one-metric task. A range says the true
+# thing -- how much it paid per unit depends on which unit, and here is how much
+# that matters.
+
+
+def _capability_metrics(task_dir):
+    # IMPORTED, NOT REIMPLEMENTED. The roles live in report_table.py and are a
+    # claim about each task's CONTRACT -- which metric "more is better and area
+    # buys it" applies to. A second copy here would drift from the table it is
+    # supposed to illustrate, and the two would disagree about what a design is
+    # being credited for.
+    import importlib.util
+    global _RT
+    try:
+        _RT
+    except NameError:
+        _spec = importlib.util.spec_from_file_location(
+            "_rt", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "report_table.py"))
+        _RT = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_RT)
+    roles = _RT.metric_roles(task_dir)
+    return sorted(k for k, v in roles.items() if v == "capability")
+
+
+def _metric_value(task, label, key):
+    """The metric across configs for one submission, from its newest sim record."""
+    best = None
+    for f in glob.glob(os.path.join(REPO, "runs", task, f"*__{label}__sim.json")):
+        try:
+            r = json.load(open(f))
+        except Exception:
+            continue
+        if best is None or r.get("timestamp_utc", "") > best.get("timestamp_utc", ""):
+            best = r
+    if not best:
+        return None
+    vals = []
+    for cfg, m in (best.get("metrics") or {}).items():
+        if key in m:
+            try:
+                vals.append(float(m[key]))
+            except (TypeError, ValueError):
+                pass
+    return sum(vals) / len(vals) if vals else None
+
+
+def capability_rows():
+    out = []
+    for short, pin, label in DESIGN_PINS:
+        dirs = glob.glob(os.path.join(REPO, "domains", "*", "design", short + "_*"))
+        if not dirs:
+            continue
+        task = os.path.basename(dirs[0])
+        keys = _capability_metrics(dirs[0])
+        if not keys:
+            continue
+        best = {}
+        for f in glob.glob(os.path.join(REPO, "runs", task, f"*_fx{pin}__ppa.json")):
+            try:
+                r = json.load(open(f))
+            except Exception:
+                continue
+            w = r.get("label", "").split("_fx")[0]
+            if w not in best or r.get("timestamp_utc", "") > best[w].get("timestamp_utc", ""):
+                best[w] = r
+        ref = best.get("reference")
+        ref_lbl = None
+        for cand in glob.glob(os.path.join(dirs[0], "ref", "*.sv")):
+            ref_lbl = os.path.basename(cand)[:-3]
+            if ref_lbl.endswith("_top"):
+                break
+        if not ref or not ref.get("design_area_um2"):
+            continue
+        ref_per = {}
+        for k in keys:
+            rc = _metric_value(task, ref_lbl, k)
+            if rc:
+                ref_per[k] = float(ref["design_area_um2"]) / rc
+        if not ref_per:
+            continue
+        bars = []
+        for m in DESIGN_MODELS:
+            r = best.get(m)
+            if r is None or r.get("design_area_um2") is None:
+                bars.append((m, None, None, [], "not comparable"))
+                continue
+            if r.get("wns_ns") is not None and float(r["wns_ns"]) < 0:
+                bars.append((m, None, None, [], "missed timing"))
+                continue
+            ratios = []
+            for k, rp in ref_per.items():
+                cap = _metric_value(task, m, k)
+                if cap and rp:
+                    ratios.append((k, (float(r["design_area_um2"]) / cap) / rp))
+            if not ratios:
+                bars.append((m, None, None, [], "no metric"))
+                continue
+            lo = min(ratios, key=lambda x: x[1])
+            hi = max(ratios, key=lambda x: x[1])
+            bars.append((m, lo[1], hi[1], ratios, ""))
+        if any(b[1] for b in bars):
+            out.append((task, label, pin, sorted(ref_per), bars))
+    return out
+
+
+def capability_svg(theme):
+    c = THEMES[theme]
+    rows = capability_rows()
+    W, x0, trackw = 900, 250, 440
+    grouph, barh = 86, 15
+    H = 84 + grouph * max(1, len(rows))
+    top = 1.0
+    for _, _, _, _, bars in rows:
+        for _, lo, hi, _, _ in bars:
+            if hi:
+                top = max(top, hi)
+    top = max(1.25, top * 1.08)
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
+         f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">']
+    p.append(f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>')
+    p.append(f'<text x="20" y="26" fill="{c["fg"]}" font-size="15" font-weight="600">'
+             f'Area PER UNIT OF CAPABILITY, vs the reference</text>')
+    p.append(f'<text x="20" y="45" fill="{c["mute"]}" font-size="12">'
+             f'Lower is cheaper for what it delivers. Where a task declares '
+             f'several capability metrics, the bar spans best to worst.</text>')
+    ytop, ybot = 58, H - 20
+    xr = x0 + trackw * (1.0 / top)
+    p.append(f'<line x1="{xr}" y1="{ytop}" x2="{xr}" y2="{ybot}" stroke="{c["rule"]}" '
+             f'stroke-width="1.5" stroke-dasharray="4 3"/>')
+    p.append(f'<text x="{xr + 5}" y="{ytop + 10}" fill="{c["rule"]}" font-size="11">'
+             f'reference (1.0\u00d7)</text>')
+    y = ytop + 20
+    for task, label, pin, keys, bars in rows:
+        p.append(f'<text x="20" y="{y + 10}" fill="{c["fg"]}" font-size="13" '
+                 f'font-weight="600">{esc(label)}</text>')
+        cap = (f'per {esc(keys[0])}' if len(keys) == 1
+               else f'range over {len(keys)} declared metrics')
+        p.append(f'<text x="20" y="{y + 26}" fill="{c["mute"]}" font-size="10">'
+                 f'{cap}</text>')
+        yy = y
+        for m, lo, hi, ratios, note in bars:
+            p.append(f'<text x="{x0 - 10}" y="{yy + 11}" fill="{c["mute"]}" font-size="11" '
+                     f'text-anchor="end">{esc(m)}</text>')
+            p.append(f'<rect x="{x0}" y="{yy}" width="{trackw}" height="{barh}" rx="2" '
+                     f'fill="{c["dead"]}" opacity="0.45"/>')
+            if lo:
+                xlo = max(2, int(trackw * lo / top))
+                xhi = max(2, int(trackw * hi / top))
+                fill = c["bar"] if hi <= 1.0 else c["bar2"]
+                if xhi - xlo < 3:
+                    # ONE METRIC, OR ALL METRICS AGREE: a point, drawn as a bar
+                    # so a single-metric task reads exactly as it did before.
+                    p.append(f'<rect x="{x0}" y="{yy}" width="{xlo}" height="{barh}" '
+                             f'rx="2" fill="{fill}"/>')
+                    p.append(f'<text x="{x0 + xlo + 6}" y="{yy + 11}" fill="{c["fg"]}" '
+                             f'font-size="11">{lo:.2f}\u00d7</text>')
+                else:
+                    # A RANGE. The bar runs to the BEST case and a lighter
+                    # extension carries it to the worst, with both ends labelled
+                    # -- so the eye reads the favourable number first and cannot
+                    # miss how far the unfavourable one is.
+                    p.append(f'<rect x="{x0}" y="{yy}" width="{xlo}" height="{barh}" '
+                             f'rx="2" fill="{fill}"/>')
+                    p.append(f'<rect x="{x0 + xlo}" y="{yy + 4}" width="{xhi - xlo}" '
+                             f'height="{barh - 8}" fill="{fill}" opacity="0.42"/>')
+                    p.append(f'<line x1="{x0 + xhi}" y1="{yy}" x2="{x0 + xhi}" '
+                             f'y2="{yy + barh}" stroke="{fill}" stroke-width="2"/>')
+                    p.append(f'<text x="{x0 + xhi + 6}" y="{yy + 11}" fill="{c["fg"]}" '
+                             f'font-size="11">{lo:.2f}\u2013{hi:.2f}\u00d7</text>')
+            else:
+                p.append(f'<text x="{x0 + 6}" y="{yy + 11}" fill="{c["mute"]}" '
+                         f'font-size="11" font-style="italic">{esc(note)}</text>')
+            yy += barh + 5
+        y += grouph
+    p.append("</svg>")
+    return "\n".join(p)
+
+
 def main():
     check = "--check" in sys.argv
     os.makedirs(OUT, exist_ok=True)
     stale = []
-    for name, fn in (("funnel", funnel_svg), ("verification_faults", faults_svg)):
+    for name, fn in (("funnel", funnel_svg), ("verification_faults", faults_svg),
+                     ("design_area", design_svg),
+                     ("design_power", lambda th: design_svg(th, "power")),
+                     ("design_capability", capability_svg)):
         for theme in THEMES:
             path = os.path.join(OUT, f"{name}_{theme}.svg")
             new = fn(theme) + "\n"

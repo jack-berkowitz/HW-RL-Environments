@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 1, correct 1, PPA measured 15. Verification: submitted 30, compiled 28, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 15, correct 11, PPA measured 16. Verification: submitted 30, compiled 24, tells correct from broken 15, fault count 12." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -38,45 +38,201 @@ area and slower.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro 4 of 10. v_ca04: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 6 of 10; Gemini 3.1 Pro 0 of 10. v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (gate); Gemini 3.1 Pro not scoreable (gate). v_ca06: Claude Opus 5 not scoreable (invalid). v_dsp02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 10 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw04: ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca04: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 6 of 10; Gemini 3.1 Pro 0 of 10. v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (gate); Gemini 3.1 Pro not scoreable (gate). v_dsp02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 10 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw04: ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---
 
 ## Design results
 
-**Withheld pending re-solicitation.** Every design task's specification was
+**Seven tasks are complete at their pinned clock.** Every design specification was
 revised to state its grading criteria — what correctness gates, which PPA axes
-are compared, at what clock, and which levers the contract has already spent.
-That changed every design `task_text_hash`, so every candidate on record answers
-a superseded prompt and no design number here is currently scoreable:
+are compared, at what clock, and which levers the contract has already spent —
+and every candidate was re-solicited against the revised prompt.
 
-| task | prompt then | prompt now |
-|---|---|---|
-| d_ca01 | `77229cda1b6cd7c3` | `7e0c51b2fd28d3c5` |
-| d_ca04 | `5c9a12842b8b0c7d` | `353f11388a6d579d` |
-| d_dsp01 | *(no prompt)* | `18c2e731034e5c5e` |
-| d_dsp02 | `617eb4240908e773` | `aff15b9eeb69e6cd` |
-| d_dsp03 | `8eb2ae18667fe22a` | `51a7fa04a20938a3` |
-| d_nw01 | `96c1a3ad5854776a` | `05379ddae2650498` |
-| d_nw03 | `b02da2223907630b` | `27a4c81ec39cddf7` |
+Each task is built at **one pinned period**, stated in the spec before
+solicitation and derived as `ceil(1.5 × converged_period_ns / 0.25) × 0.25` from
+the reference's own Fmax sweep. A single clock for every submission is what makes
+area comparable at all: without it, area can be bought by relaxing timing.
 
-The tables that stood here are not archived in this file because they would read
-as results. They are in git history, and every run record behind them is still on
-disk under `runs/`, stamped with the prompt it answered — which is what makes
-this supersession visible rather than silent.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_area_dark.svg">
+  <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.75x, claude 0.75x, gemini 0.73x. Stream switch at 4.25 ns, reference 26,340 um2: all three missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat 1.80x, claude 1.05x, gemini fails correctness. Multi-format FMA at 70.5 ns, reference 177,557 um2: chat fails correctness, claude 1.42x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.36x, claude missed timing, gemini fails correctness." src="docs/assets/design_area_light.svg" width="100%">
+</picture>
 
-Two of those numbers are worth naming, because they are why the revision
-happened rather than an accident of it. d_nw01's largest submission measured
-2,086,235 µm² against a 146,932 µm² reference, and d_ca01's measured 753,209 µm².
-Both were buffering storage the contract never asked for. The specifications now
-bound that storage by clause, and separately now say what the submission is being
-compared on — neither of which they did when those designs were solicited.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_power_dark.svg">
+  <img alt="Total power relative to each task's reference, at its pinned clock. async CDC FIFO: chat 0.61x, claude 0.60x, gemini 0.62x. Stream switch: all three missed timing. FP32 FMA: chat 0.30x, claude 0.89x, gemini fails correctness. Multi-format FMA: chat fails correctness, claude 0.88x, gemini did not build. AXI4 crossbar: chat 1.06x, claude missed timing, gemini did not build. Non-blocking D-cache: chat 1.68x, claude 1.24x, gemini fails correctness. Sv39 MMU: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_power_light.svg" width="100%">
+</picture>
 
-`results_table.md` is generated from the run records and renders each superseded
-row as *not scored against this prompt*, naming the hash it answered. The
-verification side below is unaffected: those tasks were not changed.
+**Power does not track area.** d_dsp02's `chat` is the clearest case: 1.80× the
+reference's area and **0.30× its power**. d_ca01's `chat` is the opposite — worse
+on both, 1.36× area and 1.68× power. A single figure of merit would have to
+weight these against each other, and nothing here establishes that weighting,
+which is why there is no combined score.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_capability_dark.svg">
+  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. async CDC FIFO per capacity_beats_accepted: chat 0.91x, claude 0.91x, gemini 0.88x. Multi-format FMA per throughput_ops_per_1000cyc: claude 1.32x. AXI4 crossbar, range over 4 declared metrics: chat 2.59x to 3.40x. Non-blocking D-cache per max_outstanding_n: chat 1.36x, claude 1.15x." src="docs/assets/design_capability_light.svg" width="100%">
+</picture>
+
+**Raw area credits a design for being small when it was merely doing less**, and
+this chart is where that shows. Two conclusions from the area chart invert:
+
+- d_ca01's `claude` is **0.98×** on raw area — the only submission to come in
+  under a reference on a large design — and **1.15×** per unit of outstanding
+  capacity. The area win does not survive normalisation.
+- d_nw01's `chat` is 1.36× on area and **2.59×–3.40×** per unit delivered. It is
+  much further behind than the raw figure suggests, and *how much* further
+  depends on which unit — 2.59× per burst, 2.72× per disjoint pair, 3.40× per
+  outstanding transaction.
+- d_ca04's three narrow from 0.73–0.75× to 0.88–0.91×. Most of that headline gap
+  is two spill registers the reference has and they do not.
+
+**Where a task declares several capability metrics, the bar spans best to worst
+rather than picking one.** d_nw01 declares four, and they disagree by 31% about
+how much `chat` paid per unit. Picking one and labelling it made the choice
+visible but still made it silently: a reader had no way to know a different
+declared metric moves the number by a third. The three other tasks declare one
+metric each and render as points.
+
+The alternatives were worse. A geometric mean is a synthetic quantity no contract
+defines, and would smuggle in the combined score this project refuses. Worst-case
+only penalises a task for declaring *more* metrics, which is backwards —
+declaring more is better spec hygiene. One row per metric lets a four-metric task
+visually outweigh a one-metric task.
+
+Only tasks that **declare** a capability metric appear. d_dsp02 and d_ca03
+declare none, so they are absent rather than shown against an invented axis —
+"more is better and area buys it" is a claim about the contract, not something to
+infer from a metric's name.
+
+**Nine of twenty-one submissions produce a comparable area number.** Five missed
+timing, four fail correctness, and three were rejected by the synthesis frontend
+without ever running. That is the result, not a gap in the data.
+
+### d_ca04 — asynchronous CDC FIFO, pinned at 4.25 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 19,837 | 13.4 | +0.606 | — |
+| `chat` | 14,939 | 8.1 | +0.507 | **0.75×** |
+| `claude` | 14,798 | 8.0 | +0.461 | **0.75×** |
+| `gemini` | 14,396 | 8.3 | +0.456 | **0.73×** |
+
+The only task where every submission closed timing, and all three are 25–27%
+smaller than the reference. Two of them reach that partly by a design choice
+rather than better implementation — see the like-for-like note below.
+
+### d_nw03 — output-queued stream switch, pinned at 4.25 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 26,340 | 10.2 | +0.337 | — |
+| `chat` | *withheld* | *withheld* | **−0.623** | missed timing |
+| `claude` | *withheld* | *withheld* | **−0.078** | missed timing |
+| `gemini` | *withheld* | *withheld* | **−0.116** | missed timing |
+
+All three missed at the pin. `claude` missed by 78 ps, which is close — and close
+is still missed: the number it would have reported describes a circuit that
+cannot run at 4.25 ns.
+
+### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 60,031 | 74.7 | +2.710 | — |
+| `chat` | 108,000 | 22.3 | +1.703 | 1.80× |
+| `claude` | 63,197 | 66.2 | +0.992 | 1.05× |
+| `gemini` | **0** | **0** | — | fails correctness |
+
+### d_dsp03 — multi-format FMA, pinned at 70.5 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 177,557 | 91.1 | +1.995 | — |
+| `chat` | **0** | **0** | — | fails correctness |
+| `claude` | 251,769 | 80.1 | +8.179 | 1.42× |
+| `gemini` | **0** | **0** | — | did not build |
+
+### d_nw01 — AXI4 crossbar, pinned at 8.0 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 147,144 | 54.7 | +1.148 | — |
+| `chat` | 199,852 | 58.1 | +0.802 | 1.36× |
+| `claude` | *withheld* | *withheld* | **−0.023** | missed timing |
+| `gemini` | **0** | **0** | — | did not build |
+
+### d_ca01 — non-blocking data cache, pinned at 15.0 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 573,055 | 76.0 | +2.200 | — |
+| `chat` | 780,029 | 128.0 | +1.121 | 1.36× |
+| `claude` | 563,403 | 94.5 | +2.648 | **0.98×** |
+| `gemini` | **0** | **0** | — | fails correctness |
+
+`claude` is the only submission across all seven tasks to come in under a
+reference on a large design, and it did so with the most slack in the row. It
+reaches a different design point to do it — one cycle of minimum latency against
+the reference's two — so the area is correct but not like-for-like.
+
+### d_ca03 — RISC-V Sv39 MMU, pinned at 12.5 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 279,456 | 32.6 | +0.989 | — |
+| `chat` | *withheld* | *withheld* | **−35.461** | missed timing |
+| `claude` | **0** | **0** | — | fails correctness |
+| `gemini` | **0** | **0** | — | rejected by the synthesis frontend |
+
+`chat` is correct — it passes the scored configuration — and needs roughly 48 ns
+to do it, against a 12.5 ns pin. That is not a near miss like d_nw03's 78 ps; it
+is a design that works and is nearly four times too slow.
+
+`gemini` is a distinct outcome from a correctness failure: slang rejects it with
+ten diagnostics, none of them internal errors, and Verilator rejects the same
+construct at the same line. Two independent frontends agreeing makes it a
+genuine build failure rather than a host problem.
+
+### Why some cells are withheld and others are zero
+
+**Timing closure is a gate, not a scored axis.** Slack is bought with area, so a
+design that misses timing and one that closes it are not describing the same
+circuit — quoting the area of the first beside the second compares two different
+questions. PPA from a build that missed its pin is withheld, not reported (rule
+22).
+
+**A correctness failure scores zero on every PPA axis, and is shown as zero**
+rather than omitted (rule 19). Omitting it would make the surviving rows look
+like the whole population, which is how an 8-of-18 result reads as 8 of 10.
+
+**"Did not build" is a separate outcome from "fails correctness"**, and they are
+not interchangeable: one wrote hardware the synthesis frontend rejects, the other
+wrote hardware that compiles and computes the wrong answer. Both score zero;
+they say different things about the model. Three submissions never ran at all.
+
+### Not measured yet
+
+| task | state |
+|---|---|
+| d_ai01 | no pin yet — HEIGHT=8 never routed on sky130hd (76k–83k violations across three floorplans). The scored geometry moved to HEIGHT=4, which routes clean at 0 violations, so its reference Fmax sweep is possible for the first time and is queued |
+| d_dsp01 | no scoring testbench; withdrawn |
+
+`results_table.md` carries the full per-task detail — capability metrics,
+per-unit normalisations, and every superseded row rendered as *not scored against
+this prompt* with the hash it answered. It is generated from the run records
+under `runs/`, never hand-edited, and fails loudly rather than emitting a table
+with rows missing.
+
+Two numbers from the superseded round are worth naming, because they are why the
+revision happened rather than an accident of it. d_nw01's largest submission
+measured 2,086,235 µm² against a 146,932 µm² reference, and d_ca01's measured
+753,209 µm². Both were buffering storage the contract never asked for. The
+specifications now bound that storage by clause, and separately now say what the
+submission is being compared on — neither of which they did when those designs
+were solicited.
 
 ### How design choices are separated from implementation quality
 

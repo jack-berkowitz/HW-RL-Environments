@@ -224,3 +224,14 @@ readies_criterion:
     reported this task clean: three of that sweep's rows were wrong when read
     against my own tasks, and a clean row is the one nobody rechecks.
 
+
+must_fire:
+  reference: [v_dsp02.cov_noncanon_nan, v_dsp02.cov_qnan, v_dsp02.cov_reset, v_dsp02.cov_signed_zero_eq, v_dsp02.cov_snan, v_dsp02.cov_stall, v_dsp02.cov_zero_pair]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20). Keyed BY
+  VARIANT: a negative-control run contains no conformant perturbations and vice
+  versa, so a flat per-task list would refuse on every run that is not the union
+  of all of them. Declared rather than globbed, so a deleted artefact is a
+  refusal instead of a shorter list.

@@ -1,0 +1,12 @@
+{
+  "build_error": "1 error(s); first: sanitised_gemini.sv:391:139: error: no member named 'w_ready' in 'mst_req_t' ",
+  "build_status": "slang_rejected",
+  "git_sha": "84fa595e75fcd0303544528e41fe259b133a864a-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_nw01/gemini.sv",
+  "submission_sha256_16": "7c92e4c8bf774d59",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "29910fdec8a8e5d9",
+  "timestamp_utc": "2026-08-25T06:53:47Z"
+}

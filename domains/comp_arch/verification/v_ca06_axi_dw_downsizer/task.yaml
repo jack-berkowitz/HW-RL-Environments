@@ -34,7 +34,7 @@ harness:
   sim_timeout_s: 120
 
 spec: [spec/dw_downsizer_spec.md, spec/dw_downsizer_iface.sv]
-task_text_hash: ca63302d6b23df46
+task_text_hash: ae29e2161468aeff
 
 scored_configuration:
   SLV_DATA_W: 64
@@ -447,19 +447,257 @@ watchdog:
 
 readies_criterion:
   date: 2026-08-25
-  verdict: REACHABILITY GAP -- flagged, NOT gated
-  frozen: [m_arready, m_awready, m_wready, s_bready, s_rready]
-  test_applied: >
-    Does any check have an antecedent requiring one of these to be LOW? Measured
-    mechanically across the testbench: NONE does. And no clause in the spec
-    speaks about valid stability or ordering under stall -- there is no X3
-    equivalent here.
+  verdict: CLOSED -- clause A5 added, readies made reactive, checker landed
+  was: >
+    REACHABILITY GAP -- flagged, not gated. Five readies were frozen at 1
+    (m_arready, m_awready, m_wready, s_bready, s_rready); no check had an
+    antecedent requiring any of them LOW, and no clause spoke about valid
+    stability under stall, so there was nothing to gate. The absence was itself
+    a contract gap: a design that withdrew a valid before its ready was seen
+    conformed to the specification AS WRITTEN.
+  closed_by:
+    clause: >
+      A5 in the spec's section 1 -- on every channel of both ports, once a
+      `valid` is asserted it remains asserted, with its payload unchanged, until
+      the corresponding `ready` is seen; and `valid` shall not depend
+      combinationally on `ready`. Authority is AMBA AXI4, and the anchor asserts
+      the same property internally at dut/rr_arb_tree.sv:391.
+    stimulus: >
+      All five readies changed from `=1` initialisers to reactive stalls with a
+      COMBINATIONAL arm, so the stall engages on the cycle the valid is offered
+      rather than one cycle later. Ported from v_nw02.
+    checker: >
+      Per-channel held-offer tracker (pv[5]/pp[5], payload via pay(c)), cleared
+      on reset because F1 legitimately drops valids across a reset. Withdrawal
+      and payload change are reported as separate failures.
+    floor: >
+      cov_bp_driven < 8 gates the STIMULUS half only. The A5 antecedent count is
+      REPORTED and never gates: whether a conforming design's valid coincides
+      with a stalled ready is its own timing.
+  hash: ca63302d6b23df46 -> 949ffacfa1dd725b
+  measured:
+    golden: PASS -- A5 antecedent held s_b=177 s_r=528 m_aw=153 m_w=393 m_ar=209
+    dut2: PASS
+    conformant: 5/5 PASS
+    mutants: 12/12 killed -- unchanged from before the boundary
+    gate_mutant: rejected
+    policy_independence: OK on both bases
+
+conformant_repairs:
+  date: 2026-08-25
+  ruling: >
+    dwc_c1 and dwc_c5 to be made conformant under backpressure -- holding valid
+    and payload until ready is seen, keeping the extra-latency and slow-intake
+    behaviour they exist to demonstrate, since neither requires withdrawing an
+    offer.
+  defect_1_withdrawal:
+    what: >
+      Both wrappers gated a `valid` on the way INTO the golden. The gate fell on
+      cycles where the golden held an unaccepted offer, which is a withdrawal.
+      The golden's own vendored arbiter fired on it:
+      rr_arb_tree.sv:391 "It is disallowed to deassert unserved request signals
+      when LockIn is enabled." Both perturbations CRASHed once A5's stimulus
+      existed.
+    repair: >
+      A gate may FALL only while nothing is pending. One flop per channel:
+      hold_x <= (valid_in & gate_x) & ~golden_ready; gate_x = slow | hold_x.
+      The perturbation keeps every cycle of slowness -- it still refuses to
+      BEGIN a transfer for the whole closed phase -- and gives up only the right
+      to take an offer back. hold_x is a flop, so the presented valid never
+      depends combinationally on the ready.
+    not_repairable_on_W: >
+      dwc_c1's W gate was removed outright rather than held. Stalling s_wvalid
+      starves a downstream burst the golden has already committed to, and the
+      golden responds by withdrawing m_wvalid itself -- an A5 violation on the
+      wrapper's own master port whose author is the golden, not the wrapper.
+  defect_2_inert_channel:
+    what: >
+      Both wrappers contained `assign m_rready = g_rready & <gate>;` AND a bare
+      `.m_rready` in the instantiation. The bare connection bound the GOLDEN'S
+      OUTPUT to the wrapper's m_rready -- a double drive -- and left g_rready
+      connected to nothing. The R half of "extra latency" and of "response
+      intake slow" had never been slow. Both perturbations passed every run for
+      as long as they have existed.
+    repair: .m_rvalid(m_rvalid & gate_r), .m_rready(g_rready) on both.
+    note: >
+      A conformant artefact that PASSES tells you it did not break the
+      testbench. It does not tell you it does what its name claims. Nothing in
+      the apparatus separates "legal" from "inert" -- both are green.
+
+d6_narrowed_to_ownership:
+  date: 2026-08-25
+  status: CLOSED -- D6 narrowed, persistence registered as latitude L7
+  was: >
+    D6 required a downstream read error to be STICKY -- to persist onto every
+    later upstream beat of the transaction. The reference passed it for as long
+    as it existed.
+  finding: >
+    The reference is sticky only while its pipeline stays full. Measured with
+    the testbench's own downstream R slave simply presenting its next narrow
+    beat N cycles later -- no wrapper, no valid gating, unambiguously legal for
+    a slave:
+      0, 1, 2 idle cycles -> PASS (persists)
+      3, 4, 8 idle cycles -> FAIL, 9 x D6 and nothing else AS OF 2026-08-25
+    dut2 persists at every depth, so the clause was satisfiable; the reference
+    just did not satisfy it. The task had never stalled that path.
+  which_half: >
+    Instrumented at the failure point with `own` = does the erroring narrow beat
+    belong to this wide beat. own=0 on all nine. The reference NEVER loses an
+    error on the beat that carried it. Every failure was persistence -- the half
+    AXI does not require.
+  mechanism: >
+    An accumulated response register that is not cleared while beats keep
+    arriving and IS cleared when the pipeline bubbles. The persistence is a
+    property of the unit being busy, not of the contract. It became a clause
+    because it was observed, and it was observed because the only stimulus that
+    existed kept the pipeline full.
+  change:
+    spec: >
+      D6 is ownership only -- an upstream beat carries an error if any
+      downstream beat in ITS OWN group carried one. Persistence moved to L7,
+      declared-open latitude, with the accumulator mechanism named in the spec
+      so a reader knows it is incidental rather than contractual. The latitude
+      register now says seven, not six.
+    tb: >
+      The D6 comparison is skipped entirely on beats after the erroring one, in
+      both directions: a submission may neither require persistence nor forbid
+      it.
+    conformant: >
+      dwc_c1's R gate stalls four cycles, dwc_c5's stalls two -- deliberately on
+      opposite sides of the three-cycle threshold, so the conformant set
+      exercises L7 from both directions instead of sampling one. Neither stalled
+      that path at all before this week; both were double-driven and inert.
+  hash: 949ffacfa1dd725b -> 6cb14e9d2e6381ac
+  measured_after:
+    golden: PASS
+    dut2: PASS
+    conformant: 5/5 PASS
+    mutants: 12/12 killed -- dw_m6, dw_m11 and dw_m12 included; not one kill lost
+    gate_mutant: rejected
+    policy_independence: OK on both bases
+    run_against_the_repair: >
+      Reference PASSES at 3, 4, 8 and 16 idle cycles between narrow R beats.
+  why_no_detector_saw_it: >
+    Mutation coverage: every mutant dies at either reading of D6, so the number
+    is identical whether the clause is true or false. Conformant acceptance: the
+    perturbations did not stall that path either. Stimulus-variation sweep:
+    m_rvalid is NOT frozen, it toggles constantly -- what is frozen is the GAP
+    BETWEEN BEATS, and no instrument names inter-beat timing as an axis.
+    Attempt-vs-condition classifier: cov_rd_err and cov_err_last are satisfied
+    at every depth. Common cause -- every one asks whether something was
+    OBSERVED, none asks whether the thing that would break it was ever
+    ATTEMPTED. See inbox/FINDINGS.agent2.md.
+
+backpressure_instrument:
+  date: 2026-08-25
+  status: REPAIRED -- the stall no longer reads the signal it drives
+  defect: >
+    A5's stall was armed combinationally on each channel's own valid, which
+    closes a loop: ready -> design -> valid -> arm -> ready. Verilator reported
+    it as UNOPTFLAT on four testbench readies (m_arready, m_awready, m_wready,
+    s_bready); the anchor contributes eleven of its own, so the count alone said
+    nothing and the harness's -Wno-fatal -- correct for vendored RTL -- carried
+    it past unread. The same instrument on v_ca03 produced 26 failures across
+    six clause ids, none a design defect, identically for four different one-hot
+    choices of which single ready was reactive.
+  repair: >
+    Free-running aperiodic backpressure from a 16-bit LFSR, different bit pairs
+    per channel. Nothing harness-side is derived from a design output any more.
+    UNOPTFLAT is back to the anchor's own eleven with no testbench signal
+    circular.
+  antecedent_before_after: >
+    armed s_b=11 s_r=79 m_aw=19 m_w=112 m_ar=12;
+    free-running s_b=12 s_r=84 m_aw=28 m_w=116 m_ar=18 -- better on every
+    channel, so the combinational arm was not buying the coverage it was
+    justified by.
+  second_defect_exposed: >
+    n_ds_ar and n_ds_aw are incremented in a separate always @(posedge clk) and
+    were read by do_read/do_write resuming at the same posedge -- a race. With
+    every ready at 1 the downstream address and the upstream response never
+    landed in the same cycle, so it was unreachable; backpressure aligns them.
+    Reads moved to the negedge, s_bid and s_bresp latched before it.
+  verdicts_unchanged: >
+    golden PASS, dut2 PASS, 5/5 conformant, gate rejected, 12/12 killed, 5c OK
+    -- every verdict identical to the armed run. The committed numbers were
+    right; they were right by convergence, and the run did not say so.
+  hash_unmoved: 6cb14e9d2e6381ac -- tb/ is not in task_text_hash
+
+a5_negative_control:
+  date: 2026-08-25
+  file: negctl/a5_withdraws_ar.sv
+  kind: negative
+  expect: fail
+  measured_by: hand_run
+  result: FAIL -- 5 x A5 on channel 4, and nothing else AS OF 2026-08-25
+  why_it_was_missing: >
+    A5 landed with a checker that passed everything the task ships, which is what
+    a correct clause looks like and also what a clause with no instrument looks
+    like. Every mutant here dies on some other clause, so none of them licensed a
+    claim that A5's checker fires at all. Rule 24 wants a control that REFUSES.
+  detail: >
+    Withdraws m_arvalid only on a cycle when m_arready is already low, so no
+    handshake is lost and the wrapped design sees a bit-identical environment.
+  first_version_passed: >
+    At a threshold of three consecutive stalled cycles it PASSED, because
+    backpressure is aperiodic and m_arvalid reaches the antecedent only 18 times
+    in the run. A control that passes is not evidence the clause holds; it is
+    evidence the control never ran. Threshold lowered to two: one stalled cycle
+    to enter the antecedent, the second to withdraw.
+
+must_fire:
+  reference: [v_ca06.cov_a4_offered, v_ca06.cov_bp_driven, v_ca06.cov_conc_offered, v_ca06.cov_decerr, v_ca06.cov_err_last, v_ca06.cov_fixed1, v_ca06.cov_long, v_ca06.cov_narrow, v_ca06.cov_partial_strb, v_ca06.cov_rbeats, v_ca06.cov_rd_err, v_ca06.cov_reads, v_ca06.cov_refused, v_ca06.cov_size0, v_ca06.cov_unaligned, v_ca06.cov_wbeats, v_ca06.cov_wr_err, v_ca06.cov_writes, v_ca06.cov_zero_strb_beat]
+  dw_nc_a5_withdraws_ar: [nc_a5_withdraws_ar.drop]
+  dwc_c1_extra_latency: [dwc_c1.r_backpressure]
+  dwc_c5_response_intake_slow: [dwc_c5.r_backpressure]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once at the end of a run; check_fired.py REFUSES
+  on zero, and refuses ABSENT separately because absent is not zero (rule 20).
+  Declared here rather than globbed, so a deleted artefact is a refusal instead
+  of a shorter list, and keyed BY VARIANT: the negative-control run contains no
+  conformant perturbations and vice versa, so a flat per-task list would refuse
+  on every run that is not the union of all of them.
+  not_a_detector_for_the_inert_channel: >
+    dwc_c1.r_backpressure and dwc_c5.r_backpressure are DECLARED and MEASURED,
+    but they would not have caught the double drive that made those channels
+    inert. Measured in the historical configuration -- pre-repair perturbation,
+    pre-A5 testbench, the run in which it passed -- the count is 5, not 0: the
+    double-driven m_rready did go low sometimes, it just was not the gate doing
+    it. Non-zero is not a floor. They are kept because they measure a real thing
+    (the channel now stalls 598 cycles), not because they close that gap.
+
+exclusivity_is_dated:
+  date: 2026-08-25
+  claim_qualified: >
+    "A5 and nothing else" is a claim about THE SET OF CHECKS THAT EXISTED WHEN IT
+    WAS MEASURED, not about the control. Adding a check can retroactively falsify
+    an isolation claim made in good faith, and the claim reads as verified the
+    whole time. AGENT-DESIGN-43a92055's d_nw03 nc_b_outputs_serialised went from
+    6/8 exclusive to 0/8 within a day of an R1 stability check being added --
+    nothing in the control moved.
   therefore: >
-    Not a defect by the criterion: a frozen ready is one when it gates a clause
-    about stability or ordering under stall, and no such clause exists to gate.
-    Flagged and not gated.
-  but_worth_saying: >
-    The absence is itself a contract gap of the E1 shape -- a design that
-    withdraws a valid before its ready is seen conforms to this specification AS
-    WRITTEN, because nothing forbids it. That is a clause question and a hash
-    move, not a testbench one, and it is not decided here.
+    Every exclusivity claim in this task carries the date it was measured. Read
+    it as "exclusive with respect to the checks this task had on that date".
+    This one was measured on the day D5 and A5's checkers were added, which is
+    the least stale it will ever be and still not a permanent claim.
+
+grouping_declared:
+  date: 2026-08-25
+  convention: >
+    A clause whose observation is shared names, IN ITS OWN TEXT, the id that
+    reports it: "... is reported under X". check_clause_emittable.py reads that
+    as a declaration and VERIFIES the named id is emittable -- a clause annotated
+    into a hole reads as resolved and is worse than one left silent.
+  declared: C1 -> C4, C2 -> C4
+  effect: >
+    It records grouping honestly; it does not remove it. A submission checking
+    the named id is still credited with this clause. What changes is that the
+    credit is VISIBLE, so scoring can decide deliberately instead of the grouping
+    being found by someone reading a failure message and noticing the wrong
+    letter.
+  not_annotated_and_why: >
+    F1, F2 and F3 remain UNCHECKED, not grouped: phase L asserts reset,
+    releases, waits four cycles and then nothing follows. They need an
+    instrument, not an annotation. C3 and D2 are not yet hand-worked and are
+    left as candidates rather than guessed at.
+  hash_moved_for_this: true

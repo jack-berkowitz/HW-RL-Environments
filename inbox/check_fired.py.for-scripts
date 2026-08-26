@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Refuse a run whose must-fire artefacts did not fire.
+
+    check_fired.py RUNLOG [--require NAME ...]
+                          [--declared TASK_YAML --variant VARIANT]
+
+WHY THIS EXISTS
+---------------
+A control that passes is not evidence the clause holds. It is evidence the
+control did not run, and THE TWO ARE INDISTINGUISHABLE IN THE OUTPUT.
+
+Four instances in one week. THIS TOOL COVERS TWO OF THEM, and the header said
+three until the coverage was measured -- which is the error the tool exists to
+find, made in the tool's own documentation. The measurement is below.
+
+  COVERED -- 1. v_ca06's first A5 negative control PASSED. It needed three
+     consecutive stalled cycles; backpressure is aperiodic and `m_arvalid`
+     enters the antecedent 18 times in a whole run, so it never triggered.
+
+         A5 control, threshold 3:  RESULT: PASS   FIRED ...drop 0   -> REFUSED
+         A5 control, threshold 2:  RESULT: FAIL   FIRED ...drop 5   -> OK
+
+     The passing run is refused and names the reason. This is the instance the
+     tool was built for and it catches it.
+
+  COVERED -- 2. v_ca03's read-coverage floor sat behind a dangling `else` and
+     ran only on a run that had ALREADY failed -- skipped exactly when the run
+     was otherwise clean, which is the only situation a floor exists for. A
+     floor that emits its count unconditionally cannot be skipped silently:
+     absent is refused as loudly as zero.
+
+  NOT COVERED -- 3. v_ca06's `dwc_c1` and `dwc_c5` declared themselves slow on
+     the downstream response path, and a double drive left `g_rready` connected
+     to nothing, so that channel was never slow. Measured in the historical
+     configuration -- the pre-repair perturbation against the pre-A5 testbench,
+     the run in which it passed:
+
+         FIRED dwc_c1.r_backpressure 5      -> OK, and the channel was inert
+
+     Five, not zero. The double-driven `m_rready` did go low sometimes; it just
+     was not the gate doing it. A port-level count answers "did this channel
+     stall" and the question needed was "did THIS PERTURBATION stall it", which
+     no counter on the perturbation can answer, because a bypassed mechanism
+     produces no counter at all. What finds that is a DIFFERENTIAL check -- a
+     perturbation must differ from the golden somewhere observable, or it is
+     inert -- and that is a different instrument. NON-ZERO IS NOT A FLOOR.
+
+  NOT COVERED -- 4. A clause the reference satisfies only on the fast path,
+     because the task never leaves the fast path (v_ca06's D6). Its antecedent
+     IS entered; what is unexplored is the timing space around it. That needs a
+     sweep over the reference at settings nobody chose.
+
+Saying which two is part of the job: a checker that implies more coverage than
+it has is the defect it was built to find.
+
+A FIFTH INSTANCE, AND A SUB-SHAPE THE CONVENTION HAS TO NAME EXPLICITLY
+----------------------------------------------------------------------
+From AGENT-DESIGN-43a92055, on d_ca01's M3:
+
+    chk(m3_overlap_err == 0, "a memory request was issued while a"
+                             " transaction was in flight");
+
+`m3_overlap_err == 0` is VACUOUSLY TRUE for a design that issues no memory
+transaction at all. The check cannot separate "never issued two at once" from
+"never issued one".
+
+A never-happens assertion counts nothing by construction -- its whole form is an
+absence -- so "did it fire" is not the right question and a tool keying on
+"a counter exists and reads zero" sees nothing, because there is no counter.
+
+THE RULE THAT MAKES IT COVERED: for a never-happens assertion, the FIRED count
+is NOT how often the assertion fired. It is HOW OFTEN THE SITUATION IT FORBIDS
+WAS REACHABLE -- for M3, the number of memory transactions issued at all. That
+is a DIFFERENT counter from the one the assertion uses, and it has to be written
+deliberately; nothing derives it from the assertion. d_ca01 now counts `m3_txns`
+and gates on non-zero, reference unchanged at 16/16.
+
+So the convention below applies to four kinds, and the fourth is the one that
+has to be said out loud:
+
+    a control              -> how many times its trigger asserted
+    a coverage floor       -> the count it already keeps
+    a perturbation's gate  -> how many cycles it was closed on a live offer
+    a NEVER-HAPPENS check  -> how many times its antecedent was REACHABLE
+
+THE CONVENTION
+--------------
+Any artefact whose evidentiary value depends on it triggering prints, once, at
+the end of a run:
+
+    FIRED <name> <count>
+
+A control, a coverage floor, a perturbation's gate, a checker's antecedent. The
+count is how many times the trigger occurred. A verdict says what happened; this
+says whether anything was asked.
+
+WHY IT REFUSES AND DOES NOT WARN
+--------------------------------
+Rule 24: a control must refuse, not warn. Every artefact above was GREEN while
+broken. A warning in the same stream as the run's normal output is exactly the
+channel that failed for the combinational loop this week -- Verilator reported
+it as UNOPTFLAT and it arrived among thirty warnings about the vendored anchor
+under -Wno-fatal, which is the correct setting and made the new warning
+invisible by dilution. A permanently noisy channel is not a channel.
+
+ABSENT AND ZERO ARE DIFFERENT FAILURES, and are reported differently. Zero means
+the artefact ran and its trigger never occurred. Absent means the artefact is
+not in this run at all -- deleted, renamed, or never reached -- and no count can
+be inferred from silence (rule 20).
+
+A DUPLICATE NAME IS A REFUSAL, not a sum. Two artefacts reporting under one name
+is the clause-grouping shape: one of them can be at zero while the other carries
+the line, and the reader sees a healthy number. If two things fire, they get two
+names.
+"""
+import re
+import sys
+
+LINE = re.compile(r"^FIRED\s+([A-Za-z_][\w.:-]*)\s+(\d+)\s*$", re.M)
+
+
+def scan(text):
+    """-> (counts, duplicates). Duplicates are names seen more than once."""
+    counts, dup = {}, []
+    for name, n in LINE.findall(text):
+        if name in counts:
+            dup.append(name)
+        counts[name] = int(n)
+    return counts, sorted(set(dup))
+
+
+def check(text, required=()):
+    counts, dup = scan(text)
+    zero = sorted(n for n, c in counts.items() if c == 0)
+    absent = sorted(n for n in required if n not in counts)
+    return counts, dup, zero, absent
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        sys.exit(__doc__.strip().splitlines()[0])
+    log, required = argv[0], []
+    declared = variant = None
+    declared_variant = False
+    i = 1
+    while i < len(argv):
+        if argv[i] == "--require":
+            required.append(argv[i + 1]); i += 2
+        elif argv[i] == "--declared":
+            declared = argv[i + 1]; i += 2
+        elif argv[i] == "--variant":
+            variant = argv[i + 1]; i += 2
+        else:
+            sys.exit("unknown argument %r" % argv[i])
+    # DECLARED PER VARIANT, NOT PER TASK. A flat per-task list refuses on every
+    # run that does not contain every artefact -- the negative-control run has no
+    # conformant perturbations in it and vice versa -- and a gate that fires on
+    # runs it does not apply to is one that gets routed around within a week.
+    if declared:
+        if not variant:
+            sys.exit("--declared needs --variant: which run is this?")
+        y = open(declared, encoding="utf-8").read()
+        blk = re.search(r"^must_fire:\s*$(.*?)(?=^\S|\Z)", y, re.M | re.S)
+        if blk:
+            row = re.search(r"^\s+%s:\s*\[([^\]]*)\]" % re.escape(variant), blk.group(1), re.M)
+            declared_variant = True
+            if row is None:
+                print("REFUSED: %s declares must_fire but not for variant %r." % (declared, variant))
+                print("  An undeclared variant is not an exempt one. Add an empty")
+                print("  list to say deliberately that nothing must fire in it.")
+                return 2
+            required += [r.strip() for r in row.group(1).split(",") if r.strip()]
+    counts, dup, zero, absent = check(open(log, encoding="utf-8").read(), required)
+
+    if not counts and not required:
+        # AN EXPLICIT EMPTY LIST IS NOT SILENCE. `reference: []` is a task saying
+        # deliberately that nothing here must fire -- which is itself a finding
+        # worth being able to state -- and it must not be reported as the same
+        # thing as a task that declared nothing at all.
+        if declared_variant:
+            print("  (nothing declared for this variant, deliberately)")
+            print("OK: the declaration is an explicit empty list. Read the task's")
+            print("  own note for why -- an empty list is a claim, not an absence.")
+            return 0
+        print("REFUSED: no FIRED lines in %s, and nothing was required." % log)
+        print("  A run that declares nothing about what fired cannot be checked,")
+        print("  and reporting that as OK would be the defect this tool is for.")
+        return 2
+    for n in sorted(counts):
+        print("  %-44s %s%s" % (n, counts[n], "   <-- NEVER FIRED" if counts[n] == 0 else ""))
+    rc = 0
+    if dup:
+        print("REFUSED: reported twice under one name: %s" % ", ".join(dup))
+        print("  Not summed. One of them can be at zero while the other carries")
+        print("  the line, and the reader sees a healthy number.")
+        rc = 2
+    if zero:
+        print("REFUSED: %d artefact(s) never fired: %s" % (len(zero), ", ".join(zero)))
+        print("  Their verdicts carry no information about the clause they are for.")
+        rc = 2
+    if absent:
+        print("REFUSED: %d required artefact(s) reported nothing: %s" % (len(absent), ", ".join(absent)))
+        print("  ABSENT is not ZERO (rule 20): the artefact is not in this run at")
+        print("  all -- deleted, renamed, or never reached -- and no count can be")
+        print("  inferred from silence.")
+        rc = 2
+    if rc == 0:
+        print("OK: %d artefact(s) declared a trigger and every one of them fired." % len(counts))
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

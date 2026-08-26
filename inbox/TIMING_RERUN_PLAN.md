@@ -1,0 +1,302 @@
+<!-- author: agent2 -->
+# The single perturbed rerun — plan, for approval before anything runs
+
+**Not started.** This document is the per-task perturbation table and the failure
+definition, both required before the first build.
+
+## The rule the magnitudes come from
+
+A perturbation shorter than the deepest thing the design can be holding **cannot
+drain it** — the design absorbs the stall in buffering and never has to expose
+held state. So the magnitude is not a round number; it is derived per task:
+
+> **stall depth = (deepest buffer the design can hold on that channel) + 1**
+
+One cycle past the buffer is the first cycle on which the design must *hold*
+rather than *absorb*. Where a task's deepest buffer is a whole transaction rather
+than a channel FIFO, the relevant depth is still the **per-channel** one: D6 fired
+at three idle cycles between narrow beats, not at a drained 64-beat burst,
+because the mechanism was an accumulator cleared on a pipeline bubble. **The
+bubble is what the stall has to produce, and a bubble needs only to outlast the
+buffer.**
+
+Floor of 4 where a design has no buffer on the axis, so the stall is longer than
+any single-cycle handshake artefact.
+
+## The table
+
+| task | axis perturbed | deepest hold, from the design | stall | why sufficient |
+|---|---|---|---|---|
+| `v_ai02` | inter-beat gap, input line | `STRB_FIFO_DEPTH=4`, plus one held beat | **6** | 4-deep strobe FIFO + the held beat + 1. A line runs to 10 beats, so a 6-cycle gap lands inside a line rather than between lines |
+| `v_ca03` | inter-beat gap, `m_r`/`m_b` intake | internal FIFO depth **8**; 4 ids × 2 txns = 8 outstanding | **9** | one past the 8-deep FIFO; the table cannot absorb a ninth cycle without holding |
+| `v_ca04` | inter-beat gap, per output | `OutSpillReg=0` — **no output buffer**; one beat in flight | **4** | floor; with no spill register any stall > 1 forces the hold, and 4 outlasts arbitration round-robin over `N_OUT=4` |
+| `v_ca05` | gap between pop/search requests | `SLOTS=8` entries, `NTAG=8` | **9** | one past capacity: the store must be full and still holding when the next request arrives |
+| `v_ca06` | inter-beat gap, downstream `R` | internal FIFO depth **8**; ratio 4; `MAX_READS=4` | **9** | one past the 8-deep FIFO. **Known to be sufficient: D6 fires at 3** |
+| `v_ca07` | gap between `div_valid_i` offers | divisor to `2^4-1 = 15`; one output period = up to 15 input cycles | **16** | one past the longest output period, so a change is offered while a full period is in flight |
+| `v_dsp02` | gap between operand offers | `NumPipeRegs=1` — depth 1 | **4** | floor; depth 1 needs only 2, and 4 outlasts the `PipeConfig=BEFORE` register plus handshake |
+| `v_nw01` | gap between frames | `REQUEST_RETRY_INTERVAL=64`, cache 4 entries | **65** | one past the retry interval — a stall shorter than 64 never lets a retry fire, so the retry path is unreachable |
+| `v_nw02` | inter-beat gap, `W` intake | `MAX_WRITE_TXNS=4`; internal FIFO depth **8** | **9** | one past the FIFO; the debt bound of W1 is only observable with the queue held full |
+| `v_nw03` | inter-beat gap, mid-frame | `S_COUNT=4` inputs, no output spill | **5** | one past the number of contending inputs, so a round-robin cannot hide the stall by serving another input |
+| `v_nw04` | gap between `adj`/`drift` offers | `DRIFT_RATE=5` — a drift lands every 5 cycles | **6** | one past the drift period, so a stall always contains a whole drift event |
+
+**Two magnitudes are load-bearing rather than conservative.** `v_nw01` at 65 and
+`v_ca07` at 16 are large because those designs hold *timers*, not buffers, and a
+stall shorter than the timer cannot reach the state the clause is about. Both
+will need the drain widening described below.
+
+## Showing the perturbation is live — `FIRED`, on the instrument itself
+
+A rerun that passes because the perturbation never took effect is
+indistinguishable from one that passes because the clauses hold. **That is the
+class this week is about and the instrument is not exempt from it.**
+
+Each perturbed run emits, at end of run:
+
+    FIRED <task>.perturb_applied <n>      cycles the stall was asserted
+    FIRED <task>.perturb_at_depth <n>     times the stall ran to its FULL depth
+
+and `check_fired.py` refuses on zero for either. **The second is the one that
+matters**: a stall interrupted at cycle 2 of 9 by the end of a phase has been
+*applied* without ever being *deep*, and only the second counter separates them.
+`perturb_at_depth == 0` with `perturb_applied > 0` is the exact shape of a
+control that ran and never triggered.
+
+## What a failure looks like, defined before any result
+
+### Escalates — a candidate reference failure
+
+The reference **FAILS on a contract clause id it passes at zero perturbation**,
+and the failure **survives the drain-widened repeat** described below.
+
+### Does not escalate — phase-structure artefact
+
+Any of:
+
+- failures on `FLOOR` or `COVERAGE` ids
+- wrong-id, wrong-beat-count or out-of-order failures, which are the signature of
+  one phase's traffic arriving inside the next
+- **anything that disappears when the drains are widened**
+
+These get the drain fixed and the rerun repeated. They are not results.
+
+### Does not escalate — refuses instead
+
+Hang, crash, or no `RESULT` line. **Absent is not failure (rule 20).** The task is
+reported NOT MEASURABLE under perturbation and comes back to you.
+
+### The separation, mechanically
+
+**Every task is run twice**: once at its existing inter-phase drain, once with
+every drain multiplied by `(1 + stall_depth)`.
+
+    fails at both drains      -> candidate reference failure, ESCALATE
+    fails only at the narrow  -> phase-structure artefact, fix the drain and repeat
+    fails only at the wide    -> report; this should not happen and I do not have
+                                 a story for it, so it goes to you unexplained
+
+This costs one extra build per task and it is derived from the one case where I
+got it wrong: v_ca06's first slow-slave run reported **43 failures across seven
+clause ids** and read as the anchor collapsing. Widening the drain from 40 cycles
+to 600 left **9 × D6 and nothing else**. Six of seven clause ids were the drain.
+
+## Scope
+
+**Reference, `dut2`, and the conformant set. Not mutants.** D6 was a clause false
+about the reference and every mutant died either way, so the kill table is not the
+instrument here.
+
+The kill table is re-run **only on a task where a clause has to change**, because
+narrowing can cost kills. D6 cost zero — **measured, not assumed**, and the same
+measurement is owed by any narrowing this produces.
+
+## Stopping rule
+
+**A failing golden is the D6 shape. I report before sweeping for a threshold, and
+before any clause moves.** The threshold sweep — bisection on stall depth for that
+one task, roughly seven builds — runs only after that.
+
+
+---
+
+# RESULTS — first run, and the mechanism is wrong
+
+**No threshold sweep started. No clause moved.** Reporting per the stopping rule.
+
+## What was measured
+
+| task | depth | narrow drain | wide drain | verdict |
+|---|---|---|---|---|
+| `v_ca06` | 9 | FAIL, 38 across 7 ids | **PASS** | **clean.** 38 of 38 were drain artefacts |
+| `v_ai02` | 6 | PASS | PASS | **clean** |
+| `v_dsp02` | 4 | PASS | PASS | **clean** |
+| `v_ca07` | 16 | FAIL, FLOOR only | FAIL, FLOOR only | does not escalate — see below |
+| `v_ca03` | 9 | FAIL 4 | FAIL 4 | **clause made unmeasurable** |
+| `v_nw02` | 9 | FAIL 22 | FAIL 22 | **clause made unmeasurable** |
+| `v_ca05` | 9 | FAIL | FAIL | **instrument artefact** |
+| `v_ca04` | 4 | — | — | blocked: vector signal, patcher fixed, not re-run |
+| `v_nw03` | 5 | — | — | blocked: same |
+| `v_nw01` | 65 | — | — | not run: abbreviated signal names, unmapped |
+| `v_nw04` | 6 | — | — | **NOT APPLICABLE**: pulse valids, no ready to gate |
+
+Perturbation was live on every task that ran — `perturb_at_depth` between 78 and
+3717, never zero. **The instrument declared itself, as designed.**
+
+## The drain discriminator worked exactly as specified
+
+`v_ca06`: **40 failures across 8 clause ids at the narrow drain, 0 at the wide.**
+That is the whole point of the two-run design and it earned its cost on the first
+task. Without it I would have reported the anchor as collapsing, for the second
+time.
+
+## A THIRD failure category the definition did not have
+
+`v_ca03`'s `A4` bounds retirement at **2 cycles**. `v_nw02`'s `X4` bounds a
+manufactured B at **232 cycles**. `v_ca07`'s `H4` needs a request pending while a
+change gates.
+
+**A perturbation of 9 or 16 cycles does not violate those clauses. It makes them
+unmeasurable** — the testbench cannot offer inside a 2-cycle window when the
+source is gated for 9.
+
+    FAIL [A4] entry freed late: new id accepted 8 cycles after retirement, window is 2
+    FAIL [X4] manufactured B for id=4 arrived at cycle 8541, deadline was 232
+
+> **A clause with its own cycle bound cannot be measured under a perturbation
+> that exceeds that bound, and the result reads as a violation.**
+
+**And the difference between reading as a violation and reading as untested is
+whether the clause has an antecedent floor.** `v_ca07`'s H4 has one, and reported:
+
+    FAIL [FLOOR] H4's antecedent never held: no offered request was ever pending
+                 while a change was still gating
+
+*That is the honest form.* Same situation, same cause, and the task with the floor
+said "untested" while the two without said "failed".
+
+## The mechanism is unsound, and that is the real result
+
+**Gating the DUT-visible valid creates phantom transfers in any testbench that
+commits on ready or grant ALONE.**
+
+    v_ca06   for (t=0; ...) begin @(posedge clk); if (s_wready) break; end
+    v_ca05   if (push_gnt) begin              // R4: commit on req && gnt
+               granted = 1'b1; ref_q[tg].push_back(d); ref_count++;
+
+**v_ca05's own comment states the correct condition and the code checks the wrong
+one.** Both are correct today *only because neither testbench ever gates its own
+valid* — the third variety again, and now in the artefact the sweep was built to
+test.
+
+My patcher corrects `if (R) break;`. It does not match `if (R) begin`, so v_ca05
+ran uncorrected and produced `full=0 with 8 entries` — the reference model
+counting pushes the DUT never saw. **A pattern-matched correction to a pattern-matched
+defect keeps missing variants**, which is the same failure one level up.
+
+### What the mechanism should have been
+
+**The run that actually found D6 did not gate anything.** It slowed the
+responder's own beat advance — `RGAP` idle cycles between presenting beats — so
+the DUT and the testbench never disagreed about whether a transfer occurred.
+
+    gate the valid          creates valid/ready disagreement; unsound wherever a
+                            testbench commits on one side
+    delay the source's own  no disagreement possible; the testbench simply offers
+    advance                 later, which is what a slow master IS
+
+The sweep should be rebuilt on the second. That is a per-task edit to each
+responder rather than a generic gate, which is the cost I estimated at 1–2 hours
+per task and then tried to avoid with a generic mechanism.
+
+## What I would do next, for a decision rather than on my own
+
+1. **Rebuild on the delay-the-advance mechanism**, per task, and re-run the three
+   that are currently artefacts.
+2. **Exclude bounded clauses from perturbed runs**, or perturb below their bound —
+   `v_ca03`'s A4 at 2 and `v_nw02`'s X4 at 232 cannot share a run with a 9-cycle
+   gap. The alternative is a per-clause exclusion list, which is a scoring
+   decision and not mine.
+3. **The one substantive result so far is `v_ca06` clean at depth 9**, which is
+   three times the depth at which the old sticky D6 broke — evidence that the
+   narrowing was right, and the only positive result the run has produced.
+
+
+---
+
+# SECOND RUN — delay-the-advance, and a correction to my own first report
+
+**No sweep. No clause moved.**
+
+## The mechanism was rebuilt twice, not once
+
+    v1  gate the DUT-visible valid       UNSOUND -- phantom transfers
+    v2  delay before the valid           UNSOUND -- sits between a measurement's
+                                         baseline and the event it measures
+    v3  delay at the top of the task     sound, and passing
+
+**v2's defect is the wrong-baseline finding in a new form.** `do_read` samples
+`ar0 = n_ds_ar` at task entry and compares at the end. A delay placed just before
+the offer left that window open across the gap, so a *previous* transaction's
+downstream address landed inside it:
+
+    FAIL [A2] read issued 2 downstream addresses, expected exactly 1   x24
+
+I did not move the baseline. **I moved the event away from it**, which has the
+same effect and is harder to see.
+
+## And it overturns the "third failure category" I reported
+
+I reported `v_ca03`'s A4 (window 2) and `v_nw02`'s X4 (deadline 232) as **clauses
+made unmeasurable by a 9-cycle perturbation**, and proposed excluding bounded
+clauses. Under v3, at the same depth 9:
+
+    v_ca03   PASS      (was FAIL 4)
+    v_nw02   PASS      (was FAIL 22)
+    v_ca06   PASS      (was FAIL 1 at wide drain)
+
+**They were not unmeasurable. They were artefacts of the gate**, which inserted
+delay inside the window those clauses bound. The category was real as an idea and
+false as a diagnosis of these three, and I proposed a scoring change on the
+strength of it.
+
+> A category inferred from an instrument's output inherits the instrument's
+> defects. I had already written that a failure surviving the drain widening
+> escalates — it did survive, twice, and it was still the instrument.
+
+## What v3 actually tests, and it is not the axis in the table above
+
+The delay sits at the **top of each driving task**, so it spaces *transactions*
+apart. The plan's axis is the **inter-beat gap** — the spacing between beats
+*within* a transaction — and that is what found D6.
+
+    v3 tests     inter-transaction spacing
+    the plan     inter-beat gap
+    D6 needed    inter-beat gap
+
+**v3 would not have found D6.** It is sound and it is measuring the wrong thing,
+which is a better position than v1 and v2 but not the one the plan asked for.
+
+The inter-beat axis needs the responder's own beat advance slowed — the `RGAP`
+edit, per task, in each responder's always block. That is the 1–2 hours per task
+the estimate named, and no generic patcher reaches it: **the beat advance lives in
+a different place in every testbench, which is exactly why a generic mechanism
+kept measuring something else.**
+
+## Standing results
+
+| task | depth | mechanism | narrow | wide |
+|---|---|---|---|---|
+| `v_ca06` | 9 | v1 gate | FAIL 38 | **PASS** |
+| `v_ca06` | 9 | v3 delay | **PASS** | FLOOR only |
+| `v_ca03` | 9 | v3 delay | **PASS** | FLOOR only |
+| `v_nw02` | 9 | v3 delay | **PASS** | FAIL, uncategorised |
+| `v_ai02` | 6 | v1 gate | PASS | PASS |
+| `v_dsp02` | 4 | v1 gate | PASS | PASS |
+| `v_ca07` | 16 | v1 gate | FLOOR only | FLOOR only |
+
+**`v_ca06` clean at depth 9 under two independent mechanisms** is the one result
+that has survived every revision of the instrument, and it is three times the
+depth at which the old sticky D6 broke.
+
+A FLOOR firing at the wide drain is expected and does not escalate: multiplying
+every drain changes how much stimulus fits in the run, so coverage counts fall.
+That is the drain being widened, not the design.

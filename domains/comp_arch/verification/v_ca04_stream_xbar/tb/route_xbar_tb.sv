@@ -364,6 +364,19 @@ module route_xbar_tb;
     if (!cov_reset_mid)         fail("COVERAGE", "reset was never asserted mid-stream");
     for (int j = 0; j < N_OUT; j++)
       if (!cov_all_outputs[j])  fail("COVERAGE", $sformatf("output %0d was never selected", j));
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_ca04.cov_a3_held %0d", cov_a3_held);
+    $display("FIRED v_ca04.cov_beats %0d", cov_beats);
+    $display("FIRED v_ca04.cov_contend_phases %0d", cov_contend_phases);
+    $display("FIRED v_ca04.cov_lockin_probe %0d", cov_lockin_probe);
+    $display("FIRED v_ca04.cov_reset_mid %0d", cov_reset_mid);
+    $display("FIRED v_ca04.cov_stall_phases %0d", cov_stall_phases);
 
     if (errors == 0) $display("RESULT: PASS");
     else $display("RESULT: FAIL (%0d violation%s)", errors, (errors == 1) ? "" : "s");

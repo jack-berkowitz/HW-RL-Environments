@@ -6217,7 +6217,129 @@ between them is invisible from inside.**
 
 **Rules:** 24
 
-## F95. ABC is handed a clock period it never reads, and the whole flow is built around it
+## F95. Three agents, one git index: the staged state would have reverted the fix that keeps the scored number honest
+
+Third staged-state incident today, and the first where the consequence is worth
+more than the mechanism.
+
+`domains/ai_accel/design/d_ai01_fp16_gemm_array/orfs/config.mk` read `MM` in
+porcelain — modified in the index AND in the working tree, differently. The
+working tree and `HEAD` both carried the geometry pin:
+
+    export VERILOG_TOP_PARAMS = HEIGHT 4 WIDTH 8
+
+**The index carried the version from before it.** Any commit taken from that
+index — by me, by either of the two agents also working in this tree, by a hook —
+would have silently removed the pin.
+
+### The consequence is the finding, not the drift
+
+That pin is what makes d_ai01's PPA number the scored number. Without it ORFS
+takes the shim's declared default of `HEIGHT=8`, which is the geometry that does
+**not route on sky130hd** — 76,253 to 83,445 detailed-routing violations across
+three floorplans. So the revert would not have produced a wrong number. It would
+have produced a **build failure at the scored configuration**, for a reason that
+is no longer the scored question, and the natural reading of that failure is
+"this design does not route" rather than "the config lost its pin".
+
+**A silent revert of a correctness-preserving pin is worse than a silent revert
+of a result**, because the failure it produces looks like a finding.
+
+### The two earlier instances today, for the shape
+
+* A staged **deletion** of `d_ca03/ref/sim_flags_verilator.txt` — the one file
+  that makes d_ca03 simulable at all. `HEAD` had it, the disk copy was
+  byte-identical, and a commit from that index would have removed it.
+* Staged **deletions** of the seven sim records the PC's correctness gate
+  depends on. Present in `HEAD` and on disk; a commit from that index would have
+  taken them out from under a machine that had already started building.
+
+All three share a structure: **`HEAD` is right, the working tree is right, and
+the thing that would be committed is wrong.** Every check any of us runs looks
+at `HEAD` or at the working tree. `check_linkage_tree.sh --staged` is the only
+instrument here that reads the index, and it checks document linkage, not
+content.
+
+### What it does not license
+
+Not a conclusion that shared trees cannot work — the explicit-path commit
+protocol (temp index, `read-tree HEAD`, name every path, CAS the ref,
+`cmp`-verify) contained all three: nothing was lost in any of them, because no
+commit was ever taken from the ambient index. The gap is **detection**, not
+containment. Nothing announces a divergent index; all three were found by
+reading porcelain for another reason.
+
+**Rules:** 17, 30
+
+## F96. Seventeen checkers, two in the scoring path — and three of the unwired ones I built this week
+
+Found by AGENT-VERIF-A2, who measured the class rather than agreeing with it, and
+whose own account it corrected. Verified here independently, on a directory that
+is mine.
+
+**F91 recorded a field with no reader.** This is the same defect from the other
+end: **a tool that runs, is right, and is invoked by nothing.** Both are correct,
+present and inert. Neither is visible from the artefact.
+
+### The census
+
+Nineteen checkers exist — fifteen in `scripts/`, four staged in `inbox/`. Of the
+fifteen in `scripts/`, five are named by any other file. Of those five, walking
+from the scoring entry points (`sim_candidate.sh`, `ppa_candidate.sh`,
+`reference_ppa.sh`, `find_fmax.py`, `report_table.py`, `collect_results.py`):
+
+    check_transport.py     DIRECT -- sim_candidate.sh, report_table.py,
+                           sim_verification.sh
+    check_ppa_record.py    ONE HOP -- via overnight_ppa2.sh
+    ------------------------------------------------------------------
+    everything else        not reachable from a scored run
+
+`check_rule_linkage.py` and `check_witness_sync.py` do have a caller —
+`check_linkage_tree.sh` — which is **run by hand before a commit**. A2's
+distinction is the load-bearing one and a census that stops at "has a caller"
+reports the wrong number: **having a caller and being in the scoring path are
+different properties.**
+
+### It corrects two accounts, and the second is mine
+
+A2 had reported landing `check_clause_emittable.py` into `scripts/` as the loop
+closing for that tool. It has no caller. **Moving a file from `inbox/` to
+`scripts/` changes where it lives and nothing else** — a tool is not wired
+because it sits in the tools directory, which is the same mistake as a field
+being right because it is present, made about a tool whose entire subject is that
+mistake.
+
+They had also written that two unwired tools in an inbox was the whole gap
+between naming a defect class and catching it. The measurement says fifteen —
+an underestimate by an order of magnitude, in the direction that made the week
+look better.
+
+**Mine is worse, because I was writing F91 at the time.** Three of the unwired
+checkers in `scripts/` were built by me on 2026-08-25:
+
+    check_pin.py                794d57e   no caller
+    check_unread_fields.py      a5226db   no caller
+    check_no_silent_revert.sh   1c2efe1   no caller
+
+`check_unread_fields.py` is the tool that finds fields nothing reads. It is a
+tool nothing runs. I spent the day filing findings about inert annotations and
+added three inert instruments, and I did not notice until someone else counted.
+
+### What it does not license
+
+Not "wire everything". `check_no_silent_revert.sh` is a **pre-push** check and a
+scoring run is the wrong place for it; `check_pin.py` answers a question that is
+asked when a pin is set, not on every build. An unwired tool is not automatically
+a defect — the defect is **not knowing which state each one is in**, and having
+no artefact that says.
+
+The operational form, which is F91's with the arrow reversed: **for a field, ask
+what reads it. For a tool, ask what runs it — and "I run it by hand" is an
+answer that stops being true the moment the person changes.**
+
+**Rules:** 30
+
+## F97. ABC is handed a clock period it never reads, and the whole flow is built around it
 
 `ABC_CLOCK_PERIOD_IN_PS` is the variable F24 exists to protect, the one
 `build_config_hash` records, and the one two config.mk edits were made to declare
@@ -6251,7 +6373,7 @@ entirely, plus a value 1000x too small from the units bug, produces the
 BYTE-IDENTICAL netlist and the same 643,044.230399 um^2. The runs are real: the
 yosys logs differ from each other, each carries its own distinct ABC command
 line, netlist mtime moves between runs, and make never reported the target up to
-date. Logs in `docs/evidence/f95_abc_period_independent/`.
+date. Logs in `docs/evidence/f97_abc_period_independent/`.
 
 **HOW IT WAS NEARLY MISSED, TWICE.** First I compared d_ca03's ABC target (12500)
 against d_ai01's (50.0) and concluded a missing config line was the cause -- but

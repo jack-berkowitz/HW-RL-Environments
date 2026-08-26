@@ -1,59 +1,50 @@
 // =============================================================================
 // fp32_fma_ii1.sv -- IEEE-754 binary32 fused multiply-add, II = 1, latency 3
 // -----------------------------------------------------------------------------
-// Structure. The dataflow is cut into the four segments S1 names, with the
-// three register boundaries falling between them:
+// STRUCTURE. Three register boundaries (S1), one operation accepted per cycle
+// (C3). The whole pipeline advances or freezes together, so `in_ready` depends
+// on `out_ready` but never on `in_valid` (H1), and a held result stays stable
+// (H3). Results are in order by construction (H4).
 //
-//   stage 1  classify, normalise the operands, form the exact 48-bit product
-//   -- reg --
-//   stage 2  align the addend into the accumulator, one add
-//   -- reg --
-//   stage 3  leading-zero count of the sum, normalising shift
-//   -- reg --
-//   stage 4  round once, pack, flags                      (combinational out)
+//   stage 1 comb : classify, 24x24 multiply, align the addend, add/subtract
+//   stage 2 comb : leading-zero count, normalise, extract significand + G/R/S
+//   stage 3 comb : round, assemble, derive flags
 //
-// A result therefore appears exactly 3 clocks after its operands are accepted
-// (S1), and a new operation is accepted every cycle (C3): the pipeline has no
-// feedback and nothing in it can stall except a stalled consumer.
+// THE ALIGNMENT, which is what makes the rounding single (A1).
+// A 77-bit window holds the exact product-sum to the precision that can affect
+// one rounding. Window bit k has weight 2^(anchor-75+k):
 //
-// The arithmetic, and why it is shaped this way
-// ---------------------------------------------
-// Every operand is pre-normalised into a common form -- a 24-bit significand
-// with its MSB set, and a signed exponent -- so a subnormal is just an operand
-// with a smaller exponent. Nothing is flushed and there is no separate
-// subnormal path to stall on (A3).
+//   * the addend's 24-bit significand is placed with its MSB at window bit 75
+//     and shifted RIGHT by `shamt`; bits pushed below bit 0 are collapsed into
+//     a sticky bit,
+//   * the 48-bit product is placed, shifted left by 2, at bits [49:0].
 //
-// The product is formed exactly (48 bits) and the addend is aligned into an
-// 80-bit fixed-point accumulator with 4 guard positions below the product LSB.
-// There is exactly ONE rounding, of the exact product-plus-addend (A1): the
-// product is never rounded on its way into the accumulator, which is what makes
-// a = b = 1 + 2^-12 against c = -(1 + 2^-11) return 2^-24 rather than zero.
+// `shamt = 27 - d` where d is the addend-minus-product exponent difference, so
+// the two operands land in their true relative positions. Outside the range
+// -49 <= d <= 26 the shift saturates:
 //
-// Alignment shifts saturate. Past saturation the smaller term can only reach
-// the sticky region, which is what makes saturating safe -- but the left
-// saturation must also carry its lost magnitude into the result exponent, which
-// is what `esc` does. Dropping that compensation gives the right mantissa with
-// the wrong exponent on roughly a quarter of random vectors.
+//   d >= 27  the addend dominates; the product lands wholly at or below the
+//            sticky region, so its exact placement cannot change the rounded
+//            result -- only whether it is non-zero -- and the anchor becomes
+//            the addend's exponent;
+//   d <= -49 the addend is below the window entirely and is pure sticky.
 //
-// A9, the datapath bound. The widest significand signal in this module is the
-// 80-bit alignment accumulator (ACC_W): the 48-bit exact product placed with 4
-// guard positions below it, the addend aligned above it with saturation, and
-// one carry bit -- 3*p + 8, which is the "3p plus guard, round and sticky"
-// shape A9 sanctions and well inside its 4*p = 96 ceiling. Alignment shifts
-// SATURATE rather than widening the accumulator: everything below the window
-// collapses into the sticky bit, which is exactly what A9 permits. Nothing
-// here scales with the operand exponents, so no input can widen the datapath.
+// This is what bounds the datapath at 76/77 bits rather than the ~400 an
+// unbounded intermediate would need (A9's ceiling is 96).
 //
-// A6 is implemented as written, not as IEEE 7.5 states it: underflow is
-// inexactness AND a delivered biased exponent field of zero. That is read off
-// the packed result, after rounding and after the overflow substitution, so the
-// round-up-to-smallest-normal band reports no underflow (delivered field is 1)
-// and a tiny inexact result that rounds to zero does report it (field is 0).
-// No second rounding with an unbounded exponent range is computed anywhere,
-// because this contract does not ask for one.
+// SUBNORMALS (A3) fall out of this without a separate path: operands keep their
+// biased-exponent-1 interpretation rather than being pre-normalised, which
+// keeps the anchor high enough that a subnormal result is reached by a
+// left shift of `anchor + 127` instead of a right shift.
+//
+// ROUNDING uses the contiguous {exponent, mantissa} encoding, so a mantissa
+// carry-out and the subnormal-to-normal transition are both just `+1`.
 // =============================================================================
 
 `timescale 1ns/1ps
+
+/* verilator lint_off DECLFILENAME */
+/* verilator lint_off UNUSED */
 
 module fp32_fma_ii1 (
     input  logic        clk,
@@ -77,374 +68,315 @@ module fp32_fma_ii1 (
     output logic        flag_inexact
 );
 
-  // ---------------------------------------------------------------------------
-  // Geometry
-  // ---------------------------------------------------------------------------
-  localparam int PW    = 24;          // significand width
-  localparam int PW2   = 48;          // exact product
-  localparam int ACC_W = 80;          // alignment accumulator
-  localparam int L_MAX = 55;          // left-align saturation
-  localparam int BIAS  = 127;
-
-  localparam logic [31:0] QNAN   = 32'h7FC00000;
-  localparam logic [31:0] INF_P  = 32'h7F800000;
-  localparam logic [31:0] SGN_B  = 32'h80000000;
-  localparam logic [31:0] MAXN   = 32'h7F7FFFFF;
+  localparam logic [2:0] RNE = 3'd0;
+  localparam logic [2:0] RTZ = 3'd1;
+  localparam logic [2:0] RDN = 3'd2;
+  localparam logic [2:0] RUP = 3'd3;
+  localparam logic [2:0] RMM = 3'd4;
 
   // ---------------------------------------------------------------------------
-  // Helpers
+  // Pipeline control. One enable for the whole pipe: it either advances or it
+  // freezes, which keeps results in order and held results stable.
   // ---------------------------------------------------------------------------
-  // Round-up decision, all five modes (A2).
-  function automatic logic rup_f(input logic [2:0] rm, input logic sgn,
-                                 input logic lsb, input logic gb, input logic sb);
-    case (rm)
-      3'd0:    rup_f = gb & (sb | lsb);        // RNE
-      3'd1:    rup_f = 1'b0;                   // RTZ
-      3'd2:    rup_f = sgn & (gb | sb);        // RDN
-      3'd3:    rup_f = (~sgn) & (gb | sb);     // RUP
-      3'd4:    rup_f = gb;                     // RMM
-      default: rup_f = 1'b0;                   // 5..7 out of scope
-    endcase
-  endfunction
-
-  // Leading-zero counts. The loop variables are deliberately not named `i`, and
-  // no caller invokes these from a loop condition.
-  function automatic int lzc24(input logic [PW-1:0] v);
-    int li;
-    begin
-      lzc24 = PW;
-      for (li = 0; li < PW; li = li + 1)
-        if (v[li]) lzc24 = PW - 1 - li;
-    end
-  endfunction
-
-  function automatic int lzc80(input logic [ACC_W-1:0] v);
-    int lj;
-    begin
-      lzc80 = ACC_W;
-      for (lj = 0; lj < ACC_W; lj = lj + 1)
-        if (v[lj]) lzc80 = ACC_W - 1 - lj;
-    end
-  endfunction
-
-  // ---------------------------------------------------------------------------
-  // Handshake. in_ready is a function of out_valid and out_ready only, never of
-  // in_valid (H1). A stalled consumer freezes the whole pipeline, so the held
-  // result and flags are stable (H3), and order is structural (H4).
-  // ---------------------------------------------------------------------------
-  logic v1, v2, v3;
   logic en;
+  logic v1_q, v2_q, v3_q;
 
-  assign out_valid = v3;
-  assign en        = ~(v3 & ~out_ready);
-  assign in_ready  = en;
+  assign en       = ~(v3_q & ~out_ready);
+  assign in_ready = en;                 // H1: no dependence on in_valid
+  assign out_valid = v3_q;
 
   always_ff @(posedge clk) begin
     if (!rst_n) begin
-      v1 <= 1'b0;
-      v2 <= 1'b0;
-      v3 <= 1'b0;
+      v1_q <= 1'b0; v2_q <= 1'b0; v3_q <= 1'b0;   // R2/R3
     end else if (en) begin
-      v1 <= in_valid;
-      v2 <= v1;
-      v3 <= v2;
+      v1_q <= in_valid;
+      v2_q <= v1_q;
+      v3_q <= v2_q;
     end
   end
 
-  // ---------------------------------------------------------------------------
-  // Stage 1 : classify, pre-normalise, multiply
-  // ---------------------------------------------------------------------------
-  logic [PW2-1:0]     n1_mp;
-  logic [PW-1:0]      n1_sigcn;
-  logic signed [15:0] n1_ep, n1_tsh;
-  logic               n1_sp, n1_sc, n1_zc, n1_pz;
-  logic [2:0]         n1_rnd;
-  logic               n1_spv, n1_snv;
-  logic [31:0]        n1_sres;
+  // ===========================================================================
+  // STAGE 1 -- classify, multiply, align, add
+  // ===========================================================================
+  logic        sa, sb, sc_s;
+  logic [7:0]  ea_f, eb_f, ec_f;
+  logic [22:0] ma_f, mb_f, mc_f;
 
-  logic [PW2-1:0]     r1_mp;
-  logic [PW-1:0]      r1_sigcn;
-  logic signed [15:0] r1_ep, r1_tsh;
-  logic               r1_sp, r1_sc, r1_zc, r1_pz;
-  logic [2:0]         r1_rnd;
-  logic               r1_spv, r1_snv;
-  logic [31:0]        r1_sres;
+  assign sa   = a[31];  assign ea_f = a[30:23];  assign ma_f = a[22:0];
+  assign sb   = b[31];  assign eb_f = b[30:23];  assign mb_f = b[22:0];
+  assign sc_s = c[31];  assign ec_f = c[30:23];  assign mc_f = c[22:0];
 
+  logic a_zero, b_zero, c_zero, a_inf, b_inf, c_inf;
+  logic a_nan, b_nan, c_nan, a_snan, b_snan, c_snan;
+
+  assign a_zero = (ea_f == 8'd0)   && (ma_f == 23'd0);
+  assign b_zero = (eb_f == 8'd0)   && (mb_f == 23'd0);
+  assign c_zero = (ec_f == 8'd0)   && (mc_f == 23'd0);
+  assign a_inf  = (ea_f == 8'hFF)  && (ma_f == 23'd0);
+  assign b_inf  = (eb_f == 8'hFF)  && (mb_f == 23'd0);
+  assign c_inf  = (ec_f == 8'hFF)  && (mc_f == 23'd0);
+  assign a_nan  = (ea_f == 8'hFF)  && (ma_f != 23'd0);
+  assign b_nan  = (eb_f == 8'hFF)  && (mb_f != 23'd0);
+  assign c_nan  = (ec_f == 8'hFF)  && (mc_f != 23'd0);
+  assign a_snan = a_nan && ~ma_f[22];
+  assign b_snan = b_nan && ~mb_f[22];
+  assign c_snan = c_nan && ~mc_f[22];
+
+  // significands with the implicit bit; a subnormal keeps exponent field 1
+  logic [23:0] sig_a, sig_b, sig_c;
+  assign sig_a = {(ea_f != 8'd0), ma_f};
+  assign sig_b = {(eb_f != 8'd0), mb_f};
+  assign sig_c = {(ec_f != 8'd0), mc_f};
+
+  logic signed [12:0] eff_ea, eff_eb, eff_ec;
+  assign eff_ea = (ea_f == 8'd0) ? 13'sd1 : $signed({5'd0, ea_f});
+  assign eff_eb = (eb_f == 8'd0) ? 13'sd1 : $signed({5'd0, eb_f});
+  assign eff_ec = (ec_f == 8'd0) ? 13'sd1 : $signed({5'd0, ec_f});
+
+  logic sign_p;
+  assign sign_p = sa ^ sb;
+
+  // Exponent of the product's leading position, and of the addend.
+  // A zero product is forced far below the addend so the addend anchors and the
+  // (zero) product contributes nothing.
+  logic signed [12:0] exp_prod, exp_add, expdiff, anchor_c;
+  assign exp_prod = (a_zero || b_zero) ? -13'sd300 : (eff_ea + eff_eb - 13'sd254);
+  assign exp_add  = eff_ec - 13'sd127;
+  assign expdiff  = exp_add - exp_prod;
+  assign anchor_c = (expdiff >= 13'sd27) ? exp_add : (exp_prod + 13'sd27);
+
+  logic [6:0] shamt;
   always_comb begin
-    logic               sa, sb_, sc_;
-    logic [7:0]         fa, fb, fc;
-    logic [22:0]        mua, mub, muc;
-    logic               za, zb, zc, ina, inb, inc;
-    logic               nna, nnb, nnc, sna, snb, snc;
-    logic [PW-1:0]      siga, sigb, sigc, sigan, sigbn, sigcn;
-    int                 lza, lzb, lzc_;
-    int                 ea, eb, ec;
-    logic               zsgn;
-
-    sa  = a[31]; fa = a[30:23]; mua = a[22:0];
-    sb_ = b[31]; fb = b[30:23]; mub = b[22:0];
-    sc_ = c[31]; fc = c[30:23]; muc = c[22:0];
-
-    za  = (fa == 8'h00) && (mua == 23'd0);
-    zb  = (fb == 8'h00) && (mub == 23'd0);
-    zc  = (fc == 8'h00) && (muc == 23'd0);
-    ina = (fa == 8'hFF) && (mua == 23'd0);
-    inb = (fb == 8'hFF) && (mub == 23'd0);
-    inc = (fc == 8'hFF) && (muc == 23'd0);
-    nna = (fa == 8'hFF) && (mua != 23'd0);
-    nnb = (fb == 8'hFF) && (mub != 23'd0);
-    nnc = (fc == 8'hFF) && (muc != 23'd0);
-    sna = nna && !mua[22];
-    snb = nnb && !mub[22];
-    snc = nnc && !muc[22];
-
-    // value = sig * 2^(exp-23); a subnormal is simply exp = 1-BIAS
-    siga = {(fa != 8'h00), mua};
-    sigb = {(fb != 8'h00), mub};
-    sigc = {(fc != 8'h00), muc};
-    ea   = (fa == 8'h00) ? (1 - BIAS) : ($signed({24'd0, fa}) - BIAS);
-    eb   = (fb == 8'h00) ? (1 - BIAS) : ($signed({24'd0, fb}) - BIAS);
-    ec   = (fc == 8'h00) ? (1 - BIAS) : ($signed({24'd0, fc}) - BIAS);
-
-    // pre-normalise: this is what keeps subnormals at full precision (A3)
-    lza   = lzc24(siga);
-    lzb   = lzc24(sigb);
-    lzc_  = lzc24(sigc);
-    sigan = siga << lza;
-    sigbn = sigb << lzb;
-    sigcn = sigc << lzc_;
-    ea    = ea - lza;
-    eb    = eb - lzb;
-    ec    = ec - lzc_;
-
-    n1_mp    = {{PW{1'b0}}, sigan} * {{PW{1'b0}}, sigbn};   // exact, unrounded
-    n1_sigcn = sigcn;
-    n1_ep    = 16'(ea + eb - 2*(PW-1));    // weight of the product LSB
-    n1_tsh   = 16'(ec - (PW-1) - (ea + eb - 2*(PW-1)) + 4);
-    n1_sp    = sa ^ sb_;
-    n1_sc    = sc_;
-    n1_zc    = zc;
-    n1_pz    = za | zb;
-    n1_rnd   = rnd_mode;
-
-    // ---- special values, resolved here and carried past the datapath -------
-    zsgn    = 1'b0;
-    n1_spv  = 1'b1;
-    n1_snv  = 1'b0;
-    n1_sres = QNAN;
-    if (sna | snb | snc) begin                       // signalling NaN operand
-      n1_sres = QNAN; n1_snv = 1'b1;
-    end else if ((za & inb) | (ina & zb)) begin      // 0 * Inf
-      n1_sres = QNAN; n1_snv = 1'b1;
-    end else if (nna | nnb | nnc) begin              // quiet NaN operand
-      n1_sres = QNAN; n1_snv = 1'b0;
-    end else if (ina | inb) begin                    // infinite product
-      if (inc && (sc_ != (sa ^ sb_))) begin
-        n1_sres = QNAN; n1_snv = 1'b1;               // Inf - Inf
-      end else begin
-        n1_sres = INF_P | ((sa ^ sb_) ? SGN_B : 32'd0);
-      end
-    end else if (inc) begin                          // infinite addend
-      n1_sres = INF_P | (sc_ ? SGN_B : 32'd0);
-    end else if (za | zb) begin                      // 0*b + c is exactly c
-      if (zc) begin
-        zsgn    = ((sa ^ sb_) == sc_) ? sc_ : (rnd_mode == 3'd2);
-        n1_sres = zsgn ? SGN_B : 32'd0;
-      end else begin
-        n1_sres = c;
-      end
-    end else begin
-      n1_spv = 1'b0;
-    end
+    if (expdiff >= 13'sd27)       shamt = 7'd0;
+    else if (expdiff <= -13'sd49) shamt = 7'd76;
+    else                          shamt = 7'(13'sd27 - expdiff);
   end
 
-  always_ff @(posedge clk) begin
-    if (en) begin
-      r1_mp    <= n1_mp;
-      r1_sigcn <= n1_sigcn;
-      r1_ep    <= n1_ep;
-      r1_tsh   <= n1_tsh;
-      r1_sp    <= n1_sp;
-      r1_sc    <= n1_sc;
-      r1_zc    <= n1_zc;
-      r1_pz    <= n1_pz;
-      r1_rnd   <= n1_rnd;
-      r1_spv   <= n1_spv;
-      r1_snv   <= n1_snv;
-      r1_sres  <= n1_sres;
-    end
-  end
+  // addend placed with its MSB at window bit 75, then shifted right
+  logic [75:0] addend_max, addend_sh;
+  assign addend_max = {sig_c, 52'd0};
+  assign addend_sh  = addend_max >> shamt;
 
-  // ---------------------------------------------------------------------------
-  // Stage 2 : align the addend, one add
-  // ---------------------------------------------------------------------------
-  logic [ACC_W-1:0]   n2_sum;
-  logic               n2_stky, n2_sr;
-  logic signed [15:0] n2_epx;
+  // bits pushed below window bit 0 become sticky
+  logic [4:0]  n_out;
+  logic [24:0] mask_full;
+  logic        sticky_c;
+  assign n_out     = (shamt > 7'd52) ? 5'(shamt - 7'd52) : 5'd0;
+  assign mask_full = (25'd1 << n_out) - 25'd1;
+  assign sticky_c  = |(sig_c & mask_full[23:0]);
 
-  logic [ACC_W-1:0]   r2_sum;
-  logic               r2_stky, r2_sr;
-  logic signed [15:0] r2_epx;
-  logic [2:0]         r2_rnd;
-  logic               r2_spv, r2_snv;
-  logic [31:0]        r2_sres;
+  // product, shifted left by two so it sits below the addend's LSB
+  logic [47:0] prod;
+  assign prod = sig_a * sig_b;
 
+  logic [76:0] a_win, p_win;
+  assign a_win = {1'b0, addend_sh};
+  assign p_win = {27'd0, prod, 2'd0};
+
+  logic eff_sub;
+  assign eff_sub = sa ^ sb ^ sc_s;
+
+  logic [77:0] sum_add, sum_sub;
+  logic        sub_neg, sub_zero;
+  assign sum_add  = {1'b0, a_win} + {1'b0, p_win};
+  assign sum_sub  = {1'b0, p_win} - {1'b0, a_win};
+  assign sub_neg  = sum_sub[77];
+  assign sub_zero = (sum_sub == 78'd0);
+
+  logic [76:0] mag_c;
+  logic        sign_c_res;
   always_comb begin
-    logic [ACC_W-1:0] acc_p, acc_c;
-    logic [PW2-1:0]   tmp2;
-    int               tt, ss, esc;
-    logic             stky_c, eff_sub;
-
-    acc_p = r1_pz ? {ACC_W{1'b0}} : ({{(ACC_W-PW2){1'b0}}, r1_mp} << 4);
-    esc   = 0;
-    tt    = 0;
-    ss    = 0;
-    tmp2  = {PW2{1'b0}};
-
-    if (r1_zc || r1_pz) begin
-      acc_c  = {ACC_W{1'b0}};
-      stky_c = 1'b0;
-    end else if (r1_tsh >= 16'sd0) begin
-      tt     = (r1_tsh > 16'sd55) ? L_MAX : int'(r1_tsh);
-      esc    = int'(r1_tsh) - tt;        // saturated: rescale the accumulator
-      acc_c  = {{(ACC_W-PW){1'b0}}, r1_sigcn} << tt;
-      stky_c = 1'b0;
-    end else begin
-      ss     = ((0 - int'(r1_tsh)) > PW) ? PW : (0 - int'(r1_tsh));
-      tmp2   = {r1_sigcn, {PW{1'b0}}} >> ss;
-      acc_c  = {{(ACC_W-PW){1'b0}}, tmp2[PW2-1:PW]};
-      stky_c = |tmp2[PW-1:0];
-    end
-
-    eff_sub = r1_sp ^ r1_sc;
     if (!eff_sub) begin
-      n2_sum = acc_p + acc_c;    n2_stky = stky_c; n2_sr = r1_sp;
-    end else if (stky_c) begin
-      // acc_p strictly dominates here; the discarded tail is a borrow
-      n2_sum = acc_p - acc_c - 1; n2_stky = 1'b1;  n2_sr = r1_sp;
-    end else if (acc_p >= acc_c) begin
-      n2_sum = acc_p - acc_c;    n2_stky = 1'b0;   n2_sr = r1_sp;
+      mag_c = sum_add[76:0];
+    end else if (sub_zero) begin
+      // magnitudes cancel in the window; anything below it is the whole result
+      mag_c = 77'd0;
+    end else if (!sub_neg) begin
+      // true addend is (window value + eps), so one extra unit comes off
+      mag_c = sum_sub[76:0] - {76'd0, sticky_c};
     end else begin
-      n2_sum = acc_c - acc_p;    n2_stky = 1'b0;   n2_sr = r1_sc;
+      mag_c = (~sum_sub[76:0]) + 77'd1;
     end
-
-    n2_epx = r1_ep + 16'(esc);
   end
+  // when the addend wins, or the entire result is the sub-window remainder,
+  // the sign follows the addend
+  assign sign_c_res = (eff_sub && (sub_neg || (sub_zero && sticky_c))) ? sc_s : sign_p;
+
+  logic exact_zero_c, zero_sign_c;
+  assign exact_zero_c = (mag_c == 77'd0) && !sticky_c;
+  assign zero_sign_c  = ((a_zero || b_zero) && c_zero && (sign_p == sc_s))
+                        ? sign_p : (rnd_mode == RDN);
+
+  // ---- special values (A4, A5) ----
+  logic mul_inv, prod_inf, addsub_inv, any_nan, spec_v, spec_nan_c, spec_sign_c, inv_c;
+  assign mul_inv     = (a_inf && b_zero) || (b_inf && a_zero);
+  assign prod_inf    = ((a_inf && !b_zero) || (b_inf && !a_zero)) && !a_nan && !b_nan;
+  assign addsub_inv  = prod_inf && c_inf && (sign_p != sc_s);
+  assign any_nan     = a_nan || b_nan || c_nan;
+  assign spec_nan_c  = any_nan || mul_inv || addsub_inv;
+  assign inv_c       = a_snan || b_snan || c_snan || mul_inv || addsub_inv;
+  assign spec_v      = spec_nan_c || prod_inf || c_inf;
+  assign spec_sign_c = prod_inf ? sign_p : sc_s;
+
+  // ---- stage 1 registers ----
+  logic [76:0]        mag_q;
+  logic               sticky_q, sign_q, exact_zero_q, zero_sign_q;
+  logic signed [12:0] anchor_q;
+  logic               spec_v_q, spec_nan_q, spec_sign_q, inv_q;
+  logic [2:0]         rnd_q1;
 
   always_ff @(posedge clk) begin
     if (en) begin
-      r2_sum  <= n2_sum;
-      r2_stky <= n2_stky;
-      r2_sr   <= n2_sr;
-      r2_epx  <= n2_epx;
-      r2_rnd  <= r1_rnd;
-      r2_spv  <= r1_spv;
-      r2_snv  <= r1_snv;
-      r2_sres <= r1_sres;
+      mag_q        <= mag_c;
+      sticky_q     <= sticky_c;
+      sign_q       <= sign_c_res;
+      exact_zero_q <= exact_zero_c;
+      zero_sign_q  <= zero_sign_c;
+      anchor_q     <= anchor_c;
+      spec_v_q     <= spec_v;
+      spec_nan_q   <= spec_nan_c;
+      spec_sign_q  <= spec_sign_c;
+      inv_q        <= inv_c;
+      rnd_q1       <= rnd_mode;
     end
   end
 
-  // ---------------------------------------------------------------------------
-  // Stage 3 : leading-zero count and normalising shift
-  // ---------------------------------------------------------------------------
-  logic [ACC_W-1:0]   n3_norm;
-  logic signed [15:0] n3_exp;
-  logic               n3_szero;
-
-  logic [ACC_W-1:0]   r3_norm;
-  logic signed [15:0] r3_exp;
-  logic               r3_szero, r3_stky, r3_sr;
-  logic [2:0]         r3_rnd;
-  logic               r3_spv, r3_snv;
-  logic [31:0]        r3_sres;
-
+  // ===========================================================================
+  // STAGE 2 -- leading-zero count, normalise, extract significand and G/R/S
+  // ===========================================================================
+  logic [6:0] lead_idx;
   always_comb begin
-    int lzs;
-    lzs      = lzc80(r2_sum);
-    n3_norm  = r2_sum << lzs;
-    n3_exp   = r2_epx - 16'sd4 + 16'(ACC_W - 1 - lzs);
-    n3_szero = (r2_sum == {ACC_W{1'b0}});   // exact cancellation
+    lead_idx = 7'd0;
+    for (int i = 0; i < 77; i++) begin
+      if (mag_q[i]) lead_idx = 7'(i);
+    end
   end
+
+  logic mag_zero;
+  assign mag_zero = (mag_q == 77'd0);
+
+  // biased exponent implied by the leading one
+  logic signed [12:0] exp_full;
+  assign exp_full = anchor_q + $signed({6'd0, lead_idx}) + 13'sd52;
+
+  logic is_norm;
+  assign is_norm = (exp_full >= 13'sd1) && !mag_zero;
+
+  // normal: put the leading one at bit 76.  subnormal: fixed shift so that the
+  // significand LSB lands on 2^-149.  both are proven to lie in [0, 76].
+  logic [6:0] nshift;
+  always_comb begin
+    if (mag_zero)     nshift = 7'd0;
+    else if (is_norm) nshift = 7'd76 - lead_idx;
+    else              nshift = 7'(anchor_q + 13'sd127);
+  end
+
+  logic [76:0] shifted;
+  assign shifted = mag_q << nshift;
+
+  logic [23:0] sig24_c;
+  logic        gbit_c, rbit_c, sbit_c;
+  logic [8:0]  expp_c;
+
+  assign sig24_c = shifted[76:53];
+  assign gbit_c  = shifted[52];
+  assign rbit_c  = shifted[51];
+  assign sbit_c  = (|shifted[50:0]) | sticky_q;
+  assign expp_c  = is_norm ? 9'(exp_full) : 9'd0;
+
+  logic [23:0]  sig24_q;
+  logic         g_q, r_q, s_q;
+  logic [8:0]   expp_q;
+  logic         sign_q2, exact_zero_q2, zero_sign_q2;
+  logic         spec_v_q2, spec_nan_q2, spec_sign_q2, inv_q2;
+  logic [2:0]   rnd_q2;
 
   always_ff @(posedge clk) begin
     if (en) begin
-      r3_norm  <= n3_norm;
-      r3_exp   <= n3_exp;
-      r3_szero <= n3_szero;
-      r3_stky  <= r2_stky;
-      r3_sr    <= r2_sr;
-      r3_rnd   <= r2_rnd;
-      r3_spv   <= r2_spv;
-      r3_snv   <= r2_snv;
-      r3_sres  <= r2_sres;
+      sig24_q       <= sig24_c;
+      g_q           <= gbit_c;
+      r_q           <= rbit_c;
+      s_q           <= sbit_c;
+      expp_q        <= expp_c;
+      sign_q2       <= sign_q;
+      exact_zero_q2 <= exact_zero_q;
+      zero_sign_q2  <= zero_sign_q;
+      spec_v_q2     <= spec_v_q;
+      spec_nan_q2   <= spec_nan_q;
+      spec_sign_q2  <= spec_sign_q;
+      inv_q2        <= inv_q;
+      rnd_q2        <= rnd_q1;
     end
   end
 
-  // ---------------------------------------------------------------------------
-  // Stage 4 : round once, pack, flags  (combinational from the stage-3 registers)
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // STAGE 3 -- round, assemble, flags
+  // ===========================================================================
+  logic rb, st, ru, fsign;
+  assign rb    = g_q;
+  assign st    = r_q | s_q;
+  assign fsign = exact_zero_q2 ? zero_sign_q2 : sign_q2;
+
   always_comb begin
-    logic [ACC_W-1:0]   mask;
-    logic [31:0]        sig_r, sigp, res_n;
-    logic               gbit, stk, ru, carry, res_sub, want_inf;
-    logic signed [15:0] shr_full, qexp, qf, bexp;
-    int                 shr, ts;
-    logic               ovf, nxf;
+    case (rnd_q2)
+      RNE:     ru = rb & (st | sig24_q[0]);
+      RTZ:     ru = 1'b0;
+      RDN:     ru = fsign & (rb | st);
+      RUP:     ru = ~fsign & (rb | st);
+      RMM:     ru = rb;
+      default: ru = 1'b0;
+    endcase
+  end
 
-    shr_full = 16'sd1 - 16'sd127 - r3_exp;           // emin - exp
+  // contiguous encoding: one increment covers both mantissa carry-out and the
+  // subnormal-to-normal step
+  logic [31:0] enc, enc_r;
+  logic [8:0]  expf;
+  assign enc   = {expp_q, sig24_q[22:0]};
+  assign enc_r = enc + {31'd0, ru};
+  assign expf  = enc_r[31:23];
 
-    if (shr_full <= 16'sd0)              shr = 0;
-    else if (shr_full > 16'sd26)         shr = 26;   // beyond this all is sticky
-    else                                 shr = int'(shr_full);
-    qexp = (shr_full > 16'sd0) ? (16'sd1 - 16'sd127) : r3_exp;
+  logic ovf_c, nx_c, uf_c;
+  assign ovf_c = (expf >= 9'd255);
+  assign nx_c  = rb | st | ovf_c;                    // A4b
+  assign uf_c  = (expf == 9'd0) && (rb | st);        // A6
 
-    // ts runs 56..82 against an 80-bit accumulator. A shift past the top
-    // yields zero on its own; only the round-bit select needs a guard, and
-    // above the MSB that bit is zero because r3_norm is normalised.
-    ts    = (ACC_W - PW) + shr;
-    sig_r = 32'(r3_norm >> ts);
-    gbit  = ((ts-1) < ACC_W) ? r3_norm[ts-1] : 1'b0;
-    mask  = {ACC_W{1'b1}} << (ts-1);
-    stk   = (|(r3_norm & ~mask)) | r3_stky;
-
-    ru    = rup_f(r3_rnd, r3_sr, sig_r[0], gbit, stk);
-    sigp  = sig_r + {31'b0, ru};
-    carry = sigp[PW];
-    res_sub = (!carry) && (!sigp[PW-1]);
-
-    qf   = qexp + (carry ? 16'sd1 : 16'sd0);
-    bexp = qf + 16'sd127;
-    ovf  = (bexp >= 16'sd255);
-    nxf  = gbit | stk | ovf;                          // A4b: overflow is inexact
-    want_inf = (r3_rnd == 3'd0) || (r3_rnd == 3'd4) ||
-               ((r3_rnd == 3'd3) && !r3_sr) || ((r3_rnd == 3'd2) && r3_sr);
-
-    if (ovf)
-      res_n = (want_inf ? INF_P : MAXN) | (r3_sr ? SGN_B : 32'd0);
+  logic [31:0] ovf_val, norm_val, fin_val;
+  always_comb begin
+    if ((rnd_q2 == RNE) || (rnd_q2 == RMM) ||
+        ((rnd_q2 == RDN) && fsign) || ((rnd_q2 == RUP) && !fsign))
+      ovf_val = {fsign, 8'hFF, 23'd0};
     else
-      res_n = {r3_sr, (res_sub ? 8'd0 : bexp[7:0]), sigp[22:0]};
+      ovf_val = {fsign, 8'hFE, 23'h7FFFFF};
+  end
+  assign norm_val = {fsign, enc_r[30:23], enc_r[22:0]};
 
-    // ---- output mux -------------------------------------------------------
-    if (r3_spv) begin
-      result         = r3_sres;
-      flag_invalid   = r3_snv;
-      flag_overflow  = 1'b0;
-      flag_underflow = 1'b0;
-      flag_inexact   = 1'b0;
-    end else if (r3_szero) begin                      // exact zero (A5)
-      result         = (r3_rnd == 3'd2) ? SGN_B : 32'd0;
-      flag_invalid   = 1'b0;
-      flag_overflow  = 1'b0;
-      flag_underflow = 1'b0;
-      flag_inexact   = 1'b0;
-    end else begin
-      result         = res_n;
-      flag_invalid   = 1'b0;
-      flag_overflow  = ovf;
-      // A6, exactly as pinned: inexact AND the DELIVERED exponent field is zero
-      flag_underflow = nxf & (res_n[30:23] == 8'd0);
-      flag_inexact   = nxf;
+  always_comb begin
+    if (spec_v_q2)   fin_val = spec_nan_q2 ? 32'h7FC00000 : {spec_sign_q2, 8'hFF, 23'd0};
+    else if (ovf_c)  fin_val = ovf_val;
+    else             fin_val = norm_val;
+  end
+
+  logic [31:0] res_q;
+  logic        finv_q, fovf_q, fuf_q, fnx_q;
+
+  always_ff @(posedge clk) begin
+    if (en) begin
+      res_q  <= fin_val;
+      finv_q <= spec_v_q2 ? inv_q2 : 1'b0;
+      fovf_q <= spec_v_q2 ? 1'b0   : ovf_c;
+      fuf_q  <= spec_v_q2 ? 1'b0   : uf_c;
+      fnx_q  <= spec_v_q2 ? 1'b0   : nx_c;
     end
   end
+
+  assign result         = res_q;
+  assign flag_invalid   = finv_q;
+  assign flag_overflow  = fovf_q;
+  assign flag_underflow = fuf_q;
+  assign flag_inexact   = fnx_q;
 
 endmodule
+
+/* verilator lint_on UNUSED */
+/* verilator lint_on DECLFILENAME */

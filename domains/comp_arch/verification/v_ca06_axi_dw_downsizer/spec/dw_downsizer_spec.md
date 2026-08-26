@@ -45,6 +45,22 @@ Throughout: **`beat_bytes(size)` = 2^`size`**, and
   final upstream response beat transfers. At most `MAX_READS` reads may be
   outstanding at once; a further read address need not be accepted until one
   retires.
+- **A5 — an offered beat is not withdrawn.** On every channel of both ports,
+  once a `valid` is asserted it remains asserted, with its payload unchanged,
+  until the corresponding `ready` is seen.
+
+  `valid` **shall not depend combinationally on `ready`.** A unit that offers
+  only into a ready sink satisfies the first sentence by never entering it, and
+  deadlocks against a consumer that waits for `valid` before asserting `ready`.
+  The second sentence is stated because the first is otherwise unfalsifiable.
+  *Authority: AMBA AXI4 — a source may not withdraw an offer, and may not wait
+  for the sink before making one. The anchor asserts the same property
+  internally: `rr_arb_tree.sv:391`, "it is disallowed to deassert unserved
+  request signals when LockIn is enabled".*
+  *Measured: on all five channels the antecedent is entered and the payload
+  holds. The count per channel is REPORTED and is not a pass condition —
+  whether a conforming design's `valid` coincides with a stalled `ready` is its
+  own timing, not the testbench's.*
 
 ---
 
@@ -96,7 +112,17 @@ Let `size` and `len` be the upstream request's, and let
 ## 3. Burst types that are refused
 
 - **C1.** A **`WRAP`** burst is refused.
+
+  *Which bursts are refused is observed through the RESPONSE to a refusal,
+  so a violation of this clause is **reported under C4**. A submission that
+  checks C4 is credited with this clause; that is deliberate and recorded
+  here so it is visible rather than discovered from a failure message.*
 - **C2.** A **`FIXED`** burst of **more than one beat** (`len != 0`) is refused.
+
+  *Which bursts are refused is observed through the RESPONSE to a refusal,
+  so a violation of this clause is **reported under C4**. A submission that
+  checks C4 is credited with this clause; that is deliberate and recorded
+  here so it is visible rather than discovered from a failure message.*
 - **C3.** A `FIXED` burst of **exactly one beat** (`len == 0`) is **accepted** and
   converted under §2 like any other.
   *The verdict turns on a single beat: `FIXED len=0` is served, `FIXED len=1` is
@@ -132,16 +158,15 @@ Let `size` and `len` be the upstream request's, and let
   and low on every other.
 - **D5 — response.** Absent a refusal (§3) and absent a downstream error, every
   upstream `R` beat carries `OKAY`.
-- **D6 — downstream error precedence, and it is STICKY.** Number the upstream
-  beats 0, 1, 2, … Each is built from a group of downstream beats. An upstream
-  beat carries an error response if any downstream beat in **its own group, or in
-  any earlier group**, carried one. Equivalently: once an error occurs it
-  persists to the end of the transaction, and beats before it are unaffected.
+- **D6 — downstream error precedence.** Number the upstream beats 0, 1, 2, …
+  Each is built from a group of downstream beats. An upstream beat carries an
+  error response if any downstream beat in **its own group** carried one. Beats
+  whose own group was error-free are unconstrained by this clause — see **L7**.
 
   *Measured, on a two-beat upstream read of eight downstream beats: an error on
-  downstream beat 0 or 3 gives `SLVERR SLVERR`; an error on the LAST downstream
-  beat gives `OKAY SLVERR`. It is not "all beats error", and a testbench that
-  requires that rejects correct hardware.*
+  downstream beat 0 or 3 puts the error on upstream beat 0; an error on the LAST
+  downstream beat puts it on upstream beat 1. It is not "all beats error", and a
+  testbench that requires that rejects correct hardware.*
 - **D7 — the error code is preserved.** `SLVERR` upstream for a downstream
   `SLVERR`, `DECERR` for a `DECERR`. Neither is normalised to the other.
   *Measured: `DECERR` on a downstream beat produces `DECERR` upstream.*
@@ -225,8 +250,31 @@ Let `size` and `len` be the upstream request's, and let
   aligned block; `FIXED` and `INCR` describe the same transfer, so neither is
   required. Do not check it. B4 binds only where the downstream burst has more
   than one beat.
+- **L7 — whether a downstream read error PERSISTS onto later upstream beats.**
+  Once an upstream beat has carried an error under D6, a conforming design may
+  carry it on every later beat of the transaction, or may return to `OKAY` on a
+  beat whose own group was error-free. Both are legal. **Do not require either**,
+  in any direction.
 
-These six are the whole of the latitude in this contract. Everything above is
+  *This was written into D6 as "and it is STICKY" because the reference is
+  sticky and that is what was measured. It is sticky ONLY while the downstream
+  slave returns narrow beats back-to-back. The mechanism is an accumulated
+  response register that is not cleared while the pipeline is full and IS
+  cleared when the pipeline bubbles — so the persistence is a property of the
+  unit being busy, not of the contract. Measured with a downstream slave that
+  simply presents its next narrow beat N cycles later, which any slave may do:*
+
+  | idle cycles between downstream `R` beats | reference |
+  |---|---|
+  | 0, 1, 2 | persists |
+  | 3, 4, 8 | does **not** persist |
+
+  *At every depth the error appears on the beat that carried it — D6 itself
+  never fails. The independent implementation in `dut2/` persists at every
+  depth, which is equally legal. A submission that requires persistence is
+  asserting a property of one pipeline's occupancy and calling it a contract.*
+
+These seven are the whole of the latitude in this contract. Everything above is
 exact.
 
 ---

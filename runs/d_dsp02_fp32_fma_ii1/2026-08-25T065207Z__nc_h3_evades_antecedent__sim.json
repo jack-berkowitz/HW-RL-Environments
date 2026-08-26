@@ -1,0 +1,12 @@
+{
+  "build_error": "12 error(s); first: nc_h3_evades_antecedent.sv:73:5: error: unknown class or package 'fpnew_pkg' ",
+  "build_status": "slang_rejected",
+  "git_sha": "84fa595e75fcd0303544528e41fe259b133a864a-dirty",
+  "kind": "sim",
+  "label": "nc_h3_evades_antecedent",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/43a92055-d290-4ffc-97a9-82b348bec2e9/scratchpad/nc_h3_evades_antecedent.sv",
+  "submission_sha256_16": "c55b1d5bcc8f3037",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "8420f4393a0a930d",
+  "timestamp_utc": "2026-08-25T06:52:07Z"
+}

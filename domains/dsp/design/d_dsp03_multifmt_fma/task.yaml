@@ -340,3 +340,150 @@ scored_metrics:
   - {metric: latency_min,                 label: "lat.min", role: choice}
   - {metric: latency_max,                 label: "lat.max"}  # worst case, not a choice
   - {metric: throughput_ops_per_1000cyc,  label: "ops/1k",  role: capability}
+
+# ---------------------------------------------------------------------------
+# CONTROL DECLARATION -- inbox/CONTROL_ENUMERATION.contract.md, revision 2.
+# DECLARED, NOT GLOBBED: the directory is where they live, this is what they are.
+# `measured_by` is mandatory on this side because most of these verdicts are hand
+# runs, and a hand run is a measurement whose instrument was never wired -- the
+# defect the contract exists to close. It is stated per control rather than per
+# task so a mixed set cannot read as uniform.
+# ---------------------------------------------------------------------------
+controls:
+  - file: controls/nc_a_stuck_output.sv
+    kind: negative
+    expect: fail
+    clause: any
+    measured_by: hand_run
+    result: "0/2 -- vec 0/1, FP32 scalar: result 0 against a non-zero expected value"
+    note: >
+      WRONG RESET POLARITY WAS TRIED FIRST AND PASSED AT BOTH WIDTHS. Not a hole
+      in the checker: the reference binds NumPipeRegs=0 and is purely
+      combinational, so it has no state for a reset to hold. The control was
+      VACUOUS, not the checker blind -- and that control is standard equipment
+      here and is inert against every combinational DUT in this project.
+  - file: controls/nc_b_two_lanes.sv
+    kind: negative
+    expect: PER_CONFIG            # SCHEMA GAP -- see controls_schema_gap below
+    passes_at: ["WIDTH=32"]
+    fails_at:  ["WIDTH=64"]
+    clause: P1
+    exclusive: true
+    measured_by: hand_run
+    result: "1/2 -- capability-reduced; only the lane count can fail (rule 16)"
+  - file: controls/nc_c_flush_to_zero.sv
+    kind: negative
+    expect: fail
+    clause: A3
+    exclusive: true
+    measured_by: hand_run
+    result: "0/2 -- 158/299/271 subnormal results per format at WIDTH=32, 284/358/265 at WIDTH=64"
+  - file: controls/nc_d_band_unbounded_tininess.sv
+    kind: negative
+    expect: fail
+    clause: A7
+    exclusive: true
+    measured_by: scored_path
+    result: >
+      0/2 -- fails at BOTH widths on flags. First failure at vec 6300, fmt=0,
+      rnd=0: flags 00011 against the expected value. One distinct failure across
+      both configurations.
+    result_produced_on: 2026-08-25
+    note: >
+      DECLARED WITH AN EMPTY RESULT AND THE RUNNER PRODUCED ONE, which is what the
+      empty field was for. It rendered as a verdict the runner must produce rather
+      than as a control that passed -- the one state that cannot be mistaken for
+      evidence -- and then the verdict was produced. The field did its job by
+      being visibly incomplete.
+
+controls_schema_gap:
+  field: "expect: PER_CONFIG with passes_at / fails_at"
+  status: PROPOSED EXTENSION -- not in contract revision 2
+  why: >
+    The contract's `expect:` is scalar, pass or fail. FOUR OF THE TWENTY-FIVE
+    DESIGN CONTROLS HAVE A CONFIG-DEPENDENT VERDICT BY CONSTRUCTION, because that
+    is what a CAPABILITY-REDUCED control is: it is correct at the setting whose
+    capability it lacks and wrong at the setting that needs it.
+      d_ai01 nc_g_height_blind_depth   PASS at HEIGHT=4,  FAIL at HEIGHT=8
+      d_ca03 nc_g_itlb_one_entry       PASS at ITLB=16,   FAIL at ITLB=1
+      d_dsp03 nc_b_two_lanes           PASS at WIDTH=32,  FAIL at WIDTH=64
+      d_nw03 nc_b_outputs_serialised   FAILS only at S_COUNT=M_COUNT=4
+    Declaring any of them `expect: fail` makes the runner report a false mismatch
+    on every configuration where the control is CORRECT. Declaring `expect: pass`
+    inverts it. Neither is the fact.
+  why_it_matters_beyond_bookkeeping: >
+    A capability-reduced control's whole evidentiary value is the SPLIT -- it
+    passes where the capability is not needed and fails where it is, and that pair
+    is what proves the capability is scored. A schema that cannot express the
+    split cannot express the evidence.
+  sent_to: AGENT-VERIF-A2, for contract revision 3
+
+controls_unverified:
+  note: >
+    RESOLVED 2026-08-25 -- the set has no unverified control now.
+    nc_d_band_unbounded_tininess was declared with an EMPTY result rather than
+    omitted, so it rendered as a verdict the runner must produce rather than as a
+    control that passed. It was then run: 0/2, failing at both widths on flags.
+    Kept as a record of the mechanism working -- an empty field that is visibly
+    empty is the one state that cannot be mistaken for evidence, and it was the
+    reason this control got run at all.
+
+# ---------------------------------------------------------------------------
+# HANDSHAKE MIRROR DECISION -- taken ACROSS FOUR TASKS AT ONCE, 2026-08-25.
+# Recorded identically in all four so a reader of any one sees the whole shape.
+# ---------------------------------------------------------------------------
+handshake_mirror_decision:
+  decided_on: 2026-08-25
+  the_question: >
+    A stability clause of the form "once valid is asserted it stays asserted
+    until the transfer completes" is satisfiable by NEVER OFFERING -- a beat or
+    result never presented to a stalled consumer cannot be withdrawn from one. So
+    a design may empty the antecedent instead of honouring the consequent. Does
+    the contract forbid that, permit it, or say nothing?
+  why_it_was_decided_together: >
+    SILENCE IS THE ONE STATE THAT IS NOT A DECISION. Before this, d_dsp02 and
+    d_ca01 had the gap, d_dsp03 had made the opposite decision deliberately, and
+    d_nw03 was simply silent. Deciding task by task would have produced four
+    positions that looked like an inconsistency; deciding once produces three
+    that forbid it and one that permits it FOR A STATED REASON, which is an
+    intentional asymmetry a reader can check.
+  outcome:
+    d_dsp02: FORBIDS -- clause H1b, landed 2026-08-25
+    d_ca01:  FORBIDS -- clause R1b, landed 2026-08-25
+    d_nw03:  FORBIDS -- clause R1b, landed 2026-08-25
+    d_dsp03: PERMITS -- clause L4, THE DELIBERATE EXCEPTION, unchanged
+  d_dsp03_is_the_exception_and_here_is_its_reason: >
+    QUOTED RATHER THAN SUMMARISED, because the point is that it was decided and
+    not overlooked. d_dsp03's L4 reads:
+    .
+      "L4. `in_ready_o` MAY DEPEND COMBINATIONALLY ON `in_valid_i`, and
+           `out_valid_o` may depend combinationally on `out_ready_i`. The harness
+           drives neither from the other, so a design that gates either way
+           cannot deadlock against it. A fully combinational unit is conformant."
+    .
+    The reason is task-specific and sound: d_dsp03's reference binds
+    NumPipeRegs=0 and is purely combinational, so requiring a registered valid
+    would exclude the reference's own shape. The other three tasks all have
+    buffering designs where the deadlock L4 rules out is reachable.
+  the_consequence_d_dsp03_carries: >
+    STATED SO IT IS NOT REDISCOVERED AS A DEFECT. L4 licenses the construction
+    that EMPTIES d_dsp03's own output stability clause, so on that task the
+    stability sentence is decorative rather than wrong -- a design gating
+    out_valid_o on out_ready_i never has valid high while ready is low, and it is
+    CONFORMING. Two coherent resolutions remain open and neither is taken here:
+    narrow L4 to the input side, or drop the output stability sentence as
+    non-normative. Doing neither leaves a clause that reads as a requirement and
+    is not one.
+  evidence_base: >
+    Every one of the three FORBIDS clauses cites a control that PASSED the
+    contract as it stood while driving the clause's firing count to zero:
+    nc_h3_evades_antecedent (d_dsp02), nc_r1_evades_antecedent (d_ca01, 0/16),
+    nc_r1_evades_antecedent (d_nw03, 0/8). None was declared unfalsifiable by
+    reading; F86's own founding instance was, and that is recorded in F86.
+  enforceability_caveat: >
+    ALL THREE CLAUSES FORBID A COMBINATIONAL DEPENDENCY, which no testbench here
+    can observe directly -- it sees valid low and cannot distinguish "gated on
+    ready" from "nothing ready yet". The condition floor catches the construction
+    but reports it as "the clause was never exercised", not as a violation of the
+    mirror clause. Enforceable by inspection and by control, only partially by
+    the harness. This is in each task's candidates README where a grader meets it.

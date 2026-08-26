@@ -259,3 +259,69 @@ stimulus_rebaseline:
     re-baseline. Regeneration is byte-identical, so this changed the guarantees
     and not the content. The runner's header also said "the same eight defects"
     where there are ten; it now derives the count.
+
+emittability_closed:
+  date: 2026-08-25
+  was: >
+    15 candidate clauses; four of them real gaps. `grep -c ts_step_o tb/` was 1
+    -- the port map. A4 and S3 describe an output the testbench connected and
+    never read (measured: high on 35 cycles across 4 set windows, so not a dead
+    signal). S1 and S2 were worse: set_ts96/set_ts64 drove the set and raised
+    `settle`, which suppresses the increment checker, so a design that set the
+    base to ANY value passed provided it kept incrementing legally afterwards.
+  now:
+    A4: >
+      An equality, cycle for cycle: outside a set's window ts_step_o must EQUAL
+      adj_active_o. Not correlated, not counted.
+    S3: >
+      Checked PER SET, not per run. The global identity
+      steps == adj_active cycles + sets is satisfied by a design that raises two
+      steps for one set and none for the next, so it is not the clause.
+    S1_S2: >
+      The base is compared against the value written, allowing only the
+      increments reachable in the sampling window. A wrong value misses that
+      interval by orders of magnitude, not by a beat.
+  controls_that_must_fail:
+    ts_step_tied_low:   FAIL -- 24 x A4
+    ts_step_tied_high:  FAIL -- 24 x A4
+    set_never_delivered:
+      result: FAIL -- 3 x S1, 3 x S3, and 1 x W1
+      exclusive_as_of: null
+      exclusive_note: >
+        DELIBERATELY NOT EXCLUSIVE, and not merely undated. The W1 is collateral:
+        this control's blast radius exceeds one clause, so it licenses "the
+        checker refuses" and NOT "it refuses on this clause alone". A date would
+        imply the narrower claim was made and measured; it was not made.
+    ts_step_controls_exclusive_as_of: >
+      2026-08-25 -- ts_step tied low and tied high each fail on A4 and nothing
+      else. Read as "exclusive with respect to the checks this task had on that
+      date": adding a check can retroactively falsify an isolation claim made in
+      good faith, and the claim reads as verified the whole time.
+    why_needed: >
+      No mutant in this task exercises any of the four. A checker whose refusal
+      is unverified has not been shown to fire, and a passing run cannot tell
+      the difference.
+    measured_by: hand_run
+  measured: >
+    golden PASS, dut2 PASS, conformant PASS, gate rejected, 10/10 killed.
+    Emittability candidates 15 -> 11. tb/ is not in task_text_hash: no hash
+    moved.
+
+must_fire:
+  reference: [nw04.set_windows, nw04.ts_step, v_nw04.cov_adjusts, v_nw04.cov_drifts, v_nw04.cov_neg_adjusts, v_nw04.cov_neg_drifts, v_nw04.cov_ns_drifts, v_nw04.cov_periods, v_nw04.cov_reset_mid, v_nw04.cov_sets, v_nw04.cov_step_windows, v_nw04.cov_wrap_driven]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20). Keyed BY
+  VARIANT: a negative-control run contains no conformant perturbations and vice
+  versa. Declared rather than globbed, so a deleted artefact is a refusal
+  instead of a shorter list.
+must_fire_prefix_note: >
+  Two prefixes on purpose, and it was nearly a defect. The ts_step and
+  set_windows emitters were hand-written as `nw04.` before the mechanical sweep
+  added `v_nw04.` ones. The sweep keyed its declaration off the FIRST name in
+  the log, read `nw04`, matched no task, and wrote this task an EMPTY list with
+  a note saying it has no floors -- which is false and describes v_ca05. Caught
+  by the count disagreeing with the run. Left as two prefixes with this note
+  rather than renamed, because a rename would move names a declaration already
+  points at, and the disagreement is the thing worth recording.

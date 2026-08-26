@@ -1,0 +1,228 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 8,
+  "configs_total": 8,
+  "coverage": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "928 968"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "928 968"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "1079 1119"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "1079 1119"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "578 624 588 572"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "578 624 588 572"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "879 906 860 849"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "879 906 860 849"
+    }
+  },
+  "git_sha": "40459d5f1786b6bd45a729ac0b8a7d455c6e8d1a-dirty",
+  "kind": "sim",
+  "label": "chat",
+  "metrics": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "12",
+      "beats": "see fields",
+      "beats_accepted": "8583",
+      "beats_cycles": "7756",
+      "beats_delivered": "8583",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "843",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "1907",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "12",
+      "beats": "see fields",
+      "beats_accepted": "8583",
+      "beats_cycles": "7756",
+      "beats_delivered": "8583",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "843",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "1907",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "16",
+      "beats": "see fields",
+      "beats_accepted": "9993",
+      "beats_cycles": "8041",
+      "beats_delivered": "9993",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "843",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2220",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "16",
+      "beats": "see fields",
+      "beats_accepted": "9993",
+      "beats_cycles": "8041",
+      "beats_delivered": "9993",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "843",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2220",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "14",
+      "beats": "see fields",
+      "beats_accepted": "10688",
+      "beats_cycles": "7834",
+      "beats_delivered": "10688",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "977",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2374",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "14",
+      "beats": "see fields",
+      "beats_accepted": "10688",
+      "beats_cycles": "7834",
+      "beats_delivered": "10688",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "977",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2374",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "36",
+      "beats": "see fields",
+      "beats_accepted": "15926",
+      "beats_cycles": "8129",
+      "beats_delivered": "15926",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1695",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "3536",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "36",
+      "beats": "see fields",
+      "beats_accepted": "15926",
+      "beats_cycles": "8129",
+      "beats_delivered": "15926",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1695",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "3536",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "46"
+    }
+  },
+  "per_config": [
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "candidates/d_nw03/chat.sv",
+  "submission_sha256_16": "893a3310fbf5982f",
+  "task": "d_nw03_axis_switch_oq",
+  "task_text_hash": "514a316a4889dd72",
+  "timestamp_utc": "2026-08-25T06:51:08Z"
+}

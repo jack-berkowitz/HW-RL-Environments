@@ -1,4 +1,27 @@
 # NOTE: DESIGN_CATALOG.md and VERIFICATION_CATALOG.md, referenced below, were
+
+# CORRECTED 2026-08-26 AGAINST WHAT THE BUILDS ACTUALLY READ.
+#
+# Every `tasks:` list in this file named tasks in a SUPERSEDED NAMESPACE --
+# ai_v03, ca_d01, nw_d02 and 36 others. ZERO of the 39 distinct names matched a
+# real task directory; the scheme moved to d_ai01 / v_ca03 / d_nw01 and this file
+# did not. A repo-to-task mapping in a dead namespace is not a weak mapping, it
+# is none, and this is the artefact a licence review would be run against.
+#
+# The lists are now derived from the only thing that decides what is actually
+# distributed: the /work/refs/ paths in each task's orfs/config.mk. A repo no
+# config.mk reads carries `tasks: []` and says so, rather than naming a task that
+# does not exist -- an empty list that is CORRECT is a different artefact from a
+# list that is wrong, and only the first is legible.
+#
+# Two repos were consumed and never declared at all: hci and tech_cells_generic,
+# both read by d_ai01. redmule listed three files where the build reads six.
+# nvdla/hw globbed nv_small/, a directory that does not exist.
+#
+# WHAT THIS IS NOT. It records what is consumed and what each LICENSE file calls
+# itself. It makes no judgement about whether any of it may be distributed, and
+# `expected_licence` is a transcription rather than a conclusion. That review is
+# still owed and is not a thing this file can discharge.
 # consolidated into TASK_CATALOG.md and deleted. Their content is recoverable at
 # git c7609fa. The references below are left as written because this file is the
 # Phase 0 record of what was vendored and why -- rewriting it would falsify
@@ -43,7 +66,7 @@ repos:
 
   # ---------------------------------------------------------------- basejump_stl
   - repo: https://github.com/bespoke-silicon-group/basejump_stl
-    tasks: [ca_d01, ca_d03, ca_d05, nw_d05, ca_v06]
+    tasks: [d_ca01]
     expected_licence: BSD-3
     mode: vendor
     files:
@@ -70,7 +93,7 @@ repos:
 
   # ---------------------------------------------------------------- common_cells
   - repo: https://github.com/pulp-platform/common_cells
-    tasks: [ca_v01, ca_v02, ca_v03]
+    tasks: [d_ai01, d_ca03, d_ca04, d_dsp02, d_dsp03, d_nw01]
     expected_licence: SHL-0.51
     mode: vendor
     files:
@@ -90,7 +113,7 @@ repos:
 
   # ------------------------------------------------------------------ pulp axi
   - repo: https://github.com/pulp-platform/axi
-    tasks: [nw_d02, nw_v01, nw_v02, nw_v03]
+    tasks: [d_nw01]
     expected_licence: SHL-0.51
     mode: vendor
     files:
@@ -115,7 +138,7 @@ repos:
 
   # --------------------------------------------------------------------- cvfpu
   - repo: https://github.com/pulp-platform/cvfpu
-    tasks: [dsp_d04, dsp_v01, dsp_v02, dsp_v03]
+    tasks: [d_ai01, d_dsp02, d_dsp03]
     expected_licence: SHL-0.51 / Apache-2.0
     mode: vendor
     files:
@@ -138,7 +161,7 @@ repos:
 
   # -------------------------------------------------------------- hwpe-stream
   - repo: https://github.com/pulp-platform/hwpe-stream
-    tasks: [ai_d04, ai_v02]
+    tasks: [d_ai01]
     expected_licence: SHL-0.51
     mode: vendor
     files:
@@ -159,7 +182,7 @@ repos:
 
   # ---------------------------------------------------------------------- ne16
   - repo: https://github.com/pulp-platform/ne16
-    tasks: [ai_d02]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: SHL-0.51
     mode: vendor
     files:
@@ -176,13 +199,18 @@ repos:
 
   # ------------------------------------------------------------------- redmule
   - repo: https://github.com/pulp-platform/redmule
-    tasks: [ai_v03]
+    tasks: [d_ai01]
     expected_licence: SHL-0.51
     mode: vendor
     files:
-      - rtl/redmule_ctrl.sv                                # ai_v03
-      - rtl/redmule_scheduler.sv                           # ai_v03
+      # THE LIST WAS THREE FILES AND NAMED A TASK THAT NO LONGER EXISTS.
+      # d_ai01 builds SIX, of which only redmule_pkg.sv was listed.
       - rtl/redmule_pkg.sv
+      - rtl/redmule_fma.sv
+      - rtl/redmule_noncomp.sv
+      - rtl/redmule_ce.sv
+      - rtl/redmule_row.sv
+      - rtl/redmule_engine.sv
     deps_anticipated:
       - hwpe-stream, hwpe-ctrl, common_cells, cf_math_pkg
     notes: >
@@ -193,7 +221,7 @@ repos:
 
   # ---------------------------------------------------------------------- idma
   - repo: https://github.com/pulp-platform/idma
-    tasks: [ai_v01]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: SHL-0.51
     mode: vendor
     files:
@@ -209,14 +237,43 @@ repos:
       the network, that is a Phase 0 blocker for ai_v01 and I report it here
       rather than discovering it in Part 2. ai_v01 may need to be cut.
 
-  # ------------------------------------------------------------------ nvdla/hw
-  - repo: https://github.com/nvdla/hw
-    tasks: [ai_v04, ai_d01, ai_d02]
-    expected_licence: NVDLA Open HW
+  # --------------------------------------------------------------------- hci
+  # CONSUMED AND NEVER DECLARED until 2026-08-26. d_ai01 builds hci_package.sv,
+  # and nothing in this file said so -- a licence review run against this
+  # manifest would have missed the repo entirely.
+  - repo: https://github.com/pulp-platform/hci
+    tasks: [d_ai01]
+    expected_licence: SHL-0.51        # refs/hci/LICENSE: Solderpad Hardware License v0.51
     mode: vendor
     files:
-      - nv_small/vmod/nvdla/sdp/**                         # ai_v04 (DUT, vendored)
-      - nv_small/vmod/nvdla/cmac/**                        # ai_d02 cross-check
+      - rtl/common/hci_package.sv
+    notes: >
+      Pulled in by redmule's package chain rather than chosen. d_ai01's
+      VERILOG_FILES lists it explicitly; it is not optional.
+
+  # ------------------------------------------------------ tech_cells_generic
+  # CONSUMED AND NEVER DECLARED until 2026-08-26, same as hci.
+  - repo: https://github.com/pulp-platform/tech_cells_generic
+    tasks: [d_ai01]
+    expected_licence: SHL-0.51        # refs/tech_cells_generic/LICENSE
+    mode: vendor
+    files:
+      - src/rtl/tc_clk.sv
+      - src/deprecated/cluster_clk_cells.sv
+    notes: >
+      Clock-cell primitives. cluster_clk_cells.sv is under src/deprecated/ in
+      upstream and is still the file the build reads.
+
+  # ------------------------------------------------------------------ nvdla/hw
+  - repo: https://github.com/nvdla/hw
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
+    expected_licence: NVIDIA Open NVDLA License and Agreement v1.0   # as refs/nvdla_hw/LICENSE names itself
+    mode: vendor
+    files:
+      # PATHS CORRECTED: the vendored tree is refs/nvdla_hw/vmod/, and no
+      # nv_small/ directory exists, so the old globs matched nothing at all.
+      - vmod/nvdla/sdp/**                                  # d_ai04 anchor
+      - vmod/nvdla/cmac/**
     deps_anticipated:
       - nv_small/vmod/include/**, nv_small/spec/defs/**
     notes: >
@@ -229,7 +286,7 @@ repos:
 
   # ------------------------------------------------------------- verilog-axis
   - repo: https://github.com/alexforencich/verilog-axis
-    tasks: [nw_d01, nw_v05]
+    tasks: [d_nw03]
     expected_licence: MIT
     mode: vendor
     files:
@@ -240,7 +297,7 @@ repos:
 
   # --------------------------------------------------------- verilog-ethernet
   - repo: https://github.com/alexforencich/verilog-ethernet
-    tasks: [nw_d03, nw_d04, nw_v04, nw_v06]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: MIT
     mode: vendor
     files:
@@ -265,7 +322,7 @@ repos:
 
   # ---------------------------------------------------------------------- cva6
   - repo: https://github.com/openhwgroup/cva6
-    tasks: [ca_d02, ca_d04, ca_d05, ca_d06, ca_v04, ca_v05, ca_v07]
+    tasks: [d_ca03]
     expected_licence: Apache-2.0 / SHL
     mode: vendor
     files:
@@ -297,7 +354,7 @@ repos:
 
   # ----------------------------------------------------------------- opentitan
   - repo: https://github.com/lowRISC/opentitan
-    tasks: [ca_d07]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: Apache-2.0
     mode: cross_check_only
     files:
@@ -317,7 +374,7 @@ repos:
 
   # ------------------------------------------------------------------ ZipCPU x2
   - repo: https://github.com/ZipCPU/cordic
-    tasks: [dsp_d01]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: GPL — verify in tree
     mode: model_of_record
     files:
@@ -332,7 +389,7 @@ repos:
       Python CORDIC model + vectors. dsp_d01 is Class B.
 
   - repo: https://github.com/ZipCPU/dspfilters
-    tasks: [dsp_d02]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: GPL — verify in tree
     mode: model_of_record
     files:
@@ -347,7 +404,7 @@ repos:
 
   # --------------------------------------------------- ca_d08 trace cross-check
   - repo: https://github.com/olofk/serv
-    tasks: [ca_d08]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: ISC
     mode: cross_check_only
     vendored_to: null
@@ -358,7 +415,7 @@ repos:
       reference (bit-serial; catalog says so explicitly).
 
   - repo: https://github.com/darklife/darkriscv
-    tasks: [ca_d08]
+    tasks: []                    # NOT CONSUMED by any orfs/config.mk today
     expected_licence: BSD
     mode: cross_check_only
     vendored_to: null

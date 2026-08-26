@@ -105,25 +105,82 @@ module dwc_c1_extra_latency #(
   // The valid presented to the golden and the ready presented outward carry the
   // same gate, so no cycle exists in which one side believes a transfer
   // happened and the other does not.
-  logic g_awready, g_arready, g_wready, g_bready, g_rready;
-  assign s_awready = g_awready & slow;
-  assign s_arready = g_arready & slow;
-  assign s_wready  = g_wready  & slow;
-  assign m_bready  = g_bready  & slow;
-  assign m_rready  = g_rready  & slow;
+  //
+  // AND HELD ONCE OPEN. A bare `valid & gate` is a WITHDRAWAL whenever the gate
+  // falls on a cycle where the golden has an offer in hand and has not yet
+  // taken it -- which is exactly what A5 forbids, and it is not a theoretical
+  // worry: the anchor asserts the same property internally, and closing the
+  // gate on `m_bvalid` mid-arbitration fires it --
+  //     rr_arb_tree.sv:391  "it is disallowed to deassert unserved request
+  //                          signals when LockIn is enabled".
+  // So each gate may FALL only while nothing is pending. `hold_*` is a flop, so
+  // the valid presented to the golden never depends combinationally on its
+  // ready. Holding costs this perturbation none of the slowness it exists to
+  // show -- it still refuses to BEGIN a transfer for the whole closed phase on
+  // every intake channel. What it gives up is the right to take an offer back,
+  // which no conforming design has.
+  //
+  // THE W CHANNEL IS NOT GATED AT ALL, and no hold could rescue it. Stalling
+  // `s_wvalid` starves a downstream burst the golden has already committed to,
+  // and the golden responds by withdrawing `m_wvalid` -- an A5 violation on the
+  // wrapper's own master port whose author is the golden, not the wrapper.
+  // Slow address intake and slow response intake demonstrate L1/L2 completely.
+  //
+  // THE R GATE IS THE DEEPEST STALL IN THE TASK, AND THAT IS ITS JOB.
+  // Until the double drive below was repaired, `g_rready` was connected to
+  // nothing and this wrapper's R channel was never throttled at all. Repairing
+  // it stalled the downstream response path for the first time and immediately
+  // failed the task's own D6 -- because D6 required a downstream read error to
+  // PERSIST onto later upstream beats, and the reference only persists while
+  // its pipeline stays full. Three idle cycles between narrow R beats is the
+  // threshold: 0/1/2 persist, 3/4/8 do not, dut2 persists at every depth.
+  // D6 is now ownership-only and persistence is L7, declared-open latitude.
+  // This gate at four cycles is what keeps that honest -- it is the only
+  // stimulus in the task that leaves the reference's fast path at all.
+  logic g_awready, g_arready, g_bready, g_rready;
+  logic hold_aw, hold_ar, hold_b, hold_r;
+  wire  gate_aw = slow | hold_aw;
+  wire  gate_ar = slow | hold_ar;
+  wire  gate_b  = slow | hold_b;
+  wire  gate_r  = slow | hold_r;
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) begin
+      hold_aw <= 1'b0; hold_ar <= 1'b0; hold_b <= 1'b0; hold_r <= 1'b0;
+    end else begin
+      hold_aw <= (s_awvalid & gate_aw) & ~g_awready;
+      hold_ar <= (s_arvalid & gate_ar) & ~g_arready;
+      hold_b  <= (m_bvalid  & gate_b ) & ~g_bready;
+      hold_r  <= (m_rvalid  & gate_r ) & ~g_rready;
+    end
+  assign s_awready = g_awready & gate_aw;
+  assign s_arready = g_arready & gate_ar;
+  assign m_bready  = g_bready  & gate_b;
+  assign m_rready  = g_rready  & gate_r;
   dw_downsizer i_g (
     .clk_i, .rst_ni,
-    .s_awid, .s_awaddr, .s_awlen, .s_awsize, .s_awburst, .s_awvalid(s_awvalid & slow), .s_awready(g_awready),
-    .s_wdata, .s_wstrb, .s_wlast, .s_wvalid(s_wvalid & slow), .s_wready(g_wready),
+    .s_awid, .s_awaddr, .s_awlen, .s_awsize, .s_awburst, .s_awvalid(s_awvalid & gate_aw), .s_awready(g_awready),
+    .s_wdata, .s_wstrb, .s_wlast, .s_wvalid, .s_wready,
     .s_bid, .s_bresp, .s_bvalid, .s_bready,
-    .s_arid, .s_araddr, .s_arlen, .s_arsize, .s_arburst, .s_arvalid(s_arvalid & slow), .s_arready(g_arready),
+    .s_arid, .s_araddr, .s_arlen, .s_arsize, .s_arburst, .s_arvalid(s_arvalid & gate_ar), .s_arready(g_arready),
     .s_rid, .s_rdata, .s_rresp, .s_rlast, .s_rvalid, .s_rready,
     .m_awid, .m_awaddr, .m_awlen, .m_awsize, .m_awburst, .m_awvalid, .m_awready,
     .m_wdata, .m_wstrb, .m_wlast, .m_wvalid, .m_wready,
-    .m_bid, .m_bresp, .m_bvalid(m_bvalid & slow), .m_bready(g_bready),
+    .m_bid, .m_bresp, .m_bvalid(m_bvalid & gate_b), .m_bready(g_bready),
     .m_arid, .m_araddr, .m_arlen, .m_arsize, .m_arburst, .m_arvalid, .m_arready,
-    .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready
+    // `.m_rready` bare bound the GOLDEN'S OUTPUT to the wrapper's `m_rready`,
+    // which the assign above already drives -- a DOUBLE DRIVE, with `g_rready`
+    // connected to nothing. The R half of "extra latency" was never slow.
+    .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid(m_rvalid & gate_r), .m_rready(g_rready)
   );
+  // DID THIS CHANNEL ACTUALLY STALL? Measured AT THE PORTS, not at the gate, so
+  // the number is the same question whatever the implementation is -- and so it
+  // reads zero on the version of this file where `.m_rready` was double-driven
+  // and this channel was never slow at all. `FIRED <name> <count>`; see
+  // check_fired.py, which REFUSES on zero.
+  int n_r_bp = 0;
+  always @(posedge clk_i) if (rst_ni && m_rvalid && !m_rready) n_r_bp <= n_r_bp + 1;
+  final $display("FIRED dwc_c1.r_backpressure %0d", n_r_bp);
+
 endmodule
 
 // ----------------------------------------------------------------------------
@@ -570,9 +627,39 @@ module dwc_c5_response_intake_slow #(
   // The valid presented to the golden and the ready presented outward carry the
   // same gate, so no cycle exists in which one side believes a transfer
   // happened and the other does not.
+  //
+  // AND HELD ONCE OPEN. A bare `valid & gate` is a WITHDRAWAL whenever the gate
+  // falls on a cycle where the golden has an offer in hand and has not yet
+  // taken it -- which is exactly what A5 forbids, and it is not a theoretical
+  // worry: the anchor asserts the same property internally, and closing the
+  // gate on `m_bvalid` mid-arbitration fires it --
+  //     rr_arb_tree.sv:391  "it is disallowed to deassert unserved request
+  //                          signals when LockIn is enabled".
+  // So each gate may FALL only while nothing is pending. `hold_*` is a flop, so
+  // the valid presented to the golden never depends combinationally on its
+  // ready. Holding costs this perturbation none of the slowness it exists to
+  // show -- it still refuses to BEGIN a transfer for the whole closed phase on
+  // every intake channel. What it gives up is the right to take an offer back,
+  // which no conforming design has.
+  //
+  // Depth two here, depth four in dwc_c1, on purpose: the two straddle the
+  // reference's persistence threshold (three idle cycles between narrow R
+  // beats), so the conformant set exercises L7 on both sides of it rather than
+  // sampling one. Both were double-driven and inert until this repair -- see
+  // the note on the instantiation below.
   logic g_bready, g_rready;
-  assign m_bready = g_bready & ok;
-  assign m_rready = g_rready & ok;
+  logic hold_b, hold_r;
+  wire  gate_b = ok | hold_b;
+  wire  gate_r = ok | hold_r;
+  always_ff @(posedge clk_i or negedge rst_ni)
+    if (!rst_ni) begin
+      hold_b <= 1'b0; hold_r <= 1'b0;
+    end else begin
+      hold_b <= (m_bvalid & gate_b) & ~g_bready;
+      hold_r <= (m_rvalid & gate_r) & ~g_rready;
+    end
+  assign m_bready = g_bready & gate_b;
+  assign m_rready = g_rready & gate_r;
   dw_downsizer i_g (
     .clk_i, .rst_ni,
     .s_awid, .s_awaddr, .s_awlen, .s_awsize, .s_awburst, .s_awvalid, .s_awready,
@@ -582,8 +669,20 @@ module dwc_c5_response_intake_slow #(
     .s_rid, .s_rdata, .s_rresp, .s_rlast, .s_rvalid, .s_rready,
     .m_awid, .m_awaddr, .m_awlen, .m_awsize, .m_awburst, .m_awvalid, .m_awready,
     .m_wdata, .m_wstrb, .m_wlast, .m_wvalid, .m_wready,
-    .m_bid, .m_bresp, .m_bvalid(m_bvalid & ok), .m_bready(g_bready),
+    .m_bid, .m_bresp, .m_bvalid(m_bvalid & gate_b), .m_bready(g_bready),
     .m_arid, .m_araddr, .m_arlen, .m_arsize, .m_arburst, .m_arvalid, .m_arready,
-    .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready
+    // `.m_rready` bare bound the GOLDEN'S OUTPUT to the wrapper's `m_rready`,
+    // which the assign above already drives -- a DOUBLE DRIVE, with `g_rready`
+    // connected to nothing. The R half of "response intake slow" was never slow.
+    .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid(m_rvalid & gate_r), .m_rready(g_rready)
   );
+  // DID THIS CHANNEL ACTUALLY STALL? Measured AT THE PORTS, not at the gate, so
+  // the number is the same question whatever the implementation is -- and so it
+  // reads zero on the version of this file where `.m_rready` was double-driven
+  // and this channel was never slow at all. `FIRED <name> <count>`; see
+  // check_fired.py, which REFUSES on zero.
+  int n_r_bp = 0;
+  always @(posedge clk_i) if (rst_ni && m_rvalid && !m_rready) n_r_bp <= n_r_bp + 1;
+  final $display("FIRED dwc_c5.r_backpressure %0d", n_r_bp);
+
 endmodule

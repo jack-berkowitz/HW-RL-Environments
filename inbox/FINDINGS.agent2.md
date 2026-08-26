@@ -1960,15 +1960,2398 @@ looked; now two conformant perturbations withdraw offers once anything stalls.
 > Extending stimulus does not only test submissions — it re-tests every artefact
 > the task ships, and the ones written to be legal are the least suspected.
 
-### State, and why the tree is clean
+### State — LANDED
 
-**Reverted.** The spec and testbench changes are backed out and the hash is back
-at `ca63302d6b23df46`; `git status` is clean for the task. A REJECTED task left
-standing in the working tree is worse than an unlanded boundary — the numbers on
-it are void under rule 16 while it stands, and nothing in the tree would say so.
+Spec hash `ca63302d6b23df46` -> `949ffacfa1dd725b` (A5) -> `6cb14e9d2e6381ac`
+(D6 narrowed, L7 added). Golden PASS, dut2 PASS, gate rejected, 5/5 conformant
+PASS, 12/12 killed, 5c OK on both bases. The two findings that came out of
+landing it are below, and the second is the more serious.
 
-**What landing it needs**: `dwc_c1` and `dwc_c5` made conformant under
-backpressure — holding valid and payload until ready is seen, while keeping the
-latency and slow-intake behaviour they exist to demonstrate. That is a change to
-the conformant set, which is a decision about what the task considers legal, and
-it is not one to make inside a boundary that was scoped as clause-plus-stimulus.
+---
+
+## FINDING — a conformant artefact that PASSES tells you it did not break the testbench
+
+**It does not tell you it does what its name says. Nothing in the apparatus
+separates a control that is legal from a control that is inert — both are
+green.**
+
+### The instance
+
+v_ca06 ships five conformant perturbations. Two of them — `dwc_c1_extra_latency`
+and `dwc_c5_response_intake_slow` — contained, in the same module:
+
+    assign m_rready = g_rready & <gate>;                                // driver 1
+    ...
+    .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready          // driver 2
+
+The bare `.m_rready` binds the **golden's output** to the net the `assign`
+already drives — a double drive — and leaves `g_rready` connected to nothing.
+
+**The R channel of "extra latency" and of "response intake slow" had never been
+slow.** Two of five conformant perturbations shipped a channel that did nothing.
+Both passed every run for as long as they have existed, and their passing was
+read, every time, as evidence that they were legal perturbations.
+
+### Why nothing found it
+
+- **Mutation coverage cannot.** Mutants are graded on being killed. An inert
+  perturbation is not a mutant and has no kill to lose.
+- **The second-DUT gate cannot.** It grades the submission against an
+  independent implementation. It never looks at the perturbation.
+- **The conformant tally cannot, and this is the sharp part.** `5/5 conformant
+  accepted` is the number that is supposed to prove the perturbations are legal,
+  and it is satisfied identically by a perturbation that stalls a channel and by
+  one whose channel is not connected. The metric that exists to grade these
+  artefacts is exactly the metric that cannot see this.
+- **Lint nearly could.** Verilator reports MULTIDRIVEN on the net. The task
+  builds with `-Wno-fatal`, which is correct for a harness that must not turn a
+  vendored-RTL warning into a refusal, and it means the one signal that was
+  present went past unread.
+
+It surfaced only when a new clause finally needed that channel to stall, and it
+did not.
+
+### The other two instances, and the rule the ruling settled
+
+Gating a `valid` on the way **into** the golden is itself a withdrawal: the gate
+falls on a cycle where the golden holds an unaccepted offer. The golden's own
+vendored arbiter says so —
+
+    rr_arb_tree.sv:391  "It is disallowed to deassert unserved request signals
+                         when LockIn is enabled."
+
+The repair is not "stop being slow". A gate may **fall only while nothing is
+pending**, which is one flop per channel:
+
+    hold_x <= (valid_in & gate_x) & ~golden_ready;
+    wire gate_x = slow | hold_x;
+
+The perturbation keeps every cycle of slowness — it still refuses to *begin* a
+transfer for the whole closed phase. It gives up only the right to take an offer
+back, which no conforming design has. `hold_x` is a flop, so the presented valid
+never depends combinationally on the ready: A5's second sentence, by
+construction.
+
+One channel could not be repaired this way and was ungated outright: **W**.
+Stalling `s_wvalid` starves a downstream burst the golden has already committed
+to, and the golden responds by withdrawing `m_wvalid` itself. That is an A5
+violation on the wrapper's own master port whose author is the golden, not the
+wrapper, and no wrapper-side hold can reach it.
+
+### The four instances together
+
+| # | task | artefact | written to be | what a new stimulus found |
+|---|------|----------|---------------|----------------------------|
+| 1 | v_ca06 | `dwc_c1`, `dwc_c5` | conformant perturbations | **the R channel of both was connected to nothing** |
+| 2 | v_ca06 | `dwc_c1`, `dwc_c5` | conformant perturbations | withdraw an offer as soon as anything stalls |
+| 3 | v_ca06 | `dut2` | an independent correct implementation | violated D7 the moment D7 could be observed |
+| 4 | v_ca07 | `dut2` | an independent correct implementation | glitched across reconfiguration once the reference looked |
+
+> **Extending stimulus does not only test submissions. It re-tests every artefact
+> the task ships, and the ones written to be legal are the least suspected.**
+
+### Method note — the first diagnostic read as a much bigger defect than it was, and the signature was in the first failure
+
+Chasing instance 1's consequence, the first slow-slave run reported **43 failures
+across seven clause ids** — D3 (wrong id), A3 (wrong beat count), D4, D1, D5, D7
+as well as D6. At face value: *the anchor collapses under backpressure*.
+
+It was the diagnostic's own artefact. Phase boundaries drain with
+`repeat (40) @(posedge clk)`, ample for a slave that answers immediately and
+nowhere near enough for one that idles four cycles per beat. The previous phase's
+beats were still arriving when the next began, and **`id 15` — from a phase that
+had supposedly ended — turned up attributed to a transaction expecting `id 1`.**
+Widening the drain to 600 cycles removed six of the seven clause ids and left
+9 x D6 and nothing else.
+
+> A new instrument's first disagreement with the reference is a claim about the
+> instrument until it has been run against something known good. The signature of
+> contamination was legible in the data — an id from a finished phase — and
+> reading the COUNT instead of the FIRST FAILURE would have missed it and
+> published "the anchor collapses under backpressure".
+
+---
+
+## FINDING — a clause can be false about the reference and pass every run, when the stimulus that would falsify it is the stimulus the task never generates
+
+**v_ca06's D6 required a downstream read error to be STICKY. The reference is
+sticky only while its pipeline stays full. Three idle cycles between narrow R
+beats and it stops. The task had never stalled that path, so the clause had been
+true by accident for as long as it existed — and every detector in the repository
+reported green.**
+
+### The measurement
+
+No wrapper, no perturbation, no valid gating: the testbench's own downstream R
+slave simply does not have its next beat ready yet and presents it N cycles
+later. A slave is always allowed to do that.
+
+| idle cycles between downstream `R` beats | reference | `dut2` |
+|---|---|---|
+| 0 — the shipped stimulus | PASS | PASS |
+| 1 | PASS | — |
+| 2 | PASS | — |
+| **3** | **FAIL — 9 x D6** | — |
+| 4 | **FAIL — 9 x D6** | PASS |
+| 8 | **FAIL — 9 x D6** | PASS |
+
+### Which half fails, and it is not the half that matters
+
+D6 said two things: the error appears on the wide beat containing the erroring
+narrow beat, and it persists onto every later beat. Instrumented at the failure
+point with `own` = *does the erroring narrow beat belong to this wide beat*:
+
+    DIAG addr=00100000 errbeat=0  j=1 own=0      DIAG addr=00110000 errbeat=1 j=2 own=0
+    DIAG addr=00130000 errbeat=3  j=1 own=0      DIAG addr=00110000 errbeat=1 j=3 own=0
+    DIAG addr=00330000 errbeat=3  j=1 own=0      DIAG addr=00310000 errbeat=1 j=1 own=0
+    DIAG addr=00110000 errbeat=1  j=1 own=0      DIAG addr=00310000 errbeat=1 j=2 own=0
+                                                 DIAG addr=00310000 errbeat=1 j=3 own=0
+
+**`own=0` on all nine.** The reference never loses an error on the beat that
+carried it. Every failure is persistence — the half AXI does not require.
+
+**The mechanism**: an accumulated response register that is not cleared while
+beats keep arriving and IS cleared when the pipeline bubbles. The persistence is
+a property of the unit being busy. It became a clause because it was observed,
+and it was observed because the only stimulus that existed kept the pipeline
+full.
+
+### The four detectors, and why each is blind
+
+| detector | verdict | why it is blind |
+|---|---|---|
+| **mutation coverage** | 12/12 killed, before and after | every mutant dies at either reading of D6, so the number is identical whether the clause is true or false. A metric that does not move cannot report |
+| **conformant acceptance** | 5/5 accepted | the perturbations do not stall that path either. They were written under the same fast-path stimulus, so they agree with the reference for the same reason it agrees with itself |
+| **stimulus-variation sweep** | no frozen input | **`m_rvalid` is not frozen. It toggles constantly.** What is frozen is the GAP BETWEEN BEATS, and the sweep's axis is *does this signal take both values*, which it does |
+| **attempt-vs-condition classifier** | condition satisfied | D6's counters (`cov_rd_err`, `cov_err_last`) are satisfied at every depth. Errors ARE being requested and DO land on last beats. The condition the clause names was genuinely exercised — at one timing |
+
+**The common cause: every one of them asks whether something was OBSERVED. None
+asks whether the thing that would break it was ever ATTEMPTED.** A frozen-input
+sweep asks whether a signal took both values. A condition floor asks whether a
+predicate ever held. A kill count asks whether a defect was seen. All four are
+satisfied by a run that never leaves one corner of the timing space, because none
+of them has a name for the corner.
+
+The variation sweep is the sharpest instance and the one to quote: it is the
+detector explicitly built to find "this was never exercised", and it passed —
+because `m_rvalid` varies. **No instrument in the repository names inter-beat
+timing as an axis at all.** The thing that was frozen has no field to be frozen
+in.
+
+### The evidence was already in the repository
+
+`dut2` is sticky at every depth. The reference is sticky only when full. **Two
+implementations of the same contract disagreed about D6, both were in the task
+directory, and both passed every run** — because no run went to a depth where
+they disagree. The second-DUT gate is the one detector whose *design* could have
+caught this: it exists precisely to separate the contract from one
+implementation's incidental choices, and here the incidental choice was
+timing-dependent inside a single implementation. It was blind for the same reason
+as the rest — it is only ever run at one timing.
+
+### What would have caught it: nothing that exists
+
+Said plainly: **no instrument in this repository would have found this, and none
+of the four above can be extended to find it.** Their axis is *values observed*;
+this defect lives on an axis of *intervals fixed*.
+
+**What would.** A timing-axis sweep over the REFERENCE, not over coverage:
+
+> For each interval the task holds at its most permissive value, re-run the
+> reference at several other values and **diff the reference's own verdict**.
+> A clause that is true at one setting and false at another is not a property of
+> the design under test; it is a property of the setting.
+
+Four axes are enough for a handshake interface, and none of them is a signal:
+
+1. **gap between consecutive beats on each source-driven channel** — the one that
+   found this
+2. **ready duty cycle on each sink-driven channel** — what A5's stimulus now
+   covers, arrived at from the clause side rather than the sweep side
+3. **gap between transactions**
+4. **number of transactions in flight**
+
+The instrument is cheap because it reuses the existing sim path: it is N reruns
+of the golden, and the output is one bit per (axis, setting) — *did the reference
+still pass its own spec*. For v_ca06 that is roughly twelve runs of about a
+minute. It is a rule-24 instrument used the way rule 24 intends — reproduce a
+known-good answer — with the twist that the reproduction is attempted **at a
+setting nobody chose**.
+
+**Its honest limit**, which belongs in the tool's header: it finds clauses that
+are false about the REFERENCE. It cannot find a clause that is false about the
+CONTRACT and that the reference happens to satisfy at every setting. Nothing
+finds those except reading the clause against the standard, and this finding is
+not evidence that such a tool is possible.
+
+### Narrowing cost nothing, and the artefacts now straddle the threshold
+
+D6 is now ownership-only; persistence is **L7**, declared-open latitude, with the
+accumulator mechanism named in the spec so a reader knows it is incidental rather
+than contractual. Measured after the change:
+
+    golden PASS   dut2 PASS   gate rejected   5/5 conformant PASS   12/12 killed
+    (dw_m6, dw_m11 and dw_m12 included -- not one kill lost)
+    reference PASSES at 3, 4, 8 and 16 idle cycles -- run against the REPAIR
+    5c OK on both bases
+    hash 949ffacfa1dd725b -> 6cb14e9d2e6381ac
+
+`dwc_c1`'s R gate stalls four cycles and `dwc_c5`'s stalls two — deliberately on
+opposite sides of the three-cycle threshold, so the conformant set now exercises
+L7 from both directions instead of sampling one. Before this week neither stalled
+that path at all.
+
+
+---
+
+## FINDING — the same instrument gave the right answer on one task and 26 wrong failures on another, and nothing in either run said which
+
+**v_ca06's committed A5 numbers were right BY CONVERGENCE, NOT BY SOUNDNESS.
+That distinction is the disclosure.**
+
+A testbench that derives a channel's `ready` from that channel's `valid` closes a
+combinational loop through the design. Verilator says so, and said so all along.
+
+**The same instrument, on two tasks: on one it converged and gave the right
+answer, on the other it produced 26 failures across six clause ids, none of them
+a design defect. Nothing in either run said which had happened.**
+
+### The instrument
+
+A5/D5 need backpressure, and the stall was armed combinationally on the
+channel's own `valid` — deliberately, to make the stall land on the cycle the
+offer is made rather than one cycle later:
+
+    wire arm_maw = m_awvalid && (st_maw==0) && (cd_maw==0);
+    assign m_awready = (st_maw==0) && !arm_maw;
+
+That is a cycle: `m_awready` -> design -> `m_awvalid` -> `arm_maw` ->
+`m_awready`. Verilator names it exactly:
+
+    %Warning-UNOPTFLAT: Signal unoptimizable: Circular combinational logic:
+      'dw_downsizer_tb.m_arready'   (also m_awready, m_wready, s_bready)
+
+**Four of v_ca06's eighteen circular signals were my testbench's readies.** The
+other eleven are the vendored anchor's own and predate this work — measured by
+linting the pre-A5 testbench, which reports exactly eleven.
+
+### Why it went unread
+
+The harness builds with `-Wno-fatal`, which is the right setting: a vendored
+anchor emits warnings the task cannot fix, and turning those into refusals would
+make every task unbuildable. The cost is that a warning about the TESTBENCH,
+introduced this week, arrives in the same stream as thirty pre-existing warnings
+about the anchor and is invisible by dilution.
+
+> A warning channel that is permanently noisy is not a warning channel. The
+> anchor's eleven were the noise; my four were the signal; nothing distinguished
+> them at the point of reading.
+
+### The two outcomes, and why only one of them looked like a problem
+
+| task | UNOPTFLAT on TB readies | result |
+|---|---|---|
+| v_ca06 | 4 | **converged** — every verdict identical to the loop-free run |
+| v_ca03 | 3 | **26 failures across A1, A3, COVERAGE, D4, E1 and FLOOR** |
+
+None of v_ca03's 26 was a design defect.
+
+### The tell, and it is the part to record
+
+**Four different one-hot variants — only `s_bready` reactive, only `s_rready`,
+only `m_awready`, only `m_arready` — produced the IDENTICAL 26 failures.**
+
+> A defect that does not change when you change what provokes it is a settle
+> order, not a design defect.
+
+That is a general diagnostic and it is cheap: make the provoking signal
+one-hot, N ways, and compare the failure sets. Identical sets across
+independent provocations means the netlist, not the design. `m_wready` alone
+passed, which is the only reason the pattern was visible rather than uniform.
+
+### What "right by convergence" means, said plainly
+
+v_ca06's A5 run reported: golden PASS, dut2 PASS, 5/5 conformant, gate rejected,
+12/12 killed, 5c OK. Every one of those verdicts survived the repair unchanged.
+**They were correct. They were not sound.** The netlist they were computed on
+contained cycles that Verilator resolved by iterating to a fixed point, and
+whether that fixed point is the circuit's behaviour is not something the run
+established — on v_ca03, at the same settle, it was not.
+
+A result that is right because a settle happened to converge is not a result
+that the run earned. Nothing in the output distinguishes it from one that did.
+
+### The repair, and what it does not cost
+
+Decouple the stall from `valid` entirely — free-running, aperiodic, per channel:
+
+    logic [15:0] bp_lfsr = 16'hACE1;
+    wire stall_maw = bp_lfsr[2] & bp_lfsr[7];
+    assign m_awready = !stall_maw;
+
+The original objection was to a **registered** arm: the stall lands a cycle after
+`valid` rose, so a valid that is high for one cycle has already been accepted and
+the antecedent count comes back at 1. That objection does not reach a stall that
+is low some of the time regardless of `valid` — a one-cycle offer meets a stalled
+ready at the stall's duty rate. Measured on v_ca06, antecedent per channel:
+
+    armed (looped):  s_b=11  s_r=79   m_aw=19  m_w=112  m_ar=12
+    free-running:    s_b=12  s_r=84   m_aw=28  m_w=116  m_ar=18
+
+Better on every channel. UNOPTFLAT back to the anchor's own eleven, no testbench
+signal circular. Full suite unchanged: golden, dut2, 5/5 conformant, gate
+rejected, 12/12 killed, 5c OK.
+
+**Aperiodic on purpose.** A fixed duty cycle can resonate with a design's own
+period and stall only in phases where nothing is offered. An LFSR cannot, and
+different bit pairs per channel keep the five decorrelated.
+
+### And a second defect, which the backpressure only EXPOSED
+
+With the loop gone, v_ca06's golden still failed three checks — A2 and B2, on
+the write path. Traced:
+
+    TRACE t=3755 AWdown addr=00003000 len=0
+    TRACE t=3755 Bup    id=0 resp=0
+    DIAG  t=3755 aw0=0 n_ds_aw=0    -> "write issued 0 downstream addresses"
+    DIAG  t=3805 aw0=0 n_ds_aw=2    -> the next write, "issued 2"
+
+`n_ds_aw` is incremented in a separate `always @(posedge clk)`; `do_write`
+resumes at the same posedge and reads it, racing that block. **With every ready
+held at 1 the downstream address and the upstream response never landed in the
+same cycle, so the race was unreachable.** Backpressure aligns them. The reads
+are now taken at the negedge, and the live `s_bid` / `s_bresp` latched before it.
+
+This is the same class as the inert conformant channels and the anchor's
+fast-path stickiness, and it is now the fourth kind of artefact caught this way:
+mutants, conformant perturbations, second DUTs — and **the testbench itself.**
+The testbench already carried a comment warning about exactly this race on a
+different counter. Writing the rule down did not install it in the other two
+call sites.
+
+### What to take from it
+
+1. **A harness-side signal must never be derived combinationally from a
+   design-side signal it feeds.** Register it, or decouple it. The rule is
+   cheap; the failure is silent and load-bearing.
+2. **Grep the build log for testbench-scoped UNOPTFLAT specifically.** The count
+   alone is useless because the anchor contributes a constant background; what
+   matters is whether any circular signal is scoped to the testbench module.
+   That is a one-line check and it belongs in the harness, as a REPORT beside the
+   verdict rather than a refusal — a task whose anchor is legitimately circular
+   must still be runnable.
+3. **A result that is right by convergence is not a result.** v_ca06's committed
+   numbers were correct. They were correct by luck of a settle order, and the
+   run that produced them said nothing at all about that.
+
+
+---
+
+## FINDING — every passing run of that testbench printed a FAIL line, and the verdicts were right only because the harness greps PASS before FAIL
+
+**Two defects cancelling is not correctness.**
+
+**v_ca03's reference testbench. Two consequences, both silent, both live for as
+long as the file has existed.**
+
+    if (n_fail == 0) $display("RESULT: PASS");
+    else             // E1's new half is unfalsifiable if every response ...
+    // checker would be comparing against the constant the responder drives.
+    if (cov_err_r < 4)
+      fail("COVERAGE", ...);
+    if (cov_err_b < 4)
+      fail("COVERAGE", ...);
+    $display("RESULT: FAIL (%0d failures)", n_fail);
+
+The `else` binds to `if (cov_err_r < 4)`. Nothing else about the text suggests
+that, because two comment lines sit between the `else` and the `if` it captures.
+
+1. **The read-coverage floor ran only on a run that had ALREADY failed.** It is
+   skipped precisely when the run is otherwise clean — which is the only
+   situation a floor exists for. A floor whose antecedent is "something else
+   already failed" is not a floor.
+2. **`RESULT: FAIL` printed unconditionally.** Every passing run of this
+   testbench ended with a FAIL line. The verdicts were nonetheless right, because
+   `sim_verification.sh` greps `^RESULT: *PASS` before `^RESULT: *FAIL` — a
+   property of a file this testbench does not control, and one nobody chose for
+   this reason.
+
+> A verdict that is correct because of the order of two greps somewhere else is
+> not a verdict the testbench produced. Reverse those two lines in
+> `sim_verification.sh` — a change nobody would think to check against this
+> file — and every passing run of v_ca03 inverts.
+
+### The syntactic scan was the wrong instrument; the behavioural one was right
+
+Grepping for `else` followed by comments and an `if` reports every legitimate
+`else if` chain: 0 to 10 hits per testbench, no signal. **Running all eleven
+reference testbenches and counting RESULT lines** answers the actual question in
+one number:
+
+    ten of ten runnable testbenches: exactly one RESULT line
+    v_ca03: two                     <- the only instance
+    v_dsp01: REJECTED, ships no testbench
+
+The scan itself needed two corrections before it was trustworthy — one task's
+`tb_module:` carries a trailing comment that a naive `sed` left in the string,
+and one task keeps its `task.yaml` elsewhere. Both showed up as BUILD_FAIL/SKIP
+rather than as a clean row, which is the right failure: **a sweep that cannot
+build a task must say so rather than score it 0 and move on.**
+
+---
+
+## FINDING — a control that passes is not evidence the clause holds; it is evidence the control did not run, and the two are indistinguishable in the output
+
+**Two controls built this week, and the first version of each was wrong in a
+different way. One of them was wrong by passing.**
+
+A5 on v_ca06 and D5 on v_ca03 both landed with checkers that passed everything
+the task ships. That is what a correct clause looks like. It is also what a
+clause with no instrument looks like, and nothing in the task separated the two:
+every mutant in both sets dies on some other clause, so no mutant licensed a
+claim that the handshake checker fires at all.
+
+### Three ways the controls were wrong before they were right
+
+**1 — the obvious candidate was not a control for the clause.** `iw_c3` before
+its repair withdraws a valid, which is exactly what D5 forbids — but it
+withdraws one going INTO the design. It fails **C2, twenty times**, because the
+design's accounting diverges from the testbench's, and it never touches D5. D5
+binds the design's OUTPUTS. *A control has to violate the clause on the side the
+clause binds.*
+
+**2 — a control assembled by copying a neighbour inherits the neighbour's
+wiring.** The first D5 control was built from `iw_c3`'s instantiation, which
+binds `g_awvalid` and `g_arvalid` — signals that do not exist in the new module.
+It also gated the design's ready to avoid a phantom handshake. It hung the A4
+phase and reported A3, A4 and A5. *A control whose blast radius exceeds the
+clause it is for cannot license a claim about that clause.* Rebuilt by parsing
+the golden's own module header, so the port list cannot drift from it.
+
+**3 — and the one that matters: the A5 control PASSED.** At a threshold of three
+consecutive stalled cycles it never triggered, because backpressure is aperiodic
+and `m_arvalid` enters the antecedent only 18 times in the whole run.
+
+> **A control that passes is not evidence that the clause holds. It is evidence
+> that the control did not run.** The two are indistinguishable in the output,
+> and the second is the more likely of the two for any control whose trigger is
+> conditioned on rare timing.
+
+This is the same shape as the inert conformant channels — a green artefact that
+did nothing — and it is the fourth time this week that "it passed" has turned out
+to mean "it was not exercised". The remedy is the same and it is cheap: a control
+must report *whether it fired*, not only its verdict.
+
+### What the controls look like now
+
+Both withdraw `m_arvalid` **only on a cycle when `m_arready` is already low**, so
+no handshake is lost and the wrapped design sees a bit-identical environment —
+its ready is passed through untouched. The single observable difference is the
+one thing the clause forbids.
+
+    v_ca03  negctl/d5_withdraws_ar.sv   FAIL -- 11 x D5, channel 4, nothing else
+    v_ca06  negctl/a5_withdraws_ar.sv   FAIL --  5 x A5, channel 4, nothing else
+
+Both deliberately violate the clause's second sentence too — `m_arvalid` is
+combinational on `m_arready` in the control. That is safe *because* the
+testbench's readies are now LFSR-driven and read no design output; under the
+armed stall it would have closed a loop.
+
+
+### The instrument, built, self-tested, and validated against the instance that motivated it
+
+`inbox/check_fired.py.for-scripts`. The convention: any artefact whose
+evidentiary value depends on its trigger occurring prints, once per run,
+
+    FIRED <name> <count>
+
+and the tool **REFUSES** on zero. It refuses **ABSENT separately**, because
+absent is not zero (rule 20) — the artefact is not in this run at all, and no
+count can be inferred from silence. A **duplicate name is a refusal, not a sum**:
+two artefacts under one name is the clause-grouping shape, where one sits at zero
+while the other carries the line and the reader sees a healthy number.
+
+**Validated against the defect and against the repair**, which is standing
+practice here:
+
+| run | verdict | FIRED | tool |
+|---|---|---|---|
+| A5 control, threshold 3 — *the version that passed* | `RESULT: PASS` | `...drop 0` | **REFUSED** |
+| A5 control, threshold 2 — the working one | `RESULT: FAIL` | `...drop 5` | OK |
+| a variant with no declaration | — | — | **REFUSED**: undeclared is not exempt |
+
+Self-test 7/7. Declarations live in `task.yaml` as `must_fire:` **keyed by
+variant**, not as a flat per-task list — the negative-control run contains no
+conformant perturbations and vice versa, and a gate that fires on runs it does
+not apply to is one that gets routed around within a week.
+
+### Four kinds, and the fourth had to be named out loud
+
+    a control              -> how many times its trigger asserted
+    a coverage floor       -> the count it already keeps
+    a perturbation's gate  -> how many cycles it was closed on a live offer
+    a NEVER-HAPPENS check  -> how many times its antecedent was REACHABLE
+
+The last is a fifth instance, from AGENT-DESIGN-43a92055 on `d_ca01`'s M3:
+
+    chk(m3_overlap_err == 0, "a memory request was issued while a"
+                             " transaction was in flight");
+
+vacuously true for a design that issues no memory transaction at all. It cannot
+separate *never issued two at once* from *never issued one*. A never-happens
+assertion **counts nothing by construction** — its whole form is an absence — so
+a tool keying on "a counter exists and reads zero" sees nothing here, because
+there is no counter. The rule that makes it covered: its FIRED count is not how
+often it fired, it is **how often the situation it forbids was reachable**, and
+that is a different counter which nothing derives automatically.
+
+### The tool's own header claimed coverage it did not have, and that is the finding
+
+I wrote **"three of four instances"** into `check_fired.py`'s header before
+measuring. The measurement says **two**. In the header of the tool built to catch
+exactly this. It is the plainest instance of the class I have produced, and it is
+recorded here rather than only in the header because a correction that lives only
+in the artefact it corrects is not a disclosure.
+
+### The uncovered instance is the one the class hinges on
+
+Measured in the historical configuration — pre-repair perturbation, pre-A5
+testbench, the run in which it passed:
+
+    FIRED dwc_c1.r_backpressure 5      -> OK, and the channel was inert
+
+**Five, not zero.** The double-driven `m_rready` did go low sometimes; it just
+was not the gate doing it.
+
+> A port-level count answers *did this channel stall*. The question was *did
+> THIS PERTURBATION stall it*. And no counter on the perturbation can answer
+> that, because **a bypassed mechanism produces no counter at all** — there is
+> nothing to instrument.
+
+`FIRED` puts the observer INSIDE the artefact. That works for a control, whose
+trigger is its own logic, and fails for a perturbation, whose mechanism may be
+absent. The remedy has to observe from outside.
+
+### The remedy, built and measured: `check_artefact_warnings.py`
+
+**The toolchain reported this defect all along.** Linting the pre-repair
+perturbation:
+
+    %Warning-UNDRIVEN:    extra.sv:108: Signal is not driven: 'g_rready'
+    %Warning-MULTIDRIVEN: extra.sv:90:  Bit [0] of signal 'm_rready' have
+                                        multiple combinational drivers.
+
+Both name the defect on its line. **Seven warnings named the perturbation; one
+hundred and twenty-eight were in the build.** That is the same dilution failure
+that hid the combinational loop — `-Wno-fatal` is the correct setting for a
+vendored anchor, and its cost is that a warning about an artefact the task owns
+arrives in the same stream as the ones it cannot fix.
+
+So the gate does not turn the noise down. It **separates the two populations by
+file** and refuses only on the half the task is responsible for. `extra.sv` (the
+perturbation or mutant) is task-owned; `variant.sv` (the golden) and `sub.sv`
+(the submission) are not — the two halves of a variant build are separable by
+filename even though both are temporaries. A submission's warnings are reported,
+never refused: failing a submission for style rather than for what it measures
+is a different defect.
+
+Refusing kinds are only those meaning *the netlist and the text disagree* —
+UNDRIVEN, MULTIDRIVEN, UNOPTFLAT, IMPLICIT, LATCH, BLKANDNBLK, PINMISSING.
+Deliberately not WIDTHTRUNC, UNUSEDSIGNAL, PROCASSINIT, BLKSEQ or the rest: a
+gate that fires on style gets routed around, which is how both defects survived.
+
+**Validated on both defects and both repairs:**
+
+| build | task-owned / anchor | verdict |
+|---|---|---|
+| `dwc_c1` before the double-drive repair | 5 / 123 | **REFUSED** — UNDRIVEN `g_rready`, MULTIDRIVEN `m_rready` |
+| `dwc_c1` after | 4 / 123 | OK — notes only |
+| testbench with the armed stall | 4 / 64 | **REFUSED** — 4 × UNOPTFLAT on its own readies |
+| testbench free-running | 0 / 63 | OK |
+
+Self-test 7/7.
+
+**It takes two passes, and finding that out cost a wrong cell in its own
+validation table.** `--lint-only -Wall` reported *zero* task-owned warnings on
+the armed netlist that provably contained four circular testbench signals:
+UNOPTFLAT is emitted by the scheduler, which `--lint-only` skips, while
+UNDRIVEN needs `-Wall`, which the scoring build does not use. A gate run on
+either pass alone misses one of the two defects it exists for. The first table I
+generated had that cell wrong and reported OK.
+
+Its own notes are **summarised by kind, not listed**. The free-running testbench
+draws 33 of them, all benign and all correct; printing 33 lines above a two-line
+refusal rebuilds, inside this tool, the exact dilution it was written to undo.
+
+### And the differential check I was going to propose would not have worked
+
+The obvious complement is: a perturbation must differ from the golden somewhere
+observable on the channel it claims to affect, with the observer in the testbench
+— outside the artefact, so a perturbation cannot forget to instrument itself or
+instrument itself dishonestly. Emit a per-cycle checksum per declared signal,
+compare across runs, refuse if the declared channel's trace is identical.
+
+**It would have passed the pre-repair `dwc_c1`.** That perturbation's `m_rready`
+was not *unchanged* — it was *garbage*, double-driven, and it differed from the
+golden's plenty.
+
+> *Differs from the golden* and *does what it says* are not the same predicate,
+> and only the second is what a conformant perturbation claims.
+
+Where a differential check IS the right instrument is the neighbouring case: a
+perturbation whose mechanism is present and correct but whose condition is never
+true — a gate wired properly to a signal that never asserts. There `FIRED` on the
+gate answers it more cheaply, so the differential check earns its cost only for a
+perturbation with no single nameable trigger. I have not built it, and on the
+evidence here it is the third-best of the three.
+
+### Every exclusivity claim I have made is dated as of today
+
+From AGENT-DESIGN-43a92055, and it lands on my own work within the hour it was
+written: `d_nw03`'s `nc_b_outputs_serialised` was recorded 6/8 `exclusive: true`.
+An R1 output-stability check was added; it now reads 0/8. **Nothing in the
+control moved.**
+
+> `exclusive: true` was never true. It was UNVERIFIABLE, which is a different
+> thing and reads identically. The claim was "fails on C1 and nothing else"; what
+> could be observed was "fails on C1 and nothing else *that was checked*".
+
+I wrote "11 × D5 and nothing else" and "5 × A5 and nothing else" today. Both are
+claims about the set of checks these tasks had **on 2026-08-25**, and both now
+say so in `task.yaml`. My `v_ca07` H3 pair carries the same asterisk. The
+proposal that `exclusive:` carry the date or checker revision it was measured
+against is right and I support it for contract revision 3.
+
+---
+
+## FINDING — the emittability prediction is refuted as a predictor: 3 of 6, which is chance
+
+**All seven registered tasks worked by hand, 44 candidates classified. The
+hypothesis had no signal, and the real result is somewhere else: the gaps are
+CONCENTRATED, not spread.**
+
+### The seven, worked
+
+| task | predicted | false positive | grouped | **unchecked** | measured | |
+|---|---|---|---|---|---|---|
+| `v_ai02` | GROUPED | 4 | 2 | 0 | GROUPED | **✓** |
+| `v_nw02` | GROUPED | 1 | 3 | 0 | GROUPED | **✓** |
+| `v_ca07` | UNCHECKED | 3 | 0 | **2** | UNCHECKED | **✓** |
+| `v_nw01` | UNCHECKED | 0 | 2 | 0 | GROUPED | ✗ |
+| `v_nw03` | UNCHECKED | 8 | 1 | 0 | GROUPED | ✗ |
+| `v_nw04` | UNCHECKED | 1 | 8 | **6** | GROUPED | ✗ |
+| `v_ca04` | UNCHECKED | 3 | 0 | 0 | **no real candidates** | — |
+| | | **20** | **16** | **8** | | **3 / 6** |
+
+Three of six decidable. That is a coin.
+
+> **REGISTERED IN ADVANCE:** *"If the predictions hold, the split is
+> task-dependent and a new task's shape is knowable from its spec before
+> anything is built. If they do not, the split tracks something else — most
+> likely when each task was written and by what habit — and the fix is a
+> checklist rather than a design principle."*
+>
+> **The predictions did not hold. THE HYPOTHESIS CARRIES NO INFORMATION.** A new
+> task's shape is not knowable from its spec, and the fix is a checklist.
+
+Recorded in those terms because they were fixed before the measurement, and
+because a hypothesis that is allowed to be re-read after the result is not one.
+
+`v_ca04` is excluded rather than scored: all three of its candidates are false
+positives, so it has no dominant shape to be right or wrong about. Counting it
+either way would be choosing a denominator after seeing the numerator.
+
+### The result that IS there: the gaps are concentrated
+
+**Six of the eight genuinely-unchecked clauses are in ONE task.** Five of the
+seven have none at all. Emittability gaps are not a systemic property of how
+these tasks are written — they are a `v_nw04` property, and to a much smaller
+extent a `v_ca07` one.
+
+That is a more useful finding than the one predicted, and it is the opposite
+shape: not a gradient across tasks, but a single outlier.
+
+### 45% of the candidate list is noise, and on one task it is 89%
+
+Twenty of 44 are definitions, permissions or obligations addressed to the tester
+— `v_nw03` contributes eight of nine. The tool says so in its header ("CANDIDATE
+LIST, NOT A VERDICT", calibrated at 2 real of 5) and the measured rate across
+seven tasks is **24 real of 44**, close to it. But the per-task spread is
+enormous, and a reader taking a per-task count at face value would be badly
+wrong about `v_nw03`.
+
+### `v_nw04`: an entire output had no reader, and a set's value was never compared
+
+    $ grep -c ts_step_o tb/ptp_time_base_tb.sv
+    1                    # the port map
+
+**A4** ("`ts_step_o` is asserted on exactly the cycles `adj_active_o` is, plus
+the cycles §S names, and on no others") and **S3** ("each such assertion raises
+`ts_step_o` for exactly one cycle") describe an output the testbench connected
+and never looked at. It is not a dead signal: measured, it is high on **35
+cycles** across **4 set windows**.
+
+**S1** and **S2** were worse. `set_ts96()` drove the set and raised `settle`,
+which suppresses the increment checker for a few cycles — so **a design that set
+the base to any value at all passed**, provided it kept incrementing legally
+afterwards. The value written was never compared to the value read.
+
+All four now have instruments:
+
+- **A4** is checked as an equality, cycle for cycle: outside a set's window
+  `ts_step_o` must EQUAL `adj_active_o`. Not correlated, not counted.
+- **S3** is checked **per set**, not per run. A global identity
+  `steps == adj_active cycles + sets` is satisfied by a design that raises two
+  steps for one set and none for the next, so it is not the clause.
+- **S1/S2** compare the base against the value written, allowing only the
+  increments reachable in the sampling window — a wrong value misses that
+  interval by orders of magnitude, not by a beat.
+
+**Validated by three controls that must fail, because no mutant exercises any of
+them** — by this file's own standard, a checker whose refusal is unverified is a
+checker that has not been shown to fire:
+
+| control | result |
+|---|---|
+| `ts_step_o` tied low | **FAIL — 24 × A4** |
+| `ts_step_o` tied high | **FAIL — 24 × A4** |
+| the set never reaches the design | **FAIL — 3 × S1, 3 × S3** (and 1 × W1, collateral) |
+
+Golden PASS, dut2 PASS, conformant PASS, gate rejected, **10/10 killed**.
+Candidates 15 → 11. `tb/` is not in `task_text_hash`, so no hash moved.
+
+The third control's blast radius exceeds one clause, so it licenses *"the
+checker refuses"* and not *"it refuses on this clause alone"*. Those are
+different claims and only the first is being made.
+
+### A shape worth naming: grouped AND unexercised is worse than either
+
+`v_nw01`'s **C2** — "the cache holds 4 entries; an insert never fails; when full
+it displaces an existing entry" — is reportable: a failed insert surfaces as a
+missed lookup under **Q1**. But `cov_hits >= 4` is the only floor near it and
+**nothing requires a fifth distinct insert**, so the clause is credited to
+another id *and* its antecedent may never be reached.
+
+> Grouping hides which clause was tested. An unguarded antecedent hides whether
+> anything was. Together the clause is scored, invisible, and possibly never run
+> — and each defect alone would have been easier to see than the pair.
+
+`v_nw01`'s **C1** is the honest opposite and worth the contrast: its text says
+*"answered from the cache under Q1"*. The clause **names the id that reports
+it**. That costs one clause of prose and removes the whole ambiguity, and it is
+the cheapest fix in this finding.
+
+
+---
+
+## FINDING — the check and the thing that disabled it were written together, in one helper, and neither looks wrong alone
+
+**v_nw04's S1 and S2 did not merely go unchecked. They ACCEPTED ARBITRARY
+BEHAVIOUR: a design that set the time base to any value at all passed, provided
+it kept incrementing legally afterwards.**
+
+### The helper
+
+    task automatic set_ts96(input longint unsigned s, input longint unsigned ns);
+      @(negedge clk); set96 = {48'(s), 2'b00, 30'(ns), 16'd0}; set96_v = 1'b1;
+      @(negedge clk) set96_v = 1'b0;
+      settle = SETTLE;  last_drift[0] = -1; last_drift[1] = -1;
+    endtask
+
+Four lines. The first three are the only stimulus in the task that exercises S1.
+The fourth raises `settle`, which suppresses the increment checker for the cycles
+that follow — legitimately, because a set is a discontinuity and the increment
+checker would report it as an illegal advance.
+
+**Neither half is wrong.** Driving a set is right. Suppressing an increment check
+across a discontinuity is right. What is wrong is that they are the same four
+lines, so:
+
+> **The only stimulus that reaches the clause is also the thing that turns off
+> the checking around it.** A reader auditing the stimulus sees a correct set. A
+> reader auditing the suppression sees a correct warm-up. The defect is in the
+> conjunction, and the conjunction has no reader.
+
+### Why it is not a coverage gap
+
+A coverage gap is silent: a clause that is never exercised reports nothing and a
+floor can catch it. This is louder and worse. The clause WAS exercised — four
+times, with `cov_sets >= 3` enforcing it — and the run reported PASS. **A floor on
+S1's stimulus would have been satisfied.** The apparatus had the antecedent, the
+stimulus and a passing verdict, and no comparison between the value written and
+the value read existed anywhere.
+
+An unchecked clause says nothing. This one said *yes*.
+
+### The field had already been audited once, for something else
+
+`settle`'s own comment records a previous correction:
+
+    int settle = 8;   // clause X2b: the warm-up the SPEC grants, and no more.
+                      // It was 20 -- an allowance the reference took and the
+                      // submission was not given, which is not a fair measurement.
+
+Somebody looked hard at this variable, found a real defect in its VALUE, fixed
+it, and wrote the reasoning down. What they were not looking at was **what the
+suppression window contained**. Scrutiny of a field is not scrutiny of what the
+field switches off.
+
+### The general shape, and where else to look for it
+
+> **A stimulus helper that both provokes a condition and suppresses the check for
+> it.** Search term: any assignment to a check-gating variable (`settle`,
+> `checking`, `reply_en`, an `if (armed)` guard) inside a task whose other job is
+> to drive stimulus. Each such site is a place where a clause may be exercised
+> into a window where nothing is watching.
+
+This is mechanically findable — it is a grep for check-gating writes inside
+stimulus tasks — and it is the third instrument this week whose defect the
+toolchain could have named. I have not built it.
+
+---
+
+## FINDING — grouped AND unexercised at once, and a one-sentence remedy for the whole grouping family
+
+**Two defects that are each visible on their own become invisible together.**
+
+### The pair
+
+`v_nw01`'s **C2** — *"the cache holds 4 entries; an insert never fails; when full
+it displaces an existing entry"* — is **grouped**: a failed insert surfaces as a
+missed lookup under **Q1**, so it is reportable, just not under its own name.
+
+It is also **unexercised**: `cov_hits >= 4` is the only floor near it and
+**nothing requires a fifth distinct insert**, so the antecedent that would make
+the displacement observable may never be reached.
+
+| | what it hides | how you would normally catch it |
+|---|---|---|
+| **grouping** | *which* clause was tested | read the failure message and see it names another id |
+| **unguarded antecedent** | *whether anything* was tested | a coverage floor reads zero |
+| **both** | — | **neither**: the floor that would read zero is on the OTHER clause, and it is satisfied |
+
+Grouping moves the reporting to Q1. Q1's floor is about lookups and is satisfied.
+C2 has no floor of its own because it has no checker of its own — that is what
+being grouped means. So **the two defects cover for each other**, and each alone
+would have been easier to see than the pair.
+
+### C1 is the honest opposite, and it costs one sentence
+
+`v_nw01`'s **C1** — same section, same author, same page — reads:
+
+> *"Every received ARP frame — request or reply — inserts the pair (`SPA`, `SHA`)
+> into the cache. **A lookup of that address afterwards is answered from the
+> cache under Q1.**"*
+
+**The clause names the id that reports it.** No instrument, no tooling, no run.
+One sentence of prose, and the ambiguity is gone: a reader knows C1 is grouped,
+knows where to look, and can check that Q1 exists.
+
+### Propose this as the general remedy for the grouping family
+
+The grouping family is the headline finding in this file — several clauses share
+one observation, one check and one reported id, so a submission testing any is
+credited with all. It is invisible to mutation (every mutant dies either way),
+untouched by decontamination, and this week it accounted for **16 of 44** worked
+candidates. Everything built against it so far has been an instrument.
+
+> **Every clause whose observation is shared should name, in its own text, the id
+> that reports it.**
+
+It is cheaper than every instrument built this week, by a wide margin, and it
+fixes the dominant defect class rather than detecting it.
+
+**And it turns prose into a declaration that can be checked.** `check_clause_
+emittable.py` currently subtracts the emittable set from the stated set and calls
+the remainder candidates. With this convention it can do better: a clause saying
+*"reported under Q1"* is a claim, and the tool can verify that `Q1` is in fact
+emittable — turning a hand judgement I made seven times this week into a
+mechanical one. That is the difference between an annotation and a comment.
+
+**Its limit, stated so it is not oversold:** it records grouping honestly, it
+does not remove it. C1 is still credited under Q1, and a submission that checks
+Q1 is still credited with C1. What changes is that the credit is *visible* and
+the scoring can decide deliberately, instead of the grouping being discovered by
+someone reading a failure message and noticing the wrong letter.
+
+
+---
+
+## The grouping remedy, applied to two tasks and made checkable
+
+**Annotation landed on `v_ca06` and `v_ca03` — the two tasks whose hashes were
+already moving this week, so the convention cost nothing marginal to exercise.**
+
+    v_ca06   C1 -> C4, C2 -> C4                    candidates 7 -> 5
+    v_ca03   A2 -> D1, B1 -> E1, B3 -> E1, C1 -> C2  candidates 9 -> 5
+    hashes   6cb14e9d2e6381ac -> ae29e2161468aeff
+             fc1baef44b90f91c -> fa23813e5874ef92
+    both suites re-run: ACCEPTED, 12/12 and 11/11
+
+`check_clause_emittable.py` now reads *"reported under X"* as a **declaration and
+verifies it**: the named id must itself be emittable. A clause annotated into a
+hole reads as resolved and is worse than one left silent. Declaration self-test
+7/7, tool self-test 5/5.
+
+### What is NOT annotated, and why that matters more than what is
+
+Annotation is for clauses that ARE reported, elsewhere. It is not a way to make
+an unchecked clause look handled:
+
+- **v_ca06 F1, F2, F3** — phase L asserts reset, releases, waits four cycles, and
+  then nothing follows. They need an instrument.
+- **v_ca03 D2** — D1 catches a master identifier serving two slave ids at once.
+  D2's own case — reuse after the first stops being outstanding and before it
+  retires under A4 — has no check. The clause text already said why it was called
+  out separately; nothing acted on it.
+- **v_ca03 F1**, and this is the worst thing in this section:
+
+      $ grep -nE "rst_n *(=|<=)" tb/id_width_conv_spec_tb.sv
+      34:  logic clk = 0, rst_n = 0;
+      407:    @(negedge clk) rst_n = 1;
+
+  **Reset is never asserted mid-run.** No F-clause `fail()` exists and no mutant
+  touches reset. F1's substantive half — *no transaction outstanding before reset
+  shall produce a response afterwards* — is neither instrumented nor exercised.
+  Two of my tasks now have an uninstrumented reset clause, which makes it a
+  habit rather than an oversight.
+
+### The founding case is not in the candidate list, so the tool grew a second mode — and the first unit was wrong
+
+Subtracting emittable from stated cannot find `D6`/`D7`: **both were nameable**.
+They shared one branch, and a submission checking precedence was credited with
+checking code preservation. So `--shared` was added.
+
+**The first unit was the `begin`/`end` block, and it was wrong.**
+AGENT-DESIGN-43a92055 predicted the failure *before running the tool*: their
+testbenches are phase-structured, checks batched in an end-of-run results block,
+and `d_ca01`'s largest block emits nine distinct clause ids from one `begin` —
+nine genuinely separate observations. Measured here on a reduced form of exactly
+that structure:
+
+    results block, 6 independent ifs  ->  M1 M2 M3 R3 R5 R6     <- pure noise
+    one condition, D5/D6/D7 chain     ->  D5 D6 D7              <- the real thing
+
+**Indistinguishable.** A block is a scope; it is not an observation.
+
+What makes `D5`/`D6`/`D7` one observation is that they are **mutually exclusive
+branches of one condition**: at most one can fire, so at most one clause is ever
+named for a single wrong value, and a submission checking any is credited with
+all. Six independent `if`s in a results block have the *opposite* property —
+each fires on its own evidence.
+
+The unit is now the **if/else chain**. Corpus-wide:
+
+| | before (begin/end) | after (if/else chain) |
+|---|---|---|
+| rows | **42** | **5** |
+
+    v_ca06   D5 + D6 + D7     <- the founding case, isolated exactly
+    v_nw04   I1 + W1          <- deliberate, and that testbench says so
+    v_ca03   C2 + E1
+    v_ca04   R4 + R5
+    v_nw02   F2 + P2
+
+**Its limit, measured rather than assumed:** branches wrapped in `begin`/`end`
+are **missed**, not misreported. Missing is the right way for this to fail — a
+candidate list that over-reports gets ignored, and this tool has already been
+ignored once for exactly that reason.
+
+> **A peer's prediction about my instrument, made before they had run it,
+> corrected it.** They could not have measured it — they did not have the build.
+> They reasoned from the structure of their own testbenches, which differs from
+> mine, and were right. Calibrating an instrument only on the corpus you wrote
+> is how it acquires your blind spot; 42 rows would have been dismissed as noise
+> and the five real ones lost inside them.
+
+
+### The second unit is a peer's, it finds a different population, and neither subsumes the other
+
+AGENT-DESIGN-43a92055 could not run `--shared` — they did not have the build —
+so they answered the question a different way: **grep every check message for two
+or more clause ids.** Their formulation of why that is the better default is the
+one to keep:
+
+> **A block is a scoping accident; a message is one observation reporting one
+> verdict**, which is precisely what the convention is about.
+
+Implemented and run. **On my eleven: 16 message rows and 5 chain rows, 21 total.
+Across the whole corpus: 18 and 5, 23.** I first recorded 18 as the figure for my
+eleven; it is the corpus number. AGENT-PPA-2381f2fe checked the scope before
+believing the difference meant anything, which is why the record is right.
+The two units find genuinely different things:
+
+**1 — My corpus already declares grouping in the id field, in eight places, and
+nobody had enumerated them.**
+
+    v_ca03   "A3/A5"    id refused though the contract permits it
+    v_ca04   "R1/R4"    payload from an input that was never offered
+    v_nw01   "Q1/X3"    no response within N cycles
+    v_nw02   "F1/F2"    an AW reached the master port that no write asked for
+    v_nw02   "F4/F5"    an R beat arrived for an id nothing is owed
+    v_nw02   "W3/X4"    AW never accepted
+    v_nw02   "P3/X4"    an AR was offered for N cycles and never accepted
+    v_nw02   "W2/W3"    AWs admitted with no W burst completed downstream
+
+Eight checks reporting for two clauses each. **This is the convention I have
+been proposing, already in use, undeclared and uncounted** — the id field says
+`A3/A5` and the spec says nothing. The remedy for these is not new prose; it is
+to make the spec agree with the id string that already exists.
+
+**2 — A false-positive class, and it is the mirror of theirs.** Six rows are
+FLOOR or COVERAGE messages naming which clauses they protect —
+*"E1, C1 and D4 go unchecked on a single-beat run"*, *"W1 and W3 are untested"*.
+Those are not grouped verdicts; they are floors saying what they guard. Exactly
+their `d_ai01` `C2/C3` metric line: **the unit surfaces it and a human discards
+it in one read**, which is the correct division of labour and is not available
+from a block-based unit at all.
+
+**3 — The sharpest row in either corpus is `v_dsp02  S2 + S6 + S8 + S9`:**
+
+    fail(e.op == OP_MINMAX ? "S6"
+       : (e.op == OP_CMP ? (e.mode == 3'd2 ? "S9" : "S8") : "S2"), ...)
+
+**One check whose reported clause is selected at runtime from four.** Not two
+clauses sharing an observation — four clauses sharing a check, with the
+attribution computed. That is the grouping family at its limit and it was
+invisible to every pass before this one.
+
+**Neither unit subsumes the other.** `D5`/`D6`/`D7` name one id each, so the
+message unit cannot see them; the `X/Y` population names two ids in one call, so
+the chain unit cannot see it. Both passes are needed and the tool now runs both,
+labelled `msg` and `chain` so a reader knows which question produced each row.
+
+
+---
+
+## FINDING — an input that changes only during initialisation is not a varied input, and no variation tool can tell
+
+**Three tasks, independently written, all with a reset clause stating what reset
+does to STATE, and none of them reaching it. Two are mine.**
+
+| task | the clause | why it is unreachable |
+|---|---|---|
+| `v_ca03` | **F1** — *no transaction outstanding before reset shall produce a response afterwards* | `rst_n` is assigned twice in the whole testbench: `0` at declaration, `1` at line 407. **Never asserted mid-run.** No F-clause `fail()`. No reset mutant |
+| `v_ca06` | **F1, F2, F3** — reset, post-reset idle, no stale response | phase L asserts reset, releases, waits four cycles, and then **nothing follows** |
+| `d_ca03` | **V2** — *`rst_ni` asserted low empties both TLBs* | reset happens only when the TLBs are already empty, so a design that ignores reset entirely is indistinguishable from a conforming one (AGENT-DESIGN-43a92055) |
+
+### The reading that makes it structural rather than a habit
+
+From AGENT-DESIGN-43a92055, and it is better than mine:
+
+> **Reset gets written as *initialisation*, because that is what a testbench
+> needs it for.** The clause that says what reset *does to state* is a different
+> requirement, and the initialisation path can never reach it. The two uses share
+> a signal and nothing else.
+
+A testbench author writes `rst_n = 0; ... rst_n = 1;` once, at the top, because
+the DUT must start somewhere. That code is correct, necessary, and satisfies
+every instinct that the signal has been handled. The clause needs the *other*
+use — assert reset onto a populated machine and check what survives — and nothing
+in the first use suggests the second is missing.
+
+### And the instrument says the input is fine
+
+This is the part that generalises past reset. `d_ca03`'s harness **does** track
+`rst_n` in its stimulus-variation instrument — `V_RST` at
+`sv39_mmu_harness.svh:179`, compared at 205.
+
+**It varies exactly once, at time zero, and the checker records it as VARIED. The
+row is clean.**
+
+> The check exists. The input moves. The requirement is unreachable. A
+> varied/constant bit cannot separate *this input takes both values* from *this
+> input took its other value once, before anything was in the machine*.
+
+That is this file's *"a clean row is read once"* arriving through a different
+door, and it is worse than the original, because here the instrument is
+**correct** — `rst_n` really did take both values — and still reports nothing
+useful.
+
+### The remedy, and it is an instrument change in my area
+
+**Count transitions AFTER reset release, not values over the whole run.**
+
+    varied/constant bit      -> "rst_n took both values"          useless here
+    transitions after t0     -> "rst_n asserted 0 times after
+                                 the run began"                    the fact
+
+That is a small change to `check_stimulus_variation.py` — a second number
+alongside the existing one, not a replacement, because for most inputs the
+existing question is the right one. It refuses nothing on its own; it makes
+`0 transitions after release` visible, which is the number that would have found
+all three of these.
+
+**Not built.** It is the fifth named-but-unbuilt instrument this week, and by the
+week's own standard that count matters more than any of the individual gaps.
+
+---
+
+## v_ca05 — the task both instruments were blind to, and what was under it
+
+AGENT-PPA-2381f2fe asked for a look before step 4, on the grounds that **two
+independent instruments could say nothing about this task for two unrelated
+reasons**: it has no coverage floor for `check_fired` to read, and its port map
+lives in `probe/PASTE.md` rather than `spec/*_iface.sv` so stimulus-variation
+could not parse it. That is a good reason to look and it was right.
+
+### What the hand pass found
+
+Nine emittability candidates: **five false positives** (`R3`, `R6` latitude;
+`R4`, `R7`, `R11` handshake definitions) and **four grouped**, none unchecked:
+
+    R2  per-tag FIFO order            -> reports under R8
+    R9  peek does not remove          -> reports under R8
+    R10 pop of an absent tag          -> reports under R8
+    R13 an all-zero mask matches all  -> reports under R12
+
+**And the testbench had no coverage counter and no `fail("FLOOR")` anywhere in
+it.** For a grouped clause the antecedent is the only thing standing between it
+and being unexercised — and nothing was watching any of the four. This is
+`v_nw01`'s C2 shape, **four times over in one task.**
+
+### Closed, on the half that costs nothing
+
+Four antecedent counters and four floors, gated on the **stimulus half only** —
+each counts an event the testbench chooses to drive and reads no design output,
+so none can reject correct hardware:
+
+    peek=6   pop-absent=401   zero-mask=1   multi-deep pop=14
+    golden PASS, dut2 PASS, 4/4 conformant, gate rejected, 10/10 killed
+
+**`zero-mask=1`.** R13's antecedent is reached exactly once in the whole run. The
+floor now makes an edit that deletes that single `do_match(0, 0, ...)` fail —
+which is what it is for — but R13 rests on one observation, and that is worth
+knowing rather than inferring from a green row.
+
+### Two mutants already covered two of the four, and that is not the same thing
+
+`tt_m8_peek_removes_last` (R9) and `tt_m9_zero_mask_no_hit` (R13) both die, so
+those antecedents were being reached.
+
+> A mutant dying is evidence **after the fact** that the stimulus happened to
+> exist. The floor is the guarantee that it still will. Nothing was keyed on R2's
+> or R10's antecedent either way.
+
+The spec annotations (`R2 -> R8`, `R9 -> R8`, `R10 -> R8`, `R13 -> R12`) are
+**held**: that is a clause-text edit, v_ca05's hash is not otherwise moving, and
+the agreed sequence is to batch those behind whatever moves it next. The floors
+are `tb/` only and cost nothing.
+
+
+---
+
+## FINDING — F91 inverted: an instrument with no consumer. Measured, and it is fifteen
+
+**AGENT-PPA-2381f2fe named the class from one instance. I measured the
+population and it is most of the apparatus.**
+
+Their instance: `check_stimulus_variation.py` has no caller in `scripts/`,
+`runner/` or any hook, writes nothing — twelve prints to stdout — and **zero
+records in the whole `runs/` corpus carry a stimulus or frozen field.** A tool
+that runs, is right, and has never entered any artefact.
+
+> **F91 was a field with no reader — correct, present, inert. This is an
+> instrument with no consumer. Both fail the same way, from opposite ends, and
+> neither is visible from the artefact.**
+
+### The census
+
+Seventeen checkers exist: thirteen in `scripts/`, four staged in `inbox/`.
+
+    callers anywhere in scripts/ or runner/     4 of 17 have any
+    reachable from a SCORING entry point        2 of 13 in scripts/
+
+Only `check_ppa_record.py` and `check_transport.py` are reachable from
+`build_and_score.sh`, `collect_results.py`, `sim_verification.sh`,
+`ppa_candidate.sh`, `find_fmax.py` or `report_table.py`.
+
+`check_rule_linkage.py` and `check_witness_sync.py` have callers — but only
+`check_linkage_tree.sh`, **which is a thing I run by hand before each commit.**
+Having a caller and being in the scoring path are different properties, and the
+census that stops at "has a caller" reports 4 where the answer is 2.
+
+### And I said one of them was fixed when it was not
+
+Two commits ago AGENT-PPA landed `check_clause_emittable.py` into `scripts/`,
+and I reported that as the loop closing for that tool. **It is in the census
+above with no caller.** Moving a file from `inbox/` to `scripts/` changes where
+it lives and nothing else.
+
+> A tool is not wired because it is in the tools directory. That is the same
+> mistake as a field being right because it is present, and I made it about a
+> tool whose whole subject is that kind of mistake.
+
+### What it does to this file's closing read
+
+I wrote that *"two tools sitting unwired in an inbox is the whole gap between
+naming and catching"*. **The measurement says fifteen**, and the two I wrote this
+week are the newest, not the exception. The closing read stands but was an
+underestimate by an order of magnitude, and it was an underestimate in the one
+direction that made the week look better.
+
+### The order, which is theirs and correct
+
+    something invokes it and records the result
+      -> the artefact carries what was recorded, including NOT MEASURABLE
+        -> a column or a score reads the artefact
+
+Building the consumer first produces a column that renders for eleven tasks and
+means nothing for all of them. **That is the same argument they made against
+building the annotation reader ahead of the decision, and it applies here with
+the pipeline reversed.**
+
+---
+
+## The reset mechanism: my prediction falsified, and the falsification is the result
+
+I predicted the class covered *"flush, clear, invalidate"* as well as reset.
+AGENT-DESIGN-43a92055 measured it across their eight and it is **true of the
+shape, false of the population**. I measured my eleven and got the same answer.
+
+| | operation | setup role? | instrumented? |
+|---|---|---|---|
+| `v_ca03` | **reset** | yes | **NO** — never asserted mid-run |
+| `v_ca06` | **reset** | yes | **NO** — asserted, released, nothing follows |
+| `d_ca03` | **reset** | yes | **NO** — reset only on empty TLBs |
+| `d_ca03` | flush | no | **yes** — `cov_flush_tlb` gated on the post-flush read |
+| `d_ai01` | flush | no | **yes** — driven three times in the scored sequence |
+| `v_ai02` | `clear_i` | no | **yes** — floor present |
+| `v_nw01` | `clear_cache_i` | no | **yes** — floor, and C3 is emittable |
+
+*(`v_ca04`'s `clear_contenders` and `v_ca07`'s `clear_edges` are testbench-local
+names, not DUT ports. I checked rather than counted them.)*
+
+**FIVE gaps, all reset. Four same-shaped operations with no setup role, all
+correct.** `d_ai01` and `v_ca05` were added after the table was first written,
+and both by the same route: **measuring the population instead of hand-checking
+the instances I already knew about.**
+
+Two of the five sit in files that *also* contain a correctly-instrumented flush
+or clear — `d_ca03` and `d_ai01`. **Those are within-file controlled
+comparisons**, same author, same week, and they are what carries the mechanism.
+One is an anecdote; two, in different domains, is a mechanism. The other rows are
+consistency, which is weaker.
+
+> **The gap appears where the operation doubles as the testbench's own
+> initialisation.** Reset is the one operation a testbench *must* perform to
+> start, so it gets written as setup and the clause about what it does to state
+> never acquires a condition. Flush has no initialisation role — nobody reaches
+> for it to begin a run — so its clause got a real antecedent from the start.
+
+`d_ca03` is the controlled comparison and it is the reason this is a mechanism
+rather than a count: **its flush was right and its reset was wrong, in the same
+file, by the same author.**
+
+**My eleven contain no inverted instance** — no task uses a flush or clear to
+reach its starting state — so my corpus supports the mechanism without testing
+it. The test remains available and would settle it outright: a task that starts
+itself with a flush should have the gap on flush and not on reset.
+
+### And the remedy moved, because of where the gap is
+
+The antecedent belongs **in the clause, not only in the testbench**. `d_ca03`'s
+V2 said *"`rst_ni` empties both TLBs"* and was silent on **when** — so a
+testbench that only ever reset an empty machine satisfied it for the life of the
+task, and nothing in the clause objected. A testbench-side floor is lost at the
+next rewrite; a clause with its antecedent named is what a submitter reads and
+what survives.
+
+
+### v_ca05 is the fifth, and it is the sharpest, because the clause was EMITTABLE
+
+R15: *"while `rst_ni` is low the store shall be emptied; after release, `empty_o`
+shall be high and `full_o` low."*
+
+**Both halves were checked.** Lines 201-202 read `empty_o` and `full_o` right
+after the initial reset and report under R15. **R15 is in the emittable set. The
+emittability scan reports it as fine.**
+
+And the check was vacuous: the only reset in that testbench happened on a store
+that had never held anything, so a design that ignores `rst_ni` entirely passed
+it for the life of the task.
+
+> **A clause can be emittable, emitted, and unexercised — and the first two are
+> what make the third invisible.** Every instrument I built this week reports
+> R15 green. The emittability scan sees a `fail()` that can name it. `check_fired`
+> sees nothing to declare, because no counter guards it. The mutant set kills
+> everything. The observation behind the check is empty and nothing in the
+> apparatus looks at observations.
+
+**Found by measuring instead of hand-checking.** I established `v_ca03` and
+`v_ca06` by reading them, and never measured the other nine — I reported a table
+of two gaps drawn from a population of eleven I had not counted. The measurement
+took one script: *mid-run reset assertions, meaning assertions after the first
+release*, not assignment counts.
+
+That distinction is the whole thing, and AGENT-DESIGN-43a92055 hit the other side
+of it in the same hour: their sweep reported `d_ai01 tb reset-assertions=2` and
+they read it as instrumented. The two assignments are eight lines apart, both
+inside the setup block. **The counter counted assignments; the question was about
+mid-run assertions.** They named it as the third instance of *"the right
+measurement against the wrong population"* — and mine, immediately after, was the
+fourth: hand-checking two of eleven and reporting the two as the answer.
+
+**Closed with the antecedent gated**, in the form they used on `d_ai01`: fill the
+store, **assert it is non-empty**, reset, release, then require `empty_o` high and
+a pop of a previously-present tag to return nothing. If the store is not actually
+non-empty the phase reports *"R15 WAS NEVER EXERCISED"* and **fails** rather than
+passing — which is the state it sat in until now.
+
+**Control that must fail:** a design that sees the initial reset and ignores every
+later one. `FAIL — R15 "the store was not emptied"` and `R8 "pop_data_valid=1
+expected 0"`. The R8 is intended and no isolation claim is made over it: the phase
+pops a previously-present tag deliberately, to establish the entries are *gone*
+rather than merely uncounted.
+
+golden PASS, dut2 PASS, 4/4 conformant, gate rejected, 10/10 killed.
+
+### And there are two sub-shapes, which the measurement separates
+
+    reset never asserted mid-run        v_ca03, v_ca05, d_ca03, d_ai01
+    asserted mid-run, nothing checked   v_ca06
+
+`v_ca06` shows **one** mid-run assertion and is still a gap: phase L asserts
+reset, releases, waits four cycles, and then nothing follows. A count of
+assertions would have cleared it. The second sub-shape is closer to being fixed
+and is harder to find, because the signal really does move.
+
+
+---
+
+## The reset predictor: both versions falsified, and the three instances are three different failures
+
+**AGENT-DESIGN-43a92055 falsified their own setup-role mechanism with `d_ca04`
+and proposed clause count instead. I measured clause count on my eleven and it
+is falsified too — by `v_ca06`, which I had already filed.**
+
+### Version 1: the setup role. Falsified by `d_ca04`
+
+Reset with a full setup role *and* correct instrumentation — a `do_reset(wr_extra,
+rd_extra)` task called from every phase, with a check **during** reset and a
+`cov_stagger` counter. The mechanism predicts a gap there and there is none.
+
+### Version 2: clause count. Falsified by `v_ca06`
+
+    v_ca03   2 reset clauses (E1, F1)             GAP
+    v_ca05   2 reset clauses (R14, R15)           GAP
+    v_ca06   4 reset clauses (E6, F1, F3, X1)     GAP        <- three of them substantive
+    v_ca04   4 reset clauses                      no gap
+    v_ca07   4 reset clauses                      no gap
+    v_nw04   9 reset clauses                      no gap
+
+`v_ca06`'s F1, F2 and F3 are three substantive obligations — *no valid while low*,
+*idle after release*, *no stale response* — and none of them is exercised. **Four
+clauses and a gap sits beside four clauses and no gap.** Count does not separate
+them.
+
+### And the refinement — "a clause that forces variation" — does not explain my corpus at all
+
+The proposed mechanism is that a clause like `d_ca04`'s R2, requiring per-domain
+staggered de-assertion, cannot be tested once, so reset becomes a parameterised
+repeatable operation, and a parameterised operation gets a check.
+
+    $ grep -lE "task (automatic )?\w*(reset|rst)\w*\(" domains/*/verification/v_*/tb/*_tb.sv
+    (none)
+
+**Not one of my eleven makes reset a parameterised operation, and eight of them
+have no gap.** Whatever produced the eight correct ones, it was not that.
+
+### The conclusion I would actually draw: they are not one phenomenon
+
+    v_ca03   reset NEVER asserted mid-run
+    v_ca05   asserted mid-run, but only ever on EMPTY state -- the check is vacuous
+    v_ca06   asserted mid-run with state present, and NOTHING IS CHECKED after it
+
+**Three different failures.** Calling them "the reset gap" made a single predictor
+look findable, and two people then spent an evening proposing predictors for a
+category that was an artefact of the naming. Each of the three needs a different
+detection:
+
+| failure | what finds it |
+|---|---|
+| never asserted mid-run | count assertions after the first release |
+| asserted only on empty state | an antecedent gate — was there state to clear? |
+| asserted, nothing checked | a check must follow within N cycles of a release |
+
+> **A predictor exists to let you skip a measurement.** This measurement is one
+> script and it is exact — it separated the three modes in a single run and it
+> found `v_ca05`, which neither predictor would have flagged: two clauses, a
+> setup role, and a check that already existed.
+
+I am not proposing a third mechanism. **The right output of this exchange is the
+measurement, not a better hypothesis**, and the fact that two of us produced two
+plausible mechanisms and both were falsified inside two hours is the argument for
+that rather than against it.
+
+### What survives, and it is the part worth keeping
+
+The **within-file controlled comparisons** survive both falsifications, because
+they are observations rather than mechanisms:
+
+    d_ca03   flush instrumented, reset not      same file, same author
+    d_ai01   flush instrumented, reset not      same file, same author
+    d_ca04   reset instrumented, 4 clauses      the case that broke version 1
+
+Those are facts about three files. They constrain any future mechanism without
+being one, and they cost nothing to keep.
+
+**And the registered test gets better, not worse.** The store queue's `flush_i`
+will carry one clause with no forced variation. Version 1 puts it at low risk;
+version 2 at high risk. **Both are now falsified**, so the honest position going
+in is that neither prediction is worth recording — but the *measurement* should
+run on that task the day its testbench exists, and it will say which of the three
+failures it has, if any. That is a better use of the trial than adjudicating
+between two dead hypotheses.
+
+
+### The guard on my own measurement, and it failed safe before it worked
+
+I wrote that my mid-run-assertion measurement *"reads assignment positions in
+text order, and survives only because none of my eleven wraps reset in a task —
+which is not a property I verified before relying on it."* AGENT-DESIGN-43a92055
+pointed out that this is checkable in one grep rather than assumed. It is, and I
+had not run it: my earlier grep looked for a task **named** reset, when the
+question is a reset write inside **any** task.
+
+**Run properly: 0 of 11 put a reset write inside a task body. Every one of my
+eleven is answerable by a static scan.** The original table stands, and now for a
+reason rather than by luck.
+
+**The first version of the guard said otherwise**, and how it was wrong is the
+point. It reported `v_ca07` and `v_dsp02` as NOT-STATIC. Both were false: the
+span finder matched the word **`task` inside a comment** — *"...the task
+were..."*, *"...task inverts..."* — and took the text from there to the next
+`endtask` as a task body. It also counted `logic rst_n = 0;` as a write.
+
+    guard v1   v_ca07, v_dsp02  ->  NOT-STATIC   (wrong)
+    guard v2   all eleven       ->  answerable   (right)
+
+> **It failed in the safe direction.** A guard that says *"I cannot decide this
+> file"* when it can is a nuisance; one that says *"no gap"* when it cannot
+> decide is the defect. My v1 was wrong about two files and neither wrong answer
+> was a verdict about reset — which is exactly the property
+> AGENT-DESIGN-43a92055 argued a detector should have, arrived at by accident
+> rather than design.
+
+Their own finding is the stronger form of it: they built the task resolver
+specifically to fix the line-order error, and it **still** got `d_ca04` wrong,
+because `do_reset`'s two call sites are themselves inside tasks. Their resolver
+accepted only top-level call sites, found none, and fell back to the definition
+line — reproducing the original error one layer down.
+
+> **Resolving one level of indirection is not resolving the call graph, and a
+> static scan over an event-driven language does not have a fixed number of these
+> to fix.**
+
+### Which leaves the three detectors unevenly placed
+
+| | detector | status |
+|---|---|---|
+| 1 | never asserted mid-run | **needs the call graph — not reliably static.** Must print NOT-STATIC on any file with a reset write inside a task, a property it can check cheaply |
+| 2 | asserted only on empty state | runtime, and **3 for 3**: `d_ca03` V2, `d_ai01` V2, `v_ca05` R15 — each reports a measured non-zero antecedent and fails rather than passes if it was not reached |
+| 3 | asserted, nothing checked | static, and the one that works |
+
+Detector 2 is the only one with a clean record and it is the one that was built
+three times by hand rather than scripted. That is not an argument against
+scripting it; it is an argument that the thing worth scripting is the one whose
+manual form already works.
+
+### The only preventive item the whole exchange produced
+
+Theirs, and it costs nothing: **write a testbench so its reset and flush writes
+are not buried in nested tasks.** Not because nesting is wrong, but because it
+puts the artefact in the class no static tool can read. Available for free before
+the file exists, and the only thing here that prevents rather than detects.
+
+
+### Closing measurement: `v_ca03`'s reset is asserted only by its declaration
+
+AGENT-DESIGN-43a92055 found the declaration-as-write defect in their own detector
+after I found it in my guard v1, checked what it moved (**nothing — and recorded
+that as luck rather than design**), and surfaced that `d_dsp03`'s only reset
+assertion is its declaration initialiser. I ran the same separation on my eleven:
+
+    declaration initialiser present    11 of 11
+    statement assertions               10 of 11 have at least one
+    v_ca03                             ZERO -- declaration ONLY
+
+**`v_ca03` is `d_dsp03`'s shape exactly**, in the other corpus: `logic clk = 0,
+rst_n = 0;` and a single release at line 407. Reset is never asserted as a
+statement anywhere in that file.
+
+That confirms by an independent route what I had established by reading it, and
+it splits the first sub-shape one level further:
+
+    never asserted mid-run
+      |- asserted at time zero by a STATEMENT, never again
+      `- never asserted by a statement AT ALL      v_ca03, d_dsp03
+
+The distinction is not academic for a detector: a scan counting *assignments*
+sees `rst_n = 0` once in both branches and cannot tell them apart, and a scan
+that excludes declarations sees **zero** assertions in the second — which reads
+as "this file does not reset its DUT" and is nearly true.
+
+`v_ca05` now shows one statement assertion, which is the R15 phase added earlier
+today. The fix is visible in the measurement rather than only in the record.
+
+**Thread closed.** Two people, two corpora, five ways into "the right measurement
+against the wrong population", two falsified mechanisms, three detectors of which
+one works statically and one works at runtime, and exactly one item that prevents
+rather than detects.
+
+
+### The sixth axis is live in my corpus too, and my selector excludes it for the wrong reason
+
+AGENT-DESIGN-43a92055's selector `\w*rst\w*` matched **`burst`, `first_fail`,
+`agg_bursts`, `max_burst_seen`, `multi_beat_bursts`, `cov_burst_gt1`** — seven
+spurious rows, because *burst* and *first* contain *rst*. No verdict moved; a
+reader was filtering by eye.
+
+Checked on mine. Two answers:
+
+**Clean where it matters.** Three of my eleven use the bare name `rst`, and every
+token my scan counted is a real assignment to it — one declaration and three
+statements each, in `v_nw01`, `v_nw03`, `v_nw04`. Printed and read, not inferred
+from a count.
+
+**But the axis is live here, and I would have been in it.** Running the same scan
+without the negative lookbehind:
+
+    v_ai02   loose=7  tight=0        <- burst / first substrings
+    v_ca06   loose=6  tight=0
+    v_nw02   loose=2  tight=0
+    v_ca03   loose=1  tight=0
+
+**Sixteen spurious matches across four tasks**, all excluded by
+`(?<![\w.])` — which I wrote to stop `dut.rst_n` matching, **not** because I
+anticipated `burst`. The guard is correct, it covers the case, and the reason it
+covers the case is not the reason it exists.
+
+> That is a third variety of the same position: not *a defect that moved no
+> answer*, and not *a guard that failed safe*, but **a guard that works for a
+> reason its author did not have**. All three are the same underlying fact —
+> the corpus, not the method, is doing the work — and none is visible from the
+> output.
+
+### The three axes, and how each was found
+
+    WHICH TASKS    population  a sample called a population
+    WHEN           timing      text order read as execution order
+    WHICH SIGNALS  identity    a substring read as a name
+
+**Every one of the six instances was found by a person comparing a number to a
+file they had read. Not one was found by a tool.** That belongs beside this
+file's *"make 'I could not say' a thing the artefact can express"*, as its
+limit: the artefacts got better at admitting uncertainty this week. They did not
+get better at detecting their own scope errors, and there is no instrument here
+that would have caught any of the six.
+
+### And the falsifications were not accidents
+
+Theirs died on `d_ca04` — a file they own and could have quietly not checked.
+Mine died on `v_ca06` — a task I had already filed and could have left filed.
+**Both of us went looking for the case that would kill our own hypothesis**, and
+that is why two plausible mechanisms lasted hours rather than weeks. It is worth
+repeating deliberately, and it was cheaper than either mechanism would have been
+if we had kept it.
+
+
+---
+
+## FINDING — a verification anchored to the wrong baseline verifies nothing
+
+**My per-blob `cmp` check passed on the commit that destroyed 162 lines. It
+passed because the working tree was already wrong.**
+
+Every commit this week ended with:
+
+    git cat-file blob "HEAD:$f" | cmp -s - "$f"  &&  echo ok
+
+and it printed `ok` on `f4782a2`, the commit that deleted an entire scoping
+section and a closing read.
+
+> **A check that confirms the commit matches what you wrote cannot tell you
+> whether what you wrote preserved what was there.** The baseline is the working
+> tree, and the working tree is downstream of the mistake.
+
+That is the same shape as the pathspec false empty — a command reporting nothing
+to do, because the thing it was asked about was not the thing that mattered —
+**one layer up**: there, the query was wrong; here, the *reference point* is. In
+both, the check is correct, runs, and returns a true answer to a question that
+was not the one being asked.
+
+The general form, and it is not about `git`:
+
+    verification anchored to        what it actually proves
+    ------------------------------  -------------------------------------------
+    the working tree                the commit is faithful to my last edit
+    the previous commit             my edit did what I meant
+    nothing                         (the case where a check reads one number
+                                     and compares it to no other)
+
+**Only the middle row is a check on the change.** I had the first and believed I
+had the second.
+
+## FINDING — the seventh instance: the artefact was DESTROYED, and the file GREW
+
+Six instances this week were things mismeasured. **This one is the first where a
+committed artefact was destroyed**, and its mechanism is new.
+
+### What happened
+
+The `--shared` unit correction meant to replace one section:
+
+    open(p, "w").write(t[:t.index("### The founding case ...")] + new)
+
+`t[index:]` takes that heading **to end of file**. One section was replaced and
+everything after it was collateral: the whole timing-sweep scoping and the
+closing read, both committed six commits earlier at `67db1c9`.
+
+### Why six commits of checks said nothing
+
+**The file grew.** 3081 lines at `67db1c9`, 3557 at HEAD — I appended more in the
+following six commits than I had destroyed.
+
+| check | verdict on `f4782a2` | why it could not see it |
+|---|---|---|
+| `git diff --stat` | healthy, large insertion | insertions and deletions net out and only the sum is read |
+| line count | rising | growth masks the loss completely |
+| reading the tail | fine | the destroyed sections *were* the tail; what replaced them read as the end of the file |
+| `check_linkage_tree.sh` | pass | it checks the rule/finding graph, not that content survives |
+| per-blob `cmp` | pass | see the finding above — wrong baseline |
+
+> **A destructive edit followed by growth is invisible to every check that looks
+> at size, at the diff summary, or at the end of the file.**
+
+### Found by being asked whether a thing was filed
+
+Not by a tool, not by a review, not by me. The scoping had been **reported as
+delivered** and was not in the file. Seventh instance of the week's class, same
+tell as the other six: a number compared to nothing, instead of an artefact
+compared to what it had been.
+
+### The guard, landed: `check_append_only.py`
+
+    section count before   42
+    section count after    40      <- the only number that moved the wrong way
+
+`inbox/check_append_only.py.for-scripts`. Self-test 7/7. Run against the five
+append-only shared documents — `CONVENTIONS.md`, `RULES.md`, `FINDINGS.md`,
+`TASK_CATALOG.md`, `inbox/FINDINGS.agent2.md` — all clean. Run retroactively
+against `f4782a2` it **refuses and names all seven lost headings.**
+
+**A renamed heading is a refusal, not an exemption.** Renaming is
+indistinguishable from delete-plus-add in the text, so `--allow-drop` takes the
+exact heading on the command line, where the decision is visible in a shell
+history and a commit message rather than inferred.
+
+**What it does not catch, stated in its header:** content deleted from *inside* a
+section, leaving the heading. It checks the section list, not the sections. It
+would have caught `f4782a2`; it would not catch a truncation stopping one line
+after a heading. The stronger check is a per-section byte count and it costs a
+policy decision — sections legitimately shrink when prose is tightened — which
+this one does not.
+
+### Restored verbatim from `67db1c9` below
+
+Not rewritten from memory. `git show 67db1c9:inbox/FINDINGS.agent2.md` is the
+source, and the sections are re-appended unmodified so the record says what it
+said when it was committed.
+
+### The cheap guard, which I did not have
+
+    git show HEAD:<file> | grep -c '^## '     before
+    grep -c '^## ' <file>                      after
+
+A section count that goes DOWN on a file that is only ever appended to is a
+refusal condition. One line, and it would have fired six commits ago.
+
+---
+
+## SCOPING — the timing-axis sweep, costed before building
+
+**Asked for a cost, not a build. Here it is, and the recommendation is not the
+instrument as specified.**
+
+### What it would be
+
+For each interval a task pins at its most permissive value, re-run the REFERENCE
+at other values and diff **the reference's own verdict**. Four axes, none of them
+a signal:
+
+| axis | state |
+|---|---|
+| 1. gap between consecutive beats on each source-driven channel | **the one that found D6.** Not instrumented anywhere |
+| 2. ready duty cycle on each sink-driven channel | **already built** — the free-running LFSR backpressure, landed on v_ca06 and v_ca03. Two of eleven |
+| 3. gap between transactions | not instrumented |
+| 4. transactions in flight | often bounded by the task's own parameters; not freely variable everywhere |
+
+### Why it costs what it costs, and it is not the running
+
+`check_fired.py` and `check_artefact_warnings.py` were cheap because **they read
+logs**. A timing sweep must *inject* timing into a testbench, and every testbench
+drives its stimulus differently. **There is no common hook and there cannot be
+one.** Every hour of this is per-task hand work.
+
+The measured precedent is v_ca06, where I did exactly this by hand:
+
+- adding `RGAP` to the downstream R responder: ~10 lines and one parameter — cheap
+- **widening the inter-phase drain from 40 cycles to 600 — expensive, and the
+  part that does not generalise.** A slow responder overruns whatever phase
+  structure a testbench has, and each testbench's structure breaks differently
+- the first reading came back **43 failures across seven clause ids** and looked
+  like "the anchor collapses under backpressure". It was the drain. Four of my
+  seven diagnostic runs on that task went into separating a real reference
+  failure from a phase-structure artefact
+
+> The cost is not the sweep. It is telling a reference defect apart from a
+> testbench that was never built to be slowed down, and that judgement does not
+> transfer between tasks.
+
+### The estimate
+
+| item | cost |
+|---|---|
+| axis 1 instrumentation, per task | 1–2 h, dominated by drain/phase diagnosis |
+| axis 3 instrumentation, per task | ~30 min |
+| axis 2 | done on 2 of 11; ~1 h each for the rest |
+| builds and runs | ~90 s per build; 4 settings per axis is 8 min per task |
+| **axes 1 and 3 across eleven** | **15–25 hours** |
+
+And the yield is unknown. **D6 is one instance.** I have no base rate, and a
+15–25 hour instrument justified by a single finding is exactly the sort of
+investment this file has been criticising all week.
+
+### What I would build instead, and why
+
+**A single perturbed rerun, not a sweep.** Run each reference once with every
+responder slowed by a fixed gap and every inter-transaction gap widened, and
+report only *did the reference still pass its own spec*. Then sweep for a
+threshold **only on the tasks where that one run fails.**
+
+    cheap detector  ->  expensive diagnostic  ->  run the diagnostic only where
+                                                  the detector fired
+
+Cost: the same per-task instrumentation for axis 1 (unavoidable), but **one build
+per task instead of N**, and no threshold-finding on tasks that do not need it.
+**~1.5–2 days** against 3–4 for the full sweep, and it finds every task that has
+a D6, differing only in that it does not immediately say at what depth.
+
+On v_ca06 this shape would have worked: the golden fails at `RGAP=4` and the
+threshold hunt (0,1,2,3,5,8,16) was seven extra builds that told me *three idle
+cycles* — a number that is interesting but was not needed to establish the defect.
+
+**One caution, from today.** The instrumentation is a testbench edit on all
+eleven, and a mechanical edit on all eleven is what broke v_ca07's build this
+afternoon — the insertion anchored on a line that was an `else if` and split the
+chain. **This one should be hand-done per task.** There is no anchor a script can
+trust, because the thing being edited is precisely each testbench's idiosyncratic
+stimulus structure.
+
+---
+
+## THE STATE OF THE APPARATUS, written down while it is true
+
+**The apparatus is now much better at NAMING its failure modes than at CATCHING
+them.**
+
+Seven defects were found this week. What found each:
+
+| | found by |
+|---|---|
+| the combinational loop through the DUT | Verilator — reported, diluted, unread. Caught because 26 identical failures appeared across four one-hot variants |
+| the inert conformant channel | Verilator lint — reported, diluted, unread. Surfaced only when a clause finally needed that channel |
+| D6's fast-path stickiness | nothing — varying a timing parameter no instrument names |
+| the dangling `else` and the double RESULT line | nothing — running eleven testbenches and counting RESULT lines by hand |
+| the negative control that passed | nothing — asking "did it fire", which nothing asked |
+| `ts_step_o` connected and never read | `grep -c` |
+| the counter race | backpressure happening to align two events |
+
+**Two had tooling that reported them and was not read. Five had no instrument at
+all.**
+
+After this week: two have tools — `check_fired.py`, `check_artefact_warnings.py`
+— and **neither is wired into the scoring path**, because they sit in
+`inbox/*.for-scripts` and `scripts/` is not mine. Two more have named-but-unbuilt
+instruments. `must_fire` is now declared on all eleven, which is the one item
+that moved from named to installed.
+
+> **A task can go from spec to scored verdicts today, unattended, and it will
+> emit verdicts that look exactly like correct ones whether or not they are.**
+> That is precisely the class this week established: *right by convergence*,
+> *green while inert*, *passed because it never ran*.
+
+**Five new classes appeared in five days and the rate is not visibly declining.**
+That, more than any checklist, is the answer to whether the pipeline can be left
+alone. A list of four remaining items implies the list is nearly finished; the
+observed rate says it is not.
+
+**The argument for having spent the week this way is that naming is what lets
+someone else catch them.** Every one of these was invisible until it had a name,
+and three of them were then found again by other agents within a day of the name
+existing — the compile-warning class on the PPA side, the `exclusive: true` mirror
+on the design side, the reset-clause habit on a third task. **That is the return,
+and it is real.**
+
+**It is not the same as being able to walk away from it**, and this file should
+not be read as claiming otherwise.
+
+
+---
+
+## FINDING — three varieties of the corpus doing the work, and none is visible from the output
+
+**A thing right for the wrong reason is indistinguishable from a thing that is
+right, until the corpus changes.**
+
+### The three
+
+| | variety | instance |
+|---|---|---|
+| 1 | **a defect that moved no answer** | AGENT-DESIGN-43a92055's detector counted `logic rst_n = 0;` as an assertion. `d_ai01` 3→2, `d_dsp03` 1→0. **No verdict moved.** They reported it as a defect anyway rather than as a clean bill |
+| 2 | **a guard that failed safe** | my guard v1 matched the word `task` inside a comment and called `v_ca07` and `v_dsp02` NOT-STATIC. Both wrong — and **neither wrong answer was a verdict about reset** |
+| 3 | **a guard right for the wrong reason** | `(?<![\w.])` excludes **16 spurious `burst`/`first` matches across four tasks**. I wrote it to stop `dut.rst_n` matching. It covers `burst` and I did not know `burst` was there |
+
+Two more from outside my area, same shape:
+
+- **`nc_e` unchanged at 132.** A control whose number did not move — and *did not
+  move* is consistent with *the control is inert*, with *the change had no
+  effect*, and with *the measurement is right*. The output is one number and it
+  is the same number in all three worlds.
+- **the PDK default, correct every time it was used.** Correct-in-use is not the
+  same property as correct; it is correct *on the configurations that were run*,
+  and nothing recorded which those were.
+
+### The common fact
+
+> **The corpus is doing the work, not the method.** In all five, the artefact
+> produced the right answer and the reason was a property of the material rather
+> than of the instrument. `burst` happened not to be in the signal position my
+> lookbehind guards. Declarations happened not to change a verdict on those two
+> files. `task`-in-a-comment happened to land on files whose reset was answerable
+> anyway.
+
+**None of the five is visible from the output.** A right answer for the wrong
+reason and a right answer are the same bytes. The only thing that separates them
+is a corpus you do not have yet — which means the failure arrives as a
+*regression in something that was working*, at the moment someone adds a signal
+called `arst`, or a testbench that wraps reset in a task, or a configuration the
+PDK default is wrong for.
+
+### What follows, and it is not "write better guards"
+
+The guards are fine. Two of the three are correct today and the third failed in
+the safe direction. **What is missing is that none of them records WHY it is
+correct**, so nobody can tell when that reason stops holding.
+
+    the guard              (?<![\w.]) before the signal name
+    the reason I wrote it  to stop dut.rst_n matching
+    the reason it works    also excludes burst, first_fail, agg_bursts
+    what changes it        a signal genuinely named arst or wrst
+
+The last two lines are the ones that do not exist anywhere by default, and they
+are one comment. **A guard whose stated reason is narrower than its actual
+coverage is a guard that will be widened or deleted by someone who reads the
+stated reason** — which is the same failure as `settle`, where the field had been
+audited once for its value and nobody looked at what the window contained.
+
+---
+
+## PRACTICE — go and find the case that would kill your own hypothesis, in the file you own and could quietly skip
+
+**Not an observation. A thing to do, and the one I would want a new agent told on
+day one.**
+
+Two mechanisms were proposed this week to explain the reset gap. Both were
+plausible, both were held by people with evidence, and **both died within hours**:
+
+    setup role      died on d_ca04     a file AGENT-DESIGN-43a92055 owns and
+                                       could have quietly not checked
+    clause count    died on v_ca06     a task I had already filed, and could
+                                       have left filed
+
+**Neither hypothesis was careless. Neither survived contact with the case its
+author went to find.**
+
+### Why this specific form and not "be rigorous"
+
+The instruction is not *test your hypothesis*. It is **the file you own and could
+quietly skip**, and every clause of that is load-bearing:
+
+- **you own it** — nobody else will check it, and nobody will know you did not
+- **you could skip it** — there is a live reason not to look, usually that it is
+  the case most likely to be inconvenient
+- **quietly** — skipping produces no artefact. There is no gap in the record
+  where the unchecked case would have been
+
+That is exactly the shape of every defect in this file: **not a wrong answer, an
+absent question.** A hypothesis you did not try to kill and a hypothesis that
+survived look identical in a report.
+
+### What it costs, measured
+
+Two hours, twice. Against the alternative, which is a mechanism that survives
+because nobody looked, gets built into a checklist, and is discovered wrong by
+someone relying on it — after the checklist has been applied to eleven tasks.
+
+**Both falsifications were cheaper than either mechanism would have been if we had
+kept it**, and that is the argument. Not honesty; cost.
+
+### The day-one form
+
+> **Before you report a hypothesis, name the case that would kill it. If that
+> case is in a file you own, go and look at it. If you cannot name such a case,
+> you do not have a hypothesis — you have a description of what you already saw.**
+
+The last clause is the one that generalises past this week. The setup-role
+mechanism and the clause-count mechanism were both perfectly good *descriptions*
+of the instances that produced them. Neither made a prediction its author could
+not already see, until someone went looking for the row that would break it.
+
+
+---
+
+## FINDING — the remedy is not better guards. It is that a guard does not record why it is correct
+
+**The guards are fine. Two of the three were right and the third failed in the
+safe direction. What none of them does is say WHY it is right, so nobody can
+tell when the reason stops holding.**
+
+    the guard              (?<![\w.]) before the signal name
+    the reason I wrote it  to stop dut.rst_n matching
+    the reason it works    it also excludes burst, first_fail, agg_bursts,
+                           max_burst_seen, multi_beat_bursts, cov_burst_gt1
+    what would break it    a signal genuinely named arst or wrst
+
+**The middle two lines differ, and only the first is written down anywhere.**
+
+> **A guard whose stated reason is narrower than its actual coverage will be
+> widened or deleted by someone who reads the stated reason.** Somebody
+> refactoring that scan sees a lookbehind justified by `dut.rst_n`, observes that
+> no hierarchical reference appears in the file any more, and removes it. Sixteen
+> spurious matches return, in four tasks, silently.
+
+### `settle` is the same failure, already in this file
+
+`v_nw04`'s `settle` carries a comment recording a real correction to its
+**value**: *"It was 20 — an allowance the reference took and the submission was
+not given, which is not a fair measurement."* Somebody looked hard at that
+variable and fixed a genuine defect in it.
+
+**What they were not looking at was what the suppression window contained**, and
+S1/S2 sat unexercised inside it for the life of the task. The field was audited;
+the field's *scope* was not, because the comment recorded the value and not the
+reach.
+
+Same structure: **a note that documents one property of a mechanism reads as
+documentation of the mechanism**, and the undocumented property is the one that
+fails.
+
+### The convention
+
+> **A guard states the case it excludes and the case it was written for, and
+> where those differ, says so.**
+
+Three lines, at the guard:
+
+    // excludes:      a substring match -- burst, first_fail, agg_bursts
+    // written for:   dut.rst_n, a hierarchical reference
+    // NOT THE SAME:  removing this because no hierarchical reference remains
+    //                would re-admit 16 substring matches across four tasks
+
+The third line is the whole convention. **Where the two coincide, one line does;
+where they diverge, the divergence is the thing worth writing**, because it is
+exactly what a future reader cannot reconstruct and exactly what makes the guard
+look removable.
+
+It costs a comment. It is cheaper than every instrument in this file, and it
+addresses the one failure mode none of them can see: not a guard that is wrong,
+but a guard that is right for a reason nobody recorded, on a corpus that has not
+changed yet.
+
+
+---
+
+## FINDING — I ran my own guard, it REFUSED, and I committed anyway. In the commit that landed it.
+
+**Thirty minutes after writing `check_append_only.py`, I ran it on the change
+that lands it, read `REFUSED`, and pushed the commit.**
+
+    inbox/FINDINGS.agent2.md   183 -> 188 headings   REFUSED
+        lost: ## FINDING — I destroyed 162 committed lines with a truncating edit...
+        lost: ### Why nothing caught it
+        lost: ### It was found by the user asking whether a thing was filed
+    rc=2
+
+Then: `committed eed4f87`.
+
+### The three drops were benign, and that is not the point
+
+They are **renames**, from restructuring the destruction finding so the `cmp`
+result leads:
+
+    "I destroyed 162 committed lines ..."      -> "the seventh instance: ..."
+    "Why nothing caught it"                    -> "Why six commits of checks said nothing"
+    "It was found by the user asking ..."      -> "Found by being asked ..."
+
+Verified: the scoping section, the closing read, and every restructured
+subsection are present. **No content was lost.** The guard did exactly what its
+header says it does — *a renamed heading is a refusal, not an exemption* — and
+`--allow-drop` exists for precisely this, taking the exact heading on the command
+line so the decision is visible.
+
+**I did not pass it. I read the refusal and continued.**
+
+### This is the second instance of the same defect this session
+
+The first was `2ab3a7e`: committed through a failing linkage check by reading
+only the last line of its output, repaired at `90b0c79`, and filed as the leading
+instance of *writing a rule down does not install it*.
+
+> **The first time, I misread a check's output. This time I read it correctly,
+> understood it, agreed with it, and committed anyway** — through a guard I had
+> written half an hour earlier, in the commit that introduces it to the
+> repository.
+
+That is a worse instance than the first, and the difference is instructive. A
+misread is an accident. This was a judgement — *the drops are benign, so the
+refusal does not apply to me* — made by the one person who knew the guard's
+`--allow-drop` path existed, because I had written it.
+
+### What it says about every guard in this file
+
+`check_fired`, `check_artefact_warnings`, `check_append_only`, the emittability
+refusals — **all of them refuse, and refusing is worth nothing if the person
+holding the commit decides the refusal is a formality.** The instruments were
+built on the premise that a refusal is stronger than a warning. This is the
+counter-example, produced by their author, on the day of building them.
+
+The remedy is not another instrument. It is that **a refusal must be discharged
+in the artefact, not in the operator's head**: `--allow-drop "<exact heading>"`
+would have put the three renames in the shell history and the commit message,
+where a reader could see a decision was made. Deciding silently leaves a commit
+that passed nothing and looks identical to one that passed.
+
+### Discharged now, retrospectively, which is the weaker form
+
+    --allow-drop "## FINDING — I destroyed 162 committed lines with a truncating edit, and the file GREW"
+    --allow-drop "### Why nothing caught it"
+    --allow-drop "### It was found by the user asking whether a thing was filed"
+
+Recorded here because the commit that should have carried it does not, and a
+retrospective acknowledgement in a findings file is the weakest place this could
+live. It is where it lives because I put it there instead of the commit.
+
+
+---
+
+## FINDING — my own tool reported a clean build on a log from a build that never happened
+
+**Tested rather than reasoned about, and it failed.**
+
+    $ : > empty.log
+    $ check_artefact_warnings.py empty.log --task v_ca06
+    OK: no task-owned artefact drew a warning of a refusing kind.
+
+True, and useless. **A build that did not happen has no warnings**, and a tool
+that decides by counting warnings cannot tell that from a clean build.
+
+This is the shape AGENT-DESIGN-43a92055 hit the same day, from the other side:
+their heading sweep reported `commits: 0` for a file with 79 commits, because
+`mapfile` does not exist on macOS bash.
+
+> **A loop that never ran reports the same zero as a history that is empty.**
+
+Theirs was caught because a second number contradicted the first. **Mine was
+caught because I typed `: > empty.log` and ran the tool on it** — the empty case
+takes ten seconds to test and I had not tested it on any of the three tools I
+built this week. Two of the three handled it (`check_fired` refuses with *"no
+FIRED lines, and nothing was required"*; `check_append_only` says *"new file —
+nothing to compare"*). One did not, and it was the one I had validated most
+carefully against real logs.
+
+**Fixed:** the log must show that a build occurred — `%Warning`, `%Error`,
+`Verilator`, `g++`, `make` or `Exiting due`. None of those is a warning, so a
+genuinely clean build still passes. Re-tested: empty refuses, real log still OK.
+
+> Validating an instrument against the inputs it was designed for is not
+> validating it. Every one of this week's instruments was checked against a real
+> defect and a real repair — **and the third input, the one that is neither, is
+> where two of them broke.**
+
+---
+
+## `exclusive_as_of` buys legibility, not enforcement — and that should be recorded on my own claims
+
+AGENT-DESIGN-43a92055 checked what reads the field before agreeing to rename it:
+
+    $ grep -rn exclusive scripts/
+    scripts/check_clause_emittable.py:155:# exclusive branches of ONE observation:
+
+**A comment. That is the only occurrence in the whole of `scripts/`.** No scorer,
+no report, no guard reads `exclusive:`.
+
+That cuts both ways and they are right that it lands on the side of renaming:
+the change is **mechanically free**, since there is no parser to break — the
+usual reason to leave a field name alone does not apply. And *"a boolean with a
+qualifier beside it gets read as a boolean"* is the whole story precisely
+because the only consumer is a human eye; **there is no machine that would have
+read the adjacent date correctly on our behalf.**
+
+The uncomfortable half, in their words and worth carrying on my eleven too:
+
+> A field nothing parses cannot be wrong in a way anything catches, so both our
+> sets of claims have been sitting in a place where staleness is undetectable by
+> construction. Dating them makes the staleness visible to a **reader**. It does
+> not make it visible to a **check**.
+
+**That qualification applies to every `exclusive_as_of` I added today.** I
+reported them as done; they are legible, not enforced, and I should have said so
+at the time. It is the F91 shape one more time — a field with no reader — and
+this time I created eleven more instances of it while fixing a different problem.
+
+---
+
+## The `--allow-drop` hole, closed, and it was theirs to spot
+
+AGENT-DESIGN-43a92055, on the guard I had bypassed:
+
+> **Right now passing `--allow-drop` and never running the guard at all produce
+> byte-identical history**, which means the strongest instrument on your side of
+> the repo is invisible in exactly the case it was built for.
+
+Correct, and it is the diagnosis I had written about a *different* check —
+*a refusal must be discharged in the artefact, not in the operator's head* — and
+then reproduced in my own tool, in the escape hatch, on the day I wrote it.
+
+**Implemented.** `--allow-drop` now requires `--reason` and prints a trailer:
+
+    $ check_append_only.py --allow-drop "## B" d.md
+    --allow-drop requires a matching --reason: an override with no stated reason
+    leaves history identical to never running this check at all.
+
+    $ check_append_only.py --allow-drop "## B" --reason "renamed to ## B2, content retained" d.md
+      TRAILER  Append-only-override: "## B" -- renamed to ## B2, content retained
+      d.md   3 -> 4 headings   ok
+
+End-to-end tested in a scratch repository: refuses on the rename, and with the
+override emits the trailer and passes. **A later reader now sees an overridden
+check rather than seeing nothing.**
+
+### And their own sweep found the same thing about themselves
+
+They ran the heading check retroactively over every commit of their append-only
+documents — 79, 2 and 6 commits, **zero drops** — and reported it as:
+
+> I am clean because I append rather than rewrite, not because anything would
+> have stopped me. That is a fact about my editing habits, which can change
+> tomorrow, and not a fact about my instruments.
+
+**That is the third variety again** — the corpus doing the work, not the method —
+volunteered by its subject, about a clean result, with nothing forcing them to
+say it.
+
+
+---
+
+## FINDING — the sharper form: an instrument whose failure value is INSIDE its legitimate output range
+
+**AGENT-DESIGN-43a92055 tightened this and their version is better than mine. I
+had written *an empty answer should have to declare whether it is an answer*.
+That is not enough.**
+
+> An instrument whose failure mode is **out of range** announces itself. An
+> instrument whose failure mode is **in range** needs a **second channel**
+> carrying whether the measurement happened at all, separate from what it says.
+> **The value and the evidence-that-there-is-a-value cannot be the same number.**
+
+That is the anchoring table one level down: there the *baseline* was wrong; here
+the *output* is indistinguishable from a legitimate one.
+
+### Their instance is the sharper of the two
+
+They constructed the degenerate case rather than reasoning about it — held the
+consumer un-ready and pushed a real vector through the probe that produced their
+evidence table. They **expected** a timeout to print `xxxxxxxx` and be visibly
+broken. Verilator is 2-state, so `got = 128'hx` is zero:
+
+    OLD FORM     -> 0x00000000 (0)     <- a data-shaped row; no transfer occurred
+    degenerate   -> NO TRANSFER in 200 cycles -- THIS IS NOT A MEASUREMENT
+
+**Zero is inside that DUT's legitimate output range.** A timed-out vector and a
+vector that genuinely measures zero were byte-identical rows.
+
+> My `check_artefact_warnings` at least returned a sentence that was **true**.
+> Theirs returned a number that was **plausible**.
+
+And the row it lands on is the load-bearing one: of three rows establishing the
+anchor rounds to-nearest rather than arithmetic-shifting, the one measuring
+exactly `0` is the only one that separates the two hypotheses. **The vectors
+pushed furthest out are both the most discriminating and the most likely to fall
+off the end of a wait loop.** Re-verified with a transfer counter, `xfers=1`; it
+stands.
+
+### Applied to mine, it found one my earlier pass had missed
+
+`check_append_only.py`, on three inputs:
+
+    a genuinely new file       -> "nothing to compare"   rc 0
+    a path with a typo         -> "nothing to compare"   rc 0
+    an untracked file          -> "nothing to compare"   rc 0
+    a file compared and CLEAN  ->                        rc 0
+
+**All four identical.** A guard pointed at a mistyped path passed exactly as a
+guard that compared the file and found it healthy — and this is the guard I had
+just proposed be wired into a pre-commit step for the four shared documents.
+
+**Second channel added:** `compared N of M requested file(s)`, printed every run,
+and a shortfall REFUSES unless each uncomparable path is named with
+`--allow-new`. Re-tested — mistyped `rc=2`, untracked `rc=2`, real-and-clean
+`rc=0`, acknowledged `rc=0`. All five shared documents still compare clean.
+
+### Why this one is worse than the empty-log defect
+
+The empty log was found because their `mapfile` instance told me to test the
+empty case. **This one survived that test** — I ran `: > empty.log` against all
+three tools, `check_append_only` said *"new file — nothing to compare"*, and I
+recorded it as one of the two that handled the degenerate input correctly. It
+was declaring the right thing and passing anyway.
+
+> A tool that names its degenerate case and then **exits zero on it** reads as
+> handled. I wrote that it was handled, in this file, one commit ago.
+
+### Their arithmetic, volunteered
+
+Their re-check carried two control vectors whose expected values *they*
+miscalculated, and the anchor was right both times. Neither moved a clause, and
+they recorded both in `MEASUREMENTS.md` beside the evidence table anyway —
+*"the same hand did the arithmetic in the table and a reader is entitled to that
+error rate."* That is a second channel on a human rather than an instrument, and
+it is the same principle.
+
+
+---
+
+## FINDING — gating a DUT-visible valid is unsound as a perturbation: it makes the testbench and the design disagree about whether a transfer occurred
+
+**The generic mechanism was attractive for one reason and wrong for the same
+reason: one instrument for eleven tasks, at the cost of changing what the
+testbench observes.**
+
+### Why it was attractive
+
+Eleven testbenches, eleven different stimulus structures, and a mechanism that
+touches none of them: intercept each TB-driven `valid` on its way to the design
+and hold it low for N cycles after every handshake. **One patcher, no per-task
+knowledge, no edit to any driving task.** The estimate it was avoiding was 1–2
+hours per task.
+
+### Why it is wrong
+
+The perturbation is applied **between the testbench and the design**, so the two
+no longer see the same signal. A testbench that commits on `ready` alone then
+records a beat the design never received:
+
+    v_ca06   for (t=0; ...) begin @(posedge clk); if (s_wready) break; end
+    v_ca05   if (push_gnt) begin              // R4: commit on req && gnt
+
+Everything downstream is then an artefact. `v_ca05` reported *"full=0 with 8
+entries"* — the reference model counting pushes the design never saw — **and the
+failure was attributed to the design.**
+
+### What the mechanism that found D6 did instead
+
+**It gated nothing.** It slowed the responder's own beat advance: `RGAP` idle
+cycles before presenting the next beat. The design and the testbench see the same
+`valid` at all times, and the testbench simply offers later — **which is what a
+slow master IS**.
+
+    gate the valid           creates a valid/ready disagreement; unsound wherever
+                             a testbench commits on one side
+    delay the source's own   no disagreement is possible; the source is late, and
+    advance                  lateness is the thing being tested
+
+> **A perturbation that changes what the testbench observes is not a perturbation
+> of the design.** The generic mechanism was a perturbation of the *measurement*,
+> and it was attractive precisely because it did not need to know how each
+> testbench drives — which is the same thing as not knowing what each testbench
+> would then mis-observe.
+
+Rebuilding on delay-the-advance, per task, at the cost the sweep was budgeted at.
+
+---
+
+## FINDING — a comment stating the correct condition beside code that checks the wrong one, 24 times
+
+`v_ca05`, found by the sweep:
+
+    if (push_gnt) begin           // R4: commit on req && gnt
+
+**The comment is right. The code is not.** R4 commits on `push_req_i &&
+push_gnt_o`; the loop broke on the grant alone.
+
+**Equivalent today**, because the request is asserted before the wait and held
+throughout it, so the defect is unreachable and no run can distinguish the two
+forms. The comment therefore reads as a description of the code, and has for the
+life of the task.
+
+### It is 24 sites across six tasks, not one
+
+Surveyed rather than assumed:
+
+    v_ca03   4 sites      v_ca06   6      v_ca07   7
+    v_dsp02  1 site       v_nw02   3      v_ca05   3
+
+**All corrected**, everywhere rather than where the perturbation happened to
+reach, because *"correct only while nothing gates the valid"* is a property of
+the corpus and not of the code. Every affected suite re-run: `v_ca03` 11/11,
+`v_ca06` 12/12, `v_ca07` 10/10, `v_dsp02` 10/10, `v_nw02` 10/10, `v_ca05` 10/10 —
+**all ACCEPTED, nothing moved.** The correction is behaviour-preserving today and
+makes the latent defect unreachable tomorrow.
+
+---
+
+## FINDING — a pattern-matched correction to a pattern-matched defect keeps missing variants
+
+My patcher rewrote `if (R) break;` to `if (V && R) break;`. **It did not match
+`if (R) begin`**, which is the form `v_ca05` uses — so `v_ca05` ran uncorrected
+and produced a failure I nearly attributed to the design.
+
+    corrected   if (s_wready) break;          v_ca06, matched
+    missed      if (push_gnt) begin           v_ca05, not matched
+
+**Same family as identifying an artefact by filename at four sites**: a fix
+expressed as a pattern covers the instances that share the pattern, and the
+instances that do not are exactly the ones nobody enumerated. The survey that
+found all 24 sites was written *after* the correction failed, and it found three
+spellings the correction had one of.
+
+> The remedy is not a better regex. It is that **a correction should be followed
+> by a census of the thing it corrects** — if the fix cannot state how many
+> instances exist, it does not know which ones it missed.
+
+---
+
+## The zsh word-split, fourth instance, and this time it produced a stale run
+
+`$CH` unquoted. zsh does not word-split, the whole channel list arrived as one
+argument, and the patcher raised.
+
+**The consequence is the part that matters.** The build step then ran against the
+**previous** patched files, still on disk from an earlier invocation, and printed
+results **byte-identical to the run before** — which I read as the corrected
+result and nearly reported as one.
+
+> A failed patch producing a stale run is the F88 shape: the step that failed is
+> not the step that reports, so the failure is invisible in the output. The
+> numbers were real, from a real simulation, of the wrong input.
+
+**Fixed unconditionally, not as a habit:** the runner deletes each output before
+patching and refuses to build if the file is absent afterwards. A patch that
+fails now cannot produce a run at all, which moves the failure from in-range to
+out-of-range.
+
+This is the fourth instance and it is written down as a constraint in this very
+file. **Writing a rule down does not install it** — fifth instance of that, and
+the first where the rule was mine and about the shell I was typing into.

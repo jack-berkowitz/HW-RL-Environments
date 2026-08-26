@@ -9,6 +9,19 @@
 // It deliberately does NOT require an order between a manufactured B and the
 // manufactured R beats (clause L1), nor any value on their data/user fields
 // (clause L2).
+// A WAIT COMMITS ON THE HANDSHAKE, NOT ON ONE SIDE OF IT.
+// These loops broke on the READY/GRANT alone. That is equivalent today -- the
+// valid is asserted before the wait and held throughout it -- so the defect was
+// unreachable and no run could distinguish the two forms.
+//
+// It becomes reachable the moment anything gates the valid: the design sees no
+// offer, the testbench sees a ready, and a beat that never moved is recorded as
+// moved. Measured on v_ca05, where the reference model then reported "full=0
+// with 8 entries" and the failure was attributed to the design.
+//
+// 24 sites across six tasks had this shape. Corrected everywhere rather than
+// where a perturbation happened to reach, because "correct only while nothing
+// gates the valid" is a property of the corpus and not of the code.
 module atop_filter_tb;
 
   // VCD on demand, for the rule-34 stimulus-variation check. Guarded by a
@@ -419,7 +432,7 @@ module atop_filter_tb;
     accepted = 1'b0;
     for (t = 0; t < timeout; t++) begin
       @(posedge clk);
-      if (s_awready) begin accepted = 1'b1; break; end
+      if (s_awvalid && s_awready) begin accepted = 1'b1; break; end
     end
     @(negedge clk) s_awvalid = 1'b0;
     if (!accepted) begin
@@ -464,7 +477,7 @@ module atop_filter_tb;
         // watchdog rather than the clause that was actually broken.
         for (t = 0; t < RESP_DEADLINE; t++) begin
           @(posedge clk);
-          if (s_wready) begin took = 1'b1; break; end
+          if (s_wvalid && s_wready) begin took = 1'b1; break; end
         end
         if (!took) begin
           fail("X4", $sformatf("a W beat was offered for %0d cycles and never accepted (cycle %0d). Every W beat of a write already admitted must be consumed -- forwarded or absorbed.", RESP_DEADLINE, cyc));
@@ -503,7 +516,7 @@ module atop_filter_tb;
       took = 1'b0;
       for (t = 0; t < RESP_DEADLINE; t++) begin
         @(posedge clk);
-        if (s_arready) begin took = 1'b1; break; end
+        if (s_arvalid && s_arready) begin took = 1'b1; break; end
       end
       if (!took) fail("P3/X4", $sformatf("an AR was offered for %0d cycles and never accepted (cycle %0d); the read path is never filtered and must not be blocked", RESP_DEADLINE, cyc));
     end
@@ -673,6 +686,23 @@ module atop_filter_tb;
       fail("COVERAGE", $sformatf("downstream backpressure was driven only %0d time(s) -- X3's master-side channels cannot be judged without it, and that half is the harness's to provide", cov_bp_driven));
     if (sb_ctr < 8 || sb_ar < 8)
       fail("COVERAGE", $sformatf("only %0d write and %0d read sideband patterns driven -- P1 and P3 are pass-through clauses and a field held constant cannot show a design that ignores it", sb_ctr, sb_ar));
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_nw02.cov_backpressure %0d", cov_backpressure);
+    $display("FIRED v_nw02.cov_bp_driven %0d", cov_bp_driven);
+    $display("FIRED v_nw02.cov_filled_bound %0d", cov_filled_bound);
+    $display("FIRED v_nw02.cov_load %0d", cov_load);
+    $display("FIRED v_nw02.cov_multibeat %0d", cov_multibeat);
+    $display("FIRED v_nw02.cov_nonatomic %0d", cov_nonatomic);
+    $display("FIRED v_nw02.cov_reset %0d", cov_reset);
+    $display("FIRED v_nw02.cov_store %0d", cov_store);
+    $display("FIRED v_nw02.cov_wbeats %0d", cov_wbeats);
+    $display("FIRED v_nw02.peak_debt %0d", peak_debt);
 
     if (errors == 0) $display("RESULT: PASS");
     else $display("RESULT: FAIL (%0d violation%s)", errors, (errors == 1) ? "" : "s");

@@ -209,6 +209,14 @@ module nonblocking_dcache_tb #(
   int  mem_txn_count, mem_fill_count, mem_wb_count;
   int  mem_beats_this_txn;
   int  m1_align_err, m1_beats_err, m3_overlap_err, m2_data_err;
+  // M3 IS A NEVER-HAPPENS CHECK AND HAS NO FIRING COUNT. `m3_overlap_err == 0` is
+  // vacuously true for a design that issues NO memory transaction at all -- the
+  // check cannot distinguish "never issued two at once" from "never issued one".
+  // The harness drives misses so a conforming design must issue them, but nothing
+  // measured that it did. Rule 36's remedy: count the transactions and gate on
+  // non-zero. Found by the F86 conditional-clause sweep, which flagged M3 because
+  // its antecedent -- mem_req_valid_o -- is a DESIGN OUTPUT.
+  int  m3_txns;
   int  wb_words_checked;
 
   // A `wire` may not carry an `int` type; a plain vector is what this needs.
@@ -221,6 +229,7 @@ module nonblocking_dcache_tb #(
       mbeat_r <= 0; mgap_r <= 0; mbase_r <= 0; mrd_data_r <= '0; mreq_addr_r <= '0;
       mem_txn_count <= 0; mem_fill_count <= 0; mem_wb_count <= 0; mem_beats_this_txn <= 0;
       m1_align_err <= 0; m1_beats_err <= 0; m3_overlap_err <= 0; m2_data_err <= 0;
+      m3_txns <= 0;
       wb_words_checked <= 0;
     end
     else begin
@@ -235,6 +244,7 @@ module nonblocking_dcache_tb #(
             mgap_r <= mgap_r - 1;
           end
           else if (mem_req_valid && mreq_ready_r) begin
+            m3_txns <= m3_txns + 1;
             // M1: fill address must be block aligned
             if (mem_req_addr[BLK_OFF_W-1:0] != '0) m1_align_err <= m1_align_err + 1;
             mreq_addr_r  <= mem_req_addr;
@@ -667,6 +677,9 @@ module nonblocking_dcache_tb #(
     chk(sb_dup_err     == 0, "harness: R6 violated -- two requests in flight with one id");
     chk(m1_align_err   == 0, "M1: a memory request address was not block aligned");
     chk(m1_beats_err   == 0, "M1/M2: a memory transaction did not carry BLOCK_WORDS beats");
+    $display("METRIC: m3_txns=%0d (0 means M3 was not exercised -- no memory transaction issued)", m3_txns);
+    if (m3_txns == 0)
+      note_fail("M3 was never exercised -- the design issued no memory transaction, so `no overlap' is vacuous");
     chk(m3_overlap_err == 0, "M3: a memory request was issued while a transaction was in flight");
     chk(m2_data_err    == 0, "M2: a writeback block did not match architectural state");
 

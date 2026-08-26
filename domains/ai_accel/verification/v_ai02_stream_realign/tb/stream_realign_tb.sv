@@ -419,6 +419,28 @@ module stream_realign_tb;
     if (!cov_passthrough_after) fail("COVERAGE", "pass-through was never exercised AFTER realigning");
     for (int i = 0; i < 5; i++)
       if (!cov_rot[i]) fail("COVERAGE", $sformatf("rotation %0d was never driven", i));
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_ai02.cov_beats %0d", cov_beats);
+    $display("FIRED v_ai02.cov_clear %0d", cov_clear);
+    $display("FIRED v_ai02.cov_empty_last %0d", cov_empty_last);
+    $display("FIRED v_ai02.cov_lines %0d", cov_lines);
+    $display("FIRED v_ai02.cov_long_empty_last %0d", cov_long_empty_last);
+    $display("FIRED v_ai02.cov_long_stall %0d", cov_long_stall);
+    $display("FIRED v_ai02.cov_mid_empty %0d", cov_mid_empty);
+    $display("FIRED v_ai02.cov_partial_last %0d", cov_partial_last);
+    $display("FIRED v_ai02.cov_partial_strb %0d", cov_partial_strb);
+    $display("FIRED v_ai02.cov_passthrough %0d", cov_passthrough);
+    $display("FIRED v_ai02.cov_passthrough_after %0d", cov_passthrough_after);
+    $display("FIRED v_ai02.cov_reset %0d", cov_reset);
+    $display("FIRED v_ai02.cov_run_of_lines %0d", cov_run_of_lines);
+    $display("FIRED v_ai02.cov_stalls %0d", cov_stalls);
+    $display("FIRED v_ai02.cov_strb_changes %0d", cov_strb_changes);
 
     if (errors == 0) $display("RESULT: PASS");
     else $display("RESULT: FAIL (%0d violation%s)", errors, (errors == 1) ? "" : "s");

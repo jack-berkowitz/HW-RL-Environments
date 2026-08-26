@@ -191,6 +191,20 @@ case "$TASK_NAME" in
       # submission to hold at BOTH, so running only the scored geometry would
       # score a clause the task explicitly declines to rest on.
       CFGS=("+HH=4" "+HH=8") ;;
+  d_ai04_sdp_requant)
+      # EXACTLY ONE config, BY CONSTRUCTION rather than by omission -- the
+      # distinction the *) branch below exists to enforce. sdp_requant declares
+      # NO PARAMETERS AT ALL: spec P1 pins four lanes and the 16b/32b lane
+      # widths, and every other axis is a runtime INPUT -- cfg_precision,
+      # cfg_offset, cfg_scale, cfg_truncate, cfg_bypass, cfg_nan_to_zero -- so
+      # it is swept by the stimulus rather than by elaboration.
+      #
+      # The coverage that would be configs elsewhere is in the vectors: 44
+      # anchor-measured words carrying the contract, plus 800 swept words across
+      # both modes, both signs, every binary16 subnormal boundary and truncate
+      # values to 47. If a parameter is ever added here, this list must grow with
+      # it or the sweep silently narrows.
+      CFGS=("") ;;
   d_dsp02_fp32_fma_ii1)
       # EXACTLY ONE config, and one BY CONSTRUCTION rather than by omission --
       # the distinction the refusal below exists to enforce. fp32_fma_ii1
@@ -363,6 +377,68 @@ run_one() {
       if [ -x "$d/sim" ]; then out="$(timeout 600 "./$d/sim" 2>&1)"
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -m1 "%Error" | sed "s|.*/candidates/|candidates/|" | cut -c1-90)"; fi
       rm -rf "$d"
+      # COMPILE WARNINGS WERE DISCARDED ENTIRELY ON A SUCCESSFUL BUILD. cerr was
+      # read only inside the failure branch above, so a clean build reported
+      # nothing at all about what the compiler said.
+      #
+      # AGENT-VERIF-A2 lost a day to a combinational loop -- a testbench driving
+      # ready from valid, closing ready -> design -> valid -> arm -> ready --
+      # that Verilator reported as UNOPTFLAT and that was invisible among ~30
+      # warnings about a vendored anchor under -Wno-fatal. On one task it
+      # converged and every verdict was right; on another it produced 26 failures
+      # across six clause ids, none of them a design defect. Their tell is the
+      # durable part: four different one-hot variants gave the IDENTICAL 26
+      # failures, and a defect that does not change when you change what provokes
+      # it is a settle order rather than a design defect.
+      #
+      # That was invisible by DILUTION. Here it would have been invisible by
+      # TOTAL SUPPRESSION, which is strictly harder to notice -- dilution at
+      # least leaves the warning in the output for someone to grep.
+      #
+      # UNOPTFLAT IS NOT A STYLE WARNING. It reports a combinational loop, and a
+      # loop in the testbench means every verdict from that run is a settle-order
+      # artefact. It is surfaced by name, separately from the count, and carried
+      # into the run record so it survives the terminal.
+      NWARN=$(printf '%s\n' "$cerr" | grep -c '^%Warning')
+      WCLASSES=$(printf '%s\n' "$cerr" | grep -oE '^%Warning-[A-Z0-9]+' \
+                 | sed 's/^%Warning-//' | sort -u | paste -sd, - 2>/dev/null)
+      # THE FAMILY, NOT ONE NAME. Keyed on UNOPTFLAT alone this detector did not
+      # fire on the very shape it was built for: a testbench driving ready from
+      # valid, closing ready -> design -> valid -> ready, which Verilator 5.046
+      # reports as ALWCOMBORDER ("Always_comb variable driven after use"). A
+      # constructed instance of A2's exact hazard produced zero UNOPTFLAT.
+      # UNOPT and UNOPTFLAT cover the shapes it does name that way.
+      NLOOP=$(printf '%s\n' "$cerr" | grep -cE 'UNOPTFLAT|ALWCOMBORDER|%Warning-UNOPT\b')
+      if [ "${NLOOP:-0}" -gt 0 ]; then
+        printf '%-26s %-9s %s\n' "$name" "LOOP" \
+          "combinational-loop warning x$NLOOP in cfg '${cfg:-default}' (UNOPTFLAT/ALWCOMBORDER) -- verdicts from this run are settle-order artefacts, not design results"
+        LOOPSEEN=$((LOOPSEEN+1))
+      fi
+      # run_one executes inside a command substitution -- a SUBSHELL -- so a
+      # variable set here is invisible to the caller. The same reason the raw
+      # per-config output is written to RAW_DIR rather than returned. Stats go
+      # to files beside it, for the caller to total.
+      # ZERO WARNINGS FROM A BUILD THAT NEVER HAPPENED IS NOT A CLEAN BUILD.
+      # This counted unconditionally, so a submission whose configs all died at
+      # elaboration reported `warnings=0` -- byte-identical to a build that
+      # compiled and had nothing to say.
+      #
+      # AGENT-DESIGN-43a92055 nearly published exactly that number while
+      # DEMONSTRATING this class of defect: their first two loop builds printed
+      # "UNOPTFLAT lines: 0" from builds that had failed with MODMISSING. They
+      # caught it by checking whether a `sim` binary existed. The instrument
+      # built to demonstrate vacuity committed one on its first two runs, and the
+      # same hole was already here.
+      #
+      # Counts are now attributed to configs that PRODUCED A BINARY, and the
+      # configs that did not are reported separately rather than averaged in.
+      if [ "$out" = "COMPILE_ERROR" ]; then
+        echo 1 >> "$RAW_DIR/_nobuild"
+      else
+        echo "$NWARN" >> "$RAW_DIR/_warn_counts"
+        [ -n "$WCLASSES" ] && echo "$WCLASSES" >> "$RAW_DIR/_warn_classes"
+        [ "${NLOOP:-0}" -gt 0 ] && echo 1 >> "$RAW_DIR/_unoptflat"
+      fi
     fi
     printf '%s\n' "$out" > "$RAW_DIR/${tag}.txt"
     v="$(echo "$out" | grep -oE 'TEST_RESULT: (PASS|FAIL)' | head -1 | awk '{print $2}')"
@@ -485,16 +561,43 @@ for cand in "${CANDS[@]}"; do
   #
   # -F: these are literal strings, not patterns. "_tb." contains a regex
   # metacharacter and would otherwise match "_tbX".
-  leak=""
-  for tok in "TEST_RESULT" "_tb." "_tb " "golden_mem" "mem_stub" "reference_solutions"; do
-    if LC_ALL=C grep -qF -- "$tok" "$cand"; then leak="$tok"; break; fi
-  done
-  if [ -n "$leak" ]; then
+  # THE SCAN READS CODE, NOT COMMENTARY. This grepped the raw file, so
+  # d_nw01/controls/nc_i_overbuffered_r.sv was rejected outright for a COMMENT
+  # reading "Grepping tb/axi4_xbar_tb.sv for an occupancy counter finds nothing"
+  # -- prose explaining why the control matters, matched as if it were a
+  # hierarchical reference. A scanner that cannot tell code from commentary
+  # refuses a file for what it SAYS rather than what it DOES.
+  #
+  # leak_scan.py splits the tokens, because a string literal is safe for one
+  # class and IS the attack for the other: $display("TEST_RESULT: PASS") forges
+  # a verdict from inside a string, while axi4_xbar_tb.r_count inside a string
+  # is inert. A comment-aware rewrite that blanked strings for both would have
+  # opened verdict forgery, and this one did until it was tested.
+  #
+  # A token found only in commentary is REPORTED and not fatal. Silence would
+  # teach the reader there was nothing to say.
+  LEAKOUT="$(python3 "$REPO/scripts/leak_scan.py" "$cand" 2>/dev/null)"
+  LEAKKIND="${LEAKOUT%%	*}"; leak="${LEAKOUT##*	}"
+  if [ "$LEAKKIND" = "COMMENT" ]; then
+    printf '%-26s %-9s %s\n' "$name" "note" \
+      "mentions '$leak' in a comment only -- not a reference, not rejected"
+  fi
+  if [ "$LEAKKIND" = "CODE" ]; then
     case "$leak" in
       TEST_RESULT) why="forges a TEST_RESULT line" ;;
       *)           why="references harness-private '$leak' -- the submission may not see the testbench" ;;
     esac
     printf '%-26s %-9s %s\n' "$name" "REJECT" "$why"
+    # A REFUSAL THAT LEAVES NO TRACE IS INDISTINGUISHABLE FROM A RUN THAT NEVER
+    # HAPPENED. This used to `continue` straight past the recorder, so the
+    # scored path could reject a file every time and nothing durable said so --
+    # exactly what let d_nw01's nc_i control carry "passes both MAX_TRANS
+    # configs" from a hand run while the scored path silently refused it.
+    tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+    python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+      "$(basename "$cand" .sv)" "task_text_hash=$tt" \
+      "build_status=rejected_leak_token" \
+      "build_error=$why" >/dev/null 2>&1 || true
     NREJECT=$((NREJECT+1)); continue
   fi
   if ! grep -qE "^[[:space:]]*module[[:space:]]+$DUT_MOD\b" "$cand"; then
@@ -654,11 +757,34 @@ for cand in "${CANDS[@]}"; do
   # a day and turned a failed command into a well-formed empty record. The
   # inner task_text_hash.py keeps its own 2>/dev/null -- that one is a nested
   # substitution whose diagnostics would otherwise land inside the label.
+  # ONE SUMMARY LINE PER SUBMISSION, ALWAYS, SUCCESS OR FAILURE. Printing 83
+  # warning lines would be its own kind of suppression; printing a COUNT and the
+  # CLASS NAMES makes a NEW class visible without burying the verdict. That is
+  # the cheapest form of the fix and it closes most of the gap.
+  WARNTOTAL=$(awk '{n+=$1} END{print n+0}' "$RAW_DIR/_warn_counts" 2>/dev/null)
+  WARNCLASSES="$(tr ',' '\n' < "$RAW_DIR/_warn_classes" 2>/dev/null | grep -v '^$' | sort -u | paste -sd, - 2>/dev/null)"
+  LOOPSEEN=$(grep -c . "$RAW_DIR/_unoptflat" 2>/dev/null || echo 0)
+  NBUILT=$(grep -c . "$RAW_DIR/_warn_counts" 2>/dev/null || echo 0)
+  NNOBUILD=$(grep -c . "$RAW_DIR/_nobuild" 2>/dev/null || echo 0)
+  if [ "${NBUILT:-0}" -eq 0 ]; then
+    printf '  compile: NO CONFIG BUILT (%s failed) -- no warning count is available; this is not "clean"\n' "${NNOBUILD:-0}"
+  else
+    printf '  compile: warnings=%s over %s config(s) that built%s%s%s\n' \
+      "${WARNTOTAL:-0}" "${NBUILT}" \
+      "$([ "${NNOBUILD:-0}" -gt 0 ] && echo ", ${NNOBUILD} did NOT build")" \
+      "${WARNCLASSES:+ classes=$WARNCLASSES}" \
+      "$([ "${LOOPSEEN:-0}" -gt 0 ] && echo "  *** COMBINATIONAL LOOP warning in ${LOOPSEEN} config(s) ***")"
+  fi
   tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
   if ! rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
         "$(basename "$cand" .sv)" \
         "task_text_hash=$tt" \
         "simulator=$SIM" "simulator_version=$VERILATOR_VERSION" \
+        "compile_warnings=${WARNTOTAL:-0}" \
+        "compile_warning_classes=${WARNCLASSES:-}" \
+        "comb_loop_configs=${LOOPSEEN:-0}" \
+        "compile_configs_built=${NBUILT:-0}" \
+        "compile_configs_failed=${NNOBUILD:-0}" \
         "$RAW_DIR")"; then
     echo "  RECORD NOT WRITTEN for $name -- see the error above. The run happened;" >&2
     echo "  nothing downstream can cite it until this is fixed." >&2

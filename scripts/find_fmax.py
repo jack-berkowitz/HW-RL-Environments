@@ -411,6 +411,82 @@ def run_period(design, tier, pdk, period, iteration, log_dir, verbose,
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+def _config_coverage(design):
+    """(passed, total, task_name) from the NEWEST sim record for this design.
+
+    THE GATE THIS BACKS. build_and_score.sh --sim-only returning 0 means the
+    reference passed the configs it RAN. It does not mean it ran them all, and
+    those are different claims: a sweep whose gate passed on one configuration
+    of a task that registers sixteen has established almost nothing about the
+    design it is about to spend a day measuring.
+
+    d_ai01 is the case that made this concrete. Its scored geometry moved to
+    HEIGHT=4, where nc_g_height_blind_depth PASSES -- so a run that elaborates
+    only the scored configuration produces no HEIGHT evidence at all, and a PPA
+    number from it is a number about *a* design rather than evidence the design
+    is parameterised.
+    """
+    task = args_design_to_task(design)
+    if not task:
+        return None, None, None
+    # THE RECORD MUST BE THE ONE FOR THE THING BEING SWEPT. The first version of
+    # this took the newest record carrying a config count, whatever it was for,
+    # and d_ai01 immediately returned 1/2 -- from nc_g_height_blind_depth, a
+    # NEGATIVE CONTROL that is SUPPOSED to fail at HEIGHT=8. It would have
+    # refused a valid sweep because a control happened to be measured last.
+    #
+    # A gate that reads someone else's record is worse than no gate: it fails
+    # the honest case and would pass a dishonest one whenever the newest record
+    # happened to be a full pass by something else.
+    subj = _sweep_subject(design)
+    recs = sorted(glob.glob(os.path.join(REPO_DIR, "runs", task, "*__sim.json")))
+    for f in reversed(recs):
+        try:
+            d = json.load(open(f))
+        except Exception:
+            continue
+        if d.get("configs_total") is None:
+            continue
+        if subj and os.path.basename(d.get("submission", "")) != subj:
+            continue
+        return d.get("configs_passed"), d.get("configs_total"), task
+    return None, None, task
+
+
+def _sweep_subject(design):
+    """Basename of the file this sweep is actually measuring, or None.
+
+    For a candidate sweep that is the generated config's VERILOG_FILES entry.
+    For a reference sweep it is the file DECLARING DESIGN_NAME -- resolved the
+    same way build_and_score.sh resolves it, because the gate must check the
+    file the gate ran.
+    """
+    task = args_design_to_task(design)
+    if not task:
+        return None
+    for d in glob.glob(os.path.join(REPO_DIR, "domains", "*", "design", task)):
+        cfg = os.path.join(d, "orfs", "config.mk")
+        dn = read_config_var(cfg, "DESIGN_NAME") if os.path.exists(cfg) else None
+        if not dn:
+            return None
+        dn = dn.strip()
+        for f in sorted(glob.glob(os.path.join(d, "ref", "*.sv"))):
+            try:
+                if re.search(r"^module\s+%s\b" % re.escape(dn),
+                             open(f, errors="replace").read(), re.M):
+                    return os.path.basename(f)
+            except OSError:
+                pass
+    return None
+
+
+def args_design_to_task(design):
+    base = design.split("_cand_")[0]
+    for d in glob.glob(os.path.join(REPO_DIR, "domains", "*", "design", base + "_*")):
+        return os.path.basename(d)
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(
         description="Find a module's Fmax by binary search over full ORFS P&R runs.",
@@ -485,6 +561,12 @@ def main():
     # Reuse build_and_score.sh's Verilator gate rather than duplicating it, and
     # run it once rather than per-iteration: the RTL does not change during the
     # search, only the constraint does.
+    # A BYPASS THAT LEAVES A MARK IS MORE USEFUL THAN ONE THAT CANNOT BE USED.
+    # --skip-sim-check is kept, and every record the sweep writes now carries
+    # correctness_gate=BYPASSED instead of the coverage it did not establish. A
+    # number does not become quotable by being labelled -- but an unlabelled one
+    # is indistinguishable from a gated one, and that is the worse failure.
+    gate_status = "BYPASSED -- --skip-sim-check: no correctness sweep was run"
     if not args.skip_sim_check:
         if tier == "candidate":
             # A generated candidate run is keyed by its ORFS nickname
@@ -508,6 +590,28 @@ def main():
                 f"ERROR: {args.design} does not pass its testbench. "
                 f"Fmax of RTL that does not work is meaningless -- fix it first."
             )
+        # PASSING IS NOT THE SAME AS PASSING EVERYTHING. The gate above reports
+        # on the configurations it ran; this asserts it ran them all, against
+        # the task's registered config list.
+        _cp, _ct, _tn = _config_coverage(args.design)
+        if _ct is None:
+            sys.exit(
+                f"ERROR: no sim record with a config count for {args.design}"
+                f"{' (' + _tn + ')' if _tn else ''}. The gate reported success and "
+                f"left nothing saying WHAT it covered, so the coverage cannot be "
+                f"established. That is not the same as full coverage and is not "
+                f"treated as it."
+            )
+        if _cp != _ct:
+            sys.exit(
+                f"ERROR: {args.design} passed {_cp} of {_ct} registered "
+                f"configurations. A PPA sweep must be preceded by the correctness "
+                f"sweep ACROSS CONFIGURATIONS -- a pass on a subset establishes "
+                f"nothing about the parameters it did not elaborate, and this "
+                f"sweep is about to spend hours measuring one of them."
+            )
+        print(f"    coverage: {_cp}/{_ct} registered configurations")
+        gate_status = f"FULL {_cp}/{_ct}"
 
     t_start = time.time()
     bracket_pass = bracket_fail = None
@@ -708,6 +812,7 @@ def main():
         # twelve minutes while a sweep for it sat queued, and a record carrying the
         # hash it was told rather than the one that was true would assert it
         # measured a text that no longer exists.
+        "correctness_gate": gate_status,
         "build_config_hash": _config_hash(cfg_path),
         "task_text_hash": _task_text_hash(args.design),
         "wns_at_converged_ns": wns_at,

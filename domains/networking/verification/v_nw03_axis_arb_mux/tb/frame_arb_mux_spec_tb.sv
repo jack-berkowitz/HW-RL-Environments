@@ -407,6 +407,20 @@ module frame_arb_mux_tb;
     $display("METRIC: beats_out [0]=%0d [1]=%0d [2]=%0d [3]=%0d", n_out[0], n_out[1], n_out[2], n_out[3]);
     $display("METRIC: cov single=%0d stalls=%0d hi_payload=%0d partial_keep=%0d phaseC=%0d",
              cov_single_frames, cov_stall_midframe, cov_hi_payload, cov_partial_keep, cov_frames_phaseC);
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_nw03.cov_frames_phaseC %0d", cov_frames_phaseC);
+    $display("FIRED v_nw03.cov_hi_payload %0d", cov_hi_payload);
+    $display("FIRED v_nw03.cov_long_frames %0d", cov_long_frames);
+    $display("FIRED v_nw03.cov_partial_keep %0d", cov_partial_keep);
+    $display("FIRED v_nw03.cov_resets %0d", cov_resets);
+    $display("FIRED v_nw03.cov_single_frames %0d", cov_single_frames);
+    $display("FIRED v_nw03.cov_stall_midframe %0d", cov_stall_midframe);
 
     if (n_fail == 0) $display("RESULT: PASS");
     else             $display("RESULT: FAIL (%0d failures)", n_fail);
