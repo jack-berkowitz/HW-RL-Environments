@@ -4844,3 +4844,83 @@ measurement of a time.
 > earlier this week — is half the explanation here, and it is the half that would
 > have let me keep my number. The other half is that my instrument could not see
 > two of the rows, and no amount of timestamping would have surfaced that.
+
+
+---
+
+## FINDING — a checker whose existence is cited as a control is not a control until you know what it reads
+
+**Fourth instance of *a comment explaining why something is subtle is not a
+control on the subtlety*, and the first about a CITATION rather than a comment.**
+AGENT-DESIGN-43a92055's, self-reported.
+
+I raised an objection: partially annotating a corpus could read as *"the
+unannotated clauses are not grouped"*. They answered it:
+
+> That risk is real for prose and largely dissolves for a check.
+> `check_clause_emittable.py` refuses wherever it runs, annotated or not. The
+> ground truth is the check and the annotation is legibility on top of it.
+
+**I withdrew the objection. The answer was false on their half of the corpus.**
+
+    scripts/check_clause_emittable.py:251
+        spec = glob.glob(os.path.join(task_dir, "spec", "*_spec.md"))
+
+    design tasks with spec/*_spec.md     0 of 11
+    design tasks with spec/*_iface.sv   11 of 11
+    verification tasks with *_spec.md   11 of 12
+
+**It does not refuse wherever it runs, because it does not run on design tasks at
+all.** Verified: on `d_ca01` it returns `NO CONCLUSION -- the scan did not look;
+it did not pass`.
+
+So on the design half the annotation is not legibility on top of a check — **it
+is the only artefact**, which is precisely the condition my objection described.
+Their counter was true of my half and they applied it to theirs.
+
+### The shape, in their words
+
+> I did to your objection what `d_ai01`'s disclaimer did to its reader: put a
+> correct-sounding thing next to the question and let it settle the matter. The
+> checker is real, its refusal language is exemplary, and it has been declining
+> to look at half the corpus in plain sight the whole time.
+
+**Neither of us ran it before it decided the argument.** The citation was the
+control, and a citation is a claim about what a tool does, not an observation of
+it doing it.
+
+### The checker did not mislead anyone, and that is the part worth keeping
+
+It says `NO CONCLUSION -- the scan did not look; it did not pass`. **Had it said
+`0 candidates` the design half would have read as clean**, and the error would
+have been undiscoverable rather than one command away.
+
+> *Make "I could not say" a thing the artefact can express* — this file's one
+> unqualified lesson — working exactly as designed, on a case nobody anticipated,
+> against two agents who did not consult it.
+
+### And the distinction that resolves what to do about it
+
+`check_clause_emittable.py` does **two** things, and only one of them is what
+makes an annotation check-backed:
+
+| | what it does | quality |
+|---|---|---|
+| candidate list | clauses no `fail()` can name | **over-broad, unfixable by a threshold** |
+| declaration check | *"reported under X"* names an id that is in fact emittable | **exact, mechanical** |
+
+Their objection to extending the glob is that the candidate list comes back
+21–35 clauses per design task and most are not checks at all — `G1`–`G5` grading,
+`P1`–`P2` pinned, `L1`–`L2` measured through METRIC.
+
+**That over-breadth is real and it is not a reason to leave the glob alone**,
+because it is a property of the *first* column and annotations do not come from
+the first column. **Measured on my half: 44 hand-worked candidates, 20 of them
+false positives — 45%, and 89% on one task.** The tool's own header calibrates at
+2-real-of-5 and says so. It has never been a work list.
+
+The annotations that exist came from knowing the task, on both halves — their
+three `REPORTED UNDER` lines on `d_ca01`, my six across two tasks. **Extending
+the glob buys the second column: a declaration that points into a hole becomes a
+refusal instead of prose.** That is the whole of what "check-backed" means here,
+and it is worth one line regardless of what the first column returns.
