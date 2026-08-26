@@ -51,10 +51,26 @@ CAND_ARG="${2:?missing candidate .sv or directory}"
 # stops. Every task reading refs/cvfpu or refs/redmule is affected: d_ai01,
 # d_dsp02, d_dsp03, v_dsp02.
 #
-# The floor is 5.051 because that is the LOWEST version measured to work here,
-# not because 5.050 is known bad -- nobody has measured between them. Override
+# The floor is 5.046 because that is the LOWEST version measured to work here,
+# not because 5.045 is known bad -- nobody has measured below it. Override
 # with VERILATOR_MIN if you have measured a lower one, or SIM_VERILATOR_EXE to name
 # a binary directly.
+#
+# LOWERED FROM 5.051 TO 5.046 on 2026-08-26, on a measurement, not a guess. The
+# paragraph above invites exactly this evidence and AGENT-DESIGN supplied the
+# prompt for it by reporting d_ai04 refused at 5.046. Measured on this host:
+# d_ai01's tb/audit/probe_l3_latency_tb.sv built and ran the FULL cvfpu closure --
+# 4 files from refs/cvfpu/src, plus redmule, hci, hwpe-stream and tech_cells_generic
+# -- at rc=0 under Verilator 5.046, at both scored heights, with ZERO BLKANDNBLK.
+# The hazard this floor exists for does not reproduce at 5.046. 5.032 is still
+# known bad; 5.033..5.045 remain unmeasured.
+#
+# STILL OVER-BROAD, KNOWINGLY. This is a GLOBAL version floor guarding a hazard
+# that is specific to refs/cvfpu and refs/redmule. The affected tasks are named
+# four paragraphs up -- d_ai01, d_dsp02, d_dsp03, v_dsp02 -- and d_ai04 is not
+# among them: its closure is one file with no vendored modules, so it was being
+# refused for a hazard that cannot apply to it. Lowering the number unblocks that
+# case without fixing its shape. The narrower fix is a per-task closure check.
 #
 # THE OVERRIDE IS **SIM_VERILATOR_EXE**, NOT VERILATOR_BIN. VERILATOR_BIN is read
 # by Verilator's own Perl wrapper (/usr/bin/verilator:170) to choose which binary
@@ -62,7 +78,7 @@ CAND_ARG="${2:?missing candidate .sv or directory}"
 # process hangs in infinite recursion with no output. Names reserved by the
 # wrapper and unusable here: VERILATOR_BIN, VERILATOR_ROOT, VERILATOR_GDB,
 # VERILATOR_VALGRIND, VERILATOR_TEST_FLAGS.
-VERILATOR_MIN="${VERILATOR_MIN:-5.051}"
+VERILATOR_MIN="${VERILATOR_MIN:-5.046}"
 if [ -n "${SIM_VERILATOR_EXE:-}" ]; then
   :
 elif [ -x "$HOME/tools/oss-cad-suite/bin/verilator" ]; then
@@ -191,6 +207,17 @@ case "$TASK_NAME" in
       # submission to hold at BOTH, so running only the scored geometry would
       # score a clause the task explicitly declines to rest on.
       CFGS=("+HH=4" "+HH=8") ;;
+  d_ca05_miss_handler_arb)
+      # EXACTLY ONE config. NR_PORTS is a parameter so arbitration is written
+      # against a count rather than unrolled, but spec P2 scores only 4: it is
+      # the only setting measured against the anchor, and an unmeasured setting
+      # is not a scored one. The cache geometry is NOT parameterised -- the task
+      # package fixes it as concrete numbers so a submission never has to
+      # reconstruct a configuration to get the widths right.
+      #
+      # If NR_PORTS is ever scored at a second value, this list must grow with it
+      # or the sweep silently narrows -- the defect the *) branch refuses.
+      CFGS=("") ;;
   d_ai04_sdp_requant)
       # EXACTLY ONE config, BY CONSTRUCTION rather than by omission -- the
       # distinction the *) branch below exists to enforce. sdp_requant declares

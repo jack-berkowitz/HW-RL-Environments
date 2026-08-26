@@ -1,0 +1,97 @@
+title: Multi-requester cache miss handler
+id: d_ca05
+module: miss_handler_arb
+domain: comp_arch
+type: design
+catalog: TASK_CATALOG.md
+
+# ORACLE. The reference IS the vendored CVA6 miss_handler behind a shim that
+# binds parameters and bitcasts two structs. Every graded decision -- arbitration
+# order, MSHR matching, the flush walk, the acknowledgement rule -- is made by
+# RTL nobody here wrote.
+oracle_class: A
+oracle_note: >
+  THE SHIM'S EMPTINESS IS PROVEN, NOT ASSERTED.
+  tb/audit/shim_conformance_tb.sv re-runs THROUGH THE SHIM the five measurements
+  taken against the raw anchor, and all twelve numbers are identical. If one had
+  differed the shim would have behaviour and this oracle_class would be wrong.
+
+reference:
+  refs_lock_repo: openhwgroup/cva6
+  file: refs/cva6/core/cache_subsystem/miss_handler.sv
+  licence: Solderpad 0.51
+  mode: vendor
+  closure: [axi_adapter, lfsr_8bit, axi_pkg, riscv_pkg, config_pkg,
+            cv64a6_imafdc_sv39_config_pkg, build_config_pkg, ariane_pkg,
+            std_cache_pkg]
+  shim: ref/miss_handler_arb_ref.sv
+  shim_note: >
+    Binds CVA6Cfg from the real cv64a6_imafdc_sv39 config, NR_PORTS, and the
+    task package's types. The AXI types bind DIRECTLY -- axi_adapter takes them
+    as PARAMETER types and reaches in by field name, and the package's fields
+    carry those names -- so no AXI conversion happens. The only cast is the amo
+    pair, bit-identical at 135 and 65 bits. No behaviour.
+  why_this_boundary: >
+    AXI STAYS AT THE BOUNDARY SO THE SHIM CAN STAY EMPTY. A simple request/grant
+    memory port reads better for a submitter but needs an AXI-to-simple adapter
+    of about eighty lines, and those eighty lines would be locally-written
+    behaviour inside the SCORED reference. Usability is solved instead the way
+    d_nw01 solves it: the task ships spec/miss_handler_arb_pkg.sv and a
+    submission imports it.
+
+spec: [spec/miss_handler_arb_iface.sv, spec/miss_handler_arb_pkg.sv]
+
+scored_configuration:
+  NR_PORTS: 4
+  rationale: >
+    NR_PORTS is a parameter so arbitration must be written against a count
+    rather than unrolled, but only 4 is measured and only 4 is scored.
+    d_nw01's lesson is that a pass at a low setting is not capability evidence;
+    the corollary is that an unmeasured setting is not a scored one.
+  geometry: >
+    Fixed by the package as CONCRETE NUMBERS rather than parameters -- SET_ASSOC
+    8, INDEX 12, TAG 44, LINE 128, OFFSET 4, NUM_WORDS 256, AXI 4/64/64 -- so a
+    submission does not have to reconstruct a configuration to get them right.
+
+scored_metrics:
+  - {metric: total_cycles, label: "cycles", role: choice}
+  - {metric: area_um2,     label: "area",   role: choice}
+  - {metric: power_mw,     label: "power",  role: choice}
+  # A CYCLE AXIS EXISTS HERE and does not on d_ai04. F4 is why: the flush walk's
+  # 512 array accesses are a real cost a design can trade against area.
+  # NO CAPABILITY COLUMN -- P1 pins the geometry and P2 the port count, so there
+  # is no dimension along which a submission may do MORE. Spec G5.
+
+ppa_status: >
+  NO PPA MAY BE REPORTED YET. G1 pins the period at 1.5x the reference's own
+  measured period and THE REFERENCE Fmax SWEEP HAS NOT BEEN RUN. orfs/config.mk
+  and orfs/constraint.sdc exist so it can be; the 45 ns in the SDC is a loose
+  starting constraint and says so, NOT a derived figure.
+
+controls:
+  - {file: controls/nc_a_fair_arbiter.sv,    clause: F2,  exclusive_as_of: 2026-08-26}
+  - {file: controls/nc_b_exclusive_match.sv, clause: F3a, exclusive_as_of: 2026-08-26}
+  - {file: controls/nc_c_exclude_served.sv,  clause: F3b, exclusive: false}
+  - {file: controls/nc_d_ack_amo_flush.sv,   clause: F7,  exclusive_as_of: 2026-08-26}
+  # exclusive_as_of rather than a bare boolean, per AGENT-VERIF-A2 -- with the
+  # qualification that NOTHING PARSES THIS FIELD, so the date buys a reader
+  # legibility and not enforcement. nc_c is `false` because masking the served
+  # port also breaks F3(a)'s overlap, so it trips two clauses by construction.
+
+controls_note: >
+  nc_a PASSED on its first run AND THE CONTROL WAS WHAT WAS BROKEN. It rotated
+  among the bits set in bypass_gnt_raw, and the anchor grants ONE port at a time,
+  so the rotation always landed on the same port and perturbed nothing. A control
+  that perturbs nothing and a clause that is unchecked look IDENTICAL from the
+  verdict alone. Rewritten to arbitrate over the requesters, it fails T2 with
+  5/5/5/5 against the anchor's 20/0/0/0. See CONTROLS.md.
+
+coverage_gap: >
+  No control exercises T4 (the flush walk's access count), T6 (atomic ordering)
+  or T8 (mid-stream reset). Those clauses are checked against the anchor's
+  measured values and the reference passes them, but nothing demonstrates that a
+  design violating them would be caught. Recorded rather than left to be inferred
+  from the control table's shape.
+
+submissions_status: >
+  NOT YET SOLICITED. No submission exists for this task.
