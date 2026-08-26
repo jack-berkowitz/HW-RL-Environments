@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 1, correct 1, PPA measured 15. Verification: submitted 30, compiled 28, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 18, correct 14, PPA measured 15. Verification: submitted 30, compiled 24, tells correct from broken 15, fault count 12." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -38,7 +38,7 @@ area and slower.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro 4 of 10. v_ca04: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 6 of 10; Gemini 3.1 Pro 0 of 10. v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (gate); Gemini 3.1 Pro not scoreable (gate). v_ca06: Claude Opus 5 not scoreable (invalid). v_dsp02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 10 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw04: ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca04: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 6 of 10; Gemini 3.1 Pro 0 of 10. v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (gate); Gemini 3.1 Pro not scoreable (gate). v_dsp02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 10 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw04: ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---
@@ -48,37 +48,88 @@ area and slower.
 **Five tasks are complete at their pinned clock.** Every design specification was
 revised to state its grading criteria — what correctness gates, which PPA axes
 are compared, at what clock, and which levers the contract has already spent —
-and every candidate was re-solicited against the revised prompt. These rows
-answer the current prompt.
+and every candidate was re-solicited against the revised prompt.
 
 Each task is built at **one pinned period**, stated in the spec before
 solicitation and derived as `ceil(1.5 × converged_period_ns / 0.25) × 0.25` from
 the reference's own Fmax sweep. A single clock for every submission is what makes
-the area column comparable: without it, area can be bought by relaxing timing.
+area comparable at all: without it, area can be bought by relaxing timing.
 
-| task | @ ns | reference | chat | claude | gemini |
-|---|---|---|---|---|---|
-| **d_ca04** async CDC FIFO | 4.25 | 19,837 µm² / 13.4 mW | **14,939 / 8.1** | **14,798 / 8.0** | **14,396 / 8.3** |
-| **d_nw03** stream switch | 4.25 | 26,340 / 10.2 | *missed timing* | *missed timing* | *missed timing* |
-| **d_dsp02** FP32 FMA | 19.25 | 60,031 / 74.7 | 108,000 / 22.3 | 63,197 / 66.2 | **0** — fails correctness |
-| **d_dsp03** multi-format FMA | 70.5 | 177,557 / 91.1 | **0** — fails correctness | 251,769 / 80.1 | **0** — fails correctness |
-| **d_nw01** AXI4 crossbar | 8.0 | 147,144 / 54.7 | 199,852 / 58.1 | *missed timing* | **0** — fails correctness |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_area_dark.svg">
+  <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.75x, claude 0.75x, gemini 0.73x. Stream switch at 4.25 ns, reference 26,340 um2: all three missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat 1.80x, claude 1.05x, gemini fails correctness. Multi-format FMA at 70.5 ns, reference 177,557 um2: chat fails correctness, claude 1.42x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.36x, claude missed timing, gemini fails correctness." src="docs/assets/design_area_light.svg" width="100%">
+</picture>
 
-**Timing closure is a gate, not a scored axis**, and PPA from a build that missed
-it is not reported. Slack is bought with area, so a design that misses timing and
-one that closes it are not describing the same circuit — quoting the area of the
-first alongside the second compares two different questions. Four submissions
-here missed at their pin: all three d_nw03 candidates and d_nw01's claude.
+**Six of fifteen submissions produce a comparable area number.** Four missed
+timing, four fail correctness, and one was never built. That is the result, not a
+gap in the data.
 
-**A correctness failure scores zero on every PPA axis and is shown as zero**
-rather than omitted. Four did. Omitting them would make the surviving rows look
-like the whole population, which is how a 8-of-18 result reads as 8 of 10.
+### d_ca04 — asynchronous CDC FIFO, pinned at 4.25 ns
 
-Only d_ca04 has a complete row where every submission closed timing, and all
-three beat the reference on area — 25–27% smaller. That is the one task here
-where the comparison is clean enough to say so.
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 19,837 | 13.4 | +0.606 | — |
+| `chat` | 14,939 | 8.1 | +0.507 | **0.75×** |
+| `claude` | 14,798 | 8.0 | +0.461 | **0.75×** |
+| `gemini` | 14,396 | 8.3 | +0.456 | **0.73×** |
 
-**Not in this table yet:**
+The only task where every submission closed timing, and all three are 25–27%
+smaller than the reference. Two of them reach that partly by a design choice
+rather than better implementation — see the like-for-like note below.
+
+### d_nw03 — output-queued stream switch, pinned at 4.25 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 26,340 | 10.2 | +0.337 | — |
+| `chat` | *withheld* | *withheld* | **−0.623** | missed timing |
+| `claude` | *withheld* | *withheld* | **−0.078** | missed timing |
+| `gemini` | *withheld* | *withheld* | **−0.116** | missed timing |
+
+All three missed at the pin. `claude` missed by 78 ps, which is close — and close
+is still missed: the number it would have reported describes a circuit that
+cannot run at 4.25 ns.
+
+### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 60,031 | 74.7 | +2.710 | — |
+| `chat` | 108,000 | 22.3 | +1.703 | 1.80× |
+| `claude` | 63,197 | 66.2 | +0.992 | 1.05× |
+| `gemini` | **0** | **0** | — | fails correctness |
+
+### d_dsp03 — multi-format FMA, pinned at 70.5 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 177,557 | 91.1 | +1.995 | — |
+| `chat` | **0** | **0** | — | fails correctness |
+| `claude` | 251,769 | 80.1 | +8.179 | 1.42× |
+| `gemini` | **0** | **0** | — | fails correctness |
+
+### d_nw01 — AXI4 crossbar, pinned at 8.0 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 147,144 | 54.7 | +1.148 | — |
+| `chat` | 199,852 | 58.1 | +0.802 | 1.36× |
+| `claude` | *withheld* | *withheld* | **−0.023** | missed timing |
+| `gemini` | **0** | **0** | — | fails correctness |
+
+### Why some cells are withheld and others are zero
+
+**Timing closure is a gate, not a scored axis.** Slack is bought with area, so a
+design that misses timing and one that closes it are not describing the same
+circuit — quoting the area of the first beside the second compares two different
+questions. PPA from a build that missed its pin is withheld, not reported (rule
+22).
+
+**A correctness failure scores zero on every PPA axis, and is shown as zero**
+rather than omitted (rule 19). Omitting it would make the surviving rows look
+like the whole population, which is how an 8-of-18 result reads as 8 of 10.
+
+### Not measured yet
 
 | task | state |
 |---|---|
@@ -86,11 +137,11 @@ where the comparison is clean enough to say so.
 | d_ai01 | no pin yet — HEIGHT=8 never routed on sky130hd (76k–83k violations across three floorplans). The scored geometry moved to HEIGHT=4, which routes clean at 0 violations, so its reference Fmax sweep is possible for the first time and is queued |
 | d_dsp01 | no scoring testbench; withdrawn |
 
-`results_table.md` carries the full per-task detail, including capability metrics,
-the per-unit normalisations, and every superseded row rendered as *not scored
-against this prompt* with the hash it answered. It is generated from the run
-records under `runs/`, never hand-edited, and it fails loudly rather than
-emitting a table with rows missing.
+`results_table.md` carries the full per-task detail — capability metrics,
+per-unit normalisations, and every superseded row rendered as *not scored against
+this prompt* with the hash it answered. It is generated from the run records
+under `runs/`, never hand-edited, and fails loudly rather than emitting a table
+with rows missing.
 
 Two numbers from the superseded round are worth naming, because they are why the
 revision happened rather than an accident of it. d_nw01's largest submission
