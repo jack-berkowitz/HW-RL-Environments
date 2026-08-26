@@ -3222,8 +3222,16 @@ shape, false of the population**. I measured my eleven and got the same answer.
 *(`v_ca04`'s `clear_contenders` and `v_ca07`'s `clear_edges` are testbench-local
 names, not DUT ports. I checked rather than counted them.)*
 
-**Three gaps, all reset. Four same-shaped operations with no setup role, all
-correct.** Two authors, two task families, and the split is clean.
+**FIVE gaps, all reset. Four same-shaped operations with no setup role, all
+correct.** `d_ai01` and `v_ca05` were added after the table was first written,
+and both by the same route: **measuring the population instead of hand-checking
+the instances I already knew about.**
+
+Two of the five sit in files that *also* contain a correctly-instrumented flush
+or clear — `d_ca03` and `d_ai01`. **Those are within-file controlled
+comparisons**, same author, same week, and they are what carries the mechanism.
+One is an anecdote; two, in different domains, is a mechanism. The other rows are
+consistency, which is weaker.
 
 > **The gap appears where the operation doubles as the testbench's own
 > initialisation.** Reset is the one operation a testbench *must* perform to
@@ -3248,3 +3256,62 @@ testbench that only ever reset an empty machine satisfied it for the life of the
 task, and nothing in the clause objected. A testbench-side floor is lost at the
 next rewrite; a clause with its antecedent named is what a submitter reads and
 what survives.
+
+
+### v_ca05 is the fifth, and it is the sharpest, because the clause was EMITTABLE
+
+R15: *"while `rst_ni` is low the store shall be emptied; after release, `empty_o`
+shall be high and `full_o` low."*
+
+**Both halves were checked.** Lines 201-202 read `empty_o` and `full_o` right
+after the initial reset and report under R15. **R15 is in the emittable set. The
+emittability scan reports it as fine.**
+
+And the check was vacuous: the only reset in that testbench happened on a store
+that had never held anything, so a design that ignores `rst_ni` entirely passed
+it for the life of the task.
+
+> **A clause can be emittable, emitted, and unexercised — and the first two are
+> what make the third invisible.** Every instrument I built this week reports
+> R15 green. The emittability scan sees a `fail()` that can name it. `check_fired`
+> sees nothing to declare, because no counter guards it. The mutant set kills
+> everything. The observation behind the check is empty and nothing in the
+> apparatus looks at observations.
+
+**Found by measuring instead of hand-checking.** I established `v_ca03` and
+`v_ca06` by reading them, and never measured the other nine — I reported a table
+of two gaps drawn from a population of eleven I had not counted. The measurement
+took one script: *mid-run reset assertions, meaning assertions after the first
+release*, not assignment counts.
+
+That distinction is the whole thing, and AGENT-DESIGN-43a92055 hit the other side
+of it in the same hour: their sweep reported `d_ai01 tb reset-assertions=2` and
+they read it as instrumented. The two assignments are eight lines apart, both
+inside the setup block. **The counter counted assignments; the question was about
+mid-run assertions.** They named it as the third instance of *"the right
+measurement against the wrong population"* — and mine, immediately after, was the
+fourth: hand-checking two of eleven and reporting the two as the answer.
+
+**Closed with the antecedent gated**, in the form they used on `d_ai01`: fill the
+store, **assert it is non-empty**, reset, release, then require `empty_o` high and
+a pop of a previously-present tag to return nothing. If the store is not actually
+non-empty the phase reports *"R15 WAS NEVER EXERCISED"* and **fails** rather than
+passing — which is the state it sat in until now.
+
+**Control that must fail:** a design that sees the initial reset and ignores every
+later one. `FAIL — R15 "the store was not emptied"` and `R8 "pop_data_valid=1
+expected 0"`. The R8 is intended and no isolation claim is made over it: the phase
+pops a previously-present tag deliberately, to establish the entries are *gone*
+rather than merely uncounted.
+
+golden PASS, dut2 PASS, 4/4 conformant, gate rejected, 10/10 killed.
+
+### And there are two sub-shapes, which the measurement separates
+
+    reset never asserted mid-run        v_ca03, v_ca05, d_ca03, d_ai01
+    asserted mid-run, nothing checked   v_ca06
+
+`v_ca06` shows **one** mid-run assertion and is still a gap: phase L asserts
+reset, releases, waits four cycles, and then nothing follows. A count of
+assertions would have cleared it. The second sub-shape is closer to being fixed
+and is harder to find, because the signal really does move.

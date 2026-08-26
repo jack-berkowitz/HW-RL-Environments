@@ -56,6 +56,7 @@ module tag_tracker_tb;   // name required by the scoring path
   int cov_pop_absent = 0;  // R10 -- a pop of a tag with no entries
   int cov_zero_mask = 0;   // R13 -- an all-zero mask against a NON-EMPTY store
   int cov_order = 0;       // R2  -- a pop from a tag holding two or more
+  int cov_reset_nonempty = 0; // R15 -- a reset asserted on a NON-EMPTY store
   payload_t          pop_data;
   logic              pop_data_valid, pop_gnt;
 
@@ -192,6 +193,10 @@ module tag_tracker_tb;   // name required by the scoring path
     end
     @(negedge clk);
     match_req[0] = 1'b0;
+  endtask
+
+  task automatic ref_q_clear();
+    for (int i = 0; i < NTAG; i++) ref_q[i].delete();
   endtask
 
   // ---- R14: status --------------------------------------------------------
@@ -392,6 +397,47 @@ module tag_tracker_tb;   // name required by the scoring path
       while (ref_q[t].size() != 0) do_pop(TAG_W'(t), 1'b1, 50);
     check_status("final drain");
 
+    // ---- R15: RESET ON A NON-EMPTY STORE, WITH THE ANTECEDENT GATED -------
+    // R15 says "while rst_ni is low the store shall be emptied; after release
+    // empty_o shall be high and full_o low". Both halves were CHECKED -- lines
+    // 201-202 read empty_o and full_o right after the initial reset -- and the
+    // check was VACUOUS, because the only reset in this testbench happened on a
+    // store that had never held anything. A design that ignores rst_ni entirely
+    // passed it for the life of this task.
+    //
+    // R15 IS EMITTABLE AND IS EMITTED. The emittability scan reports it as fine
+    // and it is fine, in the only sense that scan can measure: a fail() exists
+    // that can name it. What the scan cannot see is that the observation behind
+    // it is empty. A clause can be emittable, emitted, and unexercised.
+    //
+    // STEP 1 IS THE GATE. If the store is not actually non-empty when reset is
+    // asserted, this phase reports that R15 WAS NEVER EXERCISED and fails,
+    // rather than passing for the wrong reason -- which is the state it sat in
+    // until now. Appended after the final drain, so no existing measurement
+    // moves.
+    for (int i = 0; i < 3; i++) begin
+      do_push(3'd4, payload_t'(32'h_15_0000 + i), 50, granted);
+      if (!granted) fail("R15", "could not fill the store to set up the reset test");
+    end
+    if (ref_count == 0 || empty !== 1'b0) begin
+      fail("R15", $sformatf("R15 WAS NEVER EXERCISED: the store held %0d entries and empty_o=%0b when reset was about to be asserted. Resetting an already-empty store cannot distinguish a design that clears on reset from one that ignores it.", ref_count, empty));
+    end else begin
+      cov_reset_nonempty++;
+      @(negedge clk) rst_n = 1'b0;
+      repeat (4) @(posedge clk);
+      @(negedge clk) rst_n = 1'b1;
+      ref_q_clear(); ref_count = 0;
+      repeat (2) @(posedge clk);
+      if (empty !== 1'b1)
+        fail("R15", "empty_o low after a reset that was asserted on a NON-EMPTY store -- the store was not emptied");
+      else ok();
+      if (full !== 1'b0)
+        fail("R15", "full_o high after a reset asserted on a non-empty store");
+      else ok();
+      // and the entries must be gone, not merely uncounted
+      do_pop(3'd4, 1'b1, 50);
+    end
+
     // ---- FLOORS. The four clauses that report under another id ------------
     // Gated on the STIMULUS half only -- each counts an event this testbench
     // chooses to drive, and reads no design output, so none of them can reject
@@ -402,6 +448,8 @@ module tag_tracker_tb;   // name required by the scoring path
       fail("FLOOR", "no pop of an absent tag was driven -- R10's only checkable half, that pop_data_valid_o is low, reports under R8 and goes unexercised");
     if (cov_zero_mask < 1)
       fail("FLOOR", "no all-zero mask was driven against a non-empty store -- R13 reports under R12 and is untested without one");
+    if (cov_reset_nonempty < 1)
+      fail("FLOOR", "no reset was asserted on a non-empty store -- R15 says the store SHALL BE EMPTIED, and resetting an empty one cannot tell a design that clears from one that ignores rst_ni");
     if (cov_order < 2)
       fail("FLOOR", $sformatf("only %0d pop(s) from a tag holding two or more -- R2's per-tag FIFO order reports under R8 and cannot be judged on a one-deep tag", cov_order));
 
@@ -415,6 +463,7 @@ module tag_tracker_tb;   // name required by the scoring path
     $display("FIRED v_ca05.cov_pop_absent %0d", cov_pop_absent);
     $display("FIRED v_ca05.cov_zero_mask %0d", cov_zero_mask);
     $display("FIRED v_ca05.cov_order %0d", cov_order);
+    $display("FIRED v_ca05.cov_reset_nonempty %0d", cov_reset_nonempty);
     if (errors == 0) $display("RESULT: PASS");
     else             $display("RESULT: FAIL");
     $finish;
