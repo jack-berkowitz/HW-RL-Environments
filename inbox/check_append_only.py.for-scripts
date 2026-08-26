@@ -4,6 +4,7 @@
     check_append_only.py FILE...            compare working tree against HEAD
     check_append_only.py --staged FILE...   compare the index against HEAD
     check_append_only.py --allow-drop "exact heading" --reason "why" FILE...
+    check_append_only.py --allow-new PATH FILE...      a path with no HEAD version
 
 WHY THIS EXISTS
 ---------------
@@ -36,6 +37,28 @@ headings went; it would not catch a truncation that stops one line after a
 heading. The stronger check is a per-section byte count, and it costs a policy
 decision -- sections legitimately shrink when someone tightens prose -- which
 this one does not.
+
+THE COUNT OF FILES ACTUALLY COMPARED IS PRINTED, AND A SHORTFALL REFUSES.
+Found by AGENT-DESIGN-43a92055's tightening of the empty-input class, applied to
+this tool:
+
+    a genuinely new file          -> "nothing to compare", rc 0
+    a path with a typo in it      -> "nothing to compare", rc 0
+    an untracked file             -> "nothing to compare", rc 0
+
+**Identical to a file that was compared and found clean.** The failure value --
+pass -- is inside the range of legitimate outputs, so nothing announces it. That
+is their form of the class and it is sharper than "an empty answer should declare
+whether it is an answer":
+
+    An instrument whose failure mode is OUT of range announces itself. An
+    instrument whose failure mode is IN range needs a SECOND CHANNEL carrying
+    whether the measurement happened at all, separate from what it says. The
+    value and the evidence-that-there-is-a-value cannot be the same number.
+
+So: `compared N of M` is printed every run, and M > N REFUSES unless each
+uncomparable path is named by `--allow-new`. A guard pointed at a mistyped path
+now fails loudly instead of passing.
 
 A RENAMED HEADING IS A REFUSAL, NOT AN EXEMPTION. Renaming looks identical to
 deleting-plus-adding, and there is no way to tell them apart from the text.
@@ -98,6 +121,7 @@ def compare(before, after):
 def main(argv):
     staged = "--staged" in argv
     allow = [argv[i + 1] for i, a in enumerate(argv) if a == "--allow-drop"]
+    allow_new = [argv[i + 1] for i, a in enumerate(argv) if a == "--allow-new"]
     reasons = [argv[i + 1] for i, a in enumerate(argv) if a == "--reason"]
     if allow and len(reasons) != len(allow):
         sys.exit("--allow-drop requires a matching --reason: an override with no "
@@ -105,13 +129,20 @@ def main(argv):
                  "check at all.")
     files = [a for i, a in enumerate(argv)
              if not a.startswith("--")
-             and (i == 0 or argv[i - 1] not in ("--allow-drop", "--reason"))]
+             and (i == 0 or argv[i - 1] not in ("--allow-drop", "--reason", "--allow-new"))]
     if not files:
         sys.exit(__doc__.strip().splitlines()[0])
     rc = 0
+    compared, uncomparable = 0, []
     for f in files:
         before = at_ref(f, "HEAD")
-        after = at_ref(f, "") if staged else open(f, encoding="utf-8", errors="replace").read()
+        try:
+            after = ("" if staged else
+                     open(f, encoding="utf-8", errors="replace").read())
+        except OSError as e:
+            print("  %-34s CANNOT READ -- %s" % (f, e.strerror))
+            uncomparable.append(f)
+            continue
         if staged:
             after = subprocess.run(["git", "show", ":%s" % f],
                                    capture_output=True, text=True).stdout
@@ -121,8 +152,10 @@ def main(argv):
             if h in dropped:
                 print('  TRAILER  Append-only-override: "%s" -- %s' % (h[:70], why))
         if before is None:
-            print("  %-34s new file -- nothing to compare" % f)
+            print("  %-34s NO HEAD VERSION -- not compared" % f)
+            uncomparable.append(f)
             continue
+        compared += 1
         n_b, n_a = len(headings(before)), len(headings(after))
         if gone:
             rc = 2
@@ -131,7 +164,17 @@ def main(argv):
                 print("      lost: %s" % h[:96])
         else:
             print("  %-34s %d -> %d headings   ok" % (f, n_b, n_a))
-    if rc:
+    print("  compared %d of %d requested file(s)." % (compared, len(files)))
+    unexplained = [f for f in uncomparable if f not in allow_new]
+    if unexplained:
+        rc = 2
+        print("REFUSED: %d requested file(s) could not be compared: %s"
+              % (len(unexplained), ", ".join(unexplained)))
+        print("  A path with no HEAD version passes identically to one that was")
+        print("  compared and found clean -- a typo, an untracked file and a")
+        print("  genuinely new document are the same output. Name each one with")
+        print("  --allow-new to say the absence is deliberate.")
+    if rc == 2 and not unexplained:
         print("REFUSED: a heading disappeared from a document that is only appended to.")
         print("  A growing file hides a destructive edit from every size check.")
         print("  If the removal is deliberate, pass --allow-drop with the exact")
