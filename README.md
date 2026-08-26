@@ -45,38 +45,60 @@ area and slower.
 
 ## Design results
 
-**Withheld pending re-solicitation.** Every design task's specification was
+**Five tasks are complete at their pinned clock.** Every design specification was
 revised to state its grading criteria — what correctness gates, which PPA axes
-are compared, at what clock, and which levers the contract has already spent.
-That changed every design `task_text_hash`, so every candidate on record answers
-a superseded prompt and no design number here is currently scoreable:
+are compared, at what clock, and which levers the contract has already spent —
+and every candidate was re-solicited against the revised prompt. These rows
+answer the current prompt.
 
-| task | prompt then | prompt now |
-|---|---|---|
-| d_ca01 | `77229cda1b6cd7c3` | `7e0c51b2fd28d3c5` |
-| d_ca04 | `5c9a12842b8b0c7d` | `353f11388a6d579d` |
-| d_dsp01 | *(no prompt)* | `18c2e731034e5c5e` |
-| d_dsp02 | `617eb4240908e773` | `aff15b9eeb69e6cd` |
-| d_dsp03 | `8eb2ae18667fe22a` | `51a7fa04a20938a3` |
-| d_nw01 | `96c1a3ad5854776a` | `05379ddae2650498` |
-| d_nw03 | `b02da2223907630b` | `27a4c81ec39cddf7` |
+Each task is built at **one pinned period**, stated in the spec before
+solicitation and derived as `ceil(1.5 × converged_period_ns / 0.25) × 0.25` from
+the reference's own Fmax sweep. A single clock for every submission is what makes
+the area column comparable: without it, area can be bought by relaxing timing.
 
-The tables that stood here are not archived in this file because they would read
-as results. They are in git history, and every run record behind them is still on
-disk under `runs/`, stamped with the prompt it answered — which is what makes
-this supersession visible rather than silent.
+| task | @ ns | reference | chat | claude | gemini |
+|---|---|---|---|---|---|
+| **d_ca04** async CDC FIFO | 4.25 | 19,837 µm² / 13.4 mW | **14,939 / 8.1** | **14,798 / 8.0** | **14,396 / 8.3** |
+| **d_nw03** stream switch | 4.25 | 26,340 / 10.2 | *missed timing* | *missed timing* | *missed timing* |
+| **d_dsp02** FP32 FMA | 19.25 | 60,031 / 74.7 | 108,000 / 22.3 | 63,197 / 66.2 | **0** — fails correctness |
+| **d_dsp03** multi-format FMA | 70.5 | 177,557 / 91.1 | **0** — fails correctness | 251,769 / 80.1 | **0** — fails correctness |
+| **d_nw01** AXI4 crossbar | 8.0 | 147,144 / 54.7 | 199,852 / 58.1 | *missed timing* | **0** — fails correctness |
 
-Two of those numbers are worth naming, because they are why the revision
-happened rather than an accident of it. d_nw01's largest submission measured
-2,086,235 µm² against a 146,932 µm² reference, and d_ca01's measured 753,209 µm².
-Both were buffering storage the contract never asked for. The specifications now
-bound that storage by clause, and separately now say what the submission is being
-compared on — neither of which they did when those designs were solicited.
+**Timing closure is a gate, not a scored axis**, and PPA from a build that missed
+it is not reported. Slack is bought with area, so a design that misses timing and
+one that closes it are not describing the same circuit — quoting the area of the
+first alongside the second compares two different questions. Four submissions
+here missed at their pin: all three d_nw03 candidates and d_nw01's claude.
 
-`results_table.md` is generated from the run records and renders each superseded
-row as *not scored against this prompt*, naming the hash it answered. The
-verification side below is unaffected: those tasks were not changed.
+**A correctness failure scores zero on every PPA axis and is shown as zero**
+rather than omitted. Four did. Omitting them would make the surviving rows look
+like the whole population, which is how a 8-of-18 result reads as 8 of 10.
 
+Only d_ca04 has a complete row where every submission closed timing, and all
+three beat the reference on area — 25–27% smaller. That is the one task here
+where the comparison is clean enough to say so.
+
+**Not in this table yet:**
+
+| task | state |
+|---|---|
+| d_ca01, d_ca03 | building on a second machine; records not yet pushed |
+| d_ai01 | no pin yet — HEIGHT=8 never routed on sky130hd (76k–83k violations across three floorplans). The scored geometry moved to HEIGHT=4, which routes clean at 0 violations, so its reference Fmax sweep is possible for the first time and is queued |
+| d_dsp01 | no scoring testbench; withdrawn |
+
+`results_table.md` carries the full per-task detail, including capability metrics,
+the per-unit normalisations, and every superseded row rendered as *not scored
+against this prompt* with the hash it answered. It is generated from the run
+records under `runs/`, never hand-edited, and it fails loudly rather than
+emitting a table with rows missing.
+
+Two numbers from the superseded round are worth naming, because they are why the
+revision happened rather than an accident of it. d_nw01's largest submission
+measured 2,086,235 µm² against a 146,932 µm² reference, and d_ca01's measured
+753,209 µm². Both were buffering storage the contract never asked for. The
+specifications now bound that storage by clause, and separately now say what the
+submission is being compared on — neither of which they did when those designs
+were solicited.
 
 ### How design choices are separated from implementation quality
 
