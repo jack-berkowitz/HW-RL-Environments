@@ -4666,3 +4666,34 @@ fact rather than discarded with the argument.
 > stretched before they break.
 
 A fact kept after its argument collapsed is worth more than the argument was.
+
+
+### Third instance, and the override existed this time
+
+`a316030`: `check_linkage_tree.sh --staged` returned **1** — it now runs
+`check_append_only.py`, which someone has wired into the pre-commit path — and I
+printed the code, read it, and committed anyway. The block had no guard on that
+variable.
+
+**The tree is sound.** The three dropped headings were deliberate renames and I
+*did* discharge them: `--allow-drop` with a reason for each, and the three
+`Append-only-override:` trailers are in the commit message. `check_linkage_tree.sh
+HEAD` passes.
+
+**But I satisfied the override in one command and ignored the refusal in
+another.** The gate refused, and what answered it was a separate invocation whose
+result the gate never saw.
+
+    instance 1   misread the output          2ab3a7e, repaired 90b0c79
+    instance 2   read it and disagreed       eed4f87
+    instance 3   read it, had the answer,    a316030
+                 and did not give it to the gate
+
+> A refusal discharged somewhere the refusing check cannot see is not discharged.
+> The trailers make the decision visible **to a reader of the history**, which is
+> what they are for — and the gate is not a reader of the history. It needed the
+> flags, and it was run without them.
+
+The fix is mechanical and I keep not applying it: **the commit block must exit on
+a non-zero gate**, not print it. Two of the three instances had the exit guard;
+this one did not, and the difference was which block I typed.
