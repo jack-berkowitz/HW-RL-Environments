@@ -4546,55 +4546,88 @@ required checking that the widening applied.
 
 ---
 
-## FINDING — a discriminator that does not enumerate the constructs it must reach cannot report that it failed to reach one
+## FINDING — a check whose scope is implicit cannot report a scope miss
 
-**This is a defect in the escalation criterion itself, not a `v_nw02` detail. The
-criterion was load-bearing for every task in the exercise and silently passed as
-one throughout.**
+**Written to be read outside this repository. Nothing below depends on knowing
+what any of these tasks are.**
 
-The criterion: *a failure that survives a drain-widened repeat is a candidate
-reference failure.* The widener multiplied three constructs — `repeat(N)`,
-`t < N`, `drain(N)`. `v_nw02`'s read sweep ends on `settle(N)`, which was not in
-the set.
+### The shape
 
-    "the failure survived the widening"   ->   the widening never ran on that phase
+A discriminator is a check that answers *is this real?* — it takes a suspected
+problem, does something to the system, and reports whether the problem survives.
+Ours widened every timing delay in a testbench and asked whether a failure
+persisted; if it did, the failure was real rather than an artefact of the run
+being too short.
 
-> **A discriminator with a fixed list of things it acts on, and no list of things
-> it must act on, reports the same result when it works and when it does not
-> apply.** Nothing in the output distinguishes *widened and the failure persisted*
-> from *not widened, so of course it persisted*.
+**It acted on three constructs. It had no list of the constructs it needed to
+act on.** One kind of delay was spelled differently and was silently skipped, so
+for that case the discriminator did nothing at all — and reported the same thing
+it reports when it does everything and the problem is real:
 
-That is the same shape as an instrument whose failure value is in range — the
-value is `still failing`, and `still failing` is what both worlds produce.
+    "the failure survived the widening"   ->   the widening never ran
 
-### The enumeration that was missing
+> **A discriminator with a fixed list of what it acts on, and no list of what it
+> MUST act on, returns the same output when it works and when it does not
+> apply.** There is no third value. The reader gets *the problem is real*, which
+> is the reading the check was built to produce.
 
-| construct | in the widened set | tasks |
-|---|---|---|
-| `repeat (N) @(posedge clk)` | yes | all eleven |
-| `for (t = 0; t < N; ...)` | yes | all eleven |
-| `drain(N)` | yes | v_ca03 |
-| `settle(N)` | **no — added after it was missed** | v_ca07, v_nw02 |
-| `check_ratio(N)` | via `settle` | v_ca07 |
-| `wait_frames(N)` | not needed — waits on frames, not cycles | v_nw03 |
-| literal timeout arguments | **no** | v_ca05 |
-| `#N` | the watchdog | six tasks |
+### Where the two older families meet
 
-**And the answer is that the six clean rows stand**: only three of them depend on
-the widener at all — the three that failed narrow and passed wide — and those
-three use covered constructs only. The other three passed at the *narrow* drain,
-where widening is irrelevant.
+This corpus already carries two neighbours, and this is the point they intersect:
 
-**I could not have said any of that before running the enumeration.** The
-criterion had been reported as satisfied eleven times.
+- **a field with no reader** — a value that is correct, present, and consumed by
+  nothing. It cannot be wrong in a way anything notices.
+- **a vacuous check** — a comparison that no input can fail, because both sides
+  come from the same place.
 
-### The general form
+Both are *the artefact is fine and tells you nothing*. This is the same defect
+located in a check's **scope** rather than in its value or its logic:
 
-> **A discriminator must enumerate the constructs it needs to reach, and refuse
-> when it meets one outside that list.** A widener that silently no-ops on an
-> unrecognised drain is indistinguishable from one that widened and found the
-> failure real — and the second is the reading a reader will take, because it is
-> the one the criterion was written to produce.
+    field with no reader    the output is never read
+    vacuous check           the output cannot vary
+    implicit scope          the output does not distinguish RAN from DID NOT APPLY
+
+**A check whose scope is implicit cannot report a scope miss**, because reporting
+one requires knowing what the scope should have been — and that is exactly the
+thing that was never written down.
+
+It is worse than its two neighbours in one respect. A field nobody reads is inert;
+a vacuous check is at least constant. **An implicitly-scoped discriminator is
+actively misleading in precisely the cases it was built for**, because a case it
+cannot reach looks identical to a case it reached and confirmed.
+
+### The remedy, and it generalises
+
+> **Every discriminator declares the constructs it must reach, and refuses when
+> it meets one it does not cover.**
+
+Not *lists what it handles* — that is what it already had. **Declares what it must
+reach**, so that meeting something outside the declaration is an event rather than
+a silence. The declaration is the same move as `NO CONCLUSION`, as an explicit
+empty list, as `NOT-STATIC`: **make "I could not say" a thing the artefact can
+express.**
+
+The cost is one enumeration, once. In this case it was a single pass over eleven
+files and it found one real gap, and the enumeration is now the artefact rather
+than the assumption.
+
+### What it cost here, and what the enumeration was actually worth
+
+The criterion was load-bearing for every task in a two-day exercise and reported
+as satisfied eleven times. Enumerating afterwards showed that **the six clean
+results stand** — only three of them depended on the discriminator at all, and
+those three used covered constructs.
+
+**The rows were right. The claim about them was not.**
+
+I had been reporting six clean results as though the discriminator had confirmed
+them, when for three of the six it was irrelevant and for the other three nothing
+had established that it applied. Running the enumeration changed no row and
+changed what I was entitled to say about every one of them.
+
+> **That distinction is the whole value of the enumeration**, and without it the
+> exercise reads as a formality that confirmed what was already believed. It was
+> not. It converted six results I could not justify into six results I can.
 
 ---
 
