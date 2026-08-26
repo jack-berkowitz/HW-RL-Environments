@@ -1,44 +1,49 @@
 // ===========================================================================
-//  fp_noncomp_tb.sv
+// fp_noncomp_tb.sv
 //
-//  Self-checking testbench for fp_noncomp.
+// Self-checking testbench for the fp_noncomp non-computational FP unit,
+// written against the specification only.  Every check names the clause it
+// decides.
 //
-//  Method
-//  ------
-//  A reference model computes, for every operation at the moment it is
-//  ACCEPTED, exactly what the contract requires of it.  The record is pushed
-//  onto a queue; every delivered result is matched against the head of that
-//  queue, which is what makes H2 (order), H3 (no loss, duplication or
-//  reordering under backpressure) and S15 (nothing survives a reset)
-//  checkable at all -- the port map carries no tag, so bookkeeping is the only
-//  way to attribute a result to an operation.
+// STRUCTURE
+//   * One posedge monitor holds all the checking.  It samples the input
+//     handshake and the output handshake at the edge the design uses, and it
+//     folds an accepted operation into the model BEFORE it checks a delivered
+//     result, so an implementation with zero latency (result in the same cycle
+//     it accepts) is handled exactly like a deeply pipelined one (L1).
+//   * Results are identified by bookkeeping -- a FIFO of predicted records in
+//     acceptance order -- never by matching on payload, so repeated values
+//     cannot mis-attribute (H2).
+//   * Nothing the contract leaves open is checked: latency, in_ready_o
+//     promptness, outputs while out_valid_o is low, result_o under CLASSIFY,
+//     class_mask_o under anything else, unlisted op_mode_i values, and
+//     internal structure (L1-L7) are all free.
+//   * Every wait is bounded, so the run always reaches a verdict (S16).
 //
-//  Acceptance is processed before delivery within a clock edge, so a design
-//  with zero latency -- one that delivers in the same cycle it accepts -- is
-//  judged the same way as a pipelined one.
-//
-//  What is deliberately NOT checked (§10)
-//  --------------------------------------
-//    1  latency: no result is expected in any particular cycle.
-//    2  result_o / class_mask_o / status_o while out_valid_o is low: sampled
-//       only on a delivery edge.
-//    3  promptness of in_ready_o: never required high.
-//    4  result_o under CLASSIFY.
-//    5  class_mask_o under anything other than CLASSIFY.
-//    6  op_mode_i values not listed for the selected operation: never driven.
-//
-//  The one trap named in §10 is S4: MINMAX returns the OTHER operand when one
-//  operand is a NaN of either kind (IEEE 754-2008 minNum/maxNum, as RISC-V
-//  adopts), NOT the NaN-propagating 2019 minimum/maximum.
+// NOTE ON THE PROVIDED PLUMBING.  Clock, reset and watchdog are kept verbatim.
+// bfm_issue is kept but wrapped: as shipped its acceptance loop is `forever`,
+// which is exactly the hang S16 forbids against an implementation that never
+// asserts in_ready_o, so `issue` below is the same task with a cycle budget.
+// bfm_out_ready is left defined but never called -- out_ready_i is driven from
+// a single mode-controlled negedge block, because two processes driving it
+// from the same edge would race.
 // ===========================================================================
-`timescale 1ns/1ps
 
 module fp_noncomp_tb;
 
-  // ---- signals -------------------------------------------------------------
-  logic        clk;
-  logic        rst_n;
+  // ---- operation encodings (§0) -------------------------------------------
+  localparam logic [1:0] OP_SGNJ = 2'd0;
+  localparam logic [1:0] OP_MINMAX = 2'd1;
+  localparam logic [1:0] OP_CMP = 2'd2;
+  localparam logic [1:0] OP_CLASSIFY = 2'd3;
 
+  localparam logic [31:0] CANON_QNAN = 32'h7FC0_0000;   // A2
+  localparam logic [4:0]  NV_ONLY = 5'b1_0000;          // S14 field order
+
+  localparam int RN   = 2048;   // result-model ring depth
+  localparam int NOPS = 24;     // curated operand count
+
+  // ---- DUT signals ---------------------------------------------------------
   logic [31:0] operand_a_i, operand_b_i;
   logic [1:0]  op_i;
   logic [2:0]  op_mode_i;
@@ -48,19 +53,13 @@ module fp_noncomp_tb;
   logic [4:0]  status_o;
   logic        out_valid_o, out_ready_i;
 
-  fp_noncomp dut (
-    .clk_i(clk), .rst_ni(rst_n),
-    .operand_a_i(operand_a_i), .operand_b_i(operand_b_i),
-    .op_i(op_i), .op_mode_i(op_mode_i),
-    .in_valid_i(in_valid_i), .in_ready_o(in_ready_o),
-    .result_o(result_o), .class_mask_o(class_mask_o), .status_o(status_o),
-    .out_valid_o(out_valid_o), .out_ready_i(out_ready_i));
-
-  // -------------------------------------------------------------------------
-  // PROVIDED PLUMBING -- issues operations, checks nothing.
-  // (clk and rst_n are declared above, with the rest of the signals.)
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // PROVIDED PLUMBING
+  // ---------------------------------------------------------------------------
+  logic clk;
   initial begin clk = 1'b0; forever #5 clk = ~clk; end
+
+  logic rst_n;
   initial rst_n = 1'b0;
 
   task automatic bfm_reset(input int cycles = 4);
@@ -92,478 +91,568 @@ module fp_noncomp_tb;
     in_valid_i = 1'b0;
   endtask
 
+  // Kept from the plumbing but never called; see the header note.
   task automatic bfm_out_ready(input logic value);
     @(negedge clk);
     out_ready_i = value;
   endtask
 
+  // ---- watchdog (S16) --------------------------------------------------------
   initial begin
     #200_000_000;
     $display("RESULT: FAIL (watchdog: no forward progress)");
     $finish;
   end
 
-  // -------------------------------------------------------------------------
-  // END OF PROVIDED PLUMBING -- everything below is the testbench proper.
-  // -------------------------------------------------------------------------
+  // ---- device under test ---------------------------------------------------
+  fp_noncomp dut (
+    .clk_i        (clk),
+    .rst_ni       (rst_n),
+    .operand_a_i  (operand_a_i),
+    .operand_b_i  (operand_b_i),
+    .op_i         (op_i),
+    .op_mode_i    (op_mode_i),
+    .in_valid_i   (in_valid_i),
+    .in_ready_o   (in_ready_o),
+    .result_o     (result_o),
+    .class_mask_o (class_mask_o),
+    .status_o     (status_o),
+    .out_valid_o  (out_valid_o),
+    .out_ready_i  (out_ready_i)
+  );
 
-  localparam logic [31:0] QNAN_CANON = 32'h7FC0_0000;   // A2
+  // ===========================================================================
+  // VERDICT BOOKKEEPING
+  // ===========================================================================
+  int err_cnt = 0;
+  int msg_cnt = 0;
 
-  // ---- verdict -------------------------------------------------------------
-  int err_count = 0;
-  int msg_count = 0;
-  int n_checked = 0;
-
-  task automatic note_fail(input string clause, input string msg);
-    err_count = err_count + 1;
-    if (msg_count < 40) begin
-      msg_count = msg_count + 1;
-      $display("VIOLATION [%s] %s", clause, msg);
+  task automatic fail(input string req_id, input string msg);
+    err_cnt = err_cnt + 1;
+    if (msg_cnt < 50) begin
+      msg_cnt = msg_cnt + 1;
+      $display("FAIL [%s] t=%0t : %s", req_id, $time, msg);
+    end
+    if (err_cnt == 200) begin
+      $display("STATS: stopping after %0d violations", err_cnt);
+      $display("RESULT: FAIL");
+      $finish;
     end
   endtask
 
-  // ---- format helpers (A1, A3) ---------------------------------------------
-  function automatic logic fp_is_nan(input logic [31:0] x);
-    return (x[30:23] == 8'hFF) && (x[22:0] != 23'd0);
+  // ===========================================================================
+  // THE REFERENCE MODEL
+  // ===========================================================================
+  function automatic bit f_is_nan (input logic [31:0] x);
+    return (x[30:23] == 8'hFF) && (x[22:0] != 23'd0);          // A1
   endfunction
-  function automatic logic fp_is_snan(input logic [31:0] x);
-    return fp_is_nan(x) && (x[22] == 1'b0);
+  function automatic bit f_is_snan(input logic [31:0] x);
+    return f_is_nan(x) && (x[22] == 1'b0);                     // A3
   endfunction
-  function automatic logic fp_is_qnan(input logic [31:0] x);
-    return fp_is_nan(x) && (x[22] == 1'b1);
+  function automatic bit f_is_qnan(input logic [31:0] x);
+    return f_is_nan(x) && (x[22] == 1'b1);                     // A3
   endfunction
-  function automatic logic fp_is_inf(input logic [31:0] x);
+  function automatic bit f_is_inf (input logic [31:0] x);
     return (x[30:23] == 8'hFF) && (x[22:0] == 23'd0);
   endfunction
-  function automatic logic fp_is_zero(input logic [31:0] x);
-    return (x[30:23] == 8'd0) && (x[22:0] == 23'd0);
+  function automatic bit f_is_zero(input logic [31:0] x);
+    return (x[30:0] == 31'd0);
   endfunction
-  function automatic logic fp_is_sub(input logic [31:0] x);
+  function automatic bit f_is_sub (input logic [31:0] x);
     return (x[30:23] == 8'd0) && (x[22:0] != 23'd0);
   endfunction
 
-  // Ordering key for MINMAX (S3): monotone in the float value, and -0.0 sits
-  // strictly below +0.0.  Injective over all non-NaN encodings.
-  function automatic longint ord_mm(input logic [31:0] x);
-    longint mag;
-    mag = longint'({1'b0, x[30:0]});
-    if (x[31]) return -(mag + 64'd1);
-    else       return mag;
+  // Ordering used by MINMAX (S3): magnitude order, negatives below positives,
+  // and -0.0 strictly below +0.0 because the sign bits differ.
+  function automatic bit f_lt_mm(input logic [31:0] a, input logic [31:0] b);
+    if (a[31] != b[31]) return a[31];
+    if (a[31] == 1'b0)  return (a[30:0] < b[30:0]);
+    else                return (a[30:0] > b[30:0]);
   endfunction
 
-  // Ordering key for CMP (S10): the two zeros compare equal.
-  function automatic longint ord_cmp(input logic [31:0] x);
-    longint mag;
-    mag = longint'({1'b0, x[30:0]});
-    if (x[31]) return -mag;
-    else       return mag;
+  // Ordering used by CMP (S10): the two zeros compare equal.
+  function automatic bit f_eq_num(input logic [31:0] a, input logic [31:0] b);
+    if (f_is_zero(a) && f_is_zero(b)) return 1'b1;
+    return (a == b);
+  endfunction
+  function automatic bit f_lt_num(input logic [31:0] a, input logic [31:0] b);
+    if (f_is_zero(a) && f_is_zero(b)) return 1'b0;
+    if (a[31] != b[31]) return a[31];
+    if (a[31] == 1'b0)  return (a[30:0] < b[30:0]);
+    else                return (a[30:0] > b[30:0]);
   endfunction
 
-  // S12
-  function automatic logic [9:0] fp_class(input logic [31:0] x);
-    logic [9:0] m;
-    m = 10'd0;
-    if (fp_is_nan(x))       m[x[22] ? 9 : 8] = 1'b1;
-    else if (fp_is_inf(x))  m[x[31] ? 0 : 7] = 1'b1;
-    else if (fp_is_zero(x)) m[x[31] ? 3 : 4] = 1'b1;
-    else if (fp_is_sub(x))  m[x[31] ? 2 : 5] = 1'b1;
-    else                    m[x[31] ? 1 : 6] = 1'b1;
-    return m;
+  // S12 bit assignment
+  function automatic logic [9:0] f_class(input logic [31:0] x);
+    if (f_is_snan(x)) return 10'b01_0000_0000;   // bit 8
+    if (f_is_qnan(x)) return 10'b10_0000_0000;   // bit 9
+    if (f_is_inf(x))  return x[31] ? 10'b00_0000_0001    // bit 0
+                                   : 10'b00_1000_0000;   // bit 7
+    if (f_is_zero(x)) return x[31] ? 10'b00_0000_1000    // bit 3
+                                   : 10'b00_0001_0000;   // bit 4
+    if (f_is_sub(x))  return x[31] ? 10'b00_0000_0100    // bit 2
+                                   : 10'b00_0010_0000;   // bit 5
+    return x[31] ? 10'b00_0000_0010                      // bit 1
+                 : 10'b00_0100_0000;                     // bit 6
   endfunction
 
-  // ---- the reference model -------------------------------------------------
   typedef struct {
-    int          idx;
     logic [31:0] a;
     logic [31:0] b;
     logic [1:0]  op;
     logic [2:0]  mode;
-    logic [31:0] res;      // expected result_o
-    logic        chk_res;  // ... and whether it is constrained at all
-    logic [9:0]  cls;      // expected class_mask_o
-    logic        chk_cls;
-    logic [4:0]  st;       // expected status_o
-    int          res_cl;   // clause to name if the result is wrong
-    int          st_cl;    // clause to name if NV is wrong
+    logic [31:0] res;
+    logic [9:0]  cmask;
+    logic [4:0]  st;
+    bit          chk_res;
+    bit          chk_cm;
+    int          seq;
   } rec_t;
 
-  function automatic rec_t model(input logic [31:0] a, input logic [31:0] b,
-                                 input logic [1:0] op, input logic [2:0] mode);
-    rec_t r;
-    logic sgn, anan, bnan, asn, bsn, tru;
-    longint oa, ob;
-
-    r.a = a; r.b = b; r.op = op; r.mode = mode;
-    r.res = 32'd0; r.chk_res = 1'b0;
-    r.cls = 10'd0; r.chk_cls = 1'b0;
-    r.st  = 5'd0;
-    r.res_cl = 0; r.st_cl = 14;
-    r.idx = 0;
-
-    anan = fp_is_nan(a);  bnan = fp_is_nan(b);
-    asn  = fp_is_snan(a); bsn  = fp_is_snan(b);
-
+  task automatic predict(input  logic [31:0] a, input logic [31:0] b,
+                         input  logic [1:0]  op, input logic [2:0] mode,
+                         output logic [31:0] res, output logic [9:0] cm,
+                         output logic [4:0]  st,
+                         output bit chk_res, output bit chk_cm);
+    automatic bit na = f_is_nan(a);
+    automatic bit nb = f_is_nan(b);
+    automatic bit sa = f_is_snan(a);
+    automatic bit sb = f_is_snan(b);
+    automatic logic sgn = 1'b0;
+    res     = 32'd0;
+    cm      = 10'd0;
+    st      = 5'd0;
+    chk_res = 1'b1;
+    chk_cm  = 1'b0;
     case (op)
-      2'd0: begin                                   // ---- SGNJ (S1, S2)
-        sgn = (mode == 3'd0) ? b[31] :
-              (mode == 3'd1) ? ~b[31] : (a[31] ^ b[31]);
-        r.res     = {sgn, a[30:0]};                 // payload copied, not canonicalised
-        r.chk_res = 1'b1;
-        r.st      = 5'd0;                           // S2: never any flag
-        r.res_cl  = 1;
-        r.st_cl   = 2;
+      OP_SGNJ: begin
+        // S1: bits 30:0 of operand_a unchanged, NaN payloads included.
+        case (mode)
+          3'd0:    sgn = b[31];
+          3'd1:    sgn = ~b[31];
+          default: sgn = a[31] ^ b[31];
+        endcase
+        res = {sgn, a[30:0]};
+        st  = 5'd0;                                   // S2
       end
-
-      2'd1: begin                                   // ---- MINMAX (S3-S6)
-        if (anan && bnan) begin
-          r.res    = QNAN_CANON;                    // S5
-          r.res_cl = 5;
-        end else if (anan) begin
-          r.res    = b;                             // S4: the OTHER operand
-          r.res_cl = 4;
-        end else if (bnan) begin
-          r.res    = a;                             // S4
-          r.res_cl = 4;
-        end else begin
-          oa = ord_mm(a); ob = ord_mm(b);           // S3, -0.0 below +0.0
-          if (mode == 3'd0) r.res = (oa <= ob) ? a : b;
-          else              r.res = (oa >= ob) ? a : b;
-          r.res_cl = 3;
-        end
-        r.chk_res = 1'b1;
-        r.st      = {(asn | bsn), 4'b0000};         // S6: signalling NaN only
-        r.st_cl   = 6;
+      OP_MINMAX: begin
+        if (na && nb)      res = CANON_QNAN;           // S5
+        else if (na)       res = b;                    // S4
+        else if (nb)       res = a;                    // S4
+        else if (mode == 3'd0) res = f_lt_mm(a, b) ? a : b;   // S3 minimum
+        else                   res = f_lt_mm(a, b) ? b : a;   // S3 maximum
+        st = (sa || sb) ? NV_ONLY : 5'd0;              // S6
       end
-
-      2'd2: begin                                   // ---- CMP (S7-S11)
-        if (mode == 3'd2) begin                     // EQ, quiet (S9)
-          if (anan || bnan) begin
-            tru     = 1'b0;
-            r.st    = {(asn | bsn), 4'b0000};
-            r.res_cl = 9;
+      OP_CMP: begin
+        if (mode == 3'd2) begin                        // S9 equal, quiet
+          res = (na || nb) ? 32'd0 : (f_eq_num(a, b) ? 32'd1 : 32'd0);
+          st  = (sa || sb) ? NV_ONLY : 5'd0;
+        end else begin                                 // S8 le/lt, signalling
+          if (na || nb) begin
+            res = 32'd0;
+            st  = NV_ONLY;
           end else begin
-            tru     = (ord_cmp(a) == ord_cmp(b));   // S10: -0.0 == +0.0
-            r.res_cl = 10;
+            if (mode == 3'd0) res = (f_lt_num(a, b) || f_eq_num(a, b)) ? 32'd1 : 32'd0;
+            else              res = f_lt_num(a, b) ? 32'd1 : 32'd0;
+            st  = 5'd0;
           end
-          r.st_cl = 9;
-        end else begin                              // LE / LT, signalling (S8)
-          if (anan || bnan) begin
-            tru     = 1'b0;
-            r.st    = 5'b10000;                     // NV for a NaN of either kind
-            r.res_cl = 8;
-          end else begin
-            tru     = (mode == 3'd0) ? (ord_cmp(a) <= ord_cmp(b))
-                                     : (ord_cmp(a) <  ord_cmp(b));
-            r.res_cl = 10;
-          end
-          r.st_cl = 8;
         end
-        r.res     = tru ? 32'h0000_0001 : 32'h0000_0000;   // S7
-        r.chk_res = 1'b1;
       end
-
-      default: begin                                // ---- CLASSIFY (S12, S13)
-        r.cls     = fp_class(a);                    // operand_b_i ignored
-        r.chk_cls = 1'b1;
-        r.chk_res = 1'b0;                           // latitude 4
-        r.st      = 5'd0;                           // S13
-        r.st_cl   = 13;
+      default: begin                                   // CLASSIFY
+        cm      = f_class(a);                          // S12
+        st      = 5'd0;                                // S13
+        chk_res = 1'b0;                                // L4: result_o is free
+        chk_cm  = 1'b1;
       end
     endcase
-    return r;
-  endfunction
+  endtask
 
-  function automatic string cl_name(input int n);
-    return $sformatf("S%0d", n);
-  endfunction
-
-  function automatic string op_name(input rec_t r);
-    string s;
-    case (r.op)
-      2'd0: s = $sformatf("SGNJ mode %0d", r.mode);
-      2'd1: s = (r.mode == 3'd0) ? "MIN" : "MAX";
-      2'd2: s = (r.mode == 3'd0) ? "LE" : ((r.mode == 3'd1) ? "LT" : "EQ");
-      default: s = "CLASSIFY";
+  // Which clause a wrong result violates, for the diagnostic.
+  function automatic string res_req(input rec_t e);
+    case (e.op)
+      OP_SGNJ:   return "S1";
+      OP_MINMAX: begin
+        if (f_is_nan(e.a) && f_is_nan(e.b)) return "S5";
+        if (f_is_nan(e.a) || f_is_nan(e.b)) return "S4";
+        if (f_is_zero(e.a) && f_is_zero(e.b)) return "S3";
+        return "S3";
+      end
+      OP_CMP: begin
+        if (f_is_nan(e.a) || f_is_nan(e.b)) return (e.mode == 3'd2) ? "S9" : "S8";
+        if (f_is_zero(e.a) && f_is_zero(e.b)) return "S10";
+        return "S7";
+      end
+      default: return "S12";
     endcase
-    return $sformatf("%s a=%08h b=%08h (op %0d)", s, r.a, r.b, r.idx);
   endfunction
 
-  // ---- the scoreboard ------------------------------------------------------
-  rec_t q [$];
-  int   issue_idx = 0;
-  int   n_deliv   = 0;
-  int   quiet_out = 0;      // after a reset, nothing may be delivered until an
-                            // operation has been accepted (S15)
+  // Which clause a wrong NV violates.
+  function automatic string nv_req(input rec_t e);
+    case (e.op)
+      OP_SGNJ:   return "S2";
+      OP_MINMAX: return "S6";
+      OP_CMP:    return (e.mode == 3'd2) ? "S9" : "S8";
+      default:   return "S13";
+    endcase
+  endfunction
 
-  always @(posedge clk) begin : mon_blk
-    rec_t r, e;
-    int   k, later;
-    if (rst_n !== 1'b1) begin
-      q.delete();
-      quiet_out = 1;
-    end else begin
-      // ---- acceptance (H1).  Processed BEFORE delivery so a zero-latency
-      //      design, which delivers on the very edge it accepts, is handled.
-      if (in_valid_i === 1'b1 && in_ready_o === 1'b1) begin
-        r = model(operand_a_i, operand_b_i, op_i, op_mode_i);
-        r.idx = issue_idx;
-        issue_idx = issue_idx + 1;
-        q.push_back(r);
-        quiet_out = 0;
-      end
+  function automatic string op_name(input rec_t e);
+    case (e.op)
+      OP_SGNJ:   return (e.mode == 3'd0) ? "SGNJ" : ((e.mode == 3'd1) ? "SGNJN" : "SGNJX");
+      OP_MINMAX: return (e.mode == 3'd0) ? "MIN" : "MAX";
+      OP_CMP:    return (e.mode == 3'd0) ? "LE" : ((e.mode == 3'd1) ? "LT" : "EQ");
+      default:   return "CLASSIFY";
+    endcase
+  endfunction
 
-      // ---- delivery (H2, H3)
-      if (out_valid_o === 1'b1 && out_ready_i === 1'b1) begin
-        if (quiet_out == 1) begin
-          note_fail("S15", "a result was delivered after reset for an operation accepted before it");
-        end else if (q.size() == 0) begin
-          note_fail("H2", "a result was delivered with no operation outstanding (invented or duplicated)");
-        end else begin
-          e = q.pop_front();
-          n_deliv = n_deliv + 1;
-          n_checked = n_checked + 1;
-          if (e.chk_res && (result_o !== e.res)) begin
-            later = -1;
-            for (k = 0; k < q.size(); k++)
-              if ((later < 0) && q[k].chk_res && (q[k].res === result_o) &&
-                  (q[k].st === status_o)) later = k;
-            if (later >= 0)
-              note_fail($sformatf("H2/%s", cl_name(e.res_cl)),
-                        $sformatf("%s: result_o is %08h, expected %08h -- that value belongs to an operation accepted %0d later, so either the result is wrong or results are out of order",
-                                  op_name(e), result_o, e.res, later + 1));
-            else
-              note_fail(cl_name(e.res_cl),
-                        $sformatf("%s: result_o is %08h, expected %08h", op_name(e), result_o, e.res));
-          end
-          if (e.chk_cls && (class_mask_o !== e.cls))
-            note_fail("S12",
-                      $sformatf("%s: class_mask_o is %010b, expected %010b", op_name(e), class_mask_o, e.cls));
-          if (status_o[3:0] !== 4'b0000)
-            note_fail("S14",
-                      $sformatf("%s: status_o is %05b; DZ, OF, UF and NX are zero for every operation here",
-                                op_name(e), status_o));
-          if (status_o[4] !== e.st[4])
-            note_fail(cl_name(e.st_cl),
-                      $sformatf("%s: NV is %0b, expected %0b", op_name(e), status_o[4], e.st[4]));
-        end
-      end
+  // ===========================================================================
+  // RESULT MODEL -- a FIFO in acceptance order (H2)
+  // ===========================================================================
+  rec_t ring [RN];
+  int   r_head = 0;      // next result expected
+  int   r_tail = 0;      // next slot to fill
+  int   n_acc  = 0;
+  int   n_out  = 0;
+  int   n_disc = 0;      // accepted, then correctly discarded by reset (S15)
+  int   n_seq  = 0;
 
-      // S15: nothing may appear between a reset and the next acceptance
-      if (quiet_out == 1 && out_valid_o === 1'b1 &&
-          !(in_valid_i === 1'b1 && in_ready_o === 1'b1))
-        note_fail("S15", "out_valid_o is asserted after reset with no operation accepted since");
-    end
-  end
+  bit  quiet_win = 1'b0;   // nothing may be delivered in this window (S15)
+  logic rst_d = 1'b0;
 
-  // ---- forward-progress detector (S16) -------------------------------------
-  // Latitude 3 lets in_ready_o be low for any reason, so this bound is set far
-  // beyond anything a working design needs; the offer is never withdrawn.
-  int stall_cnt = 0;
-  always @(posedge clk) begin
-    if (rst_n !== 1'b1 || in_valid_i !== 1'b1 || in_ready_o === 1'b1) stall_cnt <= 0;
-    else begin
-      stall_cnt <= stall_cnt + 1;
-      if (stall_cnt == 20000) begin
-        $display("VIOLATION [H1] in_valid_i has been held for 20000 cycles without in_ready_o ever rising");
-        $display("RESULT: FAIL (no operation was ever accepted)");
-        $finish;
-      end
-    end
-  end
+  // ===========================================================================
+  // OUR READINESS.  Single driver, mode-controlled, changed only at the
+  // falling edge.  out_ready_i may be low whenever we like (H3).
+  // ===========================================================================
+  int unsigned lfsr = 32'h1ADE_5C0F;
 
-  // ---- result-side ready ---------------------------------------------------
-  // Driven at the falling edge only; the monitor samples it at the rising edge.
-  int bp_mode = 0;          // 0 = always ready, 1 = random, 2 = never ready
+  function automatic int unsigned rnd();
+    lfsr = lfsr ^ (lfsr << 13);
+    lfsr = lfsr ^ (lfsr >> 17);
+    lfsr = lfsr ^ (lfsr << 5);
+    return lfsr;
+  endfunction
+
+  // 0 = always ready, 1 = random, 2 = held low, 3 = long low stretches
+  int or_mode = 0;
+  int or_phase = 0;
+
   always @(negedge clk) begin
-    case (bp_mode)
-      0: out_ready_i = 1'b1;
-      2: out_ready_i = 1'b0;
-      default: out_ready_i = ($urandom_range(0, 2) != 0);
+    automatic int unsigned r = rnd();
+    or_phase = (or_phase + 1) % 32;
+    case (or_mode)
+      0:       out_ready_i = 1'b1;
+      1:       out_ready_i = (r[0] | r[1]);      // ready ~75% of cycles
+      3:       out_ready_i = (or_phase >= 26);   // low 26 cycles, high 6
+      default: out_ready_i = 1'b0;
     endcase
   end
 
-  // ---- operand pool --------------------------------------------------------
-  localparam int POOL_N = 24;
-  logic [31:0] pool [POOL_N];
+  // ===========================================================================
+  // THE MONITOR
+  // ===========================================================================
+  always @(posedge clk) begin
+    rst_d <= rst_n;
+    if (!rst_n) begin
+      // S15: reset returns the design to idle and discards work in flight.
+      // Those operations are owed no result, so they are counted out of the
+      // delivery tally rather than treated as lost.
+      n_disc = n_disc + (r_tail - r_head);
+      r_head = 0;
+      r_tail = 0;
+    end else begin
+      // S15: out_valid_o is low on the first cycle after release.
+      if (!rst_d && out_valid_o !== 1'b0)
+        fail("S15", "out_valid_o is high on the first cycle after reset release");
 
-  task automatic fill_pool();
-    pool[0]  = 32'h0000_0000;   // +0
-    pool[1]  = 32'h8000_0000;   // -0
-    pool[2]  = 32'h3F80_0000;   // +1.0
-    pool[3]  = 32'hBF80_0000;   // -1.0
-    pool[4]  = 32'h4000_0000;   // +2.0
-    pool[5]  = 32'hC000_0000;   // -2.0
-    pool[6]  = 32'h7F80_0000;   // +inf
-    pool[7]  = 32'hFF80_0000;   // -inf
-    pool[8]  = 32'h7FC0_0000;   // canonical qNaN
-    pool[9]  = 32'h7FC1_2345;   // qNaN, payload
-    pool[10] = 32'hFFC0_0000;   // qNaN, negative
-    pool[11] = 32'h7F80_0001;   // sNaN, smallest payload
-    pool[12] = 32'h7FBF_FFFF;   // sNaN, largest payload
-    pool[13] = 32'hFF80_0001;   // sNaN, negative
-    pool[14] = 32'h0080_0000;   // +min normal
-    pool[15] = 32'h807F_FFFF;   // -max subnormal
-    pool[16] = 32'h0000_0001;   // +min subnormal
-    pool[17] = 32'h007F_FFFF;   // +max subnormal
-    pool[18] = 32'h7F7F_FFFF;   // +max normal
-    pool[19] = 32'hFF7F_FFFF;   // -max normal
-    pool[20] = 32'h8080_0000;   // -min normal
-    pool[21] = 32'h8000_0001;   // -min subnormal
-    pool[22] = 32'h3F80_0001;   // just above +1.0
-    pool[23] = 32'h3380_0000;   // a small normal
+      // S15: nothing accepted before or during reset may be delivered after it.
+      if (quiet_win && out_valid_o === 1'b1)
+        fail("S15", "a result appeared after reset for an operation accepted before it");
+
+      // ---- H1: an operation is accepted here -----------------------------
+      if (in_valid_i === 1'b1 && in_ready_o === 1'b1) begin
+        automatic rec_t e;
+        e.a    = operand_a_i;
+        e.b    = operand_b_i;
+        e.op   = op_i;
+        e.mode = op_mode_i;
+        e.seq  = n_seq;
+        predict(e.a, e.b, e.op, e.mode, e.res, e.cmask, e.st, e.chk_res, e.chk_cm);
+        if ((r_tail - r_head) >= RN) begin
+          fail("H3", "more operations are outstanding than the model can hold");
+        end else begin
+          ring[r_tail % RN] = e;
+          r_tail = r_tail + 1;
+        end
+        n_acc = n_acc + 1;
+        n_seq = n_seq + 1;
+      end
+
+      // ---- H2: a result is delivered here --------------------------------
+      if (out_valid_o === 1'b1 && out_ready_i === 1'b1) begin
+        if (r_head == r_tail) begin
+          fail("H3", "a result was delivered with no operation outstanding (duplicated or invented)");
+        end else begin
+          automatic rec_t e = ring[r_head % RN];
+          r_head = r_head + 1;
+          n_out  = n_out + 1;
+          // result_o -- checked for every operation except CLASSIFY (L4)
+          if (e.chk_res && result_o !== e.res)
+            fail(res_req(e), $sformatf("%s(a=%08h,b=%08h): result_o=%08h, expected %08h",
+                                       op_name(e), e.a, e.b, result_o, e.res));
+          // class_mask_o -- checked only for CLASSIFY (L5)
+          if (e.chk_cm && class_mask_o !== e.cmask)
+            fail("S12", $sformatf("CLASSIFY(a=%08h): class_mask_o=%010b, expected %010b",
+                                  e.a, class_mask_o, e.cmask));
+          // status_o -- S14 pins the four non-NV flags off for every operation
+          if (status_o[3:0] !== 4'b0000)
+            fail("S14", $sformatf("%s(a=%08h,b=%08h): status_o=%05b, DZ/OF/UF/NX must all be zero",
+                                  op_name(e), e.a, e.b, status_o));
+          if (status_o[4] !== e.st[4])
+            fail(nv_req(e), $sformatf("%s(a=%08h,b=%08h): NV=%0b, expected %0b",
+                                      op_name(e), e.a, e.b, status_o[4], e.st[4]));
+        end
+      end
+    end
+  end
+
+  // ===========================================================================
+  // STIMULUS HELPERS
+  // ===========================================================================
+  int timeouts = 0;
+
+  function automatic int issue_budget();
+    return (timeouts >= 2) ? 64 : 8000;    // the fault is established; keep moving
+  endfunction
+
+  // bfm_issue with a bound (S16).  L3 says in_ready_o may be low for any
+  // reason, so the budget is generous; only never-accepting is a failure.
+  task automatic issue(input logic [31:0] a, input logic [31:0] b,
+                       input logic [1:0] op, input logic [2:0] mode);
+    automatic int w = 0;
+    automatic bit acc = 1'b0;
+    automatic int budg = issue_budget();
+    @(negedge clk);
+    operand_a_i = a;
+    operand_b_i = b;
+    op_i        = op;
+    op_mode_i   = mode;
+    in_valid_i  = 1'b1;                    // H4: held stable until accepted
+    while (w < budg) begin
+      @(posedge clk);
+      if (in_ready_o === 1'b1) begin acc = 1'b1; break; end
+      w = w + 1;
+    end
+    if (!acc) begin
+      timeouts = timeouts + 1;
+      fail("H1", $sformatf("operation op=%0d mode=%0d was offered for %0d cycles and never accepted",
+                           op, mode, budg));
+      @(negedge clk);
+      in_valid_i = 1'b0;
+    end
   endtask
 
-  function automatic logic [31:0] rnd_operand();
-    int k;
-    logic [22:0] man;
-    logic        sg;
-    k  = $urandom_range(0, 9);
-    sg = 1'($urandom_range(0, 1));
-    man = 23'($urandom_range(1, 8388607));
-    case (k)
-      0, 1, 2, 3: return pool[$urandom_range(0, POOL_N-1)];
-      4:          return {sg, 8'hFF, 1'b0, man[21:0]};        // sNaN
-      5:          return {sg, 8'hFF, 1'b1, man[21:0]};        // qNaN
-      6:          return {sg, 8'h00, man};                    // subnormal
-      7:          return {sg, 8'hFF, 23'd0};                  // infinity
-      default:    return $urandom;
+  // Offer an operation but accept a refusal: used only where the output side is
+  // deliberately stalled, since L3 permits in_ready_o to be low for any reason.
+  task automatic try_issue(input logic [31:0] a, input logic [31:0] b,
+                           input logic [1:0] op, input logic [2:0] mode,
+                           input int budg, output bit accepted);
+    automatic int w = 0;
+    accepted = 1'b0;
+    @(negedge clk);
+    operand_a_i = a;
+    operand_b_i = b;
+    op_i        = op;
+    op_mode_i   = mode;
+    in_valid_i  = 1'b1;                    // H4: held stable while offered
+    while (w < budg) begin
+      @(posedge clk);
+      if (in_ready_o === 1'b1) begin accepted = 1'b1; break; end
+      w = w + 1;
+    end
+    if (!accepted) begin
+      @(negedge clk);
+      in_valid_i = 1'b0;
+    end
+  endtask
+
+  task automatic idle_cycles(input int n);
+    @(negedge clk);
+    in_valid_i = 1'b0;
+    repeat (n) @(posedge clk);
+  endtask
+
+  // Wait for every accepted operation to be delivered.  Bounded (S16).
+  task automatic drain(input string ctx);
+    automatic int i;
+    automatic int budg = (timeouts >= 2) ? 200 : 20000;
+    @(negedge clk);
+    in_valid_i = 1'b0;
+    or_mode = 0;
+    for (i = 0; i < budg; i++) begin
+      @(posedge clk);
+      if (r_head == r_tail) break;
+    end
+    if (r_head != r_tail) begin
+      timeouts = timeouts + 1;
+      fail("H2", $sformatf("%s: %0d accepted operations never produced a result", ctx, r_tail - r_head));
+      r_head = r_tail;                       // abandon them and keep going
+    end
+  endtask
+
+  // ---- curated operands ----------------------------------------------------
+  function automatic logic [31:0] opv(input int i);
+    case (i)
+      0:  return 32'h0000_0000;   // +0
+      1:  return 32'h8000_0000;   // -0
+      2:  return 32'h3F80_0000;   // +1.0
+      3:  return 32'hBF80_0000;   // -1.0
+      4:  return 32'h4000_0000;   // +2.0
+      5:  return 32'hC000_0000;   // -2.0
+      6:  return 32'h3F00_0000;   // +0.5
+      7:  return 32'hBF00_0000;   // -0.5
+      8:  return 32'h7F80_0000;   // +inf
+      9:  return 32'hFF80_0000;   // -inf
+      10: return 32'h0000_0001;   // +smallest subnormal
+      11: return 32'h8000_0001;   // -smallest subnormal
+      12: return 32'h007F_FFFF;   // +largest subnormal
+      13: return 32'h807F_FFFF;   // -largest subnormal
+      14: return 32'h0080_0000;   // +smallest normal
+      15: return 32'h8080_0000;   // -smallest normal
+      16: return 32'h7F7F_FFFF;   // +largest normal
+      17: return 32'hFF7F_FFFF;   // -largest normal
+      18: return 32'h7FC0_0000;   // canonical qNaN
+      19: return 32'h7FD5_5555;   // qNaN, other payload
+      20: return 32'hFFC0_0001;   // negative qNaN
+      21: return 32'h7F80_0001;   // sNaN, smallest payload
+      22: return 32'h7FBF_FFFF;   // sNaN, largest payload
+      default: return 32'hFF80_0001; // negative sNaN
     endcase
   endfunction
 
-  // op / mode combinations that §0 defines
-  localparam int NCOMB = 9;
-  logic [1:0] comb_op   [NCOMB];
-  logic [2:0] comb_mode [NCOMB];
+  function automatic logic [31:0] rand_operand();
+    automatic int unsigned r1 = rnd();
+    automatic int unsigned r2 = rnd();
+    case (r1[1:0])
+      2'd0:    return opv(int'(r1[9:4]) % NOPS);
+      2'd1:    return r2;                                 // anything at all
+      2'd2:    return {r2[31], 8'hFF, r2[22:0]};          // inf or a NaN
+      default: return {r2[31], 8'd0, r2[22:0]};           // zero or subnormal
+    endcase
+  endfunction
 
-  task automatic fill_combs();
-    comb_op[0] = 2'd0; comb_mode[0] = 3'd0;
-    comb_op[1] = 2'd0; comb_mode[1] = 3'd1;
-    comb_op[2] = 2'd0; comb_mode[2] = 3'd2;
-    comb_op[3] = 2'd1; comb_mode[3] = 3'd0;
-    comb_op[4] = 2'd1; comb_mode[4] = 3'd1;
-    comb_op[5] = 2'd2; comb_mode[5] = 3'd0;
-    comb_op[6] = 2'd2; comb_mode[6] = 3'd1;
-    comb_op[7] = 2'd2; comb_mode[7] = 3'd2;
-    comb_op[8] = 2'd3; comb_mode[8] = 3'd0;
-  endtask
+  // op/mode pairs the contract defines (§0); nothing else is ever driven (L6).
+  function automatic logic [1:0] combo_op(input int k);
+    case (k)
+      0,1,2:   return OP_SGNJ;
+      3,4:     return OP_MINMAX;
+      5,6,7:   return OP_CMP;
+      default: return OP_CLASSIFY;
+    endcase
+  endfunction
+  function automatic logic [2:0] combo_mode(input int k);
+    case (k)
+      0: return 3'd0; 1: return 3'd1; 2: return 3'd2;
+      3: return 3'd0; 4: return 3'd1;
+      5: return 3'd0; 6: return 3'd1; 7: return 3'd2;
+      default: return 3'd0;
+    endcase
+  endfunction
+  localparam int NCOMBO = 9;
 
-  // ---- drain ---------------------------------------------------------------
-  task automatic drain(input int limit, input string tag);
-    int i;
-    for (i = 0; i < limit; i++) begin
-      @(posedge clk);
-      if (q.size() == 0) return;
-    end
-    note_fail("H2/H3", $sformatf("%s: %0d accepted operations never produced a result", tag, q.size()));
-  endtask
+  // ===========================================================================
+  // THE RUN
+  // ===========================================================================
+  initial begin
+    automatic int k;
+    automatic int ia;
+    automatic int ib;
 
-  // ---- stimulus ------------------------------------------------------------
-  initial begin : main
-    int c, ia, ib, i;
-    logic [31:0] a, b;
+    operand_a_i = 32'd0;
+    operand_b_i = 32'd0;
+    op_i        = 2'd0;
+    op_mode_i   = 3'd0;
+    in_valid_i  = 1'b0;
+    or_mode     = 0;
 
-    operand_a_i = 32'd0; operand_b_i = 32'd0;
-    op_i = 2'd0; op_mode_i = 3'd0; in_valid_i = 1'b0; out_ready_i = 1'b1;
-    fill_pool();
-    fill_combs();
-
+    // ---- S15: reset, and idle immediately after release -------------------
     bfm_reset(6);
+    quiet_win = 1'b1;
+    repeat (12) @(posedge clk);
+    @(negedge clk);
+    quiet_win = 1'b0;
 
-    // =================== directed: every defined op/mode over the pool =====
-    bp_mode = 0;
-    for (c = 0; c < NCOMB; c++) begin
-      for (ia = 0; ia < POOL_N; ia++) begin
-        for (ib = 0; ib < POOL_N; ib++) begin
-          bfm_issue(pool[ia], pool[ib], comb_op[c], comb_mode[c]);
-        end
-      end
+    // ---- every defined op/mode over every pair of curated operands --------
+    // out_ready_i high throughout, issue back to back.
+    for (ia = 0; ia < NOPS; ia++)
+      for (ib = 0; ib < NOPS; ib++)
+        for (k = 0; k < NCOMBO; k++)
+          issue(opv(ia), opv(ib), combo_op(k), combo_mode(k));
+    drain("curated cross product, no backpressure");
+
+    // ---- H3: the same traffic under random backpressure and issue gaps ----
+    or_mode = 1;
+    for (ia = 0; ia < NOPS; ia++) begin
+      for (ib = 0; ib < NOPS; ib++)
+        for (k = 0; k < NCOMBO; k++)
+          issue(opv(ia), opv(ib), combo_op(k), combo_mode(k));
+      if (ia % 5 == 0) idle_cycles(3);
     end
-    bfm_idle();
-    drain(2000, "directed sweep");
+    drain("curated cross product, random backpressure");
 
-    // =================== the same sweep under backpressure (H3) ===========
-    bp_mode = 1;
-    for (c = 0; c < NCOMB; c++) begin
-      for (ia = 0; ia < POOL_N; ia++) begin
-        for (ib = 0; ib < POOL_N; ib++) begin
-          if ($urandom_range(0, 2) == 0)
-            bfm_issue(pool[ia], pool[ib], comb_op[c], comb_mode[c]);
-        end
-      end
+    // ---- H3: long stretches with out_ready_i low --------------------------
+    // The stretches end, so acceptance is never required while stalled (L3);
+    // what is required is that nothing is lost, duplicated or reordered.
+    or_mode = 3;
+    for (k = 0; k < 60; k++)
+      issue(rand_operand(), rand_operand(), combo_op(k % NCOMBO), combo_mode(k % NCOMBO));
+    idle_cycles(30);
+    drain("results released after long stalls");
+
+    // ---- randomised traffic ----------------------------------------------
+    or_mode = 1;
+    for (k = 0; k < 3000; k++) begin
+      automatic int unsigned r = rnd();
+      automatic int c = int'(r[7:4]) % NCOMBO;
+      issue(rand_operand(), rand_operand(), combo_op(c), combo_mode(c));
+      if (r[11:8] == 4'd0) idle_cycles(2);
     end
-    bfm_idle();
-    bp_mode = 0;
-    drain(4000, "backpressure sweep");
+    drain("randomised traffic");
 
-    // =================== random operands ==================================
-    bp_mode = 1;
-    for (i = 0; i < 4000; i++) begin
-      c = $urandom_range(0, NCOMB-1);
-      a = rnd_operand();
-      b = rnd_operand();
-      bfm_issue(a, b, comb_op[c], comb_mode[c]);
+    // ---- S15: reset with operations in flight -----------------------------
+    or_mode = 3;                            // let some work in, then stall it
+    for (k = 0; k < 12; k++) begin
+      automatic bit got;
+      try_issue(opv(k % NOPS), opv((k + 7) % NOPS), combo_op(k % NCOMBO), combo_mode(k % NCOMBO), 400, got);
     end
-    bfm_idle();
-    bp_mode = 0;
-    drain(8000, "random operands");
+    or_mode = 2;                            // now hold the output blocked
+    @(negedge clk);
+    in_valid_i = 1'b0;
+    repeat (6) @(posedge clk);
+    bfm_reset(6);                           // discard everything in flight
+    or_mode   = 0;                          // and now accept anything offered
+    quiet_win = 1'b1;
+    repeat (40) @(posedge clk);             // nothing may appear
+    @(negedge clk);
+    quiet_win = 1'b0;
 
-    // =================== a long stall (H3) ================================
-    // The sink refuses everything for 60 cycles.  How many operations the
-    // design can hold meanwhile is its own business (latitude 3 and 7), so the
-    // issuer simply keeps its offer up -- H4 forbids withdrawing it -- and the
-    // stall is lifted on a timer rather than after a fixed number of accepts.
-    bp_mode = 2;
-    fork
-      begin : stall_issuer
-        automatic int si, sc;
-        for (si = 0; si < 6; si++) begin
-          sc = $urandom_range(0, NCOMB-1);
-          bfm_issue(rnd_operand(), rnd_operand(), comb_op[sc], comb_mode[sc]);
-        end
-        bfm_idle();
-      end
-      begin : stall_timer
-        repeat (60) @(posedge clk);                // held, not lost
-        bp_mode = 1;
-      end
-    join
-    bp_mode = 0;
-    drain(4000, "long stall");
+    // ---- the unit still works afterwards ---------------------------------
+    for (ia = 0; ia < NOPS; ia++)
+      for (k = 0; k < NCOMBO; k++)
+        issue(opv(ia), opv((ia + 3) % NOPS), combo_op(k), combo_mode(k));
+    drain("after reset");
 
-    // =================== reset discards in-flight work (S15) ==============
-    bp_mode = 2;                                   // leave work stuck in flight
-    fork
-      begin : rst_issuer
-        automatic int ri, rc;
-        for (ri = 0; ri < 3; ri++) begin
-          rc = $urandom_range(0, NCOMB-1);
-          bfm_issue(rnd_operand(), rnd_operand(), comb_op[rc], comb_mode[rc]);
-        end
-        bfm_idle();
-      end
-      begin : rst_timer
-        repeat (10) @(posedge clk);
-        bfm_reset(6);                              // the monitor clears the queue
-        bp_mode = 0;                               // and lets the issuer finish
-      end
-    join
-    repeat (40) @(posedge clk);                    // nothing stale may come out
+    // ---- H3: nothing lost or duplicated across the whole run --------------
+    if (n_acc != n_out + n_disc)
+      fail("H3", $sformatf("%0d operations were accepted, %0d results delivered, %0d discarded by reset: %0d unaccounted for",
+                           n_acc, n_out, n_disc, n_acc - n_out - n_disc));
 
-    // =================== and it still works afterwards ====================
-    bp_mode = 1;
-    for (i = 0; i < 600; i++) begin
-      c = $urandom_range(0, NCOMB-1);
-      bfm_issue(rnd_operand(), rnd_operand(), comb_op[c], comb_mode[c]);
-    end
-    bfm_idle();
-    bp_mode = 0;
-    drain(4000, "post-reset");
-
-    $display("INFO: %0d operations issued, %0d results checked", issue_idx, n_checked);
-    if (n_checked < 5000)
-      note_fail("H2", $sformatf("only %0d results were delivered for %0d operations", n_checked, issue_idx));
-    if (err_count == 0) $display("RESULT: PASS");
-    else                $display("RESULT: FAIL (%0d violation%s)", err_count, (err_count == 1) ? "" : "s");
+    // ---- verdict ----------------------------------------------------------
+    $display("STATS: %0d operations accepted, %0d results checked, %0d discarded by reset, %0d violations",
+             n_acc, n_out, n_disc, err_cnt);
+    if (n_out == 0)
+      fail("H2", "no result was ever delivered");
+    if (err_cnt == 0) $display("RESULT: PASS");
+    else              $display("RESULT: FAIL");
     $finish;
   end
 

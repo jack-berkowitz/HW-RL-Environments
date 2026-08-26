@@ -1,228 +1,654 @@
-`timescale 1ns/1ps
+// =============================================================================
+// axi4_xbar
+// =============================================================================
 
 module axi4_xbar
   import axi4_xbar_pkg::*;
 #(
-    parameter int NUM_MST       = 2,
-    parameter int NUM_SLV       = 2,
-    parameter int MAX_TRANS     = 8,
+    parameter int NUM_MST   = 2,
+    parameter int NUM_SLV   = 2,
+    parameter int MAX_TRANS = 8,
     parameter int MAX_BURST_LEN = 3
 ) (
     input  logic clk,
     input  logic rst_n,
 
+    // ---- master side: NUM_MST masters drive these -------------------------
     input  slv_req_t  [NUM_MST-1:0] mst_req,
     output slv_resp_t [NUM_MST-1:0] mst_resp,
 
+    // ---- slave side: NUM_SLV slaves are driven by these --------------------
     output mst_req_t  [NUM_SLV-1:0] slv_req,
     input  mst_resp_t [NUM_SLV-1:0] slv_resp,
 
+    // ---- address map ------------------------------------------------------
     input  xbar_rule_t [NUM_SLV-1:0] addr_map
 );
 
-  localparam int MST_IDX_W_LOCAL = $clog2(NUM_MST > 1 ? NUM_MST : 2);
-  localparam int SLV_IDX_W = $clog2(NUM_SLV > 1 ? NUM_SLV : 2);
+    localparam int SLV_ID_W = $bits(mst_req[0].aw.id);
+    localparam int MST_ID_W = SLV_ID_W + 2;
 
-  // ===========================================================================
-  // 1. ADDRESS DECODE
-  // ===========================================================================
-  logic [NUM_MST-1:0][SLV_IDX_W-1:0] aw_route, ar_route;
-  logic [NUM_MST-1:0]                aw_decerr, ar_decerr;
-
-  always_comb begin
-    for (int m = 0; m < NUM_MST; m++) begin
-      aw_route[m]  = '0;
-      aw_decerr[m] = 1'b1;
-      ar_route[m]  = '0;
-      ar_decerr[m] = 1'b1;
-
-      for (int s = 0; s < NUM_SLV; s++) begin
-        if (mst_req[m].aw.addr >= addr_map[s].start_addr && 
-            mst_req[m].aw.addr < addr_map[s].end_addr) begin
-          aw_route[m]  = addr_map[s].mst_port;
-          aw_decerr[m] = 1'b0;
-        end
-        if (mst_req[m].ar.addr >= addr_map[s].start_addr && 
-            mst_req[m].ar.addr < addr_map[s].end_addr) begin
-          ar_route[m]  = addr_map[s].mst_port;
-          ar_decerr[m] = 1'b0;
-        end
-      end
-    end
-  end
-
-  // ===========================================================================
-  // 2. MASTER PORT TRACKING & ORDERING (O1, C1)
-  // ===========================================================================
-  // Stalls requests if the same ID is in flight to a DIFFERENT slave.
-  logic [NUM_MST-1:0] aw_stall_id, ar_stall_id;
-  
-  genvar m, s;
-  generate
-    for (m = 0; m < NUM_MST; m++) begin : gen_mst_track
-      // Scoreboard arrays
-      logic [MAX_TRANS-1:0]                sb_valid;
-      slv_id_t [MAX_TRANS-1:0]             sb_id;
-      logic [MAX_TRANS-1:0][SLV_IDX_W-1:0] sb_slv;
-      
-      logic [$clog2(MAX_TRANS+1)-1:0]      sb_count;
-      logic full;
-      assign full = (sb_count == MAX_TRANS);
-
-      // Check for ID conflicts
-      always_comb begin
-        aw_stall_id[m] = 1'b0;
-        ar_stall_id[m] = 1'b0;
-        for (int i = 0; i < MAX_TRANS; i++) begin
-          if (sb_valid[i]) begin
-            if (sb_id[i] == mst_req[m].aw.id && sb_slv[i] != aw_route[m]) aw_stall_id[m] = 1'b1;
-            if (sb_id[i] == mst_req[m].ar.id && sb_slv[i] != ar_route[m]) ar_stall_id[m] = 1'b1;
-          end
-        end
-      end
-
-      // Allocation and Deallocation logic would update sb_valid, sb_id, sb_slv here.
-      // (Simplified for spatial constraints: in full RTL, push on AW/AR handshake, 
-      // pop on B/last-R handshake).
-    end
-  endgenerate
-
-  // ===========================================================================
-  // 3. CROSSBAR SWITCH MATRIX & SLAVE ARBITRATION (C2, L2)
-  // ===========================================================================
-  // Internal cross-wires
-  logic [NUM_SLV-1:0][NUM_MST-1:0] slv_aw_req, slv_aw_gnt;
-  logic [NUM_SLV-1:0][NUM_MST-1:0] slv_ar_req, slv_ar_gnt;
-  logic [NUM_SLV-1:0][NUM_MST-1:0] slv_w_req,  slv_w_gnt;
-  
-  // Demux from Masters to Slaves
-  always_comb begin
-    slv_aw_req = '0;
-    slv_ar_req = '0;
-    slv_w_req  = '0;
+    // =========================================================================
+    // Address Decoding
+    // =========================================================================
+    logic [NUM_SLV:0] dec_aw [NUM_MST];
+    logic [NUM_SLV:0] dec_ar [NUM_MST];
     
-    for (int i = 0; i < NUM_MST; i++) begin
-      if (mst_req[i].aw_valid && !aw_decerr[i] && !aw_stall_id[i]) 
-        slv_aw_req[aw_route[i]][i] = 1'b1;
-        
-      if (mst_req[i].ar_valid && !ar_decerr[i] && !ar_stall_id[i]) 
-        slv_ar_req[ar_route[i]][i] = 1'b1;
+    for (genvar m=0; m<NUM_MST; m++) begin : g_dec
+        always_comb begin
+            logic aw_matched;
+            logic ar_matched;
+            dec_aw[m] = '0;
+            dec_ar[m] = '0;
+            aw_matched = 1'b0;
+            ar_matched = 1'b0;
+            
+            for (int s=0; s<NUM_SLV; s++) begin
+                if (mst_req[m].aw.addr >= addr_map[s].start_addr && mst_req[m].aw.addr < addr_map[s].end_addr) begin
+                    dec_aw[m][addr_map[s].mst_port] = 1'b1;
+                    aw_matched = 1'b1;
+                end
+                if (mst_req[m].ar.addr >= addr_map[s].start_addr && mst_req[m].ar.addr < addr_map[s].end_addr) begin
+                    dec_ar[m][addr_map[s].mst_port] = 1'b1;
+                    ar_matched = 1'b1;
+                end
+            end
+            
+            if (!aw_matched) dec_aw[m][NUM_SLV] = 1'b1; // DECERR Dummy Slave
+            if (!ar_matched) dec_ar[m][NUM_SLV] = 1'b1;
+        end
     end
-  end
 
-  // Slave Port Generation
-  generate
-    for (s = 0; s < NUM_SLV; s++) begin : gen_slv_port
-      // A. Round-Robin Arbiters for AW and AR
-      logic [MST_IDX_W_LOCAL-1:0] aw_grant_idx, ar_grant_idx;
-      
-      // (Assume a standard RR arbiter instance here that takes slv_aw_req[s] 
-      // and produces aw_grant_idx and slv_aw_gnt[s] based on slv_req[s].aw_ready)
-      
-      // B. W-Channel Steering FIFO (O3)
-      // Stores the master index that won AW, ensures W beats follow AW order.
-      logic [MST_IDX_W_LOCAL-1:0] w_steer_fifo [0:MAX_TRANS-1];
-      logic [$clog2(MAX_TRANS)-1:0] w_ptr_rd, w_ptr_wr;
-      logic w_fifo_empty;
-      
-      always_ff @(posedge clk or negedge rst_n) begin
+    // =========================================================================
+    // W-Channel Routing FIFOs
+    // =========================================================================
+    logic [2:0] mst_w_fifo_din  [NUM_MST];
+    logic [2:0] mst_w_fifo_dout [NUM_MST];
+    logic mst_w_fifo_push [NUM_MST];
+    logic mst_w_fifo_pop  [NUM_MST];
+    logic mst_w_fifo_full [NUM_MST];
+    logic mst_w_fifo_empty[NUM_MST];
+
+    int mst_w_fifo_count [NUM_MST];
+    int mst_w_fifo_wr_ptr [NUM_MST];
+    int mst_w_fifo_rd_ptr [NUM_MST];
+    logic [2:0] mst_w_fifo_mem [NUM_MST][MAX_TRANS+2];
+
+    for (genvar m=0; m<NUM_MST; m++) begin : g_mst_fifo
+        assign mst_w_fifo_full[m] = (mst_w_fifo_count[m] == MAX_TRANS+2);
+        assign mst_w_fifo_empty[m] = (mst_w_fifo_count[m] == 0);
+        assign mst_w_fifo_dout[m] = mst_w_fifo_mem[m][mst_w_fifo_rd_ptr[m]];
+        
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin
+                mst_w_fifo_count[m] <= 0;
+                mst_w_fifo_wr_ptr[m] <= 0;
+                mst_w_fifo_rd_ptr[m] <= 0;
+            end else begin
+                logic push; logic pop;
+                push = mst_w_fifo_push[m] && !mst_w_fifo_full[m];
+                pop = mst_w_fifo_pop[m] && !mst_w_fifo_empty[m];
+                
+                if (push && !pop) begin
+                    mst_w_fifo_count[m] <= mst_w_fifo_count[m] + 1;
+                    mst_w_fifo_mem[m][mst_w_fifo_wr_ptr[m]] <= mst_w_fifo_din[m];
+                    mst_w_fifo_wr_ptr[m] <= (mst_w_fifo_wr_ptr[m] + 1 == MAX_TRANS+2) ? 0 : mst_w_fifo_wr_ptr[m] + 1;
+                end else if (!push && pop) begin
+                    mst_w_fifo_count[m] <= mst_w_fifo_count[m] - 1;
+                    mst_w_fifo_rd_ptr[m] <= (mst_w_fifo_rd_ptr[m] + 1 == MAX_TRANS+2) ? 0 : mst_w_fifo_rd_ptr[m] + 1;
+                end else if (push && pop) begin
+                    mst_w_fifo_mem[m][mst_w_fifo_wr_ptr[m]] <= mst_w_fifo_din[m];
+                    mst_w_fifo_wr_ptr[m] <= (mst_w_fifo_wr_ptr[m] + 1 == MAX_TRANS+2) ? 0 : mst_w_fifo_wr_ptr[m] + 1;
+                    mst_w_fifo_rd_ptr[m] <= (mst_w_fifo_rd_ptr[m] + 1 == MAX_TRANS+2) ? 0 : mst_w_fifo_rd_ptr[m] + 1;
+                end
+            end
+        end
+    end
+
+    logic [2:0] slv_w_fifo_din  [NUM_SLV+1];
+    logic [2:0] slv_w_fifo_dout [NUM_SLV+1];
+    logic slv_w_fifo_push [NUM_SLV+1];
+    logic slv_w_fifo_pop  [NUM_SLV+1];
+    logic slv_w_fifo_full [NUM_SLV+1];
+    logic slv_w_fifo_empty[NUM_SLV+1];
+
+    int slv_w_fifo_count [NUM_SLV+1];
+    int slv_w_fifo_wr_ptr [NUM_SLV+1];
+    int slv_w_fifo_rd_ptr [NUM_SLV+1];
+    logic [2:0] slv_w_fifo_mem [NUM_SLV+1][NUM_MST*MAX_TRANS+2];
+
+    for (genvar s=0; s<=NUM_SLV; s++) begin : g_slv_fifo
+        assign slv_w_fifo_full[s] = (slv_w_fifo_count[s] == NUM_MST*MAX_TRANS+2);
+        assign slv_w_fifo_empty[s] = (slv_w_fifo_count[s] == 0);
+        assign slv_w_fifo_dout[s] = slv_w_fifo_mem[s][slv_w_fifo_rd_ptr[s]];
+        
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin
+                slv_w_fifo_count[s] <= 0;
+                slv_w_fifo_wr_ptr[s] <= 0;
+                slv_w_fifo_rd_ptr[s] <= 0;
+            end else begin
+                logic push; logic pop;
+                push = slv_w_fifo_push[s] && !slv_w_fifo_full[s];
+                pop = slv_w_fifo_pop[s] && !slv_w_fifo_empty[s];
+                
+                if (push && !pop) begin
+                    slv_w_fifo_count[s] <= slv_w_fifo_count[s] + 1;
+                    slv_w_fifo_mem[s][slv_w_fifo_wr_ptr[s]] <= slv_w_fifo_din[s];
+                    slv_w_fifo_wr_ptr[s] <= (slv_w_fifo_wr_ptr[s] + 1 == NUM_MST*MAX_TRANS+2) ? 0 : slv_w_fifo_wr_ptr[s] + 1;
+                end else if (!push && pop) begin
+                    slv_w_fifo_count[s] <= slv_w_fifo_count[s] - 1;
+                    slv_w_fifo_rd_ptr[s] <= (slv_w_fifo_rd_ptr[s] + 1 == NUM_MST*MAX_TRANS+2) ? 0 : slv_w_fifo_rd_ptr[s] + 1;
+                end else if (push && pop) begin
+                    slv_w_fifo_mem[s][slv_w_fifo_wr_ptr[s]] <= slv_w_fifo_din[s];
+                    slv_w_fifo_wr_ptr[s] <= (slv_w_fifo_wr_ptr[s] + 1 == NUM_MST*MAX_TRANS+2) ? 0 : slv_w_fifo_wr_ptr[s] + 1;
+                    slv_w_fifo_rd_ptr[s] <= (slv_w_fifo_rd_ptr[s] + 1 == NUM_MST*MAX_TRANS+2) ? 0 : slv_w_fifo_rd_ptr[s] + 1;
+                end
+            end
+        end
+    end
+
+    // =========================================================================
+    // AW Channel
+    // =========================================================================
+    logic [NUM_MST-1:0] aw_req_matrix [NUM_SLV+1];
+    logic [NUM_MST-1:0] aw_gnt_matrix [NUM_SLV+1];
+    logic slv_aw_valid [NUM_SLV+1];
+    logic slv_aw_ready [NUM_SLV+1];
+    
+    logic [NUM_MST-1:0] aw_mask [NUM_SLV+1];
+
+    for (genvar s=0; s<=NUM_SLV; s++) begin : g_aw_arb
+        logic [NUM_MST-1:0] masked_req;
+        logic [NUM_MST-1:0] masked_gnt;
+        logic [NUM_MST-1:0] unmasked_gnt;
+        
+        for (genvar m=0; m<NUM_MST; m++) begin
+            assign aw_req_matrix[s][m] = mst_req[m].aw_valid & dec_aw[m][s] & !mst_w_fifo_full[m] & !slv_w_fifo_full[s];
+        end
+        
+        assign masked_req = aw_req_matrix[s] & aw_mask[s];
+        
+        always_comb begin
+            masked_gnt = '0;
+            unmasked_gnt = '0;
+            for (int i=0; i<NUM_MST; i++) begin
+                if (masked_req[i]) begin masked_gnt[i] = 1'b1; break; end
+            end
+            for (int i=0; i<NUM_MST; i++) begin
+                if (aw_req_matrix[s][i]) begin unmasked_gnt[i] = 1'b1; break; end
+            end
+            aw_gnt_matrix[s] = (|masked_req) ? masked_gnt : unmasked_gnt;
+        end
+        
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin
+                aw_mask[s] <= '1;
+            end else if (slv_aw_ready[s] && slv_aw_valid[s]) begin
+                for (int i=0; i<NUM_MST; i++) begin
+                    if (aw_gnt_matrix[s][i]) begin
+                        aw_mask[s] <= ~((1 << (i + 1)) - 1);
+                        break;
+                    end
+                end
+            end
+        end
+    end
+
+    // =========================================================================
+    // AR Channel
+    // =========================================================================
+    logic [NUM_MST-1:0] ar_req_matrix [NUM_SLV+1];
+    logic [NUM_MST-1:0] ar_gnt_matrix [NUM_SLV+1];
+    logic slv_ar_valid [NUM_SLV+1];
+    logic slv_ar_ready [NUM_SLV+1];
+    
+    logic [NUM_MST-1:0] ar_mask [NUM_SLV+1];
+
+    for (genvar s=0; s<=NUM_SLV; s++) begin : g_ar_arb
+        logic [NUM_MST-1:0] masked_req;
+        logic [NUM_MST-1:0] masked_gnt;
+        logic [NUM_MST-1:0] unmasked_gnt;
+        
+        for (genvar m=0; m<NUM_MST; m++) begin
+            assign ar_req_matrix[s][m] = mst_req[m].ar_valid & dec_ar[m][s];
+        end
+        
+        assign masked_req = ar_req_matrix[s] & ar_mask[s];
+        
+        always_comb begin
+            masked_gnt = '0;
+            unmasked_gnt = '0;
+            for (int i=0; i<NUM_MST; i++) begin
+                if (masked_req[i]) begin masked_gnt[i] = 1'b1; break; end
+            end
+            for (int i=0; i<NUM_MST; i++) begin
+                if (ar_req_matrix[s][i]) begin unmasked_gnt[i] = 1'b1; break; end
+            end
+            ar_gnt_matrix[s] = (|masked_req) ? masked_gnt : unmasked_gnt;
+        end
+        
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin
+                ar_mask[s] <= '1;
+            end else if (slv_ar_ready[s] && slv_ar_valid[s]) begin
+                for (int i=0; i<NUM_MST; i++) begin
+                    if (ar_gnt_matrix[s][i]) begin
+                        ar_mask[s] <= ~((1 << (i + 1)) - 1);
+                        break;
+                    end
+                end
+            end
+        end
+    end
+
+    // =========================================================================
+    // DECERR Dummy Slave logic (s = NUM_SLV)
+    // =========================================================================
+    logic dummy_aw_valid, dummy_aw_ready;
+    logic dummy_w_valid, dummy_w_ready, dummy_w_last;
+    logic dummy_ar_valid, dummy_ar_ready;
+    logic dummy_b_valid, dummy_b_ready;
+    logic dummy_r_valid, dummy_r_ready, dummy_r_last;
+    
+    logic [MST_ID_W-1:0] dummy_aw_id;
+    logic [MST_ID_W-1:0] dummy_ar_id;
+    logic [7:0] dummy_ar_len;
+
+    logic [MST_ID_W-1:0] dummy_b_fifo_mem [NUM_MST*MAX_TRANS+2];
+    int dummy_b_fifo_count, dummy_b_fifo_wr_ptr, dummy_b_fifo_rd_ptr;
+    logic dummy_b_fifo_full, dummy_b_fifo_empty, dummy_b_fifo_push, dummy_b_fifo_pop;
+    logic [MST_ID_W-1:0] dummy_b_fifo_dout;
+
+    assign dummy_b_fifo_full = (dummy_b_fifo_count == NUM_MST*MAX_TRANS+2);
+    assign dummy_b_fifo_empty = (dummy_b_fifo_count == 0);
+    assign dummy_b_fifo_dout = dummy_b_fifo_mem[dummy_b_fifo_rd_ptr];
+
+    always_ff @(posedge clk) begin
         if (!rst_n) begin
-          w_ptr_rd <= '0;
-          w_ptr_wr <= '0;
-          w_fifo_empty <= 1'b1;
+            dummy_b_fifo_count <= 0;
+            dummy_b_fifo_wr_ptr <= 0;
+            dummy_b_fifo_rd_ptr <= 0;
         end else begin
-          // Push on AW handshake
-          if (slv_req[s].aw_valid && slv_resp[s].aw_ready) begin
-            w_steer_fifo[w_ptr_wr] <= aw_grant_idx;
-            w_ptr_wr <= w_ptr_wr + 1;
-            w_fifo_empty <= 1'b0;
-          end
-          // Pop on W handshake with 'last'
-          if (slv_req[s].w_valid && slv_resp[s].w_ready && slv_req[s].w.last) begin
-            w_ptr_rd <= w_ptr_rd + 1;
-            if ((w_ptr_wr - (w_ptr_rd + 1)) == 0) w_fifo_empty <= 1'b1;
-          end
+            logic push; logic pop;
+            push = dummy_b_fifo_push && !dummy_b_fifo_full;
+            pop = dummy_b_fifo_pop && !dummy_b_fifo_empty;
+            if (push && !pop) begin
+                dummy_b_fifo_count <= dummy_b_fifo_count + 1;
+                dummy_b_fifo_mem[dummy_b_fifo_wr_ptr] <= dummy_aw_id;
+                dummy_b_fifo_wr_ptr <= (dummy_b_fifo_wr_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_b_fifo_wr_ptr + 1;
+            end else if (!push && pop) begin
+                dummy_b_fifo_count <= dummy_b_fifo_count - 1;
+                dummy_b_fifo_rd_ptr <= (dummy_b_fifo_rd_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_b_fifo_rd_ptr + 1;
+            end else if (push && pop) begin
+                dummy_b_fifo_mem[dummy_b_fifo_wr_ptr] <= dummy_aw_id;
+                dummy_b_fifo_wr_ptr <= (dummy_b_fifo_wr_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_b_fifo_wr_ptr + 1;
+                dummy_b_fifo_rd_ptr <= (dummy_b_fifo_rd_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_b_fifo_rd_ptr + 1;
+            end
         end
-      end
-      
-      logic [MST_IDX_W_LOCAL-1:0] curr_w_mst;
-      assign curr_w_mst = w_steer_fifo[w_ptr_rd];
-      
-      // Mux Master requests into Slave ports
-      always_comb begin
-        // ID Widening
-        slv_req[s].aw = mst_req[aw_grant_idx].aw;
-        slv_req[s].aw.id = {aw_grant_idx, mst_req[aw_grant_idx].aw.id};
-        slv_req[s].aw_valid = |slv_aw_req[s];
-        
-        slv_req[s].ar = mst_req[ar_grant_idx].ar;
-        slv_req[s].ar.id = {ar_grant_idx, mst_req[ar_grant_idx].ar.id};
-        slv_req[s].ar_valid = |slv_ar_req[s];
-
-        // W channel steering
-        slv_req[s].w = mst_req[curr_w_mst].w;
-        slv_req[s].w_valid = !w_fifo_empty && mst_req[curr_w_mst].w_valid;
-        slv_w_gnt[s][curr_w_mst] = !w_fifo_empty && slv_resp[s].w_ready;
-      end
     end
-  endgenerate
 
-  // ===========================================================================
-  // 4. RESPONSE ROUTING & DECERR GENERATOR (D2)
-  // ===========================================================================
-  generate
-    for (m = 0; m < NUM_MST; m++) begin : gen_decerr_resp
-      // Decode Error State Machine (Dummy Slave)
-      logic decerr_aw_active, decerr_ar_active;
-      
-      // Sink W beats if AW hit an unmapped address
-      always_ff @(posedge clk or negedge rst_n) begin
-         if (!rst_n) begin
-            decerr_aw_active <= 1'b0;
-         end else if (mst_req[m].aw_valid && aw_decerr[m] && mst_resp[m].aw_ready) begin
-            decerr_aw_active <= 1'b1;
-         end else if (decerr_aw_active && mst_req[m].w_valid && mst_req[m].w.last && mst_resp[m].w_ready) begin
-            decerr_aw_active <= 1'b0;
-         end
-      end
+    logic [MST_ID_W+8-1:0] dummy_r_fifo_mem [NUM_MST*MAX_TRANS+2];
+    int dummy_r_fifo_count, dummy_r_fifo_wr_ptr, dummy_r_fifo_rd_ptr;
+    logic dummy_r_fifo_full, dummy_r_fifo_empty, dummy_r_fifo_push, dummy_r_fifo_pop;
+    logic [MST_ID_W+8-1:0] dummy_r_fifo_dout;
 
-      // Mux responses back to masters based on the upper bits of the widened ID
-      logic [NUM_SLV-1:0] b_match, r_match;
-      always_comb begin
-        mst_resp[m].b_valid = 1'b0;
-        mst_resp[m].r_valid = 1'b0;
-        
-        for (int s = 0; s < NUM_SLV; s++) begin
-          b_match[s] = slv_resp[s].b_valid && (slv_resp[s].b.id[MST_ID_W-1 : SLV_ID_W] == m);
-          r_match[s] = slv_resp[s].r_valid && (slv_resp[s].r.id[MST_ID_W-1 : SLV_ID_W] == m);
-          
-          if (b_match[s]) begin
-             mst_resp[m].b_valid = 1'b1;
-             mst_resp[m].b       = {slv_resp[s].b.id[SLV_ID_W-1:0], slv_resp[s].b.resp, slv_resp[s].b.user};
-             slv_req[s].b_ready  = mst_req[m].b_ready;
-          end
-          
-          if (r_match[s]) begin
-             mst_resp[m].r_valid = 1'b1;
-             mst_resp[m].r       = {slv_resp[s].r.id[SLV_ID_W-1:0], slv_resp[s].r.data, slv_resp[s].r.resp, slv_resp[s].r.last, slv_resp[s].r.user};
-             slv_req[s].r_ready  = mst_req[m].r_ready;
-          end
+    assign dummy_r_fifo_full = (dummy_r_fifo_count == NUM_MST*MAX_TRANS+2);
+    assign dummy_r_fifo_empty = (dummy_r_fifo_count == 0);
+    assign dummy_r_fifo_dout = dummy_r_fifo_mem[dummy_r_fifo_rd_ptr];
+
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            dummy_r_fifo_count <= 0;
+            dummy_r_fifo_wr_ptr <= 0;
+            dummy_r_fifo_rd_ptr <= 0;
+        end else begin
+            logic push; logic pop;
+            push = dummy_r_fifo_push && !dummy_r_fifo_full;
+            pop = dummy_r_fifo_pop && !dummy_r_fifo_empty;
+            if (push && !pop) begin
+                dummy_r_fifo_count <= dummy_r_fifo_count + 1;
+                dummy_r_fifo_mem[dummy_r_fifo_wr_ptr] <= {dummy_ar_len, dummy_ar_id};
+                dummy_r_fifo_wr_ptr <= (dummy_r_fifo_wr_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_r_fifo_wr_ptr + 1;
+            end else if (!push && pop) begin
+                dummy_r_fifo_count <= dummy_r_fifo_count - 1;
+                dummy_r_fifo_rd_ptr <= (dummy_r_fifo_rd_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_r_fifo_rd_ptr + 1;
+            end else if (push && pop) begin
+                dummy_r_fifo_mem[dummy_r_fifo_wr_ptr] <= {dummy_ar_len, dummy_ar_id};
+                dummy_r_fifo_wr_ptr <= (dummy_r_fifo_wr_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_r_fifo_wr_ptr + 1;
+                dummy_r_fifo_rd_ptr <= (dummy_r_fifo_rd_ptr + 1 == NUM_MST*MAX_TRANS+2) ? 0 : dummy_r_fifo_rd_ptr + 1;
+            end
         end
-        
-        // Fabricate DECERR response if triggered
-        if (decerr_aw_active && mst_req[m].w.last && mst_req[m].w_valid) begin
-           mst_resp[m].b_valid = 1'b1;
-           mst_resp[m].b.resp  = RESP_DECERR;
-        end
-      end
-      
-      // Master Ready Signals
-      assign mst_resp[m].aw_ready = (aw_decerr[m]) ? !decerr_aw_active : 
-                                    (!aw_stall_id[m] && slv_aw_gnt[aw_route[m]][m]);
-      assign mst_resp[m].ar_ready = (ar_decerr[m]) ? !decerr_ar_active : 
-                                    (!ar_stall_id[m] && slv_ar_gnt[ar_route[m]][m]);
-      assign mst_resp[m].w_ready  = (decerr_aw_active) ? 1'b1 : slv_w_gnt[aw_route[m]][m];
     end
-  endgenerate
+
+    int w_done_cnt, b_sent_cnt;
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin
+            w_done_cnt <= 0;
+            b_sent_cnt <= 0;
+        end else begin
+            if (dummy_w_valid && dummy_w_ready && dummy_w_last) w_done_cnt <= w_done_cnt + 1;
+            if (dummy_b_valid && dummy_b_ready) b_sent_cnt <= b_sent_cnt + 1;
+        end
+    end
+    
+    logic [7:0] dummy_r_beat;
+    always_ff @(posedge clk) begin
+        if (!rst_n) dummy_r_beat <= 0;
+        else if (dummy_r_valid && dummy_r_ready) begin
+            if (dummy_r_last) dummy_r_beat <= 0;
+            else dummy_r_beat <= dummy_r_beat + 1;
+        end
+    end
+
+    assign dummy_aw_valid = (|aw_req_matrix[NUM_SLV]);
+    assign dummy_aw_ready = !dummy_b_fifo_full;
+    assign slv_aw_ready[NUM_SLV] = dummy_aw_ready;
+    assign dummy_b_fifo_push = dummy_aw_valid && dummy_aw_ready;
+    
+    assign dummy_w_valid = (!slv_w_fifo_empty[NUM_SLV]) ? mst_req[slv_w_fifo_dout[NUM_SLV]].w_valid : 1'b0;
+    assign dummy_w_last = mst_req[slv_w_fifo_empty[NUM_SLV] ? 0 : slv_w_fifo_dout[NUM_SLV]].w.last;
+    assign dummy_w_ready = 1'b1;
+
+    assign dummy_b_valid = !dummy_b_fifo_empty && (w_done_cnt > b_sent_cnt);
+    assign dummy_b_fifo_pop = dummy_b_valid && dummy_b_ready;
+
+    assign dummy_ar_valid = (|ar_req_matrix[NUM_SLV]);
+    assign dummy_ar_ready = !dummy_r_fifo_full;
+    assign slv_ar_ready[NUM_SLV] = dummy_ar_ready;
+    assign dummy_r_fifo_push = dummy_ar_valid && dummy_ar_ready;
+
+    assign dummy_r_valid = !dummy_r_fifo_empty;
+    assign dummy_r_fifo_pop = dummy_r_valid && dummy_r_ready && dummy_r_last;
+    assign dummy_r_last = (dummy_r_beat == dummy_r_fifo_dout[MST_ID_W+8-1 : MST_ID_W]);
+
+    always_comb begin
+        dummy_aw_id = '0;
+        for (int m=0; m<NUM_MST; m++) begin
+            if (aw_gnt_matrix[NUM_SLV][m]) dummy_aw_id = {2'(m), mst_req[m].aw.id};
+        end
+        dummy_ar_id = '0;
+        dummy_ar_len = '0;
+        for (int m=0; m<NUM_MST; m++) begin
+            if (ar_gnt_matrix[NUM_SLV][m]) begin
+                dummy_ar_id = {2'(m), mst_req[m].ar.id};
+                dummy_ar_len = mst_req[m].ar.len;
+            end
+        end
+    end
+
+    // =========================================================================
+    // Write FIFO Control
+    // =========================================================================
+    for (genvar s=0; s<=NUM_SLV; s++) begin : g_slv_w_ctrl
+        always_comb begin
+            slv_w_fifo_din[s] = '0;
+            for (int m=0; m<NUM_MST; m++) begin
+                if (aw_gnt_matrix[s][m] && slv_aw_valid[s]) slv_w_fifo_din[s] = m[2:0];
+            end
+        end
+        assign slv_w_fifo_push[s] = slv_aw_valid[s] && slv_aw_ready[s];
+        assign slv_w_fifo_pop[s]  = (s == NUM_SLV) ? (dummy_w_valid && dummy_w_ready && dummy_w_last) : (slv_req[s].w_valid && slv_req[s].w_ready && slv_req[s].w.last);
+    end
+
+    for (genvar m=0; m<NUM_MST; m++) begin : g_mst_w_ctrl
+        always_comb begin
+            mst_w_fifo_din[m] = '0;
+            for (int s=0; s<=NUM_SLV; s++) begin
+                if (aw_gnt_matrix[s][m] && slv_aw_ready[s]) mst_w_fifo_din[m] = s[2:0];
+            end
+        end
+        assign mst_w_fifo_push[m] = mst_req[m].aw_valid && mst_resp[m].aw_ready;
+        assign mst_w_fifo_pop[m]  = mst_req[m].w_valid && mst_resp[m].w_ready && mst_req[m].w.last;
+    end
+
+    // =========================================================================
+    // Crossbar outputs to Real Slaves
+    // =========================================================================
+    for (genvar s=0; s<NUM_SLV; s++) begin : g_slv_out
+        assign slv_aw_ready[s] = slv_resp[s].aw_ready;
+        assign slv_ar_ready[s] = slv_resp[s].ar_ready;
+        
+        always_comb begin
+            slv_req[s] = mst_req[0]; // Struct base to carry unchanged fields
+            
+            slv_aw_valid[s] = (|aw_req_matrix[s]);
+            slv_req[s].aw_valid = slv_aw_valid[s] & rst_n;
+            for (int m=0; m<NUM_MST; m++) begin
+                if (aw_gnt_matrix[s][m]) begin
+                    slv_req[s].aw = mst_req[m].aw;
+                    slv_req[s].aw.id = {2'(m), mst_req[m].aw.id};
+                end
+            end
+            
+            slv_req[s].w_valid = (!slv_w_fifo_empty[s] ? mst_req[slv_w_fifo_dout[s]].w_valid : 1'b0) & rst_n;
+            slv_req[s].w = mst_req[!slv_w_fifo_empty[s] ? slv_w_fifo_dout[s] : 0].w;
+            
+            slv_ar_valid[s] = (|ar_req_matrix[s]);
+            slv_req[s].ar_valid = slv_ar_valid[s] & rst_n;
+            for (int m=0; m<NUM_MST; m++) begin
+                if (ar_gnt_matrix[s][m]) begin
+                    slv_req[s].ar = mst_req[m].ar;
+                    slv_req[s].ar.id = {2'(m), mst_req[m].ar.id};
+                end
+            end
+            
+            slv_req[s].b_ready = 1'b0;
+            slv_req[s].r_ready = 1'b0;
+        end
+    end
+
+    // =========================================================================
+    // B and R Channel Aggregation
+    // =========================================================================
+    logic [NUM_SLV:0] slv_b_valid, slv_b_ready;
+    logic [NUM_SLV:0] slv_r_valid, slv_r_ready, slv_r_last;
+    logic [MST_ID_W-1:0] slv_b_id [NUM_SLV:0];
+    logic [MST_ID_W-1:0] slv_r_id [NUM_SLV:0];
+
+    for (genvar s=0; s<NUM_SLV; s++) begin : g_resp_agg
+        assign slv_b_valid[s] = slv_resp[s].b_valid;
+        assign slv_b_id[s]    = slv_resp[s].b.id;
+        assign slv_r_valid[s] = slv_resp[s].r_valid;
+        assign slv_r_id[s]    = slv_resp[s].r.id;
+        assign slv_r_last[s]  = slv_resp[s].r.last;
+    end
+    assign slv_b_valid[NUM_SLV] = dummy_b_valid;
+    assign slv_b_id[NUM_SLV]    = dummy_b_fifo_dout;
+    assign dummy_b_ready        = slv_b_ready[NUM_SLV];
+    
+    assign slv_r_valid[NUM_SLV] = dummy_r_valid;
+    assign slv_r_id[NUM_SLV]    = dummy_r_fifo_dout[MST_ID_W-1:0];
+    assign slv_r_last[NUM_SLV]  = dummy_r_last;
+    assign dummy_r_ready        = slv_r_ready[NUM_SLV];
+
+    // =========================================================================
+    // B Channel Routing to Masters
+    // =========================================================================
+    logic [NUM_SLV:0] b_req_matrix [NUM_MST];
+    logic [NUM_SLV:0] b_gnt_matrix [NUM_MST];
+    logic [NUM_SLV:0] b_mask [NUM_MST];
+
+    for (genvar m=0; m<NUM_MST; m++) begin : g_b_arb
+        logic [NUM_SLV:0] masked_req;
+        logic [NUM_SLV:0] masked_gnt;
+        logic [NUM_SLV:0] unmasked_gnt;
+        
+        for (genvar s=0; s<=NUM_SLV; s++) begin
+            assign b_req_matrix[m][s] = slv_b_valid[s] && (slv_b_id[s][MST_ID_W-1 : SLV_ID_W] == m);
+        end
+        
+        assign masked_req = b_req_matrix[m] & b_mask[m];
+        
+        always_comb begin
+            masked_gnt = '0;
+            unmasked_gnt = '0;
+            for (int i=0; i<=NUM_SLV; i++) begin
+                if (masked_req[i]) begin masked_gnt[i] = 1'b1; break; end
+            end
+            for (int i=0; i<=NUM_SLV; i++) begin
+                if (b_req_matrix[m][i]) begin unmasked_gnt[i] = 1'b1; break; end
+            end
+            b_gnt_matrix[m] = (|masked_req) ? masked_gnt : unmasked_gnt;
+        end
+        
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin
+                b_mask[m] <= '1;
+            end else if (mst_req[m].b_ready && (|b_req_matrix[m])) begin
+                for (int i=0; i<=NUM_SLV; i++) begin
+                    if (b_gnt_matrix[m][i]) begin
+                        b_mask[m] <= ~((1 << (i + 1)) - 1);
+                        break;
+                    end
+                end
+            end
+        end
+    end
+
+    // =========================================================================
+    // R Channel Routing to Masters
+    // =========================================================================
+    logic [NUM_SLV:0] r_req_matrix [NUM_MST];
+    logic [NUM_SLV:0] r_gnt_matrix [NUM_MST];
+    logic [NUM_SLV:0] r_mask [NUM_MST];
+    logic r_locked [NUM_MST];
+    logic [$clog2(NUM_SLV+1)-1:0] r_locked_sel [NUM_MST];
+
+    for (genvar m=0; m<NUM_MST; m++) begin : g_r_arb
+        logic [NUM_SLV:0] r_arb_req;
+        logic [NUM_SLV:0] masked_req;
+        logic [NUM_SLV:0] masked_gnt;
+        logic [NUM_SLV:0] unmasked_gnt;
+        logic r_advance;
+        
+        for (genvar s=0; s<=NUM_SLV; s++) begin
+            assign r_req_matrix[m][s] = slv_r_valid[s] && (slv_r_id[s][MST_ID_W-1 : SLV_ID_W] == m);
+        end
+        
+        always_comb begin
+            r_arb_req = r_req_matrix[m];
+            if (r_locked[m]) begin
+                r_arb_req = '0;
+                r_arb_req[r_locked_sel[m]] = r_req_matrix[m][r_locked_sel[m]];
+            end
+        end
+        
+        assign masked_req = r_arb_req & r_mask[m];
+        
+        always_comb begin
+            masked_gnt = '0;
+            unmasked_gnt = '0;
+            for (int i=0; i<=NUM_SLV; i++) begin
+                if (masked_req[i]) begin masked_gnt[i] = 1'b1; break; end
+            end
+            for (int i=0; i<=NUM_SLV; i++) begin
+                if (r_arb_req[i]) begin unmasked_gnt[i] = 1'b1; break; end
+            end
+            r_gnt_matrix[m] = (|masked_req) ? masked_gnt : unmasked_gnt;
+        end
+        
+        assign r_advance = mst_req[m].r_ready && mst_resp[m].r_valid;
+        
+        always_ff @(posedge clk) begin
+            if (!rst_n) begin
+                r_mask[m] <= '1;
+                r_locked[m] <= 1'b0;
+                r_locked_sel[m] <= '0;
+            end else if (r_advance) begin
+                if (mst_resp[m].r.last) begin
+                    r_locked[m] <= 1'b0;
+                    for (int i=0; i<=NUM_SLV; i++) begin
+                        if (r_gnt_matrix[m][i]) begin
+                            r_mask[m] <= ~((1 << (i + 1)) - 1);
+                            break;
+                        end
+                    end
+                end else if (!r_locked[m]) begin
+                    r_locked[m] <= 1'b1;
+                    for (int i=0; i<=NUM_SLV; i++) begin
+                        if (r_gnt_matrix[m][i]) r_locked_sel[m] <= i[$clog2(NUM_SLV+1)-1:0];
+                    end
+                end
+            end
+        end
+    end
+
+    // =========================================================================
+    // Crossbar outputs to Masters
+    // =========================================================================
+    for (genvar m=0; m<NUM_MST; m++) begin : g_mst_out
+        always_comb begin
+            mst_resp[m] = slv_resp[0]; // Base struct
+            
+            mst_resp[m].aw_ready = 1'b0;
+            for (int s=0; s<=NUM_SLV; s++) begin
+                if (aw_gnt_matrix[s][m] && slv_aw_ready[s]) mst_resp[m].aw_ready = 1'b1;
+            end
+            
+            mst_resp[m].w_ready = (!mst_w_fifo_empty[m] && (mst_w_fifo_dout[m] == NUM_SLV) ? dummy_w_ready : (!mst_w_fifo_empty[m] ? slv_resp[mst_w_fifo_dout[m]].w_ready : 1'b0));
+            
+            mst_resp[m].ar_ready = 1'b0;
+            for (int s=0; s<=NUM_SLV; s++) begin
+                if (ar_gnt_matrix[s][m] && slv_ar_ready[s]) mst_resp[m].ar_ready = 1'b1;
+            end
+            
+            mst_resp[m].b_valid = (|b_req_matrix[m]) & rst_n;
+            mst_resp[m].b = slv_resp[0].b; // Default
+            for (int s=0; s<NUM_SLV; s++) begin
+                if (b_gnt_matrix[m][s]) mst_resp[m].b = slv_resp[s].b;
+            end
+            if (b_gnt_matrix[m][NUM_SLV]) mst_resp[m].b.resp = 2'b11;
+            mst_resp[m].b.id = '0;
+            for (int s=0; s<=NUM_SLV; s++) begin
+                if (b_gnt_matrix[m][s]) mst_resp[m].b.id = slv_b_id[s][SLV_ID_W-1:0];
+            end
+            
+            mst_resp[m].r_valid = 1'b0;
+            for (int s=0; s<=NUM_SLV; s++) begin
+                if (r_gnt_matrix[m][s]) mst_resp[m].r_valid = 1'b1;
+            end
+            mst_resp[m].r_valid &= rst_n;
+            
+            mst_resp[m].r = slv_resp[0].r; // Default
+            for (int s=0; s<NUM_SLV; s++) begin
+                if (r_gnt_matrix[m][s]) mst_resp[m].r = slv_resp[s].r;
+            end
+            if (r_gnt_matrix[m][NUM_SLV]) begin
+                mst_resp[m].r.resp = 2'b11;
+                mst_resp[m].r.data = '0;
+                mst_resp[m].r.last = dummy_r_last;
+            end
+            mst_resp[m].r.id = '0;
+            for (int s=0; s<=NUM_SLV; s++) begin
+                if (r_gnt_matrix[m][s]) mst_resp[m].r.id = slv_r_id[s][SLV_ID_W-1:0];
+            end
+        end
+    end
+
+    for (genvar s=0; s<NUM_SLV; s++) begin : g_slv_ready_b_r
+        always_comb begin
+            slv_req[s].b_ready = 1'b0;
+            for (int m=0; m<NUM_MST; m++) begin
+                if (b_gnt_matrix[m][s] && mst_req[m].b_ready) slv_req[s].b_ready = 1'b1;
+            end
+            
+            slv_req[s].r_ready = 1'b0;
+            for (int m=0; m<NUM_MST; m++) begin
+                if (r_gnt_matrix[m][s] && mst_req[m].r_ready) slv_req[s].r_ready = 1'b1;
+            end
+        end
+    end
+    
+    always_comb begin
+        slv_b_ready[NUM_SLV] = 1'b0;
+        for (int m=0; m<NUM_MST; m++) begin
+            if (b_gnt_matrix[m][NUM_SLV] && mst_req[m].b_ready) slv_b_ready[NUM_SLV] = 1'b1;
+        end
+        slv_r_ready[NUM_SLV] = 1'b0;
+        for (int m=0; m<NUM_MST; m++) begin
+            if (r_gnt_matrix[m][NUM_SLV] && mst_req[m].r_ready) slv_r_ready[NUM_SLV] = 1'b1;
+        end
+    end
 
 endmodule

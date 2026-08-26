@@ -1,42 +1,57 @@
 // ===========================================================================
-// atop_filter_tb.sv -- specification-driven testbench for atop_filter
+// atop_filter_tb.sv
 //
-// Everything is decided by a model driven from OBSERVED handshakes, never from
-// what the stimulus intended: the slave side is observed to build expectations,
-// the master side is checked against them, and manufactured responses are
-// attributed by id (F4) rather than by arrival order.
+// Decides whether a design on this port map obeys the atop_filter contract.
 //
-// Checks:  C1/C2 classification (bits [5:4] only; read response on bit [5])
-//          P1  non-atomic AW forwarded with every field unmodified
-//          P2  W beats forwarded unmodified and in order, wlast on same beat
-//          P3  AR forwarded unmodified, master R beats returned unmodified
-//          P4  master B returned unmodified (id, resp, user)
-//          F1  atomic AW never forwarded; m_awatop_o zero while m_awvalid_o
-//          F2  W beats of a filtered write consumed, never forwarded
-//          F3  exactly one B per filtered write, SLVERR, correct id
-//          F4  exactly awlen+1 R beats, SLVERR, correct id, rlast on the last
-//          F5  no R beats for a filtered write with awatop[5] == 0
-//          W2  downstream write debt never exceeds 4
-//          W3  debt below the bound does not stall a non-atomic AW
-//          W4  debt falls on a completed W burst, not on a B response
-//          W5  a filtered write does not consume bound capacity
-//          X1  no output valid asserted while rst_ni is low
-//          X2  nothing owed after reset
-//          X3  valid held with a stable payload until ready
-//          X4  the 64-cycle liveness bounds
+// HOW IT DECIDES
+//   * One posedge monitor holds every check.  It processes a cycle in the
+//     order upstream-request -> downstream-request -> downstream-response ->
+//     upstream-response, so a purely combinational design that forwards a beat
+//     in the same cycle it accepts it is handled exactly like a registered one
+//     (L3, L5).
+//   * Pass-through is decided by FIFO expectation queues filled from what the
+//     design was given and drained by what it produced -- never by matching on
+//     payload values, which repeat.
+//   * Manufactured responses are attributed by id, exactly as F4 instructs,
+//     and never by arrival order or by position relative to the B.  Write ids
+//     are partitioned so an id alone says which write owes a response:
+//         ids  0-5   non-atomic writes   (pass-through B)
+//         ids  6-11  atomic writes       (manufactured B, maybe R)
+//         ids 12-15  reads               (pass-through R)
+//   * Every wait is bounded, so a design that never makes progress fails
+//     rather than hanging.
 //
-// Deliberately NOT checked (latitude):
-//          L1  B before R, R before B, or interleaved -- attribution is by id
-//          L2  s_rdata_o / s_ruser_o / s_buser_o on a manufactured response
-//          L3  whether any ready is combinational or registered
-//          L4  whether a later AW is stalled behind a filtered write
-//          L5  the latency of a manufactured response
+// WHAT IT DELIBERATELY DOES NOT CHECK (the latitude, L1-L5)
+//   * L1: the order of a filtered write's B relative to its R beats.  The two
+//     are counted independently and neither is required to come first.
+//   * L2: s_rdata_o, s_ruser_o and s_buser_o on a manufactured response are
+//     never read.
+//   * L3/L5: no ready is required to be combinational or registered, and no
+//     manufactured response is required at any particular cycle -- only the
+//     64-cycle bound of X4.
+//   * L4: a subsequent AW may be stalled for as long as the design likes while
+//     a filtered write is in flight; the concurrency phase treats a refusal as
+//     a legal answer, not a failure.
+//   Nor anything the contract is silent about: s_awaddr_i is never privileged,
+//   m_wstrb_o is only ever compared against what was presented, and read
+//   traffic is never counted against the §W bound.
+//
+// TWO EXTENSIONS TO THE PROVIDED PLUMBING, both marked EXTENSION below:
+//   * the subordinate's B and R response fields are driven from variables
+//     instead of the constants 2'b00 / 1'b0, because P3 and P4 require those
+//     fields to be returned *unmodified* and a subordinate that only ever
+//     answers OKAY with user=0 cannot tell an unmodified field from a
+//     hardwired one;
+//   * request tasks that take every AW/AR field, because P1 and P3 require
+//     every field to be forwarded unmodified and the provided tasks pin most
+//     of them to zero.
 // ===========================================================================
+
 module atop_filter_tb;
 
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // PROVIDED PLUMBING -- moves transactions, checks nothing.
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
   // ---- clock ---------------------------------------------------------------
   logic clk = 1'b0;
@@ -57,189 +72,133 @@ module atop_filter_tb;
   endtask
 
   // ---- the signals, and the design under test ------------------------------
-  logic [3:0]     s_awid;
-  logic [31:0]   s_awaddr;
-  logic [7:0]          s_awlen;
-  logic [2:0]          s_awsize;
-  logic [1:0]          s_awburst;
-  logic                s_awlock;
-  logic [3:0]          s_awcache;
-  logic [2:0]          s_awprot;
-  logic [3:0]          s_awqos;
-  logic [3:0]          s_awregion;
-  logic [5:0]          s_awatop;
-  logic    s_awuser;
-  logic                s_awvalid;
-  logic                s_awready;
-  logic [31:0]   s_wdata;
-  logic [3:0] s_wstrb;
-  logic                s_wlast;
-  logic    s_wuser;
-  logic                s_wvalid;
-  logic                s_wready;
-  logic [3:0]     s_bid;
-  logic [1:0]          s_bresp;
-  logic    s_buser;
-  logic                s_bvalid;
-  logic                s_bready;
-  logic [3:0]     s_arid;
-  logic [31:0]   s_araddr;
-  logic [7:0]          s_arlen;
-  logic [2:0]          s_arsize;
-  logic [1:0]          s_arburst;
-  logic                s_arlock;
-  logic [3:0]          s_arcache;
-  logic [2:0]          s_arprot;
-  logic [3:0]          s_arqos;
-  logic [3:0]          s_arregion;
-  logic    s_aruser;
-  logic                s_arvalid;
-  logic                s_arready;
-  logic [3:0]     s_rid;
-  logic [31:0]   s_rdata;
-  logic [1:0]          s_rresp;
-  logic                s_rlast;
-  logic    s_ruser;
-  logic                s_rvalid;
-  logic                s_rready;
-  logic [3:0]     m_awid;
-  logic [31:0]   m_awaddr;
-  logic [7:0]          m_awlen;
-  logic [2:0]          m_awsize;
-  logic [1:0]          m_awburst;
-  logic                m_awlock;
-  logic [3:0]          m_awcache;
-  logic [2:0]          m_awprot;
-  logic [3:0]          m_awqos;
-  logic [3:0]          m_awregion;
-  logic [5:0]          m_awatop;
-  logic    m_awuser;
-  logic                m_awvalid;
-  logic                m_awready;
-  logic [31:0]   m_wdata;
-  logic [3:0] m_wstrb;
-  logic                m_wlast;
-  logic    m_wuser;
-  logic                m_wvalid;
-  logic                m_wready;
-  logic [3:0]     m_bid;
-  logic [1:0]          m_bresp;
-  logic    m_buser;
-  logic                m_bvalid;
-  logic                m_bready;
-  logic [3:0]     m_arid;
-  logic [31:0]   m_araddr;
-  logic [7:0]          m_arlen;
-  logic [2:0]          m_arsize;
-  logic [1:0]          m_arburst;
-  logic                m_arlock;
-  logic [3:0]          m_arcache;
-  logic [2:0]          m_arprot;
-  logic [3:0]          m_arregion;
-  logic [3:0]          m_arqos;
-  logic    m_aruser;
-  logic                m_arvalid;
-  logic                m_arready;
-  logic [3:0]     m_rid;
-  logic [31:0]   m_rdata;
-  logic [1:0]          m_rresp;
-  logic                m_rlast;
-  logic    m_ruser;
-  logic                m_rvalid;
-  logic                m_rready;
+  logic [3:0]  s_awid;
+  logic [31:0] s_awaddr;
+  logic [7:0]  s_awlen;
+  logic [2:0]  s_awsize;
+  logic [1:0]  s_awburst;
+  logic        s_awlock;
+  logic [3:0]  s_awcache;
+  logic [2:0]  s_awprot;
+  logic [3:0]  s_awqos;
+  logic [3:0]  s_awregion;
+  logic [5:0]  s_awatop;
+  logic        s_awuser;
+  logic        s_awvalid;
+  logic        s_awready;
+  logic [31:0] s_wdata;
+  logic [3:0]  s_wstrb;
+  logic        s_wlast;
+  logic        s_wuser;
+  logic        s_wvalid;
+  logic        s_wready;
+  logic [3:0]  s_bid;
+  logic [1:0]  s_bresp;
+  logic        s_buser;
+  logic        s_bvalid;
+  logic        s_bready;
+  logic [3:0]  s_arid;
+  logic [31:0] s_araddr;
+  logic [7:0]  s_arlen;
+  logic [2:0]  s_arsize;
+  logic [1:0]  s_arburst;
+  logic        s_arlock;
+  logic [3:0]  s_arcache;
+  logic [2:0]  s_arprot;
+  logic [3:0]  s_arqos;
+  logic [3:0]  s_arregion;
+  logic        s_aruser;
+  logic        s_arvalid;
+  logic        s_arready;
+  logic [3:0]  s_rid;
+  logic [31:0] s_rdata;
+  logic [1:0]  s_rresp;
+  logic        s_rlast;
+  logic        s_ruser;
+  logic        s_rvalid;
+  logic        s_rready;
+  logic [3:0]  m_awid;
+  logic [31:0] m_awaddr;
+  logic [7:0]  m_awlen;
+  logic [2:0]  m_awsize;
+  logic [1:0]  m_awburst;
+  logic        m_awlock;
+  logic [3:0]  m_awcache;
+  logic [2:0]  m_awprot;
+  logic [3:0]  m_awqos;
+  logic [3:0]  m_awregion;
+  logic [5:0]  m_awatop;
+  logic        m_awuser;
+  logic        m_awvalid;
+  logic        m_awready;
+  logic [31:0] m_wdata;
+  logic [3:0]  m_wstrb;
+  logic        m_wlast;
+  logic        m_wuser;
+  logic        m_wvalid;
+  logic        m_wready;
+  logic [3:0]  m_bid;
+  logic [1:0]  m_bresp;
+  logic        m_buser;
+  logic        m_bvalid;
+  logic        m_bready;
+  logic [3:0]  m_arid;
+  logic [31:0] m_araddr;
+  logic [7:0]  m_arlen;
+  logic [2:0]  m_arsize;
+  logic [1:0]  m_arburst;
+  logic        m_arlock;
+  logic [3:0]  m_arcache;
+  logic [2:0]  m_arprot;
+  logic [3:0]  m_arqos;
+  logic [3:0]  m_arregion;
+  logic        m_aruser;
+  logic        m_arvalid;
+  logic        m_arready;
+  logic [3:0]  m_rid;
+  logic [31:0] m_rdata;
+  logic [1:0]  m_rresp;
+  logic        m_rlast;
+  logic        m_ruser;
+  logic        m_rvalid;
+  logic        m_rready;
 
   atop_filter #(.ID_W(4), .ADDR_W(32), .DATA_W(32), .USER_W(1)) dut (
     .clk_i(clk),
     .rst_ni(rst_n),
-    .s_awid_i(s_awid),
-    .s_awaddr_i(s_awaddr),
-    .s_awlen_i(s_awlen),
-    .s_awsize_i(s_awsize),
-    .s_awburst_i(s_awburst),
-    .s_awlock_i(s_awlock),
-    .s_awcache_i(s_awcache),
-    .s_awprot_i(s_awprot),
-    .s_awqos_i(s_awqos),
-    .s_awregion_i(s_awregion),
-    .s_awatop_i(s_awatop),
-    .s_awuser_i(s_awuser),
-    .s_awvalid_i(s_awvalid),
-    .s_awready_o(s_awready),
-    .s_wdata_i(s_wdata),
-    .s_wstrb_i(s_wstrb),
-    .s_wlast_i(s_wlast),
-    .s_wuser_i(s_wuser),
-    .s_wvalid_i(s_wvalid),
-    .s_wready_o(s_wready),
-    .s_bid_o(s_bid),
-    .s_bresp_o(s_bresp),
-    .s_buser_o(s_buser),
-    .s_bvalid_o(s_bvalid),
-    .s_bready_i(s_bready),
-    .s_arid_i(s_arid),
-    .s_araddr_i(s_araddr),
-    .s_arlen_i(s_arlen),
-    .s_arsize_i(s_arsize),
-    .s_arburst_i(s_arburst),
-    .s_arlock_i(s_arlock),
-    .s_arcache_i(s_arcache),
-    .s_arprot_i(s_arprot),
-    .s_arqos_i(s_arqos),
-    .s_arregion_i(s_arregion),
-    .s_aruser_i(s_aruser),
-    .s_arvalid_i(s_arvalid),
-    .s_arready_o(s_arready),
-    .s_rid_o(s_rid),
-    .s_rdata_o(s_rdata),
-    .s_rresp_o(s_rresp),
-    .s_rlast_o(s_rlast),
-    .s_ruser_o(s_ruser),
-    .s_rvalid_o(s_rvalid),
+    .s_awid_i(s_awid), .s_awaddr_i(s_awaddr), .s_awlen_i(s_awlen),
+    .s_awsize_i(s_awsize), .s_awburst_i(s_awburst), .s_awlock_i(s_awlock),
+    .s_awcache_i(s_awcache), .s_awprot_i(s_awprot), .s_awqos_i(s_awqos),
+    .s_awregion_i(s_awregion), .s_awatop_i(s_awatop), .s_awuser_i(s_awuser),
+    .s_awvalid_i(s_awvalid), .s_awready_o(s_awready),
+    .s_wdata_i(s_wdata), .s_wstrb_i(s_wstrb), .s_wlast_i(s_wlast),
+    .s_wuser_i(s_wuser), .s_wvalid_i(s_wvalid), .s_wready_o(s_wready),
+    .s_bid_o(s_bid), .s_bresp_o(s_bresp), .s_buser_o(s_buser),
+    .s_bvalid_o(s_bvalid), .s_bready_i(s_bready),
+    .s_arid_i(s_arid), .s_araddr_i(s_araddr), .s_arlen_i(s_arlen),
+    .s_arsize_i(s_arsize), .s_arburst_i(s_arburst), .s_arlock_i(s_arlock),
+    .s_arcache_i(s_arcache), .s_arprot_i(s_arprot), .s_arqos_i(s_arqos),
+    .s_arregion_i(s_arregion), .s_aruser_i(s_aruser),
+    .s_arvalid_i(s_arvalid), .s_arready_o(s_arready),
+    .s_rid_o(s_rid), .s_rdata_o(s_rdata), .s_rresp_o(s_rresp),
+    .s_rlast_o(s_rlast), .s_ruser_o(s_ruser), .s_rvalid_o(s_rvalid),
     .s_rready_i(s_rready),
-    .m_awid_o(m_awid),
-    .m_awaddr_o(m_awaddr),
-    .m_awlen_o(m_awlen),
-    .m_awsize_o(m_awsize),
-    .m_awburst_o(m_awburst),
-    .m_awlock_o(m_awlock),
-    .m_awcache_o(m_awcache),
-    .m_awprot_o(m_awprot),
-    .m_awqos_o(m_awqos),
-    .m_awregion_o(m_awregion),
-    .m_awatop_o(m_awatop),
-    .m_awuser_o(m_awuser),
-    .m_awvalid_o(m_awvalid),
-    .m_awready_i(m_awready),
-    .m_wdata_o(m_wdata),
-    .m_wstrb_o(m_wstrb),
-    .m_wlast_o(m_wlast),
-    .m_wuser_o(m_wuser),
-    .m_wvalid_o(m_wvalid),
-    .m_wready_i(m_wready),
-    .m_bid_i(m_bid),
-    .m_bresp_i(m_bresp),
-    .m_buser_i(m_buser),
-    .m_bvalid_i(m_bvalid),
-    .m_bready_o(m_bready),
-    .m_arid_o(m_arid),
-    .m_araddr_o(m_araddr),
-    .m_arlen_o(m_arlen),
-    .m_arsize_o(m_arsize),
-    .m_arburst_o(m_arburst),
-    .m_arlock_o(m_arlock),
-    .m_arcache_o(m_arcache),
-    .m_arprot_o(m_arprot),
-    .m_arqos_o(m_arqos),
-    .m_arregion_o(m_arregion),
-    .m_aruser_o(m_aruser),
-    .m_arvalid_o(m_arvalid),
-    .m_arready_i(m_arready),
-    .m_rid_i(m_rid),
-    .m_rdata_i(m_rdata),
-    .m_rresp_i(m_rresp),
-    .m_rlast_i(m_rlast),
-    .m_ruser_i(m_ruser),
-    .m_rvalid_i(m_rvalid),
+    .m_awid_o(m_awid), .m_awaddr_o(m_awaddr), .m_awlen_o(m_awlen),
+    .m_awsize_o(m_awsize), .m_awburst_o(m_awburst), .m_awlock_o(m_awlock),
+    .m_awcache_o(m_awcache), .m_awprot_o(m_awprot), .m_awqos_o(m_awqos),
+    .m_awregion_o(m_awregion), .m_awatop_o(m_awatop), .m_awuser_o(m_awuser),
+    .m_awvalid_o(m_awvalid), .m_awready_i(m_awready),
+    .m_wdata_o(m_wdata), .m_wstrb_o(m_wstrb), .m_wlast_o(m_wlast),
+    .m_wuser_o(m_wuser), .m_wvalid_o(m_wvalid), .m_wready_i(m_wready),
+    .m_bid_i(m_bid), .m_bresp_i(m_bresp), .m_buser_i(m_buser),
+    .m_bvalid_i(m_bvalid), .m_bready_o(m_bready),
+    .m_arid_o(m_arid), .m_araddr_o(m_araddr), .m_arlen_o(m_arlen),
+    .m_arsize_o(m_arsize), .m_arburst_o(m_arburst), .m_arlock_o(m_arlock),
+    .m_arcache_o(m_arcache), .m_arprot_o(m_arprot), .m_arqos_o(m_arqos),
+    .m_arregion_o(m_arregion), .m_aruser_o(m_aruser),
+    .m_arvalid_o(m_arvalid), .m_arready_i(m_arready),
+    .m_rid_i(m_rid), .m_rdata_i(m_rdata), .m_rresp_i(m_rresp),
+    .m_rlast_i(m_rlast), .m_ruser_i(m_ruser), .m_rvalid_i(m_rvalid),
     .m_rready_o(m_rready));
 
   // ---- upstream: offering requests to the design ---------------------------
@@ -297,13 +256,51 @@ module atop_filter_tb;
   int bfm_b_lag = 0;
   task automatic bfm_dn_b_lag(input int cycles); bfm_b_lag = cycles; endtask
 
+  // EXTENSION: the response fields the subordinate returns are variables, so
+  // that P3 and P4 ("returned unmodified") can actually be decided.  A
+  // subordinate hardwired to OKAY/user=0 cannot distinguish a design that
+  // forwards those fields from one that hardwires them.
+  logic [1:0] sub_bresp = 2'b00;
+  logic       sub_buser = 1'b0;
+  logic [1:0] sub_rresp = 2'b00;
+  logic       sub_ruser = 1'b0;
+
+  // EXTENSION: the subordinate's responses are driven from REGISTERS rather
+  // than combinationally from its queues.  As provided, m_bvalid/m_bid/m_rvalid
+  // /m_rid/m_rdata/m_rlast are an always_comb reading queue variables that the
+  // plumbing's own always @(posedge) block mutates with blocking assignments in
+  // the same active region, so a posedge observer can sample a torn snapshot --
+  // m_rvalid from before the update and m_rid/m_rdata from after it.  That is a
+  // scheduling hazard in the harness, not behaviour of any design, and it would
+  // misfire against a correct design as readily as a faulty one.  Registering
+  // the outputs removes it and still models a perfectly legal AXI subordinate.
   int bfm_bq_id [$], bfm_bq_t [$], bfm_rq_id [$], bfm_rq_n [$];
   assign m_awready = 1'b1;
   assign m_wready  = 1'b1;
   assign m_arready = 1'b1;
+
+  logic [3:0]  sub_b_id_q;
+  logic        sub_b_val_q;
+  logic [3:0]  sub_r_id_q;
+  logic [31:0] sub_r_dat_q;
+  logic        sub_r_val_q, sub_r_last_q;
+
+  assign m_bvalid = sub_b_val_q;
+  assign m_bid    = sub_b_id_q;
+  assign m_bresp  = sub_bresp;
+  assign m_buser  = sub_buser;
+  assign m_rvalid = sub_r_val_q;
+  assign m_rid    = sub_r_id_q;
+  assign m_rdata  = sub_r_dat_q;
+  assign m_rresp  = sub_rresp;
+  assign m_ruser  = sub_ruser;
+  assign m_rlast  = sub_r_last_q;
+
   always @(posedge clk) begin
     if (!rst_n) begin
       bfm_bq_id.delete(); bfm_bq_t.delete(); bfm_rq_id.delete(); bfm_rq_n.delete();
+      sub_b_val_q <= 1'b0;
+      sub_r_val_q <= 1'b0;
     end else begin
       if (m_awvalid && m_awready) begin
         bfm_bq_id.push_back(int'(m_awid)); bfm_bq_t.push_back(bfm_cycle + bfm_b_lag);
@@ -311,29 +308,34 @@ module atop_filter_tb;
       if (m_arvalid && m_arready) begin
         bfm_rq_id.push_back(int'(m_arid)); bfm_rq_n.push_back(int'(m_arlen) + 1);
       end
-      if (m_bvalid && m_bready) begin
-        void'(bfm_bq_id.pop_front()); void'(bfm_bq_t.pop_front());
+      // B output register
+      if (!sub_b_val_q || m_bready) begin
+        if (bfm_bq_id.size() > 0 && bfm_cycle >= bfm_bq_t[0]) begin
+          sub_b_val_q <= 1'b1;
+          sub_b_id_q  <= 4'(bfm_bq_id[0]);
+          void'(bfm_bq_id.pop_front()); void'(bfm_bq_t.pop_front());
+        end else begin
+          sub_b_val_q <= 1'b0;
+        end
       end
-      if (m_rvalid && m_rready) begin
-        if (bfm_rq_n[0] <= 1) begin void'(bfm_rq_id.pop_front()); void'(bfm_rq_n.pop_front()); end
-        else bfm_rq_n[0] = bfm_rq_n[0] - 1;
+      // R output register
+      if (!sub_r_val_q || m_rready) begin
+        if (bfm_rq_id.size() > 0) begin
+          sub_r_val_q  <= 1'b1;
+          sub_r_id_q   <= 4'(bfm_rq_id[0]);
+          sub_r_dat_q  <= 32'hFEED_0000 + 32'(bfm_rq_n[0]);
+          sub_r_last_q <= (bfm_rq_n[0] <= 1);
+          if (bfm_rq_n[0] <= 1) begin
+            void'(bfm_rq_id.pop_front()); void'(bfm_rq_n.pop_front());
+          end else begin
+            bfm_rq_n[0] = bfm_rq_n[0] - 1;
+          end
+        end else begin
+          sub_r_val_q <= 1'b0;
+        end
       end
     end
   end
-  /* verilator lint_off WIDTHTRUNC */
-  always_comb begin
-    m_bvalid = (bfm_bq_id.size() > 0) && (bfm_cycle >= bfm_bq_t[0]);
-    m_bid    = 4'(bfm_bq_id.size() ? bfm_bq_id[0] : 0);
-    m_bresp  = 2'b00;                 // the subordinate always succeeds
-    m_buser  = 1'b0;
-    m_rvalid = (bfm_rq_id.size() > 0);
-    m_rid    = 4'(bfm_rq_id.size() ? bfm_rq_id[0] : 0);
-    m_rdata  = 32'hFEED_0000 + 32'(bfm_rq_n.size() ? bfm_rq_n[0] : 0);
-    m_rresp  = 2'b00;
-    m_ruser  = 1'b0;
-    m_rlast  = (bfm_rq_id.size() > 0) && (bfm_rq_n[0] <= 1);
-  end
-  /* verilator lint_on WIDTHTRUNC */
 
   // ---- idle the upstream request signals at time zero ----------------------
   initial begin
@@ -355,40 +357,35 @@ module atop_filter_tb;
     $finish;
   end
 
-  // =========================================================================
-  // VERDICT
-  // =========================================================================
-  bit    verdict_done = 1'b0;
-  string phase_name   = "startup";
-  int    phase_cnt    = 0;
+  // ===========================================================================
+  //                        FROM HERE ON: MY OWN CODE
+  // ===========================================================================
 
-  task automatic tb_fail(input string clause_id, input string detail);
-    if (!verdict_done) begin
-      verdict_done = 1'b1;
-      $display("------------------------------------------------------------");
-      $display("  time    : %0t  (cycle %0d)", $time, bfm_cycle);
-      $display("  phase   : %s", phase_name);
-      $display("  clause  : %s", clause_id);
-      $display("  detail  : %s", detail);
-      $display("------------------------------------------------------------");
-      $display("RESULT: FAIL");
+  localparam int MAX_WRITE_TXNS = 4;
+  localparam logic [1:0] SLVERR = 2'b10;
+
+  // ---- verdict bookkeeping -------------------------------------------------
+  int err_cnt = 0;
+  int msg_cnt = 0;
+
+  task automatic fail(input string cl, input string msg);
+    err_cnt = err_cnt + 1;
+    if (msg_cnt < 40) begin
+      msg_cnt = msg_cnt + 1;
+      $display("VIOLATION [%s] cycle=%0d : %s", cl, bfm_cycle, msg);
     end
-    $finish;
+    if (err_cnt == 60) begin
+      $display("SUMMARY: stopping after %0d violations", err_cnt);
+      $display("RESULT: FAIL");
+      $finish;
+    end
   endtask
 
-  task automatic set_phase(input string nm);
-    phase_name = nm;
-    phase_cnt  = phase_cnt + 1;
-  endtask
+  // ---- id partitioning, so an id alone attributes a response ---------------
+  function automatic bit id_is_atomic(input int id); return (id >= 6)  && (id <= 11); endfunction
+  function automatic bit id_is_read  (input int id); return (id >= 12) && (id <= 15); endfunction
 
-  // =========================================================================
-  // MODEL
-  // =========================================================================
-
-  // a write whose AW has been accepted upstream but whose W burst is unfinished
-  typedef struct packed { logic filt; logic [3:0] id; } wpend_t;
-
-  // the AW that must appear, unmodified, on the master port (P1)
+  // ---- expectation records (packed, so they can live in queues) ------------
   typedef struct packed {
     logic [3:0]  id;
     logic [31:0] addr;
@@ -401,368 +398,381 @@ module atop_filter_tb;
     logic [3:0]  qos;
     logic [3:0]  region;
     logic        user;
-  } awrec_t;
+  } addr_t;
 
   typedef struct packed {
     logic [31:0] data;
     logic [3:0]  strb;
     logic        last;
     logic        user;
-  } wrec_t;
+  } wbeat_t;
 
-  typedef struct packed { logic [3:0] id; logic manuf; }                 brec_t;
-  typedef struct packed { logic [3:0] id; logic [8:0] remain; }          rrec_t;
   typedef struct packed {
-    logic [3:0]  id;
-    logic [1:0]  resp;
-    logic        user;
-    logic [31:0] earliest;   // cycle before which the subordinate cannot answer
-  } mbrec_t;
+    logic [3:0] id;
+    logic [1:0] resp;
+    logic       user;
+  } bresp_t;
+
   typedef struct packed {
     logic [3:0]  id;
     logic [31:0] data;
     logic [1:0]  resp;
     logic        last;
-  } mrrec_t;
+    logic        user;
+  } rbeat_t;
 
-  wpend_t wpend_q  [$];   // writes in AW order, for W-beat routing
-  awrec_t exp_maw_q[$];   // AWs that must be forwarded, in order
-  wrec_t  exp_mw_q [$];   // W beats that must be forwarded, in order
-  awrec_t exp_mar_q[$];   // ARs that must be forwarded, in order
-  brec_t  exp_b_q  [$];   // B responses owed upstream
-  rrec_t  exp_r_q  [$];   // manufactured R bursts owed upstream, by id
-  mbrec_t mb_q     [$];   // B responses taken from the subordinate
-  mrrec_t mr_q     [$];   // R beats taken from the subordinate
+  addr_t  fwd_aw_exp [$];   // non-atomic AWs, in acceptance order
+  wbeat_t fwd_w_exp  [$];   // W beats of forwarded writes, in order
+  addr_t  fwd_ar_exp [$];   // ARs, in acceptance order
+  bresp_t b_pass_exp [$];   // B responses taken from the subordinate
+  rbeat_t r_pass_exp [$];   // R beats taken from the subordinate
 
-  int debt = 0;           // W1, computed from master-port handshakes only
+  // ---- upstream write ordering, for attributing W beats --------------------
+  int wo_id  [$];
+  int wo_rem [$];
+  bit wo_flt [$];
 
-  function automatic bit queues_idle();
-    return (wpend_q.size()  == 0) && (exp_maw_q.size() == 0) &&
-           (exp_mw_q.size() == 0) && (exp_mar_q.size() == 0) &&
-           (exp_b_q.size()  == 0) && (exp_r_q.size()   == 0) &&
-           (mb_q.size()     == 0) && (mr_q.size()      == 0);
+  // ---- per-id state of filtered writes -------------------------------------
+  bit f_act  [16];
+  bit f_owes [16];
+  bit f_bsee [16];
+  bit f_done [16];
+  bit f_x4   [16];
+  int f_len  [16];
+  int f_rcnt [16];
+  int f_wlst [16];   // cycle of the s_wlast handshake, -1 if not yet
+  int f_atop [16];
+
+  // ---- the §W debt ---------------------------------------------------------
+  int debt = 0;
+  int dn_aw_cnt = 0;
+  int dn_wlast_cnt = 0;
+  int up_b_cnt = 0;
+  int up_r_cnt = 0;
+
+  bit x1_en = 1'b0;     // judge X1 while reset is low (master port quiet)
+  bit x4_en = 1'b1;     // judge the X4 bound (off while we apply backpressure)
+  int rst_edges = 0;
+
+  // ---- X3: valid held stable until ready -----------------------------------
+  bit     pv_have = 1'b0;
+  logic   pv_bv, pv_br, pv_rv, pv_rr, pv_awv, pv_wv, pv_arv;
+  bresp_t pv_b;
+  rbeat_t pv_r;
+  addr_t  pv_aw, pv_ar;
+  wbeat_t pv_w;
+  logic [5:0] pv_awatop;
+
+  function automatic addr_t s_aw_rec();
+    addr_t a;
+    a.id = s_awid; a.addr = s_awaddr; a.len = s_awlen; a.size = s_awsize;
+    a.burst = s_awburst; a.lock = s_awlock; a.cache = s_awcache;
+    a.prot = s_awprot; a.qos = s_awqos; a.region = s_awregion; a.user = s_awuser;
+    return a;
+  endfunction
+  function automatic addr_t m_aw_rec();
+    addr_t a;
+    a.id = m_awid; a.addr = m_awaddr; a.len = m_awlen; a.size = m_awsize;
+    a.burst = m_awburst; a.lock = m_awlock; a.cache = m_awcache;
+    a.prot = m_awprot; a.qos = m_awqos; a.region = m_awregion; a.user = m_awuser;
+    return a;
+  endfunction
+  function automatic addr_t s_ar_rec();
+    addr_t a;
+    a.id = s_arid; a.addr = s_araddr; a.len = s_arlen; a.size = s_arsize;
+    a.burst = s_arburst; a.lock = s_arlock; a.cache = s_arcache;
+    a.prot = s_arprot; a.qos = s_arqos; a.region = s_arregion; a.user = s_aruser;
+    return a;
+  endfunction
+  function automatic addr_t m_ar_rec();
+    addr_t a;
+    a.id = m_arid; a.addr = m_araddr; a.len = m_arlen; a.size = m_arsize;
+    a.burst = m_arburst; a.lock = m_arlock; a.cache = m_arcache;
+    a.prot = m_arprot; a.qos = m_arqos; a.region = m_arregion; a.user = m_aruser;
+    return a;
   endfunction
 
-  task automatic model_clear();
-    wpend_q.delete(); exp_maw_q.delete(); exp_mw_q.delete(); exp_mar_q.delete();
-    exp_b_q.delete(); exp_r_q.delete(); mb_q.delete(); mr_q.delete();
-    debt = 0;
+  function automatic string aw_str(input addr_t a);
+    return $sformatf("id=%0d addr=%08h len=%0d size=%0d burst=%0d lock=%0b cache=%01h prot=%0d qos=%01h region=%01h user=%0b",
+                     a.id, a.addr, a.len, a.size, a.burst, a.lock, a.cache, a.prot, a.qos, a.region, a.user);
+  endfunction
+
+  task automatic filt_complete_check(input int id);
+    automatic int d;
+    if (!f_act[id] || f_done[id]) return;
+    if (!f_bsee[id]) return;
+    if (f_owes[id] && f_rcnt[id] < f_len[id] + 1) return;
+    f_done[id] = 1'b1;
+    if (f_x4[id] && f_wlst[id] >= 0) begin
+      d = bfm_cycle - f_wlst[id];
+      if (d > 64)
+        fail("X4", $sformatf("filtered write id=%0d completed its responses %0d cycles after its s_wlast_i handshake, the bound is 64", id, d));
+    end
   endtask
 
-  // =========================================================================
-  // MONITOR
-  //   order within the edge: slave requests observed, master requests checked,
-  //   master responses captured, slave responses checked -- so that a design
-  //   which is combinational in either direction is handled correctly.
-  // =========================================================================
+  // ===========================================================================
+  // THE MONITOR
+  // ===========================================================================
   always @(posedge clk) begin
-    automatic wpend_t wp;
-    automatic awrec_t aw, aw2;
-    automatic wrec_t  wr, wr2;
-    automatic brec_t  br;
-    automatic rrec_t  rr;
-    automatic mbrec_t mb;
-    automatic mrrec_t mr;
-    automatic int     idx;
-    automatic int     d_up, d_dn;
-
     if (!rst_n) begin
-      model_clear();
+      // X2: reset leaves nothing owed and nothing held.  Flush the model too.
+      fwd_aw_exp.delete(); fwd_w_exp.delete(); fwd_ar_exp.delete();
+      b_pass_exp.delete(); r_pass_exp.delete();
+      wo_id.delete(); wo_rem.delete(); wo_flt.delete();
+      for (int i = 0; i < 16; i++) begin
+        f_act[i] = 1'b0; f_done[i] = 1'b0; f_bsee[i] = 1'b0;
+        f_rcnt[i] = 0; f_wlst[i] = -1;
+      end
+      debt = 0;
+      pv_have = 1'b0;
+      rst_edges <= rst_edges + 1;
+      // X1: while reset is low the unit originates nothing.  Judged from the
+      // second rising edge on, because before an edge has passed the design's
+      // registers hold nothing defined.  The master port is quiet here, so the
+      // pass-through the clause exempts cannot be the cause.
+      if (x1_en && rst_edges >= 1) begin
+        if (m_awvalid === 1'b1 || m_wvalid === 1'b1)
+          fail("X1", $sformatf("with rst_ni low the unit drives m_awvalid_o=%0b m_wvalid_o=%0b", m_awvalid, m_wvalid));
+        if (s_bvalid === 1'b1 || s_rvalid === 1'b1)
+          fail("X1", $sformatf("with rst_ni low and the master port quiet the unit drives s_bvalid_o=%0b s_rvalid_o=%0b", s_bvalid, s_rvalid));
+      end
     end else begin
+      automatic addr_t  ea, ga;
+      automatic wbeat_t ew, gw;
+      automatic bresp_t eb, gb;
+      automatic rbeat_t er, gr;
+      automatic int     id, fid;
 
-      // ---- 1. slave-side requests: build the expectations ----------------
-      if (s_awvalid === 1'b1 && s_awready === 1'b1) begin
-        wp.filt = (s_awatop[5:4] != 2'b00);          // C1
-        wp.id   = s_awid;
-        wpend_q.push_back(wp);
-        br.id = s_awid; br.manuf = wp.filt;
-        exp_b_q.push_back(br);                        // F3 / P4
-        if (wp.filt && s_awatop[5] === 1'b1) begin    // C2 / F4
-          rr.id = s_awid; rr.remain = 9'(s_awlen) + 9'd1;
-          exp_r_q.push_back(rr);
+      rst_edges <= 0;
+
+      // ---- F1: atop is cleared on every forwarded AW ---------------------
+      if (m_awvalid === 1'b1 && m_awatop !== 6'b000000)
+        fail("F1", $sformatf("m_awatop_o=%06b while m_awvalid_o is asserted; it must be zero", m_awatop));
+
+      // ---- X3: a valid may not be withdrawn or altered before its ready ---
+      if (pv_have) begin
+        if (pv_bv === 1'b1 && pv_br !== 1'b1) begin
+          if (s_bvalid !== 1'b1)
+            fail("X3", "s_bvalid_o was withdrawn before s_bready_i was seen");
+          else if ({s_bid, s_bresp} !== {pv_b.id, pv_b.resp})
+            fail("X3", "the B payload changed while s_bvalid_o was waiting for s_bready_i");
         end
-        if (!wp.filt) begin
-          aw.id = s_awid; aw.addr = s_awaddr; aw.len = s_awlen; aw.size = s_awsize;
-          aw.burst = s_awburst; aw.lock = s_awlock; aw.cache = s_awcache;
-          aw.prot = s_awprot; aw.qos = s_awqos; aw.region = s_awregion;
-          aw.user = s_awuser;
-          exp_maw_q.push_back(aw);
+        if (pv_rv === 1'b1 && pv_rr !== 1'b1) begin
+          if (s_rvalid !== 1'b1)
+            fail("X3", "s_rvalid_o was withdrawn before s_rready_i was seen");
+          else if ({s_rid, s_rresp, s_rlast} !== {pv_r.id, pv_r.resp, pv_r.last})
+            fail("X3", "the R payload changed while s_rvalid_o was waiting for s_rready_i");
+        end
+        if (pv_awv === 1'b1 && m_awready !== 1'b1) begin
+          if (m_awvalid !== 1'b1)
+            fail("X3", "m_awvalid_o was withdrawn before m_awready_i was seen");
+          else if (m_aw_rec() !== pv_aw)
+            fail("X3", "the AW payload changed while m_awvalid_o was waiting for m_awready_i");
+        end
+        if (pv_wv === 1'b1 && m_wready !== 1'b1) begin
+          if (m_wvalid !== 1'b1)
+            fail("X3", "m_wvalid_o was withdrawn before m_wready_i was seen");
+        end
+        if (pv_arv === 1'b1 && m_arready !== 1'b1) begin
+          if (m_arvalid !== 1'b1)
+            fail("X3", "m_arvalid_o was withdrawn before m_arready_i was seen");
+        end
+      end
+
+      // ---- 1. upstream requests -------------------------------------------
+      if (s_awvalid === 1'b1 && s_awready === 1'b1) begin
+        id = int'(s_awid);
+        wo_id.push_back(id);
+        wo_rem.push_back(int'(s_awlen) + 1);
+        // C1: atomic iff atop[5:4] != 00, whatever atop[3:0] holds
+        wo_flt.push_back((s_awatop[5:4] != 2'b00) ? 1'b1 : 1'b0);
+        if (s_awatop[5:4] == 2'b00) begin
+          fwd_aw_exp.push_back(s_aw_rec());
+        end else begin
+          if (!id_is_atomic(id))
+            $display("NOTE: testbench issued an atomic write on id %0d, outside the atomic id range", id);
+          f_act[id]  = 1'b1;
+          f_done[id] = 1'b0;
+          f_bsee[id] = 1'b0;
+          f_rcnt[id] = 0;
+          f_wlst[id] = -1;
+          f_len[id]  = int'(s_awlen);
+          f_atop[id] = int'(s_awatop);
+          f_owes[id] = s_awatop[5];      // C2
+          f_x4[id]   = x4_en;
         end
       end
 
       if (s_wvalid === 1'b1 && s_wready === 1'b1) begin
-        if (wpend_q.size() == 0) begin
-          tb_fail("P2/F2", "a W beat was accepted while no write address was outstanding");
+        if (wo_id.size() == 0) begin
+          fail("F2", "a W beat was accepted upstream with no write address outstanding");
         end else begin
-          if (wpend_q[0].filt !== 1'b1) begin
-            wr.data = s_wdata; wr.strb = s_wstrb; wr.last = s_wlast; wr.user = s_wuser;
-            exp_mw_q.push_back(wr);
+          if (!wo_flt[0]) begin
+            ew.data = s_wdata; ew.strb = s_wstrb; ew.last = s_wlast; ew.user = s_wuser;
+            fwd_w_exp.push_back(ew);
           end
-          if (s_wlast === 1'b1) void'(wpend_q.pop_front());
+          if (s_wlast === 1'b1) begin
+            if (wo_flt[0]) f_wlst[wo_id[0]] = bfm_cycle;
+            void'(wo_id.pop_front()); void'(wo_rem.pop_front()); void'(wo_flt.pop_front());
+          end else begin
+            wo_rem[0] = wo_rem[0] - 1;
+          end
         end
       end
 
-      if (s_arvalid === 1'b1 && s_arready === 1'b1) begin
-        aw.id = s_arid; aw.addr = s_araddr; aw.len = s_arlen; aw.size = s_arsize;
-        aw.burst = s_arburst; aw.lock = s_arlock; aw.cache = s_arcache;
-        aw.prot = s_arprot; aw.qos = s_arqos; aw.region = s_arregion;
-        aw.user = s_aruser;
-        exp_mar_q.push_back(aw);
-      end
+      if (s_arvalid === 1'b1 && s_arready === 1'b1)
+        fwd_ar_exp.push_back(s_ar_rec());
 
-      // ---- 2. master-side requests: check them ---------------------------
-      if (m_awvalid === 1'b1 && m_awatop !== 6'b000000)
-        tb_fail("F1", $sformatf("m_awatop_o = %06b while m_awvalid_o is asserted; it must be zero",
-                                m_awatop));
-
-      d_up = 0; d_dn = 0;
+      // ---- 2. downstream requests -----------------------------------------
       if (m_awvalid === 1'b1 && m_awready === 1'b1) begin
-        if (exp_maw_q.size() == 0) begin
-          tb_fail("F1", $sformatf(
-            "an AW (id %0h) was forwarded that the design was not given to forward -- an atomic AW must never reach the master port",
-            m_awid));
+        ga = m_aw_rec();
+        if (fwd_aw_exp.size() == 0) begin
+          fail("F1", $sformatf("an AW was forwarded (%s) that no non-atomic upstream write called for; an atomic write must never be forwarded", aw_str(ga)));
         end else begin
-          aw  = exp_maw_q.pop_front();
-          aw2.id = m_awid; aw2.addr = m_awaddr; aw2.len = m_awlen; aw2.size = m_awsize;
-          aw2.burst = m_awburst; aw2.lock = m_awlock; aw2.cache = m_awcache;
-          aw2.prot = m_awprot; aw2.qos = m_awqos; aw2.region = m_awregion;
-          aw2.user = m_awuser;
-          if (aw2 !== aw)
-            tb_fail("P1/F1", $sformatf(
-              "forwarded AW altered: got id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b ; expected id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b",
-              aw2.id, aw2.addr, aw2.len, aw2.size, aw2.burst, aw2.lock, aw2.cache,
-              aw2.prot, aw2.qos, aw2.region, aw2.user,
-              aw.id, aw.addr, aw.len, aw.size, aw.burst, aw.lock, aw.cache,
-              aw.prot, aw.qos, aw.region, aw.user));
+          ea = fwd_aw_exp.pop_front();
+          if (ga !== ea)
+            fail("P1", $sformatf("forwarded AW differs from the one presented:\n           got      %s\n           expected %s", aw_str(ga), aw_str(ea)));
         end
-        // The subordinate on the master port is fully determined: it accepts
-        // every request and answers it.  Predicting its answers here, instead
-        // of sampling m_bvalid/m_rvalid, keeps the checker clear of the
-        // plumbing's same-timestep queue updates.
-        mb.id = m_awid; mb.resp = 2'b00; mb.user = 1'b0;
-        mb.earliest = 32'(bfm_cycle) + 32'(bfm_b_lag);
-        mb_q.push_back(mb);
-        d_up = 1;
+        dn_aw_cnt = dn_aw_cnt + 1;
+        debt = debt + 1;
       end
 
       if (m_wvalid === 1'b1 && m_wready === 1'b1) begin
-        if (exp_mw_q.size() == 0) begin
-          tb_fail("F2", $sformatf(
-            "a W beat (data %08h) was forwarded that belongs to a filtered write -- it must be consumed instead",
-            m_wdata));
+        gw.data = m_wdata; gw.strb = m_wstrb; gw.last = m_wlast; gw.user = m_wuser;
+        if (fwd_w_exp.size() == 0) begin
+          fail("F2", $sformatf("a W beat was forwarded (data=%08h last=%0b) that belongs to no forwarded write; the W beats of a filtered write must be consumed, not forwarded", gw.data, gw.last));
         end else begin
-          wr = exp_mw_q.pop_front();
-          wr2.data = m_wdata; wr2.strb = m_wstrb; wr2.last = m_wlast; wr2.user = m_wuser;
-          if (wr2 !== wr)
-            tb_fail("P2", $sformatf(
-              "forwarded W beat altered: got data=%08h strb=%04b last=%b user=%b ; expected data=%08h strb=%04b last=%b user=%b",
-              wr2.data, wr2.strb, wr2.last, wr2.user, wr.data, wr.strb, wr.last, wr.user));
+          ew = fwd_w_exp.pop_front();
+          if (gw !== ew)
+            fail("P2", $sformatf("forwarded W beat differs: got data=%08h strb=%04b last=%0b user=%0b, expected data=%08h strb=%04b last=%0b user=%0b",
+                                 gw.data, gw.strb, gw.last, gw.user, ew.data, ew.strb, ew.last, ew.user));
         end
-        if (m_wlast === 1'b1) d_dn = 1;
+        if (m_wlast === 1'b1) begin
+          dn_wlast_cnt = dn_wlast_cnt + 1;
+          debt = debt - 1;
+        end
       end
-
-      debt = debt + d_up - d_dn;                       // W1
-      if (debt > 4)
-        tb_fail("W2", $sformatf("downstream write debt reached %0d; MAX_WRITE_TXNS is 4", debt));
 
       if (m_arvalid === 1'b1 && m_arready === 1'b1) begin
-        if (exp_mar_q.size() == 0) begin
-          tb_fail("P3", $sformatf("an AR (id %0h) appeared on the master port that was never offered upstream", m_arid));
+        ga = m_ar_rec();
+        if (fwd_ar_exp.size() == 0) begin
+          fail("P3", $sformatf("an AR was forwarded (%s) that no upstream read called for", aw_str(ga)));
         end else begin
-          aw  = exp_mar_q.pop_front();
-          aw2.id = m_arid; aw2.addr = m_araddr; aw2.len = m_arlen; aw2.size = m_arsize;
-          aw2.burst = m_arburst; aw2.lock = m_arlock; aw2.cache = m_arcache;
-          aw2.prot = m_arprot; aw2.qos = m_arqos; aw2.region = m_arregion;
-          aw2.user = m_aruser;
-          if (aw2 !== aw)
-            tb_fail("P3", $sformatf(
-              "forwarded AR altered: got id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b ; expected id=%0h addr=%08h len=%0d size=%0d burst=%0d lock=%b cache=%0h prot=%0h qos=%0h region=%0h user=%b",
-              aw2.id, aw2.addr, aw2.len, aw2.size, aw2.burst, aw2.lock, aw2.cache,
-              aw2.prot, aw2.qos, aw2.region, aw2.user,
-              aw.id, aw.addr, aw.len, aw.size, aw.burst, aw.lock, aw.cache,
-              aw.prot, aw.qos, aw.region, aw.user));
-        end
-        for (int k = 0; k <= int'(m_arlen); k++) begin
-          mr.id   = m_arid;
-          mr.data = 32'hFEED_0000 + 32'(int'(m_arlen) + 1 - k);
-          mr.resp = 2'b00;
-          mr.last = (k == int'(m_arlen));
-          mr_q.push_back(mr);
+          ea = fwd_ar_exp.pop_front();
+          if (ga !== ea)
+            fail("P3", $sformatf("forwarded AR differs from the one presented:\n           got      %s\n           expected %s", aw_str(ga), aw_str(ea)));
         end
       end
 
-      // ---- 3. slave-side responses: check them ---------------------------
+      // ---- W2: the downstream write debt --------------------------------
+      if (debt > MAX_WRITE_TXNS)
+        fail("W2", $sformatf("the downstream write debt reached %0d, MAX_WRITE_TXNS is %0d", debt, MAX_WRITE_TXNS));
+
+      // ---- 3. downstream responses arriving (pushed before any upstream
+      //         pop, so a combinational pass-through in the same cycle works)
+      if (m_bvalid === 1'b1 && m_bready === 1'b1) begin
+        eb.id = m_bid; eb.resp = m_bresp; eb.user = m_buser;
+        b_pass_exp.push_back(eb);
+      end
+      if (m_rvalid === 1'b1 && m_rready === 1'b1) begin
+        er.id = m_rid; er.data = m_rdata; er.resp = m_rresp;
+        er.last = m_rlast; er.user = m_ruser;
+        r_pass_exp.push_back(er);
+      end
+
+      // ---- 4. upstream responses leaving ----------------------------------
       if (s_bvalid === 1'b1 && s_bready === 1'b1) begin
-        idx = -1;
-        for (int i = 0; i < exp_b_q.size(); i++)
-          if (exp_b_q[i].id === s_bid) begin idx = i; break; end
-        if (idx < 0) begin
-          tb_fail("F3/P4", $sformatf(
-            "B response with id %0h that no outstanding write owes -- a filtered write gets exactly one B, and a forwarded write exactly the subordinate's",
-            s_bid));
-        end else if (exp_b_q[idx].manuf === 1'b1) begin
-          if (s_bresp !== 2'b10)
-            tb_fail("F3", $sformatf("manufactured B for id %0h carries resp %02b; SLVERR (10) is required",
-                                    s_bid, s_bresp));
-          exp_b_q.delete(idx);
-        end else begin
-          idx = -1;
-          for (int i = 0; i < mb_q.size(); i++)
-            if (mb_q[i].id === s_bid) begin idx = i; break; end
-          if (idx < 0) begin
-            tb_fail("P4/F3", $sformatf(
-              "B with id %0h returned upstream although the subordinate has not answered that write -- a forwarded write's B may not be manufactured",
-              s_bid));
-          end else if (32'(bfm_cycle) < mb_q[idx].earliest) begin
-            tb_fail("P4", $sformatf(
-              "B with id %0h returned upstream at cycle %0d, before the subordinate answers that write (cycle %0d) -- a forwarded write's B may not be manufactured",
-              s_bid, bfm_cycle, mb_q[idx].earliest));
+        up_b_cnt = up_b_cnt + 1;
+        fid = int'(s_bid);
+        if (id_is_atomic(fid)) begin
+          // F3: manufactured, attributed by id
+          if (!f_act[fid]) begin
+            fail("F3", $sformatf("a B response arrived with id=%0d, which no filtered write owes", fid));
+          end else if (f_bsee[fid]) begin
+            fail("F3", $sformatf("a second B response arrived for filtered write id=%0d; exactly one is owed", fid));
           end else begin
-            if (s_bresp !== mb_q[idx].resp || s_buser !== mb_q[idx].user)
-              tb_fail("P4", $sformatf(
-                "B for id %0h altered: got resp=%02b user=%b ; the subordinate sent resp=%02b user=%b",
-                s_bid, s_bresp, s_buser, mb_q[idx].resp, mb_q[idx].user));
-            mb_q.delete(idx);
-            for (int i = 0; i < exp_b_q.size(); i++)
-              if (exp_b_q[i].id === s_bid) begin exp_b_q.delete(i); break; end
+            if (s_bresp !== SLVERR)
+              fail("F3", $sformatf("the manufactured B for filtered write id=%0d carries resp=%02b, expected SLVERR (10)", fid, s_bresp));
+            f_bsee[fid] = 1'b1;
+            filt_complete_check(fid);
+          end
+        end else begin
+          // P4: pass-through, in order
+          gb.id = s_bid; gb.resp = s_bresp; gb.user = s_buser;
+          if (b_pass_exp.size() == 0) begin
+            fail("P4", $sformatf("a B response arrived upstream with id=%0d that the subordinate never sent", fid));
+          end else begin
+            eb = b_pass_exp.pop_front();
+            if (gb !== eb)
+              fail("P4", $sformatf("a B response was altered in transit: got id=%0d resp=%02b user=%0b, the subordinate sent id=%0d resp=%02b user=%0b",
+                                   gb.id, gb.resp, gb.user, eb.id, eb.resp, eb.user));
           end
         end
       end
 
       if (s_rvalid === 1'b1 && s_rready === 1'b1) begin
-        idx = -1;
-        for (int i = 0; i < exp_r_q.size(); i++)
-          if (exp_r_q[i].id === s_rid) begin idx = i; break; end
-        if (idx >= 0) begin
-          // a manufactured beat, attributed by id as F4 requires
-          if (s_rresp !== 2'b10)
-            tb_fail("F4", $sformatf("manufactured R beat for id %0h carries resp %02b; SLVERR (10) is required",
-                                    s_rid, s_rresp));
-          else if (s_rlast !== ((exp_r_q[idx].remain == 9'd1) ? 1'b1 : 1'b0))
-            tb_fail("F4", $sformatf(
-              "manufactured R beat for id %0h has rlast=%b with %0d beat(s) of the burst still owed; rlast belongs on the final beat and no other",
-              s_rid, s_rlast, exp_r_q[idx].remain));
-          else if (exp_r_q[idx].remain <= 9'd1) exp_r_q.delete(idx);
-          else exp_r_q[idx].remain = exp_r_q[idx].remain - 9'd1;
-        end else begin
-          idx = -1;
-          for (int i = 0; i < mr_q.size(); i++)
-            if (mr_q[i].id === s_rid) begin idx = i; break; end
-          if (idx < 0) begin
-            tb_fail("F4/F5/P3", $sformatf(
-              "R beat with id %0h that nothing owes -- either too many manufactured beats, beats for a write that owes none, or a read that was never made",
-              s_rid));
+        up_r_cnt = up_r_cnt + 1;
+        fid = int'(s_rid);
+        if (id_is_atomic(fid)) begin
+          if (!f_act[fid]) begin
+            fail("F4", $sformatf("an R beat arrived with id=%0d, which no filtered write owes", fid));
+          end else if (!f_owes[fid]) begin
+            fail("F5", $sformatf("an R beat arrived for filtered write id=%0d (atop=%06b), which owes no read response at all", fid, f_atop[fid][5:0]));
+          end else if (f_rcnt[fid] >= f_len[fid] + 1) begin
+            fail("F4", $sformatf("filtered write id=%0d owes %0d R beats but a further one arrived", fid, f_len[fid] + 1));
           end else begin
-            if (s_rdata !== mr_q[idx].data || s_rresp !== mr_q[idx].resp ||
-                s_rlast !== mr_q[idx].last)
-              tb_fail("P3", $sformatf(
-                "R beat for id %0h altered: got data=%08h resp=%02b last=%b ; the subordinate sent data=%08h resp=%02b last=%b",
-                s_rid, s_rdata, s_rresp, s_rlast,
-                mr_q[idx].data, mr_q[idx].resp, mr_q[idx].last));
-            mr_q.delete(idx);
+            f_rcnt[fid] = f_rcnt[fid] + 1;
+            if (s_rresp !== SLVERR)
+              fail("F4", $sformatf("manufactured R beat %0d of filtered write id=%0d carries resp=%02b, expected SLVERR (10)", f_rcnt[fid], fid, s_rresp));
+            if (s_rlast !== ((f_rcnt[fid] == f_len[fid] + 1) ? 1'b1 : 1'b0))
+              fail("F4", $sformatf("manufactured R beat %0d of %0d for filtered write id=%0d has s_rlast_o=%0b", f_rcnt[fid], f_len[fid] + 1, fid, s_rlast));
+            filt_complete_check(fid);
           end
+        end else if (id_is_read(fid)) begin
+          gr.id = s_rid; gr.data = s_rdata; gr.resp = s_rresp;
+          gr.last = s_rlast; gr.user = s_ruser;
+          if (r_pass_exp.size() == 0) begin
+            fail("P3", $sformatf("an R beat arrived upstream with id=%0d that the subordinate never sent", fid));
+          end else begin
+            er = r_pass_exp.pop_front();
+            if (gr !== er)
+              fail("P3", $sformatf("an R beat was altered in transit: got id=%0d data=%08h resp=%02b last=%0b user=%0b, the subordinate sent id=%0d data=%08h resp=%02b last=%0b user=%0b",
+                                   gr.id, gr.data, gr.resp, gr.last, gr.user, er.id, er.data, er.resp, er.last, er.user));
+          end
+        end else begin
+          fail("F4", $sformatf("an R beat arrived with id=%0d, which belongs to neither a read nor a filtered write", fid));
         end
       end
+
+      // ---- remember this cycle for the X3 check --------------------------
+      pv_bv = s_bvalid; pv_br = s_bready;
+      pv_b.id = s_bid; pv_b.resp = s_bresp; pv_b.user = s_buser;
+      pv_rv = s_rvalid; pv_rr = s_rready;
+      pv_r.id = s_rid; pv_r.data = s_rdata; pv_r.resp = s_rresp;
+      pv_r.last = s_rlast; pv_r.user = s_ruser;
+      pv_awv = m_awvalid; pv_aw = m_aw_rec(); pv_awatop = m_awatop;
+      pv_wv  = m_wvalid;
+      pv_arv = m_arvalid; pv_ar = m_ar_rec();
+      pv_have = 1'b1;
     end
   end
 
-  // ---- X1: no output valid while reset is low -------------------------------
-  // The subordinate in the plumbing only clears its own queues synchronously,
-  // so for the first edge of a reset it can still be offering a response that a
-  // pass-through design is merely relaying.  The check is taken once it is
-  // quiet, which is the state X1 is actually about.
-  // Sampled at the rising edge only: rst_ni changes on the falling edge, so by
-  // the rising edge an asynchronous reset has certainly propagated.
-  // X1 constrains what the unit ORIGINATES.  The pass-through B and R paths are
-  // combinational in their master-port inputs whatever rst_ni is doing, so those
-  // two are only judged while the subordinate is quiet -- which is the gate
-  // below on the plumbing's own response queues.  Nothing is judged before the
-  // first rising edge: until one has happened the design's registers hold no
-  // defined value and its outputs mean nothing.
-  int x1_edges = 0;
-  always @(posedge clk) begin
-    x1_edges <= x1_edges + 1;
-    if (rst_n === 1'b0 && x1_edges > 0) begin
-      if (m_awvalid === 1'b1 || m_wvalid === 1'b1)
-        tb_fail("X1", "the unit originates a request while rst_ni is low");
-      if (bfm_bq_id.size() == 0 && bfm_rq_id.size() == 0 &&
-          s_awvalid !== 1'b1 && s_wvalid !== 1'b1 && s_arvalid !== 1'b1) begin
-        if (m_arvalid === 1'b1 || s_bvalid === 1'b1 || s_rvalid === 1'b1)
-          tb_fail("X1", "a manufactured response is offered while rst_ni is low");
-      end
-    end
-  end
-
-  // ---- X3: valid held with a stable payload until ready ---------------------
-  // Only the fields the contract fixes are compared: L2 leaves s_rdata_o,
-  // s_ruser_o and s_buser_o free on a manufactured response.
-  logic        hb, hr, haw, hw, har;
-  logic [3:0]  hb_id,  hr_id,  haw_id,  har_id;
-  logic [1:0]  hb_resp, hr_resp;
-  logic        hr_last;
-  logic [31:0] haw_addr, har_addr, hw_data;
-  logic [3:0]  hw_strb;
-  logic        hw_last;
-
-  always @(posedge clk) begin
-    if (!rst_n) begin
-      hb <= 1'b0; hr <= 1'b0; haw <= 1'b0; hw <= 1'b0; har <= 1'b0;
-    end else begin
-      if (hb === 1'b1) begin
-        if (s_bvalid !== 1'b1)
-          tb_fail("X3", "s_bvalid_o was deasserted before s_bready_i was seen");
-        else if (s_bid !== hb_id || s_bresp !== hb_resp)
-          tb_fail("X3", "the s_b payload changed while the response was waiting for s_bready_i");
-      end
-      if (hr === 1'b1) begin
-        if (s_rvalid !== 1'b1)
-          tb_fail("X3", "s_rvalid_o was deasserted before s_rready_i was seen");
-        else if (s_rid !== hr_id || s_rresp !== hr_resp || s_rlast !== hr_last)
-          tb_fail("X3", "the s_r payload changed while the beat was waiting for s_rready_i");
-      end
-      if (haw === 1'b1) begin
-        if (m_awvalid !== 1'b1)
-          tb_fail("X3", "m_awvalid_o was deasserted before m_awready_i was seen");
-        else if (m_awid !== haw_id || m_awaddr !== haw_addr)
-          tb_fail("X3", "the m_aw payload changed while the request was waiting for m_awready_i");
-      end
-      if (hw === 1'b1) begin
-        if (m_wvalid !== 1'b1)
-          tb_fail("X3", "m_wvalid_o was deasserted before m_wready_i was seen");
-        else if (m_wdata !== hw_data || m_wstrb !== hw_strb || m_wlast !== hw_last)
-          tb_fail("X3", "the m_w payload changed while the beat was waiting for m_wready_i");
-      end
-      if (har === 1'b1) begin
-        if (m_arvalid !== 1'b1)
-          tb_fail("X3", "m_arvalid_o was deasserted before m_arready_i was seen");
-        else if (m_arid !== har_id || m_araddr !== har_addr)
-          tb_fail("X3", "the m_ar payload changed while the request was waiting for m_arready_i");
-      end
-      hb  <= s_bvalid  && !s_bready;   hb_id <= s_bid; hb_resp <= s_bresp;
-      hr  <= s_rvalid  && !s_rready;   hr_id <= s_rid; hr_resp <= s_rresp; hr_last <= s_rlast;
-      haw <= m_awvalid && !m_awready;  haw_id <= m_awid; haw_addr <= m_awaddr;
-      hw  <= m_wvalid  && !m_wready;   hw_data <= m_wdata; hw_strb <= m_wstrb; hw_last <= m_wlast;
-      har <= m_arvalid && !m_arready;  har_id <= m_arid; har_addr <= m_araddr;
-    end
-  end
-
-  // =========================================================================
-  // STIMULUS HELPERS
-  // =========================================================================
-
-  // A full-field AW, so that P1's "every field unmodified" is actually tested.
-  task automatic tb_aw(input logic [3:0] id, input logic [31:0] addr,
+  // ===========================================================================
+  // STIMULUS HELPERS -- EXTENSION: every AW/AR field is drivable, because P1
+  // and P3 require every field to be forwarded unmodified.
+  // ===========================================================================
+  task automatic my_aw(input logic [3:0] id, input logic [31:0] addr,
                        input logic [7:0] len, input logic [5:0] atop,
                        input logic [2:0] size, input logic [1:0] burst,
                        input logic lock, input logic [3:0] cache,
                        input logic [2:0] prot, input logic [3:0] qos,
                        input logic [3:0] region, input logic user,
                        input int timeout, output bit accepted);
-    int t;
+    automatic int t;
     @(negedge clk);
-    s_awid = id; s_awaddr = addr; s_awlen = len; s_awatop = atop; s_awsize = size;
-    s_awburst = burst; s_awlock = lock; s_awcache = cache; s_awprot = prot;
-    s_awqos = qos; s_awregion = region; s_awuser = user;
+    s_awid = id; s_awaddr = addr; s_awlen = len; s_awatop = atop;
+    s_awsize = size; s_awburst = burst; s_awlock = lock; s_awcache = cache;
+    s_awprot = prot; s_awqos = qos; s_awregion = region; s_awuser = user;
     s_awvalid = 1'b1;
     accepted = 1'b0;
     for (t = 0; t < timeout; t++) begin
@@ -772,17 +782,18 @@ module atop_filter_tb;
     @(negedge clk) s_awvalid = 1'b0;
   endtask
 
-  task automatic tb_ar(input logic [3:0] id, input logic [31:0] addr,
-                       input logic [7:0] len, input logic [2:0] size,
-                       input logic [1:0] burst, input logic lock,
-                       input logic [3:0] cache, input logic [2:0] prot,
-                       input logic [3:0] qos, input logic [3:0] region,
-                       input logic user, input int timeout, output bit accepted);
-    int t;
+  task automatic my_ar(input logic [3:0] id, input logic [31:0] addr,
+                       input logic [7:0] len,
+                       input logic [2:0] size, input logic [1:0] burst,
+                       input logic lock, input logic [3:0] cache,
+                       input logic [2:0] prot, input logic [3:0] qos,
+                       input logic [3:0] region, input logic user,
+                       input int timeout, output bit accepted);
+    automatic int t;
     @(negedge clk);
-    s_arid = id; s_araddr = addr; s_arlen = len; s_arsize = size; s_arburst = burst;
-    s_arlock = lock; s_arcache = cache; s_arprot = prot; s_arqos = qos;
-    s_arregion = region; s_aruser = user;
+    s_arid = id; s_araddr = addr; s_arlen = len;
+    s_arsize = size; s_arburst = burst; s_arlock = lock; s_arcache = cache;
+    s_arprot = prot; s_arqos = qos; s_arregion = region; s_aruser = user;
     s_arvalid = 1'b1;
     accepted = 1'b0;
     for (t = 0; t < timeout; t++) begin
@@ -792,10 +803,10 @@ module atop_filter_tb;
     @(negedge clk) s_arvalid = 1'b0;
   endtask
 
-  task automatic tb_w(input logic [31:0] data, input logic [3:0] strb,
+  task automatic my_w(input logic [31:0] data, input logic [3:0] strb,
                       input bit last, input logic user,
                       input int timeout, output bit accepted);
-    int t;
+    automatic int t;
     @(negedge clk);
     s_wdata = data; s_wstrb = strb; s_wlast = last; s_wuser = user;
     s_wvalid = 1'b1;
@@ -807,284 +818,300 @@ module atop_filter_tb;
     @(negedge clk) s_wvalid = 1'b0;
   endtask
 
-  // Address phase only, with every field derived from the id so that a dropped
-  // or swapped field shows up.
-  task automatic send_aw(input logic [3:0] id, input logic [7:0] len,
-                         input logic [5:0] atop, input int timeout,
-                         input bit must, output bit accepted);
-    tb_aw(id, 32'h1000_0000 + (32'(id) << 8), len, atop, 3'd2, 2'd1, id[1],
-          4'(id ^ 4'h5), 3'(id), 4'(id ^ 4'hA), 4'(id ^ 4'h3), id[0],
-          timeout, accepted);
-    if (must && !accepted)
-      tb_fail("X4/W3", $sformatf(
-        "AW id %0h was not accepted within %0d cycles although the write bound permits it",
-        id, timeout));
+  // Drive an AW and require it to be taken.  X4 gives 64 cycles; the budget is
+  // wider so only a design that never takes it is reported.
+  task automatic aw_must(input logic [3:0] id, input logic [31:0] addr,
+                         input logic [7:0] len, input logic [5:0] atop,
+                         input logic [2:0] size, input logic [1:0] burst,
+                         input logic lock, input logic [3:0] cache,
+                         input logic [2:0] prot, input logic [3:0] qos,
+                         input logic [3:0] region, input logic user,
+                         input string ctx);
+    automatic bit acc;
+    my_aw(id, addr, len, atop, size, burst, lock, cache, prot, qos, region, user, 200, acc);
+    if (!acc)
+      fail("X4", $sformatf("%s: AW id=%0d atop=%06b was offered for 200 cycles and never accepted", ctx, id, atop));
   endtask
 
-  task automatic send_wburst(input logic [3:0] id, input logic [7:0] len,
-                             input int timeout);
-    bit acc;
-    for (int i = 0; i <= int'(len); i++) begin
-      tb_w(32'hD000_0000 + (32'(id) << 16) + 32'(i), 4'(i + 1),
-           (i == int'(len)), id[0], timeout, acc);
-      if (!acc)
-        tb_fail("X4/F2", $sformatf(
-          "W beat %0d of write id %0h was not accepted within %0d cycles", i, id, timeout));
+  task automatic w_must(input logic [31:0] data, input logic [3:0] strb,
+                        input bit last, input logic user, input string ctx);
+    automatic bit acc;
+    my_w(data, strb, last, user, 200, acc);
+    if (!acc)
+      fail("X4", $sformatf("%s: a W beat (last=%0b) was offered for 200 cycles and never accepted", ctx, last));
+  endtask
+
+  task automatic wait_cycles(input int n); repeat (n) @(posedge clk); endtask
+
+  // Wait, bounded, until every filtered write has been fully answered.
+  task automatic settle(input int n);
+    automatic int t;
+    for (t = 0; t < n; t++) begin
+      automatic bit busy = 1'b0;
+      @(negedge clk);
+      for (int i = 0; i < 16; i++) if (f_act[i] && !f_done[i]) busy = 1'b1;
+      if (b_pass_exp.size() > 0 || r_pass_exp.size() > 0) busy = 1'b1;
+      if (fwd_aw_exp.size() > 0 || fwd_w_exp.size() > 0 || fwd_ar_exp.size() > 0) busy = 1'b1;
+      if (!busy) break;
     end
   endtask
 
-  // X4's bound is conditional on the sink holding ready.  While responses are
-  // being left unconsumed the unit is entitled to refuse W beats, so this
-  // variant reports nothing when a beat is not taken.
-  task automatic send_wburst_soft(input logic [3:0] id, input logic [7:0] len,
-                                  input int timeout);
-    bit acc;
-    for (int i = 0; i <= int'(len); i++) begin
-      tb_w(32'hD000_0000 + (32'(id) << 16) + 32'(i), 4'(i + 1),
-           (i == int'(len)), id[0], timeout, acc);
-      if (!acc) return;
-    end
+  task automatic check_settled(input string ctx);
+    for (int i = 0; i < 16; i++)
+      if (f_act[i] && !f_done[i])
+        fail("X4", $sformatf("%s: filtered write id=%0d never received everything it owes (B seen=%0b, %0d of %0d R beats)",
+                             ctx, i, f_bsee[i], f_rcnt[i], f_owes[i] ? f_len[i] + 1 : 0));
+    if (b_pass_exp.size() > 0)
+      fail("P4", $sformatf("%s: %0d B response(s) taken from the subordinate were never returned upstream", ctx, b_pass_exp.size()));
+    if (r_pass_exp.size() > 0)
+      fail("P3", $sformatf("%s: %0d R beat(s) taken from the subordinate were never returned upstream", ctx, r_pass_exp.size()));
+    if (fwd_aw_exp.size() > 0)
+      fail("P1", $sformatf("%s: %0d non-atomic AW(s) were accepted upstream but never forwarded (C1 fixes which writes are non-atomic: atop[5:4]==00)", ctx, fwd_aw_exp.size()));
+    if (fwd_ar_exp.size() > 0)
+      fail("P3", $sformatf("%s: %0d AR(s) were accepted upstream but never forwarded; a read is never filtered", ctx, fwd_ar_exp.size()));
+    if (fwd_w_exp.size() > 0)
+      fail("P2", $sformatf("%s: %0d W beat(s) of a forwarded write were never forwarded", ctx, fwd_w_exp.size()));
   endtask
 
-  task automatic do_write(input logic [3:0] id, input logic [7:0] len,
-                          input logic [5:0] atop);
-    bit acc;
-    send_aw(id, len, atop, 80, 1'b1, acc);
-    send_wburst(id, len, 80);
+  // No R beat may ever arrive for a filtered write that owes none (F5).
+  task automatic check_no_r(input int id, input string ctx);
+    if (f_rcnt[id] != 0)
+      fail("F5", $sformatf("%s: filtered write id=%0d owes no read response but %0d R beat(s) arrived for it", ctx, id, f_rcnt[id]));
   endtask
 
-  // Everything owed must have been delivered within `budget` cycles.
-  task automatic settle(input int budget);
-    int t;
-    for (t = 0; t < budget; t++) begin
-      @(posedge clk);
-      if (queues_idle()) break;
-    end
-    @(negedge clk);
-    if (exp_r_q.size() != 0)
-      tb_fail("F4/X4", $sformatf(
-        "%0d manufactured R beat(s) still owed after %0d cycles (first: id %0h, %0d beat(s) missing)",
-        exp_r_q.size(), budget, exp_r_q[0].id, exp_r_q[0].remain));
-    if (exp_b_q.size() != 0)
-      tb_fail("F3/X4", $sformatf(
-        "%0d B response(s) still owed after %0d cycles (first: id %0h, %0s)",
-        exp_b_q.size(), budget, exp_b_q[0].id,
-        exp_b_q[0].manuf ? "manufactured" : "forwarded write"));
-    if (exp_mw_q.size() != 0)
-      tb_fail("P2/X4", $sformatf("%0d W beat(s) of a forwarded write never reached the master port",
-                                 exp_mw_q.size()));
-    if (exp_maw_q.size() != 0)
-      tb_fail("P1/X4", $sformatf("%0d accepted non-atomic AW(s) never reached the master port",
-                                 exp_maw_q.size()));
-    if (exp_mar_q.size() != 0)
-      tb_fail("P3/X4", $sformatf("%0d accepted AR(s) never reached the master port",
-                                 exp_mar_q.size()));
-    if (mb_q.size() != 0)
-      tb_fail("P4/X4", $sformatf("%0d B response(s) taken from the subordinate were never returned upstream",
-                                 mb_q.size()));
-    if (mr_q.size() != 0)
-      tb_fail("P3/X4", $sformatf("%0d R beat(s) taken from the subordinate were never returned upstream",
-                                 mr_q.size()));
-    if (wpend_q.size() != 0)
-      tb_fail("F2/X4", $sformatf("%0d write(s) have an unfinished W burst", wpend_q.size()));
-  endtask
-
-  // =========================================================================
-  // STIMULUS
-  // =========================================================================
-  //   write ids live in 1..7, read ids in 8..15, so that a manufactured R beat
-  //   and a pass-through R beat can never be confused for one another.
+  // ===========================================================================
+  // THE RUN
+  // ===========================================================================
   initial begin
-    bit acc;
+    automatic bit acc, acc2;
+    automatic int i, t, t0;
 
-    bfm_reset(5);
-    repeat (5) @(posedge clk);
+    // ---- X1: reset originates nothing -------------------------------------
+    x1_en = 1'b1;
+    bfm_reset(8);
+    x1_en = 1'b0;
+    wait_cycles(4);
 
-    // ---------- pass-through ----------------------------------------------
-    set_phase("P1/P2/P4 single-beat non-atomic write");
-    do_write(4'h1, 8'd0, 6'b000000);
-    settle(80);
+    // ---- P1/P2/P4: a non-atomic write, every field varied ------------------
+    sub_bresp = 2'b11; sub_buser = 1'b1;      // so "unmodified" is decidable
+    aw_must(4'd0, 32'hCAFE_0004, 8'd0, 6'b000000, 3'd2, 2'd1, 1'b1, 4'hA, 3'd5, 4'h7, 4'h3, 1'b1, "P1 single beat");
+    w_must(32'h1234_5678, 4'b1011, 1'b1, 1'b1, "P1 single beat");
+    settle(300);
+    check_settled("P1 single beat");
 
-    set_phase("P2 four-beat non-atomic write");
-    do_write(4'h2, 8'd3, 6'b000000);
-    settle(80);
+    // ---- P2: a multi-beat burst -------------------------------------------
+    sub_bresp = 2'b01; sub_buser = 1'b0;
+    aw_must(4'd1, 32'h0BAD_C0DE, 8'd3, 6'b000000, 3'd0, 2'd2, 1'b0, 4'h5, 3'd2, 4'hF, 4'hC, 1'b0, "P2 burst");
+    w_must(32'hAAAA_0001, 4'b0001, 1'b0, 1'b1, "P2 burst");
+    w_must(32'hAAAA_0002, 4'b0110, 1'b0, 1'b0, "P2 burst");
+    w_must(32'hAAAA_0003, 4'b1111, 1'b0, 1'b1, "P2 burst");
+    w_must(32'hAAAA_0004, 4'b1000, 1'b1, 1'b0, "P2 burst");
+    settle(300);
+    check_settled("P2 burst");
 
-    set_phase("C1 awatop[3:0] alone does not make a write atomic");
-    do_write(4'h3, 8'd1, 6'b001111);       // [5:4] == 00 -> must be forwarded
-    settle(80);
-    do_write(4'h3, 8'd0, 6'b000110);
-    settle(80);
+    // ---- C1: atop[3:0] never affects classification ------------------------
+    // atop = 001111 has [5:4] == 00, so this write is NOT atomic and must be
+    // forwarded like any other.
+    sub_bresp = 2'b00; sub_buser = 1'b1;
+    aw_must(4'd2, 32'h1111_2222, 8'd1, 6'b001111, 3'd2, 2'd1, 1'b0, 4'h0, 3'd7, 4'h1, 4'h9, 1'b1, "C1 atop[3:0] only");
+    w_must(32'hC1C1_0001, 4'b1100, 1'b0, 1'b0, "C1 atop[3:0] only");
+    w_must(32'hC1C1_0002, 4'b0011, 1'b1, 1'b1, "C1 atop[3:0] only");
+    settle(300);
+    check_settled("C1 atop[3:0] only");
 
-    set_phase("P3 read pass-through, three-beat burst");
-    tb_ar(4'h8, 32'h2000_0100, 8'd2, 3'd2, 2'd1, 1'b1, 4'hB, 3'd6, 4'h9, 4'h4, 1'b1, 80, acc);
-    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
-    settle(80);
+    // ---- P3: reads are never altered and never filtered --------------------
+    sub_rresp = 2'b01; sub_ruser = 1'b1;
+    my_ar(4'd12, 32'hDEAD_0000, 8'd2, 3'd1, 2'd2, 1'b1, 4'h3, 3'd4, 4'hB, 4'h6, 1'b1, 200, acc);
+    if (!acc) fail("X4", "P3: an AR was offered for 200 cycles and never accepted");
+    settle(300);
+    check_settled("P3 burst read");
+    sub_rresp = 2'b11; sub_ruser = 1'b0;
+    my_ar(4'd13, 32'hBEEF_1000, 8'd0, 3'd2, 2'd1, 1'b0, 4'hF, 3'd0, 4'h0, 4'hE, 1'b0, 200, acc);
+    if (!acc) fail("X4", "P3: an AR was offered for 200 cycles and never accepted");
+    settle(300);
+    check_settled("P3 single read");
+    sub_rresp = 2'b00; sub_ruser = 1'b0;
 
-    // ---------- filtering --------------------------------------------------
-    set_phase("F1/F2/F3/F5 atomic write without a read response, one beat");
-    do_write(4'h4, 8'd0, 6'b010000);       // [5:4]=01 -> atomic, no R owed
-    settle(70);                            // X4: within 64 cycles of wlast
+    // ---- F1/F2/F3/F5: atomic without a read response -----------------------
+    aw_must(4'd6, 32'hA100_0000, 8'd0, 6'b010000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "F3 single beat");
+    w_must(32'hDDDD_0001, 4'hF, 1'b1, 1'b0, "F3 single beat");
+    settle(300);
+    check_settled("F3 single beat");
+    check_no_r(6, "F5 single beat");
 
-    set_phase("F2/F5 atomic write without a read response, four beats");
-    do_write(4'h5, 8'd3, 6'b011010);
-    settle(70);
+    // a filtered burst, so the whole W burst must be swallowed
+    aw_must(4'd7, 32'hA100_0100, 8'd3, 6'b011111, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "F2 burst");
+    w_must(32'hDDDD_1001, 4'hF, 1'b0, 1'b0, "F2 burst");
+    w_must(32'hDDDD_1002, 4'hF, 1'b0, 1'b0, "F2 burst");
+    w_must(32'hDDDD_1003, 4'hF, 1'b0, 1'b0, "F2 burst");
+    w_must(32'hDDDD_1004, 4'hF, 1'b1, 1'b0, "F2 burst");
+    settle(300);
+    check_settled("F2 burst");
+    check_no_r(7, "F5 burst");
 
-    set_phase("F3/F4 atomic write owing a read response, one beat");
-    do_write(4'h6, 8'd0, 6'b100000);       // [5:4]=10 -> R owed
-    settle(70);
+    // ---- F4: atomic that also owes a read response -------------------------
+    aw_must(4'd8, 32'hA200_0000, 8'd0, 6'b100000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "F4 len=0");
+    w_must(32'hEEEE_0001, 4'hF, 1'b1, 1'b0, "F4 len=0");
+    settle(300);
+    check_settled("F4 len=0");
+    if (f_rcnt[8] != 1)
+      fail("F4", $sformatf("filtered write id=8 (len=0) received %0d R beats, exactly 1 is owed", f_rcnt[8]));
 
-    set_phase("F4 atomic write owing a four-beat read response");
-    do_write(4'h7, 8'd3, 6'b110001);       // [5:4]=11 -> R owed, len+1 = 4
-    settle(70);
+    aw_must(4'd9, 32'hA200_0100, 8'd3, 6'b110000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "F4 len=3");
+    w_must(32'hEEEE_1001, 4'hF, 1'b0, 1'b0, "F4 len=3");
+    w_must(32'hEEEE_1002, 4'hF, 1'b0, 1'b0, "F4 len=3");
+    w_must(32'hEEEE_1003, 4'hF, 1'b0, 1'b0, "F4 len=3");
+    w_must(32'hEEEE_1004, 4'hF, 1'b1, 1'b0, "F4 len=3");
+    settle(300);
+    check_settled("F4 len=3");
+    if (f_rcnt[9] != 4)
+      fail("F4", $sformatf("filtered write id=9 (len=3) received %0d R beats, exactly 4 are owed", f_rcnt[9]));
 
-    set_phase("F4 atomic write owing an eight-beat read response");
-    do_write(4'h2, 8'd7, 6'b100011);
-    settle(70);
+    // atop[3:0] set, and [5:4] = 10: still atomic, still owes a read
+    aw_must(4'd10, 32'hA200_0200, 8'd1, 6'b101010, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "F4 len=1");
+    w_must(32'hEEEE_2001, 4'hF, 1'b0, 1'b0, "F4 len=1");
+    w_must(32'hEEEE_2002, 4'hF, 1'b1, 1'b0, "F4 len=1");
+    settle(300);
+    check_settled("F4 len=1");
+    if (f_rcnt[10] != 2)
+      fail("F4", $sformatf("filtered write id=10 (len=1) received %0d R beats, exactly 2 are owed", f_rcnt[10]));
 
-    // ---------- one transaction after another ------------------------------
-    set_phase("F3/F4 three filtered writes back to back");
-    do_write(4'h1, 8'd1, 6'b100000);
-    do_write(4'h2, 8'd0, 6'b010000);
-    do_write(4'h3, 8'd2, 6'b110000);
-    settle(120);
-
-    set_phase("mixed traffic: forwarded, filtered, forwarded");
-    do_write(4'h4, 8'd1, 6'b000000);
-    do_write(4'h5, 8'd1, 6'b100100);
-    do_write(4'h6, 8'd2, 6'b000000);
-    tb_ar(4'h9, 32'h3000_0000, 8'd1, 3'd2, 2'd1, 1'b0, 4'h6, 3'd1, 4'hC, 4'h2, 1'b0, 80, acc);
-    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
-    do_write(4'h7, 8'd0, 6'b010001);
-    settle(160);
-
-    // ---------- back-pressure and X3 ---------------------------------------
-    set_phase("X3 pass-through B held while s_bready_i is low");
-    bfm_dn_b_lag(12);
-    do_write(4'h1, 8'd0, 6'b000000);
-    bfm_b_ready(1'b0);
-    repeat (25) @(posedge clk);            // the B waits here; X3 watches it
-    bfm_b_ready(1'b1);
-    settle(80);
-    bfm_dn_b_lag(0);
-
-    set_phase("X3 pass-through R held while s_rready_i is low");
-    bfm_r_ready(1'b0);
-    tb_ar(4'hA, 32'h4000_0000, 8'd3, 3'd2, 2'd1, 1'b0, 4'h1, 3'd2, 4'h3, 4'h4, 1'b1, 80, acc);
-    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
-    repeat (20) @(posedge clk);
-    bfm_r_ready(1'b1);
-    settle(80);
-
-    set_phase("X3/L1/L5 manufactured responses held while both readies are low");
-    bfm_b_ready(1'b0);
-    bfm_r_ready(1'b0);
-    send_aw(4'h6, 8'd3, 6'b100000, 80, 1'b0, acc);
-    if (acc) begin
-      // R beats may already be waiting here, before the burst is finished, so
-      // release the readies from a second process rather than deadlocking.
-      fork
-        begin
-          repeat (18) @(posedge clk);
-          bfm_r_ready(1'b1);
-          repeat (4) @(posedge clk);
-          bfm_b_ready(1'b1);
-        end
-        send_wburst(4'h6, 8'd3, 400);
-      join
-    end else begin
-      bfm_r_ready(1'b1);
-      bfm_b_ready(1'b1);
+    // ---- two filtered writes in flight at once, if the design allows it ----
+    // L4 lets it stall the second for as long as it likes, so a refusal here
+    // is a legal answer and is not reported.
+    aw_must(4'd6, 32'hA300_0000, 8'd3, 6'b100000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "F4 overlap");
+    w_must(32'hBBBB_0001, 4'hF, 1'b0, 1'b0, "F4 overlap");
+    w_must(32'hBBBB_0002, 4'hF, 1'b0, 1'b0, "F4 overlap");
+    my_aw(4'd7, 32'hA300_0100, 8'd1, 6'b110000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, 60, acc2);
+    w_must(32'hBBBB_0003, 4'hF, 1'b0, 1'b0, "F4 overlap");
+    w_must(32'hBBBB_0004, 4'hF, 1'b1, 1'b0, "F4 overlap");
+    if (!acc2) begin
+      aw_must(4'd7, 32'hA300_0100, 8'd1, 6'b110000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "F4 overlap 2nd");
     end
-    settle(120);
+    w_must(32'hBBBB_1001, 4'hF, 1'b0, 1'b0, "F4 overlap 2nd");
+    w_must(32'hBBBB_1002, 4'hF, 1'b1, 1'b0, "F4 overlap 2nd");
+    settle(400);
+    check_settled("F4 overlap");
+    if (f_rcnt[6] != 4)
+      fail("F4", $sformatf("filtered write id=6 (len=3) received %0d R beats, exactly 4 are owed", f_rcnt[6]));
+    if (f_rcnt[7] != 2)
+      fail("F4", $sformatf("filtered write id=7 (len=1) received %0d R beats, exactly 2 are owed", f_rcnt[7]));
 
-    // ---------- the write bound --------------------------------------------
-    set_phase("W2/W3 four AWs with no write data, then a fifth");
-    send_aw(4'h1, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 0 -> 1
-    send_aw(4'h2, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 1 -> 2
-    send_aw(4'h3, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 2 -> 3
-    send_aw(4'h4, 8'd0, 6'b000000, 80, 1'b1, acc);   // debt 3 -> 4  (W3)
-    send_aw(4'h5, 8'd0, 6'b000000, 40, 1'b0, acc);   // may be refused (W2)
-    send_aw(4'h6, 8'd0, 6'b000000, 40, 1'b0, acc);
-    // now let the four bursts finish; the monitor has been watching the debt
-    send_wburst(4'h1, 8'd0, 80);
-    send_wburst(4'h2, 8'd0, 80);
-    send_wburst(4'h3, 8'd0, 80);
-    send_wburst(4'h4, 8'd0, 80);
-    settle(200);
-    set_phase("W3 the bound releases once the bursts have finished");
-    do_write(4'h5, 8'd0, 6'b000000);
-    settle(120);
-
-    set_phase("W4 the debt falls on a completed W burst, not on a B response");
-    bfm_dn_b_lag(200);                     // the subordinate answers nothing yet
-    for (int i = 0; i < 7; i++) begin
-      send_aw(4'(i + 1), 8'd0, 6'b000000, 80, 1'b1, acc);
-      send_wburst(4'(i + 1), 8'd0, 80);
+    // ---- X3: hold both response readies low and watch for a withdrawal ----
+    // X4 is suspended here: with the readies low the unit is entitled to stall.
+    x4_en = 1'b0;
+    bfm_b_ready(1'b0);
+    bfm_r_ready(1'b0);
+    my_aw(4'd8, 32'hA400_0000, 8'd1, 6'b110000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, 200, acc);
+    if (acc) begin
+      my_w(32'hCCCC_0001, 4'hF, 1'b0, 1'b0, 200, acc);
+      if (acc) my_w(32'hCCCC_0002, 4'hF, 1'b1, 1'b0, 200, acc);
+    end
+    wait_cycles(40);                       // the monitor judges X3 throughout
+    bfm_b_ready(1'b1);
+    bfm_r_ready(1'b1);
+    // finish the burst if the design would not take it under backpressure
+    for (i = 0; i < 2; i++) begin
+      automatic bit still = 1'b0;
+      for (int k = 0; k < wo_id.size(); k++) if (wo_id[k] == 8) still = 1'b1;
+      if (!still) break;
+      my_w(32'hCCCC_0003, 4'hF, (i == 1) ? 1'b1 : 1'b0, 1'b0, 200, acc);
     end
     settle(400);
+    x4_en = 1'b1;
+
+    // ---- W2/W3/W4/W5: the outstanding-write bound --------------------------
+    // W5 is decided by getting here at all: every filtered write above would
+    // have leaked debt if the design counted them, and the four AWs below
+    // would then never all be forwarded.
+    bfm_dn_b_lag(400);                     // no B will arrive during the phase
+    t0 = dn_aw_cnt;
+    for (i = 0; i < MAX_WRITE_TXNS; i++)
+      aw_must(4'(i), 32'h4000_0000 + 32'(i), 8'd0, 6'b000000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "W3 filling the bound");
+    // W3: none of those four may have been stalled by the bound
+    if (dn_aw_cnt - t0 != MAX_WRITE_TXNS)
+      fail("W3", $sformatf("only %0d of %0d AWs were forwarded while the debt was below the bound", dn_aw_cnt - t0, MAX_WRITE_TXNS));
+    if (debt != MAX_WRITE_TXNS)
+      fail("W1", $sformatf("the downstream write debt is %0d after %0d AWs and no W burst, expected %0d", debt, MAX_WRITE_TXNS, MAX_WRITE_TXNS));
+    // W2: a fifth AW may be offered; it must not be forwarded while the debt
+    // is at the bound.  Whether it is accepted upstream is the design's choice.
+    t0 = dn_aw_cnt;                        // captured before the offer: a design
+    my_aw(4'd4, 32'h4000_0004, 8'd0, 6'b000000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, 80, acc);
+    if (dn_aw_cnt != t0)                   // may accept and forward in one cycle
+      fail("W2", "a fifth AW was forwarded while the downstream write debt was already at MAX_WRITE_TXNS");
+    // W4: completing W bursts, and not the arrival of a B, is what frees the
+    // bound.  No B has arrived at all at this point.
+    for (i = 0; i < MAX_WRITE_TXNS; i++)
+      w_must(32'h5000_0000 + 32'(i), 4'hF, 1'b1, 1'b0, "W4 draining the bound");
+    if (!acc) begin
+      my_aw(4'd4, 32'h4000_0004, 8'd0, 6'b000000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, 200, acc);
+      if (!acc)
+        fail("W4", "the fifth AW was still not accepted after four W bursts completed and with no B response yet delivered");
+    end
+    // it must now be forwarded, the bound having been freed by the W bursts.
+    // t0 still holds the count from before the offer, so this is true whether
+    // the forwarding happened during the offer or after the drain.
+    for (t = 0; t < 200; t++) begin
+      @(negedge clk);
+      if (dn_aw_cnt > t0) break;
+    end
+    if (dn_aw_cnt == t0)
+      fail("W4", "the fifth AW was never forwarded even though four W bursts had completed; only a B response was still missing");
+    w_must(32'h5000_0004, 4'hF, 1'b1, 1'b0, "W4 fifth write");
     bfm_dn_b_lag(0);
+    settle(900);
+    check_settled("W bound phase");
 
-    set_phase("W5 filtered writes do not consume bound capacity");
-    do_write(4'h1, 8'd0, 6'b010000);
-    settle(70);
-    do_write(4'h2, 8'd0, 6'b100000);
-    settle(70);
-    do_write(4'h3, 8'd1, 6'b010000);
-    settle(70);
-    do_write(4'h4, 8'd0, 6'b110000);
-    settle(70);
-    do_write(4'h5, 8'd0, 6'b010000);
-    settle(70);
-    do_write(4'h6, 8'd1, 6'b000000);       // must still be forwarded
-    settle(120);
-
-    // ---------- X1: nothing originated while reset is low --------------------
-    // X2 says the unit's behaviour must not depend on anything presented while
-    // reset was low, so presenting something is fair game; X1 says that while
-    // it is low no request is originated on the master port.
-    set_phase("X1 requests offered while rst_ni is low originate nothing");
-    @(negedge clk) rst_n = 1'b0;
-    @(negedge clk);
-    s_awid = 4'h5; s_awaddr = 32'h1000_0000; s_awlen = 8'd1; s_awatop = 6'b000000;
-    s_awsize = 3'd2; s_awburst = 2'd1; s_awvalid = 1'b1;
-    s_wdata = 32'hAAAA_5555; s_wstrb = 4'hF; s_wlast = 1'b0; s_wvalid = 1'b1;
-    repeat (8) @(posedge clk);           // the X1 monitor is watching here
-    @(negedge clk);
-    s_awvalid = 1'b0; s_wvalid = 1'b0;
-    repeat (3) @(posedge clk);
-    @(negedge clk) rst_n = 1'b1;
-    repeat (4) @(posedge clk);
-    set_phase("X2 service is clean after that reset");
-    do_write(4'h3, 8'd0, 6'b000000);
-    settle(80);
-
-    // ---------- reset in flight ---------------------------------------------
-    set_phase("X2 reset with a filtered write in flight");
+    // ---- X1/X2: reset while responses are actually owed --------------------
+    // The readies are held low first, so the unit finishes consuming a filtered
+    // write and is left owing a B and two R beats it cannot deliver.  Resetting
+    // then is what makes X1 and X2 observable: a unit that neither gates nor
+    // discards those responses shows it here and nowhere else.  X4 is suspended
+    // because the backpressure is ours.
+    x4_en = 1'b0;
     bfm_b_ready(1'b0);
     bfm_r_ready(1'b0);
-    send_aw(4'h7, 8'd2, 6'b100000, 60, 1'b0, acc);
-    if (acc) send_wburst_soft(4'h7, 8'd2, 60);
-    bfm_reset(4);
+    aw_must(4'd11, 32'hA500_0000, 8'd1, 6'b110000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "X2 setup");
+    w_must(32'hFFFF_0001, 4'hF, 1'b0, 1'b0, "X2 setup");
+    w_must(32'hFFFF_0002, 4'hF, 1'b1, 1'b0, "X2 setup");
+    wait_cycles(10);
+    x1_en = 1'b1;
+    bfm_reset(8);
+    x1_en = 1'b0;
     bfm_b_ready(1'b1);
     bfm_r_ready(1'b1);
-    repeat (60) @(posedge clk);            // any response now is unowed
-    @(negedge clk);
-    if (!queues_idle())
-      tb_fail("X2", "the unit still owed something after reset");
+    x4_en = 1'b1;
+    // X2: nothing may be owed or produced afterwards
+    t0 = up_b_cnt + up_r_cnt;
+    wait_cycles(60);
+    if (up_b_cnt + up_r_cnt != t0)
+      fail("X2", "a response appeared after reset for a transaction that was in flight before it");
+    if (debt != 0)
+      fail("X2", $sformatf("the downstream write debt is %0d after reset, expected 0", debt));
 
-    set_phase("normal service after reset");
-    do_write(4'h1, 8'd1, 6'b000000);
-    settle(80);
-    do_write(4'h2, 8'd1, 6'b100000);
-    settle(70);
-    tb_ar(4'hB, 32'h5000_0000, 8'd0, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, 80, acc);
-    if (!acc) tb_fail("X4/P3", "AR was not accepted within 80 cycles");
-    settle(80);
+    // ---- and the unit still works afterwards -------------------------------
+    sub_bresp = 2'b00; sub_buser = 1'b0;
+    aw_must(4'd0, 32'h9000_0000, 8'd0, 6'b000000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "X2 after reset");
+    w_must(32'h7777_0001, 4'hF, 1'b1, 1'b0, "X2 after reset");
+    settle(300);
+    check_settled("X2 after reset");
+    aw_must(4'd6, 32'h9000_0100, 8'd1, 6'b100000, 3'd2, 2'd1, 1'b0, 4'h0, 3'd0, 4'h0, 4'h0, 1'b0, "X2 after reset filtered");
+    w_must(32'h7777_1001, 4'hF, 1'b0, 1'b0, "X2 after reset filtered");
+    w_must(32'h7777_1002, 4'hF, 1'b1, 1'b0, "X2 after reset filtered");
+    settle(300);
+    check_settled("X2 after reset filtered");
+    if (f_rcnt[6] != 2)
+      fail("F4", $sformatf("filtered write id=6 after reset received %0d R beats, exactly 2 are owed", f_rcnt[6]));
 
-    if (!verdict_done) begin
-      $display("all %0d phases clean", phase_cnt);
-      $display("RESULT: PASS");
-    end
+    // ---- verdict -----------------------------------------------------------
+    $display("SUMMARY: %0d AWs forwarded, %0d W bursts completed downstream, %0d B and %0d R beats returned upstream, %0d violations",
+             dn_aw_cnt, dn_wlast_cnt, up_b_cnt, up_r_cnt, err_cnt);
+    if (dn_aw_cnt == 0)
+      fail("P1", "not a single AW was ever forwarded");
+    if (up_b_cnt == 0)
+      fail("F3", "not a single B response was ever returned");
+    if (err_cnt == 0) $display("RESULT: PASS");
+    else              $display("RESULT: FAIL");
     $finish;
   end
 

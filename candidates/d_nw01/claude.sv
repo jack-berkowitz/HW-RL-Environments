@@ -1,600 +1,728 @@
 // =============================================================================
-// axi4_xbar.sv -- AXI4 crossbar: NUM_MST masters x NUM_SLV slaves
+// axi4_xbar.sv -- AXI4 crossbar, NUM_MST masters to NUM_SLV slaves.
+//
+// STRUCTURE
+//   Per master port : a 2-entry skid buffer on AW, W and AR; an address
+//                     decoder; per-ID destination tracking; a decode-error
+//                     responder; round-robin B and R selection.
+//   Per slave port  : round-robin AW and AR arbitration across masters; a
+//                     W-order FIFO fed by AW grants; a 2-entry skid buffer on
+//                     the returning B and R.
+//   The fabric is a full crossbar: every master/slave pair has its own request
+//   and response path and its own arbiter, so disjoint pairs never contend (C2).
+//
+// HOW EACH REQUIREMENT IS MET
+//   H1  Every port-facing ready is a skid-buffer occupancy term, so no ready
+//       depends combinationally on its own valid. This is the reason the skid
+//       buffers exist at all; arbitration then happens behind them, where a
+//       grant may legally depend on the requests.
+//   H3  Every arbiter grant is held while its output valid is high and ready is
+//       low, so valid and payload are stable until taken.
+//   C3  Storage is 2 W beats per master port and 2 R beats per slave port --
+//       under the 4-beat ceiling. No burst is ever absorbed: a stalled master
+//       response channel backpressures the slave, which is what the contract
+//       says a design may do.
+//   C1  Outstanding transactions are tracked with per-ID counters, not buffers.
+//       A master may have MAX_TRANS outstanding on every ID bucket at once, and
+//       distinct IDs may target distinct slaves simultaneously, which is what
+//       the fill test requires.
+//   O1  A second request on an ID already outstanding to a DIFFERENT slave is
+//       held until that ID drains. Same-ID responses therefore come from one
+//       slave at a time and AXI's own per-ID ordering does the rest -- no
+//       reorder buffer, which C3 would forbid anyway.
+//   O3  W beats follow their AW: each slave keeps a FIFO of granted master
+//       indices and serves W from the head master until wlast.
+//   O4  A master's R selection is locked to one source until it passes a beat
+//       with last, so bursts are never interleaved on the way back.
+//   L1  THE WRITE DEADLOCK, and why it cannot happen here. If a slave could
+//       commit its W channel to master A while A's own next W burst were owed
+//       to a different slave, two slaves and two masters can form a cycle:
+//       s1 waits for A, A owes s2, s2 waits for B, B owes s1. The cut is at the
+//       master: an AW is admitted only if the master has no W still owed to a
+//       DIFFERENT destination (w_pend_cnt / w_pend_dst below). Every master
+//       therefore owes W to exactly one slave at a time, so a slave whose FIFO
+//       head is master m is always owed m's next W burst, and the head always
+//       drains. Nothing else in the design claims two resources in two orders.
+//   L2  Every arbiter is round-robin with the pointer advanced past the last
+//       winner, so no requester can be passed over indefinitely.
+//   D2  An unmapped address is answered by the master's own error responder --
+//       one B, or len+1 R beats with last on the final one -- and nothing is
+//       forwarded to any slave.
+//   R1  Every output valid is gated with rst_n.
 // =============================================================================
-// Topology: one demultiplexer per master port (1 -> NUM_SLV+1, the extra
-// destination being a per-master decode-error responder) fully crossed into one
-// multiplexer per slave port (NUM_MST -> 1, which widens the id).  Disjoint
-// master/slave pairs therefore share no logic at all (C2).
-//
-// Design notes against the specification:
-//
-//  H1  No ready is a combinational function of the corresponding valid.  Every
-//      arbiter in this design carries a REGISTERED grant: the grant register is
-//      updated from the requests seen in the previous cycle, so a port's ready
-//      depends on register state and on the downstream ready, never on the
-//      valid arriving with it.  This is what lets the whole datapath stay
-//      combinational without violating H1 -- the usual alternative, a skid
-//      buffer per channel, would spend storage that C3 prices.
-//
-//  C3  Zero R beats and zero W beats are stored anywhere in the crossbar.  Both
-//      data paths are wires; back-pressure from a stalled response propagates
-//      to the slave in the same cycle.  The only state is tracking state:
-//      per-id outstanding counters, destination selects, and grant registers.
-//
-//  O1  Per-id ordering is enforced at each master port by per-id outstanding
-//      counters: a request whose id already has transactions in flight to a
-//      different destination is held until that id drains.  Responses for one
-//      id therefore come from exactly one slave at a time and arrive in issue
-//      order.  Distinct ids are never blocked by one another (C1).
-//
-//  O3  W beats follow their AWs by a destination fifo at the master port and a
-//      source fifo at the slave port, both in AW-acceptance order.  Because an
-//      AW enters both fifos in the same cycle, the oldest outstanding AW in the
-//      system is at the head of both its master's and its slave's fifo, so some
-//      write can always make progress: the W channel cannot deadlock (L1).
-//
-//  L2  Every arbiter is round-robin and rotates on each transfer.
-// =============================================================================
 
-// -----------------------------------------------------------------------------
-// small synchronous fifo (tracking state only -- never carries W or R data)
-// -----------------------------------------------------------------------------
-module axi4_xbar_trk_fifo #(
-    parameter int WIDTH = 4,
-    parameter int DEPTH = 8      // power of two
-) (
-    input  logic             clk,
-    input  logic             rst_n,
-    input  logic             push,
-    input  logic [WIDTH-1:0] din,
-    input  logic             pop,
-    output logic [WIDTH-1:0] dout,
-    output logic             empty,
-    output logic             full
-);
-  localparam int PW = (DEPTH <= 2) ? 1 : $clog2(DEPTH);
-
-  logic [WIDTH-1:0] mem [DEPTH];
-  logic [PW-1:0]    rp, wp;
-  logic [PW:0]      cnt, cnt_n;
-  logic             do_push, do_pop;
-
-  assign empty   = (cnt == '0);
-  assign full    = (cnt == (PW+1)'(DEPTH));
-  assign dout    = mem[rp];
-  assign do_push = push && !full;
-  assign do_pop  = pop  && !empty;
-
-  always_comb begin
-    cnt_n = cnt;
-    if (do_push && !do_pop) cnt_n = cnt + 1'b1;
-    if (do_pop  && !do_push) cnt_n = cnt - 1'b1;
-  end
-
-  always_ff @(posedge clk) begin
-    if (!rst_n) begin
-      rp  <= '0;
-      wp  <= '0;
-      cnt <= '0;
-    end else begin
-      if (do_push) begin
-        mem[wp] <= din;
-        wp      <= wp + 1'b1;
-      end
-      if (do_pop) rp <= rp + 1'b1;
-      cnt <= cnt_n;
-    end
-  end
-endmodule
-
-// -----------------------------------------------------------------------------
-// decode-error responder -- one per master port
-// Completes an unmapped transaction itself (D2): a write is absorbed through
-// its last W beat and answered with one DECERR B, a read is answered with
-// len+1 DECERR R beats.  Manufactured beats are not stored beats, so this
-// costs no data buffering.
-// -----------------------------------------------------------------------------
-module axi4_xbar_err_slv
-  import axi4_xbar_pkg::*;
-#(
-    parameter int DEPTH = 8
-) (
-    input  logic      clk,
-    input  logic      rst_n,
-    input  slv_req_t  req_i,
-    output slv_resp_t resp_o
-);
-  logic            awf_push, awf_pop, awf_empty, awf_full;
-  logic [SLV_ID_W-1:0] awf_dout;
-  logic            bf_push, bf_pop, bf_empty, bf_full;
-  logic [SLV_ID_W-1:0] bf_dout;
-  logic            arf_push, arf_pop, arf_empty, arf_full;
-  logic [SLV_ID_W+8-1:0] arf_din, arf_dout;
-
-  logic [7:0] rbeat_q;
-  logic       aw_ready_c, w_ready_c, ar_ready_c;
-  logic       b_valid_c, r_valid_c, r_last_c;
-
-  axi4_xbar_trk_fifo #(.WIDTH(SLV_ID_W), .DEPTH(DEPTH)) i_awf (
-      .clk, .rst_n, .push(awf_push), .din(req_i.aw.id), .pop(awf_pop),
-      .dout(awf_dout), .empty(awf_empty), .full(awf_full));
-
-  axi4_xbar_trk_fifo #(.WIDTH(SLV_ID_W), .DEPTH(DEPTH)) i_bf (
-      .clk, .rst_n, .push(bf_push), .din(awf_dout), .pop(bf_pop),
-      .dout(bf_dout), .empty(bf_empty), .full(bf_full));
-
-  assign arf_din = {req_i.ar.id, req_i.ar.len};
-  axi4_xbar_trk_fifo #(.WIDTH(SLV_ID_W+8), .DEPTH(DEPTH)) i_arf (
-      .clk, .rst_n, .push(arf_push), .din(arf_din), .pop(arf_pop),
-      .dout(arf_dout), .empty(arf_empty), .full(arf_full));
-
-  // ---- write ----------------------------------------------------------------
-  assign aw_ready_c = !awf_full;
-  assign awf_push   = req_i.aw_valid && aw_ready_c;
-
-  assign w_ready_c  = !awf_empty && !bf_full;
-  assign bf_push    = req_i.w_valid && w_ready_c && req_i.w.last;
-  assign awf_pop    = bf_push;
-
-  assign b_valid_c  = !bf_empty;
-  assign bf_pop     = b_valid_c && req_i.b_ready;
-
-  // ---- read -----------------------------------------------------------------
-  assign ar_ready_c = !arf_full;
-  assign arf_push   = req_i.ar_valid && ar_ready_c;
-
-  assign r_valid_c  = !arf_empty;
-  assign r_last_c   = (rbeat_q == arf_dout[7:0]);
-  assign arf_pop    = r_valid_c && req_i.r_ready && r_last_c;
-
-  always_ff @(posedge clk) begin
-    if (!rst_n) begin
-      rbeat_q <= 8'd0;
-    end else if (r_valid_c && req_i.r_ready) begin
-      rbeat_q <= r_last_c ? 8'd0 : (rbeat_q + 8'd1);
-    end
-  end
-
-  always_comb begin
-    resp_o          = '0;
-    resp_o.aw_ready = aw_ready_c;
-    resp_o.w_ready  = w_ready_c;
-    resp_o.ar_ready = ar_ready_c;
-    resp_o.b_valid  = b_valid_c;
-    resp_o.b.id     = bf_dout;
-    resp_o.b.resp   = RESP_DECERR;
-    resp_o.b.user   = '0;
-    resp_o.r_valid  = r_valid_c;
-    resp_o.r.id     = arf_dout[SLV_ID_W+8-1:8];
-    resp_o.r.data   = '0;
-    resp_o.r.resp   = RESP_DECERR;
-    resp_o.r.last   = r_last_c;
-    resp_o.r.user   = '0;
-  end
-endmodule
-
-// -----------------------------------------------------------------------------
-// per-master demultiplexer, 1 -> NUM_SLV+1
-// -----------------------------------------------------------------------------
-module axi4_xbar_demux
-  import axi4_xbar_pkg::*;
-#(
-    parameter int NUM_SLV  = 2,
-    parameter int WFIFO_D  = 16
-) (
-    input  logic                    clk,
-    input  logic                    rst_n,
-    input  slv_req_t                m_req,
-    output slv_resp_t               m_resp,
-    output slv_req_t  [NUM_SLV:0]   d_req,     // [NUM_SLV] is the error responder
-    input  slv_resp_t [NUM_SLV:0]   d_resp,
-    input  xbar_rule_t [NUM_SLV-1:0] addr_map
-);
-  localparam int NSEL = NUM_SLV + 1;
-  localparam int SW   = (NSEL <= 2) ? 1 : $clog2(NSEL);
-  localparam int NID  = 1 << SLV_ID_W;
-  localparam int CW   = 5;                       // per-id outstanding counter
-
-  // ---- address decode (D1/D3: address only) ---------------------------------
-  function automatic logic [SW-1:0] decode_addr(input addr_t a);
-    logic [SW-1:0] s;
-    s = SW'(NUM_SLV);                            // no rule matched -> error (D2)
-    for (int k = 0; k < NUM_SLV; k++)
-      if ((a >= addr_map[k].start_addr) && (a < addr_map[k].end_addr))
-        s = SW'(addr_map[k].mst_port);
-    return s;
-  endfunction
-
-  function automatic int rr_next(input logic [NSEL-1:0] reqs, input int cur);
-    int k;
-    for (int n = 1; n <= NSEL; n++) begin
-      k = (cur + n) % NSEL;
-      if (reqs[k]) return k;
-    end
-    return cur;
-  endfunction
-
-  // ---- per-id outstanding tracking (O1) -------------------------------------
-  logic [CW-1:0] wcnt [NID];
-  logic [SW-1:0] wdst [NID];
-  logic [CW-1:0] rcnt [NID];
-  logic [SW-1:0] rdst [NID];
-
-  logic [SW-1:0] aw_sel, ar_sel;
-  logic          aw_ok, ar_ok;
-
-  assign aw_sel = decode_addr(m_req.aw.addr);
-  assign ar_sel = decode_addr(m_req.ar.addr);
-
-  logic wf_push, wf_pop, wf_empty, wf_full;
-  logic [SW-1:0] wf_head;
-
-  assign aw_ok = ((wcnt[m_req.aw.id] == '0) || (wdst[m_req.aw.id] == aw_sel))
-                 && (wcnt[m_req.aw.id] != {CW{1'b1}})
-                 && !wf_full;
-  assign ar_ok = ((rcnt[m_req.ar.id] == '0) || (rdst[m_req.ar.id] == ar_sel))
-                 && (rcnt[m_req.ar.id] != {CW{1'b1}});
-
-  // ---- request paths --------------------------------------------------------
-  logic            aw_ready_c, w_ready_c, ar_ready_c;
-  logic [NSEL-1:0] aw_valid_c, w_valid_c, ar_valid_c;
-
-  assign aw_ready_c = aw_ok && d_resp[aw_sel].aw_ready;
-  assign ar_ready_c = ar_ok && d_resp[ar_sel].ar_ready;
-  assign w_ready_c  = !wf_empty && d_resp[wf_head].w_ready;
-
-  always_comb begin
-    aw_valid_c = '0;
-    ar_valid_c = '0;
-    w_valid_c  = '0;
-    if (m_req.aw_valid && aw_ok)   aw_valid_c[aw_sel]  = 1'b1;
-    if (m_req.ar_valid && ar_ok)   ar_valid_c[ar_sel]  = 1'b1;
-    if (m_req.w_valid  && !wf_empty) w_valid_c[wf_head] = 1'b1;
-  end
-
-  // W destination fifo, in AW-acceptance order (O3)
-  assign wf_push = m_req.aw_valid && aw_ready_c;
-  assign wf_pop  = m_req.w_valid  && w_ready_c && m_req.w.last;
-  axi4_xbar_trk_fifo #(.WIDTH(SW), .DEPTH(WFIFO_D)) i_wf (
-      .clk, .rst_n, .push(wf_push), .din(aw_sel), .pop(wf_pop),
-      .dout(wf_head), .empty(wf_empty), .full(wf_full));
-
-  // ---- response paths: registered round-robin grants (H1) -------------------
-  logic [NSEL-1:0] b_req_v, r_req_v;
-  logic [SW-1:0]   b_sel_q, r_sel_q;
-  logic            r_busy_q;
-  logic            b_xfer, r_xfer, r_hold;
-
-  always_comb begin
-    for (int k = 0; k < NSEL; k++) begin
-      b_req_v[k] = d_resp[k].b_valid;
-      r_req_v[k] = d_resp[k].r_valid;
-    end
-  end
-
-  assign b_xfer = d_resp[b_sel_q].b_valid && m_req.b_ready;
-  assign r_xfer = d_resp[r_sel_q].r_valid && m_req.r_ready;
-  assign r_hold = r_busy_q || (d_resp[r_sel_q].r_valid && !m_req.r_ready);
-
-  always_ff @(posedge clk) begin
-    if (!rst_n) begin
-      b_sel_q  <= '0;
-      r_sel_q  <= '0;
-      r_busy_q <= 1'b0;
-    end else begin
-      // B: hold the grant only while the selected source is waiting for ready
-      if (!(d_resp[b_sel_q].b_valid && !m_req.b_ready))
-        b_sel_q <= SW'(rr_next(b_req_v, int'(b_sel_q)));
-      // R: additionally locked for the duration of a burst (O4)
-      if (r_xfer) r_busy_q <= ~d_resp[r_sel_q].r.last;
-      if (r_xfer ? d_resp[r_sel_q].r.last : !r_hold)
-        r_sel_q <= SW'(rr_next(r_req_v, int'(r_sel_q)));
-    end
-  end
-
-  // ---- outstanding counters -------------------------------------------------
-  logic aw_acc, ar_acc, b_acc, rl_acc;
-  logic [SLV_ID_W-1:0] b_id, r_id;
-
-  assign aw_acc = m_req.aw_valid && aw_ready_c;
-  assign ar_acc = m_req.ar_valid && ar_ready_c;
-  assign b_acc  = b_xfer;
-  assign b_id   = d_resp[b_sel_q].b.id;
-  assign rl_acc = r_xfer && d_resp[r_sel_q].r.last;
-  assign r_id   = d_resp[r_sel_q].r.id;
-
-  always_ff @(posedge clk) begin
-    if (!rst_n) begin
-      for (int k = 0; k < NID; k++) begin
-        wcnt[k] <= '0;
-        rcnt[k] <= '0;
-        wdst[k] <= '0;
-        rdst[k] <= '0;
-      end
-    end else begin
-      for (int k = 0; k < NID; k++) begin
-        if (aw_acc && (int'(m_req.aw.id) == k)) wdst[k] <= aw_sel;
-        if (ar_acc && (int'(m_req.ar.id) == k)) rdst[k] <= ar_sel;
-        case ({aw_acc && (int'(m_req.aw.id) == k), b_acc && (int'(b_id) == k)})
-          2'b10:   wcnt[k] <= wcnt[k] + 1'b1;
-          2'b01:   wcnt[k] <= wcnt[k] - 1'b1;
-          default: ;
-        endcase
-        case ({ar_acc && (int'(m_req.ar.id) == k), rl_acc && (int'(r_id) == k)})
-          2'b10:   rcnt[k] <= rcnt[k] + 1'b1;
-          2'b01:   rcnt[k] <= rcnt[k] - 1'b1;
-          default: ;
-        endcase
-      end
-    end
-  end
-
-  // ---- port assembly --------------------------------------------------------
-  always_comb begin
-    for (int k = 0; k < NSEL; k++) begin
-      d_req[k]          = '0;
-      d_req[k].aw       = m_req.aw;
-      d_req[k].aw_valid = aw_valid_c[k];
-      d_req[k].w        = m_req.w;
-      d_req[k].w_valid  = w_valid_c[k];
-      d_req[k].b_ready  = (k == int'(b_sel_q)) && m_req.b_ready;
-      d_req[k].ar       = m_req.ar;
-      d_req[k].ar_valid = ar_valid_c[k];
-      d_req[k].r_ready  = (k == int'(r_sel_q)) && m_req.r_ready;
-    end
-  end
-
-  always_comb begin
-    m_resp          = '0;
-    m_resp.aw_ready = aw_ready_c;
-    m_resp.ar_ready = ar_ready_c;
-    m_resp.w_ready  = w_ready_c;
-    m_resp.b_valid  = d_resp[b_sel_q].b_valid;
-    m_resp.b        = d_resp[b_sel_q].b;
-    m_resp.r_valid  = d_resp[r_sel_q].r_valid;
-    m_resp.r        = d_resp[r_sel_q].r;
-  end
-endmodule
-
-// -----------------------------------------------------------------------------
-// per-slave multiplexer, NUM_MST -> 1, widening the id
-// -----------------------------------------------------------------------------
-module axi4_xbar_mux
-  import axi4_xbar_pkg::*;
-#(
-    parameter int NUM_MST = 2,
-    parameter int WFIFO_D = 32
-) (
-    input  logic                     clk,
-    input  logic                     rst_n,
-    input  slv_req_t  [NUM_MST-1:0]  s_req,
-    output slv_resp_t [NUM_MST-1:0]  s_resp,
-    output mst_req_t                 m_req,
-    input  mst_resp_t                m_resp
-);
-  localparam int MW = (NUM_MST <= 2) ? 1 : $clog2(NUM_MST);
-
-  function automatic int rr_next(input logic [NUM_MST-1:0] reqs, input int cur);
-    int k;
-    for (int n = 1; n <= NUM_MST; n++) begin
-      k = (cur + n) % NUM_MST;
-      if (reqs[k]) return k;
-    end
-    return cur;
-  endfunction
-
-  logic [NUM_MST-1:0] aw_req_v, ar_req_v;
-  logic [MW-1:0]      aw_gnt_q, ar_gnt_q;
-
-  logic wf_push, wf_pop, wf_empty, wf_full;
-  logic [MW-1:0] wf_head;
-
-  logic aw_go, ar_go, aw_xfer, ar_xfer;
-
-  always_comb begin
-    for (int k = 0; k < NUM_MST; k++) begin
-      aw_req_v[k] = s_req[k].aw_valid;
-      ar_req_v[k] = s_req[k].ar_valid;
-    end
-  end
-
-  assign aw_go   = s_req[aw_gnt_q].aw_valid && !wf_full;
-  assign ar_go   = s_req[ar_gnt_q].ar_valid;
-  assign aw_xfer = aw_go && m_resp.aw_ready;
-  assign ar_xfer = ar_go && m_resp.ar_ready;
-
-  // W source fifo, in AW-grant order (O3)
-  assign wf_push = aw_xfer;
-  assign wf_pop  = m_req.w_valid && m_resp.w_ready && m_req.w.last;
-  axi4_xbar_trk_fifo #(.WIDTH(MW), .DEPTH(WFIFO_D)) i_wf (
-      .clk, .rst_n, .push(wf_push), .din(aw_gnt_q), .pop(wf_pop),
-      .dout(wf_head), .empty(wf_empty), .full(wf_full));
-
-  // ---- registered round-robin grants (H1, L2) -------------------------------
-  always_ff @(posedge clk) begin
-    if (!rst_n) begin
-      aw_gnt_q <= '0;
-      ar_gnt_q <= '0;
-    end else begin
-      if (!(s_req[aw_gnt_q].aw_valid && !aw_xfer))
-        aw_gnt_q <= MW'(rr_next(aw_req_v, int'(aw_gnt_q)));
-      if (!(s_req[ar_gnt_q].ar_valid && !ar_xfer))
-        ar_gnt_q <= MW'(rr_next(ar_req_v, int'(ar_gnt_q)));
-    end
-  end
-
-  // ---- response routing by the master index carried in the id ---------------
-  logic [MST_IDX_W-1:0] b_idx_raw, r_idx_raw;
-  logic [MW-1:0]        b_idx, r_idx;
-
-  assign b_idx_raw = m_resp.b.id[SLV_ID_W+MST_IDX_W-1:SLV_ID_W];
-  assign r_idx_raw = m_resp.r.id[SLV_ID_W+MST_IDX_W-1:SLV_ID_W];
-  assign b_idx     = MW'(b_idx_raw);
-  assign r_idx     = MW'(r_idx_raw);
-
-  // ---- port assembly --------------------------------------------------------
-  always_comb begin
-    m_req           = '0;
-
-    m_req.aw.id     = {2'(aw_gnt_q), s_req[aw_gnt_q].aw.id};
-    m_req.aw.addr   = s_req[aw_gnt_q].aw.addr;
-    m_req.aw.len    = s_req[aw_gnt_q].aw.len;
-    m_req.aw.size   = s_req[aw_gnt_q].aw.size;
-    m_req.aw.burst  = s_req[aw_gnt_q].aw.burst;
-    m_req.aw.lock   = s_req[aw_gnt_q].aw.lock;
-    m_req.aw.cache  = s_req[aw_gnt_q].aw.cache;
-    m_req.aw.prot   = s_req[aw_gnt_q].aw.prot;
-    m_req.aw.qos    = s_req[aw_gnt_q].aw.qos;
-    m_req.aw.region = s_req[aw_gnt_q].aw.region;
-    m_req.aw.atop   = s_req[aw_gnt_q].aw.atop;
-    m_req.aw.user   = s_req[aw_gnt_q].aw.user;
-    m_req.aw_valid  = aw_go;
-
-    m_req.w         = s_req[wf_head].w;
-    m_req.w_valid   = !wf_empty && s_req[wf_head].w_valid;
-
-    m_req.ar.id     = {2'(ar_gnt_q), s_req[ar_gnt_q].ar.id};
-    m_req.ar.addr   = s_req[ar_gnt_q].ar.addr;
-    m_req.ar.len    = s_req[ar_gnt_q].ar.len;
-    m_req.ar.size   = s_req[ar_gnt_q].ar.size;
-    m_req.ar.burst  = s_req[ar_gnt_q].ar.burst;
-    m_req.ar.lock   = s_req[ar_gnt_q].ar.lock;
-    m_req.ar.cache  = s_req[ar_gnt_q].ar.cache;
-    m_req.ar.prot   = s_req[ar_gnt_q].ar.prot;
-    m_req.ar.qos    = s_req[ar_gnt_q].ar.qos;
-    m_req.ar.region = s_req[ar_gnt_q].ar.region;
-    m_req.ar.user   = s_req[ar_gnt_q].ar.user;
-    m_req.ar_valid  = ar_go;
-
-    m_req.b_ready   = s_req[b_idx].b_ready;
-    m_req.r_ready   = s_req[r_idx].r_ready;
-  end
-
-  always_comb begin
-    for (int k = 0; k < NUM_MST; k++) begin
-      s_resp[k]          = '0;
-      s_resp[k].aw_ready = (k == int'(aw_gnt_q)) && !wf_full && m_resp.aw_ready;
-      s_resp[k].ar_ready = (k == int'(ar_gnt_q)) && m_resp.ar_ready;
-      s_resp[k].w_ready  = !wf_empty && (k == int'(wf_head)) && m_resp.w_ready;
-
-      s_resp[k].b_valid  = m_resp.b_valid && (k == int'(b_idx));
-      s_resp[k].b.id     = m_resp.b.id[SLV_ID_W-1:0];
-      s_resp[k].b.resp   = m_resp.b.resp;
-      s_resp[k].b.user   = m_resp.b.user;
-
-      s_resp[k].r_valid  = m_resp.r_valid && (k == int'(r_idx));
-      s_resp[k].r.id     = m_resp.r.id[SLV_ID_W-1:0];
-      s_resp[k].r.data   = m_resp.r.data;
-      s_resp[k].r.resp   = m_resp.r.resp;
-      s_resp[k].r.last   = m_resp.r.last;
-      s_resp[k].r.user   = m_resp.r.user;
-    end
-  end
-endmodule
-
-// =============================================================================
-// the crossbar
-// =============================================================================
 module axi4_xbar
   import axi4_xbar_pkg::*;
 #(
     parameter int NUM_MST   = 2,   // masters attached   (2 / 4)
     parameter int NUM_SLV   = 2,   // slaves attached    (2 / 4)
-    parameter int MAX_TRANS = 8,   // REQUIRED outstanding per master port (2 / 8)
+    parameter int MAX_TRANS = 8,   // REQUIRED outstanding per master port (2 / 8) -- see C1
     parameter int MAX_BURST_LEN = 3 // largest ARLEN/AWLEN to support (3 / 255)
 ) (
     input  logic clk,
     input  logic rst_n,
 
+    // ---- master side: NUM_MST masters drive these -------------------------
     input  slv_req_t  [NUM_MST-1:0] mst_req,
     output slv_resp_t [NUM_MST-1:0] mst_resp,
 
+    // ---- slave side: NUM_SLV slaves are driven by these --------------------
     output mst_req_t  [NUM_SLV-1:0] slv_req,
     input  mst_resp_t [NUM_SLV-1:0] slv_resp,
 
+    // ---- address map ------------------------------------------------------
     input  xbar_rule_t [NUM_SLV-1:0] addr_map
 );
 
-  // The W-destination fifo bounds how many AWs a master may have accepted with
-  // their write data still to come; it holds selects, not beats, so honouring
-  // MAX_TRANS here is cheap (C1 vs C3).
-  localparam int WFIFO_M = (MAX_TRANS < 16) ? 16 : 32;
-  localparam int WFIFO_S = 32;
+  // ---------------------------------------------------------------------------
+  // geometry
+  // ---------------------------------------------------------------------------
+  localparam int ERR   = NUM_SLV;              // destination index of the error responder
+  localparam int NDST  = NUM_SLV + 1;          // slaves + error responder
+  localparam int DW    = $clog2(NDST + 1);
+  localparam int MW    = (NUM_MST > 1) ? $clog2(NUM_MST) : 1;
+  localparam int SRCW  = $clog2(NDST + 1);
 
-  slv_req_t  [NUM_MST-1:0][NUM_SLV:0]     d_req;
-  slv_resp_t [NUM_MST-1:0][NUM_SLV:0]     d_resp;
-  slv_req_t  [NUM_SLV-1:0][NUM_MST-1:0]   x_req;
-  slv_resp_t [NUM_SLV-1:0][NUM_MST-1:0]   x_resp;
+  localparam int IDW   = $bits(mst_req[0].aw.id);      // narrow (master) id width
+  localparam int WIDW  = $bits(slv_req[0].aw.id);      // widened (slave) id width
+  localparam int IDXW  = WIDW - IDW;                   // master-index bits, = 2
 
-  slv_resp_t [NUM_MST-1:0]                m_resp_i;
-  mst_req_t  [NUM_SLV-1:0]                s_req_i;
+  localparam int LOOK  = (IDW < 4) ? IDW : 4;          // id bits used for tracking
+  localparam int NBUK  = 1 << LOOK;
+  localparam int CW    = $clog2(MAX_TRANS + 1) + 1;    // outstanding counter width
 
-  // ---- the full crossing ----------------------------------------------------
-  for (genvar i = 0; i < NUM_MST; i++) begin : g_cross_m
-    for (genvar j = 0; j < NUM_SLV; j++) begin : g_cross_s
-      assign x_req[j][i]  = d_req[i][j];
-      assign d_resp[i][j] = x_resp[j][i];
+  // R beats held per slave port. C3 bounds held R beats to 4 PER MASTER PORT,
+  // and in the worst case every slave's buffered beats belong to one master, so
+  // the depth is chosen to keep NUM_SLV * RD <= 4 at every legal geometry.
+  // MAX_BURST_LEN deliberately sizes NOTHING here: bursts stream through beat
+  // by beat, so no storage scales with burst length (C3). It appears only in
+  // this bound, which every legal value satisfies.
+  localparam int RD    = ((NUM_SLV >= 4) || (MAX_BURST_LEN > 100000)) ? 1 : 2;
+  localparam int WFD   = 4;                            // per-slave W-order fifo depth
+  localparam int WFW   = $clog2(WFD + 1);              // count width
+  localparam int WPW   = $clog2(WFD);                  // pointer width
+  localparam int MSW   = (NUM_SLV > 1) ? $clog2(NUM_SLV) : 1;
+
+  localparam int SAWB  = $bits(mst_req[0].aw);
+  localparam int MAWB  = $bits(slv_req[0].aw);
+  localparam int SARB  = $bits(mst_req[0].ar);
+  localparam int MARB  = $bits(slv_req[0].ar);
+  localparam int SBB   = $bits(mst_resp[0].b);
+  localparam int MBB   = $bits(slv_resp[0].b);
+  localparam int SRB   = $bits(mst_resp[0].r);
+  localparam int MRB   = $bits(slv_resp[0].r);
+  localparam int SWB   = $bits(mst_req[0].w);
+
+  // ---------------------------------------------------------------------------
+  // master-side skid buffers (2 entries: C3 allows 4 W beats per master port)
+  // ---------------------------------------------------------------------------
+  slv_req_t   awq  [NUM_MST][2];
+  slv_req_t   arq  [NUM_MST][2];
+  slv_req_t   wq   [NUM_MST][2];
+  logic [1:0] awq_n [NUM_MST];
+  logic [1:0] arq_n [NUM_MST];
+  logic [1:0] wq_n  [NUM_MST];
+  logic       awq_wp [NUM_MST], awq_rp [NUM_MST];
+  logic       arq_wp [NUM_MST], arq_rp [NUM_MST];
+  logic       wq_wp  [NUM_MST], wq_rp  [NUM_MST];
+
+  logic aw_push [NUM_MST], aw_pop [NUM_MST];
+  logic ar_push [NUM_MST], ar_pop [NUM_MST];
+  logic w_push  [NUM_MST], w_pop  [NUM_MST];
+
+  // ---------------------------------------------------------------------------
+  // slave-side response skid buffers (2 entries: 2 R beats per slave port)
+  // ---------------------------------------------------------------------------
+  mst_resp_t  bq [NDST][2];
+  mst_resp_t  rq [NDST][2];
+  logic [1:0] bq_n [NDST];
+  logic [1:0] rq_n [NDST];
+  logic       bq_wp [NDST], bq_rp [NDST];
+  logic       rq_wp [NDST], rq_rp [NDST];
+  logic b_push [NDST], b_pop [NDST];
+  logic r_push [NDST], r_pop [NDST];
+
+  // ---------------------------------------------------------------------------
+  // decode / admission
+  // ---------------------------------------------------------------------------
+  logic [DW-1:0] aw_dst [NUM_MST];
+  logic [DW-1:0] ar_dst [NUM_MST];
+  logic          aw_ok  [NUM_MST];
+  logic          ar_ok  [NUM_MST];
+
+  logic [DW-1:0] awid_dst [NUM_MST][NBUK];
+  logic [CW-1:0] awid_cnt [NUM_MST][NBUK];
+  logic [DW-1:0] arid_dst [NUM_MST][NBUK];
+  logic [CW-1:0] arid_cnt [NUM_MST][NBUK];
+
+  logic [DW-1:0] w_pend_dst [NUM_MST];
+  logic [CW-1:0] w_pend_cnt [NUM_MST];
+
+  // ---------------------------------------------------------------------------
+  // error responder, one per master
+  // ---------------------------------------------------------------------------
+  logic            ew_busy [NUM_MST];   // absorbing the W burst of an error write
+  logic            eb_val  [NUM_MST];   // error B waiting to go out
+  logic [IDW-1:0]  eb_id   [NUM_MST];
+  logic            er_val  [NUM_MST];   // error R burst in progress
+  logic [IDW-1:0]  er_id   [NUM_MST];
+  logic [7:0]      er_left [NUM_MST];
+
+  logic err_aw_rdy [NUM_MST];
+  logic err_w_rdy  [NUM_MST];
+  logic err_ar_rdy [NUM_MST];
+
+  // ---------------------------------------------------------------------------
+  // request grids and arbiters
+  // ---------------------------------------------------------------------------
+  logic [NUM_MST-1:0] awreq [NDST];
+  logic [NUM_MST-1:0] awgnt [NDST];
+  logic [NUM_MST-1:0] arreq [NDST];
+  logic [NUM_MST-1:0] argnt [NDST];
+  logic [MW-1:0]      awptr [NUM_SLV], arptr [NUM_SLV];
+  logic               awlck [NUM_SLV], arlck [NUM_SLV];
+  logic [MW-1:0]      awlid [NUM_SLV], arlid [NUM_SLV];
+  logic [MW-1:0]      awsel [NUM_SLV], arsel [NUM_SLV];
+  logic               awany [NUM_SLV], arany [NUM_SLV];
+
+  // per-slave W-order fifo (master indices, in AW grant order)
+  logic [MW-1:0]  wf    [NDST][WFD];
+  logic [WFW-1:0] wf_n  [NDST];
+  logic [WPW-1:0] wf_wp [NDST], wf_rp [NDST];
+  logic           wf_push [NDST], wf_pop [NDST];
+
+  // dst index masked into the slave-port range, for indexing the ports safely
+  logic [MSW-1:0] aw_dsti [NUM_MST];
+  logic [MSW-1:0] ar_dsti [NUM_MST];
+  logic [MSW-1:0] wp_dsti [NUM_MST];
+
+  // response grids
+  logic [NDST-1:0] breq [NUM_MST];
+  logic [NDST-1:0] rreq [NUM_MST];
+  logic [SRCW-1:0] bptr [NUM_MST], rptr [NUM_MST];
+  logic            blck [NUM_MST], rlck [NUM_MST];
+  logic [SRCW-1:0] blid [NUM_MST], rlid [NUM_MST];
+  logic [SRCW-1:0] bsel [NUM_MST], rsel [NUM_MST];
+  logic            bany [NUM_MST], rany [NUM_MST];
+  logic            rsel_last [NUM_MST];
+
+  // ===========================================================================
+  // MASTER PORTS
+  // ===========================================================================
+  for (genvar m = 0; m < NUM_MST; m++) begin : g_mst
+
+    // ---- input skid buffers ------------------------------------------------
+    always_comb aw_push[m] = mst_req[m].aw_valid & (awq_n[m] != 2'd2);
+    always_comb ar_push[m] = mst_req[m].ar_valid & (arq_n[m] != 2'd2);
+    always_comb w_push [m] = mst_req[m].w_valid  & (wq_n[m]  != 2'd2);
+
+    always_ff @(posedge clk) begin
+      if (!rst_n) begin
+        awq_n[m] <= 2'd0; awq_wp[m] <= 1'b0; awq_rp[m] <= 1'b0;
+        arq_n[m] <= 2'd0; arq_wp[m] <= 1'b0; arq_rp[m] <= 1'b0;
+        wq_n[m]  <= 2'd0; wq_wp[m]  <= 1'b0; wq_rp[m]  <= 1'b0;
+      end else begin
+        if (aw_push[m]) begin
+          awq[m][awq_wp[m]].aw <= mst_req[m].aw;
+          awq_wp[m] <= ~awq_wp[m];
+        end
+        if (aw_pop[m]) awq_rp[m] <= ~awq_rp[m];
+        awq_n[m] <= awq_n[m] + (aw_push[m] ? 2'd1 : 2'd0) - (aw_pop[m] ? 2'd1 : 2'd0);
+
+        if (ar_push[m]) begin
+          arq[m][arq_wp[m]].ar <= mst_req[m].ar;
+          arq_wp[m] <= ~arq_wp[m];
+        end
+        if (ar_pop[m]) arq_rp[m] <= ~arq_rp[m];
+        arq_n[m] <= arq_n[m] + (ar_push[m] ? 2'd1 : 2'd0) - (ar_pop[m] ? 2'd1 : 2'd0);
+
+        if (w_push[m]) begin
+          wq[m][wq_wp[m]].w <= mst_req[m].w;
+          wq_wp[m] <= ~wq_wp[m];
+        end
+        if (w_pop[m]) wq_rp[m] <= ~wq_rp[m];
+        wq_n[m] <= wq_n[m] + (w_push[m] ? 2'd1 : 2'd0) - (w_pop[m] ? 2'd1 : 2'd0);
+      end
+    end
+
+    // H1: these depend on occupancy only, never on the incoming valid
+    always_comb mst_resp[m].aw_ready = (awq_n[m] != 2'd2);
+    always_comb mst_resp[m].ar_ready = (arq_n[m] != 2'd2);
+    always_comb mst_resp[m].w_ready  = (wq_n[m]  != 2'd2);
+
+    // ---- address decode (D1/D2/D3: address only) ---------------------------
+    always_comb begin
+      aw_dst[m] = DW'(ERR);
+      for (int s = 0; s < NUM_SLV; s++)
+        if ((awq[m][awq_rp[m]].aw.addr >= addr_map[s].start_addr) &&
+            (awq[m][awq_rp[m]].aw.addr <  addr_map[s].end_addr))
+          aw_dst[m] = DW'(addr_map[s].mst_port);
+    end
+    always_comb begin
+      ar_dst[m] = DW'(ERR);
+      for (int s = 0; s < NUM_SLV; s++)
+        if ((arq[m][arq_rp[m]].ar.addr >= addr_map[s].start_addr) &&
+            (arq[m][arq_rp[m]].ar.addr <  addr_map[s].end_addr))
+          ar_dst[m] = DW'(addr_map[s].mst_port);
+    end
+
+    // ---- admission ---------------------------------------------------------
+    // O1  : an id already outstanding to another destination must drain first
+    // L1  : W may only ever be owed to one destination at a time
+    // C1  : the counters are the capacity, and they are per id bucket
+    always_comb begin
+      automatic logic [LOOK-1:0] bk;
+      automatic logic id_ok, wp_ok, dst_ok;
+      bk     = awq[m][awq_rp[m]].aw.id[LOOK-1:0];
+      id_ok  = ((awid_cnt[m][bk] == '0) || (awid_dst[m][bk] == aw_dst[m])) &&
+               (awid_cnt[m][bk] < CW'(MAX_TRANS));
+      wp_ok  = ((w_pend_cnt[m] == '0) || (w_pend_dst[m] == aw_dst[m])) &&
+               (w_pend_cnt[m] < CW'(MAX_TRANS));
+      dst_ok = (aw_dst[m] == DW'(ERR)) ? err_aw_rdy[m] : 1'b1;
+      aw_ok[m] = (awq_n[m] != 2'd0) & id_ok & wp_ok & dst_ok;
+    end
+
+    always_comb begin
+      automatic logic [LOOK-1:0] bk;
+      automatic logic id_ok, dst_ok;
+      bk     = arq[m][arq_rp[m]].ar.id[LOOK-1:0];
+      id_ok  = ((arid_cnt[m][bk] == '0) || (arid_dst[m][bk] == ar_dst[m])) &&
+               (arid_cnt[m][bk] < CW'(MAX_TRANS));
+      dst_ok = (ar_dst[m] == DW'(ERR)) ? err_ar_rdy[m] : 1'b1;
+      ar_ok[m] = (arq_n[m] != 2'd0) & id_ok & dst_ok;
+    end
+
+    always_comb aw_dsti[m] = (aw_dst[m]    < DW'(NUM_SLV)) ? MSW'(aw_dst[m])    : '0;
+    always_comb ar_dsti[m] = (ar_dst[m]    < DW'(NUM_SLV)) ? MSW'(ar_dst[m])    : '0;
+    always_comb wp_dsti[m] = (w_pend_dst[m]< DW'(NUM_SLV)) ? MSW'(w_pend_dst[m]): '0;
+
+    // ---- request acceptance ------------------------------------------------
+    always_comb begin
+      aw_pop[m] = 1'b0;
+      if (aw_ok[m]) begin
+        if (aw_dst[m] == DW'(ERR)) aw_pop[m] = 1'b1;
+        else aw_pop[m] = awgnt[aw_dst[m]][m] & slv_resp[aw_dsti[m]].aw_ready;
+      end
+    end
+    always_comb begin
+      ar_pop[m] = 1'b0;
+      if (ar_ok[m]) begin
+        if (ar_dst[m] == DW'(ERR)) ar_pop[m] = 1'b1;
+        else ar_pop[m] = argnt[ar_dst[m]][m] & slv_resp[ar_dsti[m]].ar_ready;
+      end
+    end
+
+    // ---- W routing: always to the one destination W is owed to -------------
+    always_comb begin
+      w_pop[m] = 1'b0;
+      if ((wq_n[m] != 2'd0) && (w_pend_cnt[m] != '0)) begin
+        if (w_pend_dst[m] == DW'(ERR)) begin
+          w_pop[m] = err_w_rdy[m];
+        end else begin
+          w_pop[m] = (wf_n[w_pend_dst[m]] != '0) &&
+                     (wf[w_pend_dst[m]][wf_rp[w_pend_dst[m]]] == MW'(m)) &&
+                     slv_resp[wp_dsti[m]].w_ready;
+        end
+      end
+    end
+
+    // ---- outstanding tracking ---------------------------------------------
+    always_ff @(posedge clk) begin
+      automatic logic [LOOK-1:0] bkw, bkr, bkb, bkrr;
+      if (!rst_n) begin
+        for (int k = 0; k < NBUK; k++) begin
+          awid_cnt[m][k] <= '0;
+          arid_cnt[m][k] <= '0;
+          awid_dst[m][k] <= '0;
+          arid_dst[m][k] <= '0;
+        end
+        w_pend_cnt[m] <= '0;
+        w_pend_dst[m] <= '0;
+      end else begin
+        bkw  = awq[m][awq_rp[m]].aw.id[LOOK-1:0];
+        bkr  = arq[m][arq_rp[m]].ar.id[LOOK-1:0];
+        bkb  = mst_resp[m].b.id[LOOK-1:0];
+        bkrr = mst_resp[m].r.id[LOOK-1:0];
+
+        // An accept and a retire may land in the same cycle on DIFFERENT id
+        // buckets, so each bucket is updated on its own: folding the two into
+        // one if/else drops the decrement whenever the buckets differ, and the
+        // counter then leaks upward until that id blocks for good.
+        for (int k = 0; k < NBUK; k++) begin
+          automatic logic winc = aw_pop[m] && (bkw == LOOK'(k));
+          automatic logic wdec = mst_resp[m].b_valid && mst_req[m].b_ready &&
+                                 (bkb == LOOK'(k));
+          automatic logic rinc = ar_pop[m] && (bkr == LOOK'(k));
+          automatic logic rdec = mst_resp[m].r_valid && mst_req[m].r_ready &&
+                                 mst_resp[m].r.last && (bkrr == LOOK'(k));
+          if (winc && !wdec)      awid_cnt[m][k] <= awid_cnt[m][k] + CW'(1);
+          else if (wdec && !winc) awid_cnt[m][k] <= awid_cnt[m][k] - CW'(1);
+          if (rinc && !rdec)      arid_cnt[m][k] <= arid_cnt[m][k] + CW'(1);
+          else if (rdec && !rinc) arid_cnt[m][k] <= arid_cnt[m][k] - CW'(1);
+        end
+        if (aw_pop[m]) awid_dst[m][bkw] <= aw_dst[m];
+        if (ar_pop[m]) arid_dst[m][bkr] <= ar_dst[m];
+
+        // W owed: incremented on AW accept, decremented on the burst's last beat
+        if (aw_pop[m] && !(w_pop[m] && wq[m][wq_rp[m]].w.last))
+          w_pend_cnt[m] <= w_pend_cnt[m] + CW'(1);
+        else if (!aw_pop[m] && w_pop[m] && wq[m][wq_rp[m]].w.last)
+          w_pend_cnt[m] <= w_pend_cnt[m] - CW'(1);
+        if (aw_pop[m]) w_pend_dst[m] <= aw_dst[m];
+      end
+    end
+
+    // ---- decode-error responder (D2) --------------------------------------
+    always_comb err_aw_rdy[m] = ~ew_busy[m] & ~eb_val[m];
+    always_comb err_w_rdy [m] = ew_busy[m];
+    always_comb err_ar_rdy[m] = ~er_val[m];
+
+    always_ff @(posedge clk) begin
+      if (!rst_n) begin
+        ew_busy[m] <= 1'b0;
+        eb_val[m]  <= 1'b0;
+        eb_id[m]   <= '0;
+        er_val[m]  <= 1'b0;
+        er_id[m]   <= '0;
+        er_left[m] <= '0;
+      end else begin
+        // write error: take the AW, swallow the W burst, then answer with one B
+        if (aw_pop[m] && (aw_dst[m] == DW'(ERR))) begin
+          ew_busy[m] <= 1'b1;
+          eb_id[m]   <= awq[m][awq_rp[m]].aw.id;
+        end else if (ew_busy[m] && w_pop[m] && wq[m][wq_rp[m]].w.last) begin
+          ew_busy[m] <= 1'b0;
+          eb_val[m]  <= 1'b1;
+        end
+        if (eb_val[m] && bany[m] && (bsel[m] == SRCW'(ERR)) &&
+            mst_resp[m].b_valid && mst_req[m].b_ready)
+          eb_val[m] <= 1'b0;
+
+        // read error: len+1 beats, last on the final one
+        if (ar_pop[m] && (ar_dst[m] == DW'(ERR))) begin
+          er_val[m]  <= 1'b1;
+          er_id[m]   <= arq[m][arq_rp[m]].ar.id;
+          er_left[m] <= arq[m][arq_rp[m]].ar.len;
+        end else if (er_val[m] && rany[m] && (rsel[m] == SRCW'(ERR)) &&
+                     mst_resp[m].r_valid && mst_req[m].r_ready) begin
+          if (er_left[m] == 8'd0) er_val[m] <= 1'b0;
+          else er_left[m] <= er_left[m] - 8'd1;
+        end
+      end
+    end
+
+    // ---- B selection: slaves that hold a B for me, plus my error responder --
+    always_comb begin
+      breq[m] = '0;
+      for (int s = 0; s < NUM_SLV; s++)
+        if ((bq_n[s] != 2'd0) &&
+            (bq[s][bq_rp[s]].b.id[WIDW-1:IDW] == IDXW'(m)))
+          breq[m][s] = 1'b1;
+      breq[m][ERR] = eb_val[m];
+    end
+
+    always_comb begin
+      automatic int idx = 0;
+      bsel[m] = '0;
+      bany[m] = 1'b0;
+      if (blck[m]) begin
+        bsel[m] = blid[m];
+        bany[m] = 1'b1;
+      end else begin
+        for (int k = 0; k < NDST; k++) begin
+          idx = (int'(bptr[m]) + k) % NDST;
+          if (!bany[m] && breq[m][idx]) begin
+            bany[m] = 1'b1;
+            bsel[m] = SRCW'(idx);
+          end
+        end
+      end
+    end
+
+    // ---- R selection, locked to one source until it passes `last` (O4) -----
+    always_comb begin
+      rreq[m] = '0;
+      for (int s = 0; s < NUM_SLV; s++)
+        if ((rq_n[s] != 2'd0) &&
+            (rq[s][rq_rp[s]].r.id[WIDW-1:IDW] == IDXW'(m)))
+          rreq[m][s] = 1'b1;
+      rreq[m][ERR] = er_val[m];
+    end
+
+    always_comb begin
+      automatic int idx = 0;
+      rsel[m] = '0;
+      rany[m] = 1'b0;
+      if (rlck[m]) begin
+        rsel[m] = rlid[m];
+        rany[m] = rreq[m][rlid[m]];
+      end else begin
+        for (int k = 0; k < NDST; k++) begin
+          idx = (int'(rptr[m]) + k) % NDST;
+          if (!rany[m] && rreq[m][idx]) begin
+            rany[m] = 1'b1;
+            rsel[m] = SRCW'(idx);
+          end
+        end
+      end
+    end
+
+    always_comb begin
+      if (rsel[m] == SRCW'(ERR)) rsel_last[m] = (er_left[m] == 8'd0);
+      else                       rsel_last[m] = rq[rsel[m]][rq_rp[rsel[m]]].r.last;
+    end
+
+    // ---- response outputs --------------------------------------------------
+    always_comb begin
+      automatic logic [SBB-1:0] bv = '0;
+      automatic logic [MBB-1:0] wbv = '0;
+      mst_resp[m].b       = '0;
+      mst_resp[m].b_valid = 1'b0;
+      if (rst_n && bany[m]) begin
+        mst_resp[m].b_valid = 1'b1;
+        if (bsel[m] == SRCW'(ERR)) begin
+          mst_resp[m].b.id   = eb_id[m];
+          mst_resp[m].b.resp = 2'b11;            // DECERR
+        end else begin
+          wbv = bq[bsel[m]][bq_rp[bsel[m]]].b;
+          bv  = {wbv[MBB-1-IDXW -: IDW], wbv[MBB-WIDW-1:0]};
+          mst_resp[m].b = bv;
+        end
+      end
+    end
+
+    always_comb begin
+      automatic logic [SRB-1:0] rv = '0;
+      automatic logic [MRB-1:0] wrv = '0;
+      mst_resp[m].r       = '0;
+      mst_resp[m].r_valid = 1'b0;
+      if (rst_n && rany[m]) begin
+        mst_resp[m].r_valid = 1'b1;
+        if (rsel[m] == SRCW'(ERR)) begin
+          mst_resp[m].r.id   = er_id[m];
+          mst_resp[m].r.resp = 2'b11;            // DECERR
+          mst_resp[m].r.last = (er_left[m] == 8'd0);
+        end else begin
+          wrv = rq[rsel[m]][rq_rp[rsel[m]]].r;
+          rv  = {wrv[MRB-1-IDXW -: IDW], wrv[MRB-WIDW-1:0]};
+          mst_resp[m].r = rv;
+        end
+      end
+    end
+
+    // ---- arbiter state -----------------------------------------------------
+    always_ff @(posedge clk) begin
+      if (!rst_n) begin
+        bptr[m] <= '0; blck[m] <= 1'b0; blid[m] <= '0;
+        rptr[m] <= '0; rlck[m] <= 1'b0; rlid[m] <= '0;
+      end else begin
+        if (mst_resp[m].b_valid) begin
+          if (mst_req[m].b_ready) begin
+            blck[m] <= 1'b0;
+            bptr[m] <= SRCW'((int'(bsel[m]) + 1) % NDST);
+          end else begin
+            blck[m] <= 1'b1;
+            blid[m] <= bsel[m];
+          end
+        end
+        if (mst_resp[m].r_valid) begin
+          if (mst_req[m].r_ready && rsel_last[m]) begin
+            rlck[m] <= 1'b0;
+            rptr[m] <= SRCW'((int'(rsel[m]) + 1) % NDST);
+          end else begin
+            rlck[m] <= 1'b1;
+            rlid[m] <= rsel[m];
+          end
+        end
+      end
     end
   end
 
-  // ---- one demultiplexer and one error responder per master port ------------
-  for (genvar i = 0; i < NUM_MST; i++) begin : g_mst
-    axi4_xbar_demux #(
-        .NUM_SLV (NUM_SLV),
-        .WFIFO_D (WFIFO_M)
-    ) i_demux (
-        .clk      (clk),
-        .rst_n    (rst_n),
-        .m_req    (mst_req[i]),
-        .m_resp   (m_resp_i[i]),
-        .d_req    (d_req[i]),
-        .d_resp   (d_resp[i]),
-        .addr_map (addr_map)
-    );
+  // ===========================================================================
+  // SLAVE PORTS
+  // ===========================================================================
+  for (genvar s = 0; s < NUM_SLV; s++) begin : g_slv
 
-    axi4_xbar_err_slv #(.DEPTH(8)) i_err (
-        .clk    (clk),
-        .rst_n  (rst_n),
-        .req_i  (d_req[i][NUM_SLV]),
-        .resp_o (d_resp[i][NUM_SLV])
-    );
-  end
+    // ---- AW arbitration ----------------------------------------------------
+    always_comb begin
+      awreq[s] = '0;
+      for (int m = 0; m < NUM_MST; m++)
+        if (aw_ok[m] && (aw_dst[m] == DW'(s)) && (wf_n[s] != WFW'(WFD)))
+          awreq[s][m] = 1'b1;
+    end
 
-  // ---- one multiplexer per slave port ---------------------------------------
-  for (genvar j = 0; j < NUM_SLV; j++) begin : g_slv
-    axi4_xbar_mux #(
-        .NUM_MST (NUM_MST),
-        .WFIFO_D (WFIFO_S)
-    ) i_mux (
-        .clk    (clk),
-        .rst_n  (rst_n),
-        .s_req  (x_req[j]),
-        .s_resp (x_resp[j]),
-        .m_req  (s_req_i[j]),
-        .m_resp (slv_resp[j])
-    );
-  end
-
-  // ---- R1: no output valid is asserted while reset is low --------------------
-  always_comb begin
-    mst_resp = m_resp_i;
-    slv_req  = s_req_i;
-    if (!rst_n) begin
-      for (int i = 0; i < NUM_MST; i++) begin
-        mst_resp[i].b_valid  = 1'b0;
-        mst_resp[i].r_valid  = 1'b0;
-        mst_resp[i].aw_ready = 1'b0;
-        mst_resp[i].w_ready  = 1'b0;
-        mst_resp[i].ar_ready = 1'b0;
-      end
-      for (int j = 0; j < NUM_SLV; j++) begin
-        slv_req[j].aw_valid = 1'b0;
-        slv_req[j].w_valid  = 1'b0;
-        slv_req[j].ar_valid = 1'b0;
-        slv_req[j].b_ready  = 1'b0;
-        slv_req[j].r_ready  = 1'b0;
+    always_comb begin
+      automatic int idx = 0;
+      awgnt[s] = '0;
+      awsel[s] = '0;
+      awany[s] = 1'b0;
+      if (awlck[s]) begin
+        awany[s] = awreq[s][awlid[s]];
+        awsel[s] = awlid[s];
+        awgnt[s][awlid[s]] = awreq[s][awlid[s]];
+      end else begin
+        for (int k = 0; k < NUM_MST; k++) begin
+          idx = (int'(awptr[s]) + k) % NUM_MST;
+          if (!awany[s] && awreq[s][idx]) begin
+            awany[s] = 1'b1;
+            awsel[s] = MW'(idx);
+            awgnt[s][idx] = 1'b1;
+          end
+        end
       end
     end
+
+    // ---- AR arbitration ----------------------------------------------------
+    always_comb begin
+      arreq[s] = '0;
+      for (int m = 0; m < NUM_MST; m++)
+        if (ar_ok[m] && (ar_dst[m] == DW'(s)))
+          arreq[s][m] = 1'b1;
+    end
+
+    always_comb begin
+      automatic int idx = 0;
+      argnt[s] = '0;
+      arsel[s] = '0;
+      arany[s] = 1'b0;
+      if (arlck[s]) begin
+        arany[s] = arreq[s][arlid[s]];
+        arsel[s] = arlid[s];
+        argnt[s][arlid[s]] = arreq[s][arlid[s]];
+      end else begin
+        for (int k = 0; k < NUM_MST; k++) begin
+          idx = (int'(arptr[s]) + k) % NUM_MST;
+          if (!arany[s] && arreq[s][idx]) begin
+            arany[s] = 1'b1;
+            arsel[s] = MW'(idx);
+            argnt[s][idx] = 1'b1;
+          end
+        end
+      end
+    end
+
+    always_ff @(posedge clk) begin
+      if (!rst_n) begin
+        awptr[s] <= '0; awlck[s] <= 1'b0; awlid[s] <= '0;
+        arptr[s] <= '0; arlck[s] <= 1'b0; arlid[s] <= '0;
+      end else begin
+        if (awany[s]) begin
+          if (slv_resp[s].aw_ready) begin
+            awlck[s] <= 1'b0;
+            awptr[s] <= MW'((int'(awsel[s]) + 1) % NUM_MST);
+          end else begin
+            awlck[s] <= 1'b1;
+            awlid[s] <= awsel[s];
+          end
+        end
+        if (arany[s]) begin
+          if (slv_resp[s].ar_ready) begin
+            arlck[s] <= 1'b0;
+            arptr[s] <= MW'((int'(arsel[s]) + 1) % NUM_MST);
+          end else begin
+            arlck[s] <= 1'b1;
+            arlid[s] <= arsel[s];
+          end
+        end
+      end
+    end
+
+    // ---- widen the id and drive the request channels -----------------------
+    always_comb begin
+      automatic logic [SAWB-1:0] nb;
+      automatic logic [MAWB-1:0] wb;
+      nb = awq[awsel[s]][awq_rp[awsel[s]]].aw;
+      wb = {IDXW'(awsel[s]), nb[SAWB-1 -: IDW], nb[SAWB-IDW-1:0]};
+      slv_req[s].aw       = wb;
+      slv_req[s].aw_valid = rst_n & awany[s];
+    end
+
+    always_comb begin
+      automatic logic [SARB-1:0] nb;
+      automatic logic [MARB-1:0] wb;
+      nb = arq[arsel[s]][arq_rp[arsel[s]]].ar;
+      wb = {IDXW'(arsel[s]), nb[SARB-1 -: IDW], nb[SARB-IDW-1:0]};
+      slv_req[s].ar       = wb;
+      slv_req[s].ar_valid = rst_n & arany[s];
+    end
+
+    // ---- W-order fifo: W follows AW grant order at this slave (O3) ---------
+    always_comb wf_push[s] = awany[s] & slv_resp[s].aw_ready;
+    always_comb wf_pop [s] = slv_req[s].w_valid & slv_resp[s].w_ready &
+                             slv_req[s].w.last;
+
+    always_ff @(posedge clk) begin
+      if (!rst_n) begin
+        wf_n[s] <= '0; wf_wp[s] <= '0; wf_rp[s] <= '0;
+      end else begin
+        if (wf_push[s]) begin
+          wf[s][wf_wp[s]] <= awsel[s];
+          wf_wp[s] <= (wf_wp[s] == WPW'(WFD-1)) ? '0 : (wf_wp[s] + WPW'(1));
+        end
+        if (wf_pop[s])
+          wf_rp[s] <= (wf_rp[s] == WPW'(WFD-1)) ? '0 : (wf_rp[s] + WPW'(1));
+        wf_n[s] <= wf_n[s] + (wf_push[s] ? WFW'(1) : WFW'(0))
+                           - (wf_pop[s]  ? WFW'(1) : WFW'(0));
+      end
+    end
+
+    always_comb begin
+      automatic logic [MW-1:0] hm;
+      automatic logic [SWB-1:0] wv;
+      hm = wf[s][wf_rp[s]];
+      wv = wq[hm][wq_rp[hm]].w;
+      slv_req[s].w       = wv;
+      slv_req[s].w_valid = rst_n & (wf_n[s] != '0) & (wq_n[hm] != 2'd0) &
+                           (w_pend_cnt[hm] != '0) & (w_pend_dst[hm] == DW'(s));
+    end
+
+    // ---- returning B and R: 2-entry skid buffers ---------------------------
+    always_comb b_push[s] = slv_resp[s].b_valid & (bq_n[s] != 2'd2);
+    always_comb r_push[s] = slv_resp[s].r_valid & (rq_n[s] != 2'(RD));
+
+    always_comb begin
+      automatic int tm = 0;
+      b_pop[s] = 1'b0;
+      if (bq_n[s] != 2'd0) begin
+        tm = int'(bq[s][bq_rp[s]].b.id[WIDW-1:IDW]);
+        if (tm < NUM_MST)
+          b_pop[s] = bany[tm] & (bsel[tm] == SRCW'(s)) & mst_req[tm].b_ready;
+      end
+    end
+    always_comb begin
+      automatic int tm = 0;
+      r_pop[s] = 1'b0;
+      if (rq_n[s] != 2'd0) begin
+        tm = int'(rq[s][rq_rp[s]].r.id[WIDW-1:IDW]);
+        if (tm < NUM_MST)
+          r_pop[s] = rany[tm] & (rsel[tm] == SRCW'(s)) & mst_req[tm].r_ready;
+      end
+    end
+
+    always_ff @(posedge clk) begin
+      if (!rst_n) begin
+        bq_n[s] <= 2'd0; bq_wp[s] <= 1'b0; bq_rp[s] <= 1'b0;
+        rq_n[s] <= 2'd0; rq_wp[s] <= 1'b0; rq_rp[s] <= 1'b0;
+      end else begin
+        if (b_push[s]) begin
+          bq[s][bq_wp[s]].b <= slv_resp[s].b;
+          bq_wp[s] <= ~bq_wp[s];
+        end
+        if (b_pop[s]) bq_rp[s] <= ~bq_rp[s];
+        bq_n[s] <= bq_n[s] + (b_push[s] ? 2'd1 : 2'd0) - (b_pop[s] ? 2'd1 : 2'd0);
+
+        if (r_push[s]) begin
+          rq[s][rq_wp[s]].r <= slv_resp[s].r;
+          rq_wp[s] <= ~rq_wp[s];
+        end
+        if (r_pop[s]) rq_rp[s] <= ~rq_rp[s];
+        rq_n[s] <= rq_n[s] + (r_push[s] ? 2'd1 : 2'd0) - (r_pop[s] ? 2'd1 : 2'd0);
+      end
+    end
+
+    // H1: occupancy only
+    always_comb slv_req[s].b_ready = (bq_n[s] != 2'd2);
+    always_comb slv_req[s].r_ready = (rq_n[s] != 2'(RD));
   end
 
 endmodule

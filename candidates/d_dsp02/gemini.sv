@@ -1,5 +1,5 @@
 // =============================================================================
-// fp32_fma_ii1  --  IMPLEMENTATION
+// fp32_fma_ii1
 // =============================================================================
 
 `timescale 1ns/1ps
@@ -11,10 +11,10 @@ module fp32_fma_ii1 (
     // ---- operand input ------------------------------------------------------
     input  logic        in_valid,
     output logic        in_ready,
-    input  logic [31:0] a,          // IEEE-754 binary32
+    input  logic [31:0] a,
     input  logic [31:0] b,
     input  logic [31:0] c,
-    input  logic [2:0]  rnd_mode,   // 0 RNE, 1 RTZ, 2 RDN, 3 RUP, 4 RMM
+    input  logic [2:0]  rnd_mode,
 
     // ---- result output ------------------------------------------------------
     output logic        out_valid,
@@ -26,345 +26,327 @@ module fp32_fma_ii1 (
     output logic        flag_inexact
 );
 
-    // -------------------------------------------------------------------------
-    // Helper Functions
-    // -------------------------------------------------------------------------
-    function automatic logic [4:0] lzcnt24(input logic [23:0] val);
-        for (int i = 23; i >= 0; i--) begin
-            if (val[i]) return 5'(23 - i);
-        end
-        return 5'd24;
-    endfunction
+    // =========================================================================
+    // Pipeline Control
+    // =========================================================================
+    logic v1, v2, v3;
+    logic advance_1, advance_2, advance_3;
 
-    function automatic logic [6:0] lzcnt77(input logic [76:0] val);
-        for (int i = 76; i >= 0; i--) begin
-            if (val[i]) return 7'(76 - i);
-        end
-        return 7'd77;
-    endfunction
+    assign advance_3 = out_ready || !v3;
+    assign advance_2 = advance_3 || !v2;
+    assign advance_1 = advance_2 || !v1;
 
-    // -------------------------------------------------------------------------
-    // Pipeline Control (3 Stages, II=1)
-    // -------------------------------------------------------------------------
-    logic valid_r1, valid_r2, valid_r3;
-    logic ready_r1, ready_r2;
-
-    assign in_ready = !valid_r1 || ready_r1;
-    assign ready_r1 = !valid_r2 || ready_r2;
-    assign ready_r2 = !valid_r3 || out_ready;
+    assign in_ready  = advance_1;
+    assign out_valid = v3;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            valid_r1 <= 0;
-            valid_r2 <= 0;
-            valid_r3 <= 0;
+            v1 <= 1'b0;
+            v2 <= 1'b0;
+            v3 <= 1'b0;
         end else begin
-            if (in_ready) valid_r1 <= in_valid;
-            if (ready_r1) valid_r2 <= valid_r1;
-            if (ready_r2) valid_r3 <= valid_r2;
+            if (advance_1) v1 <= in_valid;
+            if (advance_2) v2 <= v1;
+            if (advance_3) v3 <= v2;
         end
     end
 
-    wire en_r1 = in_ready && in_valid;
-    wire en_r2 = ready_r1 && valid_r1;
-    wire en_r3 = ready_r2 && valid_r2;
+    // =========================================================================
+    // Stage 1: Decode, Multiply, Align
+    // =========================================================================
+    logic a_sign, b_sign, c_sign;
+    logic [7:0] a_exp_raw, b_exp_raw, c_exp_raw;
+    logic [22:0] a_frac, b_frac, c_frac;
 
-    assign out_valid = valid_r3;
+    assign {a_sign, a_exp_raw, a_frac} = a;
+    assign {b_sign, b_exp_raw, b_frac} = b;
+    assign {c_sign, c_exp_raw, c_frac} = c;
 
-    // -------------------------------------------------------------------------
-    // STAGE 1: Unpack, Multiply, Align
-    // -------------------------------------------------------------------------
-    logic [74:0] r1_P_shift, r1_C_shift;
-    logic        r1_P_sticky, r1_C_sticky;
-    logic signed [12:0] r1_E_max;
-    logic        r1_S_P, r1_S_C;
-    logic        r1_is_invalid, r1_is_nan_res, r1_is_inf_res, r1_inf_sign;
-    logic [2:0]  r1_rnd_mode;
-    logic        r1_P_is_zero, r1_C_is_zero;
+    logic a_is_zero, a_is_sub, a_is_inf, a_is_nan, a_is_snan;
+    assign a_is_zero = (a_exp_raw == 8'd0) && (a_frac == 23'd0);
+    assign a_is_sub  = (a_exp_raw == 8'd0) && (a_frac != 23'd0);
+    assign a_is_inf  = (a_exp_raw == 8'd255) && (a_frac == 23'd0);
+    assign a_is_nan  = (a_exp_raw == 8'd255) && (a_frac != 23'd0);
+    assign a_is_snan = a_is_nan && (a_frac[22] == 1'b0);
+
+    logic b_is_zero, b_is_sub, b_is_inf, b_is_nan, b_is_snan;
+    assign b_is_zero = (b_exp_raw == 8'd0) && (b_frac == 23'd0);
+    assign b_is_sub  = (b_exp_raw == 8'd0) && (b_frac != 23'd0);
+    assign b_is_inf  = (b_exp_raw == 8'd255) && (b_frac == 23'd0);
+    assign b_is_nan  = (b_exp_raw == 8'd255) && (b_frac != 23'd0);
+    assign b_is_snan = b_is_nan && (b_frac[22] == 1'b0);
+
+    logic c_is_zero, c_is_sub, c_is_inf, c_is_nan, c_is_snan;
+    assign c_is_zero = (c_exp_raw == 8'd0) && (c_frac == 23'd0);
+    assign c_is_sub  = (c_exp_raw == 8'd0) && (c_frac != 23'd0);
+    assign c_is_inf  = (c_exp_raw == 8'd255) && (c_frac == 23'd0);
+    assign c_is_nan  = (c_exp_raw == 8'd255) && (c_frac != 23'd0);
+    assign c_is_snan = c_is_nan && (c_frac[22] == 1'b0);
+
+    logic p_sign;
+    assign p_sign = a_sign ^ b_sign;
+
+    logic [23:0] a_man, b_man, c_man;
+    assign a_man = a_is_zero ? 24'd0 : (a_is_sub ? {1'b0, a_frac} : {1'b1, a_frac});
+    assign b_man = b_is_zero ? 24'd0 : (b_is_sub ? {1'b0, b_frac} : {1'b1, b_frac});
+    assign c_man = c_is_zero ? 24'd0 : (c_is_sub ? {1'b0, c_frac} : {1'b1, c_frac});
+
+    logic signed [9:0] a_exp, b_exp, c_exp;
+    assign a_exp = (a_is_zero || a_is_sub) ? -10'sd126 : ($signed({2'b0, a_exp_raw}) - 10'sd127);
+    assign b_exp = (b_is_zero || b_is_sub) ? -10'sd126 : ($signed({2'b0, b_exp_raw}) - 10'sd127);
+    assign c_exp = (c_is_zero || c_is_sub) ? -10'sd126 : ($signed({2'b0, c_exp_raw}) - 10'sd127);
+
+    logic signed [9:0] E_p, E_c;
+    assign E_p = a_exp + b_exp - 10'sd46;
+    assign E_c = c_exp - 10'sd23;
+
+    logic p_is_zero, p_is_inf;
+    assign p_is_zero = a_is_zero || b_is_zero;
+    assign p_is_inf  = (a_is_inf && !b_is_zero) || (b_is_inf && !a_is_zero);
+
+    logic is_invalid_d1, is_nan_d1, is_inf_d1, inf_sign_d1;
+    assign is_invalid_d1 = a_is_snan || b_is_snan || c_is_snan ||
+                           (a_is_inf && b_is_zero) || (a_is_zero && b_is_inf) ||
+                           (p_is_inf && c_is_inf && (p_sign != c_sign));
+    assign is_nan_d1 = a_is_nan || b_is_nan || c_is_nan || is_invalid_d1;
+    assign is_inf_d1 = p_is_inf || c_is_inf;
+    assign inf_sign_d1 = p_is_inf ? p_sign : c_sign;
+
+    logic signed [9:0] eff_weight_p, eff_weight_c, W_max_d1;
+    assign eff_weight_p = p_is_zero ? -10'sd300 : (E_p + 10'sd47);
+    assign eff_weight_c = c_is_zero ? -10'sd300 : (E_c + 10'sd23);
+    assign W_max_d1 = (eff_weight_p > eff_weight_c) ? eff_weight_p : eff_weight_c;
+
+    logic signed [10:0] W_max_11, eff_weight_p_11, eff_weight_c_11;
+    assign W_max_11 = W_max_d1;
+    assign eff_weight_p_11 = eff_weight_p;
+    assign eff_weight_c_11 = eff_weight_c;
+
+    logic signed [10:0] shift_p_raw, shift_c_raw;
+    assign shift_p_raw = W_max_11 - eff_weight_p_11;
+    assign shift_c_raw = W_max_11 - eff_weight_c_11;
+
+    logic [7:0] shift_p_capped, shift_c_capped;
+    assign shift_p_capped = (shift_p_raw > 11'sd81) ? 8'd81 : shift_p_raw[7:0];
+    assign shift_c_capped = (shift_c_raw > 11'sd81) ? 8'd81 : shift_c_raw[7:0];
+
+    logic [47:0] p_man_mult;
+    assign p_man_mult = a_man * b_man;
+
+    logic [79:0] p_val_wide, c_val_wide;
+    assign p_val_wide = {2'b0, p_man_mult, 30'b0};
+    assign c_val_wide = {2'b0, c_man, 54'b0};
+
+    logic [160:0] p_shifted_full, c_shifted_full;
+    assign p_shifted_full = {p_val_wide, 81'b0} >> shift_p_capped;
+    assign c_shifted_full = {c_val_wide, 81'b0} >> shift_c_capped;
+
+    logic [79:0] p_aligned, c_aligned;
+    logic p_sticky, c_sticky;
+    assign p_aligned = p_shifted_full[160:81];
+    assign p_sticky  = (p_shifted_full[80:0] != 161'd0);
+    assign c_aligned = c_shifted_full[160:81];
+    assign c_sticky  = (c_shifted_full[80:0] != 161'd0);
+
+    logic p_larger;
+    assign p_larger = (p_aligned > c_aligned) || ((p_aligned == c_aligned) && (p_sticky >= c_sticky));
+
+    logic [79:0] larger_val_d1, smaller_val_d1;
+    logic smaller_sticky_d1, final_sign_d1, eff_sub_d1;
+    assign larger_val_d1 = p_larger ? p_aligned : c_aligned;
+    assign smaller_val_d1 = p_larger ? c_aligned : p_aligned;
+    assign smaller_sticky_d1 = p_larger ? c_sticky : p_sticky;
+    assign final_sign_d1 = p_larger ? p_sign : c_sign;
+    assign eff_sub_d1 = (p_sign != c_sign);
+
+    // Stage 1 Registers
+    logic [79:0] larger_val_q1, smaller_val_q1;
+    logic smaller_sticky_q1, final_sign_q1, eff_sub_q1;
+    logic signed [9:0] W_max_q1;
+    logic is_nan_q1, is_inf_q1, is_invalid_q1, inf_sign_q1;
+    logic [2:0] rnd_mode_q1;
 
     always_ff @(posedge clk) begin
-        if (en_r1) begin
-            logic A_sign, B_sign, C_sign;
-            logic [7:0] A_exp_field, B_exp_field, C_exp_field;
-            logic [22:0] A_mant_field, B_mant_field, C_mant_field;
-
-            A_sign = a[31]; A_exp_field = a[30:23]; A_mant_field = a[22:0];
-            B_sign = b[31]; B_exp_field = b[30:23]; B_mant_field = b[22:0];
-            C_sign = c[31]; C_exp_field = c[30:23]; C_mant_field = c[22:0];
-
-            logic A_is_zero, A_is_subnormal, A_is_inf, A_is_nan, A_is_snan;
-            A_is_zero      = (A_exp_field == 0) && (A_mant_field == 0);
-            A_is_subnormal = (A_exp_field == 0) && (A_mant_field != 0);
-            A_is_inf       = (A_exp_field == 255) && (A_mant_field == 0);
-            A_is_nan       = (A_exp_field == 255) && (A_mant_field != 0);
-            A_is_snan      = A_is_nan && (A_mant_field[22] == 0);
-
-            logic B_is_zero, B_is_subnormal, B_is_inf, B_is_nan, B_is_snan;
-            B_is_zero      = (B_exp_field == 0) && (B_mant_field == 0);
-            B_is_subnormal = (B_exp_field == 0) && (B_mant_field != 0);
-            B_is_inf       = (B_exp_field == 255) && (B_mant_field == 0);
-            B_is_nan       = (B_exp_field == 255) && (B_mant_field != 0);
-            B_is_snan      = B_is_nan && (B_mant_field[22] == 0);
-
-            logic C_is_zero, C_is_subnormal, C_is_inf, C_is_nan, C_is_snan;
-            C_is_zero      = (C_exp_field == 0) && (C_mant_field == 0);
-            C_is_subnormal = (C_exp_field == 0) && (C_mant_field != 0);
-            C_is_inf       = (C_exp_field == 255) && (C_mant_field == 0);
-            C_is_nan       = (C_exp_field == 255) && (C_mant_field != 0);
-            C_is_snan      = C_is_nan && (C_mant_field[22] == 0);
-
-            logic [4:0] A_lza = lzcnt24({A_mant_field, 1'b0});
-            logic [4:0] B_lza = lzcnt24({B_mant_field, 1'b0});
-            logic [4:0] C_lza = lzcnt24({C_mant_field, 1'b0});
-
-            logic signed [12:0] A_exp_unb, B_exp_unb, C_exp_unb;
-            logic [23:0] A_norm_mant, B_norm_mant, C_norm_mant;
-
-            A_exp_unb   = A_is_zero ? -13'd1000 : (A_is_subnormal ? -13'd126 - {8'b0, A_lza} : {5'b0, A_exp_field} - 13'd127);
-            A_norm_mant = A_is_zero ? 24'b0 : (A_is_subnormal ? {A_mant_field, 1'b0} << A_lza : {1'b1, A_mant_field});
-
-            B_exp_unb   = B_is_zero ? -13'd1000 : (B_is_subnormal ? -13'd126 - {8'b0, B_lza} : {5'b0, B_exp_field} - 13'd127);
-            B_norm_mant = B_is_zero ? 24'b0 : (B_is_subnormal ? {B_mant_field, 1'b0} << B_lza : {1'b1, B_mant_field});
-
-            C_exp_unb   = C_is_zero ? -13'd1000 : (C_is_subnormal ? -13'd126 - {8'b0, C_lza} : {5'b0, C_exp_field} - 13'd127);
-            C_norm_mant = C_is_zero ? 24'b0 : (C_is_subnormal ? {C_mant_field, 1'b0} << C_lza : {1'b1, C_mant_field});
-
-            logic [47:0] M_P_full = A_norm_mant * B_norm_mant;
-            logic signed [12:0] E_P_unb = A_exp_unb + B_exp_unb;
-
-            logic [74:0] V_P = {2'b0, M_P_full, 25'b0};
-            logic [74:0] V_C = {3'b0, C_norm_mant, 48'b0};
-
-            logic signed [13:0] E_diff = E_P_unb - C_exp_unb;
-            logic [13:0] shift_amt;
-            logic [74:0] ones_75 = {75{1'b1}};
-
-            if (E_diff >= 0) begin
-                shift_amt = E_diff;
-                r1_E_max  = E_P_unb;
-                r1_P_shift = V_P;
-                r1_P_sticky = 0;
-                
-                if (shift_amt >= 75) begin
-                    r1_C_shift = 0;
-                    r1_C_sticky = (V_C != 0);
-                end else begin
-                    r1_C_shift = V_C >> shift_amt;
-                    r1_C_sticky = |(V_C & ~(ones_75 << shift_amt));
-                end
-            end else begin
-                shift_amt = -E_diff;
-                r1_E_max  = C_exp_unb;
-                r1_C_shift = V_C;
-                r1_C_sticky = 0;
-
-                if (shift_amt >= 75) begin
-                    r1_P_shift = 0;
-                    r1_P_sticky = (V_P != 0);
-                end else begin
-                    r1_P_shift = V_P >> shift_amt;
-                    r1_P_sticky = |(V_P & ~(ones_75 << shift_amt));
-                end
-            end
-
-            logic P_is_zero = A_is_zero || B_is_zero;
-            logic P_is_inf  = A_is_inf || B_is_inf;
-            logic P_is_nan  = A_is_nan || B_is_nan;
-            logic P_sign    = A_sign ^ B_sign;
-
-            r1_S_P = P_sign;
-            r1_S_C = C_sign;
-
-            logic is_inv_mul = (A_is_zero && B_is_inf) || (A_is_inf && B_is_zero);
-            logic is_inv_add = P_is_inf && C_is_inf && (P_sign != C_sign);
-
-            r1_is_invalid = A_is_snan || B_is_snan || C_is_snan || is_inv_mul || is_inv_add;
-            r1_is_nan_res = P_is_nan || C_is_nan || is_inv_mul || is_inv_add;
-            r1_is_inf_res = (P_is_inf || C_is_inf) && !r1_is_nan_res;
-            r1_inf_sign   = P_is_inf ? P_sign : C_sign;
-
-            r1_P_is_zero  = P_is_zero;
-            r1_C_is_zero  = C_is_zero;
-            r1_rnd_mode   = rnd_mode;
+        if (advance_1 && in_valid) begin
+            larger_val_q1     <= larger_val_d1;
+            smaller_val_q1    <= smaller_val_d1;
+            smaller_sticky_q1 <= smaller_sticky_d1;
+            final_sign_q1     <= final_sign_d1;
+            eff_sub_q1        <= eff_sub_d1;
+            W_max_q1          <= W_max_d1;
+            is_nan_q1         <= is_nan_d1;
+            is_inf_q1         <= is_inf_d1;
+            is_invalid_q1     <= is_invalid_d1;
+            inf_sign_q1       <= inf_sign_d1;
+            rnd_mode_q1       <= rnd_mode;
         end
     end
 
-    // -------------------------------------------------------------------------
-    // STAGE 2: Add / Subtract, Sign & LZA
-    // -------------------------------------------------------------------------
-    logic [76:0]        r2_sum;
-    logic [6:0]         r2_sum_lza;
-    logic signed [12:0] r2_E_max;
-    logic               r2_S_res;
-    logic               r2_is_invalid, r2_is_nan_res, r2_is_inf_res, r2_inf_sign;
-    logic               r2_exact_zero_sum;
-    logic [2:0]         r2_rnd_mode;
+    // =========================================================================
+    // Stage 2: Add & Leading Zero Count
+    // =========================================================================
+    logic [79:0] sum_val_d2;
+    logic sum_sticky_d2;
+    assign sum_val_d2 = eff_sub_q1 ? (larger_val_q1 - smaller_val_q1 - {79'd0, smaller_sticky_q1}) : (larger_val_q1 + smaller_val_q1);
+    assign sum_sticky_d2 = smaller_sticky_q1;
+
+    logic [6:0] lzc_d2;
+    always_comb begin
+        lzc_d2 = 7'd80;
+        for (int i = 79; i >= 0; i--) begin
+            if (sum_val_d2[i]) begin
+                lzc_d2 = 7'd79 - 7'(i);
+                break;
+            end
+        end
+    end
+
+    // Stage 2 Registers
+    logic [79:0] sum_val_q2;
+    logic sum_sticky_q2;
+    logic [6:0] lzc_q2;
+    logic final_sign_q2, eff_sub_q2;
+    logic signed [9:0] W_max_q2;
+    logic is_nan_q2, is_inf_q2, is_invalid_q2, inf_sign_q2;
+    logic [2:0] rnd_mode_q2;
 
     always_ff @(posedge clk) begin
-        if (en_r2) begin
-            logic [75:0] P_val = {r1_P_shift, r1_P_sticky};
-            logic [75:0] C_val = {r1_C_shift, r1_C_sticky};
-            logic same_sign = (r1_S_P == r1_S_C);
-            logic [76:0] sum;
-            logic S_res;
-            logic exact_zero;
-
-            if (same_sign) begin
-                sum = P_val + C_val;
-                S_res = r1_S_P;
-                exact_zero = (sum == 0);
-            end else begin
-                if (P_val >= C_val) begin
-                    sum = P_val - C_val;
-                    S_res = r1_S_P;
-                    exact_zero = (sum == 0);
-                end else begin
-                    sum = C_val - P_val;
-                    S_res = r1_S_C;
-                    exact_zero = (sum == 0);
-                end
-            end
-
-            if (exact_zero) begin
-                if (same_sign) r2_S_res = r1_S_P;
-                else r2_S_res = (r1_rnd_mode == 3'd2) ? 1'b1 : 1'b0;
-            end else begin
-                r2_S_res = S_res;
-            end
-
-            r2_sum            = sum;
-            r2_sum_lza        = lzcnt77(sum);
-            r2_exact_zero_sum = exact_zero;
-            r2_E_max          = r1_E_max;
-            r2_is_invalid     = r1_is_invalid;
-            r2_is_nan_res     = r1_is_nan_res;
-            r2_is_inf_res     = r1_is_inf_res;
-            r2_inf_sign       = r1_inf_sign;
-            r2_rnd_mode       = r1_rnd_mode;
+        if (advance_2 && v1) begin
+            sum_val_q2     <= sum_val_d2;
+            sum_sticky_q2  <= sum_sticky_d2;
+            lzc_q2         <= lzc_d2;
+            final_sign_q2  <= final_sign_q1;
+            eff_sub_q2     <= eff_sub_q1;
+            W_max_q2       <= W_max_q1;
+            is_nan_q2      <= is_nan_q1;
+            is_inf_q2      <= is_inf_q1;
+            is_invalid_q2  <= is_invalid_q1;
+            inf_sign_q2    <= inf_sign_q1;
+            rnd_mode_q2    <= rnd_mode_q1;
         end
     end
 
-    // -------------------------------------------------------------------------
-    // STAGE 3: Normalize, Round, Pack -> Output Registers
-    // -------------------------------------------------------------------------
-    logic [31:0] r3_result;
-    logic        r3_invalid, r3_overflow, r3_underflow, r3_inexact;
+    // =========================================================================
+    // Stage 3: Normalize, Round, Pack
+    // =========================================================================
+    logic signed [11:0] W_max_ext;
+    assign W_max_ext = W_max_q2;
+
+    logic signed [11:0] lzc_signed;
+    assign lzc_signed = {5'd0, lzc_q2};
+
+    logic signed [11:0] norm_weight, target_weight, shift_left_amt;
+    assign norm_weight = W_max_ext + 12'sd2 - lzc_signed;
+    assign target_weight = (norm_weight > -12'sd126) ? norm_weight : -12'sd126;
+    assign shift_left_amt = (W_max_ext + 12'sd2) - target_weight;
+
+    logic [7:0] L_sh, R_sh;
+    assign L_sh = (shift_left_amt > 12'sd0) ? shift_left_amt[7:0] : 8'd0;
+    assign R_sh = (shift_left_amt < 12'sd0) ? (-shift_left_amt[7:0]) : 8'd0;
+
+    logic [159:0] sum_val_r_full;
+    assign sum_val_r_full = {sum_val_q2, 80'd0} >> R_sh;
+    
+    logic [79:0] sum_val_r;
+    assign sum_val_r = sum_val_r_full[159:80];
+
+    logic sum_sticky_r;
+    assign sum_sticky_r = sum_sticky_q2 | (sum_val_r_full[79:0] != 160'd0);
+
+    logic [79:0] sum_val_l;
+    assign sum_val_l = sum_val_r << L_sh;
+
+    logic [23:0] mantissa;
+    logic guard, round, sticky;
+    assign mantissa = sum_val_l[79:56];
+    assign guard = sum_val_l[55];
+    assign round = sum_val_l[54];
+    assign sticky = (|sum_val_l[53:0]) | sum_sticky_r;
+
+    logic is_exact_zero, sign_zero, out_sign;
+    assign is_exact_zero = (sum_val_q2 == 80'd0) && !sum_sticky_q2;
+    assign sign_zero = (rnd_mode_q2 == 3'b010) ? 1'b1 : 1'b0;
+    assign out_sign = is_exact_zero ? (eff_sub_q2 ? sign_zero : final_sign_q2) : final_sign_q2;
+
+    logic round_up;
+    always_comb begin
+        case (rnd_mode_q2)
+            3'b000: round_up = guard & (round | sticky | mantissa[0]);
+            3'b001: round_up = 1'b0;
+            3'b010: round_up = out_sign & (guard | round | sticky);
+            3'b011: round_up = ~out_sign & (guard | round | sticky);
+            3'b100: round_up = guard;
+            default: round_up = 1'b0;
+        endcase
+    end
+
+    logic [24:0] mantissa_rounded;
+    logic mantissa_overflow;
+    logic [23:0] final_mantissa;
+    logic signed [11:0] final_exp_adj, biased_exp;
+
+    assign mantissa_rounded = {1'b0, mantissa} + {24'd0, round_up};
+    assign mantissa_overflow = mantissa_rounded[24];
+    assign final_mantissa = mantissa_overflow ? mantissa_rounded[24:1] : mantissa_rounded[23:0];
+    
+    assign final_exp_adj = target_weight + {11'd0, mantissa_overflow};
+    assign biased_exp = final_exp_adj + 12'sd127;
+
+    logic [31:0] result_d3;
+    logic flag_overflow_d3, flag_inexact_d3, flag_underflow_d3;
+    logic is_special;
+    
+    assign is_special = is_invalid_q2 || is_nan_q2 || is_inf_q2;
+
+    always_comb begin
+        if (is_special) begin
+            if (is_invalid_q2 || is_nan_q2) result_d3 = 32'h7FC00000;
+            else result_d3 = {inf_sign_q2, 8'hFF, 23'd0};
+            flag_overflow_d3 = 1'b0;
+            flag_inexact_d3 = 1'b0;
+        end else if (is_exact_zero) begin
+            result_d3 = {out_sign, 31'd0};
+            flag_overflow_d3 = 1'b0;
+            flag_inexact_d3 = 1'b0;
+        end else if (biased_exp >= 12'sd255) begin
+            logic max_normal;
+            max_normal = (rnd_mode_q2 == 3'b001) ||
+                         (rnd_mode_q2 == 3'b010 && !out_sign) ||
+                         (rnd_mode_q2 == 3'b011 && out_sign);
+            result_d3 = max_normal ? {out_sign, 8'hFE, 23'h7FFFFF} : {out_sign, 8'hFF, 23'd0};
+            flag_overflow_d3 = 1'b1;
+            flag_inexact_d3 = 1'b1;
+        end else if (biased_exp <= 12'sd0) begin
+            result_d3 = {out_sign, 8'h00, final_mantissa[22:0]};
+            flag_overflow_d3 = 1'b0;
+            flag_inexact_d3 = guard | round | sticky;
+        end else begin
+            result_d3 = {out_sign, biased_exp[7:0], final_mantissa[22:0]};
+            flag_overflow_d3 = 1'b0;
+            flag_inexact_d3 = guard | round | sticky;
+        end
+    end
+
+    assign flag_underflow_d3 = !is_special && flag_inexact_d3 && (result_d3[30:23] == 8'd0) && !flag_overflow_d3;
+
+    // Stage 3 Registers (Final Output)
+    logic [31:0] result_q3;
+    logic flag_invalid_q3, flag_overflow_q3, flag_underflow_q3, flag_inexact_q3;
 
     always_ff @(posedge clk) begin
-        if (en_r3) begin
-            logic [76:0] norm_sum = r2_sum << r2_sum_lza;
-            logic signed [13:0] E_norm = r2_E_max + (76 - {7'b0, r2_sum_lza}) - 14'd71;
-            logic signed [13:0] E_bias = E_norm + 14'd127;
-            
-            logic [76:0] shifted_sum;
-            logic [7:0]  final_exp;
-            logic        extra_sticky;
-            logic [76:0] ones_77 = {77{1'b1}};
-
-            if (r2_exact_zero_sum) begin
-                shifted_sum = 0;
-                final_exp = 0;
-                extra_sticky = 0;
-            end else if (E_bias <= 0) begin
-                logic [13:0] shift_right_amt = 14'd1 - E_bias;
-                if (shift_right_amt >= 77) begin
-                    shifted_sum = 0;
-                    extra_sticky = (norm_sum != 0);
-                end else begin
-                    shifted_sum = norm_sum >> shift_right_amt;
-                    extra_sticky = |(norm_sum & ~(ones_77 << shift_right_amt));
-                end
-                final_exp = 0;
-            end else begin
-                shifted_sum = norm_sum;
-                final_exp = E_bias[7:0];
-                extra_sticky = 0;
-            end
-
-            logic [22:0] unrounded_frac = shifted_sum[75:53];
-            logic guard_bit  = shifted_sum[52];
-            logic round_bit  = shifted_sum[51];
-            logic sticky_bit = (|shifted_sum[50:0]) | extra_sticky;
-            logic LSB        = unrounded_frac[0];
-            logic round_up;
-
-            case (r2_rnd_mode)
-                3'd0: round_up = guard_bit & (round_bit | sticky_bit | LSB);
-                3'd1: round_up = 1'b0;
-                3'd2: round_up = r2_S_res & (guard_bit | round_bit | sticky_bit);
-                3'd3: round_up = (~r2_S_res) & (guard_bit | round_bit | sticky_bit);
-                3'd4: round_up = guard_bit;
-                default: round_up = 1'b0;
-            endcase
-
-            logic [23:0] pre_round_mant = {shifted_sum[76], unrounded_frac};
-            logic [24:0] post_round_mant = {1'b0, pre_round_mant} + {24'b0, round_up};
-
-            logic [22:0] final_mant;
-            logic [7:0]  packed_exp;
-            logic        overflow;
-            logic        inexact;
-
-            overflow   = 0;
-            inexact    = (guard_bit | round_bit | sticky_bit) != 0;
-            packed_exp = final_exp;
-            final_mant = post_round_mant[22:0];
-
-            if (post_round_mant[24]) begin
-                packed_exp = final_exp + 1;
-                final_mant = 0;
-            end else if (final_exp == 0 && post_round_mant[23]) begin
-                packed_exp = 1;
-                final_mant = 0;
-            end
-
-            if (packed_exp >= 255) begin
-                overflow = 1;
-                inexact = 1;
-                case (r2_rnd_mode)
-                    3'd0: begin packed_exp = 255; final_mant = 0; end
-                    3'd1: begin packed_exp = 254; final_mant = {23{1'b1}}; end
-                    3'd2: begin 
-                        if (r2_S_res) begin packed_exp = 255; final_mant = 0; end
-                        else begin packed_exp = 254; final_mant = {23{1'b1}}; end
-                    end
-                    3'd3: begin 
-                        if (!r2_S_res) begin packed_exp = 255; final_mant = 0; end
-                        else begin packed_exp = 254; final_mant = {23{1'b1}}; end
-                    end
-                    3'd4: begin packed_exp = 255; final_mant = 0; end
-                    default: begin packed_exp = 255; final_mant = 0; end
-                endcase
-            end
-
-            logic underflow = inexact & (packed_exp == 0);
-
-            if (r2_is_nan_res) begin
-                r3_result    <= 32'h7FC00000;
-                r3_invalid   <= r2_is_invalid;
-                r3_overflow  <= 0;
-                r3_underflow <= 0;
-                r3_inexact   <= 0;
-            end else if (r2_is_inf_res) begin
-                r3_result    <= {r2_inf_sign, 8'hFF, 23'h0};
-                r3_invalid   <= r2_is_invalid;
-                r3_overflow  <= 0;
-                r3_underflow <= 0;
-                r3_inexact   <= 0;
-            end else begin
-                r3_result    <= {r2_S_res, packed_exp, final_mant};
-                r3_invalid   <= r2_is_invalid;
-                r3_overflow  <= overflow;
-                r3_underflow <= underflow;
-                r3_inexact   <= inexact;
-            end
+        if (advance_3 && v2) begin
+            result_q3         <= result_d3;
+            flag_invalid_q3   <= is_invalid_q2;
+            flag_overflow_q3  <= flag_overflow_d3;
+            flag_underflow_q3 <= flag_underflow_d3;
+            flag_inexact_q3   <= flag_inexact_d3;
         end
     end
 
-    assign result         = r3_result;
-    assign flag_invalid   = r3_invalid;
-    assign flag_overflow  = r3_overflow;
-    assign flag_underflow = r3_underflow;
-    assign flag_inexact   = r3_inexact;
+    assign result         = result_q3;
+    assign flag_invalid   = flag_invalid_q3;
+    assign flag_overflow  = flag_overflow_q3;
+    assign flag_underflow = flag_underflow_q3;
+    assign flag_inexact   = flag_inexact_q3;
 
 endmodule
