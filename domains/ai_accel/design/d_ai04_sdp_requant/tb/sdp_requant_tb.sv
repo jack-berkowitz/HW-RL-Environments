@@ -357,20 +357,65 @@ module sdp_requant_tb;
     end
 
     // =========================================================================
-    // T6 -- CONFIGURATION PIPELINING (A5): back-to-back words, config changing
-    // every word. A design applying the CURRENT config to an older word fails.
+    // T6 -- CONFIGURATION PIPELINING (A5).
+    //
+    // THE FIRST VERSION OF THIS CHECK WAS VACUOUS, and only nc_i_stale_config
+    // revealed it. It changed the configuration between words and let each word
+    // flow straight through, so with a one-deep pipeline the configuration at
+    // EMIT time was always still the configuration at ACCEPT time -- and a
+    // design applying the live configuration at the output was indistinguishable
+    // from one carrying it alongside the data. The control PASSED.
+    //
+    // The check now STALLS THE CONSUMER, fills the buffer with words carrying
+    // DIFFERENT configurations, then changes the configuration AGAIN to a third
+    // value before releasing the stall. Every buffered word is therefore emitted
+    // while a configuration that is not its own is presented on the pins.
     // =========================================================================
     n_cfgpipe = 0;
-    for (int i = 0; i < 24; i++) begin
+    for (int rep = 0; rep < 12; rep++) begin
+      logic [63:0] w0, w1;
+      w0 = {16'(11+rep), 16'(12+rep), 16'(13+rep), 16'(14+rep)};
+      w1 = {16'(21+rep), 16'(22+rep), 16'(23+rep), 16'(24+rep)};
+
+      @(negedge clk); out_ready = 1'b0;
+
+      // word 0 under configuration A
       @(negedge clk);
-      cfg_offset   = 32'(i * 7);
-      cfg_scale    = 16'(i + 1);
-      cfg_truncate = 6'(i % 5);
-      cfg_precision = (i % 4 == 2) ? 2'd2 : 2'd0;
-      send({16'(100+i), 16'(200+i), 16'(300+i), 16'(400+i)}, $sformatf("cfgpipe %0d", i));
-      n_cfgpipe++;
+      cfg_precision = 2'd0; cfg_offset = 32'(rep*3); cfg_scale = 16'(rep+1);
+      cfg_truncate = 6'(rep % 4); cfg_bypass = 1'b0; cfg_nan_to_zero = 1'b0;
+      in_data = w0; in_valid = 1'b1;
+      if (!in_ready) begin fail("T6: not ready at the start of a rep"); end
+      exp_q.push_back(g_word(w0, cfg_precision, cfg_offset, cfg_scale,
+                             cfg_truncate, cfg_bypass, cfg_nan_to_zero));
+      tag_q.push_back($sformatf("cfgpipe r%0d A", rep));
+      @(posedge clk); n_accepted++;
+
+      // word 1 under configuration B, back to back, still stalled
+      @(negedge clk);
+      cfg_precision = (rep % 3 == 1) ? 2'd2 : 2'd0;
+      cfg_offset = 32'hFFFF_0000 + 32'(rep); cfg_scale = 16'(100+rep);
+      cfg_truncate = 6'((rep % 5) + 1); cfg_nan_to_zero = (rep % 2);
+      in_data = w1; in_valid = 1'b1;
+      if (in_ready) begin
+        exp_q.push_back(g_word(w1, cfg_precision, cfg_offset, cfg_scale,
+                               cfg_truncate, cfg_bypass, cfg_nan_to_zero));
+        tag_q.push_back($sformatf("cfgpipe r%0d B", rep));
+        @(posedge clk); n_accepted++;
+      end
+      @(negedge clk); in_valid = 1'b0;
+
+      // configuration C -- belongs to NEITHER buffered word, and is what a
+      // design reading the live pins at the output would use.
+      @(negedge clk);
+      cfg_precision = 2'd0; cfg_offset = 32'h0BAD_0BAD; cfg_scale = 16'hFFFF;
+      cfg_truncate = 6'd9; cfg_bypass = 1'b1; cfg_nan_to_zero = 1'b1;
+      repeat (2) @(negedge clk);
+
+      @(negedge clk); out_ready = 1'b1;
+      drain(300);
+      n_cfgpipe = n_cfgpipe + 2;
+      @(negedge clk); cfg_bypass = 1'b0; cfg_nan_to_zero = 1'b0;
     end
-    drain(600);
 
     // =========================================================================
     // T8 -- SUSTAINED THROUGHPUT. Both sides open, one word per cycle.
