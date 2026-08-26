@@ -157,6 +157,71 @@ module sv39_mmu_tb;
           r.paddr === seq[i].va[55:0])                      cov_fetch_bare  = 1'b1;
     end
 
+    // ---------------------------------------------------------------------
+    // V2 -- RESET EMPTIES BOTH TLBs. A CLAUSE THAT WAS NEVER EXERCISED.
+    //
+    // V2 says "rst_ni asserted low empties both TLBs and returns the walker to
+    // idle". Before this phase, RESET WAS ASSERTED EXACTLY ONCE, AT
+    // INITIALISATION -- rst_n starts low in the harness declaration and rises at
+    // the top of this task, never to fall again. So "empties both TLBs" was
+    // unreachable: reset only ever happened when the TLBs were already empty,
+    // and a design that ignored reset entirely was INDISTINGUISHABLE from a
+    // conforming one.
+    //
+    // Found by answering AGENT-VERIF-A2's question, who had the identical gap on
+    // v_ca03's F1 and v_ca06's phase L. Three tasks, independently written. The
+    // cause looks structural rather than careless: RESET GETS WRITTEN AS
+    // INITIALISATION, because that is what a testbench needs it for, and the
+    // clause saying what reset does TO STATE is a different requirement that the
+    // initialisation path can never reach. The two uses share a signal and
+    // nothing else.
+    //
+    // WORSE, AND THE REASON THIS WAS INVISIBLE: the harness tracks rst_n in the
+    // stimulus-variation instrument (V_RST). It varies exactly once, at time
+    // zero, so the variation checker records it VARIED and the row reads clean.
+    // An input that changes only during initialisation is not a varied input and
+    // the tool cannot tell.
+    //
+    // APPENDED AFTER THE SCORED LOOP, deliberately: it drives no recorded vector
+    // and changes no comparison, so vectors_sv39.hex stays valid and this is NOT
+    // a stimulus boundary.
+    //
+    // THE ANTECEDENT IS MEASURED, NOT ASSUMED. Step 1 establishes the page is
+    // TLB-RESIDENT by requiring zero page-table reads. If that fails the phase
+    // measured nothing, and it says so rather than passing -- the same gate rule
+    // 36 puts on every other conditional check here.
+    begin : v2_reset_phase
+      step_t v2_step;
+      int unsigned v2_hit_reads, v2_post_reset_reads;
+
+      v2_step = seq[A10_GLOB_HIT];        // a page the sequence already resolved
+
+      do_step(v2_step);                   // 1. prove it is resident
+      v2_hit_reads = last_acc;
+
+      rst_n = 1'b0;                       // 2. the event V2 is about
+      repeat (4) @(posedge clk);
+      rst_n = 1'b1;
+      repeat (4) @(posedge clk);
+
+      do_step(v2_step);                   // 3. the same page again
+      v2_post_reset_reads = last_acc;
+
+      $display("MEASURE: V2 resident-hit reads=%0d (want 0), post-reset reads=%0d (want >0)",
+               v2_hit_reads, v2_post_reset_reads);
+
+      if (v2_hit_reads != 0) begin
+        $display("[FAIL] V2 was never exercised -- the page was not TLB-resident before");
+        $display("            reset (%0d reads), so emptying the TLB could not be observed.",
+                 v2_hit_reads);
+        errs++;
+      end else if (v2_post_reset_reads == 0) begin
+        $display("[FAIL] V2: the same page was answered with no page-table read AFTER");
+        $display("            reset; rst_ni must empty both TLBs.");
+        errs++;
+      end
+    end
+
     // ---------------------------------------------------------------- verdict
     $display("");
     // A5, behavioural half. The structural half is guaranteed by V1's port list
