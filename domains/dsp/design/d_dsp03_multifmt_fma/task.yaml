@@ -133,7 +133,7 @@ version_boundary:
     that does not. A pass on one set is not a pass on the other.
   prior_result:
     value: 13860/13860
-    task_text_hash: c4b5edc12f407731
+    task_text_hash: 30388a1122282bf0
     vectors: {w32: 6300, w64: 7560}
     status: >
       RETAINED AS HISTORICAL, not deleted and not re-scored. It is accurate over

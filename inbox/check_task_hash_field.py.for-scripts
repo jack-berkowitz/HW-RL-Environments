@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Refuse a task.yaml whose recorded task_text_hash no longer matches the text.
+
+    check_task_hash_field.py                 every task with a task.yaml
+    check_task_hash_field.py <task_dir>...   just these
+
+WHY THIS EXISTS
+---------------
+AGENT-VERIF-A2 recomputed four hashes rather than taking them from a message,
+found they disagreed with the `task_text_hash:` field recorded beside them, and
+swept the corpus:
+
+    recorded field == recomputed       2 of 21
+    recorded field is STALE            3
+    NO task_text_hash FIELD AT ALL    16
+
+On the design half it was worse -- five stale, three missing, none correct. Two
+of the five recorded that morning's value exactly: they were right until a spec
+edit landed and went stale in the same commit that made them wrong.
+
+THE FIELD IS NOT UNREAD. IT IS READ AND BELIEVED.
+------------------------------------------------
+This is the inverse of the usual failure here. `exclusive:` is a field nothing
+parses, so it can be wrong forever and no one notices. `task_text_hash:` is a
+field people DO read -- it is the first place anyone looks when asking "is this
+task's prompt the one that submission answered" -- and it silently stops being
+true whenever spec/ or probe/PASTE.md changes.
+
+d_ai01's field carried, one line above the value:
+
+    # Recompute with scripts/task_text_hash.py at the point of use
+
+Somebody already knew. The disclaimer did not help, because a disclaimer next to
+a value that looks like an answer loses to the value. THE FIX FOR A FIELD THAT
+GOES STALE IS NOT A WARNING, IT IS A CHECK.
+
+WHAT IT DOES NOT DO
+-------------------
+It does not tell you whether a RESULT is comparable -- that is
+report_table.py's stale-prompt guard, which compares the hash stamped into a run
+record against the current text. This checks the DECLARATION in task.yaml, which
+is a different thing that happens to hold the same kind of value.
+
+A missing field is reported and does not fail: not every task declares one, and
+inventing a policy that they must is a bigger decision than this script.
+A field that is present and WRONG fails, because that is a false statement.
+"""
+import os, re, subprocess, sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HASHER = os.path.join(REPO, "scripts", "task_text_hash.py")
+FIELD = re.compile(r"^\s*task_text_hash:\s*([0-9a-f]{8,})", re.M)
+
+
+def recorded(task_dir):
+    p = os.path.join(task_dir, "task.yaml")
+    if not os.path.isfile(p):
+        return None
+    m = FIELD.search(open(p, encoding="utf-8", errors="replace").read())
+    return m.group(1) if m else None
+
+
+def computed(task_dir):
+    r = subprocess.run([sys.executable, HASHER, task_dir],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    first = r.stdout.strip().split("\n")[0].strip()
+    return first if re.fullmatch(r"[0-9a-f]{8,}", first) else None
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if args:
+        tasks = args
+    else:
+        tasks = []
+        for kind in ("design", "verification"):
+            base = os.path.join(REPO, "domains")
+            for dom in sorted(os.listdir(base)):
+                d = os.path.join(base, dom, kind)
+                if os.path.isdir(d):
+                    tasks += [os.path.join(d, t) for t in sorted(os.listdir(d))]
+    tasks = [t for t in tasks if os.path.isfile(os.path.join(t, "task.yaml"))]
+
+    stale = missing = ok = 0
+    for t in tasks:
+        name = os.path.basename(t)
+        rec, cmp_ = recorded(t), computed(t)
+        if cmp_ is None:
+            print(f"  {name:34s} SKIP   the text does not hash (see task_text_hash.py)")
+            continue
+        if rec is None:
+            print(f"  {name:34s} —      no task_text_hash field")
+            missing += 1
+        elif rec == cmp_:
+            print(f"  {name:34s} ok     {rec}")
+            ok += 1
+        else:
+            print(f"  {name:34s} STALE  records {rec}, text hashes to {cmp_}")
+            stale += 1
+
+    print(f"\n{len(tasks)} task(s): {ok} correct, {stale} stale, {missing} with no field")
+    if stale:
+        print("REFUSED: a recorded task_text_hash that no longer matches its text is a")
+        print("  FALSE STATEMENT sitting where people look first. Update it, or delete")
+        print("  the field -- absent is honest, wrong is not.")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
