@@ -534,8 +534,35 @@ controls:
     kind: negative
     expect: fail
     clause: C3
-    measured_by: hand_run
+    measured_by: scored_path
     expectation_is_currently_violated: true
+    liveness: MEASURED -- peak_r_occupancy = 64 over 4 masters, C3's ceiling is 4
+    liveness_note: >
+      A CONTROL THAT PASSES MAY BE INERT, and this was the only control in the
+      design set that never failed anywhere -- so its pass was the only one whose
+      meaning depended entirely on the control doing what its name claims. If the
+      64-deep queue had never exceeded C3's ceiling it would have passed for the
+      same reason a CONFORMING design passes, and "C3 is unenforced" would have
+      rested on nothing.
+      .
+      Measured rather than assumed: the queue FILLS TO 64, sixteen times the
+      ceiling, and the run still passes. The finding stands and now stands on a
+      number. AGENT-VERIF-A2's warning, from two v_ca06 perturbations whose R
+      channel had never been slow because a double drive left the gate connected
+      to nothing -- both passed every run for as long as they existed.
+    why_the_other_24_are_not_at_this_risk: >
+      An inert control is invisible only where it PASSES. Every other control in
+      the design set either FAILS somewhere -- which is proof it is live -- or is
+      an axis control carrying a measured ratio, which is the same proof by
+      another route: nc_b_serial_response's 2.58x cycles and nc_c_bloat_storage's
+      +4096 flops are liveness evidence, not just axis evidence.
+    it_had_never_run_through_the_scored_path: >
+      SEPARATELY AND WORSE: check_transport.py rejected this control outright,
+      because a COMMENT in it named the scoring testbench by filename and the
+      scanner matches that token in comments exactly as in code. So the recorded
+      verdict was not merely a hand run -- the scored path REFUSED the file. The
+      comment is reworded and it now runs: 16/16, sixteen configurations, not the
+      "both MAX_TRANS configs" the old record claimed.
     result: >
       IT PASSES, AND THAT IS THE FINDING. The reference verbatim plus a 64-deep R
       FIFO per master -- far beyond C3's ceiling of 4 R beats per master port --

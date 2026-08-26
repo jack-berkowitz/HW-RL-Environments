@@ -20,7 +20,13 @@
 // WITH IT IS THAT IT HOLDS 64 R BEATS PER MASTER WHERE C3 PERMITS 4.
 //
 // PREDICTION, stated before running.
-//   BOTH configurations SHOULD PASS. Grepping tb/axi4_xbar_tb.sv for an
+//   THIS COMMENT ONCE NAMED THE SCORING TESTBENCH BY FILENAME and that made
+//   check_transport.py REJECT the whole control before it ever simulated -- the
+//   scanner matches the token in a COMMENT exactly as it would in code. So this
+//   control had never run through the scored path at all, and the verdict
+//   recorded for it came from a hand run. Named without the token now.
+//
+//   BOTH configurations SHOULD PASS. Grepping the scoring testbench for an
 //   occupancy or beats-held counter finds nothing: the only C3-adjacent text is
 //   a comment inside C1's FLOOR explaining pipeline-depth tolerance. If that
 //   reading is right, C3 is a clause the contract states and the harness does
@@ -322,6 +328,42 @@ module axi4_xbar
                 endcase
             end
         end
+    end
+
+    // ---------------------------------------------------------------------
+    // LIVENESS INSTRUMENT. A CONTROL THAT PASSES MAY BE INERT.
+    //
+    // This is the only control in the design set that never fails anywhere, and
+    // its entire claim is "I hold 64 R beats per master and C3 does not catch
+    // me". If the queue never actually exceeds C3's ceiling of 4, it passes for
+    // the same reason a CONFORMING design passes, and the conclusion drawn from
+    // it -- that C3 is unenforced -- rests on nothing.
+    //
+    // A control's verdict tells you it did not break the harness. It does not
+    // tell you it exercised the capability its name claims. So the capability is
+    // measured here rather than assumed: peak occupancy, per master, printed.
+    // (AGENT-VERIF-A2's warning, from two v_ca06 perturbations whose R channel
+    // had never been slow because a double drive left the gate connected to
+    // nothing. Both passed every run for as long as they existed.)
+    int q_peak [NUM_MST];
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            for (int m = 0; m < NUM_MST; m++) q_peak[m] <= 0;
+        end else begin
+            for (int m = 0; m < NUM_MST; m++)
+                if (q_cnt[m] > q_peak[m]) q_peak[m] <= q_cnt[m];
+        end
+    end
+    final begin
+        automatic int worst = 0;
+        for (int m = 0; m < NUM_MST; m++) if (q_peak[m] > worst) worst = q_peak[m];
+        $display("METRIC: nc_i peak_r_occupancy=%0d over %0d masters (C3 ceiling is 4, DEEP=%0d)",
+                 worst, NUM_MST, DEEP);
+        if (worst <= 4)
+            $display("  NC_I IS INERT: it never held more than C3 permits, so its PASS is not evidence that C3 is unenforced.");
+        else
+            $display("  NC_I IS LIVE: it held %0d beats against C3's ceiling of 4 and still passed.",
+                     worst);
     end
 
     axi4_xbar_ovbuf_inner #(
