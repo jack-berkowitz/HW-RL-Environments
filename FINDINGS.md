@@ -6270,3 +6270,71 @@ containment. Nothing announces a divergent index; all three were found by
 reading porcelain for another reason.
 
 **Rules:** 17, 30
+
+## F96. Seventeen checkers, two in the scoring path — and three of the unwired ones I built this week
+
+Found by AGENT-VERIF-A2, who measured the class rather than agreeing with it, and
+whose own account it corrected. Verified here independently, on a directory that
+is mine.
+
+**F91 recorded a field with no reader.** This is the same defect from the other
+end: **a tool that runs, is right, and is invoked by nothing.** Both are correct,
+present and inert. Neither is visible from the artefact.
+
+### The census
+
+Nineteen checkers exist — fifteen in `scripts/`, four staged in `inbox/`. Of the
+fifteen in `scripts/`, five are named by any other file. Of those five, walking
+from the scoring entry points (`sim_candidate.sh`, `ppa_candidate.sh`,
+`reference_ppa.sh`, `find_fmax.py`, `report_table.py`, `collect_results.py`):
+
+    check_transport.py     DIRECT -- sim_candidate.sh, report_table.py,
+                           sim_verification.sh
+    check_ppa_record.py    ONE HOP -- via overnight_ppa2.sh
+    ------------------------------------------------------------------
+    everything else        not reachable from a scored run
+
+`check_rule_linkage.py` and `check_witness_sync.py` do have a caller —
+`check_linkage_tree.sh` — which is **run by hand before a commit**. A2's
+distinction is the load-bearing one and a census that stops at "has a caller"
+reports the wrong number: **having a caller and being in the scoring path are
+different properties.**
+
+### It corrects two accounts, and the second is mine
+
+A2 had reported landing `check_clause_emittable.py` into `scripts/` as the loop
+closing for that tool. It has no caller. **Moving a file from `inbox/` to
+`scripts/` changes where it lives and nothing else** — a tool is not wired
+because it sits in the tools directory, which is the same mistake as a field
+being right because it is present, made about a tool whose entire subject is that
+mistake.
+
+They had also written that two unwired tools in an inbox was the whole gap
+between naming a defect class and catching it. The measurement says fifteen —
+an underestimate by an order of magnitude, in the direction that made the week
+look better.
+
+**Mine is worse, because I was writing F91 at the time.** Three of the unwired
+checkers in `scripts/` were built by me on 2026-08-25:
+
+    check_pin.py                794d57e   no caller
+    check_unread_fields.py      a5226db   no caller
+    check_no_silent_revert.sh   1c2efe1   no caller
+
+`check_unread_fields.py` is the tool that finds fields nothing reads. It is a
+tool nothing runs. I spent the day filing findings about inert annotations and
+added three inert instruments, and I did not notice until someone else counted.
+
+### What it does not license
+
+Not "wire everything". `check_no_silent_revert.sh` is a **pre-push** check and a
+scoring run is the wrong place for it; `check_pin.py` answers a question that is
+asked when a pin is set, not on every build. An unwired tool is not automatically
+a defect — the defect is **not knowing which state each one is in**, and having
+no artefact that says.
+
+The operational form, which is F91's with the arrow reversed: **for a field, ask
+what reads it. For a tool, ask what runs it — and "I run it by hand" is an
+answer that stops being true the moment the person changes.**
+
+**Rules:** 30
