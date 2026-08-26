@@ -2916,166 +2916,50 @@ an unchecked clause look handled:
   Two of my tasks now have an uninstrumented reset clause, which makes it a
   habit rather than an oversight.
 
-### The founding case is not in the candidate list, so the tool grew a second mode
+### The founding case is not in the candidate list, so the tool grew a second mode — and the first unit was wrong
 
 Subtracting emittable from stated cannot find `D6`/`D7`: **both were nameable**.
 They shared one branch, and a submission checking precedence was credited with
-checking code preservation. `--shared` scans `begin`/`end` blocks and reports
-every innermost block emitting two or more distinct clause ids:
+checking code preservation. So `--shared` was added.
 
-    v_ca06   C4 + D1 + D3 + D4 + D5 + D6 + D7
-             D1 + D5 + D6 + D7          <- the founding trio, inside it
-             B1 + B2 + B3 + B4
-    ...
-    42 shared block(s) across the corpus
+**The first unit was the `begin`/`end` block, and it was wrong.**
+AGENT-DESIGN-43a92055 predicted the failure *before running the tool*: their
+testbenches are phase-structured, checks batched in an end-of-run results block,
+and `d_ca01`'s largest block emits nine distinct clause ids from one `begin` —
+nine genuinely separate observations. Measured here on a reduced form of exactly
+that structure:
 
-**It over-reports and the header says so.** A large outer block is one `begin`,
-not one observation, and two ids sitting together may be two independent checks.
-It is a candidate list in the same sense as the rest of the tool. What it cannot
-do is *miss the shape*, which subtracting sets provably can.
+    results block, 6 independent ifs  ->  M1 M2 M3 R3 R5 R6     <- pure noise
+    one condition, D5/D6/D7 chain     ->  D5 D6 D7              <- the real thing
 
-Two rows are worth pulling out because they show both signs:
+**Indistinguishable.** A block is a scope; it is not an observation.
 
-- **`v_nw04  I1 + W1`** is a *deliberate and documented* disambiguation. The
-  testbench's own comment reads: *"Naming I1 would send a reader looking at the
-  arithmetic; the clause actually broken is W1."* Someone met this exact problem
-  and solved it in place. That is what a resolved shared observation looks like.
-- **`v_nw04  A4 + S3`** is mine, added yesterday. Both clauses are about
-  `ts_step_o` and they genuinely share the observation. The enumerator caught my
-  own new code on its first run, which is the only reason I would believe it.
+What makes `D5`/`D6`/`D7` one observation is that they are **mutually exclusive
+branches of one condition**: at most one can fire, so at most one clause is ever
+named for a single wrong value, and a submission checking any is credited with
+all. Six independent `if`s in a results block have the *opposite* property —
+each fires on its own evidence.
 
-**42 blocks is the population to work, and it is nine times the size of what I
-enumerated by hand.** The hand pass found 16 grouped clauses among 44
-*candidates*; the shared-block scan says the real population is elsewhere and
-larger, exactly as the founding case predicted.
+The unit is now the **if/else chain**. Corpus-wide:
 
+| | before (begin/end) | after (if/else chain) |
+|---|---|---|
+| rows | **42** | **5** |
 
----
+    v_ca06   D5 + D6 + D7     <- the founding case, isolated exactly
+    v_nw04   I1 + W1          <- deliberate, and that testbench says so
+    v_ca03   C2 + E1
+    v_ca04   R4 + R5
+    v_nw02   F2 + P2
 
-## SCOPING — the timing-axis sweep, costed before building
+**Its limit, measured rather than assumed:** branches wrapped in `begin`/`end`
+are **missed**, not misreported. Missing is the right way for this to fail — a
+candidate list that over-reports gets ignored, and this tool has already been
+ignored once for exactly that reason.
 
-**Asked for a cost, not a build. Here it is, and the recommendation is not the
-instrument as specified.**
-
-### What it would be
-
-For each interval a task pins at its most permissive value, re-run the REFERENCE
-at other values and diff **the reference's own verdict**. Four axes, none of them
-a signal:
-
-| axis | state |
-|---|---|
-| 1. gap between consecutive beats on each source-driven channel | **the one that found D6.** Not instrumented anywhere |
-| 2. ready duty cycle on each sink-driven channel | **already built** — the free-running LFSR backpressure, landed on v_ca06 and v_ca03. Two of eleven |
-| 3. gap between transactions | not instrumented |
-| 4. transactions in flight | often bounded by the task's own parameters; not freely variable everywhere |
-
-### Why it costs what it costs, and it is not the running
-
-`check_fired.py` and `check_artefact_warnings.py` were cheap because **they read
-logs**. A timing sweep must *inject* timing into a testbench, and every testbench
-drives its stimulus differently. **There is no common hook and there cannot be
-one.** Every hour of this is per-task hand work.
-
-The measured precedent is v_ca06, where I did exactly this by hand:
-
-- adding `RGAP` to the downstream R responder: ~10 lines and one parameter — cheap
-- **widening the inter-phase drain from 40 cycles to 600 — expensive, and the
-  part that does not generalise.** A slow responder overruns whatever phase
-  structure a testbench has, and each testbench's structure breaks differently
-- the first reading came back **43 failures across seven clause ids** and looked
-  like "the anchor collapses under backpressure". It was the drain. Four of my
-  seven diagnostic runs on that task went into separating a real reference
-  failure from a phase-structure artefact
-
-> The cost is not the sweep. It is telling a reference defect apart from a
-> testbench that was never built to be slowed down, and that judgement does not
-> transfer between tasks.
-
-### The estimate
-
-| item | cost |
-|---|---|
-| axis 1 instrumentation, per task | 1–2 h, dominated by drain/phase diagnosis |
-| axis 3 instrumentation, per task | ~30 min |
-| axis 2 | done on 2 of 11; ~1 h each for the rest |
-| builds and runs | ~90 s per build; 4 settings per axis is 8 min per task |
-| **axes 1 and 3 across eleven** | **15–25 hours** |
-
-And the yield is unknown. **D6 is one instance.** I have no base rate, and a
-15–25 hour instrument justified by a single finding is exactly the sort of
-investment this file has been criticising all week.
-
-### What I would build instead, and why
-
-**A single perturbed rerun, not a sweep.** Run each reference once with every
-responder slowed by a fixed gap and every inter-transaction gap widened, and
-report only *did the reference still pass its own spec*. Then sweep for a
-threshold **only on the tasks where that one run fails.**
-
-    cheap detector  ->  expensive diagnostic  ->  run the diagnostic only where
-                                                  the detector fired
-
-Cost: the same per-task instrumentation for axis 1 (unavoidable), but **one build
-per task instead of N**, and no threshold-finding on tasks that do not need it.
-**~1.5–2 days** against 3–4 for the full sweep, and it finds every task that has
-a D6, differing only in that it does not immediately say at what depth.
-
-On v_ca06 this shape would have worked: the golden fails at `RGAP=4` and the
-threshold hunt (0,1,2,3,5,8,16) was seven extra builds that told me *three idle
-cycles* — a number that is interesting but was not needed to establish the defect.
-
-**One caution, from today.** The instrumentation is a testbench edit on all
-eleven, and a mechanical edit on all eleven is what broke v_ca07's build this
-afternoon — the insertion anchored on a line that was an `else if` and split the
-chain. **This one should be hand-done per task.** There is no anchor a script can
-trust, because the thing being edited is precisely each testbench's idiosyncratic
-stimulus structure.
-
----
-
-## THE STATE OF THE APPARATUS, written down while it is true
-
-**The apparatus is now much better at NAMING its failure modes than at CATCHING
-them.**
-
-Seven defects were found this week. What found each:
-
-| | found by |
-|---|---|
-| the combinational loop through the DUT | Verilator — reported, diluted, unread. Caught because 26 identical failures appeared across four one-hot variants |
-| the inert conformant channel | Verilator lint — reported, diluted, unread. Surfaced only when a clause finally needed that channel |
-| D6's fast-path stickiness | nothing — varying a timing parameter no instrument names |
-| the dangling `else` and the double RESULT line | nothing — running eleven testbenches and counting RESULT lines by hand |
-| the negative control that passed | nothing — asking "did it fire", which nothing asked |
-| `ts_step_o` connected and never read | `grep -c` |
-| the counter race | backpressure happening to align two events |
-
-**Two had tooling that reported them and was not read. Five had no instrument at
-all.**
-
-After this week: two have tools — `check_fired.py`, `check_artefact_warnings.py`
-— and **neither is wired into the scoring path**, because they sit in
-`inbox/*.for-scripts` and `scripts/` is not mine. Two more have named-but-unbuilt
-instruments. `must_fire` is now declared on all eleven, which is the one item
-that moved from named to installed.
-
-> **A task can go from spec to scored verdicts today, unattended, and it will
-> emit verdicts that look exactly like correct ones whether or not they are.**
-> That is precisely the class this week established: *right by convergence*,
-> *green while inert*, *passed because it never ran*.
-
-**Five new classes appeared in five days and the rate is not visibly declining.**
-That, more than any checklist, is the answer to whether the pipeline can be left
-alone. A list of four remaining items implies the list is nearly finished; the
-observed rate says it is not.
-
-**The argument for having spent the week this way is that naming is what lets
-someone else catch them.** Every one of these was invisible until it had a name,
-and three of them were then found again by other agents within a day of the name
-existing — the compile-warning class on the PPA side, the `exclusive: true` mirror
-on the design side, the reset-clause habit on a third task. **That is the return,
-and it is real.**
-
-**It is not the same as being able to walk away from it**, and this file should
-not be read as claiming otherwise.
+> **A peer's prediction about my instrument, made before they had run it,
+> corrected it.** They could not have measured it — they did not have the build.
+> They reasoned from the structure of their own testbenches, which differs from
+> mine, and were right. Calibrating an instrument only on the corpus you wrote
+> is how it acquires your blind spot; 42 rows would have been dismissed as noise
+> and the five real ones lost inside them.

@@ -165,38 +165,46 @@ def declarations(text):
 # rest of this tool -- a block emitting two ids may be two genuinely independent
 # checks that happen to sit together, and a reader must look. What it cannot do
 # is miss the shape, which subtracting sets can.
-BEGIN_END = re.compile(r"\b(begin|end)\b")
+# THE UNIT IS AN if/else CHAIN, NOT A begin/end BLOCK, and the first version had
+# it wrong. AGENT-DESIGN-43a92055 predicted the failure before running the tool:
+# their testbenches are phase-structured, with checks batched in an end-of-run
+# results block, and d_ca01's largest block emits nine distinct clause ids from
+# one `begin` -- nine genuinely separate observations. Measured on a reduced
+# form of exactly that structure:
+#
+#     results block  -> ['M1','M2','M3','R3','R5','R6']      <- pure noise
+#     one condition  -> ['D5','D6','D7']                     <- the real thing
+#
+# Indistinguishable. A block is a scope; it is not an observation. What makes
+# D5/D6/D7 one observation is that they are MUTUALLY EXCLUSIVE BRANCHES OF ONE
+# CONDITION -- at most one can fire, so at most one clause is ever named for a
+# single wrong value, and a submission checking any is credited with all. Six
+# independent `if`s in a results block have the opposite property: each fires on
+# its own evidence.
+#
+# So: find if/else chains and group the ids within one chain.
+#
+# ITS LIMIT, MEASURED NOT ASSUMED: branches wrapped in begin/end are not matched
+# by this form. The corpus's instances are single-statement branches, which is
+# what the shape looks like when written naturally, but a chain with begin/end
+# branches will be MISSED rather than misreported. Missing is the right way for
+# this to fail -- a candidate list that over-reports gets ignored, and this tool
+# has already been ignored once for that reason.
+CHAIN = re.compile(
+    r"\bif\s*\([^;{]*?\)[^;]*?;"          # if (...) stmt;
+    r"(?:\s*else\s+(?:if\s*\([^;{]*?\)\s*)?[^;]*?;)+",  # (else [if (...)] stmt;)+
+    re.S)
 
 def shared_blocks(text):
-    """-> [(depth, sorted ids)] for innermost begin/end blocks emitting >= 2."""
-    stack, out = [], []
-    pos = 0
-    for m in BEGIN_END.finditer(text):
-        seg = text[pos:m.start()]
-        for f in FAILCALL.finditer(seg):
-            for fr in stack:
-                fr.add(f.group(1))
-        pos = m.end()
-        if m.group(1) == "begin":
-            stack.append(set())
-        elif stack:
-            ids = stack.pop()
-            if len(ids) >= 2:
-                out.append((len(stack), sorted(ids)))
-            if stack:
-                stack[-1] |= ids
-    for f in FAILCALL.finditer(text[pos:]):
-        for fr in stack:
-            fr.add(f.group(1))
-    # innermost only: a block is reported unless a strictly deeper block in the
-    # list carries the SAME id set, which would make this one an echo of it.
-    seen, keep = set(), []
-    for depth, ids in sorted(out, key=lambda r: -r[0]):
-        k = tuple(ids)
-        if k in seen:
-            continue
-        seen.add(k); keep.append((depth, ids))
-    return sorted(keep, key=lambda r: (-len(r[1]), r[1]))
+    """-> [(0, sorted ids)] for if/else chains naming two or more clause ids."""
+    src = re.sub(r"//[^\n]*", "", text)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    out, seen = [], set()
+    for m in CHAIN.finditer(src):
+        ids = sorted({f.group(1) for f in FAILCALL.finditer(m.group(0))})
+        if len(ids) >= 2 and tuple(ids) not in seen:
+            seen.add(tuple(ids)); out.append((0, ids))
+    return sorted(out, key=lambda r: (-len(r[1]), r[1]))
 
 
 def analyse(task_dir):
@@ -258,9 +266,13 @@ def main(argv):
     if "--shared" in argv:
         roots = [a for a in argv[1:] if not a.startswith("-")] or \
                 sorted(glob.glob("domains/*/*/[dv]_*"))
-        print("SHARED-OBSERVATION CANDIDATES -- clause ids emitted from one")
-        print("begin/end block. Candidate list, not a verdict: two ids in one")
-        print("block may be two independent checks that sit together.\n")
+        print("SHARED-OBSERVATION CANDIDATES -- clause ids named from MUTUALLY")
+        print("EXCLUSIVE BRANCHES OF ONE CONDITION. At most one can fire, so at")
+        print("most one clause is ever named for a single wrong value and a")
+        print("submission checking any is credited with all.")
+        print("Candidate list, not a verdict. Branches wrapped in begin/end are")
+        print("MISSED, not misreported -- see the header for why that is the")
+        print("right way for this to fail.\n")
         n = 0
         for d in roots:
             tbs = sorted(glob.glob(os.path.join(d, "tb", "*_tb.sv")))
@@ -274,7 +286,7 @@ def main(argv):
                 for depth, ids in rows:
                     print("      %s" % " + ".join(ids))
                     n += 1
-        print("\n%d shared block(s)." % n)
+        print("\n%d shared observation(s)." % n)
         return 0
     roots = [a for a in argv[1:] if not a.startswith("-")]
     if not roots:
