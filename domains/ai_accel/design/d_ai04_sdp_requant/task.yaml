@@ -142,5 +142,38 @@ scored_path_note: >
   A sentence plus the command above is worth more than an artefact that
   misrepresents what it is.
 
+second_source:
+  file: tb/sdp_requant_alt_ref.sv
+  written_from: spec/ alone, not from MEASUREMENTS.md and not from the reference
+  verdict: PASS on the scoring rig; 0 differing words of 1728 against the anchor
+  deliberately_different:
+    - two pipeline stages, so LATENCY 2 and CAPACITY 3 against the reference's 1 and 2
+    - floor-then-correct rounding in the signed domain, not round-half-up on the magnitude
+    - a priority case over the subnormal mantissa positions, not a counting loop
+  why_it_matters: >
+    The reference was written by the author of the spec from the measurements the
+    spec was derived from. That tests the reference, not the SPEC. Two conforming
+    designs with different latency and different buffer depth both passing is the
+    evidence that the contract constrains behaviour without constraining
+    structure -- and had the testbench quietly assumed the reference's latency of
+    1, this file would have failed it, which is why it was built with latency 2.
+  what_it_did_not_find: >
+    No contract defect. d_ca03's second source found four; this one found none,
+    and the honest reading is that d_ai04's contract is narrower -- one
+    combinational function plus a handshake, against a three-level walker with
+    PMP. One implementation bug of my own was found and is not a spec defect
+    (`unique case` where `priority case` was meant; several mantissa bits are set
+    at once in any subnormal with more than one significant digit).
+  one_gap_worth_recording: >
+    The spec does not say what out_data holds while out_valid is low. Both
+    sources leave it as the queue head and the testbench does not read it, so
+    nothing depends on it -- but it is undetermined by the text rather than
+    decided by it.
+
+prompting_status: >
+  READY. candidates/d_ai04/ exists with a README carrying the scoring command,
+  the hash, the configuration, what is and is not scored, and the two controls a
+  reader should know about before reading a submission.
+
 submissions_status: >
   NOT YET SOLICITED. No submission exists for this task.

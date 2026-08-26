@@ -30,11 +30,16 @@ architecture:
   word is accepted. That case is checked directly.
 
 Everything asserted below about delivered lanes, rounding, saturation and
-control behaviour was MEASURED against the anchor — see `MEASUREMENTS.md`. Where
-IEEE-754 would permit something else, the contract states the choice rather than
-leaving it to be inferred: infinity clamps to `FLT_MAX` rather than propagating.
+control behaviour was **measured** against a hardware anchor rather than assumed
+from convention. Where IEEE-754 would permit something else, the contract states
+the choice rather than leaving it to be inferred: infinity clamps to `FLT_MAX`
+rather than propagating.
 
-Everything normative is in the interface below.
+**Everything normative is in the interface below, and it is complete.** The
+contract cites a few repository file names in passing — those are provenance
+notes for maintainers, not documents you need; nothing normative lives in them.
+You are not expected to have seen the anchor, and you do not need it: every
+value the contract depends on is written out here.
 
 ```systemverilog
 // =============================================================================
