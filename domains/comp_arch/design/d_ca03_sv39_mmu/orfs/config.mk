@@ -24,6 +24,7 @@ export CORE_UTILIZATION = 10
 export PLACE_DENSITY    = 0.50
 export TNS_END_PERCENT  = 100
 
+
 export SYNTH_HDL_FRONTEND = slang
 
 # The dependency closure, EXPLICIT and in order, packages first. slang does not
@@ -67,6 +68,28 @@ export VERILOG_FILES = /work/refs/common_cells/src/cf_math_pkg.sv \
                        /work/domains/comp_arch/design/d_ca03_sv39_mmu/ref/sv39_mmu_top.sv
 
 export SDC_FILE      = /work/domains/comp_arch/design/d_ca03_sv39_mmu/orfs/constraint.sdc
+
+# ABC's mapping target. COPIED VERBATIM from d_ca01's config.mk, deriving the
+# value from this task's own SDC rather than restating a number.
+#
+# Without this line ppa_candidate.sh REFUSES to build any candidate for this task
+# (scripts/ppa_candidate.sh:152, the F24 guard). It copies this line into the
+# generated candidate config so the candidate is mapped against the SAME ABC
+# target as the reference; with nothing to copy it cannot prove that, and it
+# stops rather than assume. That refusal is what blocked d_ca03/chat at 12.5 ns.
+#
+# ADDING IT MOVES NO NUMBER. run_orfs_build.sh:121 already puts
+# ABC_CLOCK_PERIOD_IN_PS=<period*1000> on the make command line whenever
+# CLK_PERIOD_NS is set, and a make-line variable overrides the file -- the
+# reference at 12.5 ns synthesised against 12500 either way. What changes is that
+# the target is now DECLARED, so it is visible to the guard and recorded in
+# build_config_hash instead of reading <unset>. The reference must therefore be
+# REBUILT after this change, or the reference and the candidates carry different
+# build_config_hash values and the row is not comparable under rule 17.
+#
+# This file is not part of task_text_hash (which covers spec/ and PASTE.md), so
+# adding it invalidates no solicitation -- same reasoning as the floorplan vars.
+export ABC_CLOCK_PERIOD_IN_PS := $(shell awk '/^set clk_period/{printf "%d", $$3*1000; exit}' $(SDC_FILE))
 
 # The include path is the TOP-LEVEL refs/common_cells/include. cva6 and
 # common_cells both `include "common_cells/registers.svh"`.

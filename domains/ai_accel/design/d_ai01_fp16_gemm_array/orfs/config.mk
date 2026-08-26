@@ -72,6 +72,7 @@ export CORE_UTILIZATION = 30
 export PLACE_DENSITY    = 0.50
 export TNS_END_PERCENT  = 100
 
+
 export SYNTH_HDL_FRONTEND = slang
 
 # TWO shim files, and the order matters. fp16_gemm_array_ref.sv declares
@@ -130,6 +131,33 @@ export VERILOG_FILES = /work/refs/common_cells/src/cf_math_pkg.sv \
                        /work/domains/ai_accel/design/d_ai01_fp16_gemm_array/ref/fp16_gemm_array_top.sv
 
 export SDC_FILE      = /work/domains/ai_accel/design/d_ai01_fp16_gemm_array/orfs/constraint.sdc
+
+# ABC's mapping target. COPIED VERBATIM from d_ca01's config.mk, deriving the
+# value from this task's own SDC rather than restating a number.
+#
+# WITHOUT THIS LINE ABC WAS TOLD 50 PICOSECONDS INSTEAD OF 50 NANOSECONDS.
+# d_ai01 was the last design task with no explicit line, so it fell through to
+# ORFS's own fallback (scripts/variables.mk:220):
+#
+#   sed -nE "s/^set\s+clk_period\s+(\S+).*|.*-period\s+(\S+).*/\1\2/p" $(SDC_FILE)
+#
+# That lifts the raw number out of the SDC -- `50.0` -- and assigns it to a
+# variable whose units are PICOseconds. It does not multiply by 1000. So every
+# synthesis of this task that did not come through a caller setting
+# CLK_PERIOD_NS mapped against a 20 GHz target, and ABC buys delay at any area
+# cost: upsizing, buffering, duplication. Observed directly in the build log as
+# `Setting clock period to 50.0` where every other task shows picoseconds.
+#
+# The callers masked it: run_orfs_build.sh:121 puts a correct period*1000 on the
+# make command line whenever CLK_PERIOD_NS is set, and find_fmax.py sets it every
+# iteration. A task that depends on its caller to mask a units error still
+# produces a wrong number the moment someone builds it directly, which is what
+# the reference probes did.
+#
+# The fallback's other failure mode is worse and is why d_ca04 carries an
+# adapted line: on a MULTI-CLOCK SDC with no `set clk_period`, that same sed
+# returns the literal string `$wr_period` rather than any number at all.
+export ABC_CLOCK_PERIOD_IN_PS := $(shell awk '/^set clk_period/{printf "%d", $$3*1000; exit}' $(SDC_FILE))
 
 # The include path is the TOP-LEVEL refs/common_cells/include, NOT cvfpu's own:
 # refs/cvfpu/src/common_cells is an empty uninitialised submodule, and pointing

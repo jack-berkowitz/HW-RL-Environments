@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 18, correct 14, PPA measured 15. Verification: submitted 30, compiled 24, tells correct from broken 15, fault count 12." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 18, correct 14, PPA measured 16. Verification: submitted 30, compiled 24, tells correct from broken 15, fault count 12." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -45,7 +45,7 @@ area and slower.
 
 ## Design results
 
-**Five tasks are complete at their pinned clock.** Every design specification was
+**Seven tasks are complete at their pinned clock.** Every design specification was
 revised to state its grading criteria — what correctness gates, which PPA axes
 are compared, at what clock, and which levers the contract has already spent —
 and every candidate was re-solicited against the revised prompt.
@@ -60,9 +60,9 @@ area comparable at all: without it, area can be bought by relaxing timing.
   <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.75x, claude 0.75x, gemini 0.73x. Stream switch at 4.25 ns, reference 26,340 um2: all three missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat 1.80x, claude 1.05x, gemini fails correctness. Multi-format FMA at 70.5 ns, reference 177,557 um2: chat fails correctness, claude 1.42x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.36x, claude missed timing, gemini fails correctness." src="docs/assets/design_area_light.svg" width="100%">
 </picture>
 
-**Six of fifteen submissions produce a comparable area number.** Four missed
-timing, four fail correctness, and one was never built. That is the result, not a
-gap in the data.
+**Nine of twenty-one submissions produce a comparable area number.** Five missed
+timing, four fail correctness, and three were rejected by the synthesis frontend
+without ever running. That is the result, not a gap in the data.
 
 ### d_ca04 — asynchronous CDC FIFO, pinned at 4.25 ns
 
@@ -106,7 +106,7 @@ cannot run at 4.25 ns.
 | reference | 177,557 | 91.1 | +1.995 | — |
 | `chat` | **0** | **0** | — | fails correctness |
 | `claude` | 251,769 | 80.1 | +8.179 | 1.42× |
-| `gemini` | **0** | **0** | — | fails correctness |
+| `gemini` | **0** | **0** | — | did not build |
 
 ### d_nw01 — AXI4 crossbar, pinned at 8.0 ns
 
@@ -115,7 +115,39 @@ cannot run at 4.25 ns.
 | reference | 147,144 | 54.7 | +1.148 | — |
 | `chat` | 199,852 | 58.1 | +0.802 | 1.36× |
 | `claude` | *withheld* | *withheld* | **−0.023** | missed timing |
+| `gemini` | **0** | **0** | — | did not build |
+
+### d_ca01 — non-blocking data cache, pinned at 15.0 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 573,055 | 76.0 | +2.200 | — |
+| `chat` | 780,029 | 128.0 | +1.121 | 1.36× |
+| `claude` | 563,403 | 94.5 | +2.648 | **0.98×** |
 | `gemini` | **0** | **0** | — | fails correctness |
+
+`claude` is the only submission across all seven tasks to come in under a
+reference on a large design, and it did so with the most slack in the row. It
+reaches a different design point to do it — one cycle of minimum latency against
+the reference's two — so the area is correct but not like-for-like.
+
+### d_ca03 — RISC-V Sv39 MMU, pinned at 12.5 ns
+
+| | area µm² | power mW | slack ns | vs reference |
+|---|---|---|---|---|
+| reference | 279,456 | 32.6 | +0.989 | — |
+| `chat` | *withheld* | *withheld* | **−35.461** | missed timing |
+| `claude` | **0** | **0** | — | fails correctness |
+| `gemini` | **0** | **0** | — | rejected by the synthesis frontend |
+
+`chat` is correct — it passes the scored configuration — and needs roughly 48 ns
+to do it, against a 12.5 ns pin. That is not a near miss like d_nw03's 78 ps; it
+is a design that works and is nearly four times too slow.
+
+`gemini` is a distinct outcome from a correctness failure: slang rejects it with
+ten diagnostics, none of them internal errors, and Verilator rejects the same
+construct at the same line. Two independent frontends agreeing makes it a
+genuine build failure rather than a host problem.
 
 ### Why some cells are withheld and others are zero
 
@@ -129,11 +161,15 @@ questions. PPA from a build that missed its pin is withheld, not reported (rule
 rather than omitted (rule 19). Omitting it would make the surviving rows look
 like the whole population, which is how an 8-of-18 result reads as 8 of 10.
 
+**"Did not build" is a separate outcome from "fails correctness"**, and they are
+not interchangeable: one wrote hardware the synthesis frontend rejects, the other
+wrote hardware that compiles and computes the wrong answer. Both score zero;
+they say different things about the model. Three submissions never ran at all.
+
 ### Not measured yet
 
 | task | state |
 |---|---|
-| d_ca01, d_ca03 | building on a second machine; records not yet pushed |
 | d_ai01 | no pin yet — HEIGHT=8 never routed on sky130hd (76k–83k violations across three floorplans). The scored geometry moved to HEIGHT=4, which routes clean at 0 violations, so its reference Fmax sweep is possible for the first time and is queued |
 | d_dsp01 | no scoring testbench; withdrawn |
 

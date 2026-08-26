@@ -12,8 +12,8 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | notes |
 |---|---|---|---|---|---|
-| **reference** | **2/2 pass** | — | — | — |  |
-| `nc_g_height_blind_depth` — *negative control, expected to fail* | 1/2 FAIL | — | — | — |  |
+| **reference** | **2/2 pass** | — | — | — | scored configuration HEIGHT_4_WIDTH_8 not present in this run |
+| `nc_g_height_blind_depth` — *negative control, expected to fail* | 1/2 FAIL | — | — | — | scored configuration HEIGHT_4_WIDTH_8 not present in this run |
 | `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
 | `Claude Opus 5` | *not scored against this prompt* | — | — | — | last run answered task text `2cf1ff4be7bf693a`; the task text is now `2f2c4cd76f582ae1` |
 | `claude_nodefault` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `2f2c4cd76f582ae1` |
@@ -29,21 +29,22 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | outstd | fills | notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `chat` | **16/16 pass** | — | — | — | 2 | 20057 | 10 | 486 |  |
-| `claude` | **16/16 pass** | — | — | — | 1 | 20057 | 9 | 482 |  |
+| `chat` | **16/16 pass** | 780,029 | 128.0 | not swept | 2 | 20057 | 10 | 486 | 78,003 um2 per unit of max_outstanding_n, 1.36x the reference per unit |
+| `claude` | **16/16 pass** | 563,403 | 94.5 | not swept | 1 | 20057 | 9 | 482 | **different design point** (latency_min 1 vs reference 2): area is correct but not like-for-like; 62,600 um2 per unit of max_outstanding_n, 1.09x the reference per unit |
 | `gemini` | 0/16 FAIL | — | — | — | 2 | 184 | 16 | 455 |  |
 | `nc_r1_evades_antecedent` — *negative control, expected to fail* | 0/16 FAIL | — | — | — | 2 | 20113 | 10 | 481 |  |
-| **reference** | **16/16 pass** | 578,032 | 115.0 | 100.0 | 2 | 20113 | 10 | 481 | **measured at a superseded pin** — built at 10 ns; this task is pinned at 15 ns, so this is not comparable with rows at the pin; 57,803 um2 per unit of max_outstanding_n |
+| **reference** | **16/16 pass** | 573,055 | 76.0 | 100.0 | 2 | 20113 | 10 | 481 | 57,306 um2 per unit of max_outstanding_n |
 | `nonblocking_dcache_alt_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `c9c3532f93fe4954`; the task text is now `51337b00b54b64c7` |
 
 ## d_ca03 — RISC-V Sv39 MMU -- page-table walker, TLBs, PMP
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | notes |
 |---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
+| `chat` | **1/1 pass** | withheld | withheld | not swept | **PPA withheld — the build did not meet timing** (slack -35.461 ns at 12.5 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
 | `claude` | 0/1 FAIL | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
 | `gemini` | **did not build** | **0** | **0** | **0** | **build failure** — 10 error(s); first: sanitised_gemini.sv:113:5: error: declaration must come before all statements in the block  |
-| **reference** | **1/1 pass** | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
+| `sv39_mmu_ref` | — | 279,456 | 32.6 | 121.9 |  |
+| **reference** | **1/1 pass** | 279,456 | 32.6 | not swept | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
 
 ## d_ca04 — asynchronous CDC FIFO
 
@@ -83,6 +84,7 @@ capability, and nothing here establishes those weights.
 | `claude` | **2/2 pass** | 251,769 | 80.1 | not swept | 1 | 14 | 460 | **different design point** (latency_min 1 vs reference 0): area is correct but not like-for-like; 547 um2 per unit of throughput_ops_per_1000cyc, 1.32x the reference per unit |
 | **reference** | **2/2 pass** | 177,557 | 91.1 | 21.3 | 0 | 0 | 427 | 416 um2 per unit of throughput_ops_per_1000cyc |
 | `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | **build failure** — 2 error(s); first: sanitised_gemini.sv:261:70: error: expected 'endfunction'  |
+| `nc_d_band_unbounded_tininess` — *negative control, expected to fail* | 0/2 FAIL | — | — | — | 0 | 0 | 427 |  |
 
 ## d_nw01 — AXI4 crossbar
 
@@ -92,6 +94,7 @@ capability, and nothing here establishes those weights.
 | `chat` | **16/16 pass** | 199,852 | 58.1 | not swept | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
 | `claude` | **16/16 pass** | withheld | withheld | not swept | — | — | — | — | — | **PPA withheld — the build did not meet timing** (slack -0.023 ns at 8.0 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
 | `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 1 error(s); first: sanitised_gemini.sv:391:139: error: no member named 'w_ready' in 'mst_req_t'  |
+| `nc_i_overbuffered_r` — *negative control, expected to fail* | **16/16 pass** | — | — | — | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
 | `DeepSeek V4 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `4e277da1edfe8af7`; the task text is now `29910fdec8a8e5d9` |
 | `Qwen 3.7 Plus` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `4e277da1edfe8af7`; the task text is now `29910fdec8a8e5d9` |
 - **capacity (C1)** — checker's C1 capacity measure, master 0 — units unresolved, see note
@@ -111,6 +114,7 @@ capability, and nothing here establishes those weights.
 | `gemini` | **8/8 pass** | withheld | withheld | not swept | 18376 | 8066 | 54 | **PPA withheld — the build did not meet timing** (slack -0.116 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 7 um2 per unit of beats_delivered, 4.06x the reference per unit |
 | `nc_a_reset_polarity` — *negative control, expected to fail* | 0/8 FAIL | — | — | — | 0 | 7834 | 0 |  |
 | `nc_b_outputs_serialised` — *negative control, expected to fail* | 6/8 FAIL | — | — | — | 7079 | 7983 | 9 |  |
+| `nc_r1_evades_antecedent` — *negative control, expected to fail* | 0/8 FAIL | — | — | — | 14882 | 8021 | 0 |  |
 
 ---
 
@@ -168,13 +172,13 @@ prompt is a different question and is not listed.
 
 ## v_ca03 — AXI ID-width converter
 
-Rows below answer task text `394f1f8fd51e8c2a` (spec + the prompt the
+Rows below answer task text `fc1baef44b90f91c` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| **reference testbench** | yes | yes | yes | 5/5 | **11/11** | establishes the ceiling |
+| `id_width_conv_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `394f1f8fd51e8c2a` |
 | `chat` | — | *not scored against this prompt* | — | — | — | last run answered task text `a04f965ad7552b22` |
 | `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `a04f965ad7552b22` |
 | `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `a04f965ad7552b22` |
@@ -207,13 +211,13 @@ prompt is a different question and is not listed.
 
 ## v_ca06 — AXI data-width downsizer
 
-Rows below answer task text `c1de26c772eb754d` (spec + the prompt the
+Rows below answer task text `6cb14e9d2e6381ac` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| `dw_downsizer_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `ca63302d6b23df46` |
+| **reference testbench** | yes | yes | yes | 5/5 | **12/12** | establishes the ceiling |
 | `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `ca63302d6b23df46` |
 
 ## v_ca07 — Glitch-free integer clock divider

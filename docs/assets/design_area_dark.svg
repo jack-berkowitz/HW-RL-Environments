@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 514" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect width="900" height="514" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 686" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="900" height="686" fill="none"/>
 <text x="20" y="26" fill="#e8e8e8" font-size="15" font-weight="600">Design area vs the reference, at each task’s pinned clock</text>
 <text x="20" y="45" fill="#9a9a9a" font-size="12">Lower is smaller. Only submissions that CLOSED TIMING are plotted — see the notes for the rest.</text>
-<line x1="457.0411522633745" y1="58" x2="457.0411522633745" y2="494" stroke="#ff6b6b" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="457.0411522633745" y1="58" x2="457.0411522633745" y2="666" stroke="#ff6b6b" stroke-width="1.5" stroke-dasharray="4 3"/>
 <text x="462.0411522633745" y="68" fill="#ff6b6b" font-size="11">reference (1.0×)</text>
 <text x="20" y="88" fill="#e8e8e8" font-size="13" font-weight="600">async CDC FIFO</text>
 <text x="20" y="104" fill="#9a9a9a" font-size="11">d_ca04 @ 4.25 ns — ref 19,837 µm²</text>
@@ -53,7 +53,7 @@
 <text x="566" y="367" fill="#e8e8e8" font-size="11">1.42×</text>
 <text x="200" y="387" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="376" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="216" y="387" fill="#9a9a9a" font-size="11" font-style="italic">fails correctness</text>
+<text x="216" y="387" fill="#9a9a9a" font-size="11" font-style="italic">did not build</text>
 <text x="20" y="432" fill="#e8e8e8" font-size="13" font-weight="600">AXI4 crossbar</text>
 <text x="20" y="448" fill="#9a9a9a" font-size="11">d_nw01 @ 8.0 ns — ref 147,144 µm²</text>
 <text x="200" y="433" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
@@ -65,5 +65,29 @@
 <text x="216" y="453" fill="#9a9a9a" font-size="11" font-style="italic">missed timing</text>
 <text x="200" y="473" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="462" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="216" y="473" fill="#9a9a9a" font-size="11" font-style="italic">fails correctness</text>
+<text x="216" y="473" fill="#9a9a9a" font-size="11" font-style="italic">did not build</text>
+<text x="20" y="518" fill="#e8e8e8" font-size="13" font-weight="600">non-blocking D-cache</text>
+<text x="20" y="534" fill="#9a9a9a" font-size="11">d_ca01 @ 15.0 ns — ref 573,055 µm²</text>
+<text x="200" y="519" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
+<rect x="210" y="508" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
+<rect x="210" y="508" width="336" height="15" rx="2" fill="#2f4f8f"/>
+<text x="552" y="519" fill="#e8e8e8" font-size="11">1.36×</text>
+<text x="200" y="539" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
+<rect x="210" y="528" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
+<rect x="210" y="528" width="242" height="15" rx="2" fill="#5b8dfb"/>
+<text x="458" y="539" fill="#e8e8e8" font-size="11">0.98×</text>
+<text x="200" y="559" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
+<rect x="210" y="548" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
+<text x="216" y="559" fill="#9a9a9a" font-size="11" font-style="italic">fails correctness</text>
+<text x="20" y="604" fill="#e8e8e8" font-size="13" font-weight="600">Sv39 MMU</text>
+<text x="20" y="620" fill="#9a9a9a" font-size="11">d_ca03 @ 12.5 ns — ref 279,456 µm²</text>
+<text x="200" y="605" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
+<rect x="210" y="594" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
+<text x="216" y="605" fill="#9a9a9a" font-size="11" font-style="italic">missed timing</text>
+<text x="200" y="625" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
+<rect x="210" y="614" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
+<text x="216" y="625" fill="#9a9a9a" font-size="11" font-style="italic">fails correctness</text>
+<text x="200" y="645" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
+<rect x="210" y="634" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
+<text x="216" y="645" fill="#9a9a9a" font-size="11" font-style="italic">did not build</text>
 </svg>

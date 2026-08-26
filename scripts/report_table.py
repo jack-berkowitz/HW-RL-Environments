@@ -466,7 +466,28 @@ def _is_reference_file(task, sub):
         names = set()
         for d in glob.glob(os.path.join(REPO, "domains", "*", "design", task)) + \
                  glob.glob(os.path.join(REPO, "domains", "*", "verification", task)):
+            cfg = os.path.join(d, "orfs", "config.mk")
+            dn = None
+            if os.path.exists(cfg):
+                m = re.search(r"^\s*export\s+DESIGN_NAME\s*:?=\s*(\S+)",
+                              open(cfg, errors="replace").read(), re.M)
+                dn = m.group(1).strip() if m else None
             for f in glob.glob(os.path.join(d, "ref", "*.sv")):
+                # LIVING IN ref/ IS NOT ENOUGH. A two-file shim puts BOTH halves
+                # there -- sv39_mmu_ref.sv declaring sv39_mmu_ref_inner beside
+                # sv39_mmu_top.sv declaring the contract module sv39_mmu -- and
+                # labelling both "reference" put TWO reference rows in d_ca03,
+                # one of them a build of the inner module produced by the
+                # filename-based pick fixed in 5c3c1ff. The reference is the file
+                # that DECLARES DESIGN_NAME, which is what reference_ppa.sh and
+                # build_and_score.sh now select on. Same property, third site.
+                if dn:
+                    try:
+                        if not re.search(r"^module\s+%s\b" % re.escape(dn),
+                                         open(f, errors="replace").read(), re.M):
+                            continue
+                    except OSError:
+                        continue
                 names.add(os.path.basename(f))
         _REFDIR_CACHE[task] = names
     return os.path.basename(sub or "") in _REFDIR_CACHE[task]

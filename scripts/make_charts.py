@@ -383,7 +383,9 @@ DESIGN_PINS = [("d_ca04", "4.25", "async CDC FIFO"),
                ("d_nw03", "4.25", "stream switch"),
                ("d_dsp02", "19.25", "FP32 FMA"),
                ("d_dsp03", "70.5", "multi-format FMA"),
-               ("d_nw01", "8.0", "AXI4 crossbar")]
+               ("d_nw01", "8.0", "AXI4 crossbar"),
+               ("d_ca01", "15.0", "non-blocking D-cache"),
+               ("d_ca03", "12.5", "Sv39 MMU")]
 DESIGN_MODELS = ("chat", "claude", "gemini")
 
 
@@ -420,10 +422,27 @@ def design_rows():
                 continue
             a = r.get("design_area_um2")
             bars.append((m, float(a) / ref_a, "") if a else (m, None, "no area"))
-        # a model with no ppa record at the pin: correctness zero or not built
+        # A MODEL WITH NO PPA RECORD AT THE PIN IS NOT AUTOMATICALLY A
+        # CORRECTNESS FAILURE. It may never have compiled, which is a different
+        # fact about the model: "wrote wrong hardware" and "wrote something the
+        # synthesis frontend rejects" are not the same result, and labelling
+        # both "fails correctness" reported three build failures as functional
+        # ones. The sim record says which -- build_status is set only when the
+        # frontend refused it.
+        sims = {}
+        for f in glob.glob(os.path.join(REPO, "runs", task, "*__sim.json")):
+            try:
+                r = json.load(open(f))
+            except Exception:
+                continue
+            w = r.get("label", "")
+            if w not in sims or r.get("timestamp_utc", "") > sims[w].get("timestamp_utc", ""):
+                sims[w] = r
         for m in DESIGN_MODELS:
             if best.get(m) is None:
-                bars[DESIGN_MODELS.index(m)] = (m, None, "fails correctness")
+                sm = sims.get(m) or {}
+                note = "did not build" if sm.get("build_status") else "fails correctness"
+                bars[DESIGN_MODELS.index(m)] = (m, None, note)
         out.append((task, label, pin, ref_a, bars))
     return out
 
