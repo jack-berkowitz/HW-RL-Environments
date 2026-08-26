@@ -1,0 +1,31 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {},
+  "git_sha": "e0b8f96149b9ca934dc45fe452e989b390dad351-dirty",
+  "invalidated": true,
+  "invalidated_by": "PC agent, 2026-08-26",
+  "invalidated_reason": "TOOLCHAIN ARTEFACT, NOT A RESULT. This records the d_ai01 REFERENCE as failing 0/2 with verdict COMPILE. The cause is Verilator 5.032 (/usr/bin/verilator, first on PATH on this host), which cannot compile the vendored cvfpu sources at all: %Error-BLKANDNBLK in refs/redmule/rtl/redmule_fma.sv, the same class of error it raises at refs/cvfpu/src/fpnew_fma.sv:111 for d_dsp02. The same reference passes 2/2 under Verilator 5.051 (oss-cad-suite) -- see 2026-08-26T003539Z. Nothing about the RTL is being reported here.",
+  "invalidated_simulator": "Verilator 5.032 2025-01-01 rev (Debian 5.032-1)",
+  "invalidated_superseded_by": "runs/d_ai01_fp16_gemm_array/2026-08-26T003539Z__fp16_gemm_array_top__sim.json",
+  "kind": "sim",
+  "label": "fp16_gemm_array_top",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "COMPILE"
+    }
+  ],
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/ref/fp16_gemm_array_top.sv",
+  "submission_sha256_16": "023cd4e46559334e",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2f2c4cd76f582ae1",
+  "timestamp_utc": "2026-08-26T00:32:10Z"
+}
