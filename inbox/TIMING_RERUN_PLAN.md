@@ -341,3 +341,80 @@ class this whole file is about.
 
 **7 of 11 measurable. Same stopping rule: report on the first escalation, no
 sweep, no clause moves.**
+
+
+---
+
+# THIRD RUN — per-task RGAP, seven edits. Five clean, two escalations.
+
+**No sweep. No clause moved.**
+
+## Results
+
+| task | depth | narrow drain | wide drain | verdict |
+|---|---|---|---|---|
+| `v_ca06` | 9 | FAIL 38 (drain) | **PASS**, FLOOR only | **CLEAN** |
+| `v_ca03` | 9 | **PASS** | FLOOR only | **CLEAN** |
+| `v_nw03` | 5 | **PASS** | **PASS** | **CLEAN** |
+| `v_ai02` | 6 | **PASS** | **PASS** | **CLEAN** |
+| `v_ca04` | 4 | FAIL 2 (I1, I2) | **PASS** | **CLEAN** — narrow failures were drain |
+| `v_nw02` | 9 | FAIL P3 | FAIL P3 | **ESCALATION** |
+| `v_nw01` | 65 | FAIL Q6 | FAIL Q6 | **ESCALATION** |
+
+Perturbation live on all seven: `perturb_at_depth` from 26 to 1380, never zero.
+
+**Five of seven clean on the axis D6 lives on**, including `v_ca06` at three times
+the depth the old sticky D6 broke at — now confirmed by a third independent
+mechanism.
+
+## Escalation 1 — `v_nw02` P3
+
+    FAIL P3: after the read sweep: 3 R beat(s) still owed, oldest id=6
+
+P3 is *"the read address path is never altered… a read is never filtered."* The
+message is not about alteration — it is **beats still in flight at a phase
+boundary**. The R responder is held back 9 cycles per beat and the read sweep's
+end-of-phase check runs before they drain.
+
+**It survived the ×10 widening, which is what makes it an escalation by my own
+definition** — but the widening multiplies `repeat(N)`, `t < N` and `drain(N)`,
+and if that phase ends on a different construct the widening never reached it.
+**I have not confirmed which**, and that is the next thing to check rather than a
+conclusion to draw.
+
+## Escalation 2 — `v_nw01` Q6, and the magnitude is my error
+
+    FAIL Q6: a matching reply did not resolve the lookup
+
+**The depth is wrong and the table says why.** I justified 65 as *"one past
+`REQUEST_RETRY_INTERVAL=64`, so a stall shorter than 64 never lets a retry fire"*
+— which is an argument about the gap **between requests**. The inter-beat axis
+applies it **between payload bytes**, and the frame is 28 bytes:
+
+    65 cycles x 28 bytes = 1820 cycles per frame
+    REQUEST_TIMEOUT      = 256
+
+**The frame takes seven times the design's own lookup timeout.** The lookup
+expires before the reply finishes arriving, and Q6 — *a matching reply resolves
+the outstanding lookup* — cannot hold because there is no outstanding lookup left.
+
+> **A magnitude justified on one axis and applied on another is not justified.**
+> My own table names the axis for each task and I derived this one from an
+> inter-transaction quantity, then applied it per beat. The table looked
+> rigorous — every row has a reason — and the reason for this row is about a
+> different measurement.
+
+The correct depth for `v_nw01`'s inter-beat axis comes from what the design
+buffers *within* a frame, not from its retry interval. **I do not currently know
+that number**, and picking one without it would repeat the error.
+
+## What this does and does not establish
+
+**Establishes:** five tasks clean on the inter-beat axis at a justified depth, by
+a mechanism that gates nothing and cannot produce a phantom transfer. `v_ca06`
+clean under three independent mechanisms.
+
+**Does not establish:** anything about `v_nw02` or `v_nw01`. One has an unverified
+widening and one has a depth I derived wrongly. **Neither is a statement about
+the design yet**, and by the pattern of this whole exercise the prior should be
+that they are not.
