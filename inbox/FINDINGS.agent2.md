@@ -2200,3 +2200,120 @@ than contractual. Measured after the change:
 opposite sides of the three-cycle threshold, so the conformant set now exercises
 L7 from both directions instead of sampling one. Before this week neither stalled
 that path at all.
+
+
+---
+
+## FINDING — a testbench that drives `ready` from `valid` closes a combinational loop through the design, and the harness is configured not to tell you
+
+**The same instrument, on two tasks: on one it converged and gave the right
+answer, on the other it produced 26 failures across six clause ids, none of them
+a design defect. Nothing in either run said which had happened.**
+
+### The instrument
+
+A5/D5 need backpressure, and the stall was armed combinationally on the
+channel's own `valid` — deliberately, to make the stall land on the cycle the
+offer is made rather than one cycle later:
+
+    wire arm_maw = m_awvalid && (st_maw==0) && (cd_maw==0);
+    assign m_awready = (st_maw==0) && !arm_maw;
+
+That is a cycle: `m_awready` -> design -> `m_awvalid` -> `arm_maw` ->
+`m_awready`. Verilator names it exactly:
+
+    %Warning-UNOPTFLAT: Signal unoptimizable: Circular combinational logic:
+      'dw_downsizer_tb.m_arready'   (also m_awready, m_wready, s_bready)
+
+**Four of v_ca06's eighteen circular signals were my testbench's readies.** The
+other eleven are the vendored anchor's own and predate this work — measured by
+linting the pre-A5 testbench, which reports exactly eleven.
+
+### Why it went unread
+
+The harness builds with `-Wno-fatal`, which is the right setting: a vendored
+anchor emits warnings the task cannot fix, and turning those into refusals would
+make every task unbuildable. The cost is that a warning about the TESTBENCH,
+introduced this week, arrives in the same stream as thirty pre-existing warnings
+about the anchor and is invisible by dilution.
+
+> A warning channel that is permanently noisy is not a warning channel. The
+> anchor's eleven were the noise; my four were the signal; nothing distinguished
+> them at the point of reading.
+
+### The two outcomes
+
+| task | UNOPTFLAT on TB readies | result |
+|---|---|---|
+| v_ca06 | 4 | converged — every verdict identical to the loop-free run |
+| v_ca03 | 3 | **26 failures across A1, A3, COVERAGE, D4, E1 and FLOOR** |
+
+None of v_ca03's 26 was a design defect. The tell was that **four different
+one-hot variants — only `s_bready` reactive, only `s_rready`, only `m_awready`,
+only `m_arready` — produced the IDENTICAL 26 failures.** A defect that does not
+change when you change which channel provokes it is not a defect in a channel;
+it is a settle order. `m_wready` alone passed, which is why the pattern was
+visible at all.
+
+### The repair, and what it does not cost
+
+Decouple the stall from `valid` entirely — free-running, aperiodic, per channel:
+
+    logic [15:0] bp_lfsr = 16'hACE1;
+    wire stall_maw = bp_lfsr[2] & bp_lfsr[7];
+    assign m_awready = !stall_maw;
+
+The original objection was to a **registered** arm: the stall lands a cycle after
+`valid` rose, so a valid that is high for one cycle has already been accepted and
+the antecedent count comes back at 1. That objection does not reach a stall that
+is low some of the time regardless of `valid` — a one-cycle offer meets a stalled
+ready at the stall's duty rate. Measured on v_ca06, antecedent per channel:
+
+    armed (looped):  s_b=11  s_r=79   m_aw=19  m_w=112  m_ar=12
+    free-running:    s_b=12  s_r=84   m_aw=28  m_w=116  m_ar=18
+
+Better on every channel. UNOPTFLAT back to the anchor's own eleven, no testbench
+signal circular. Full suite unchanged: golden, dut2, 5/5 conformant, gate
+rejected, 12/12 killed, 5c OK.
+
+**Aperiodic on purpose.** A fixed duty cycle can resonate with a design's own
+period and stall only in phases where nothing is offered. An LFSR cannot, and
+different bit pairs per channel keep the five decorrelated.
+
+### And a second defect, which the backpressure only EXPOSED
+
+With the loop gone, v_ca06's golden still failed three checks — A2 and B2, on
+the write path. Traced:
+
+    TRACE t=3755 AWdown addr=00003000 len=0
+    TRACE t=3755 Bup    id=0 resp=0
+    DIAG  t=3755 aw0=0 n_ds_aw=0    -> "write issued 0 downstream addresses"
+    DIAG  t=3805 aw0=0 n_ds_aw=2    -> the next write, "issued 2"
+
+`n_ds_aw` is incremented in a separate `always @(posedge clk)`; `do_write`
+resumes at the same posedge and reads it, racing that block. **With every ready
+held at 1 the downstream address and the upstream response never landed in the
+same cycle, so the race was unreachable.** Backpressure aligns them. The reads
+are now taken at the negedge, and the live `s_bid` / `s_bresp` latched before it.
+
+This is the same class as the inert conformant channels and the anchor's
+fast-path stickiness, and it is now the fourth kind of artefact caught this way:
+mutants, conformant perturbations, second DUTs — and **the testbench itself.**
+The testbench already carried a comment warning about exactly this race on a
+different counter. Writing the rule down did not install it in the other two
+call sites.
+
+### What to take from it
+
+1. **A harness-side signal must never be derived combinationally from a
+   design-side signal it feeds.** Register it, or decouple it. The rule is
+   cheap; the failure is silent and load-bearing.
+2. **Grep the build log for testbench-scoped UNOPTFLAT specifically.** The count
+   alone is useless because the anchor contributes a constant background; what
+   matters is whether any circular signal is scoped to the testbench module.
+   That is a one-line check and it belongs in the harness, as a REPORT beside the
+   verdict rather than a refusal — a task whose anchor is legitimately circular
+   must still be runnable.
+3. **A result that is right by convergence is not a result.** v_ca06's committed
+   numbers were correct. They were correct by luck of a settle order, and the
+   run that produced them said nothing at all about that.

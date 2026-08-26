@@ -587,3 +587,37 @@ d6_narrowed_to_ownership:
     at every depth. Common cause -- every one asks whether something was
     OBSERVED, none asks whether the thing that would break it was ever
     ATTEMPTED. See inbox/FINDINGS.agent2.md.
+
+backpressure_instrument:
+  date: 2026-08-25
+  status: REPAIRED -- the stall no longer reads the signal it drives
+  defect: >
+    A5's stall was armed combinationally on each channel's own valid, which
+    closes a loop: ready -> design -> valid -> arm -> ready. Verilator reported
+    it as UNOPTFLAT on four testbench readies (m_arready, m_awready, m_wready,
+    s_bready); the anchor contributes eleven of its own, so the count alone said
+    nothing and the harness's -Wno-fatal -- correct for vendored RTL -- carried
+    it past unread. The same instrument on v_ca03 produced 26 failures across
+    six clause ids, none a design defect, identically for four different one-hot
+    choices of which single ready was reactive.
+  repair: >
+    Free-running aperiodic backpressure from a 16-bit LFSR, different bit pairs
+    per channel. Nothing harness-side is derived from a design output any more.
+    UNOPTFLAT is back to the anchor's own eleven with no testbench signal
+    circular.
+  antecedent_before_after: >
+    armed s_b=11 s_r=79 m_aw=19 m_w=112 m_ar=12;
+    free-running s_b=12 s_r=84 m_aw=28 m_w=116 m_ar=18 -- better on every
+    channel, so the combinational arm was not buying the coverage it was
+    justified by.
+  second_defect_exposed: >
+    n_ds_ar and n_ds_aw are incremented in a separate always @(posedge clk) and
+    were read by do_read/do_write resuming at the same posedge -- a race. With
+    every ready at 1 the downstream address and the upstream response never
+    landed in the same cycle, so it was unreachable; backpressure aligns them.
+    Reads moved to the negedge, s_bid and s_bresp latched before it.
+  verdicts_unchanged: >
+    golden PASS, dut2 PASS, 5/5 conformant, gate rejected, 12/12 killed, 5c OK
+    -- every verdict identical to the armed run. The committed numbers were
+    right; they were right by convergence, and the run did not say so.
+  hash_unmoved: 6cb14e9d2e6381ac -- tb/ is not in task_text_hash

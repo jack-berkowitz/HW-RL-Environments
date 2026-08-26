@@ -204,6 +204,20 @@ module dw_downsizer_tb;
                          input logic [1:0] burst);
     int t, got, exp_beats; bit is_ref; int ar0;
     is_ref = refused(burst, len); exp_beats = len + 1;
+    // COUNTER READS ARE ORDERED WITH A NEGEDGE, and this is a defect that
+    // BACKPRESSURE EXPOSED rather than one it created. `n_ds_ar` / `n_ds_aw` are
+    // incremented in a separate `always @(posedge clk)`; a task that resumes at
+    // the same posedge and reads them races that block. With every ready held at
+    // 1 the downstream address and the upstream response never landed in the
+    // same cycle, so the race was unreachable. Under backpressure they align:
+    //     TRACE t=3755 AWdown addr=00003000 len=0
+    //     TRACE t=3755 Bup    id=0 resp=0
+    //     DIAG  t=3755 aw0=0 n_ds_aw=0   -> "issued 0 downstream addresses"
+    //     DIAG  t=3805 aw0=0 n_ds_aw=2   -> "issued 2", the same write off by one
+    // Reading at the NEGEDGE puts the read unambiguously after every posedge
+    // update. The testbench's own note at the W-beat log says the same thing
+    // about a different counter; this is the second instance.
+    @(negedge clk);
     ar0 = n_ds_ar;
     cov_reads++; if (is_ref) cov_refused++;
     if (a != algn(a, sz)) cov_unaligned++;
@@ -309,6 +323,7 @@ module dw_downsizer_tb;
     if (got != exp_beats)
       fail("A3", $sformatf("%s: read produced %0d upstream beats, expected exactly %0d",
                            phase, got, exp_beats));
+    @(negedge clk);                 // order this read after the posedge updates
     if (is_ref && (n_ds_ar != ar0))                                     // C4.2
       fail("C4", $sformatf("%s: a refused read issued %0d downstream address(es); it must issue none",
                            phase, n_ds_ar - ar0));
@@ -332,8 +347,9 @@ module dw_downsizer_tb;
                           input int unsigned len, input int unsigned sz,
                           input logic [1:0] burst, input bit sparse);
     int t, aw0, exp_dsbeats, k, j; bit is_ref;
-    logic [SBY-1:0] strb;
+    logic [SBY-1:0] strb; logic [ID_W-1:0] b_id; logic [1:0] b_resp;
     is_ref = refused(burst, len);
+    @(negedge clk);                 // see the note in do_read
     aw0 = n_ds_aw; wl_data.delete(); wl_strb.delete(); wl_last.delete();
     cov_writes++; if (is_ref) cov_refused++;
     if (a != algn(a, sz)) cov_unaligned++;
@@ -375,11 +391,15 @@ module dw_downsizer_tb;
     if (t >= 20000) begin
       fail("A3", $sformatf("%s: write never produced a B response", phase)); return;
     end
-    if (s_bid !== id)
-      fail("E5", $sformatf("%s: B carries id %0d, expected %0d", phase, s_bid, id));
+    // `s_bid` and `s_bresp` are only valid during the handshake cycle, so they
+    // are latched HERE and the counter reads move to the negedge below.
+    b_id = s_bid; b_resp = s_bresp;
+    if (b_id !== id)
+      fail("E5", $sformatf("%s: B carries id %0d, expected %0d", phase, b_id, id));
+    @(negedge clk);
     if (is_ref) begin
-      if (s_bresp !== 2'b10)
-        fail("C4", $sformatf("%s: refused write answered %0b, expected SLVERR", phase, s_bresp));
+      if (b_resp !== 2'b10)
+        fail("C4", $sformatf("%s: refused write answered %0b, expected SLVERR", phase, b_resp));
       if (n_ds_aw != aw0)
         fail("C4", $sformatf("%s: a refused write issued %0d downstream address(es); it must issue none",
                              phase, n_ds_aw - aw0));
@@ -390,9 +410,9 @@ module dw_downsizer_tb;
     end
     begin
       automatic logic [1:0] want_b = want_err(a) ? err_code_of(a) : 2'b00;
-      if (s_bresp !== want_b)
+      if (b_resp !== want_b)
         fail("E6", $sformatf("%s: write answered %0b, expected %0b -- the downstream code passes through",
-                             phase, s_bresp, want_b));
+                             phase, b_resp, want_b));
     end
     if (n_ds_aw != aw0 + 1)
       fail("A2", $sformatf("%s: write issued %0d downstream addresses, expected exactly 1",
@@ -468,34 +488,54 @@ module dw_downsizer_tb;
   // unreachable on every channel, so a design that withdraws an offer before its
   // ready is seen is undetectable and A5 is a clause with no instrument.
   //
-  // THE ARM IS COMBINATIONAL ON valid. Registered, the stall lands one cycle
-  // after valid rose, and on a channel whose valid is high for a single cycle
-  // the beat has already been accepted -- the count comes back at 1, which is
-  // non-zero and useless. Measured on v_nw02 first; this is a port.
-  logic [2:0] st_sb=0, st_sr=0, st_maw=0, st_mw=0, st_mar=0;
-  logic [4:0] cd_sb=0, cd_sr=0, cd_maw=0, cd_mw=0, cd_mar=0;
-  wire arm_sb  = s_bvalid  && (st_sb ==0) && (cd_sb ==0);
-  wire arm_sr  = s_rvalid  && (st_sr ==0) && (cd_sr ==0);
-  wire arm_maw = m_awvalid && (st_maw==0) && (cd_maw==0);
-  wire arm_mw  = m_wvalid  && (st_mw ==0) && (cd_mw ==0);
-  wire arm_mar = m_arvalid && (st_mar==0) && (cd_mar==0);
-  assign s_bready  = (st_sb ==0) && !arm_sb;
-  assign s_rready  = (st_sr ==0) && !arm_sr;
-  assign m_awready = (st_maw==0) && !arm_maw;
-  assign m_wready  = (st_mw ==0) && !arm_mw;
-  assign m_arready = (st_mar==0) && !arm_mar;
+  // FREE-RUNNING, AND NOT ARMED BY `valid`. An arm that reads a channel's valid
+  // and drives its ready in the same cycle CLOSES A COMBINATIONAL LOOP through
+  // the design -- ready -> design -> valid -> arm -> ready. Verilator names it:
+  //
+  //     %Warning-UNOPTFLAT: Circular combinational logic:
+  //       'dw_downsizer_tb.m_arready'  (also m_awready, m_wready, s_bready)
+  //
+  // and the harness builds with -Wno-fatal, which is right for vendored RTL and
+  // is what carried this past unread. It is not a cosmetic warning. The same
+  // armed stall on v_ca03 produced 26 FAILURES ACROSS SIX CLAUSE IDS -- A1, A3,
+  // COVERAGE, D4, E1, FLOOR -- none of them a design defect, and it produced
+  // them identically no matter which single ready was made reactive, which is
+  // the signature of a settle order rather than a channel. Here it converged and
+  // gave the right answer. Same instrument, two tasks, one right answer and one
+  // wrong one, and NOTHING IN EITHER RUN SAID WHICH.
+  //
+  // Decoupling costs nothing that matters. The v_nw02 objection was to a
+  // REGISTERED arm -- the stall lands a cycle after valid rose, so a valid that
+  // is high for one cycle has already been accepted. That objection does not
+  // reach a stall that is simply low some of the time regardless of valid: a
+  // one-cycle offer meets a stalled ready at the stall's duty rate. The
+  // per-channel antecedent counts printed at the end are the evidence, and they
+  // are reported for exactly that reason.
+  //
+  // Aperiodic on purpose. A fixed duty cycle can resonate with a design's own
+  // period and stall only in the phases where nothing is ever offered; an LFSR
+  // cannot. Different bit pairs per channel keep the five decorrelated, so the
+  // design is never fully blocked and never fully free.
+  logic [15:0] bp_lfsr = 16'hACE1;
+  always @(posedge clk) bp_lfsr <= !rst_n ? 16'hACE1
+      : {bp_lfsr[14:0], bp_lfsr[15]^bp_lfsr[13]^bp_lfsr[12]^bp_lfsr[10]};
+  wire stall_sb  = bp_lfsr[0] & bp_lfsr[5];
+  wire stall_sr  = bp_lfsr[1] & bp_lfsr[6];
+  wire stall_maw = bp_lfsr[2] & bp_lfsr[7];
+  wire stall_mw  = bp_lfsr[3] & bp_lfsr[8];
+  wire stall_mar = bp_lfsr[4] & bp_lfsr[9];
+  assign s_bready  = !stall_sb;
+  assign s_rready  = !stall_sr;
+  assign m_awready = !stall_maw;
+  assign m_wready  = !stall_mw;
+  assign m_arready = !stall_mar;
+  // The STIMULUS half, and it is harness-determined by construction: how many
+  // cycles this testbench held a ready low. It does not read a design output, so
+  // it cannot reject correct hardware -- which is the whole reason the ANTECEDENT
+  // counts below are reported and this one is gated.
   int cov_bp_driven = 0;
-  always @(posedge clk) if (!rst_n) begin
-    st_sb<=0; st_sr<=0; st_maw<=0; st_mw<=0; st_mar<=0;
-    cd_sb<=0; cd_sr<=0; cd_maw<=0; cd_mw<=0; cd_mar<=0;
-  end else begin
-    if (st_sb !=0) st_sb <= st_sb -1; else if (cd_sb !=0) cd_sb <= cd_sb -1; else if (arm_sb ) begin st_sb <=3'd2; cd_sb <=5'd3; end
-    if (st_sr !=0) st_sr <= st_sr -1; else if (cd_sr !=0) cd_sr <= cd_sr -1; else if (arm_sr ) begin st_sr <=3'd2; cd_sr <=5'd3; end
-    if (st_maw!=0) st_maw<= st_maw-1; else if (cd_maw!=0) cd_maw<= cd_maw-1; else if (arm_maw) begin st_maw<=3'd2; cd_maw<=5'd3; end
-    if (st_mw !=0) st_mw <= st_mw -1; else if (cd_mw !=0) cd_mw <= cd_mw -1; else if (arm_mw ) begin st_mw <=3'd2; cd_mw <=5'd3; end
-    if (st_mar!=0) st_mar<= st_mar-1; else if (cd_mar!=0) cd_mar<= cd_mar-1; else if (arm_mar) begin st_mar<=3'd2; cd_mar<=5'd3; end
-    if (arm_sb||arm_sr||arm_maw||arm_mw||arm_mar) cov_bp_driven <= cov_bp_driven + 1;
-  end
+  always @(posedge clk) if (rst_n && (stall_sb|stall_sr|stall_maw|stall_mw|stall_mar))
+    cov_bp_driven <= cov_bp_driven + 1;
 
   // ---- A5's CHECKER -------------------------------------------------------
   int cov_a5 [5];
@@ -750,8 +790,8 @@ module dw_downsizer_tb;
     for (int c = 0; c < 5; c++)
       if (cov_a5[c] == 0)
         $display("  [flag] A5 was never judged on channel %0d -- valid was never high while its ready was low. Not a failure: entering that state is the design's timing.", c);
-    if (cov_bp_driven < 8)
-      fail("FLOOR", $sformatf("backpressure was driven only %0d time(s) -- A5 cannot be judged on any channel without it, and that half is the harness's to provide", cov_bp_driven));
+    if (cov_bp_driven < 200)
+      fail("FLOOR", $sformatf("a ready was held low on only %0d cycle(s) -- A5 cannot be judged on any channel without backpressure, and that half is the harness's to provide", cov_bp_driven));
     // ---- coverage floors, all counted on STIMULUS (rule 4) ---------------
     if (cov_reads  < 40) fail("FLOOR", $sformatf("only %0d reads driven", cov_reads));
     if (cov_writes < 30) fail("FLOOR", $sformatf("only %0d writes driven", cov_writes));
