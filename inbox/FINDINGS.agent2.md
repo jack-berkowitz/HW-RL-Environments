@@ -3581,6 +3581,18 @@ to do, because the thing it was asked about was not the thing that mattered —
 both, the check is correct, runs, and returns a true answer to a question that
 was not the one being asked.
 
+**A THIRD FORM, from the perturbation work: I did not move the baseline — I moved
+the EVENT away from it.** `do_read` samples `ar0 = n_ds_ar` at task entry and
+compares at the end; a delay placed just before the offer held that window open
+across the gap, so a *previous* transaction's downstream address landed inside it:
+
+    FAIL [A2] read issued 2 downstream addresses, expected exactly 1     x24
+
+Same effect as a wrong baseline, and harder to see: the baseline is where it
+always was, and the anchoring table above would report it as the correct middle
+row. **No check anywhere compares an event's position against the window that
+measures it**, and the two are only related by the order of statements in a task.
+
 The general form, and it is not about `git`:
 
     verification anchored to        what it actually proves
@@ -4355,3 +4367,99 @@ out-of-range.
 This is the fourth instance and it is written down as a constraint in this very
 file. **Writing a rule down does not install it** — fifth instance of that, and
 the first where the rule was mine and about the shell I was typing into.
+
+
+---
+
+## FINDING — I reported a category, it was accepted, and it was the instrument. A category inferred from an instrument's output inherits the instrument's defects.
+
+**I reported that `v_ca03`'s A4 (window 2 cycles) and `v_nw02`'s X4 (deadline 232)
+were made UNMEASURABLE by a 9-cycle perturbation, and proposed excluding bounded
+clauses from perturbed runs. That was accepted and I was asked to enumerate them.
+Under a corrected mechanism, at the same depth, both PASS.**
+
+    v_ca03   FAIL 4   ->   PASS
+    v_nw02   FAIL 22  ->   PASS
+    v_ca06   FAIL 1   ->   PASS
+
+They were never unmeasurable. **The gate mechanism inserted delay inside the very
+window those clauses bound**, and I read the resulting failures as a property of
+the clauses.
+
+### The sharper half: it survived the discriminator, twice
+
+I had already defined the escalation test — *a failure that survives the
+drain-widened repeat is a candidate reference failure.* **A4 and X4 survived it.
+Twice.** And they were still the instrument.
+
+> **The drain discriminator separates contamination from real failures. It cannot
+> separate a real failure from a systematically wrong mechanism.** Contamination
+> is noisy and drops out when you widen the drain. **A wrong mechanism fails
+> consistently — and consistency reads as signal.**
+
+That is the gap in the failure definition I wrote, and nothing in it would have
+closed. Every criterion I specified was met: a contract clause id, failing at
+zero perturbation's absence, surviving the widened repeat. The one thing not
+tested was whether the *instrument* was measuring what it claimed.
+
+### The general form
+
+> **A category inferred from an instrument's output inherits the instrument's
+> defects**, and does so invisibly, because the category is stated in the
+> vocabulary of the domain rather than of the tool. "Bounded clauses cannot be
+> measured under a perturbation exceeding their bound" is a statement about
+> clauses. Its evidence was entirely a statement about my patcher.
+
+**The exclusion case is withdrawn.** The enumeration stands as a fact — `v_ca03`
+A4, `v_ca04` X3, `v_ca05` R15, `v_ca07` E1 and H4, `v_nw01` X3 and Q1, `v_nw02` X4:
+**six of eleven tasks carry at least one clause with its own cycle bound.** That
+is worth knowing. It is not evidence for excluding them from anything.
+
+---
+
+## FINDING — 24 sites in six tasks commit on one side of a handshake, and a broken instrument is what provoked it
+
+**This is the substantive result of the sweep so far, and it is independent of
+the sweep. It should not sit under the mechanism story.**
+
+Six testbenches wait for their own beats to move by watching the **ready or grant
+alone**:
+
+    v_ca03   4 sites      v_ca06   6      v_ca07   7
+    v_dsp02  1 site       v_nw02   3      v_ca05   3
+
+**Every one is behaviour-preserving today.** The valid is asserted before the wait
+and held throughout it, so `V && R` and `R` are the same condition and no run can
+distinguish the two forms. The defect is unreachable, and has been for the life of
+every one of these tasks.
+
+**`v_ca05`'s has its own correct specification written one column to the right:**
+
+    if (push_gnt) begin           // R4: commit on req && gnt
+
+The comment states the condition R4 requires. The code checks half of it. Nobody
+reading that line would see a defect, because the comment reads as a description
+of the code rather than a contradiction of it.
+
+### What it takes to become reachable, and what it did
+
+Anything that makes the design and the testbench see different values on a valid.
+The gate perturbation did exactly that, and `v_ca05`'s reference model then counted
+pushes the design never received:
+
+    [FAIL] R14 : after push 8: full=0 with 8 entries
+    [FAIL] R5  : push granted while full
+
+**Both attributed to the design.** They were the testbench recording transfers
+that did not happen.
+
+All 24 corrected — **everywhere, not where the perturbation happened to reach** —
+because *"correct only while nothing gates the valid"* is a property of the corpus
+and not of the code. Every affected suite re-run: **11/11, 12/12, 10/10, 10/10,
+10/10, 10/10, all ACCEPTED.**
+
+> **A broken instrument provoked a real defect class.** The mechanism that found
+> these 24 sites is unsound as a measurement and was withdrawn — and the sites are
+> real, latent in six shipped tasks, and would have stayed unreachable until
+> something else disturbed a valid. That is worth saying plainly rather than
+> filing under the failure of the tool that found it.

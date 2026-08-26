@@ -300,3 +300,44 @@ depth at which the old sticky D6 broke.
 A FLOOR firing at the wide drain is expected and does not escalate: multiplying
 every drain changes how much stimulus fits in the run, so coverage counts fall.
 That is the drain being widened, not the design.
+
+---
+
+# THE RGAP TABLE — where each beat advance lives, named before any edit
+
+**Seven tasks are measurable on the inter-beat axis. Four are not, and are
+reported as not measurable rather than perturbed by something adjacent.**
+
+## Measurable — the beat advance is identifiable
+
+| task | where the beat advance lives | the edit |
+|---|---|---|
+| `v_ca06` | R responder `always @(posedge clk)`: `rbeat <= rbeat + 1` at **L165** on `m_rvalid_q && m_rready`, queue pop at **L159** | countdown loaded on accept; the next beat is not presented until it expires. **This is the edit that found D6** |
+| `v_ca03` | R/B responders: `m_beat` at **L169** on `m_rvalid && m_rready`; queue pops at **L165** (R) and **L191** (B) | same, on both responders |
+| `v_nw02` | B and R responder queue pops at **L360** / **L361** on `m_bvalid && m_bready` / `m_rvalid && m_rready` | same, on both |
+| `v_ai02` | procedural driver: `if (hs && txq.size() > 0) begin void'(txq.pop_front()); pvalid = 1'b0; end` at **L172**, re-assert at **L176** | countdown between the pop and the re-assertion of `pvalid` |
+| `v_ca04` | `always @(negedge clk)`: `if (hs[k]) begin nxt[k]++; in_valid[k] = 1'b0; end` then `if (!in_valid[k] && offer[k]) present(k);` at **L202–206** | per-input countdown gating `present(k)` |
+| `v_nw03` | **the hook already exists**: `assign s_tvalid[k] = run_en && !done_f[k] && (gap_cnt[k] == 0);` at **L101**, advance at **L153** | set `gap_cnt[k] = PDEPTH` on each accepted beat. **No new mechanism — the testbench was built with an inter-beat gap counter** |
+| `v_nw01` | payload byte loop: `for (i...) @(negedge clk); s_pd = p[i]; s_pl = (i==27); s_pv = 1'b1;` at **L164** | delay at the top of the loop body, before `s_pd` is set |
+
+`v_nw03` is worth calling out: **its testbench already carries a per-input
+`gap_cnt`**, so the inter-beat axis was anticipated by whoever wrote it and the
+perturbation is a one-line assignment rather than a new mechanism.
+
+## NOT measurable on this axis — and not to be approximated
+
+| task | why |
+|---|---|
+| `v_ca05` | **No beats.** `push_req`/`push_gnt`, `pop_req`/`pop_gnt`, `match_req`/`match_gnt` are single-beat operations. There is no next beat of anything to delay |
+| `v_ca07` | **No beats.** `div_valid`/`div_ready` carries one value per handshake; the design's output is a clock, not a stream |
+| `v_dsp02` | **No beats.** One operand pair per handshake. `NumPipeRegs=1` is pipeline depth, not a burst |
+| `v_nw04` | **No handshake at all.** `adj_valid_i`, `drift_valid_i`, `set_ts96_valid_i` are pulses with no ready. Nothing to be late for |
+
+**These four have an inter-transaction axis and no inter-beat axis.** Perturbing
+their request spacing would produce a number, and the number would not be a
+measurement of the thing D6 lives on. Reporting them as not measurable is the
+honest result; the alternative is a clean row that means untested, which is the
+class this whole file is about.
+
+**7 of 11 measurable. Same stopping rule: report on the first escalation, no
+sweep, no clause moves.**
