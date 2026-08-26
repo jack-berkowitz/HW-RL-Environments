@@ -12,6 +12,8 @@
 // is penalised. Those are P3 choices.
 // =============================================================================
 
+`timescale 1ns/1ps
+
 module sdp_requant (
     input  logic         clk,
     input  logic         rst_n,
@@ -68,7 +70,7 @@ module sdp_requant (
       // every negative product became a large positive one and the magnitude was
       // taken from the corrupted value. The testbench caught it on the first
       // negative tie and on 60 sweep words; it passed every non-negative vector.
-      prod64 = $signed(prod);
+      prod64 = 64'($signed(prod));   // explicit sign-extending widen
       neg    = (prod64 < 64'sd0);
       mag    = neg ? 64'(-prod64) : 64'(prod64);
 

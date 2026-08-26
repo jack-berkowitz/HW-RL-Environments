@@ -137,6 +137,20 @@ case "$TASK_NAME" in
       # submission to hold at BOTH, so running only the scored geometry would
       # score a clause the task explicitly declines to rest on.
       CFGS=("+HH=4" "+HH=8") ;;
+  d_ai04_sdp_requant)
+      # EXACTLY ONE config, BY CONSTRUCTION rather than by omission -- the
+      # distinction the *) branch below exists to enforce. sdp_requant declares
+      # NO PARAMETERS AT ALL: spec P1 pins four lanes and the 16b/32b lane
+      # widths, and every other axis is a runtime INPUT -- cfg_precision,
+      # cfg_offset, cfg_scale, cfg_truncate, cfg_bypass, cfg_nan_to_zero -- so
+      # it is swept by the stimulus rather than by elaboration.
+      #
+      # The coverage that would be configs elsewhere is in the vectors: 44
+      # anchor-measured words carrying the contract, plus 800 swept words across
+      # both modes, both signs, every binary16 subnormal boundary and truncate
+      # values to 47. If a parameter is ever added here, this list must grow with
+      # it or the sweep silently narrows.
+      CFGS=("") ;;
   d_dsp02_fp32_fma_ii1)
       # EXACTLY ONE config, and one BY CONSTRUCTION rather than by omission --
       # the distinction the refusal below exists to enforce. fp32_fma_ii1

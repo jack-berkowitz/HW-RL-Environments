@@ -66,7 +66,7 @@ module sdp_requant_tb;
       prod = diff * longint'($signed(sc));
       mag  = (prod < 0) ? -prod : prod;
       q    = mag >>> tr;
-      if (tr != 0 && ((mag >>> (tr-1)) & 64'd1)) q = q + 1;   // ties away
+      if (tr != 0 && (((mag >>> (tr-1)) & 64'd1) != 64'd0)) q = q + 1;  // ties away
       res  = (prod < 0) ? -q : q;
       if (res >  64'sd2147483647)  return 32'h7FFFFFFF;
       if (res < -64'sd2147483648)  return 32'h80000000;
@@ -394,7 +394,7 @@ module sdp_requant_tb;
       @(negedge clk);
       cfg_precision = (rep % 3 == 1) ? 2'd2 : 2'd0;
       cfg_offset = 32'hFFFF_0000 + 32'(rep); cfg_scale = 16'(100+rep);
-      cfg_truncate = 6'((rep % 5) + 1); cfg_nan_to_zero = (rep % 2);
+      cfg_truncate = 6'((rep % 5) + 1); cfg_nan_to_zero = 1'((rep % 2));
       in_data = w1; in_valid = 1'b1;
       if (in_ready) begin
         exp_q.push_back(g_word(w1, cfg_precision, cfg_offset, cfg_scale,
