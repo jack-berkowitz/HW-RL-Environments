@@ -71,6 +71,29 @@ def ids_in_spec(text):
 
 def ids_emittable(text):
     out = set()
+    # A COMPUTED CLAUSE ID. v_dsp02 selects the id in a case statement and passes
+    # the VARIABLE to fail():
+    #
+    #     unique case (e.op)
+    #       OP_SGNJ: cl = "S1";
+    #       OP_CMP:  cl = "S7";
+    #     endcase
+    #     fail(cl, ...);
+    #
+    # Matching only fail("LITERAL" reported six clauses as unreportable that the
+    # reference names on every run. Found by working the task I know LEAST well
+    # second rather than last: its rate differed sharply from the first, and the
+    # cause was this tool, not that task.
+    for m in re.finditer(r"fail\(\s*([A-Za-z_]\w*)\s*,", text):
+        var = m.group(1)
+        # EVERY clause literal on the right-hand side of any assignment to that
+        # variable. A first version matched `var = "S1";` and a single ternary,
+        # and still missed S3/S4/S5 -- assigned by a NESTED ternary spanning two
+        # lines. Enumerating the forms is the wrong shape; take the assignment
+        # whole and pull the ids out of it.
+        for a in re.finditer(r"\b%s\s*=\s*([^;]{0,300});" % re.escape(var), text, re.S):
+            for lit in re.findall(r'"([A-Z][0-9]+[a-z]?)"', a.group(1)):
+                out.add(lit)
     for m in FAIL_STR.finditer(text):
         for part in re.split(r"[/,]", m.group(1)):
             part = part.strip()
@@ -81,6 +104,147 @@ def ids_emittable(text):
             if re.fullmatch(r"[A-Z][0-9]+[a-z]?", g.strip()):
                 out.add(g.strip())
     return out
+
+# A clause may DECLARE where it is reported. "... and is reported under C4."
+# is a claim, not a comment, and this verifies it: the named id must itself be
+# emittable, or the clause has been annotated into a hole.
+#
+# WHY THE ANNOTATION EXISTS. The grouping family -- several clauses sharing one
+# observation, one check and one reported id, so a submission testing any is
+# credited with all -- is the dominant defect class in this corpus and is
+# invisible to mutation, to conformant acceptance and to decontamination. Every
+# remedy tried so far has been an instrument. This one is a sentence of prose,
+# and it is cheaper than all of them.
+#
+# It records grouping honestly; it does not remove it. What changes is that the
+# credit becomes VISIBLE, so scoring can decide deliberately instead of the
+# grouping being discovered by someone reading a failure message and noticing
+# the wrong letter.
+#
+# The form is deliberately one that reads as English, because a clause a human
+# will not read is a clause that will not be kept true:
+#     "... and is **reported under C4**."
+FAILCALL = re.compile(r'fail\(\s*"([A-Z][0-9]+[a-z]?)"')
+DECLARED = re.compile(r"reported under\s*[`*]*([A-Z][0-9]+[a-z]?)[`*]*", re.I)
+
+def declarations(text):
+    """-> {clause id -> id it says reports it}. Keyed by the clause the marker
+       sits inside, which is the clause block it belongs to."""
+    out = {}
+    blocks = []
+    for m in re.finditer(r"^[-*]?\s*\*\*([A-Z][0-9]+[a-z]?)\b", text, re.M):
+        blocks.append((m.start(), m.group(1)))
+    blocks.append((len(text), None))
+    for i, (pos, cid) in enumerate(blocks[:-1]):
+        if cid is None:
+            continue
+        d = DECLARED.search(text[pos:blocks[i + 1][0]])
+        if d and d.group(1).upper() != cid.upper():
+            out.setdefault(cid, d.group(1).upper())
+    return out
+
+
+# ---- the SHARED-OBSERVATION population -------------------------------------
+# The candidate list above cannot contain the founding instance of the grouping
+# family. v_ca06's D6 and D7 were BOTH nameable -- both appeared in a fail() --
+# and they shared one branch, so subtracting emittable from stated found
+# nothing. The defect was that a submission checking precedence was credited
+# with checking code preservation.
+#
+# What that looks like in source is several clause ids emitted from mutually
+# exclusive branches of ONE observation:
+#
+#     if (s_rresp !== want_r) begin
+#       if      (want_r == 2'b00)   fail("D5", ...);
+#       else if (s_rresp == 2'b00)  fail("D6", ...);
+#       else                        fail("D7", ...);
+#     end
+#
+# So: scan for begin/end blocks and report every innermost block that emits two
+# or more DISTINCT clause ids. That is a CANDIDATE LIST in the same sense as the
+# rest of this tool -- a block emitting two ids may be two genuinely independent
+# checks that happen to sit together, and a reader must look. What it cannot do
+# is miss the shape, which subtracting sets can.
+# THE UNIT IS AN if/else CHAIN, NOT A begin/end BLOCK, and the first version had
+# it wrong. AGENT-DESIGN-43a92055 predicted the failure before running the tool:
+# their testbenches are phase-structured, with checks batched in an end-of-run
+# results block, and d_ca01's largest block emits nine distinct clause ids from
+# one `begin` -- nine genuinely separate observations. Measured on a reduced
+# form of exactly that structure:
+#
+#     results block  -> ['M1','M2','M3','R3','R5','R6']      <- pure noise
+#     one condition  -> ['D5','D6','D7']                     <- the real thing
+#
+# Indistinguishable. A block is a scope; it is not an observation. What makes
+# D5/D6/D7 one observation is that they are MUTUALLY EXCLUSIVE BRANCHES OF ONE
+# CONDITION -- at most one can fire, so at most one clause is ever named for a
+# single wrong value, and a submission checking any is credited with all. Six
+# independent `if`s in a results block have the opposite property: each fires on
+# its own evidence.
+#
+# So: find if/else chains and group the ids within one chain.
+#
+# ITS LIMIT, MEASURED NOT ASSUMED: branches wrapped in begin/end are not matched
+# by this form. The corpus's instances are single-statement branches, which is
+# what the shape looks like when written naturally, but a chain with begin/end
+# branches will be MISSED rather than misreported. Missing is the right way for
+# this to fail -- a candidate list that over-reports gets ignored, and this tool
+# has already been ignored once for that reason.
+CHAIN = re.compile(
+    r"\bif\s*\([^;{]*?\)[^;]*?;"          # if (...) stmt;
+    r"(?:\s*else\s+(?:if\s*\([^;{]*?\)\s*)?[^;]*?;)+",  # (else [if (...)] stmt;)+
+    re.S)
+
+# THE SECOND UNIT, AND ON MOST CORPORA IT IS THE PRIMARY ONE: THE CHECK MESSAGE.
+# From AGENT-DESIGN-43a92055, who could not run the block version and answered the
+# question a different way -- grep every check message for two or more clause ids.
+# It finds a DIFFERENT population from the chain scan and neither subsumes the
+# other:
+#
+#   message unit   one check that REPORTS FOR two clauses. The grouping is
+#                  declared in the text and a human confirms it in one read.
+#                  Found six genuine ones across four of their eight tasks, and
+#                  correctly surfaced a seventh -- d_ai01's C2/C3 in a METRIC
+#                  line, not a verdict -- which a reader discards immediately.
+#
+#   chain unit     several checks naming DIFFERENT single ids under one
+#                  condition. v_ca06's D5/D6/D7 name one id each, so the message
+#                  unit cannot see them; the founding case needs the branch scan.
+#
+# Their formulation of why the message is the better default is the one to keep:
+# A BLOCK IS A SCOPING ACCIDENT; A MESSAGE IS ONE OBSERVATION REPORTING ONE
+# VERDICT, which is precisely what the convention is about.
+CLAUSE_TOK = re.compile(r"\b([A-Z][0-9]+[a-z]?)\b")
+CHECKCALL = re.compile(r"\b(?:fail|chk)\s*\((.{0,400}?)\)\s*;", re.S)
+
+def shared_messages(text):
+    """-> [(reported ids, excerpt)] for checks whose call names >= 2 clause ids."""
+    src = re.sub(r"//[^\n]*", "", text)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    out, seen = [], set()
+    for m in CHECKCALL.finditer(src):
+        call = m.group(1)
+        ids = sorted({i for i in CLAUSE_TOK.findall(call)
+                      # a bare hex/width literal like 2'b10 is not a clause id
+                      if not re.search(r"'[bhd]?\s*%s\b" % i, call)})
+        if len(ids) >= 2 and tuple(ids) not in seen:
+            seen.add(tuple(ids))
+            txt = re.sub(r"\s+", " ", call)[:96]
+            out.append((ids, txt))
+    return out
+
+
+def shared_blocks(text):
+    """-> [(0, sorted ids)] for if/else chains naming two or more clause ids."""
+    src = re.sub(r"//[^\n]*", "", text)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    out, seen = [], set()
+    for m in CHAIN.finditer(src):
+        ids = sorted({f.group(1) for f in FAILCALL.finditer(m.group(0))})
+        if len(ids) >= 2 and tuple(ids) not in seen:
+            seen.add(tuple(ids)); out.append((0, ids))
+    return sorted(out, key=lambda r: (-len(r[1]), r[1]))
+
 
 def analyse(task_dir):
     """-> (stated, emittable, unreportable) or None when it could not look."""
@@ -97,7 +261,15 @@ def analyse(task_dir):
     # X and L sections state what is NOT required and what is deliberately free.
     # They have nothing to emit by construction, so they are not candidates.
     excl = {c for c in stated if c[0] in "XL"}
-    return stated, emit, sorted(stated - emit - excl)
+    decl = {}
+    for p in spec: decl.update(declarations(open(p, encoding="utf-8").read()))
+    # A DECLARED clause is not a candidate -- its author has said where it is
+    # reported -- but the declaration is CHECKED, not taken. Naming an id that
+    # nothing can emit annotates the clause into a hole and is worse than
+    # leaving it silent, because it reads as resolved.
+    bad = sorted(c for c, under in decl.items() if under not in emit)
+    good = {c for c, under in decl.items() if under in emit}
+    return stated, emit, sorted(stated - emit - excl - good), decl, bad
 
 def self_test():
     """Exercised, not assumed. An unfired branch reporting absence of a problem
@@ -130,6 +302,35 @@ def self_test():
 def main(argv):
     if "--self-test" in argv:
         return self_test()
+    if "--shared" in argv:
+        roots = [a for a in argv[1:] if not a.startswith("-")] or \
+                sorted(glob.glob("domains/*/*/[dv]_*"))
+        print("SHARED-OBSERVATION CANDIDATES -- clause ids named from MUTUALLY")
+        print("EXCLUSIVE BRANCHES OF ONE CONDITION. At most one can fire, so at")
+        print("most one clause is ever named for a single wrong value and a")
+        print("submission checking any is credited with all.")
+        print("Candidate list, not a verdict. Branches wrapped in begin/end are")
+        print("MISSED, not misreported -- see the header for why that is the")
+        print("right way for this to fail.\n")
+        n = 0
+        for d in roots:
+            tbs = sorted(glob.glob(os.path.join(d, "tb", "*_tb.sv")))
+            if not tbs:
+                continue
+            rows, msgs = [], []
+            for f in tbs:
+                s = open(f, encoding="utf-8").read()
+                rows += shared_blocks(s); msgs += shared_messages(s)
+            if rows or msgs:
+                print("  " + os.path.basename(d.rstrip("/")))
+                for ids, txt in msgs:
+                    print("      msg   %-16s %s" % (" + ".join(ids), txt))
+                    n += 1
+                for depth, ids in rows:
+                    print("      chain %s" % " + ".join(ids))
+                    n += 1
+        print("\n%d shared observation(s)." % n)
+        return 0
     roots = [a for a in argv[1:] if not a.startswith("-")]
     if not roots:
         roots = sorted(glob.glob("domains/*/*/[dv]_*"))
@@ -139,20 +340,31 @@ def main(argv):
     print(f"{'task':<34} {'stated':>7} {'emittable':>10}  UNREPORTABLE (candidates)")
     tot = looked = 0
     noconc = []
+    broken = []
     for d in roots:
         r = analyse(d)
         name = os.path.basename(d.rstrip("/"))
         if r is None:
             noconc.append(name); continue
-        stated, emit, miss = r
+        stated, emit, miss, decl, bad = r
         looked += 1; tot += len(miss)
         print(f"  {name:<32} {len(stated):>7} {len(emit):>10}  {', '.join(miss) if miss else '-'}")
+        if decl:
+            print(f"  {'':<32} {'':>7} {'declared:':>10}  "
+                  + ", ".join(f"{c}->{u}" for c, u in sorted(decl.items())))
+        for c in bad:
+            broken.append((name, c, decl[c]))
     for name in noconc:
         print(f"  {name:<32}  NO CONCLUSION -- no spec/*_spec.md or no tb/*_tb.sv")
         print(f"  {'':<32}  was read. The scan did not look; it did not pass.")
     print(f"\n{looked} task(s) read, {tot} candidate(s). "
           f"{len(noconc)} NO CONCLUSION.")
-    return 2 if noconc else 0
+    for name, c, under in broken:
+        print(f"REFUSED: {name}: {c} says it is reported under {under}, and no "
+              f"fail() can emit {under}.")
+        print("  A clause annotated into a hole is worse than one left silent:")
+        print("  it reads as resolved.")
+    return 2 if (noconc or broken) else 0
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
