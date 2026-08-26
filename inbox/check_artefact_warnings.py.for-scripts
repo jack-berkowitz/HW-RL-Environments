@@ -126,7 +126,23 @@ def main(argv):
     log = argv[0]
     task = argv[argv.index("--task") + 1]
     report_only = set(argv[argv.index("--report-only") + 1:]) if "--report-only" in argv else set()
-    mine, theirs = classify(open(log, encoding="utf-8", errors="replace").read(), task)
+    text = open(log, encoding="utf-8", errors="replace").read()
+    # A BUILD THAT DID NOT HAPPEN HAS NO WARNINGS, and reporting that as a clean
+    # build is this tool's own version of the defect it exists to find. Measured:
+    # on an empty file it printed "OK: no task-owned artefact drew a warning of a
+    # refusing kind" -- true, and useless. Same shape as a shell loop that never
+    # ran reporting the same zero as a history that is empty
+    # (AGENT-DESIGN-43a92055, macOS bash without `mapfile`).
+    #
+    # So the log must show that a build occurred. Any of these is enough; none of
+    # them is a warning, so a genuinely clean build still passes.
+    if not re.search(r"%Warning|%Error|[Vv]erilator|\bg\+\+|\bmake\b|Exiting due", text):
+        print("REFUSED: %s contains no build output at all." % log)
+        print("  A build that did not happen has no warnings, and this tool")
+        print("  cannot tell that from a clean build by counting warnings.")
+        print("  Absent is not zero (rule 20).")
+        return 2
+    mine, theirs = classify(text, task)
 
     hard = [w for w in mine if w[0] in REFUSE and w[0] not in report_only]
     soft = [w for w in mine if w not in hard]
