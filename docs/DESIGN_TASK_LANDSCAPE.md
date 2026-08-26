@@ -256,3 +256,61 @@ above. These four were never examined for any row.
 
 `d_ai02` needs its own audit: `cacc` is 30k lines over 13 files and `cdma` 103k
 over 25, so the boundary question there is real and unanswered.
+# STEP-0 AUDIT RESULT: what the probes did to the four mechanisms above
+
+Six probes, committed at `ac22cbe` with the evidence table in
+`domains/ai_accel/design/d_ai04_sdp_requant/MEASUREMENTS.md`. The verdict
+**VIABLE holds and strengthens**, but the mechanism list above was written by
+reading port names, and measurement moved every line of it.
+
+## One refuted
+
+> *"the **saturation bound depends on the precision mode**"*
+
+**No.** Saturation is `int32` in every integer mode, and precision codes 0, 1 and
+3 are **byte-identical to each other** on every vector tried — including a
+three-parameter one chosen to separate them. The saturation bound does not move
+with the mode. It does not move at all.
+
+## One rewritten, and it comes out stronger
+
+The capability axis is **two modes, not four** — but the two are not variants of
+one operation, they are unrelated operations sharing a port list:
+
+    precision 0,1,3   out = sat_int32(round_ties_away((x - offset)*scale / 2^truncate))
+    precision 2       out = fp16_to_fp32(x)   -- offset, scale, truncate, bypass ALL inert
+
+So *"implement one mode, alias the others"* is a **better** plausible mistake
+than the row claimed, not a worse one. Aliasing p2 onto the integer path returns
+`0x00004100` where the anchor returns `0x40200000`.
+
+And `±inf` is **clamped to `±FLT_MAX`**, not propagated. Nobody writes that
+unless the spec says so.
+
+## Two confirmed
+
+`cfg_nan_to_zero` is conditional with a design-controlled antecedent, and the
+antecedent is narrower than the row assumed: it is **float-mode-only**, inert on
+integer data. 64→128 is per-element unpacking, 4×16b → 4×32b, confirmed.
+
+## And one mechanism reading MISSED ENTIRELY
+
+    latency 1 · sustained II 1 · capacity 3 words · ready REGISTERED,
+    no same-cycle path from consumer-ready · lossless and in-order across stalls
+
+A single output register gives II=1 on open flow and loses a word at the stall
+boundary. **The third slot is invisible on the delivered surface** — it shows up
+only when a consumer stalls in the cycle a word is accepted. That is the closest
+thing in this anchor to the tagged-state family, and it is the reason `d_ai04` is
+not a pure Mechanism-C arithmetic task.
+
+Nothing in the port names suggests it. It came from a probe that held
+`chn_out_rsc_vz` low and counted.
+
+## What this says about the rest of this document
+
+The reading method produced a **false mechanism and missed the best one**, in the
+same row, on the anchor described here as the cleanest of the set. Every other
+row's mechanism list was built the same way. `d_ca05` is marked *"viable as
+written, probe outstanding"* — that phrase now means less than it did this
+morning, and the outstanding probe is the whole of its evidence.
