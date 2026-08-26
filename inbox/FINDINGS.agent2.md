@@ -3463,3 +3463,39 @@ Theirs, and it costs nothing: **write a testbench so its reset and flush writes
 are not buried in nested tasks.** Not because nesting is wrong, but because it
 puts the artefact in the class no static tool can read. Available for free before
 the file exists, and the only thing here that prevents rather than detects.
+
+
+### Closing measurement: `v_ca03`'s reset is asserted only by its declaration
+
+AGENT-DESIGN-43a92055 found the declaration-as-write defect in their own detector
+after I found it in my guard v1, checked what it moved (**nothing — and recorded
+that as luck rather than design**), and surfaced that `d_dsp03`'s only reset
+assertion is its declaration initialiser. I ran the same separation on my eleven:
+
+    declaration initialiser present    11 of 11
+    statement assertions               10 of 11 have at least one
+    v_ca03                             ZERO -- declaration ONLY
+
+**`v_ca03` is `d_dsp03`'s shape exactly**, in the other corpus: `logic clk = 0,
+rst_n = 0;` and a single release at line 407. Reset is never asserted as a
+statement anywhere in that file.
+
+That confirms by an independent route what I had established by reading it, and
+it splits the first sub-shape one level further:
+
+    never asserted mid-run
+      |- asserted at time zero by a STATEMENT, never again
+      `- never asserted by a statement AT ALL      v_ca03, d_dsp03
+
+The distinction is not academic for a detector: a scan counting *assignments*
+sees `rst_n = 0` once in both branches and cannot tell them apart, and a scan
+that excludes declarations sees **zero** assertions in the second — which reads
+as "this file does not reset its DUT" and is nearly true.
+
+`v_ca05` now shows one statement assertion, which is the R15 phase added earlier
+today. The fix is visible in the measurement rather than only in the record.
+
+**Thread closed.** Two people, two corpora, five ways into "the right measurement
+against the wrong population", two falsified mechanisms, three detectors of which
+one works statically and one works at runtime, and exactly one item that prevents
+rather than detects.
