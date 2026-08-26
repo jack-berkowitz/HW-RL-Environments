@@ -309,6 +309,50 @@ run_one() {
       if [ -x "$d/sim" ]; then out="$(timeout 600 "./$d/sim" 2>&1)"
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -m1 "%Error" | sed "s|.*/candidates/|candidates/|" | cut -c1-90)"; fi
       rm -rf "$d"
+      # COMPILE WARNINGS WERE DISCARDED ENTIRELY ON A SUCCESSFUL BUILD. cerr was
+      # read only inside the failure branch above, so a clean build reported
+      # nothing at all about what the compiler said.
+      #
+      # AGENT-VERIF-A2 lost a day to a combinational loop -- a testbench driving
+      # ready from valid, closing ready -> design -> valid -> arm -> ready --
+      # that Verilator reported as UNOPTFLAT and that was invisible among ~30
+      # warnings about a vendored anchor under -Wno-fatal. On one task it
+      # converged and every verdict was right; on another it produced 26 failures
+      # across six clause ids, none of them a design defect. Their tell is the
+      # durable part: four different one-hot variants gave the IDENTICAL 26
+      # failures, and a defect that does not change when you change what provokes
+      # it is a settle order rather than a design defect.
+      #
+      # That was invisible by DILUTION. Here it would have been invisible by
+      # TOTAL SUPPRESSION, which is strictly harder to notice -- dilution at
+      # least leaves the warning in the output for someone to grep.
+      #
+      # UNOPTFLAT IS NOT A STYLE WARNING. It reports a combinational loop, and a
+      # loop in the testbench means every verdict from that run is a settle-order
+      # artefact. It is surfaced by name, separately from the count, and carried
+      # into the run record so it survives the terminal.
+      NWARN=$(printf '%s\n' "$cerr" | grep -c '^%Warning')
+      WCLASSES=$(printf '%s\n' "$cerr" | grep -oE '^%Warning-[A-Z0-9]+' \
+                 | sed 's/^%Warning-//' | sort -u | paste -sd, - 2>/dev/null)
+      # THE FAMILY, NOT ONE NAME. Keyed on UNOPTFLAT alone this detector did not
+      # fire on the very shape it was built for: a testbench driving ready from
+      # valid, closing ready -> design -> valid -> ready, which Verilator 5.046
+      # reports as ALWCOMBORDER ("Always_comb variable driven after use"). A
+      # constructed instance of A2's exact hazard produced zero UNOPTFLAT.
+      # UNOPT and UNOPTFLAT cover the shapes it does name that way.
+      NLOOP=$(printf '%s\n' "$cerr" | grep -cE 'UNOPTFLAT|ALWCOMBORDER|%Warning-UNOPT\b')
+      if [ "${NLOOP:-0}" -gt 0 ]; then
+        printf '%-26s %-9s %s\n' "$name" "LOOP" \
+          "combinational-loop warning x$NLOOP in cfg '${cfg:-default}' (UNOPTFLAT/ALWCOMBORDER) -- verdicts from this run are settle-order artefacts, not design results"
+        LOOPSEEN=$((LOOPSEEN+1))
+      fi
+      # run_one executes inside a command substitution -- a SUBSHELL -- so a
+      # variable set here is invisible to the caller. The same reason the raw
+      # per-config output is written to RAW_DIR rather than returned. Stats go
+      # to files beside it, for the caller to total.
+      echo "$NWARN" >> "$RAW_DIR/_warn_counts"
+      [ -n "$WCLASSES" ] && echo "$WCLASSES" >> "$RAW_DIR/_warn_classes"
+      [ "${NLOOP:-0}" -gt 0 ] && echo 1 >> "$RAW_DIR/_unoptflat"
     fi
     printf '%s\n' "$out" > "$RAW_DIR/${tag}.txt"
     v="$(echo "$out" | grep -oE 'TEST_RESULT: (PASS|FAIL)' | head -1 | awk '{print $2}')"
@@ -624,10 +668,23 @@ for cand in "${CANDS[@]}"; do
   # a day and turned a failed command into a well-formed empty record. The
   # inner task_text_hash.py keeps its own 2>/dev/null -- that one is a nested
   # substitution whose diagnostics would otherwise land inside the label.
+  # ONE SUMMARY LINE PER SUBMISSION, ALWAYS, SUCCESS OR FAILURE. Printing 83
+  # warning lines would be its own kind of suppression; printing a COUNT and the
+  # CLASS NAMES makes a NEW class visible without burying the verdict. That is
+  # the cheapest form of the fix and it closes most of the gap.
+  WARNTOTAL=$(awk '{n+=$1} END{print n+0}' "$RAW_DIR/_warn_counts" 2>/dev/null)
+  WARNCLASSES="$(tr ',' '\n' < "$RAW_DIR/_warn_classes" 2>/dev/null | grep -v '^$' | sort -u | paste -sd, - 2>/dev/null)"
+  LOOPSEEN=$(grep -c . "$RAW_DIR/_unoptflat" 2>/dev/null || echo 0)
+  printf '  compile: warnings=%s%s%s\n' "${WARNTOTAL:-0}" \
+    "${WARNCLASSES:+ classes=$WARNCLASSES}" \
+    "$([ "${LOOPSEEN:-0}" -gt 0 ] && echo "  *** COMBINATIONAL LOOP warning in ${LOOPSEEN} config(s) ***")"
   tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
   if ! rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
         "$(basename "$cand" .sv)" \
         "task_text_hash=$tt" \
+        "compile_warnings=${WARNTOTAL:-0}" \
+        "compile_warning_classes=${WARNCLASSES:-}" \
+        "comb_loop_configs=${LOOPSEEN:-0}" \
         "$RAW_DIR")"; then
     echo "  RECORD NOT WRITTEN for $name -- see the error above. The run happened;" >&2
     echo "  nothing downstream can cite it until this is fixed." >&2
