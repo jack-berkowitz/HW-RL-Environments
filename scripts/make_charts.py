@@ -532,10 +532,26 @@ def design_svg(theme, series="area"):
 # none, so they are absent rather than shown with an invented axis -- "more is
 # better and area buys it" is a claim about the contract, not something to infer
 # from a metric name.
-CAP_PREFERRED = {"d_nw01": "aggregate_bursts_per_1000cyc"}
+# ONE TASK DECLARES FOUR CAPABILITY METRICS AND THE ANSWER DEPENDS ON WHICH.
+# d_nw01's chat is 2.59x the reference per burst delivered, 2.72x per disjoint
+# pair, and 3.40x per outstanding transaction -- a 31% spread. Picking one and
+# labelling it made the choice visible but still made it silently; a reader had
+# no way to know that a different declared metric moves the number by a third.
+#
+# So a submission is drawn as a RANGE across every metric its task declares,
+# endpoints labelled. Tasks declaring one metric collapse to a point and read
+# exactly as before, which is three of the four here.
+#
+# The alternatives and why not: a geometric mean is a synthetic quantity no
+# contract defines and would smuggle in the combined score this project refuses;
+# worst-case-only penalises tasks for declaring MORE metrics, which is backwards
+# since declaring more is better spec hygiene; one row per metric lets a
+# four-metric task visually outweigh a one-metric task. A range says the true
+# thing -- how much it paid per unit depends on which unit, and here is how much
+# that matters.
 
 
-def _capability_metric(task_dir, short):
+def _capability_metrics(task_dir):
     # IMPORTED, NOT REIMPLEMENTED. The roles live in report_table.py and are a
     # claim about each task's CONTRACT -- which metric "more is better and area
     # buys it" applies to. A second copy here would drift from the table it is
@@ -552,11 +568,7 @@ def _capability_metric(task_dir, short):
         _RT = importlib.util.module_from_spec(_spec)
         _spec.loader.exec_module(_RT)
     roles = _RT.metric_roles(task_dir)
-    caps = [k for k, v in roles.items() if v == "capability"]
-    if not caps:
-        return None
-    want = CAP_PREFERRED.get(short)
-    return want if want in caps else sorted(caps)[0]
+    return sorted(k for k, v in roles.items() if v == "capability")
 
 
 def _metric_value(task, label, key):
@@ -588,8 +600,8 @@ def capability_rows():
         if not dirs:
             continue
         task = os.path.basename(dirs[0])
-        key = _capability_metric(dirs[0], short)
-        if not key:
+        keys = _capability_metrics(dirs[0])
+        if not keys:
             continue
         best = {}
         for f in glob.glob(os.path.join(REPO, "runs", task, f"*_fx{pin}__ppa.json")):
@@ -608,26 +620,35 @@ def capability_rows():
                 break
         if not ref or not ref.get("design_area_um2"):
             continue
-        ref_cap = _metric_value(task, ref_lbl, key)
-        if not ref_cap:
+        ref_per = {}
+        for k in keys:
+            rc = _metric_value(task, ref_lbl, k)
+            if rc:
+                ref_per[k] = float(ref["design_area_um2"]) / rc
+        if not ref_per:
             continue
-        ref_per = float(ref["design_area_um2"]) / ref_cap
         bars = []
         for m in DESIGN_MODELS:
             r = best.get(m)
             if r is None or r.get("design_area_um2") is None:
-                bars.append((m, None, "not comparable"))
+                bars.append((m, None, None, [], "not comparable"))
                 continue
             if r.get("wns_ns") is not None and float(r["wns_ns"]) < 0:
-                bars.append((m, None, "missed timing"))
+                bars.append((m, None, None, [], "missed timing"))
                 continue
-            cap = _metric_value(task, m, key)
-            if not cap:
-                bars.append((m, None, "no metric"))
+            ratios = []
+            for k, rp in ref_per.items():
+                cap = _metric_value(task, m, k)
+                if cap and rp:
+                    ratios.append((k, (float(r["design_area_um2"]) / cap) / rp))
+            if not ratios:
+                bars.append((m, None, None, [], "no metric"))
                 continue
-            bars.append((m, (float(r["design_area_um2"]) / cap) / ref_per, ""))
+            lo = min(ratios, key=lambda x: x[1])
+            hi = max(ratios, key=lambda x: x[1])
+            bars.append((m, lo[1], hi[1], ratios, ""))
         if any(b[1] for b in bars):
-            out.append((task, label, pin, key, bars))
+            out.append((task, label, pin, sorted(ref_per), bars))
     return out
 
 
@@ -639,9 +660,9 @@ def capability_svg(theme):
     H = 84 + grouph * max(1, len(rows))
     top = 1.0
     for _, _, _, _, bars in rows:
-        for _, r, _ in bars:
-            if r:
-                top = max(top, r)
+        for _, lo, hi, _, _ in bars:
+            if hi:
+                top = max(top, hi)
     top = max(1.25, top * 1.08)
     p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
          f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">']
@@ -649,8 +670,8 @@ def capability_svg(theme):
     p.append(f'<text x="20" y="26" fill="{c["fg"]}" font-size="15" font-weight="600">'
              f'Area PER UNIT OF CAPABILITY, vs the reference</text>')
     p.append(f'<text x="20" y="45" fill="{c["mute"]}" font-size="12">'
-             f'Lower is cheaper for what it delivers. A design that is small '
-             f'because it does less loses ground here.</text>')
+             f'Lower is cheaper for what it delivers. Where a task declares '
+             f'several capability metrics, the bar spans best to worst.</text>')
     ytop, ybot = 58, H - 20
     xr = x0 + trackw * (1.0 / top)
     p.append(f'<line x1="{xr}" y1="{ytop}" x2="{xr}" y2="{ybot}" stroke="{c["rule"]}" '
@@ -658,24 +679,43 @@ def capability_svg(theme):
     p.append(f'<text x="{xr + 5}" y="{ytop + 10}" fill="{c["rule"]}" font-size="11">'
              f'reference (1.0\u00d7)</text>')
     y = ytop + 20
-    for task, label, pin, key, bars in rows:
+    for task, label, pin, keys, bars in rows:
         p.append(f'<text x="20" y="{y + 10}" fill="{c["fg"]}" font-size="13" '
                  f'font-weight="600">{esc(label)}</text>')
+        cap = (f'per {esc(keys[0])}' if len(keys) == 1
+               else f'range over {len(keys)} declared metrics')
         p.append(f'<text x="20" y="{y + 26}" fill="{c["mute"]}" font-size="10">'
-                 f'per {esc(key)}</text>')
+                 f'{cap}</text>')
         yy = y
-        for m, r, note in bars:
+        for m, lo, hi, ratios, note in bars:
             p.append(f'<text x="{x0 - 10}" y="{yy + 11}" fill="{c["mute"]}" font-size="11" '
                      f'text-anchor="end">{esc(m)}</text>')
             p.append(f'<rect x="{x0}" y="{yy}" width="{trackw}" height="{barh}" rx="2" '
                      f'fill="{c["dead"]}" opacity="0.45"/>')
-            if r:
-                w = max(2, int(trackw * r / top))
-                fill = c["bar"] if r <= 1.0 else c["bar2"]
-                p.append(f'<rect x="{x0}" y="{yy}" width="{w}" height="{barh}" rx="2" '
-                         f'fill="{fill}"/>')
-                p.append(f'<text x="{x0 + w + 6}" y="{yy + 11}" fill="{c["fg"]}" '
-                         f'font-size="11">{r:.2f}\u00d7</text>')
+            if lo:
+                xlo = max(2, int(trackw * lo / top))
+                xhi = max(2, int(trackw * hi / top))
+                fill = c["bar"] if hi <= 1.0 else c["bar2"]
+                if xhi - xlo < 3:
+                    # ONE METRIC, OR ALL METRICS AGREE: a point, drawn as a bar
+                    # so a single-metric task reads exactly as it did before.
+                    p.append(f'<rect x="{x0}" y="{yy}" width="{xlo}" height="{barh}" '
+                             f'rx="2" fill="{fill}"/>')
+                    p.append(f'<text x="{x0 + xlo + 6}" y="{yy + 11}" fill="{c["fg"]}" '
+                             f'font-size="11">{lo:.2f}\u00d7</text>')
+                else:
+                    # A RANGE. The bar runs to the BEST case and a lighter
+                    # extension carries it to the worst, with both ends labelled
+                    # -- so the eye reads the favourable number first and cannot
+                    # miss how far the unfavourable one is.
+                    p.append(f'<rect x="{x0}" y="{yy}" width="{xlo}" height="{barh}" '
+                             f'rx="2" fill="{fill}"/>')
+                    p.append(f'<rect x="{x0 + xlo}" y="{yy + 4}" width="{xhi - xlo}" '
+                             f'height="{barh - 8}" fill="{fill}" opacity="0.42"/>')
+                    p.append(f'<line x1="{x0 + xhi}" y1="{yy}" x2="{x0 + xhi}" '
+                             f'y2="{yy + barh}" stroke="{fill}" stroke-width="2"/>')
+                    p.append(f'<text x="{x0 + xhi + 6}" y="{yy + 11}" fill="{c["fg"]}" '
+                             f'font-size="11">{lo:.2f}\u2013{hi:.2f}\u00d7</text>')
             else:
                 p.append(f'<text x="{x0 + 6}" y="{yy + 11}" fill="{c["mute"]}" '
                          f'font-size="11" font-style="italic">{esc(note)}</text>')

@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 18, correct 14, PPA measured 16. Verification: submitted 30, compiled 24, tells correct from broken 15, fault count 12." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 15, correct 11, PPA measured 16. Verification: submitted 30, compiled 24, tells correct from broken 15, fault count 12." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -73,7 +73,7 @@ which is why there is no combined score.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_capability_dark.svg">
-  <img alt="Area per unit of capability, relative to each task's reference. async CDC FIFO per capacity_beats_accepted: chat 0.91x, claude 0.91x, gemini 0.88x. Multi-format FMA per throughput_ops_per_1000cyc: claude 1.32x. AXI4 crossbar per aggregate_bursts_per_1000cyc: chat 2.59x. Non-blocking D-cache per max_outstanding_n: chat 1.36x, claude 1.15x." src="docs/assets/design_capability_light.svg" width="100%">
+  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. async CDC FIFO per capacity_beats_accepted: chat 0.91x, claude 0.91x, gemini 0.88x. Multi-format FMA per throughput_ops_per_1000cyc: claude 1.32x. AXI4 crossbar, range over 4 declared metrics: chat 2.59x to 3.40x. Non-blocking D-cache per max_outstanding_n: chat 1.36x, claude 1.15x." src="docs/assets/design_capability_light.svg" width="100%">
 </picture>
 
 **Raw area credits a design for being small when it was merely doing less**, and
@@ -82,10 +82,25 @@ this chart is where that shows. Two conclusions from the area chart invert:
 - d_ca01's `claude` is **0.98×** on raw area — the only submission to come in
   under a reference on a large design — and **1.15×** per unit of outstanding
   capacity. The area win does not survive normalisation.
-- d_nw01's `chat` is 1.36× on area and **2.59×** per burst delivered. It is much
-  further behind than the raw figure suggests.
+- d_nw01's `chat` is 1.36× on area and **2.59×–3.40×** per unit delivered. It is
+  much further behind than the raw figure suggests, and *how much* further
+  depends on which unit — 2.59× per burst, 2.72× per disjoint pair, 3.40× per
+  outstanding transaction.
 - d_ca04's three narrow from 0.73–0.75× to 0.88–0.91×. Most of that headline gap
   is two spill registers the reference has and they do not.
+
+**Where a task declares several capability metrics, the bar spans best to worst
+rather than picking one.** d_nw01 declares four, and they disagree by 31% about
+how much `chat` paid per unit. Picking one and labelling it made the choice
+visible but still made it silently: a reader had no way to know a different
+declared metric moves the number by a third. The three other tasks declare one
+metric each and render as points.
+
+The alternatives were worse. A geometric mean is a synthetic quantity no contract
+defines, and would smuggle in the combined score this project refuses. Worst-case
+only penalises a task for declaring *more* metrics, which is backwards —
+declaring more is better spec hygiene. One row per metric lets a four-metric task
+visually outweigh a one-metric task.
 
 Only tasks that **declare** a capability metric appear. d_dsp02 and d_ca03
 declare none, so they are absent rather than shown against an invented axis —
