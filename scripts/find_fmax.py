@@ -50,6 +50,22 @@ import sys
 import time
 from datetime import datetime, timezone
 
+# LINE-BUFFER OUR OWN STDOUT. A sweep is hours long and its only progress signal
+# is what it prints, but Python block-buffers stdout whenever it is a pipe or a
+# file rather than a tty -- which is every background/nohup invocation. The
+# 8h13m d_ai01 sweep wrote 33 lines total, and both machines running it read the
+# log as "stalled at 14 lines" while eight iterations had in fact completed.
+#
+# Fixed HERE rather than by telling callers to pass `python3 -u`, because a
+# caller that forgets makes a healthy sweep look hung and invites someone to
+# kill it. Both runners forgot independently, which is the argument for not
+# relying on remembering.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+except Exception:
+    pass
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_DIR = os.path.dirname(SCRIPT_DIR)
 

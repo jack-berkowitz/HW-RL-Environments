@@ -35,6 +35,60 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TASK_ARG="${1:?usage: sim_candidate.sh <task> <candidate.sv|dir> [verilator|icarus] [--smoke]}"
 CAND_ARG="${2:?missing candidate .sv or directory}"
 
+# --- RESOLVE THE SIMULATOR EXPLICITLY, AND REFUSE AN UNKNOWN ONE -------------
+# `verilator` was taken from PATH and nothing checked which one it was, so the
+# same repo on the same machine passed or failed by shell environment. Measured
+# on 2026-08-26, both from this host:
+#
+#   Verilator 5.032 (Debian, /usr/bin/verilator)  d_dsp02 reference 0/1 COMPILE
+#                                                 %Error-BLKANDNBLK at
+#                                                 refs/cvfpu/src/fpnew_fma.sv:111
+#   Verilator 5.051 (oss-cad-suite)               d_dsp02 reference 1/1 PASS
+#
+# 5.032 CANNOT COMPILE THE VENDORED cvfpu SOURCES AT ALL. cvfpu drives its
+# pipeline arrays with a continuous `assign` to element [0] and non-blocking
+# assignments to the rest inside always_ff; 5.032 calls that BLKANDNBLK and
+# stops. Every task reading refs/cvfpu or refs/redmule is affected: d_ai01,
+# d_dsp02, d_dsp03, v_dsp02.
+#
+# The floor is 5.051 because that is the LOWEST version measured to work here,
+# not because 5.050 is known bad -- nobody has measured between them. Override
+# with VERILATOR_MIN if you have measured a lower one, or SIM_VERILATOR_EXE to name
+# a binary directly.
+#
+# THE OVERRIDE IS **SIM_VERILATOR_EXE**, NOT VERILATOR_BIN. VERILATOR_BIN is read
+# by Verilator's own Perl wrapper (/usr/bin/verilator:170) to choose which binary
+# to exec, so setting it to the wrapper's own path makes it exec ITSELF and the
+# process hangs in infinite recursion with no output. Names reserved by the
+# wrapper and unusable here: VERILATOR_BIN, VERILATOR_ROOT, VERILATOR_GDB,
+# VERILATOR_VALGRIND, VERILATOR_TEST_FLAGS.
+VERILATOR_MIN="${VERILATOR_MIN:-5.051}"
+if [ -n "${SIM_VERILATOR_EXE:-}" ]; then
+  :
+elif [ -x "$HOME/tools/oss-cad-suite/bin/verilator" ]; then
+  SIM_VERILATOR_EXE="$HOME/tools/oss-cad-suite/bin/verilator"
+else
+  SIM_VERILATOR_EXE="$(command -v verilator 2>/dev/null || true)"
+fi
+VERILATOR_VERSION=""
+if [ -n "${SIM_VERILATOR_EXE:-}" ] && [ -x "$SIM_VERILATOR_EXE" ]; then
+  VERILATOR_VERSION="$("$SIM_VERILATOR_EXE" --version 2>/dev/null | head -1)"
+fi
+_vnum () { echo "$1" | grep -oE '[0-9]+\.[0-9]+' | head -1; }
+if [ -z "$VERILATOR_VERSION" ]; then
+  echo "REFUSED: no verilator found. Set SIM_VERILATOR_EXE." >&2; exit 2
+fi
+_have="$(_vnum "$VERILATOR_VERSION")"; _need="$(_vnum "$VERILATOR_MIN")"
+if [ "$(printf '%s\n%s\n' "$_need" "$_have" | sort -V | head -1)" != "$_need" ]; then
+  echo "REFUSED: $SIM_VERILATOR_EXE is $VERILATOR_VERSION; this repo requires >= $VERILATOR_MIN." >&2
+  echo "  5.032 cannot compile refs/cvfpu (BLKANDNBLK at fpnew_fma.sv:111) and will" >&2
+  echo "  report a WORKING reference as failing. A sim result from it is not a result." >&2
+  echo "  Set SIM_VERILATOR_EXE to a newer binary, or VERILATOR_MIN if you have measured one." >&2
+  exit 2
+fi
+export PATH="$(dirname "$SIM_VERILATOR_EXE"):$PATH"
+export VERILATOR_VERSION
+
 SIM="verilator"; SMOKE=""; SLANG=1
 shift 2 2>/dev/null || true
 for a in "$@"; do
@@ -623,6 +677,7 @@ for cand in "${CANDS[@]}"; do
              tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
              python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
                "$(basename "$cand" .sv)" "task_text_hash=$tt" \
+               "simulator=$SIM" "simulator_version=$VERILATOR_VERSION" \
                "build_status=slang_tool_error" \
                "build_error=$slang_why -- host/tool failure, NOT a verdict" >/dev/null || true
              NSLANG=$((NSLANG+1)); continue ;;
@@ -649,6 +704,7 @@ for cand in "${CANDS[@]}"; do
              tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
              python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
                "$(basename "$cand" .sv)" "task_text_hash=$tt" \
+               "simulator=$SIM" "simulator_version=$VERILATOR_VERSION" \
                "build_status=slang_tool_error" \
                "build_error=$slang_why" >/dev/null || true
              NSLANG=$((NSLANG+1)); continue
@@ -674,6 +730,7 @@ for cand in "${CANDS[@]}"; do
            python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
              "$(basename "$cand" .sv)" \
              "task_text_hash=$tt" \
+             "simulator=$SIM" "simulator_version=$VERILATOR_VERSION" \
              "build_status=slang_rejected" \
              "build_error=$(echo "$slang_why" | tr '\n' ' ' | cut -c1-200)" >/dev/null || \
              echo "  RECORD NOT WRITTEN for $name (slang reject)" >&2
@@ -722,6 +779,7 @@ for cand in "${CANDS[@]}"; do
   if ! rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
         "$(basename "$cand" .sv)" \
         "task_text_hash=$tt" \
+        "simulator=$SIM" "simulator_version=$VERILATOR_VERSION" \
         "compile_warnings=${WARNTOTAL:-0}" \
         "compile_warning_classes=${WARNCLASSES:-}" \
         "comb_loop_configs=${LOOPSEEN:-0}" \

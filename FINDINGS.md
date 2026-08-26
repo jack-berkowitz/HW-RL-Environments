@@ -6338,3 +6338,75 @@ what reads it. For a tool, ask what runs it — and "I run it by hand" is an
 answer that stops being true the moment the person changes.**
 
 **Rules:** 30
+
+## F97. ABC is handed a clock period it never reads, and the whole flow is built around it
+
+`ABC_CLOCK_PERIOD_IN_PS` is the variable F24 exists to protect, the one
+`build_config_hash` records, and the one two config.mk edits were made to declare
+correctly. **It does not reach technology mapping.**
+
+ORFS invokes ABC with `-script scripts/abc_speed.script`, and that script is a
+fixed command sequence:
+
+    &get -n / &st / &dch / &nf / &st / &syn2 / &if -g -K 6 / &synch2  (x5)
+    &put / buffer -c / topo / stime -c / upsize -c / dnsize -c
+
+Nothing in it consults a target period. The `-c` sizing commands optimise against
+`-constr abc.constr`, which holds `set_driving_cell sky130_fd_sc_hd__buf_1` and
+`set_load 5` -- **drive and load, not a clock**. The `-D` value yosys puts on the
+ABC command line is simply never read by the script that runs.
+
+**MEASURED, six synth-only builds of d_ai01 at 4x8, each a full wipe of
+results/logs/objects/reports:**
+
+| run | `-D` on the ABC command line | netlist sha1 |
+|---|---|---|
+| A | `-D 50.0`   | `a545026fd8799e74ed5b` |
+| B | *(none emitted)* | `a545026fd8799e74ed5b` |
+| C | `-D 50000`  | `a545026fd8799e74ed5b` |
+| B2 | `-D 50000` | `a545026fd8799e74ed5b` |
+| D1 | `-D 8000`  | `a545026fd8799e74ed5b` |
+| D2 | `-D 500`   | `a545026fd8799e74ed5b` |
+
+A 100x span of targets (500 ps to 50000 ps), plus the absence of a target
+entirely, plus a value 1000x too small from the units bug, produces the
+BYTE-IDENTICAL netlist and the same 643,044.230399 um^2. The runs are real: the
+yosys logs differ from each other, each carries its own distinct ABC command
+line, netlist mtime moves between runs, and make never reported the target up to
+date. Logs in `docs/evidence/f97_abc_period_independent/`.
+
+**HOW IT WAS NEARLY MISSED, TWICE.** First I compared d_ca03's ABC target (12500)
+against d_ai01's (50.0) and concluded a missing config line was the cause -- but
+12500 came from `CLK_PERIOD_NS=12.5` on the make line, the OVERRIDE path, so I
+had compared two different code paths and credited a line that did no work.
+Jack caught that 12500 is neither 25.0 nor 25000. Then, shown three identical
+netlists, I concluded the DESIGN was insensitive to its timing target. Jack
+caught that too: identical output across a 1000x change is the signature of a
+parameter that never arrives, not of insensitivity, and run B's target was the
+empty string, which should not have landed on the same netlist as 50000 under
+any "insensitive" story. **Both times the data was right and the inference
+reached for the more comfortable conclusion.**
+
+**Consequences, recorded without deciding them:**
+
+* F24 maintains, and `ppa_candidate.sh:152` refuses builds over, a variable that
+  does not reach the mapping. The guard is not useless -- an absent line also
+  breaks the `-constr` path's neighbours and signals an unmaintained config --
+  but its stated rationale, "mapped against the same ABC target", describes
+  something that does not vary.
+* `build_config_hash` includes the period, so two builds differing only in
+  period are declared incomparable under rule 17 when their netlists are
+  byte-identical.
+* **"Area at 50 ns" does not exist for this flow.** 643,044 um^2 is the area of a
+  period-independent mapping. Any table column implying a synthesis area was
+  measured AT a period is naming something that was not varied.
+* The ns-as-ps units bug in `variables.mk:220` is real and separately recorded,
+  but it cannot have affected any netlist, so no area figure -- including the
+  1,631,831 um^2 behind the HEIGHT=8 -> HEIGHT=4 move -- is an artefact of it.
+
+**What this does NOT establish:** whether the period reaches PLACE-AND-ROUTE.
+Resizing, placement, CTS and routing are timing-driven and read the SDC
+independently of ABC. The d_ai01 Fmax sweep tests exactly that, by recording
+final post-route area alongside the netlist hash per iteration.
+
+**Rules:** 17, 24
