@@ -254,6 +254,8 @@ module fp16_gemm_array_tb;
     // ------------------------------------------------------------------
     measure_latency();
 
+    check_reset_clears();
+
     report_coverage();
 
     $display("");
@@ -272,7 +274,9 @@ module fp16_gemm_array_tb;
     // "FAIL:" with nothing after it -- a correct verdict that cannot be acted
     // on. A one-line failure with no reason is the same defect as a metric with
     // no gate: it is read, and it says nothing.
-    if (errs_z == 0 && errs_st == 0 && lat_ok) $display("TEST_RESULT: PASS");
+    if (errs_z == 0 && errs_st == 0 && lat_ok && floors_v2_ok) $display("TEST_RESULT: PASS");
+    else if (!floors_v2_ok)
+      $display("TEST_RESULT: FAIL: V2 -- reset did not clear the array, or was never exercised on a non-zero array");
     else if (!lat_ok)
       $display("TEST_RESULT: FAIL: L3 latency floor -- measured %0d ticks at HEIGHT=%0d, expected %0d (L3 D*(H-1)+2 = %0d plus one sampling edge)",
                lat_meas, H, EXP_LAT, L3_LAT);
@@ -351,6 +355,7 @@ module fp16_gemm_array_tb;
   localparam int unsigned EXP_LAT = L3_LAT + 1;    // +1 for the sampling edge
   int unsigned lat_meas;
   bit          lat_ok;
+  bit          floors_v2_ok = 1'b1;
 
   task automatic measure_latency();
     int unsigned t;
@@ -386,6 +391,81 @@ module fp16_gemm_array_tb;
       if (lat_meas == 0)
         $display("  L3 FLOOR: the impulse never emerged within %0d ticks -- not measured, not passed",
                  EXP_LAT + 20);
+    end
+  endtask
+
+  // ---------------------------------------------------------------------------
+  // V2 -- RESET CLEARS EVERY INTER-STAGE REGISTER. NOT INSTRUMENTED BEFORE THIS.
+  //
+  // V2 says "rst_ni asserted low clears every inter-stage register; z_o reads +0
+  // (0x0000) and every status_o field reads 0". Reset was asserted TWICE and BOTH
+  // ARE INITIALISATION -- rst_n low at the top of the run, high eight lines
+  // later, never again. No check anywhere referenced reset. So a design that
+  // ignored rst_ni entirely was indistinguishable from a conforming one, because
+  // reset only ever happened when the array was already zero.
+  //
+  // THIS IS THE FOURTH INSTANCE OF THE CLASS and the SECOND CONTROLLED
+  // COMPARISON. d_ca03 has flush instrumented and reset not, in one file; SO DOES
+  // THIS TASK -- flush_i is driven three times inside the scored sequence with
+  // cov_flush and the C2 refill window built around it, while reset had nothing.
+  // Two files, same author, different domains, same split. The mechanism:
+  //
+  //   THE GAP APPEARS WHERE THE OPERATION DOUBLES AS THE TESTBENCH'S OWN
+  //   INITIALISATION. Reset is what a testbench must do to get started, so it is
+  //   written as setup and the clause about what it does to state never acquires
+  //   a condition. Flush has no setup role, so its clause got one from the start.
+  //
+  // AND MY OWN SWEEP MISCOUNTED THIS TASK. It reported "tb reset-assertions=2"
+  // and passed d_ai01 as instrumented. The two assignments are the initialisation
+  // pair. The right measurement against the wrong population, which is the error
+  // AGENT-VERIF-A2 had named an hour earlier and I then made.
+  //
+  // Appended after the scored loop: drives no recorded vector, so the vectors
+  // stay valid and this is NOT a stimulus boundary.
+  task automatic check_reset_clears();
+    bit any_nonzero;
+    begin
+      // 1. ESTABLISH THE ANTECEDENT. Drive a settled non-zero field so the array
+      //    holds something for reset to clear. Without this the check is vacuous
+      //    in exactly the way V2 was for the life of the task.
+      for (int rr = 0; rr < W; rr++) begin
+        y[rr] = 16'h3C00;
+        for (int k = 0; k < H; k++) x[rr][k] = 16'h3C00;
+      end
+      for (int k = 0; k < H; k++) wt[k] = 16'h3C00;
+      rnd = 3'd0; accumulate = 1'b0; flush = 1'b0; reg_enable = 1'b1; row_gate = '1;
+      repeat (EXP_LAT + 8) @(posedge clk);
+      #1;
+      any_nonzero = 1'b0;
+      for (int rr = 0; rr < W; rr++) if (z[rr] !== 16'h0000) any_nonzero = 1'b1;
+
+      // 2. THE EVENT V2 IS ABOUT.
+      rst_n = 1'b0;
+      repeat (4) @(posedge clk);
+      #1;
+
+      $display("METRIC: v2_array_nonzero_before_reset=%0b", any_nonzero);
+      if (!any_nonzero) begin
+        $display("  FLOOR FAIL: V2 was never exercised -- z_o was already all-zero");
+        $display("              before reset, so clearing it could not be observed.");
+        floors_v2_ok = 1'b0;
+      end else begin
+        for (int rr = 0; rr < W; rr++) begin
+          if (z[rr] !== 16'h0000) begin
+            $display("  FAIL V2: z_o[%0d]=%h after reset; rst_ni must clear every inter-stage register",
+                     rr, z[rr]);
+            floors_v2_ok = 1'b0;
+          end
+          for (int k = 0; k < H; k++)
+            if (status[rr][k] !== 5'd0) begin
+              $display("  FAIL V2: status_o[%0d][%0d]=%b after reset; every status field must read 0",
+                       rr, k, status[rr][k]);
+              floors_v2_ok = 1'b0;
+            end
+        end
+      end
+      rst_n = 1'b1;
+      repeat (4) @(posedge clk);
     end
   endtask
 
