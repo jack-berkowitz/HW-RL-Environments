@@ -218,3 +218,85 @@ per task and then tried to avoid with a generic mechanism.
 3. **The one substantive result so far is `v_ca06` clean at depth 9**, which is
    three times the depth at which the old sticky D6 broke — evidence that the
    narrowing was right, and the only positive result the run has produced.
+
+
+---
+
+# SECOND RUN — delay-the-advance, and a correction to my own first report
+
+**No sweep. No clause moved.**
+
+## The mechanism was rebuilt twice, not once
+
+    v1  gate the DUT-visible valid       UNSOUND -- phantom transfers
+    v2  delay before the valid           UNSOUND -- sits between a measurement's
+                                         baseline and the event it measures
+    v3  delay at the top of the task     sound, and passing
+
+**v2's defect is the wrong-baseline finding in a new form.** `do_read` samples
+`ar0 = n_ds_ar` at task entry and compares at the end. A delay placed just before
+the offer left that window open across the gap, so a *previous* transaction's
+downstream address landed inside it:
+
+    FAIL [A2] read issued 2 downstream addresses, expected exactly 1   x24
+
+I did not move the baseline. **I moved the event away from it**, which has the
+same effect and is harder to see.
+
+## And it overturns the "third failure category" I reported
+
+I reported `v_ca03`'s A4 (window 2) and `v_nw02`'s X4 (deadline 232) as **clauses
+made unmeasurable by a 9-cycle perturbation**, and proposed excluding bounded
+clauses. Under v3, at the same depth 9:
+
+    v_ca03   PASS      (was FAIL 4)
+    v_nw02   PASS      (was FAIL 22)
+    v_ca06   PASS      (was FAIL 1 at wide drain)
+
+**They were not unmeasurable. They were artefacts of the gate**, which inserted
+delay inside the window those clauses bound. The category was real as an idea and
+false as a diagnosis of these three, and I proposed a scoring change on the
+strength of it.
+
+> A category inferred from an instrument's output inherits the instrument's
+> defects. I had already written that a failure surviving the drain widening
+> escalates — it did survive, twice, and it was still the instrument.
+
+## What v3 actually tests, and it is not the axis in the table above
+
+The delay sits at the **top of each driving task**, so it spaces *transactions*
+apart. The plan's axis is the **inter-beat gap** — the spacing between beats
+*within* a transaction — and that is what found D6.
+
+    v3 tests     inter-transaction spacing
+    the plan     inter-beat gap
+    D6 needed    inter-beat gap
+
+**v3 would not have found D6.** It is sound and it is measuring the wrong thing,
+which is a better position than v1 and v2 but not the one the plan asked for.
+
+The inter-beat axis needs the responder's own beat advance slowed — the `RGAP`
+edit, per task, in each responder's always block. That is the 1–2 hours per task
+the estimate named, and no generic patcher reaches it: **the beat advance lives in
+a different place in every testbench, which is exactly why a generic mechanism
+kept measuring something else.**
+
+## Standing results
+
+| task | depth | mechanism | narrow | wide |
+|---|---|---|---|---|
+| `v_ca06` | 9 | v1 gate | FAIL 38 | **PASS** |
+| `v_ca06` | 9 | v3 delay | **PASS** | FLOOR only |
+| `v_ca03` | 9 | v3 delay | **PASS** | FLOOR only |
+| `v_nw02` | 9 | v3 delay | **PASS** | FAIL, uncategorised |
+| `v_ai02` | 6 | v1 gate | PASS | PASS |
+| `v_dsp02` | 4 | v1 gate | PASS | PASS |
+| `v_ca07` | 16 | v1 gate | FLOOR only | FLOOR only |
+
+**`v_ca06` clean at depth 9 under two independent mechanisms** is the one result
+that has survived every revision of the instrument, and it is three times the
+depth at which the old sticky D6 broke.
+
+A FLOOR firing at the wide drain is expected and does not escalate: multiplying
+every drain changes how much stimulus fits in the run, so coverage counts fall.
+That is the drain being widened, not the design.
