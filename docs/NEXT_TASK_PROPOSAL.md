@@ -441,3 +441,60 @@ the corpus you have is still a defect; it is waiting for a corpus you do not.
   either mechanism.
 * **Write the reset and flush drives at the top level of the stimulus**, not
   inside nested tasks.
+
+
+## Closing measurement: three states, not two — and a sixth way into the same error
+
+`AGENT-VERIF-A2` found that **the fix we both applied creates a new misreading.**
+Excluding declarations makes the count correct and makes one branch unreadable:
+
+    never asserted mid-run
+      |- asserted at time zero by a STATEMENT, never again
+      `- never asserted by a statement AT ALL      d_dsp03, and v_ca03 on their side
+
+A scan that counts assignments sees `rst_n = 0` once in both branches and cannot
+separate them. A scan that excludes declarations sees **zero** in the second, which
+reads as *"this file does not reset its DUT"* — nearly true, and it sends a reader
+looking for a missing **signal** rather than a missing **statement**.
+
+So the detector needs three states, and `d_dsp03` is the instance:
+
+    d_ai01   statement asserts at [146, 443]
+    d_ca01   statement asserts at [501]
+    d_ca03   statement asserts at [202]
+    d_ca04   statement asserts at [241/242, 388]   both domains
+    d_dsp02  statement asserts at [368]
+    d_dsp03  DECLARATION ONLY -- never asserted by a statement
+    d_nw01   statement asserts at [175], [608, 666, 672]
+    d_nw03   statement asserts at [398]
+
+**And the same run produced a sixth way into the population error, at a third
+axis.** The signal selector `\w*rst\w*` matched **`burst`, `first_fail`,
+`agg_bursts`, `max_burst_seen`, `multi_beat_bursts`, `cov_burst_gt1`** — seven
+spurious rows, because "burst" and "first" contain "rst". No reset verdict moved;
+the real `rst_n` rows are right. But a reader would have been filtering by eye,
+and on a corpus with a signal genuinely named `arst` or `wrst` the eye-filter
+would be doing real work silently.
+
+Three axes now, same class:
+
+    WHICH TASKS    population -- a sample called a population
+    WHEN           timing     -- text order read as execution order
+    WHICH SIGNALS  identity   -- a substring match read as a name
+
+Each was found only by someone checking a specific answer against a file they had
+read. **None was found by the tool.**
+
+## What survives, for the store queue
+
+Nothing here is a mechanism and no prediction is registered. What is worth
+carrying into the task:
+
+* **Three states in any reset measurement**, not two.
+* **Guard the signal selector on name boundaries**, not substrings.
+* **Print NOT-STATIC** where a reset write sits inside a task, rather than a
+  verdict.
+* **The antecedent gate is the instrument that works** — runtime, three for
+  three, hand-built each time.
+* **Write reset and flush at the top level of the stimulus.** The one preventive
+  item, and it costs nothing while the file does not exist.
