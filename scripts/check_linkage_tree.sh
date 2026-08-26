@@ -72,6 +72,35 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
     ( cd "$d" && python3 scripts/check_witness_sync.py 2>&1 )
     if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ witness_sync"; fi
   fi
+  # APPEND-ONLY DOCUMENTS MUST NOT LOSE A HEADING, and this is the only place a
+  # check of that kind can be anchored correctly.
+  #
+  # MY OWN VERIFICATION HAD THE WRONG ANCHOR. Every commit this week ended with
+  # `git show HEAD:$f | cmp - $f` -- the committed blob against the WORKING TREE.
+  # That proves the commit is faithful to my last edit. It cannot prove the edit
+  # did what I meant, because if the working tree was already truncated the
+  # comparison passes on two copies of the damage. AGENT-VERIF-A2 lost 162
+  # committed lines of their findings file to exactly that, and their per-blob
+  # verification passed on the destroying commit.
+  #
+  #   anchored to the working tree     the commit matches my last edit
+  #   anchored to the PREVIOUS COMMIT  my edit did what I meant
+  #   anchored to nothing              one number compared to no other
+  #
+  # Only the middle row is a check on the change. This runs against the tree
+  # being committed and compares it to HEAD, which is that row.
+  #
+  # Wired HERE rather than left in scripts/ because F96 counted nineteen checkers
+  # and found two reachable from a scored run. A tool is not wired by living in
+  # the tools directory; three of the unwired ones were mine, built the same day
+  # I filed the finding about inert annotations.
+  # The append-only check is NOT run here. check_tree extracts an arbitrary
+  # tree-ish into a temp directory with no git repository in it, and this check
+  # is inherently a COMPARISON BETWEEN TWO REFS -- there is nothing to compare
+  # against inside an extracted tree. It runs in the --staged branch, where the
+  # index and HEAD both exist. A check placed where it cannot see its own
+  # reference point would run, pass, and mean nothing: the third row of the table
+  # below.
   rm -rf "$d"
   return $rc
 }
@@ -120,6 +149,12 @@ report_failure () {   # $1 = checker output (with markers)  $2 = what was read
   case " $fails " in
     *" rule_linkage "*" witness_sync "*|*" witness_sync "*" rule_linkage "*)
       echo "FAILED: rule/finding linkage AND witness sync, on $what." ;;
+    *" append_only "*)
+      echo "FAILED: APPEND-ONLY on $what -- a heading disappeared from a document"
+      echo "        that is only ever added to. A growing file hides a destructive"
+      echo "        edit from every size check; the heading count is the one signal"
+      echo "        it cannot hide. Pass --allow-drop with the exact heading if the"
+      echo "        removal is deliberate, so the decision lands in the artefact." ;;
     *" witness_sync "*)
       echo "FAILED: WITNESS SYNC on $what -- a mutant or rule-24 control has no"
       echo "        witness recorded in its task.yaml. This is NOT a rule/finding"
@@ -167,6 +202,40 @@ case "${1:---staged}" in
     echo "published still fails its own check for anyone who fetched it."
     exit 1 ;;
   --staged)
+    # APPEND-ONLY, AND MY OWN VERIFICATION HAD THE WRONG ANCHOR ALL WEEK.
+    # Every commit ended with `git show HEAD:$f | cmp - $f` -- the committed blob
+    # against the WORKING TREE. That proves the commit is faithful to my last
+    # edit. It cannot prove the edit did what I meant, because if the working
+    # tree was already truncated the comparison passes on two copies of the
+    # damage. AGENT-VERIF-A2 lost 162 committed lines of their findings file to
+    # exactly that shape, and their per-blob verification passed on the
+    # destroying commit.
+    #
+    #   anchored to the working tree     the commit matches my last edit
+    #   anchored to the PREVIOUS COMMIT  my edit did what I meant
+    #   anchored to nothing              one number compared to no other
+    #
+    # Only the middle row is a check on the change. --staged is that row: the
+    # index against HEAD.
+    #
+    # Wired here rather than left sitting in scripts/ because F96 counted
+    # nineteen checkers and two reachable from a scored run. A tool is not wired
+    # by living in the tools directory, and three of the unwired ones were mine.
+    if [ -f "$REPO/scripts/check_append_only.py" ]; then
+      if ! ao="$(cd "$REPO" && python3 scripts/check_append_only.py --staged \
+            FINDINGS.md RULES.md CONVENTIONS.md TASK_CATALOG.md 2>&1)"; then
+        echo "APPEND-ONLY REFUSED, on the tree the index would commit:"
+        printf '%s\n' "$ao" | sed 's/^/  /'
+        echo
+        echo "A heading disappeared from a document that is only added to. A"
+        echo "growing file hides a destructive edit from every size check; the"
+        echo "heading count is the one signal it cannot hide."
+        echo "If deliberate, re-run check_append_only.py with --allow-drop and the"
+        echo "exact heading, so the decision lands in the artefact rather than in"
+        echo "your head."
+        exit 1
+      fi
+    fi
     tree="$(git -C "$REPO" write-tree)" || { echo "cannot write-tree"; exit 2; }
     if out="$(check_tree "$tree")"; then
       echo "ok -- read THE TREE THE INDEX WOULD COMMIT (tree $(short "$tree"))"
