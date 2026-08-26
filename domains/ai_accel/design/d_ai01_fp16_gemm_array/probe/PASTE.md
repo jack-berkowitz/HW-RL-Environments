@@ -354,11 +354,13 @@ Everything normative is in the interface below.
 //     comparison is like-for-like and is about the geometry.
 //
 //     THIS IS NOT A CLAIM THAT HEIGHT=4 CLOSES AT THE SCORED PERIOD. 50 ns is the
-//     most RELAXED constraint this task allows and G1 records the pinned period as
-//     not yet set. A failure at 50 ns would have been decisive; a pass is
-//     NECESSARY AND NOT SUFFICIENT, because the pin will be tighter and closure is
-//     bought with area -- so the routed design at the pin will exceed 710,752 um^2
-//     and must be re-checked before any PPA number is published from it.
+//     most RELAXED constraint this task allows; G1 now pins 16.75 ns. A failure at
+//     50 ns would have been decisive; a pass is NECESSARY AND NOT SUFFICIENT,
+//     because the pin is tighter and closure is bought with area -- so the routed
+//     design at 16.75 ns may exceed 710,752 um^2 and must be re-checked before any
+//     PPA number is published from it. The flat-area measurement in G1 suggests
+//     the excess will be small, but 710,752 was routed at 50 ns and SUGGESTS is
+//     not MEASURED.
 //
 //     HEIGHT=8 REMAINS LEGAL under P1 and T3 STILL REQUIRES A SUBMISSION TO HOLD
 //     AT BOTH. What moved is which geometry carries the PPA comparison, not which
@@ -432,12 +434,34 @@ Everything normative is in the interface below.
 //        ONCE AT A PINNED CLOCK PERIOD rather than by sweeping for a maximum
 //        frequency.
 //
-//        THE PINNED PERIOD FOR THIS TASK IS NOT YET SET. It is derived as 1.5x
-//        the reference implementation's own measured period, rounded up to the
-//        next 0.25 ns, from a single reference Fmax sweep; that sweep is running
-//        and its result will be stated here before any submission is solicited.
+//        THE PINNED PERIOD IS 16.75 ns on sky130hd. It is derived as 1.5x the
+//        reference implementation's own measured period (11.1328 ns, 89.82 MHz,
+//        WNS +0.05), rounded up to the next 0.25 ns:
+//
+//            ceil(1.5 x 11.1328 / 0.25) x 0.25  =  67 x 0.25  =  16.75 ns
+//
+//        THE SWEEP CONVERGED TWICE, ON TWO MACHINES, AND THE SECOND RUN WAS NOT
+//        TOLD THE FIRST RUN'S ANSWER. The PC reached it in ten place-and-route
+//        runs; an independent sweep walked the identical bisection -- iterations
+//        7, 8 and 9 at 11.7188, 11.3281 and 11.1328 -- with a confirming re-run.
+//        Two agreeing bisections from the same starting bracket are weaker
+//        evidence than two different methods would be, and are recorded as what
+//        they are: a reproducibility check, not an independent measurement.
+//        build_config_hash 0403c77ec5509d34.
+//
 //        The 50 ns in orfs/constraint.sdc is a STARTING CONSTRAINT, not the pin,
-//        and it was never derived by that rule.
+//        and it was never derived by that rule. Any area recorded at 50 ns is NOT
+//        comparable to a build at 16.75 ns.
+//
+//        AREA IS FLAT IN THE LOOSE REGIME AND THE PIN SITS ON THAT PLATEAU.
+//        Measured: 708,323 um^2 at 50 ns against 708,308 at 25 ns -- 0.002% across
+//        a 2x change in period -- with area only beginning to respond below about
+//        12.5 ns. So at 16.75 ns G2's area comparison discriminates on DESIGN SIZE
+//        far more than on timing-driven bloat. That is still like-for-like across
+//        candidates and the comparison is sound; it is stated so a reader knows
+//        the pin was chosen to be comfortable rather than to be discriminating.
+//        Whether rule 18 wants a pin closer to the knee is Jack's call and is
+//        recorded as open rather than settled here.
 //
 //        Whatever the number turns out to be, it does not move in response to
 //        what is submitted. An earlier scheme pinned the row at the slowest
