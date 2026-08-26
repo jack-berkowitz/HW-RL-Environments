@@ -172,6 +172,15 @@ module dwc_c1_extra_latency #(
     // connected to nothing. The R half of "extra latency" was never slow.
     .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid(m_rvalid & gate_r), .m_rready(g_rready)
   );
+  // DID THIS CHANNEL ACTUALLY STALL? Measured AT THE PORTS, not at the gate, so
+  // the number is the same question whatever the implementation is -- and so it
+  // reads zero on the version of this file where `.m_rready` was double-driven
+  // and this channel was never slow at all. `FIRED <name> <count>`; see
+  // check_fired.py, which REFUSES on zero.
+  int n_r_bp = 0;
+  always @(posedge clk_i) if (rst_ni && m_rvalid && !m_rready) n_r_bp <= n_r_bp + 1;
+  final $display("FIRED dwc_c1.r_backpressure %0d", n_r_bp);
+
 endmodule
 
 // ----------------------------------------------------------------------------
@@ -667,4 +676,13 @@ module dwc_c5_response_intake_slow #(
     // connected to nothing. The R half of "response intake slow" was never slow.
     .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid(m_rvalid & gate_r), .m_rready(g_rready)
   );
+  // DID THIS CHANNEL ACTUALLY STALL? Measured AT THE PORTS, not at the gate, so
+  // the number is the same question whatever the implementation is -- and so it
+  // reads zero on the version of this file where `.m_rready` was double-driven
+  // and this channel was never slow at all. `FIRED <name> <count>`; see
+  // check_fired.py, which REFUSES on zero.
+  int n_r_bp = 0;
+  always @(posedge clk_i) if (rst_ni && m_rvalid && !m_rready) n_r_bp <= n_r_bp + 1;
+  final $display("FIRED dwc_c5.r_backpressure %0d", n_r_bp);
+
 endmodule

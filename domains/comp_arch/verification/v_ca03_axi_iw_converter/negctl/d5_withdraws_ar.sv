@@ -113,6 +113,15 @@ module iw_nc_d5_withdraws_ar #(
   wire drop = (cnt >= 2'd1) && g_m_arvalid && !m_arready;
   assign m_arvalid = g_m_arvalid & ~drop;
 
+  // DID IT FIRE? A verdict says what happened; this says whether anything was
+  // asked. The first version of this control PASSED because its trigger never
+  // occurred, and a pass and a no-op are indistinguishable without this line.
+  // Convention: `FIRED <name> <count>`, checked by check_fired.py, which
+  // REFUSES on zero.
+  int n_drop = 0;
+  always @(posedge clk_i) if (rst_ni && drop) n_drop <= n_drop + 1;
+  final $display("FIRED nc_d5_withdraws_ar.drop %0d", n_drop);
+
   id_width_conv #(
       .SLV_ID_W(SLV_ID_W),
       .MST_ID_W(MST_ID_W),

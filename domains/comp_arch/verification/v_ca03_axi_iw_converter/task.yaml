@@ -377,7 +377,7 @@ negative_controls:
     kind: negative
     expect: fail
     measured_by: hand_run
-    result: FAIL -- 11 x D5 on channel 4, and NOTHING ELSE
+    result: FAIL -- 11 x D5 on channel 4, and nothing else AS OF 2026-08-25
     detail: >
       Withdraws m_arvalid only on a cycle when m_arready is already low, so no
       handshake is lost and the wrapped design sees a bit-identical environment.
@@ -430,3 +430,29 @@ report_block_defect:
     All eleven verification testbenches were run and their RESULT lines counted.
     Ten produced exactly one; v_ca03 was the only instance. v_dsp01 is REJECTED
     and ships no testbench.
+
+must_fire:
+  iw_nc_d5_withdraws_ar: [nc_d5_withdraws_ar.drop]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once at the end of a run; check_fired.py REFUSES
+  on zero, and refuses ABSENT separately because absent is not zero (rule 20).
+  Declared here rather than globbed, so a deleted artefact is a refusal instead
+  of a shorter list, and keyed BY VARIANT: the negative-control run contains no
+  conformant perturbations and vice versa, so a flat per-task list would refuse
+  on every run that is not the union of all of them.
+
+exclusivity_is_dated:
+  date: 2026-08-25
+  claim_qualified: >
+    "D5 and nothing else" is a claim about THE SET OF CHECKS THAT EXISTED WHEN IT
+    WAS MEASURED, not about the control. Adding a check can retroactively falsify
+    an isolation claim made in good faith, and the claim reads as verified the
+    whole time. AGENT-DESIGN-43a92055's d_nw03 nc_b_outputs_serialised went from
+    6/8 exclusive to 0/8 within a day of an R1 stability check being added --
+    nothing in the control moved.
+  therefore: >
+    Every exclusivity claim in this task carries the date it was measured. Read
+    it as "exclusive with respect to the checks this task had on that date".
+    This one was measured on the day D5 and A5's checkers were added, which is
+    the least stale it will ever be and still not a permanent claim.

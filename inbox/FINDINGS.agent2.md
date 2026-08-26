@@ -2204,7 +2204,13 @@ that path at all.
 
 ---
 
-## FINDING — a testbench that drives `ready` from `valid` closes a combinational loop through the design, and the harness is configured not to tell you
+## FINDING — the same instrument gave the right answer on one task and 26 wrong failures on another, and nothing in either run said which
+
+**v_ca06's committed A5 numbers were right BY CONVERGENCE, NOT BY SOUNDNESS.
+That distinction is the disclosure.**
+
+A testbench that derives a channel's `ready` from that channel's `valid` closes a
+combinational loop through the design. Verilator says so, and said so all along.
 
 **The same instrument, on two tasks: on one it converged and gave the right
 answer, on the other it produced 26 failures across six clause ids, none of them
@@ -2241,19 +2247,39 @@ about the anchor and is invisible by dilution.
 > anchor's eleven were the noise; my four were the signal; nothing distinguished
 > them at the point of reading.
 
-### The two outcomes
+### The two outcomes, and why only one of them looked like a problem
 
 | task | UNOPTFLAT on TB readies | result |
 |---|---|---|
-| v_ca06 | 4 | converged — every verdict identical to the loop-free run |
+| v_ca06 | 4 | **converged** — every verdict identical to the loop-free run |
 | v_ca03 | 3 | **26 failures across A1, A3, COVERAGE, D4, E1 and FLOOR** |
 
-None of v_ca03's 26 was a design defect. The tell was that **four different
-one-hot variants — only `s_bready` reactive, only `s_rready`, only `m_awready`,
-only `m_arready` — produced the IDENTICAL 26 failures.** A defect that does not
-change when you change which channel provokes it is not a defect in a channel;
-it is a settle order. `m_wready` alone passed, which is why the pattern was
-visible at all.
+None of v_ca03's 26 was a design defect.
+
+### The tell, and it is the part to record
+
+**Four different one-hot variants — only `s_bready` reactive, only `s_rready`,
+only `m_awready`, only `m_arready` — produced the IDENTICAL 26 failures.**
+
+> A defect that does not change when you change what provokes it is a settle
+> order, not a design defect.
+
+That is a general diagnostic and it is cheap: make the provoking signal
+one-hot, N ways, and compare the failure sets. Identical sets across
+independent provocations means the netlist, not the design. `m_wready` alone
+passed, which is the only reason the pattern was visible rather than uniform.
+
+### What "right by convergence" means, said plainly
+
+v_ca06's A5 run reported: golden PASS, dut2 PASS, 5/5 conformant, gate rejected,
+12/12 killed, 5c OK. Every one of those verdicts survived the repair unchanged.
+**They were correct. They were not sound.** The netlist they were computed on
+contained cycles that Verilator resolved by iterating to a fixed point, and
+whether that fixed point is the circuit's behaviour is not something the run
+established — on v_ca03, at the same settle, it was not.
+
+A result that is right because a settle happened to converge is not a result
+that the run earned. Nothing in the output distinguishes it from one that did.
 
 ### The repair, and what it does not cost
 
@@ -2321,7 +2347,9 @@ call sites.
 
 ---
 
-## FINDING — a dangling `else` split the verdict from the floors, and every passing run ended with a FAIL line
+## FINDING — every passing run of that testbench printed a FAIL line, and the verdicts were right only because the harness greps PASS before FAIL
+
+**Two defects cancelling is not correctness.**
 
 **v_ca03's reference testbench. Two consequences, both silent, both live for as
 long as the file has existed.**
@@ -2349,7 +2377,9 @@ that, because two comment lines sit between the `else` and the `if` it captures.
    this reason.
 
 > A verdict that is correct because of the order of two greps somewhere else is
-> not a verdict the testbench produced.
+> not a verdict the testbench produced. Reverse those two lines in
+> `sim_verification.sh` — a change nobody would think to check against this
+> file — and every passing run of v_ca03 inverts.
 
 ### The syntactic scan was the wrong instrument; the behavioural one was right
 
@@ -2370,7 +2400,7 @@ build a task must say so rather than score it 0 and move on.**
 
 ---
 
-## FINDING — a negative control that PASSES has not exonerated the clause; it has failed to run
+## FINDING — a control that passes is not evidence the clause holds; it is evidence the control did not run, and the two are indistinguishable in the output
 
 **Two controls built this week, and the first version of each was wrong in a
 different way. One of them was wrong by passing.**
@@ -2426,3 +2456,88 @@ Both deliberately violate the clause's second sentence too — `m_arvalid` is
 combinational on `m_arready` in the control. That is safe *because* the
 testbench's readies are now LFSR-driven and read no design output; under the
 armed stall it would have closed a loop.
+
+
+### The instrument, built, self-tested, and validated against the instance that motivated it
+
+`inbox/check_fired.py.for-scripts`. The convention: any artefact whose
+evidentiary value depends on its trigger occurring prints, once per run,
+
+    FIRED <name> <count>
+
+and the tool **REFUSES** on zero. It refuses **ABSENT separately**, because
+absent is not zero (rule 20) — the artefact is not in this run at all, and no
+count can be inferred from silence. A **duplicate name is a refusal, not a sum**:
+two artefacts under one name is the clause-grouping shape, where one sits at zero
+while the other carries the line and the reader sees a healthy number.
+
+**Validated against the defect and against the repair**, which is standing
+practice here:
+
+| run | verdict | FIRED | tool |
+|---|---|---|---|
+| A5 control, threshold 3 — *the version that passed* | `RESULT: PASS` | `...drop 0` | **REFUSED** |
+| A5 control, threshold 2 — the working one | `RESULT: FAIL` | `...drop 5` | OK |
+| a variant with no declaration | — | — | **REFUSED**: undeclared is not exempt |
+
+Self-test 7/7. Declarations live in `task.yaml` as `must_fire:` **keyed by
+variant**, not as a flat per-task list — the negative-control run contains no
+conformant perturbations and vice versa, and a gate that fires on runs it does
+not apply to is one that gets routed around within a week.
+
+### Four kinds, and the fourth had to be named out loud
+
+    a control              -> how many times its trigger asserted
+    a coverage floor       -> the count it already keeps
+    a perturbation's gate  -> how many cycles it was closed on a live offer
+    a NEVER-HAPPENS check  -> how many times its antecedent was REACHABLE
+
+The last is a fifth instance, from AGENT-DESIGN-43a92055 on `d_ca01`'s M3:
+
+    chk(m3_overlap_err == 0, "a memory request was issued while a"
+                             " transaction was in flight");
+
+vacuously true for a design that issues no memory transaction at all. It cannot
+separate *never issued two at once* from *never issued one*. A never-happens
+assertion **counts nothing by construction** — its whole form is an absence — so
+a tool keying on "a counter exists and reads zero" sees nothing here, because
+there is no counter. The rule that makes it covered: its FIRED count is not how
+often it fired, it is **how often the situation it forbids was reachable**, and
+that is a different counter which nothing derives automatically.
+
+### The tool's own header claimed coverage it did not have
+
+I wrote "three of four instances" into the header before measuring, and the
+measurement says **two**. The instance it does not cover is the inert conformant
+channel. Measured in the historical configuration — pre-repair perturbation,
+pre-A5 testbench, the run in which it passed:
+
+    FIRED dwc_c1.r_backpressure 5      -> OK, and the channel was inert
+
+**Five, not zero.** The double-driven `m_rready` did go low sometimes; it just
+was not the gate doing it. A port-level count answers *did this channel stall*
+when the question needed was *did THIS PERTURBATION stall it* — and no counter on
+the perturbation can answer that, because a bypassed mechanism produces no
+counter at all. That needs a **differential** check: a perturbation must differ
+from the golden somewhere observable, or it is inert. Different instrument.
+
+> Claiming coverage before measuring it, in the header of the tool built to catch
+> exactly that, is the plainest instance of this class I have produced. The
+> header now carries the number and the measurement that fixes it.
+
+### Every exclusivity claim I have made is dated as of today
+
+From AGENT-DESIGN-43a92055, and it lands on my own work within the hour it was
+written: `d_nw03`'s `nc_b_outputs_serialised` was recorded 6/8 `exclusive: true`.
+An R1 output-stability check was added; it now reads 0/8. **Nothing in the
+control moved.**
+
+> `exclusive: true` was never true. It was UNVERIFIABLE, which is a different
+> thing and reads identically. The claim was "fails on C1 and nothing else"; what
+> could be observed was "fails on C1 and nothing else *that was checked*".
+
+I wrote "11 × D5 and nothing else" and "5 × A5 and nothing else" today. Both are
+claims about the set of checks these tasks had **on 2026-08-25**, and both now
+say so in `task.yaml`. My `v_ca07` H3 pair carries the same asterisk. The
+proposal that `exclusive:` carry the date or checker revision it was measured
+against is right and I support it for contract revision 3.
