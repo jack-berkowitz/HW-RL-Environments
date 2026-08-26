@@ -115,3 +115,55 @@ Item 3 is the reason this is not a pure Mechanism-C arithmetic task.
 - the fp16 subnormal boundary, and fp32 rounding for values needing it
 - reset behaviour mid-stream
 - per-lane independence beyond "all four lanes carried the same value"
+
+## The probes had the defect they were built to avoid
+
+A2 found that `check_artefact_warnings.py` returned *"OK: no task-owned artefact
+drew a warning"* when handed an **empty log** — true, useless, and identical to
+a clean build. Their reading: validating an instrument against the inputs it was
+designed for is not validating it, and the input that is neither a defect nor a
+repair is where it breaks.
+
+**Probes 2, 3 and 6 have that defect.** Their `shot()` task prints a `MEASURE:`
+row unconditionally; on timeout the wait loop breaks and the row renders anyway,
+in the shape of a result. Nothing in it says whether a transfer occurred.
+
+It is worse than predicted. The expectation was that `got = 128'hx` would print
+as `xxxxxxxx` and be visibly broken. **Verilator is 2-state, so `128'hx` is
+zero, and a timed-out vector prints `0x00000000`** — demonstrated in probe 7
+part A, which runs a real vector with the consumer held un-ready and shows the
+old form and the new form side by side:
+
+    OLD FORM  -> 0x00000000 (0)      <-- a data-shaped row, no transfer occurred
+    degenerate   NO TRANSFER in 200 cycles -- THIS IS NOT A MEASUREMENT
+
+**Zero is inside this DUT's legitimate output range**, so under the old form a
+timeout and a genuine zero were byte-identical rows.
+
+### One committed evidence row was at risk, and it was the load-bearing one
+
+    | " again, far out | x=−32768 sc=32767 t=63 | `>>>` → −1 | **0** |
+
+That row measured exactly 0, and it is one of the three independent
+confirmations that the rounding is to-nearest rather than an arithmetic shift —
+it is the one that separates them, since floor of a tiny negative is −1 and
+nearest is 0. If it had been a timeout, the shift-versus-nearest conclusion
+would have rested on two rows, not three.
+
+**Re-verified with a transfer counter: `xfers=1`, `0x00000000` on all four
+lanes. The row stands.** Probe 7 part B re-runs the six load-bearing rows with
+transfer counts printed beside each; all six report `xfers=1`.
+
+### Two expectations in that re-check were mine and were wrong
+
+The re-check carried two control vectors whose predicted values I miscalculated,
+and the anchor was right both times:
+
+| vector | predicted | actual | who was wrong |
+|---|---|---|---|
+| x=−32768 sc=32767 t=40 | −1 | **0** | mine — −1073709056/2^40 ≈ −0.00098, which rounds to 0 |
+| x=−32768 sc=32767 t=30 | −1000 | **−1** | mine — the quotient is −0.99997, not −1000 |
+
+Neither changes a clause. They are recorded because the same arithmetic produced
+the predictions in the evidence table above, and a reader is entitled to know
+the error rate of the hand that wrote them.
