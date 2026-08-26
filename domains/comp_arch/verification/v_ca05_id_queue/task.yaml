@@ -234,3 +234,22 @@ readies_criterion:
     task's hash and a task whose port map lives where the submitter sees it is
     not doing anything wrong. Jack's call, and not started.
 
+
+must_fire:
+  reference: []
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20). Keyed BY
+  VARIANT: a negative-control run contains no conformant perturbations and vice
+  versa, so a flat per-task list would refuse on every run that is not the union
+  of all of them. Declared rather than globbed, so a deleted artefact is a
+  refusal instead of a shorter list.
+  empty_is_a_statement: >
+    This testbench has NO coverage counter and NO floor -- not one
+    fail("FLOOR") or fail("COVERAGE") anywhere in it. Six clause ids are
+    emittable of fifteen stated. So nothing here asserts that the
+    reference's own stimulus reached anything, and every result it
+    produces means "the checks that ran, passed" with no statement about
+    which ran. The empty list is DELIBERATE and records that, rather than
+    the task being absent from the sweep.

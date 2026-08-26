@@ -499,6 +499,31 @@ module clk_ratio_div_tb;
              f_P, f_H, f_G, f_E, f_C, f_R, f_FLOOR);
     $display("  [coverage] divisors=%0d odd=%0d pass-through=%0d changes=%0d g1-measured=%0d",
              cov_div, cov_odd, cov_pass, cov_change, cov_g1);
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // PLACED BEFORE THE if/else CHAIN, NOT INSIDE IT. The mechanical pass that
+    // added these blocks anchored on `if (n_fail == 0) $display("RESULT: PASS")`
+    // and here that line is an `else if`, so the first attempt inserted between
+    // `if (selftest)` and its `else` and split the chain. Verilator refused --
+    // "syntax error, unexpected else" -- which is the right outcome and is the
+    // only reason it was caught. Second time this week an if/else chain has been
+    // broken by an edit that looked local; see the dangling-else finding.
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_ca07.cov_bigdrop %0d", cov_bigdrop);
+    $display("FIRED v_ca07.cov_change %0d", cov_change);
+    $display("FIRED v_ca07.cov_defer %0d", cov_defer);
+    $display("FIRED v_ca07.cov_defer_condition %0d", cov_defer_condition);
+    $display("FIRED v_ca07.cov_div %0d", cov_div);
+    $display("FIRED v_ca07.cov_en %0d", cov_en);
+    $display("FIRED v_ca07.cov_g1 %0d", cov_g1);
+    $display("FIRED v_ca07.cov_odd %0d", cov_odd);
+    $display("FIRED v_ca07.cov_pass %0d", cov_pass);
+    $display("FIRED v_ca07.cov_reset %0d", cov_reset);
+    $display("FIRED v_ca07.cov_same %0d", cov_same);
     // NOT a ternary between string literals -- SystemVerilog pads the shorter to
     // the longer one's width with NULs and the line prints as nothing at all.
     if (selftest)        $display("RESULT: SELFTEST -- not a score");

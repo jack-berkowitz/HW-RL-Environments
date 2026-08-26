@@ -141,6 +141,7 @@ def main(argv):
         sys.exit(__doc__.strip().splitlines()[0])
     log, required = argv[0], []
     declared = variant = None
+    declared_variant = False
     i = 1
     while i < len(argv):
         if argv[i] == "--require":
@@ -162,6 +163,7 @@ def main(argv):
         blk = re.search(r"^must_fire:\s*$(.*?)(?=^\S|\Z)", y, re.M | re.S)
         if blk:
             row = re.search(r"^\s+%s:\s*\[([^\]]*)\]" % re.escape(variant), blk.group(1), re.M)
+            declared_variant = True
             if row is None:
                 print("REFUSED: %s declares must_fire but not for variant %r." % (declared, variant))
                 print("  An undeclared variant is not an exempt one. Add an empty")
@@ -171,6 +173,15 @@ def main(argv):
     counts, dup, zero, absent = check(open(log, encoding="utf-8").read(), required)
 
     if not counts and not required:
+        # AN EXPLICIT EMPTY LIST IS NOT SILENCE. `reference: []` is a task saying
+        # deliberately that nothing here must fire -- which is itself a finding
+        # worth being able to state -- and it must not be reported as the same
+        # thing as a task that declared nothing at all.
+        if declared_variant:
+            print("  (nothing declared for this variant, deliberately)")
+            print("OK: the declaration is an explicit empty list. Read the task's")
+            print("  own note for why -- an empty list is a claim, not an absence.")
+            return 0
         print("REFUSED: no FIRED lines in %s, and nothing was required." % log)
         print("  A run that declares nothing about what fired cannot be checked,")
         print("  and reporting that as OK would be the defect this tool is for.")

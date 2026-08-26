@@ -645,6 +645,7 @@ a5_negative_control:
     to enter the antecedent, the second to withdraw.
 
 must_fire:
+  reference: [v_ca06.cov_a4_offered, v_ca06.cov_bp_driven, v_ca06.cov_conc_offered, v_ca06.cov_decerr, v_ca06.cov_err_last, v_ca06.cov_fixed1, v_ca06.cov_long, v_ca06.cov_narrow, v_ca06.cov_partial_strb, v_ca06.cov_rbeats, v_ca06.cov_rd_err, v_ca06.cov_reads, v_ca06.cov_refused, v_ca06.cov_size0, v_ca06.cov_unaligned, v_ca06.cov_wbeats, v_ca06.cov_wr_err, v_ca06.cov_writes, v_ca06.cov_zero_strb_beat]
   dw_nc_a5_withdraws_ar: [nc_a5_withdraws_ar.drop]
   dwc_c1_extra_latency: [dwc_c1.r_backpressure]
   dwc_c5_response_intake_slow: [dwc_c5.r_backpressure]

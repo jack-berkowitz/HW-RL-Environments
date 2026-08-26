@@ -432,6 +432,7 @@ report_block_defect:
     and ships no testbench.
 
 must_fire:
+  reference: [v_ca03.cov_boundary_long, v_ca03.cov_bp_driven, v_ca03.cov_depth, v_ca03.cov_err_b, v_ca03.cov_err_r, v_ca03.cov_full_new, v_ca03.cov_full_same, v_ca03.cov_longburst, v_ca03.cov_mixed, v_ca03.cov_mixed_w, v_ca03.cov_retire, v_ca03.cov_wfull, v_ca03.n_aw_issued, v_ca03.n_rbeat_exp]
   iw_nc_d5_withdraws_ar: [nc_d5_withdraws_ar.drop]
 must_fire_note: >
   Artefacts whose evidentiary value depends on their trigger occurring. Each

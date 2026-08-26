@@ -344,3 +344,14 @@ readies_criterion:
     perturbation PASS, 5c 11 of 11. Every verdict identical to the committed
     baseline.
 
+
+must_fire:
+  reference: [v_nw02.cov_backpressure, v_nw02.cov_bp_driven, v_nw02.cov_filled_bound, v_nw02.cov_load, v_nw02.cov_multibeat, v_nw02.cov_nonatomic, v_nw02.cov_reset, v_nw02.cov_store, v_nw02.cov_wbeats, v_nw02.peak_debt]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20). Keyed BY
+  VARIANT: a negative-control run contains no conformant perturbations and vice
+  versa, so a flat per-task list would refuse on every run that is not the union
+  of all of them. Declared rather than globbed, so a deleted artefact is a
+  refusal instead of a shorter list.

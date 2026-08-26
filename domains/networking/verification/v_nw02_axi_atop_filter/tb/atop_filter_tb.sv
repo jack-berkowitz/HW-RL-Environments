@@ -673,6 +673,23 @@ module atop_filter_tb;
       fail("COVERAGE", $sformatf("downstream backpressure was driven only %0d time(s) -- X3's master-side channels cannot be judged without it, and that half is the harness's to provide", cov_bp_driven));
     if (sb_ctr < 8 || sb_ar < 8)
       fail("COVERAGE", $sformatf("only %0d write and %0d read sideband patterns driven -- P1 and P3 are pass-through clauses and a field held constant cannot show a design that ignores it", sb_ctr, sb_ar));
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_nw02.cov_backpressure %0d", cov_backpressure);
+    $display("FIRED v_nw02.cov_bp_driven %0d", cov_bp_driven);
+    $display("FIRED v_nw02.cov_filled_bound %0d", cov_filled_bound);
+    $display("FIRED v_nw02.cov_load %0d", cov_load);
+    $display("FIRED v_nw02.cov_multibeat %0d", cov_multibeat);
+    $display("FIRED v_nw02.cov_nonatomic %0d", cov_nonatomic);
+    $display("FIRED v_nw02.cov_reset %0d", cov_reset);
+    $display("FIRED v_nw02.cov_store %0d", cov_store);
+    $display("FIRED v_nw02.cov_wbeats %0d", cov_wbeats);
+    $display("FIRED v_nw02.peak_debt %0d", peak_debt);
 
     if (errors == 0) $display("RESULT: PASS");
     else $display("RESULT: FAIL (%0d violation%s)", errors, (errors == 1) ? "" : "s");

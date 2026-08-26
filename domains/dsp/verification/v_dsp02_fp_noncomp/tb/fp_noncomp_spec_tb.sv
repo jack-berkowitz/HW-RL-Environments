@@ -371,6 +371,20 @@ module fp_noncomp_tb;
     $display("METRIC: ops_checked %0d", n_checked);
     $display("METRIC: cov snan=%0d qnan=%0d zeropair=%0d noncanon=%0d stalls=%0d",
              cov_snan, cov_qnan, cov_zero_pair, cov_noncanon_nan, cov_stall);
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_dsp02.cov_noncanon_nan %0d", cov_noncanon_nan);
+    $display("FIRED v_dsp02.cov_qnan %0d", cov_qnan);
+    $display("FIRED v_dsp02.cov_reset %0d", cov_reset);
+    $display("FIRED v_dsp02.cov_signed_zero_eq %0d", cov_signed_zero_eq);
+    $display("FIRED v_dsp02.cov_snan %0d", cov_snan);
+    $display("FIRED v_dsp02.cov_stall %0d", cov_stall);
+    $display("FIRED v_dsp02.cov_zero_pair %0d", cov_zero_pair);
 
     if (n_fail == 0) $display("RESULT: PASS");
     else             $display("RESULT: FAIL (%0d failures)", n_fail);

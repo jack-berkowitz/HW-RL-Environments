@@ -306,3 +306,22 @@ emittability_closed:
     golden PASS, dut2 PASS, conformant PASS, gate rejected, 10/10 killed.
     Emittability candidates 15 -> 11. tb/ is not in task_text_hash: no hash
     moved.
+
+must_fire:
+  reference: [nw04.set_windows, nw04.ts_step, v_nw04.cov_adjusts, v_nw04.cov_drifts, v_nw04.cov_neg_adjusts, v_nw04.cov_neg_drifts, v_nw04.cov_ns_drifts, v_nw04.cov_periods, v_nw04.cov_reset_mid, v_nw04.cov_sets, v_nw04.cov_step_windows, v_nw04.cov_wrap_driven]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20). Keyed BY
+  VARIANT: a negative-control run contains no conformant perturbations and vice
+  versa. Declared rather than globbed, so a deleted artefact is a refusal
+  instead of a shorter list.
+must_fire_prefix_note: >
+  Two prefixes on purpose, and it was nearly a defect. The ts_step and
+  set_windows emitters were hand-written as `nw04.` before the mechanical sweep
+  added `v_nw04.` ones. The sweep keyed its declaration off the FIRST name in
+  the log, read `nw04`, matched no task, and wrote this task an EMPTY list with
+  a note saying it has no floors -- which is false and describes v_ca05. Caught
+  by the count disagreeing with the run. Left as two prefixes with this note
+  rather than renamed, because a rename would move names a declaration already
+  points at, and the disagreement is the thing worth recording.

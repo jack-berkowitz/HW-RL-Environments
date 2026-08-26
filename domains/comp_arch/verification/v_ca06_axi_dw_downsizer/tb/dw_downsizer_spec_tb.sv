@@ -812,6 +812,32 @@ module dw_downsizer_tb;
     if (cov_err_last < 1) fail("FLOOR", "no error was placed on the LAST downstream beat, which is the case that shows D6 is sticky rather than whole-transaction");
     if (cov_rbeats < 120) fail("FLOOR", $sformatf("only %0d upstream R beats were asked for", cov_rbeats));
     if (cov_wbeats < 70)  fail("FLOOR", $sformatf("only %0d upstream W beats were driven", cov_wbeats));
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_ca06.cov_a4_offered %0d", cov_a4_offered);
+    $display("FIRED v_ca06.cov_bp_driven %0d", cov_bp_driven);
+    $display("FIRED v_ca06.cov_conc_offered %0d", cov_conc_offered);
+    $display("FIRED v_ca06.cov_decerr %0d", cov_decerr);
+    $display("FIRED v_ca06.cov_err_last %0d", cov_err_last);
+    $display("FIRED v_ca06.cov_fixed1 %0d", cov_fixed1);
+    $display("FIRED v_ca06.cov_long %0d", cov_long);
+    $display("FIRED v_ca06.cov_narrow %0d", cov_narrow);
+    $display("FIRED v_ca06.cov_partial_strb %0d", cov_partial_strb);
+    $display("FIRED v_ca06.cov_rbeats %0d", cov_rbeats);
+    $display("FIRED v_ca06.cov_rd_err %0d", cov_rd_err);
+    $display("FIRED v_ca06.cov_reads %0d", cov_reads);
+    $display("FIRED v_ca06.cov_refused %0d", cov_refused);
+    $display("FIRED v_ca06.cov_size0 %0d", cov_size0);
+    $display("FIRED v_ca06.cov_unaligned %0d", cov_unaligned);
+    $display("FIRED v_ca06.cov_wbeats %0d", cov_wbeats);
+    $display("FIRED v_ca06.cov_wr_err %0d", cov_wr_err);
+    $display("FIRED v_ca06.cov_writes %0d", cov_writes);
+    $display("FIRED v_ca06.cov_zero_strb_beat %0d", cov_zero_strb_beat);
 
     if (n_fail == 0) $display("RESULT: PASS");
     // Same hazard, and this one is worse: the RESULT line is the COUNTING BASIS

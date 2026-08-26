@@ -438,6 +438,23 @@ module ptp_time_base_tb;
       fail("COVERAGE", $sformatf("only %0d set(s) reached the ts_step_o window -- S3 is untested without them", cov_step_windows));
     if (!cov_wrap_driven)    fail("COVERAGE", "the one-second wrap was never driven -- W1 and W3 are untested");
     if (!cov_reset_mid)      fail("COVERAGE", "reset was never asserted mid-run -- R2 is untested");
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_nw04.cov_adjusts %0d", cov_adjusts);
+    $display("FIRED v_nw04.cov_drifts %0d", cov_drifts);
+    $display("FIRED v_nw04.cov_neg_adjusts %0d", cov_neg_adjusts);
+    $display("FIRED v_nw04.cov_neg_drifts %0d", cov_neg_drifts);
+    $display("FIRED v_nw04.cov_ns_drifts %0d", cov_ns_drifts);
+    $display("FIRED v_nw04.cov_periods %0d", cov_periods);
+    $display("FIRED v_nw04.cov_reset_mid %0d", cov_reset_mid);
+    $display("FIRED v_nw04.cov_sets %0d", cov_sets);
+    $display("FIRED v_nw04.cov_step_windows %0d", cov_step_windows);
+    $display("FIRED v_nw04.cov_wrap_driven %0d", cov_wrap_driven);
 
     if (errors == 0) $display("RESULT: PASS");
     else $display("RESULT: FAIL (%0d violation%s)", errors, (errors == 1) ? "" : "s");

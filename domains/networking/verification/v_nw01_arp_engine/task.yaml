@@ -313,3 +313,14 @@ readies_criterion:
     X3 licenses holding them ready FOR THE LIVENESS BOUND. It settles nothing
     about whether backpressure should be exercised at all. Reading this block as
     "backpressure is out of scope here" would read more into X3 than X3 says.
+
+must_fire:
+  reference: [v_nw01.cov_busy_request, v_nw01.cov_clear, v_nw01.cov_hits, v_nw01.cov_identities, v_nw01.cov_lookups, v_nw01.cov_misses, v_nw01.cov_nonarp, v_nw01.cov_notforus, v_nw01.cov_offsubnet, v_nw01.cov_replies_in, v_nw01.cov_requests_in, v_nw01.cov_reset, v_nw01.cov_second_timeout, v_nw01.cov_timeouts]
+must_fire_note: >
+  Artefacts whose evidentiary value depends on their trigger occurring. Each
+  prints `FIRED <name> <count>` once per run; check_fired.py REFUSES on zero and
+  refuses ABSENT separately, because absent is not zero (rule 20). Keyed BY
+  VARIANT: a negative-control run contains no conformant perturbations and vice
+  versa, so a flat per-task list would refuse on every run that is not the union
+  of all of them. Declared rather than globbed, so a deleted artefact is a
+  refusal instead of a shorter list.

@@ -621,6 +621,27 @@ module id_width_conv_tb;
     if (cov_err_b < 4)
       fail("COVERAGE", $sformatf("only %0d non-OKAY WRITE responses were returned -- E1's new B-channel half is untested at OKAY alone", cov_err_b));
     $display("  [coverage] non-OKAY responses returned: reads=%0d writes=%0d", cov_err_r, cov_err_b);
+    // ---- FIRED: did the artefacts that must fire, fire? ---------------------
+    // Every counter here GATES A FLOOR. The floor already refuses on zero, so
+    // these lines add one thing the floor cannot: they distinguish a floor that
+    // ran and read zero from a floor that IS NOT IN THIS RUN AT ALL -- deleted,
+    // renamed, or skipped. Absent is not zero (rule 20), and v_ca03's read
+    // coverage floor sat behind a dangling `else` and was skipped on exactly the
+    // runs that were otherwise clean. check_fired.py refuses on both, separately.
+    $display("FIRED v_ca03.cov_boundary_long %0d", cov_boundary_long);
+    $display("FIRED v_ca03.cov_bp_driven %0d", cov_bp_driven);
+    $display("FIRED v_ca03.cov_depth %0d", cov_depth);
+    $display("FIRED v_ca03.cov_err_b %0d", cov_err_b);
+    $display("FIRED v_ca03.cov_err_r %0d", cov_err_r);
+    $display("FIRED v_ca03.cov_full_new %0d", cov_full_new);
+    $display("FIRED v_ca03.cov_full_same %0d", cov_full_same);
+    $display("FIRED v_ca03.cov_longburst %0d", cov_longburst);
+    $display("FIRED v_ca03.cov_mixed %0d", cov_mixed);
+    $display("FIRED v_ca03.cov_mixed_w %0d", cov_mixed_w);
+    $display("FIRED v_ca03.cov_retire %0d", cov_retire);
+    $display("FIRED v_ca03.cov_wfull %0d", cov_wfull);
+    $display("FIRED v_ca03.n_aw_issued %0d", n_aw_issued);
+    $display("FIRED v_ca03.n_rbeat_exp %0d", n_rbeat_exp);
     if (n_fail == 0) $display("RESULT: PASS");
     else             $display("RESULT: FAIL (%0d failures)", n_fail);
     $finish;
