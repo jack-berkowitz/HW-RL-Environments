@@ -73,6 +73,7 @@ module fp16_gemm_array_tb;
   );
 
   logic [REC_W-1:0] recs [0:NCYC-1];
+  int unsigned      n_rec;
   rec_t             r;
   string            vfile;
 
@@ -134,12 +135,21 @@ module fp16_gemm_array_tb;
     // cross-geometry experiments.
     if (!$value$plusargs("vec=%s", vfile))
       vfile = $sformatf("vectors/vectors_h%0d.hex", H);
+    // PRE-ZERO, THEN COUNT NON-ZERO. The premise of the previous guard was that
+    // "$readmemh on a missing file leaves the array X", and it tested
+    // recs[0] === 'x. THAT PREMISE IS FALSE UNDER VERILATOR, which is 2-state: a
+    // failed load leaves ZEROS, the comparison is never true, and the guard
+    // could not fire. A run with no vectors at all reported PASS -- observed,
+    // with "$readmem file not found" and "TEST_RESULT: PASS" in the same output.
+    //
+    // The premise is what made it look correct to every reader. This is
+    // d_dsp02's pattern, which is the one that is right for a 2-state simulator.
+    for (int i = 0; i < NCYC; i++) recs[i] = '0;
     $readmemh(vfile, recs);
-    if (recs[0] === 'x) begin
-      // $readmemh on a missing file warns and leaves the array X. A run that
-      // compares against X vectors reports mismatches on everything, which
-      // reads as a catastrophically wrong design rather than a missing file.
-      $display("TEST_RESULT: FAIL: vector file %s did not load", vfile);
+    n_rec = 0;
+    for (int i = 0; i < NCYC; i++) if (recs[i] !== '0) n_rec = i + 1;
+    if (n_rec == 0) begin
+      $display("TEST_RESULT: FAIL: no vectors loaded from %s", vfile);
       $finish;
     end
 

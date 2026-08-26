@@ -27,6 +27,7 @@ module sv39_mmu_tb;
 
   step_t            seq  [0:NSTEP-1];
   logic [REC_W-1:0] recs [0:NSTEP-1];
+  int unsigned      n_rec;
   rec_t             r;
   string            vfile;
 
@@ -52,7 +53,20 @@ module sv39_mmu_tb;
 
   initial begin
     if (!$value$plusargs("vec=%s", vfile)) vfile = "vectors/vectors_sv39.hex";
+    // NO LOAD CHECK EXISTED HERE AT ALL. A missing or mistyped vector file left
+    // the array at zero under Verilator and the run proceeded against zeros --
+    // silently testing nothing rather than failing. d_ai01 had a guard for this
+    // and it could not fire; this had none. Same outcome, different route.
+    //
+    // d_dsp02's pattern: pre-zero, load, count non-zero, refuse on zero.
+    for (int i = 0; i < NSTEP; i++) recs[i] = '0;
     $readmemh(vfile, recs);
+    n_rec = 0;
+    for (int i = 0; i < NSTEP; i++) if (recs[i] !== '0) n_rec = i + 1;
+    if (n_rec == 0) begin
+      $display("TEST_RESULT: FAIL: no vectors loaded from %s", vfile);
+      $finish;
+    end
     plant_table();
     snapshot_table();
     build_sequence(seq);
