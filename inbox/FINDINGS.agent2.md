@@ -2505,25 +2505,105 @@ there is no counter. The rule that makes it covered: its FIRED count is not how
 often it fired, it is **how often the situation it forbids was reachable**, and
 that is a different counter which nothing derives automatically.
 
-### The tool's own header claimed coverage it did not have
+### The tool's own header claimed coverage it did not have, and that is the finding
 
-I wrote "three of four instances" into the header before measuring, and the
-measurement says **two**. The instance it does not cover is the inert conformant
-channel. Measured in the historical configuration — pre-repair perturbation,
-pre-A5 testbench, the run in which it passed:
+I wrote **"three of four instances"** into `check_fired.py`'s header before
+measuring. The measurement says **two**. In the header of the tool built to catch
+exactly this. It is the plainest instance of the class I have produced, and it is
+recorded here rather than only in the header because a correction that lives only
+in the artefact it corrects is not a disclosure.
+
+### The uncovered instance is the one the class hinges on
+
+Measured in the historical configuration — pre-repair perturbation, pre-A5
+testbench, the run in which it passed:
 
     FIRED dwc_c1.r_backpressure 5      -> OK, and the channel was inert
 
 **Five, not zero.** The double-driven `m_rready` did go low sometimes; it just
-was not the gate doing it. A port-level count answers *did this channel stall*
-when the question needed was *did THIS PERTURBATION stall it* — and no counter on
-the perturbation can answer that, because a bypassed mechanism produces no
-counter at all. That needs a **differential** check: a perturbation must differ
-from the golden somewhere observable, or it is inert. Different instrument.
+was not the gate doing it.
 
-> Claiming coverage before measuring it, in the header of the tool built to catch
-> exactly that, is the plainest instance of this class I have produced. The
-> header now carries the number and the measurement that fixes it.
+> A port-level count answers *did this channel stall*. The question was *did
+> THIS PERTURBATION stall it*. And no counter on the perturbation can answer
+> that, because **a bypassed mechanism produces no counter at all** — there is
+> nothing to instrument.
+
+`FIRED` puts the observer INSIDE the artefact. That works for a control, whose
+trigger is its own logic, and fails for a perturbation, whose mechanism may be
+absent. The remedy has to observe from outside.
+
+### The remedy, built and measured: `check_artefact_warnings.py`
+
+**The toolchain reported this defect all along.** Linting the pre-repair
+perturbation:
+
+    %Warning-UNDRIVEN:    extra.sv:108: Signal is not driven: 'g_rready'
+    %Warning-MULTIDRIVEN: extra.sv:90:  Bit [0] of signal 'm_rready' have
+                                        multiple combinational drivers.
+
+Both name the defect on its line. **Seven warnings named the perturbation; one
+hundred and twenty-eight were in the build.** That is the same dilution failure
+that hid the combinational loop — `-Wno-fatal` is the correct setting for a
+vendored anchor, and its cost is that a warning about an artefact the task owns
+arrives in the same stream as the ones it cannot fix.
+
+So the gate does not turn the noise down. It **separates the two populations by
+file** and refuses only on the half the task is responsible for. `extra.sv` (the
+perturbation or mutant) is task-owned; `variant.sv` (the golden) and `sub.sv`
+(the submission) are not — the two halves of a variant build are separable by
+filename even though both are temporaries. A submission's warnings are reported,
+never refused: failing a submission for style rather than for what it measures
+is a different defect.
+
+Refusing kinds are only those meaning *the netlist and the text disagree* —
+UNDRIVEN, MULTIDRIVEN, UNOPTFLAT, IMPLICIT, LATCH, BLKANDNBLK, PINMISSING.
+Deliberately not WIDTHTRUNC, UNUSEDSIGNAL, PROCASSINIT, BLKSEQ or the rest: a
+gate that fires on style gets routed around, which is how both defects survived.
+
+**Validated on both defects and both repairs:**
+
+| build | task-owned / anchor | verdict |
+|---|---|---|
+| `dwc_c1` before the double-drive repair | 5 / 123 | **REFUSED** — UNDRIVEN `g_rready`, MULTIDRIVEN `m_rready` |
+| `dwc_c1` after | 4 / 123 | OK — notes only |
+| testbench with the armed stall | 4 / 64 | **REFUSED** — 4 × UNOPTFLAT on its own readies |
+| testbench free-running | 0 / 63 | OK |
+
+Self-test 7/7.
+
+**It takes two passes, and finding that out cost a wrong cell in its own
+validation table.** `--lint-only -Wall` reported *zero* task-owned warnings on
+the armed netlist that provably contained four circular testbench signals:
+UNOPTFLAT is emitted by the scheduler, which `--lint-only` skips, while
+UNDRIVEN needs `-Wall`, which the scoring build does not use. A gate run on
+either pass alone misses one of the two defects it exists for. The first table I
+generated had that cell wrong and reported OK.
+
+Its own notes are **summarised by kind, not listed**. The free-running testbench
+draws 33 of them, all benign and all correct; printing 33 lines above a two-line
+refusal rebuilds, inside this tool, the exact dilution it was written to undo.
+
+### And the differential check I was going to propose would not have worked
+
+The obvious complement is: a perturbation must differ from the golden somewhere
+observable on the channel it claims to affect, with the observer in the testbench
+— outside the artefact, so a perturbation cannot forget to instrument itself or
+instrument itself dishonestly. Emit a per-cycle checksum per declared signal,
+compare across runs, refuse if the declared channel's trace is identical.
+
+**It would have passed the pre-repair `dwc_c1`.** That perturbation's `m_rready`
+was not *unchanged* — it was *garbage*, double-driven, and it differed from the
+golden's plenty.
+
+> *Differs from the golden* and *does what it says* are not the same predicate,
+> and only the second is what a conformant perturbation claims.
+
+Where a differential check IS the right instrument is the neighbouring case: a
+perturbation whose mechanism is present and correct but whose condition is never
+true — a gate wired properly to a signal that never asserts. There `FIRED` on the
+gate answers it more cheaply, so the differential check earns its cost only for a
+perturbation with no single nameable trigger. I have not built it, and on the
+evidence here it is the third-best of the three.
 
 ### Every exclusivity claim I have made is dated as of today
 
