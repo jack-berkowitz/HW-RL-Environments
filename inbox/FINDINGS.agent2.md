@@ -1960,76 +1960,77 @@ looked; now two conformant perturbations withdraw offers once anything stalls.
 > Extending stimulus does not only test submissions — it re-tests every artefact
 > the task ships, and the ones written to be legal are the least suspected.
 
-### State
+### State — LANDED
 
-**The ruling was applied and A5 is built and passing; the boundary is now blocked
-by something else.** Spec hash `ca63302d6b23df46` -> `949ffacfa1dd725b`. On the
-tree as it stands: golden PASS, dut2 PASS, gate rejected, 12/12 killed, `dwc_c2`
-`dwc_c3` `dwc_c4` `dwc_c5` PASS -- and `dwc_c1` FAIL, on **D6, not on A5**. What
-that FAIL turned out to be is the next two findings.
+Spec hash `ca63302d6b23df46` -> `949ffacfa1dd725b` (A5) -> `6cb14e9d2e6381ac`
+(D6 narrowed, L7 added). Golden PASS, dut2 PASS, gate rejected, 5/5 conformant
+PASS, 12/12 killed, 5c OK on both bases. The two findings that came out of
+landing it are below, and the second is the more serious.
 
 ---
 
-## FINDING — a conformant artefact is conformant AT THE STIMULUS IT WAS VERIFIED UNDER
+## FINDING — a conformant artefact that PASSES tells you it did not break the testbench
 
-**Extending stimulus does not only test submissions. It re-tests every artefact
-the task ships, and the ones written to be legal are the least suspected.**
+**It does not tell you it does what its name says. Nothing in the apparatus
+separates a control that is legal from a control that is inert — both are
+green.**
 
-Four instances, three of them found the same way -- a clause got a stimulus, and
-the artefact that broke was one nobody was looking at.
+### The instance
 
-| # | task | artefact | written to be | what the new stimulus found |
-|---|------|----------|---------------|------------------------------|
-| 1 | v_ca06 | `dut2` | an independent correct implementation | violated D7 the moment D7 could be observed |
-| 2 | v_ca07 | `dut2` | an independent correct implementation | glitched across reconfiguration once the reference looked |
-| 3 | v_ca06 | `dwc_c1`, `dwc_c5` | conformant perturbations | withdraw an offer as soon as anything stalls |
-| 4 | v_ca06 | `dwc_c1`, `dwc_c5` | conformant perturbations | **the R channel of both had never been connected** |
+v_ca06 ships five conformant perturbations. Two of them — `dwc_c1_extra_latency`
+and `dwc_c5_response_intake_slow` — contained, in the same module:
 
-### Instance 4 is the one that should be read first
-
-Both perturbations declare themselves slow on the downstream response path. Both
-contained:
-
-    assign m_rready = g_rready & slow;          // wrapper output, driver 1
+    assign m_rready = g_rready & <gate>;                                // driver 1
     ...
-    .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready   // driver 2
+    .m_rid, .m_rdata, .m_rresp, .m_rlast, .m_rvalid, .m_rready          // driver 2
 
-`.m_rready` bare binds the **golden's output** to the wrapper's `m_rready`, which
-the `assign` already drives -- a double drive -- and leaves `g_rready` connected
-to nothing. **The R half of "extra latency" and of "response intake slow" was
-never slow.** Two of the five conformant perturbations shipped a channel that did
-nothing, and both passed every run for as long as they have existed.
+The bare `.m_rready` binds the **golden's output** to the net the `assign`
+already drives — a double drive — and leaves `g_rready` connected to nothing.
 
-> A conformant artefact that PASSES tells you it did not break the testbench.
-> It does not tell you it does the thing its name claims. Nothing in the
-> apparatus distinguishes "this perturbation is legal" from "this perturbation
-> is inert" -- both are green.
+**The R channel of "extra latency" and of "response intake slow" had never been
+slow.** Two of five conformant perturbations shipped a channel that did nothing.
+Both passed every run for as long as they have existed, and their passing was
+read, every time, as evidence that they were legal perturbations.
 
-The mutation set cannot see it: mutants are graded on being killed, and an inert
-perturbation is not a mutant. The second-DUT gate cannot see it: it grades the
-submission, not the perturbation. It surfaced only because a clause finally
-needed that channel to stall, and it did not.
+### Why nothing found it
 
-### Instance 3, and the rule the ruling settled
+- **Mutation coverage cannot.** Mutants are graded on being killed. An inert
+  perturbation is not a mutant and has no kill to lose.
+- **The second-DUT gate cannot.** It grades the submission against an
+  independent implementation. It never looks at the perturbation.
+- **The conformant tally cannot, and this is the sharp part.** `5/5 conformant
+  accepted` is the number that is supposed to prove the perturbations are legal,
+  and it is satisfied identically by a perturbation that stalls a channel and by
+  one whose channel is not connected. The metric that exists to grade these
+  artefacts is exactly the metric that cannot see this.
+- **Lint nearly could.** Verilator reports MULTIDRIVEN on the net. The task
+  builds with `-Wno-fatal`, which is correct for a harness that must not turn a
+  vendored-RTL warning into a refusal, and it means the one signal that was
+  present went past unread.
 
-Gating a `valid` on the way **into** the golden is itself a withdrawal. The gate
-falls on a cycle where the golden holds an unaccepted offer, and the golden's own
-vendored arbiter says so:
+It surfaced only when a new clause finally needed that channel to stall, and it
+did not.
+
+### The other two instances, and the rule the ruling settled
+
+Gating a `valid` on the way **into** the golden is itself a withdrawal: the gate
+falls on a cycle where the golden holds an unaccepted offer. The golden's own
+vendored arbiter says so —
 
     rr_arb_tree.sv:391  "It is disallowed to deassert unserved request signals
                          when LockIn is enabled."
 
-The repair is not "stop being slow" -- it is that a gate may **fall only while
-nothing is pending**. One flop per channel:
+The repair is not "stop being slow". A gate may **fall only while nothing is
+pending**, which is one flop per channel:
 
     hold_x <= (valid_in & gate_x) & ~golden_ready;
     wire gate_x = slow | hold_x;
 
-The perturbation keeps every cycle of slowness it had (it still refuses to
-*begin* a transfer for the whole closed phase). What it gives up is the right to
-take an offer back, which no conforming design has. `hold_x` is a flop, so the
-presented valid never depends combinationally on the ready -- A5's second
-sentence, satisfied by construction.
+The perturbation keeps every cycle of slowness — it still refuses to *begin* a
+transfer for the whole closed phase. It gives up only the right to take an offer
+back, which no conforming design has. `hold_x` is a flop, so the presented valid
+never depends combinationally on the ready: A5's second sentence, by
+construction.
 
 One channel could not be repaired this way and was ungated outright: **W**.
 Stalling `s_wvalid` starves a downstream burst the golden has already committed
@@ -2037,29 +2038,55 @@ to, and the golden responds by withdrawing `m_wvalid` itself. That is an A5
 violation on the wrapper's own master port whose author is the golden, not the
 wrapper, and no wrapper-side hold can reach it.
 
-### What it costs to check
+### The four instances together
 
-Nothing that was not already being paid. The check is: **run the artefact against
-the repair, not only against the defect** -- and then read whether the artefact
-still does what its name says, not only whether it is still green. Instance 4 was
-invisible under the first reading and obvious under the second.
+| # | task | artefact | written to be | what a new stimulus found |
+|---|------|----------|---------------|----------------------------|
+| 1 | v_ca06 | `dwc_c1`, `dwc_c5` | conformant perturbations | **the R channel of both was connected to nothing** |
+| 2 | v_ca06 | `dwc_c1`, `dwc_c5` | conformant perturbations | withdraw an offer as soon as anything stalls |
+| 3 | v_ca06 | `dut2` | an independent correct implementation | violated D7 the moment D7 could be observed |
+| 4 | v_ca07 | `dut2` | an independent correct implementation | glitched across reconfiguration once the reference looked |
+
+> **Extending stimulus does not only test submissions. It re-tests every artefact
+> the task ships, and the ones written to be legal are the least suspected.**
+
+### Method note — the first diagnostic read as a much bigger defect than it was, and the signature was in the first failure
+
+Chasing instance 1's consequence, the first slow-slave run reported **43 failures
+across seven clause ids** — D3 (wrong id), A3 (wrong beat count), D4, D1, D5, D7
+as well as D6. At face value: *the anchor collapses under backpressure*.
+
+It was the diagnostic's own artefact. Phase boundaries drain with
+`repeat (40) @(posedge clk)`, ample for a slave that answers immediately and
+nowhere near enough for one that idles four cycles per beat. The previous phase's
+beats were still arriving when the next began, and **`id 15` — from a phase that
+had supposedly ended — turned up attributed to a transaction expecting `id 1`.**
+Widening the drain to 600 cycles removed six of the seven clause ids and left
+9 x D6 and nothing else.
+
+> A new instrument's first disagreement with the reference is a claim about the
+> instrument until it has been run against something known good. The signature of
+> contamination was legible in the data — an id from a finished phase — and
+> reading the COUNT instead of the FIRST FAILURE would have missed it and
+> published "the anchor collapses under backpressure".
 
 ---
 
-## FINDING — a clause the reference satisfies only on the fast path, in a task whose stimulus never leaves the fast path
+## FINDING — a clause can be false about the reference and pass every run, when the stimulus that would falsify it is the stimulus the task never generates
 
-**v_ca06's D6 requires a downstream read error to be STICKY. The anchor is sticky
-only when the downstream slave returns narrow beats back-to-back. Three idle
-cycles between them and it stops. The task has never stalled that path, so the
-clause has been true by accident for as long as it has existed.**
+**v_ca06's D6 required a downstream read error to be STICKY. The reference is
+sticky only while its pipeline stays full. Three idle cycles between narrow R
+beats and it stops. The task had never stalled that path, so the clause had been
+true by accident for as long as it existed — and every detector in the repository
+reported green.**
 
 ### The measurement
 
 No wrapper, no perturbation, no valid gating: the testbench's own downstream R
-slave simply does not have the next beat ready yet, and presents it `N` cycles
+slave simply does not have its next beat ready yet and presents it N cycles
 later. A slave is always allowed to do that.
 
-| idle cycles between narrow R beats | golden | dut2 |
+| idle cycles between downstream `R` beats | reference | `dut2` |
 |---|---|---|
 | 0 — the shipped stimulus | PASS | PASS |
 | 1 | PASS | — |
@@ -2068,106 +2095,108 @@ later. A slave is always allowed to do that.
 | 4 | **FAIL — 9 x D6** | PASS |
 | 8 | **FAIL — 9 x D6** | PASS |
 
-**The clause is satisfiable and the second DUT satisfies it at every depth.** The
-anchor does not.
+### Which half fails, and it is not the half that matters
 
-### Which half of D6 fails, and it is not the half that matters
+D6 said two things: the error appears on the wide beat containing the erroring
+narrow beat, and it persists onto every later beat. Instrumented at the failure
+point with `own` = *does the erroring narrow beat belong to this wide beat*:
 
-D6 says two things: an error appears on the wide beat that contains the erroring
-narrow beat, and it persists on every later beat of the transaction. Instrumented
-at the point of failure with `own` = *does the erroring narrow beat belong to this
-wide beat*:
+    DIAG addr=00100000 errbeat=0  j=1 own=0      DIAG addr=00110000 errbeat=1 j=2 own=0
+    DIAG addr=00130000 errbeat=3  j=1 own=0      DIAG addr=00110000 errbeat=1 j=3 own=0
+    DIAG addr=00330000 errbeat=3  j=1 own=0      DIAG addr=00310000 errbeat=1 j=1 own=0
+    DIAG addr=00110000 errbeat=1  j=1 own=0      DIAG addr=00310000 errbeat=1 j=2 own=0
+                                                 DIAG addr=00310000 errbeat=1 j=3 own=0
 
-    DIAG addr=00100000 errbeat=0  j=1 own=0
-    DIAG addr=00130000 errbeat=3  j=1 own=0
-    DIAG addr=00330000 errbeat=3  j=1 own=0
-    DIAG addr=00110000 errbeat=1  j=1 own=0
-    DIAG addr=00110000 errbeat=1  j=2 own=0
-    DIAG addr=00110000 errbeat=1  j=3 own=0
-    DIAG addr=00310000 errbeat=1  j=1 own=0
-    DIAG addr=00310000 errbeat=1  j=2 own=0
-    DIAG addr=00310000 errbeat=1  j=3 own=0
+**`own=0` on all nine.** The reference never loses an error on the beat that
+carried it. Every failure is persistence — the half AXI does not require.
 
-**`own=0` on all nine.** The anchor never loses an error on the beat that carried
-it. Every failure is stickiness, and stickiness is the half AXI does not require.
+**The mechanism**: an accumulated response register that is not cleared while
+beats keep arriving and IS cleared when the pipeline bubbles. The persistence is
+a property of the unit being busy. It became a clause because it was observed,
+and it was observed because the only stimulus that existed kept the pipeline
+full.
 
-So the anchor's stickiness is **incidental** -- an accumulator that happens not to
-be cleared while the pipeline is full, and is cleared when it bubbles. It was
-written down as a clause because it was observed, and it was observed because the
-only stimulus that existed kept the pipeline full.
+### The four detectors, and why each is blind
 
-### Narrowing D6 costs nothing
+| detector | verdict | why it is blind |
+|---|---|---|
+| **mutation coverage** | 12/12 killed, before and after | every mutant dies at either reading of D6, so the number is identical whether the clause is true or false. A metric that does not move cannot report |
+| **conformant acceptance** | 5/5 accepted | the perturbations do not stall that path either. They were written under the same fast-path stimulus, so they agree with the reference for the same reason it agrees with itself |
+| **stimulus-variation sweep** | no frozen input | **`m_rvalid` is not frozen. It toggles constantly.** What is frozen is the GAP BETWEEN BEATS, and the sweep's axis is *does this signal take both values*, which it does |
+| **attempt-vs-condition classifier** | condition satisfied | D6's counters (`cov_rd_err`, `cov_err_last`) are satisfied at every depth. Errors ARE being requested and DO land on last beats. The condition the clause names was genuinely exercised — at one timing |
 
-D6 narrowed to ownership only -- the wide beat containing the erroring narrow
-beat must carry the error with the code preserved, later beats unchecked:
+**The common cause: every one of them asks whether something was OBSERVED. None
+asks whether the thing that would break it was ever ATTEMPTED.** A frozen-input
+sweep asks whether a signal took both values. A condition floor asks whether a
+predicate ever held. A kill count asks whether a defect was seen. All four are
+satisfied by a run that never leaves one corner of the timing space, because none
+of them has a name for the corner.
 
-    golden PASS   dut2 PASS   gate rejected
-    dwc_c1 PASS   dwc_c2 PASS   dwc_c3 PASS   dwc_c4 PASS   dwc_c5 PASS
-    12/12 killed  -- including dw_m6_slverr_only_on_last_beat,
-                     dw_m11_downstream_error_dropped_from_second and
-                     dw_m12_error_code_normalised_from_second
+The variation sweep is the sharpest instance and the one to quote: it is the
+detector explicitly built to find "this was never exercised", and it passed —
+because `m_rvalid` varies. **No instrument in the repository names inter-beat
+timing as an axis at all.** The thing that was frozen has no field to be frozen
+in.
 
-**Not one kill is lost.** The sticky half was carrying no detection power at all;
-it was carrying a risk, which is that a submission asserting stickiness scores
-well here and is wrong about the contract.
+### The evidence was already in the repository
 
-### The class, and why it is not the same as any finding above it
+`dut2` is sticky at every depth. The reference is sticky only when full. **Two
+implementations of the same contract disagreed about D6, both were in the task
+directory, and both passed every run** — because no run went to a depth where
+they disagree. The second-DUT gate is the one detector whose *design* could have
+caught this: it exists precisely to separate the contract from one
+implementation's incidental choices, and here the incidental choice was
+timing-dependent inside a single implementation. It was blind for the same reason
+as the rest — it is only ever run at one timing.
 
-This is not a missing clause, not a frozen input, not clause grouping. It is:
+### What would have caught it: nothing that exists
 
-> **A clause can be false about the reference and still pass every run, when the
-> stimulus that would falsify it is exactly the stimulus the task never
-> generates.** The reference's agreement with the clause is then evidence about
-> the stimulus, not about the reference.
+Said plainly: **no instrument in this repository would have found this, and none
+of the four above can be extended to find it.** Their axis is *values observed*;
+this defect lives on an axis of *intervals fixed*.
 
-The detectors already built do not find it. Mutation coverage does not: every
-mutant dies either way. Conformant acceptance does not: the perturbations pass
-because they, too, never stall that path. The stimulus-variation sweep does not:
-`m_rvalid` is not a frozen input, it toggles constantly -- what is frozen is the
-*gap* between beats, which no reachability check names. The attempt-vs-condition
-classifier does not: D6's condition counter (`cov_rd_err`, `cov_err_last`) is
-satisfied at every depth, because errors ARE being requested and ARE landing on
-last beats. Every instrument reports green.
+**What would.** A timing-axis sweep over the REFERENCE, not over coverage:
 
-**What finds it is varying a timing parameter the task fixed at its most
-permissive value and re-reading the reference.** That is a different sweep from
-"is this input frozen", and I do not have it as a tool.
+> For each interval the task holds at its most permissive value, re-run the
+> reference at several other values and **diff the reference's own verdict**.
+> A clause that is true at one setting and false at another is not a property of
+> the design under test; it is a property of the setting.
 
-### Method note — the first version of this diagnostic was contaminated, and it read as a much bigger defect
+Four axes are enough for a handshake interface, and none of them is a signal:
 
-The first slow-slave run reported **43 failures across seven clause ids** --
-D3 (wrong id), A3 (wrong beat count), D4, D1, D5, D7 as well as D6. Read at face
-value that is "the anchor collapses under backpressure".
+1. **gap between consecutive beats on each source-driven channel** — the one that
+   found this
+2. **ready duty cycle on each sink-driven channel** — what A5's stimulus now
+   covers, arrived at from the clause side rather than the sweep side
+3. **gap between transactions**
+4. **number of transactions in flight**
 
-It was the diagnostic's own artefact. Phase boundaries in the testbench drain with
-`repeat (40) @(posedge clk)`, which is ample for a slave that answers immediately
-and nowhere near enough for one that idles four cycles per beat. The previous
-phase's beats were still arriving when the next phase began, and `id 15` -- from a
-phase that had supposedly ended -- turned up attributed to a transaction expecting
-`id 1`. Widening the drain to 600 cycles removed six of the seven clause ids and
-left **9 x D6 and nothing else**.
+The instrument is cheap because it reuses the existing sim path: it is N reruns
+of the golden, and the output is one bit per (axis, setting) — *did the reference
+still pass its own spec*. For v_ca06 that is roughly twelve runs of about a
+minute. It is a rule-24 instrument used the way rule 24 intends — reproduce a
+known-good answer — with the twist that the reproduction is attempted **at a
+setting nobody chose**.
 
-> A new instrument's first disagreement with the reference is a claim about the
-> instrument until it has been run against something known good. The signature of
-> contamination here was legible in the data -- an id from a finished phase -- and
-> I would have missed it by reading the count instead of the first failure.
+**Its honest limit**, which belongs in the tool's header: it finds clauses that
+are false about the REFERENCE. It cannot find a clause that is false about the
+CONTRACT and that the reference happens to satisfy at every setting. Nothing
+finds those except reading the clause against the standard, and this finding is
+not evidence that such a tool is possible.
 
-### What this blocks
+### Narrowing cost nothing, and the artefacts now straddle the threshold
 
-Landing A5 on v_ca06. `dwc_c1`, once it actually stalls the R path -- which is
-what instance 4 above repaired -- exercises D6 at depth 4 and fails it. The
-options are:
+D6 is now ownership-only; persistence is **L7**, declared-open latitude, with the
+accumulator mechanism named in the spec so a reader knows it is incidental rather
+than contractual. Measured after the change:
 
-1. **Narrow D6 to ownership** and record stickiness as declared-open latitude.
-   Costs one hash move on a clause unrelated to A5; costs no kills; makes the
-   task honest about what the anchor does.
-2. **Drop `dwc_c1`'s R gate** and land A5. Costs nothing today and re-buries the
-   defect, leaving a clause that is false about the reference and a perturbation
-   whose R channel is once again doing nothing.
-3. **Keep D6 and declare the anchor defective.** Not available: a task whose
-   golden fails its own spec under legal stimulus is void under rule 16 for as
-   long as the stimulus exists.
+    golden PASS   dut2 PASS   gate rejected   5/5 conformant PASS   12/12 killed
+    (dw_m6, dw_m11 and dw_m12 included -- not one kill lost)
+    reference PASSES at 3, 4, 8 and 16 idle cycles -- run against the REPAIR
+    5c OK on both bases
+    hash 949ffacfa1dd725b -> 6cb14e9d2e6381ac
 
-(1) is the only one that leaves a true task. It is a spec change outside the
-A5/D5 boundary and outside the conformant ruling, so it is not mine to take
-without a decision.
+`dwc_c1`'s R gate stalls four cycles and `dwc_c5`'s stalls two — deliberately on
+opposite sides of the three-cycle threshold, so the conformant set now exercises
+L7 from both directions instead of sampling one. Before this week neither stalled
+that path at all.

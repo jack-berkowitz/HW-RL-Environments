@@ -148,16 +148,15 @@ Let `size` and `len` be the upstream request's, and let
   and low on every other.
 - **D5 — response.** Absent a refusal (§3) and absent a downstream error, every
   upstream `R` beat carries `OKAY`.
-- **D6 — downstream error precedence, and it is STICKY.** Number the upstream
-  beats 0, 1, 2, … Each is built from a group of downstream beats. An upstream
-  beat carries an error response if any downstream beat in **its own group, or in
-  any earlier group**, carried one. Equivalently: once an error occurs it
-  persists to the end of the transaction, and beats before it are unaffected.
+- **D6 — downstream error precedence.** Number the upstream beats 0, 1, 2, …
+  Each is built from a group of downstream beats. An upstream beat carries an
+  error response if any downstream beat in **its own group** carried one. Beats
+  whose own group was error-free are unconstrained by this clause — see **L7**.
 
   *Measured, on a two-beat upstream read of eight downstream beats: an error on
-  downstream beat 0 or 3 gives `SLVERR SLVERR`; an error on the LAST downstream
-  beat gives `OKAY SLVERR`. It is not "all beats error", and a testbench that
-  requires that rejects correct hardware.*
+  downstream beat 0 or 3 puts the error on upstream beat 0; an error on the LAST
+  downstream beat puts it on upstream beat 1. It is not "all beats error", and a
+  testbench that requires that rejects correct hardware.*
 - **D7 — the error code is preserved.** `SLVERR` upstream for a downstream
   `SLVERR`, `DECERR` for a `DECERR`. Neither is normalised to the other.
   *Measured: `DECERR` on a downstream beat produces `DECERR` upstream.*
@@ -241,8 +240,31 @@ Let `size` and `len` be the upstream request's, and let
   aligned block; `FIXED` and `INCR` describe the same transfer, so neither is
   required. Do not check it. B4 binds only where the downstream burst has more
   than one beat.
+- **L7 — whether a downstream read error PERSISTS onto later upstream beats.**
+  Once an upstream beat has carried an error under D6, a conforming design may
+  carry it on every later beat of the transaction, or may return to `OKAY` on a
+  beat whose own group was error-free. Both are legal. **Do not require either**,
+  in any direction.
 
-These six are the whole of the latitude in this contract. Everything above is
+  *This was written into D6 as "and it is STICKY" because the reference is
+  sticky and that is what was measured. It is sticky ONLY while the downstream
+  slave returns narrow beats back-to-back. The mechanism is an accumulated
+  response register that is not cleared while the pipeline is full and IS
+  cleared when the pipeline bubbles — so the persistence is a property of the
+  unit being busy, not of the contract. Measured with a downstream slave that
+  simply presents its next narrow beat N cycles later, which any slave may do:*
+
+  | idle cycles between downstream `R` beats | reference |
+  |---|---|
+  | 0, 1, 2 | persists |
+  | 3, 4, 8 | does **not** persist |
+
+  *At every depth the error appears on the beat that carried it — D6 itself
+  never fails. The independent implementation in `dut2/` persists at every
+  depth, which is equally legal. A submission that requires persistence is
+  asserting a property of one pipeline's occupancy and calling it a contract.*
+
+These seven are the whole of the latitude in this contract. Everything above is
 exact.
 
 ---

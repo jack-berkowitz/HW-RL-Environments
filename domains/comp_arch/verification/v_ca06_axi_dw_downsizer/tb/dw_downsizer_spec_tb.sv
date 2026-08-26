@@ -249,10 +249,31 @@ module dw_downsizer_tb;
             // D6 is STICKY: this upstream beat carries the error if the erroring
             // downstream beat lies in its own group or any earlier one. D7: the
             // code is preserved, not normalised.
+            // D6 is OWNERSHIP, not persistence. This upstream beat must carry
+            // the error if the erroring downstream beat lies in ITS OWN group.
+            // Whether the error PERSISTS onto later beats is L7 -- declared-open
+            // latitude -- and beats after the erroring one are NOT CHECKED here,
+            // in either direction.
+            //
+            // This clause used to require persistence, and the reference passed
+            // it for as long as it existed. The reference is sticky only while
+            // its pipeline stays full: the accumulated response register is not
+            // cleared while beats keep arriving and IS cleared when it bubbles.
+            // Three idle cycles between downstream R beats and it stops. The
+            // task never stalled that path, so a property of pipeline occupancy
+            // was recorded as a property of the contract, and a submission
+            // asserting it would have scored well while being wrong.
+            //   0/1/2 idle cycles: persists.  3/4/8: does not.  dut2: always.
+            // Narrowing costs no detection: 12/12 mutants still die, dw_m6,
+            // dw_m11 and dw_m12 included.
             automatic logic [1:0] want_r = 2'b00;
-            if (want_err(a)
-                && (beat_lo(a, dsz(sz), err_beat_of(a)) < beat_hi(a, sz, j)))
-              want_r = err_code_of(a);
+            automatic bit err_own = want_err(a)
+                && (beat_lo(a, dsz(sz), err_beat_of(a)) >= beat_lo(a, sz, j))
+                && (beat_lo(a, dsz(sz), err_beat_of(a)) <  beat_hi(a, sz, j));
+            automatic bit err_past = want_err(a)
+                && (beat_lo(a, dsz(sz), err_beat_of(a)) <  beat_lo(a, sz, j));
+            if (err_own)  want_r = err_code_of(a);
+            if (err_past) want_r = s_rresp;   // L7: unchecked, either way
             // A ternary between two string LITERALS pads the shorter with NULs to
             // the longer's width. The empty arm here printed FIFTY NULs into the
             // middle of this message, and this message is a rule-16 WITNESS --

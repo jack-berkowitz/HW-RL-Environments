@@ -34,7 +34,7 @@ harness:
   sim_timeout_s: 120
 
 spec: [spec/dw_downsizer_spec.md, spec/dw_downsizer_iface.sv]
-task_text_hash: 949ffacfa1dd725b
+task_text_hash: 6cb14e9d2e6381ac
 
 scored_configuration:
   SLV_DATA_W: 64
@@ -524,37 +524,66 @@ conformant_repairs:
       testbench. It does not tell you it does what its name claims. Nothing in
       the apparatus separates "legal" from "inert" -- both are green.
 
-d6_stickiness_open:
+d6_narrowed_to_ownership:
   date: 2026-08-25
-  status: OPEN -- decision required, not taken here
+  status: CLOSED -- D6 narrowed, persistence registered as latitude L7
+  was: >
+    D6 required a downstream read error to be STICKY -- to persist onto every
+    later upstream beat of the transaction. The reference passed it for as long
+    as it existed.
   finding: >
-    D6 requires a downstream read error to be STICKY onto later wide beats. The
-    anchor is sticky only while the downstream slave returns narrow beats
-    back-to-back. Measured with the testbench's own R slave simply presenting
-    the next beat N cycles later -- no wrapper, no valid gating, unambiguously
-    legal for a slave:
-      0,1,2 idle cycles -> golden PASS
-      3,4,8 idle cycles -> golden FAIL, 9 x D6 and nothing else
-    dut2 PASSES at every depth, so the clause is satisfiable; the anchor just
-    does not satisfy it.
+    The reference is sticky only while its pipeline stays full. Measured with
+    the testbench's own downstream R slave simply presenting its next narrow
+    beat N cycles later -- no wrapper, no valid gating, unambiguously legal for
+    a slave:
+      0, 1, 2 idle cycles -> PASS (persists)
+      3, 4, 8 idle cycles -> FAIL, 9 x D6 and nothing else
+    dut2 persists at every depth, so the clause was satisfiable; the reference
+    just did not satisfy it. The task had never stalled that path.
   which_half: >
     Instrumented at the failure point with `own` = does the erroring narrow beat
-    belong to this wide beat. own=0 on all nine. The anchor NEVER loses an error
-    on the beat that carried it. Every failure is stickiness -- the half AXI
-    does not require. The anchor's stickiness is incidental: an accumulator that
-    happens not to be cleared while the pipeline is full.
-  cost_of_narrowing: >
-    D6 narrowed to ownership only was measured: golden PASS, dut2 PASS, 5/5
-    conformant PASS, gate rejected, 12/12 killed -- including dw_m6, dw_m11 and
-    dw_m12. Not one kill is lost. The sticky half carries no detection power and
-    does carry a risk: a submission asserting stickiness scores well and is
-    wrong about the contract.
-  why_it_is_not_taken_here: >
-    Narrowing D6 is a spec change outside the A5 boundary and outside the
-    conformant ruling, and it moves the hash for an unrelated reason.
-  interim: >
-    dwc_c1's R gate is HELD OPEN, which is the behaviour it has always actually
-    had (see defect_2_inert_channel), with the reason recorded in the artefact
-    itself. dwc_c5 keeps its R gate at depth 2 -- one cycle inside the
-    threshold, and the only place in the task where R intake is throttled at
-    all. Do not deepen it without re-reading D6.
+    belong to this wide beat. own=0 on all nine. The reference NEVER loses an
+    error on the beat that carried it. Every failure was persistence -- the half
+    AXI does not require.
+  mechanism: >
+    An accumulated response register that is not cleared while beats keep
+    arriving and IS cleared when the pipeline bubbles. The persistence is a
+    property of the unit being busy, not of the contract. It became a clause
+    because it was observed, and it was observed because the only stimulus that
+    existed kept the pipeline full.
+  change:
+    spec: >
+      D6 is ownership only -- an upstream beat carries an error if any
+      downstream beat in ITS OWN group carried one. Persistence moved to L7,
+      declared-open latitude, with the accumulator mechanism named in the spec
+      so a reader knows it is incidental rather than contractual. The latitude
+      register now says seven, not six.
+    tb: >
+      The D6 comparison is skipped entirely on beats after the erroring one, in
+      both directions: a submission may neither require persistence nor forbid
+      it.
+    conformant: >
+      dwc_c1's R gate stalls four cycles, dwc_c5's stalls two -- deliberately on
+      opposite sides of the three-cycle threshold, so the conformant set
+      exercises L7 from both directions instead of sampling one. Neither stalled
+      that path at all before this week; both were double-driven and inert.
+  hash: 949ffacfa1dd725b -> 6cb14e9d2e6381ac
+  measured_after:
+    golden: PASS
+    dut2: PASS
+    conformant: 5/5 PASS
+    mutants: 12/12 killed -- dw_m6, dw_m11 and dw_m12 included; not one kill lost
+    gate_mutant: rejected
+    policy_independence: OK on both bases
+    run_against_the_repair: >
+      Reference PASSES at 3, 4, 8 and 16 idle cycles between narrow R beats.
+  why_no_detector_saw_it: >
+    Mutation coverage: every mutant dies at either reading of D6, so the number
+    is identical whether the clause is true or false. Conformant acceptance: the
+    perturbations did not stall that path either. Stimulus-variation sweep:
+    m_rvalid is NOT frozen, it toggles constantly -- what is frozen is the GAP
+    BETWEEN BEATS, and no instrument names inter-beat timing as an axis.
+    Attempt-vs-condition classifier: cov_rd_err and cov_err_last are satisfied
+    at every depth. Common cause -- every one asks whether something was
+    OBSERVED, none asks whether the thing that would break it was ever
+    ATTEMPTED. See inbox/FINDINGS.agent2.md.
