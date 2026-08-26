@@ -168,19 +168,67 @@ is not capability evidence*, so the scored configuration must be the high one.
   not route. The h4 lesson applies: **decide the geometry with a route, not an
   area estimate.**
 
-### The alternative I did not pick, and why
+### The alternative, CHECKED: `d_ca02` is not buildable as written
 
-**`d_ca02` speculative_lsq** has the single most promising line in the catalog —
-*"the violation detector only fails under specific store/load interleavings"* —
-which is mechanism B stated outright. The anchor is present.
+I said this was a step-0 question worth an hour. It was, and the answer is no.
+**Three independent findings, any one of which is disqualifying.**
 
-**The boundary is the problem.** CVA6's `load_store_unit` interfaces with the
-scoreboard, the commit stage and the MMU; reaching memory-order-violation
-detection means shimming most of a pipeline, and a shim that ends up containing
-the sequencing **puts behaviour in the reference**, which is what disqualified
-`d_dsp01`. It is the better task if the boundary turns out to be clean, and
-checking that is a step-0 question worth an hour — but on present evidence
-`d_ai03` is the one whose boundary is already verified single-level.
+**1. The mechanism the row describes does not exist in the anchor.** The row reads
+*"speculative load issue with memory-order-violation detection and replay. The
+violation detector only fails under specific store/load interleavings."* That
+describes an **out-of-order LSQ**. Grepping every `.sv` and `.v` in `refs/` for
+`memory.order.violation`, `mem_order`, `load.store.violation`, `st_ld_viol`,
+`lsq` returns **nothing**. There is no violation detector and no replay path
+anywhere in the vendored tree.
+
+**2. What CVA6 actually implements is conservative stalling, and it is
+deliberately approximate.** `store_buffer.sv` says so in its own comment:
+
+> you can interlock and wait for the store buffer to drain if the load VA matches
+> any store VA **modulo the page size (i.e. bits 11:0)**
+
+and the code compares `page_offset_i[11:3]` — nine bits. A load whose page offset
+collides with any pending store's page offset **stalls the pipeline**, whether or
+not the addresses are actually the same. The hazard is never allowed to occur, so
+**there is nothing to detect and nothing to replay.**
+
+**3. `is_speculative_load` is BRANCH speculation, not memory-order speculation.**
+Gated by `CVA6Cfg.SpeculativeSb`, and the handling is *stall and wait for the
+branch result* for non-idempotent addresses. `store_buffer.sv`'s header — *"pushes
+them to memory if they are no longer speculative"* — is about commit, not about
+load-store ordering.
+
+**And the boundary is separately disqualified.** `load_store_unit.sv` (909 lines)
+instantiates **`cva6_mmu`** — `d_ca03`'s entire anchor — plus `pmp_data_if`,
+`load_unit`, `store_unit` and `shift_reg`. A task at that boundary would
+**subsume `d_ca03`**, so a submission's failure could be an MMU defect rather
+than an LSQ one, and the two tasks would not be independent.
+
+Building `d_ca02` as written would mean **writing the violation detector into the
+shim** — behaviour in the reference, which is exactly what disqualified `d_dsp01`.
+Reported for the catalog owner alongside `d_ai02` and `d_ai04`.
+
+### But there IS a real task at `store_buffer`, and it should be kept on the list
+
+`store_buffer.sv` is **320 lines, single-level, cleanly shimmable**, and does not
+overlap `d_ca01` (it sits upstream of the cache) or `d_ca03`. The contract in it
+is genuinely subtle and carries both mechanisms:
+
+* **Store-to-load forwarding with byte-granular masks** is mechanism A — the
+  forwarded value is assembled from overlapping stores of different widths.
+* **The 9-bit approximate match is a latitude question with teeth.** A design
+  comparing *full physical addresses* is strictly **more precise** than the
+  reference, stalls less, and is **still correct**. So the contract must decide
+  whether precision is conforming — and if it is, the reference's own stall
+  pattern cannot be scored, which is `d_ca03`'s A9 problem in a new place.
+* **Forward-versus-drain is invisible in the delivered data** — both produce the
+  right value, and the difference shows only in memory traffic. Mechanism B, the
+  T10 shape.
+
+It is smaller than `d_ai03` and has one capability axis (`DEPTH_COMMIT`) against
+`d_ai03`'s several, which is why it is second and not first: `d_dsp02` is the
+comparable size in this suite and it discriminates weakly. **Recommendation
+unchanged — `d_ai03` first, `store_buffer` as the next after it.**
 
 `d_ca05`, `d_nw02` and `d_nw04` all rest on **fairness and starvation**, which are
 liveness properties. The three tasks that discriminate nothing today are exactly
