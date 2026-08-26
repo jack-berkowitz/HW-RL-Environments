@@ -29,12 +29,12 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | outstd | fills | notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `chat` | **16/16 pass** | 780,029 | 128.0 | not swept | 2 | 20057 | 10 | 486 | 78,003 um2 per unit of max_outstanding_n, 1.36x the reference per unit |
-| `claude` | **16/16 pass** | 563,403 | 94.5 | not swept | 1 | 20057 | 9 | 482 | **different design point** (latency_min 1 vs reference 2): area is correct but not like-for-like; 62,600 um2 per unit of max_outstanding_n, 1.09x the reference per unit |
-| `gemini` | 0/16 FAIL | — | — | — | 2 | 184 | 16 | 455 |  |
-| `nc_r1_evades_antecedent` — *negative control, expected to fail* | 0/16 FAIL | — | — | — | 2 | 20113 | 10 | 481 |  |
 | **reference** | **16/16 pass** | 573,055 | 76.0 | 100.0 | 2 | 20113 | 10 | 481 | 57,306 um2 per unit of max_outstanding_n |
-| `nonblocking_dcache_alt_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `c9c3532f93fe4954`; the task text is now `51337b00b54b64c7` |
+| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `f7a68c4dbec4a1b7` |
+| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `f7a68c4dbec4a1b7` |
+| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `f7a68c4dbec4a1b7` |
+| `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `f7a68c4dbec4a1b7` |
+| `nonblocking_dcache_alt_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `c9c3532f93fe4954`; the task text is now `f7a68c4dbec4a1b7` |
 
 ## d_ca03 — RISC-V Sv39 MMU -- page-table walker, TLBs, PMP
 
@@ -109,12 +109,13 @@ capability, and nothing here establishes those weights.
 |---|---|---|---|---|---|---|---|---|
 | **second source** | **8/8 pass** | — | — | — | 14633 | 8183 | 41 |  |
 | **reference** | **8/8 pass** | 26,340 | 10.2 | 363.6 | 14882 | 8021 | 0 | 2 um2 per unit of beats_delivered |
-| `chat` | **8/8 pass** | withheld | withheld | not swept | 15926 | 8129 | 46 | **PPA withheld — the build did not meet timing** (slack -0.623 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 16 um2 per unit of beats_delivered, 9.04x the reference per unit |
-| `claude` | **8/8 pass** | withheld | withheld | not swept | 18254 | 8010 | 0 | **PPA withheld — the build did not meet timing** (slack -0.078 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 1 um2 per unit of beats_delivered, 0.57x the reference per unit |
-| `gemini` | **8/8 pass** | withheld | withheld | not swept | 18376 | 8066 | 54 | **PPA withheld — the build did not meet timing** (slack -0.116 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 7 um2 per unit of beats_delivered, 4.06x the reference per unit |
-| `nc_a_reset_polarity` — *negative control, expected to fail* | 0/8 FAIL | — | — | — | 0 | 7834 | 0 |  |
-| `nc_b_outputs_serialised` — *negative control, expected to fail* | 6/8 FAIL | — | — | — | 7079 | 7983 | 9 |  |
+| `nc_a_reset_polarity` — *negative control, expected to fail* | 0/8 FAIL | — | — | — | 0 | 7901 | 0 |  |
+| `nc_b_outputs_serialised` — *negative control, expected to fail* | 0/8 FAIL | — | — | — | 7108 | 8090 | 9 |  |
+| `nc_h_overbuffered` — *negative control, expected to fail* | 0/8 FAIL | — | — | — | 19314 | 9102 | 52 |  |
 | `nc_r1_evades_antecedent` — *negative control, expected to fail* | 0/8 FAIL | — | — | — | 14882 | 8021 | 0 |  |
+| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `514a316a4889dd72`; the task text is now `62e627b4957c0e2c` |
+| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `514a316a4889dd72`; the task text is now `62e627b4957c0e2c` |
+| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `514a316a4889dd72`; the task text is now `62e627b4957c0e2c` |
 
 ---
 
@@ -163,6 +164,8 @@ Rows below answer task text `0453b447cb8b1a5c` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
+
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 1/1 | **2/10** |  |
@@ -172,9 +175,11 @@ prompt is a different question and is not listed.
 
 ## v_ca03 — AXI ID-width converter
 
-Rows below answer task text `fc1baef44b90f91c` (spec + the prompt the
+Rows below answer task text `fa23813e5874ef92` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
+
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
@@ -189,6 +194,8 @@ Rows below answer task text `f4ed051311687cf7` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
+
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
@@ -202,6 +209,8 @@ Rows below answer task text `fd2ae1ad9bf3719d` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
+
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 4/4 | **10/10** | establishes the ceiling |
@@ -211,9 +220,11 @@ prompt is a different question and is not listed.
 
 ## v_ca06 — AXI data-width downsizer
 
-Rows below answer task text `6cb14e9d2e6381ac` (spec + the prompt the
+Rows below answer task text `ae29e2161468aeff` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
+
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
@@ -226,6 +237,8 @@ Rows below answer task text `0d5cc8575568fdb1` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
+
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 5/5 | **10/10** | establishes the ceiling |
@@ -235,6 +248,8 @@ prompt is a different question and is not listed.
 Rows below answer task text `eacc3c043e2a5767` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
+
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
@@ -249,6 +264,8 @@ Rows below answer task text `63dbe82fceded681` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
+
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
@@ -261,6 +278,8 @@ prompt is a different question and is not listed.
 Rows below answer task text `90f7b34382e396f4` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
+
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
@@ -275,6 +294,8 @@ Rows below answer task text `839999302366fa24` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
+
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 5/5 | **10/10** | establishes the ceiling |
@@ -287,6 +308,8 @@ prompt is a different question and is not listed.
 Rows below answer task text `b963a88053bae3da` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
+
+*Clause grouping is recorded in the specifications, not scored here.* Several clauses share one observation and one reported id; the columns below count mutants killed and gate outcomes, and read no clause id. A fault count is not a per-clause score.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|

@@ -1018,6 +1018,27 @@ def main():
             print(f"Rows below answer task text `{_cur}` (spec + the prompt the")
             print("model is handed). A submission scored against a different")
             print("prompt is a different question and is not listed.\n")
+            # GROUPING IS RECORDED, NOT SCORED, AND A READER CANNOT INFER THAT.
+            # Several verification clauses share one observation, one check and
+            # one reported id, so a submission testing any of them is credited
+            # with all -- and eight checks in the corpus ALREADY name a combined
+            # id today ("A3/A5", "F1/F2", "W2/W3" and five more), with v_dsp02
+            # selecting its reported clause at RUNTIME from four by nested
+            # ternary. None of that reaches these numbers: nothing in
+            # report_table.py, collect_results.py or make_charts.py reads a
+            # clause id at all. The columns below score mutant kills, the
+            # discrimination gates and the acceptance outcomes.
+            #
+            # Said here because the omission is invisible otherwise. A reader who
+            # sees clause ids in a spec and fault counts in a table will assume
+            # the second is per-clause unless told, and the annotation convention
+            # AGENT-VERIF-A2 is landing makes grouping legible in the SPEC while
+            # leaving these numbers exactly as they were.
+            print("*Clause grouping is recorded in the specifications, not scored"
+                  " here.* Several clauses share one observation and one reported"
+                  " id; the columns below count mutants killed and gate outcomes,"
+                  " and read no clause id. A fault count is not a per-clause"
+                  " score.\n")
         print("| testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |")
         print("|---|---|---|---|---|---|---|")
         _stale = []
