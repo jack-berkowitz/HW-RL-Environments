@@ -449,7 +449,27 @@ run_one() {
     if [ "$v" = "PASS" ]; then p=$((p+1))
     elif [ -z "$first" ]; then
       if [ "$v" = "COMPILE" ]; then first="$cfg -> COMPILE: $CERR"
-      else first="$cfg -> $v: $(echo "$out" | grep -m1 -E '^\[FAIL\]|COVERAGE HOLE' | sed 's/^\[FAIL\] //' | cut -c1-44)"; fi
+      # THE REASON IS DROPPED IF THE TESTBENCH SPELLS IT A THIRD WAY. This
+      # matched `^[FAIL]` and `COVERAGE HOLE` only. d_ai01 emits
+      # `TEST_RESULT: FAIL: <reason>` -- a shape neither pattern sees -- so its
+      # candidates reported "+HH=4 -> FAIL:" with nothing after the colon, and
+      # the run record's first_failure was an empty string. The testbench names
+      # the clause; the runner threw it away, and "why did it fail" could not be
+      # answered from any artefact.
+      #
+      # Third enumeration of message shapes in this file to go stale. Widened to
+      # the union, longest-reason-wins rather than first-match, so a tb that
+      # prints both a [FAIL] line and a TEST_RESULT reason yields the informative
+      # one instead of whichever came first.
+      else
+        _r="$(echo "$out" | grep -m1 -E '^\[FAIL\]' | sed 's/^\[FAIL\] //')"
+        _t="$(echo "$out" | grep -m1 -E 'TEST_RESULT: FAIL: ' | sed 's/.*TEST_RESULT: FAIL: //')"
+        _h="$(echo "$out" | grep -m1 -E 'COVERAGE HOLE')"
+        _best="$_r"
+        [ "${#_t}" -gt "${#_best}" ] && _best="$_t"
+        [ -z "$_best" ] && _best="$_h"
+        first="$cfg -> $v: $(printf '%s' "$_best" | cut -c1-90)"
+      fi
     fi
   done
   echo "$p $t|$first"
