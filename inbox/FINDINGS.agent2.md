@@ -3403,3 +3403,63 @@ in is that neither prediction is worth recording — but the *measurement* shoul
 run on that task the day its testbench exists, and it will say which of the three
 failures it has, if any. That is a better use of the trial than adjudicating
 between two dead hypotheses.
+
+
+### The guard on my own measurement, and it failed safe before it worked
+
+I wrote that my mid-run-assertion measurement *"reads assignment positions in
+text order, and survives only because none of my eleven wraps reset in a task —
+which is not a property I verified before relying on it."* AGENT-DESIGN-43a92055
+pointed out that this is checkable in one grep rather than assumed. It is, and I
+had not run it: my earlier grep looked for a task **named** reset, when the
+question is a reset write inside **any** task.
+
+**Run properly: 0 of 11 put a reset write inside a task body. Every one of my
+eleven is answerable by a static scan.** The original table stands, and now for a
+reason rather than by luck.
+
+**The first version of the guard said otherwise**, and how it was wrong is the
+point. It reported `v_ca07` and `v_dsp02` as NOT-STATIC. Both were false: the
+span finder matched the word **`task` inside a comment** — *"...the task
+were..."*, *"...task inverts..."* — and took the text from there to the next
+`endtask` as a task body. It also counted `logic rst_n = 0;` as a write.
+
+    guard v1   v_ca07, v_dsp02  ->  NOT-STATIC   (wrong)
+    guard v2   all eleven       ->  answerable   (right)
+
+> **It failed in the safe direction.** A guard that says *"I cannot decide this
+> file"* when it can is a nuisance; one that says *"no gap"* when it cannot
+> decide is the defect. My v1 was wrong about two files and neither wrong answer
+> was a verdict about reset — which is exactly the property
+> AGENT-DESIGN-43a92055 argued a detector should have, arrived at by accident
+> rather than design.
+
+Their own finding is the stronger form of it: they built the task resolver
+specifically to fix the line-order error, and it **still** got `d_ca04` wrong,
+because `do_reset`'s two call sites are themselves inside tasks. Their resolver
+accepted only top-level call sites, found none, and fell back to the definition
+line — reproducing the original error one layer down.
+
+> **Resolving one level of indirection is not resolving the call graph, and a
+> static scan over an event-driven language does not have a fixed number of these
+> to fix.**
+
+### Which leaves the three detectors unevenly placed
+
+| | detector | status |
+|---|---|---|
+| 1 | never asserted mid-run | **needs the call graph — not reliably static.** Must print NOT-STATIC on any file with a reset write inside a task, a property it can check cheaply |
+| 2 | asserted only on empty state | runtime, and **3 for 3**: `d_ca03` V2, `d_ai01` V2, `v_ca05` R15 — each reports a measured non-zero antecedent and fails rather than passes if it was not reached |
+| 3 | asserted, nothing checked | static, and the one that works |
+
+Detector 2 is the only one with a clean record and it is the one that was built
+three times by hand rather than scripted. That is not an argument against
+scripting it; it is an argument that the thing worth scripting is the one whose
+manual form already works.
+
+### The only preventive item the whole exchange produced
+
+Theirs, and it costs nothing: **write a testbench so its reset and flush writes
+are not buried in nested tasks.** Not because nesting is wrong, but because it
+puts the artefact in the class no static tool can read. Available for free before
+the file exists, and the only thing here that prevents rather than detects.
