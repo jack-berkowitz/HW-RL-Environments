@@ -242,6 +242,28 @@ endmodule
 //
 // T8. SUSTAINED THROUGHPUT (A4) over a long open-flow burst.
 //
+// T9. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator, and passing
+//     simulation is not sufficient. The synthesis frontend is slang, so a
+//     construct Verilator accepts silently can be a hard error there -- in which
+//     case a correct submission produces NO PPA NUMBER AT ALL. That is the worst
+//     shape a failure can take here: it reads as a missing measurement rather
+//     than as a rejected submission.
+//
+//     THE REJECTION THIS MOST OFTEN PRODUCES is a variable declared after a
+//     statement inside a begin/end block:
+//
+//         error: declaration must come before all statements in the block
+//
+//     slang enforces the LRM rule that every declaration in a block precedes
+//     every statement in that block. VERILATOR DOES NOT DIAGNOSE THE VIOLATION,
+//     so the file simulates clean and then yields nothing. Declare every
+//     variable at the top of the block that uses it, or at module scope, before
+//     any assignment, loop or $display in that block.
+//
+//     This is measured history, not caution: ten run records across four tasks
+//     in this repository were killed by exactly that error, nine of them from
+//     one model.
+//
 // -----------------------------------------------------------------------------
 // G -- GRADING
 // -----------------------------------------------------------------------------

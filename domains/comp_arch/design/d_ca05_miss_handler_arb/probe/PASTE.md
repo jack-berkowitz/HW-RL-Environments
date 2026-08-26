@@ -1,3 +1,53 @@
+# d_ca05 — multi-requester cache miss handler
+
+Implement `miss_handler_arb` in synthesisable SystemVerilog.
+
+The unit sits behind a data cache's controllers. Several requesters raise misses;
+it arbitrates them, fetches cache lines over AXI, answers uncached accesses on a
+separate bypass path, walks the array to flush it, and performs atomics. It also
+answers, every cycle, whether a presented address collides with the refill
+currently in flight.
+
+Five things about this contract are worth reading before choosing an
+architecture:
+
+* **The G clauses set out how you are graded**, in what order, and which
+  optimisation levers are already closed. Read them first.
+* **Arbitration is strict lowest-index priority and it starves.** A
+  continuously-requesting low port locks out every higher port indefinitely.
+  This is the contract, not a defect to improve on — a round-robin arbiter fails.
+  What is required is that every port be *servable*, not that service be fair.
+* **The two MSHR match outputs overlap.** An address match *implies* an index
+  match; they are not alternatives, and the requester whose own miss is in flight
+  is *not* excluded from either. Both are easy to get wrong for reasons that look
+  like care.
+* **The flush's cost is part of the contract, not just its effect.** The walk is
+  observable on the array port and the access count is pinned. A design that
+  reaches the same final state in fewer accesses fails.
+* **A flush requested in the same cycle as an atomic is never acknowledged.** The
+  flush happens; `flush_ack_o` does not pulse. This is not reachable by writing
+  the obvious thing, and it is invisible unless you exercise flush and atomic
+  together.
+
+Everything asserted below about arbitration, matching, flush behaviour and
+acknowledgement was **measured** against a hardware anchor rather than assumed
+from convention. Where the anchor's own comments disagree with what it does, the
+contract follows what it does, and says so.
+
+**One self-contained file** containing only `module miss_handler_arb`, with the
+exact port list below. Import `miss_handler_arb_pkg` and declare nothing else
+outside the module.
+
+**The types are in `spec/miss_handler_arb_pkg.sv`, which ships with this file and
+is part of the problem statement.** It holds the AXI channel structs, the cache
+line and byte-enable types, the request and atomic structs, and every geometry
+constant as a concrete number. Import it and you need nothing else — no vendor
+packages, no AXI library, no knowledge of where the anchor came from.
+
+The contract cites a few repository file names in passing; those are provenance
+notes for maintainers, not documents you need.
+
+```systemverilog
 // =============================================================================
 // d_ca05 -- miss_handler_arb : multi-requester cache miss handler
 // =============================================================================
@@ -345,3 +395,4 @@ endmodule
 //     pins the port count, so there is no dimension along which a submission may
 //     do MORE. It is not reported rather than reported as zero.
 // =============================================================================
+```
