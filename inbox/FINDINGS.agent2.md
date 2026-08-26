@@ -4542,3 +4542,94 @@ phase un-widened. *"Survived the widening"* was not evidence about the failure;
 it was evidence the widening had not reached it. **An escalation criterion that a
 widening never reached is not a criterion**, and nothing in my failure definition
 required checking that the widening applied.
+
+
+---
+
+## FINDING — a discriminator that does not enumerate the constructs it must reach cannot report that it failed to reach one
+
+**This is a defect in the escalation criterion itself, not a `v_nw02` detail. The
+criterion was load-bearing for every task in the exercise and silently passed as
+one throughout.**
+
+The criterion: *a failure that survives a drain-widened repeat is a candidate
+reference failure.* The widener multiplied three constructs — `repeat(N)`,
+`t < N`, `drain(N)`. `v_nw02`'s read sweep ends on `settle(N)`, which was not in
+the set.
+
+    "the failure survived the widening"   ->   the widening never ran on that phase
+
+> **A discriminator with a fixed list of things it acts on, and no list of things
+> it must act on, reports the same result when it works and when it does not
+> apply.** Nothing in the output distinguishes *widened and the failure persisted*
+> from *not widened, so of course it persisted*.
+
+That is the same shape as an instrument whose failure value is in range — the
+value is `still failing`, and `still failing` is what both worlds produce.
+
+### The enumeration that was missing
+
+| construct | in the widened set | tasks |
+|---|---|---|
+| `repeat (N) @(posedge clk)` | yes | all eleven |
+| `for (t = 0; t < N; ...)` | yes | all eleven |
+| `drain(N)` | yes | v_ca03 |
+| `settle(N)` | **no — added after it was missed** | v_ca07, v_nw02 |
+| `check_ratio(N)` | via `settle` | v_ca07 |
+| `wait_frames(N)` | not needed — waits on frames, not cycles | v_nw03 |
+| literal timeout arguments | **no** | v_ca05 |
+| `#N` | the watchdog | six tasks |
+
+**And the answer is that the six clean rows stand**: only three of them depend on
+the widener at all — the three that failed narrow and passed wide — and those
+three use covered constructs only. The other three passed at the *narrow* drain,
+where widening is irrelevant.
+
+**I could not have said any of that before running the enumeration.** The
+criterion had been reported as satisfied eleven times.
+
+### The general form
+
+> **A discriminator must enumerate the constructs it needs to reach, and refuse
+> when it meets one outside that list.** A widener that silently no-ops on an
+> unrecognised drain is indistinguishable from one that widened and found the
+> failure real — and the second is the reading a reader will take, because it is
+> the one the criterion was written to produce.
+
+---
+
+## FINDING — the drain rule is a window, not a number, and the ceiling came from a fact kept for the opposite reason
+
+**A drain widening large enough to clear contamination can be large enough to
+break a clause with a fixed deadline.**
+
+    v_nw02, perturbation depth 9
+      x1   P3 fails    below the floor -- beats still in flight at the boundary
+      x2   PASS        inside the window
+      x3   X4 fails    above the ceiling -- a fixed deadline, stretched past
+      x10  X4 fails    my rule's value
+
+**My rule was `(1 + stall_depth)`, one number, and for this task it is outside
+the window in which the task is measurable at all.** The task is clean, at x2,
+and the rule would never have found it — it would have reported X4 as a failure
+surviving the widening, which is exactly the escalation it produced.
+
+    floor     enough drain that beats in flight at a phase boundary complete
+    ceiling   before a clause with a FIXED DEADLINE is stretched past it
+
+The two bounds come from different places, and only the floor is a property of
+the perturbation. **The ceiling is a property of the task's clauses.**
+
+### Where the ceiling comes from, and it is worth saying plainly
+
+The deadline enumeration — `v_ca03` A4, `v_ca04` X3, `v_ca05` R15, `v_ca07` E1
+and H4, `v_nw01` X3 and Q1, `v_nw02` X4 — was produced as **evidence for
+excluding bounded clauses from perturbed runs**. That case was withdrawn when the
+instrument behind it turned out to be broken, and the enumeration was kept as a
+fact rather than discarded with the argument.
+
+> **It was kept for one reason and turned out to be needed for the opposite one.**
+> Not to exclude those clauses from the run — to bound how far the run may be
+> stretched before they break.
+
+A fact kept after its argument collapsed is worth more than the argument was.

@@ -509,3 +509,64 @@ timeout that is **correct behaviour**, not a defect.
 
 **Five honest rows beat five guessed depths.** Each would have produced a number,
 and each number would have been a clean row meaning untested.
+
+---
+
+# THE MAGNITUDE TABLE, WITH THE AXIS ITS JUSTIFICATION IS ABOUT
+
+**Checked by `check_magnitude_axis.py`, which REFUSES on a mismatch and on an
+unstated axis. Not a convention.**
+
+| task | axis perturbed | magnitude | axis the justification is about |
+| `v_ca06` | inter-beat gap | 9 | inter-beat gap |
+| `v_ca03` | inter-beat gap | 9 | inter-beat gap |
+| `v_nw02` | inter-beat gap | 9 | inter-beat gap |
+| `v_ai02` | inter-beat gap | 6 | inter-beat gap |
+| `v_nw03` | inter-beat gap | 5 | inter-beat gap |
+| `v_ca04` | inter-beat gap | 4 | inter-beat gap |
+
+`v_nw01` is absent because it has no row to state: its axis has no depth, so
+there is no magnitude to justify. **That is why it is NOT MEASURABLE and not a
+corrected number.** Had it stayed, the checker would have refused it —
+`inter-beat gap` perturbed, `inter-transaction gap` justified.
+
+# THE DRAIN WINDOW — the rule is not a number
+
+    floor     enough drain that beats in flight at a phase boundary complete
+    ceiling   before a clause with a FIXED DEADLINE is stretched past it
+
+    v_nw02, depth 9:   x1 P3 fails (below floor) | x2 PASS | x3,x5,x10 X4 fails (above ceiling)
+
+**My rule was `(1 + stall_depth)` — a single number, x10 here, above the ceiling
+for this task.** A task can be clean and the rule can never find it.
+
+**The ceiling comes from the deadline enumeration** — `v_ca03` A4, `v_ca04` X3,
+`v_ca05` R15, `v_ca07` E1 and H4, `v_nw01` X3 and Q1, `v_nw02` X4. That
+enumeration was produced as evidence for excluding bounded clauses, the exclusion
+case was withdrawn, and it was kept as a fact. **It was kept for one reason and
+turned out to be needed for the opposite one:** not to exclude those clauses from
+the run, but to bound how far the run may be stretched before they break.
+
+# EVERY DRAIN-SHAPED CONSTRUCT ACROSS THE ELEVEN
+
+| construct | covered by the widener | tasks |
+|---|---|---|
+| `repeat (N) @(posedge clk)` | **yes** | all eleven |
+| `for (t = 0; t < N; ...)` | **yes** | all eleven |
+| `drain(N)` | **yes** | v_ca03 |
+| `settle(N)` | **yes, added after it was missed** | v_ca07, v_nw02 |
+| `check_ratio(N)` | via `settle` | v_ca07 |
+| `wait_frames(N)` | **not needed** — waits on frames, not cycles | v_nw03 |
+| `quiet(N)` | not needed — v_nw04 is NOT MEASURABLE | v_nw04 |
+| `send_w(N)` | not a drain — sends beats | v_ca03 |
+| literal timeout arguments | **not covered** | v_ca05 (NOT MEASURABLE) |
+| `#N` | the watchdog, not a phase drain | six tasks |
+
+**Which clean rows depend on the widener at all:** only those that failed at the
+narrow drain and passed at the wide one — `v_ca06`, `v_ca04`, `v_nw02`. All three
+use `repeat`, `t < N` and `settle` only, all covered. **The other three clean rows
+— `v_ca03`, `v_nw03`, `v_ai02` — passed at the NARROW drain**, so nothing about
+them rests on the widening.
+
+The six clean rows stand. **I could not have said that before running this
+enumeration**, and nothing in the exercise required it.
