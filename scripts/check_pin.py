@@ -39,6 +39,32 @@ def stated_pin(task_dir):
     return None, None
 
 
+def prompt_pin(task_dir):
+    """The pin as the PROMPT states it, and whether the prompt says NOT YET SET.
+
+    THE SPEC IS NOT THE PROMPT. probe/PASTE.md INLINES the spec rather than
+    referencing it, so writing a pin into spec/ leaves the document the model is
+    actually handed still saying whatever it said before. d_ai01's prompt read
+    "THE PINNED PERIOD FOR THIS TASK IS NOT YET SET" for as long as its spec
+    carried 16.75, and a re-solicitation in that window would have produced three
+    candidates answering a prompt that CONTRADICTED the spec it was generated
+    from -- worse than a stale prompt, because a stale one is at least
+    self-consistent.
+
+    Caught by AGENT-DESIGN-43a92055 while landing the pin I had asked them for:
+    my own reasoning was that the pin must be in the prompt before solicitation,
+    and I had checked only the spec.
+    """
+    for p in sorted(glob.glob(os.path.join(task_dir, "probe", "*.md"))):
+        txt = open(p, errors="replace").read()
+        m = PIN_RE.search(txt)
+        if m:
+            return float(m.group(1)), os.path.basename(p), False
+        if "NOT YET SET" in txt.upper():
+            return None, os.path.basename(p), True
+    return None, None, False
+
+
 def converged(task):
     f = os.path.join("fmax_results", f"{task}_fmax.json")
     if not os.path.exists(f):
@@ -67,6 +93,22 @@ def main(argv):
             continue
         pin, specf = stated_pin(d)
         conv, fmaxf = converged(short)
+        # SPEC-VS-PROMPT AGREEMENT DOES NOT DEPEND ON A SWEEP, so it is checked
+        # BEFORE the sweep-availability branches below. My first version put it
+        # after them, where a task with no fmax.json returned NO CONCLUSION and
+        # never reached it -- and d_ai01, the task the check was written for, was
+        # exactly that task. The branch could not fire on its own founding case.
+        pnote = ""
+        if pin is not None:
+            ppin, pfile, notset = prompt_pin(d)
+            if notset:
+                pnote = f"   *** PROMPT ({pfile}) STILL SAYS 'NOT YET SET' ***"
+            elif ppin is None:
+                pnote = "   *** PROMPT STATES NO PIN -- the model is not told it ***"
+            elif abs(ppin - pin) > 1e-9:
+                pnote = f"   *** PROMPT SAYS {ppin:g}, SPEC SAYS {pin:g} ***"
+            if pnote:
+                bad += 1
         if pin is None and conv is None:
             print(f"  {t:<26} {'-':>9} {'-':>10} {'-':>11}  NO CONCLUSION -- no stated pin and no sweep")
             noconc += 1; continue
@@ -74,13 +116,14 @@ def main(argv):
             print(f"  {t:<26} {'-':>9} {conv:>10} {'-':>11}  NO CONCLUSION -- spec states no pin")
             noconc += 1; continue
         if conv is None:
-            print(f"  {t:<26} {pin:>9} {'-':>10} {'-':>11}  NO CONCLUSION -- no {short}_fmax.json to check it against")
+            print(f"  {t:<26} {pin:>9} {'-':>10} {'-':>11}  NO CONCLUSION -- no {short}_fmax.json to check it against{pnote}")
             noconc += 1; continue
         want_pin = apply_rule(conv)
         ok = abs(want_pin - pin) < 1e-9
         if not ok:
             bad += 1
-        print(f"  {t:<26} {pin:>9} {conv:>10} {want_pin:>11}  {'ok' if ok else '*** MISMATCH ***'}")
+        print(f"  {t:<26} {pin:>9} {conv:>10} {want_pin:>11}  "
+              f"{'ok' if ok else '*** MISMATCH ***'}{pnote}")
     print(f"\n{bad} mismatch(es), {noconc} NO CONCLUSION.")
     if noconc:
         print("A task with no conclusion was NOT checked. That is not a pass.")
