@@ -3555,3 +3555,306 @@ Mine died on `v_ca06` — a task I had already filed and could have left filed.
 that is why two plausible mechanisms lasted hours rather than weeks. It is worth
 repeating deliberately, and it was cheaper than either mechanism would have been
 if we had kept it.
+
+
+---
+
+## FINDING — I destroyed 162 committed lines with a truncating edit, and the file GREW
+
+**`f4782a2` deleted the timing-sweep scoping and the closing read. Both were
+committed at `67db1c9`. Nothing signalled it for six commits.**
+
+### What happened
+
+The `--shared` unit correction replaced one section:
+
+    old = t[t.index("### The founding case ..."):]
+    open(p,"w").write(t[:t.index("### The founding case ...")] + new)
+
+`t[index:]` takes the heading **to end of file**. I intended to replace one
+section and replaced *everything after it*. Two whole sections were collateral:
+
+    ## SCOPING -- the timing-axis sweep, costed before building     (5 subsections)
+    ## THE STATE OF THE APPARATUS, written down while it is true
+
+### Why nothing caught it
+
+**The file grew.** 3081 lines at `67db1c9`, 3557 at HEAD — I appended more in the
+six commits after the truncation than I had destroyed, so every size check, every
+`git diff --stat`, and every glance at the tail looked healthy.
+
+- `check_linkage_tree.sh` passed on every one of those commits. It checks the
+  rule/finding graph, not that content survives.
+- `cmp`-verifying each blob against the working tree passed. **The working tree
+  was already wrong** — the verification confirms the commit matches what I
+  wrote, not that what I wrote preserved what was there.
+- The two lost sections were the *tail* of the file, so nothing downstream broke.
+
+> **A destructive edit that is followed by growth is invisible to every check
+> that looks at size, at the diff summary, or at the end of the file.** The only
+> thing that would have caught it is a diff of the SECTION LIST, which nothing
+> here does.
+
+### It was found by the user asking whether a thing was filed
+
+Not by a tool, not by a review, not by me. The scoping had been reported as
+delivered and was not in the file. **That is the seventh instance of the week's
+class and the first where the artefact was destroyed rather than mismeasured** —
+and it is the same tell: I compared a number (line count, diff stat) to nothing,
+instead of comparing the artefact to what it had been.
+
+### Restored verbatim from `67db1c9` below
+
+Not rewritten from memory. `git show 67db1c9:inbox/FINDINGS.agent2.md` is the
+source, and the sections are re-appended unmodified so the record says what it
+said when it was committed.
+
+### The cheap guard, which I did not have
+
+    git show HEAD:<file> | grep -c '^## '     before
+    grep -c '^## ' <file>                      after
+
+A section count that goes DOWN on a file that is only ever appended to is a
+refusal condition. One line, and it would have fired six commits ago.
+
+---
+
+## SCOPING — the timing-axis sweep, costed before building
+
+**Asked for a cost, not a build. Here it is, and the recommendation is not the
+instrument as specified.**
+
+### What it would be
+
+For each interval a task pins at its most permissive value, re-run the REFERENCE
+at other values and diff **the reference's own verdict**. Four axes, none of them
+a signal:
+
+| axis | state |
+|---|---|
+| 1. gap between consecutive beats on each source-driven channel | **the one that found D6.** Not instrumented anywhere |
+| 2. ready duty cycle on each sink-driven channel | **already built** — the free-running LFSR backpressure, landed on v_ca06 and v_ca03. Two of eleven |
+| 3. gap between transactions | not instrumented |
+| 4. transactions in flight | often bounded by the task's own parameters; not freely variable everywhere |
+
+### Why it costs what it costs, and it is not the running
+
+`check_fired.py` and `check_artefact_warnings.py` were cheap because **they read
+logs**. A timing sweep must *inject* timing into a testbench, and every testbench
+drives its stimulus differently. **There is no common hook and there cannot be
+one.** Every hour of this is per-task hand work.
+
+The measured precedent is v_ca06, where I did exactly this by hand:
+
+- adding `RGAP` to the downstream R responder: ~10 lines and one parameter — cheap
+- **widening the inter-phase drain from 40 cycles to 600 — expensive, and the
+  part that does not generalise.** A slow responder overruns whatever phase
+  structure a testbench has, and each testbench's structure breaks differently
+- the first reading came back **43 failures across seven clause ids** and looked
+  like "the anchor collapses under backpressure". It was the drain. Four of my
+  seven diagnostic runs on that task went into separating a real reference
+  failure from a phase-structure artefact
+
+> The cost is not the sweep. It is telling a reference defect apart from a
+> testbench that was never built to be slowed down, and that judgement does not
+> transfer between tasks.
+
+### The estimate
+
+| item | cost |
+|---|---|
+| axis 1 instrumentation, per task | 1–2 h, dominated by drain/phase diagnosis |
+| axis 3 instrumentation, per task | ~30 min |
+| axis 2 | done on 2 of 11; ~1 h each for the rest |
+| builds and runs | ~90 s per build; 4 settings per axis is 8 min per task |
+| **axes 1 and 3 across eleven** | **15–25 hours** |
+
+And the yield is unknown. **D6 is one instance.** I have no base rate, and a
+15–25 hour instrument justified by a single finding is exactly the sort of
+investment this file has been criticising all week.
+
+### What I would build instead, and why
+
+**A single perturbed rerun, not a sweep.** Run each reference once with every
+responder slowed by a fixed gap and every inter-transaction gap widened, and
+report only *did the reference still pass its own spec*. Then sweep for a
+threshold **only on the tasks where that one run fails.**
+
+    cheap detector  ->  expensive diagnostic  ->  run the diagnostic only where
+                                                  the detector fired
+
+Cost: the same per-task instrumentation for axis 1 (unavoidable), but **one build
+per task instead of N**, and no threshold-finding on tasks that do not need it.
+**~1.5–2 days** against 3–4 for the full sweep, and it finds every task that has
+a D6, differing only in that it does not immediately say at what depth.
+
+On v_ca06 this shape would have worked: the golden fails at `RGAP=4` and the
+threshold hunt (0,1,2,3,5,8,16) was seven extra builds that told me *three idle
+cycles* — a number that is interesting but was not needed to establish the defect.
+
+**One caution, from today.** The instrumentation is a testbench edit on all
+eleven, and a mechanical edit on all eleven is what broke v_ca07's build this
+afternoon — the insertion anchored on a line that was an `else if` and split the
+chain. **This one should be hand-done per task.** There is no anchor a script can
+trust, because the thing being edited is precisely each testbench's idiosyncratic
+stimulus structure.
+
+---
+
+## THE STATE OF THE APPARATUS, written down while it is true
+
+**The apparatus is now much better at NAMING its failure modes than at CATCHING
+them.**
+
+Seven defects were found this week. What found each:
+
+| | found by |
+|---|---|
+| the combinational loop through the DUT | Verilator — reported, diluted, unread. Caught because 26 identical failures appeared across four one-hot variants |
+| the inert conformant channel | Verilator lint — reported, diluted, unread. Surfaced only when a clause finally needed that channel |
+| D6's fast-path stickiness | nothing — varying a timing parameter no instrument names |
+| the dangling `else` and the double RESULT line | nothing — running eleven testbenches and counting RESULT lines by hand |
+| the negative control that passed | nothing — asking "did it fire", which nothing asked |
+| `ts_step_o` connected and never read | `grep -c` |
+| the counter race | backpressure happening to align two events |
+
+**Two had tooling that reported them and was not read. Five had no instrument at
+all.**
+
+After this week: two have tools — `check_fired.py`, `check_artefact_warnings.py`
+— and **neither is wired into the scoring path**, because they sit in
+`inbox/*.for-scripts` and `scripts/` is not mine. Two more have named-but-unbuilt
+instruments. `must_fire` is now declared on all eleven, which is the one item
+that moved from named to installed.
+
+> **A task can go from spec to scored verdicts today, unattended, and it will
+> emit verdicts that look exactly like correct ones whether or not they are.**
+> That is precisely the class this week established: *right by convergence*,
+> *green while inert*, *passed because it never ran*.
+
+**Five new classes appeared in five days and the rate is not visibly declining.**
+That, more than any checklist, is the answer to whether the pipeline can be left
+alone. A list of four remaining items implies the list is nearly finished; the
+observed rate says it is not.
+
+**The argument for having spent the week this way is that naming is what lets
+someone else catch them.** Every one of these was invisible until it had a name,
+and three of them were then found again by other agents within a day of the name
+existing — the compile-warning class on the PPA side, the `exclusive: true` mirror
+on the design side, the reset-clause habit on a third task. **That is the return,
+and it is real.**
+
+**It is not the same as being able to walk away from it**, and this file should
+not be read as claiming otherwise.
+
+
+---
+
+## FINDING — three varieties of the corpus doing the work, and none is visible from the output
+
+**A thing right for the wrong reason is indistinguishable from a thing that is
+right, until the corpus changes.**
+
+### The three
+
+| | variety | instance |
+|---|---|---|
+| 1 | **a defect that moved no answer** | AGENT-DESIGN-43a92055's detector counted `logic rst_n = 0;` as an assertion. `d_ai01` 3→2, `d_dsp03` 1→0. **No verdict moved.** They reported it as a defect anyway rather than as a clean bill |
+| 2 | **a guard that failed safe** | my guard v1 matched the word `task` inside a comment and called `v_ca07` and `v_dsp02` NOT-STATIC. Both wrong — and **neither wrong answer was a verdict about reset** |
+| 3 | **a guard right for the wrong reason** | `(?<![\w.])` excludes **16 spurious `burst`/`first` matches across four tasks**. I wrote it to stop `dut.rst_n` matching. It covers `burst` and I did not know `burst` was there |
+
+Two more from outside my area, same shape:
+
+- **`nc_e` unchanged at 132.** A control whose number did not move — and *did not
+  move* is consistent with *the control is inert*, with *the change had no
+  effect*, and with *the measurement is right*. The output is one number and it
+  is the same number in all three worlds.
+- **the PDK default, correct every time it was used.** Correct-in-use is not the
+  same property as correct; it is correct *on the configurations that were run*,
+  and nothing recorded which those were.
+
+### The common fact
+
+> **The corpus is doing the work, not the method.** In all five, the artefact
+> produced the right answer and the reason was a property of the material rather
+> than of the instrument. `burst` happened not to be in the signal position my
+> lookbehind guards. Declarations happened not to change a verdict on those two
+> files. `task`-in-a-comment happened to land on files whose reset was answerable
+> anyway.
+
+**None of the five is visible from the output.** A right answer for the wrong
+reason and a right answer are the same bytes. The only thing that separates them
+is a corpus you do not have yet — which means the failure arrives as a
+*regression in something that was working*, at the moment someone adds a signal
+called `arst`, or a testbench that wraps reset in a task, or a configuration the
+PDK default is wrong for.
+
+### What follows, and it is not "write better guards"
+
+The guards are fine. Two of the three are correct today and the third failed in
+the safe direction. **What is missing is that none of them records WHY it is
+correct**, so nobody can tell when that reason stops holding.
+
+    the guard              (?<![\w.]) before the signal name
+    the reason I wrote it  to stop dut.rst_n matching
+    the reason it works    also excludes burst, first_fail, agg_bursts
+    what changes it        a signal genuinely named arst or wrst
+
+The last two lines are the ones that do not exist anywhere by default, and they
+are one comment. **A guard whose stated reason is narrower than its actual
+coverage is a guard that will be widened or deleted by someone who reads the
+stated reason** — which is the same failure as `settle`, where the field had been
+audited once for its value and nobody looked at what the window contained.
+
+---
+
+## PRACTICE — go and find the case that would kill your own hypothesis, in the file you own and could quietly skip
+
+**Not an observation. A thing to do, and the one I would want a new agent told on
+day one.**
+
+Two mechanisms were proposed this week to explain the reset gap. Both were
+plausible, both were held by people with evidence, and **both died within hours**:
+
+    setup role      died on d_ca04     a file AGENT-DESIGN-43a92055 owns and
+                                       could have quietly not checked
+    clause count    died on v_ca06     a task I had already filed, and could
+                                       have left filed
+
+**Neither hypothesis was careless. Neither survived contact with the case its
+author went to find.**
+
+### Why this specific form and not "be rigorous"
+
+The instruction is not *test your hypothesis*. It is **the file you own and could
+quietly skip**, and every clause of that is load-bearing:
+
+- **you own it** — nobody else will check it, and nobody will know you did not
+- **you could skip it** — there is a live reason not to look, usually that it is
+  the case most likely to be inconvenient
+- **quietly** — skipping produces no artefact. There is no gap in the record
+  where the unchecked case would have been
+
+That is exactly the shape of every defect in this file: **not a wrong answer, an
+absent question.** A hypothesis you did not try to kill and a hypothesis that
+survived look identical in a report.
+
+### What it costs, measured
+
+Two hours, twice. Against the alternative, which is a mechanism that survives
+because nobody looked, gets built into a checklist, and is discovered wrong by
+someone relying on it — after the checklist has been applied to eleven tasks.
+
+**Both falsifications were cheaper than either mechanism would have been if we had
+kept it**, and that is the argument. Not honesty; cost.
+
+### The day-one form
+
+> **Before you report a hypothesis, name the case that would kill it. If that
+> case is in a file you own, go and look at it. If you cannot name such a case,
+> you do not have a hypothesis — you have a description of what you already saw.**
+
+The last clause is the one that generalises past this week. The setup-role
+mechanism and the clause-count mechanism were both perfectly good *descriptions*
+of the instances that produced them. Neither made a prediction its author could
+not already see, until someone went looking for the row that would break it.
