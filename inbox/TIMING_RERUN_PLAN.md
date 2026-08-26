@@ -114,3 +114,107 @@ measurement is owed by any narrowing this produces.
 **A failing golden is the D6 shape. I report before sweeping for a threshold, and
 before any clause moves.** The threshold sweep — bisection on stall depth for that
 one task, roughly seven builds — runs only after that.
+
+
+---
+
+# RESULTS — first run, and the mechanism is wrong
+
+**No threshold sweep started. No clause moved.** Reporting per the stopping rule.
+
+## What was measured
+
+| task | depth | narrow drain | wide drain | verdict |
+|---|---|---|---|---|
+| `v_ca06` | 9 | FAIL, 38 across 7 ids | **PASS** | **clean.** 38 of 38 were drain artefacts |
+| `v_ai02` | 6 | PASS | PASS | **clean** |
+| `v_dsp02` | 4 | PASS | PASS | **clean** |
+| `v_ca07` | 16 | FAIL, FLOOR only | FAIL, FLOOR only | does not escalate — see below |
+| `v_ca03` | 9 | FAIL 4 | FAIL 4 | **clause made unmeasurable** |
+| `v_nw02` | 9 | FAIL 22 | FAIL 22 | **clause made unmeasurable** |
+| `v_ca05` | 9 | FAIL | FAIL | **instrument artefact** |
+| `v_ca04` | 4 | — | — | blocked: vector signal, patcher fixed, not re-run |
+| `v_nw03` | 5 | — | — | blocked: same |
+| `v_nw01` | 65 | — | — | not run: abbreviated signal names, unmapped |
+| `v_nw04` | 6 | — | — | **NOT APPLICABLE**: pulse valids, no ready to gate |
+
+Perturbation was live on every task that ran — `perturb_at_depth` between 78 and
+3717, never zero. **The instrument declared itself, as designed.**
+
+## The drain discriminator worked exactly as specified
+
+`v_ca06`: **40 failures across 8 clause ids at the narrow drain, 0 at the wide.**
+That is the whole point of the two-run design and it earned its cost on the first
+task. Without it I would have reported the anchor as collapsing, for the second
+time.
+
+## A THIRD failure category the definition did not have
+
+`v_ca03`'s `A4` bounds retirement at **2 cycles**. `v_nw02`'s `X4` bounds a
+manufactured B at **232 cycles**. `v_ca07`'s `H4` needs a request pending while a
+change gates.
+
+**A perturbation of 9 or 16 cycles does not violate those clauses. It makes them
+unmeasurable** — the testbench cannot offer inside a 2-cycle window when the
+source is gated for 9.
+
+    FAIL [A4] entry freed late: new id accepted 8 cycles after retirement, window is 2
+    FAIL [X4] manufactured B for id=4 arrived at cycle 8541, deadline was 232
+
+> **A clause with its own cycle bound cannot be measured under a perturbation
+> that exceeds that bound, and the result reads as a violation.**
+
+**And the difference between reading as a violation and reading as untested is
+whether the clause has an antecedent floor.** `v_ca07`'s H4 has one, and reported:
+
+    FAIL [FLOOR] H4's antecedent never held: no offered request was ever pending
+                 while a change was still gating
+
+*That is the honest form.* Same situation, same cause, and the task with the floor
+said "untested" while the two without said "failed".
+
+## The mechanism is unsound, and that is the real result
+
+**Gating the DUT-visible valid creates phantom transfers in any testbench that
+commits on ready or grant ALONE.**
+
+    v_ca06   for (t=0; ...) begin @(posedge clk); if (s_wready) break; end
+    v_ca05   if (push_gnt) begin              // R4: commit on req && gnt
+               granted = 1'b1; ref_q[tg].push_back(d); ref_count++;
+
+**v_ca05's own comment states the correct condition and the code checks the wrong
+one.** Both are correct today *only because neither testbench ever gates its own
+valid* — the third variety again, and now in the artefact the sweep was built to
+test.
+
+My patcher corrects `if (R) break;`. It does not match `if (R) begin`, so v_ca05
+ran uncorrected and produced `full=0 with 8 entries` — the reference model
+counting pushes the DUT never saw. **A pattern-matched correction to a pattern-matched
+defect keeps missing variants**, which is the same failure one level up.
+
+### What the mechanism should have been
+
+**The run that actually found D6 did not gate anything.** It slowed the
+responder's own beat advance — `RGAP` idle cycles between presenting beats — so
+the DUT and the testbench never disagreed about whether a transfer occurred.
+
+    gate the valid          creates valid/ready disagreement; unsound wherever a
+                            testbench commits on one side
+    delay the source's own  no disagreement possible; the testbench simply offers
+    advance                 later, which is what a slow master IS
+
+The sweep should be rebuilt on the second. That is a per-task edit to each
+responder rather than a generic gate, which is the cost I estimated at 1–2 hours
+per task and then tried to avoid with a generic mechanism.
+
+## What I would do next, for a decision rather than on my own
+
+1. **Rebuild on the delay-the-advance mechanism**, per task, and re-run the three
+   that are currently artefacts.
+2. **Exclude bounded clauses from perturbed runs**, or perturb below their bound —
+   `v_ca03`'s A4 at 2 and `v_nw02`'s X4 at 232 cannot share a run with a 9-cycle
+   gap. The alternative is a per-clause exclusion list, which is a scoring
+   decision and not mine.
+3. **The one substantive result so far is `v_ca06` clean at depth 9**, which is
+   three times the depth at which the old sticky D6 broke — evidence that the
+   narrowing was right, and the only positive result the run has produced.
