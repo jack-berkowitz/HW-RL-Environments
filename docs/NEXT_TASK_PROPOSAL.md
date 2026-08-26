@@ -235,3 +235,74 @@ liveness properties. The three tasks that discriminate nothing today are exactly
 the ones whose contracts are throughput and routing, and `d_nw01`'s fairness floor
 passes every submission. I would not build a fourth until one of the three
 existing ones is shown to discriminate.
+
+
+---
+
+# STEP 0 — ANCHOR AUDIT, RUN BEFORE ANY SPEC TEXT. `d_ai03` IS REFUTED.
+
+**The audit did the thing it exists for.** `d_ai03` is not buildable from
+`refs/idma` as vendored, and the reason is fatal at the boundary the proposal
+above named. Recorded rather than quietly re-scoped, because the proposal was
+committed and a reader should see what changed it.
+
+## The backend does not elaborate
+
+    verilator --lint-only --top-module idma_backend_rw_axi
+      MODMISSING: 'idma_legalizer_rw_axi'
+      MODMISSING: 'idma_transport_layer_rw_axi'
+
+**Neither module is vendored.** They exist only as Mako templates —
+`idma_legalizer.sv.tpl` with **96** template constructs and
+`idma_transport_layer.sv.tpl` with **120** — which require the `mario` generator
+to instantiate. `refs/idma/generated/` contains exactly one file, the backend
+top, and its two generated children were not vendored with it.
+
+**Those two modules are the task.** Legalization *is* the alignment and
+page-splitting arithmetic; the transport layer *is* the AXI datapath. Every
+mechanism the proposal argued for lives in the two files that are absent.
+
+## Why generating them is not a repair
+
+`mario` would produce them, and `refs/idma/generated/idma_backend_rw_axi.sv`
+shows generation is an accepted step for this vendor. But a module generated
+**by me** is not a vendored anchor — it is a reference I produced, which is a
+different oracle class and a different provenance claim. `refs.lock` is frozen
+and `refs.manifest.yaml` is not mine. That is a decision, not a step.
+
+## Second refutation at the same anchor
+
+The proposal already recorded the first: the **ND midend is absent**, so 2D/3D
+striding is unreachable. This is the second, and it removes the 1D fallback the
+retarget rested on. **Two refutations at one anchor is enough** — `d_ai03` is not
+buildable from `refs/idma` as vendored, at any boundary that constitutes a DMA.
+
+What remains vendored is a set of protocol-adapter leaves. `idma_axi_write.sv`
+(294 lines) does carry mechanism A —
+
+    assign w_first_mask = '1 << w_dp_req_i.offset;
+    assign w_last_mask  = '1 >> (StrbWidth - w_dp_req_i.tailer);
+
+— so a much smaller task exists there. But an adapter leaf is not the DMA the row
+describes, and the compositions that would make it one are the missing files.
+
+## The replacement was audited before being recommended
+
+Not repeating the mistake one paragraph later:
+
+    verilator --lint-only --top-module store_buffer
+      MODMISSING: 0        <- every module resolves
+      20 x %Error-UNSUPPORTED, all of the form
+         "'1 << w_dp_req_i.offset"  -- unbound parameter TYPES at standalone lint
+
+**The distinction is the whole point.** `idma` is missing entire modules, which no
+shim can supply. `store_buffer` is missing **parameter bindings**, which is
+exactly what a shim provides — the same condition `d_nw01` and `d_ca03` were in
+before their shims were written. `idma_axi_write` shows the identical error class,
+which is why its 39 errors are not evidence against it either.
+
+**Recommendation: `d_ca02`'s `store_buffer` boundary becomes the proposal, on the
+scope already written above.** Its premise refutation stands — there is no
+violation detector and no replay — so the task is store-to-load forwarding and
+conservative hazard stalling, with the 9-bit approximate match as the latitude
+question.
