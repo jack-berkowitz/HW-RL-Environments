@@ -17,10 +17,25 @@ catalog: TASK_CATALOG.md
 # reference, and can share a misreading with it. That is breadth, not oracle.
 oracle_class: A
 oracle_note: >
-  Captured-vector oracle, not co-simulation. The anchor table is ground truth
-  for the CONTRACT; the sweep is coverage for the IMPLEMENTATION. The testbench
-  header says which is which so a reader does not treat 844 checks as 844
-  independent confirmations.
+  THE SCORING RIG IS A CAPTURED-VECTOR ORACLE, not co-simulation. Its 44 anchor
+  words are ground truth for the CONTRACT; its 800 swept words are coverage for
+  the IMPLEMENTATION, checked against a model by the same author as the
+  reference. The testbench header says which is which so a reader does not treat
+  844 checks as 844 independent confirmations.
+
+  SEPARATELY, tb/audit/sdp_requant_xcheck_tb.sv DOES co-simulate: it runs the
+  vendored NV_NVDLA_SDP_CORE_Y_cvt beside the reference and compared 1728 words
+  with 0 differences, over 60 random integer configurations, 40 float
+  configurations steered at the exponent corners, and every binary16 exponent.
+  That is the strong claim -- the reference agrees with RTL nobody here wrote on
+  inputs nobody chose in advance. It is an AUDIT rig and is NOT in the scored
+  path: submissions are graded by tb/sdp_requant_tb.sv alone.
+
+  The cross-check was validated against the controls before its zero was
+  believed: nc_a 832 differing words, nc_e 194, nc_f 121, nc_b 6. It reports 0
+  for nc_i_stale_config and that is correct rather than a gap -- it drains
+  between configuration changes, so it cannot see an A5 violation by
+  construction. See CONTROLS.md.
 
 reference:
   refs_lock_repo: nvdla/hw

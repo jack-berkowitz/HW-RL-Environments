@@ -56,3 +56,55 @@ around it.
 cycle a second word arrives. On open flow it is byte-identical to the reference.
 That is the "invisible on the delivered surface" claim from the step-0 audit,
 now demonstrated rather than asserted.
+
+# The cross-check against the anchor, and what validating it revealed
+
+`tb/audit/sdp_requant_xcheck_tb.sv` runs the **real NVDLA RTL beside the
+reference** on identical stimulus and compares the delivered word sequences —
+60 random integer configurations, 40 float configurations steered at the
+exponent corners, and an exhaustive sweep over all 32 binary16 exponents.
+
+    reference vs anchor:   1728 words compared,  0 differing
+
+That upgrades the sweep's authority. `task.yaml` records that the scoring rig's
+800 swept words are checked against *a model by the same author as the
+reference*; these 1728 are checked against RTL nobody here wrote, on inputs
+nobody chose in advance.
+
+## The rig was validated before its zero was believed
+
+A cross-check reporting zero differences is the same shape as a clean lint or an
+empty log — it can mean agreement or it can mean the rig is not looking. So it
+was run against the controls:
+
+| source | differing words of 1728 |
+|---|---|
+| *(reference)* | **0** |
+| `nc_a_add_offset` | 832 |
+| `nc_e_flush_subnormals` | 194 |
+| `nc_f_propagate_inf` | 121 |
+| `nc_b_round_half_up` | **6** |
+| `nc_i_stale_config` | **0** — see below |
+
+## Two of those numbers are worth more than the verdict
+
+**`nc_b` differs on 6 words out of 1728.** Round-half-up versus ties-away can
+only diverge on an exact tie, and exact ties are vanishingly rare in random data:
+1728 words × 4 lanes is nearly 7,000 lanes, and six of them landed on one. **A
+purely random sweep would have missed this defect most of the time.** That is the
+argument for the five *directed* negative-tie vectors in the scoring rig, made
+quantitatively rather than by assertion — they catch in five vectors what random
+stimulus catches in six lanes out of seven thousand.
+
+**`nc_i_stale_config` differs on 0, and that is correct rather than a gap.** The
+cross-check drains both units fully between configuration changes, so no
+configuration is ever in flight while it changes — which is precisely the
+condition `nc_i`'s defect needs. This rig cannot see A5 violations *by
+construction*, and T6 in the scoring rig is what covers them. Recorded here so a
+later reader does not take this zero as evidence that `nc_i` is benign; the
+scoring rig fails it on 23 checks.
+
+**What the cross-check does not check at all:** flow control. The anchor holds
+three words behind a stalled consumer and the reference holds two — both conform
+(A4, G4) — so their cycle behaviour legitimately differs and only value
+sequences are compared. T5 and `tb/audit/probe_capacity_tb.sv` cover that.
