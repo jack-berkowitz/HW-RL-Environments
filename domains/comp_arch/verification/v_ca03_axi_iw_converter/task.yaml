@@ -456,3 +456,29 @@ exclusivity_is_dated:
     it as "exclusive with respect to the checks this task had on that date".
     This one was measured on the day D5 and A5's checkers were added, which is
     the least stale it will ever be and still not a permanent claim.
+
+grouping_declared:
+  date: 2026-08-25
+  convention: >
+    A clause whose observation is shared names, IN ITS OWN TEXT, the id that
+    reports it: "... is reported under X". check_clause_emittable.py reads that
+    as a declaration and VERIFIES the named id is emittable -- a clause annotated
+    into a hole reads as resolved and is worse than one left silent.
+  declared: A2 -> D1, B1 -> E1, B3 -> E1, C1 -> C2
+  effect: >
+    It records grouping honestly; it does not remove it. A submission checking
+    the named id is still credited with this clause. What changes is that the
+    credit is VISIBLE, so scoring can decide deliberately instead of the grouping
+    being found by someone reading a failure message and noticing the wrong
+    letter.
+  not_annotated_and_why: >
+    D2 is UNCHECKED: D1 catches a master identifier serving two slave ids at
+    once, but D2's own case -- reuse after the first stops being outstanding
+    and before it retires under A4 -- has no check. The clause text already
+    said why it was called out separately.
+    F1 is worse than unchecked. `rst_n` is assigned twice in the whole
+    testbench: 0 at declaration and 1 at line 407. RESET IS NEVER ASSERTED
+    MID-RUN, there is no F-clause fail(), and no mutant touches reset. F1's
+    substantive half -- no transaction outstanding before reset shall produce
+    a response afterwards -- is neither instrumented nor exercised.
+  hash_moved_for_this: true

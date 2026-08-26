@@ -2873,3 +2873,78 @@ does not remove it. C1 is still credited under Q1, and a submission that checks
 Q1 is still credited with C1. What changes is that the credit is *visible* and
 the scoring can decide deliberately, instead of the grouping being discovered by
 someone reading a failure message and noticing the wrong letter.
+
+
+---
+
+## The grouping remedy, applied to two tasks and made checkable
+
+**Annotation landed on `v_ca06` and `v_ca03` — the two tasks whose hashes were
+already moving this week, so the convention cost nothing marginal to exercise.**
+
+    v_ca06   C1 -> C4, C2 -> C4                    candidates 7 -> 5
+    v_ca03   A2 -> D1, B1 -> E1, B3 -> E1, C1 -> C2  candidates 9 -> 5
+    hashes   6cb14e9d2e6381ac -> ae29e2161468aeff
+             fc1baef44b90f91c -> fa23813e5874ef92
+    both suites re-run: ACCEPTED, 12/12 and 11/11
+
+`check_clause_emittable.py` now reads *"reported under X"* as a **declaration and
+verifies it**: the named id must itself be emittable. A clause annotated into a
+hole reads as resolved and is worse than one left silent. Declaration self-test
+7/7, tool self-test 5/5.
+
+### What is NOT annotated, and why that matters more than what is
+
+Annotation is for clauses that ARE reported, elsewhere. It is not a way to make
+an unchecked clause look handled:
+
+- **v_ca06 F1, F2, F3** — phase L asserts reset, releases, waits four cycles, and
+  then nothing follows. They need an instrument.
+- **v_ca03 D2** — D1 catches a master identifier serving two slave ids at once.
+  D2's own case — reuse after the first stops being outstanding and before it
+  retires under A4 — has no check. The clause text already said why it was called
+  out separately; nothing acted on it.
+- **v_ca03 F1**, and this is the worst thing in this section:
+
+      $ grep -nE "rst_n *(=|<=)" tb/id_width_conv_spec_tb.sv
+      34:  logic clk = 0, rst_n = 0;
+      407:    @(negedge clk) rst_n = 1;
+
+  **Reset is never asserted mid-run.** No F-clause `fail()` exists and no mutant
+  touches reset. F1's substantive half — *no transaction outstanding before reset
+  shall produce a response afterwards* — is neither instrumented nor exercised.
+  Two of my tasks now have an uninstrumented reset clause, which makes it a
+  habit rather than an oversight.
+
+### The founding case is not in the candidate list, so the tool grew a second mode
+
+Subtracting emittable from stated cannot find `D6`/`D7`: **both were nameable**.
+They shared one branch, and a submission checking precedence was credited with
+checking code preservation. `--shared` scans `begin`/`end` blocks and reports
+every innermost block emitting two or more distinct clause ids:
+
+    v_ca06   C4 + D1 + D3 + D4 + D5 + D6 + D7
+             D1 + D5 + D6 + D7          <- the founding trio, inside it
+             B1 + B2 + B3 + B4
+    ...
+    42 shared block(s) across the corpus
+
+**It over-reports and the header says so.** A large outer block is one `begin`,
+not one observation, and two ids sitting together may be two independent checks.
+It is a candidate list in the same sense as the rest of the tool. What it cannot
+do is *miss the shape*, which subtracting sets provably can.
+
+Two rows are worth pulling out because they show both signs:
+
+- **`v_nw04  I1 + W1`** is a *deliberate and documented* disambiguation. The
+  testbench's own comment reads: *"Naming I1 would send a reader looking at the
+  arithmetic; the clause actually broken is W1."* Someone met this exact problem
+  and solved it in place. That is what a resolved shared observation looks like.
+- **`v_nw04  A4 + S3`** is mine, added yesterday. Both clauses are about
+  `ts_step_o` and they genuinely share the observation. The enumerator caught my
+  own new code on its first run, which is the only reason I would believe it.
+
+**42 blocks is the population to work, and it is nine times the size of what I
+enumerated by hand.** The hand pass found 16 grouped clauses among 44
+*candidates*; the shared-block scan says the real population is elsewhere and
+larger, exactly as the founding case predicted.
