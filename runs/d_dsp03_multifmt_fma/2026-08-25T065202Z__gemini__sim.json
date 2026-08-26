@@ -1,0 +1,12 @@
+{
+  "build_error": "2 error(s); first: sanitised_gemini.sv:261:70: error: expected 'endfunction' ",
+  "build_status": "slang_rejected",
+  "git_sha": "84fa595e75fcd0303544528e41fe259b133a864a-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_dsp03/gemini.sv",
+  "submission_sha256_16": "6486b2e87c5ba6cf",
+  "task": "d_dsp03_multifmt_fma",
+  "task_text_hash": "62ca0ac68332c76d",
+  "timestamp_utc": "2026-08-25T06:52:02Z"
+}
