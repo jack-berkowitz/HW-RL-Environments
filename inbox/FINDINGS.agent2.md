@@ -3559,49 +3559,99 @@ if we had kept it.
 
 ---
 
-## FINDING — I destroyed 162 committed lines with a truncating edit, and the file GREW
+## FINDING — a verification anchored to the wrong baseline verifies nothing
 
-**`f4782a2` deleted the timing-sweep scoping and the closing read. Both were
-committed at `67db1c9`. Nothing signalled it for six commits.**
+**My per-blob `cmp` check passed on the commit that destroyed 162 lines. It
+passed because the working tree was already wrong.**
+
+Every commit this week ended with:
+
+    git cat-file blob "HEAD:$f" | cmp -s - "$f"  &&  echo ok
+
+and it printed `ok` on `f4782a2`, the commit that deleted an entire scoping
+section and a closing read.
+
+> **A check that confirms the commit matches what you wrote cannot tell you
+> whether what you wrote preserved what was there.** The baseline is the working
+> tree, and the working tree is downstream of the mistake.
+
+That is the same shape as the pathspec false empty — a command reporting nothing
+to do, because the thing it was asked about was not the thing that mattered —
+**one layer up**: there, the query was wrong; here, the *reference point* is. In
+both, the check is correct, runs, and returns a true answer to a question that
+was not the one being asked.
+
+The general form, and it is not about `git`:
+
+    verification anchored to        what it actually proves
+    ------------------------------  -------------------------------------------
+    the working tree                the commit is faithful to my last edit
+    the previous commit             my edit did what I meant
+    nothing                         (the case where a check reads one number
+                                     and compares it to no other)
+
+**Only the middle row is a check on the change.** I had the first and believed I
+had the second.
+
+## FINDING — the seventh instance: the artefact was DESTROYED, and the file GREW
+
+Six instances this week were things mismeasured. **This one is the first where a
+committed artefact was destroyed**, and its mechanism is new.
 
 ### What happened
 
-The `--shared` unit correction replaced one section:
+The `--shared` unit correction meant to replace one section:
 
-    old = t[t.index("### The founding case ..."):]
-    open(p,"w").write(t[:t.index("### The founding case ...")] + new)
+    open(p, "w").write(t[:t.index("### The founding case ...")] + new)
 
-`t[index:]` takes the heading **to end of file**. I intended to replace one
-section and replaced *everything after it*. Two whole sections were collateral:
+`t[index:]` takes that heading **to end of file**. One section was replaced and
+everything after it was collateral: the whole timing-sweep scoping and the
+closing read, both committed six commits earlier at `67db1c9`.
 
-    ## SCOPING -- the timing-axis sweep, costed before building     (5 subsections)
-    ## THE STATE OF THE APPARATUS, written down while it is true
-
-### Why nothing caught it
+### Why six commits of checks said nothing
 
 **The file grew.** 3081 lines at `67db1c9`, 3557 at HEAD — I appended more in the
-six commits after the truncation than I had destroyed, so every size check, every
-`git diff --stat`, and every glance at the tail looked healthy.
+following six commits than I had destroyed.
 
-- `check_linkage_tree.sh` passed on every one of those commits. It checks the
-  rule/finding graph, not that content survives.
-- `cmp`-verifying each blob against the working tree passed. **The working tree
-  was already wrong** — the verification confirms the commit matches what I
-  wrote, not that what I wrote preserved what was there.
-- The two lost sections were the *tail* of the file, so nothing downstream broke.
+| check | verdict on `f4782a2` | why it could not see it |
+|---|---|---|
+| `git diff --stat` | healthy, large insertion | insertions and deletions net out and only the sum is read |
+| line count | rising | growth masks the loss completely |
+| reading the tail | fine | the destroyed sections *were* the tail; what replaced them read as the end of the file |
+| `check_linkage_tree.sh` | pass | it checks the rule/finding graph, not that content survives |
+| per-blob `cmp` | pass | see the finding above — wrong baseline |
 
-> **A destructive edit that is followed by growth is invisible to every check
-> that looks at size, at the diff summary, or at the end of the file.** The only
-> thing that would have caught it is a diff of the SECTION LIST, which nothing
-> here does.
+> **A destructive edit followed by growth is invisible to every check that looks
+> at size, at the diff summary, or at the end of the file.**
 
-### It was found by the user asking whether a thing was filed
+### Found by being asked whether a thing was filed
 
-Not by a tool, not by a review, not by me. The scoping had been reported as
-delivered and was not in the file. **That is the seventh instance of the week's
-class and the first where the artefact was destroyed rather than mismeasured** —
-and it is the same tell: I compared a number (line count, diff stat) to nothing,
-instead of comparing the artefact to what it had been.
+Not by a tool, not by a review, not by me. The scoping had been **reported as
+delivered** and was not in the file. Seventh instance of the week's class, same
+tell as the other six: a number compared to nothing, instead of an artefact
+compared to what it had been.
+
+### The guard, landed: `check_append_only.py`
+
+    section count before   42
+    section count after    40      <- the only number that moved the wrong way
+
+`inbox/check_append_only.py.for-scripts`. Self-test 7/7. Run against the five
+append-only shared documents — `CONVENTIONS.md`, `RULES.md`, `FINDINGS.md`,
+`TASK_CATALOG.md`, `inbox/FINDINGS.agent2.md` — all clean. Run retroactively
+against `f4782a2` it **refuses and names all seven lost headings.**
+
+**A renamed heading is a refusal, not an exemption.** Renaming is
+indistinguishable from delete-plus-add in the text, so `--allow-drop` takes the
+exact heading on the command line, where the decision is visible in a shell
+history and a commit message rather than inferred.
+
+**What it does not catch, stated in its header:** content deleted from *inside* a
+section, leaving the heading. It checks the section list, not the sections. It
+would have caught `f4782a2`; it would not catch a truncation stopping one line
+after a heading. The stronger check is a per-section byte count and it costs a
+policy decision — sections legitimately shrink when prose is tightened — which
+this one does not.
 
 ### Restored verbatim from `67db1c9` below
 
@@ -3858,3 +3908,64 @@ The last clause is the one that generalises past this week. The setup-role
 mechanism and the clause-count mechanism were both perfectly good *descriptions*
 of the instances that produced them. Neither made a prediction its author could
 not already see, until someone went looking for the row that would break it.
+
+
+---
+
+## FINDING — the remedy is not better guards. It is that a guard does not record why it is correct
+
+**The guards are fine. Two of the three were right and the third failed in the
+safe direction. What none of them does is say WHY it is right, so nobody can
+tell when the reason stops holding.**
+
+    the guard              (?<![\w.]) before the signal name
+    the reason I wrote it  to stop dut.rst_n matching
+    the reason it works    it also excludes burst, first_fail, agg_bursts,
+                           max_burst_seen, multi_beat_bursts, cov_burst_gt1
+    what would break it    a signal genuinely named arst or wrst
+
+**The middle two lines differ, and only the first is written down anywhere.**
+
+> **A guard whose stated reason is narrower than its actual coverage will be
+> widened or deleted by someone who reads the stated reason.** Somebody
+> refactoring that scan sees a lookbehind justified by `dut.rst_n`, observes that
+> no hierarchical reference appears in the file any more, and removes it. Sixteen
+> spurious matches return, in four tasks, silently.
+
+### `settle` is the same failure, already in this file
+
+`v_nw04`'s `settle` carries a comment recording a real correction to its
+**value**: *"It was 20 — an allowance the reference took and the submission was
+not given, which is not a fair measurement."* Somebody looked hard at that
+variable and fixed a genuine defect in it.
+
+**What they were not looking at was what the suppression window contained**, and
+S1/S2 sat unexercised inside it for the life of the task. The field was audited;
+the field's *scope* was not, because the comment recorded the value and not the
+reach.
+
+Same structure: **a note that documents one property of a mechanism reads as
+documentation of the mechanism**, and the undocumented property is the one that
+fails.
+
+### The convention
+
+> **A guard states the case it excludes and the case it was written for, and
+> where those differ, says so.**
+
+Three lines, at the guard:
+
+    // excludes:      a substring match -- burst, first_fail, agg_bursts
+    // written for:   dut.rst_n, a hierarchical reference
+    // NOT THE SAME:  removing this because no hierarchical reference remains
+    //                would re-admit 16 substring matches across four tasks
+
+The third line is the whole convention. **Where the two coincide, one line does;
+where they diverge, the divergence is the thing worth writing**, because it is
+exactly what a future reader cannot reconstruct and exactly what makes the guard
+look removable.
+
+It costs a comment. It is cheaper than every instrument in this file, and it
+addresses the one failure mode none of them can see: not a guard that is wrong,
+but a guard that is right for a reason nobody recorded, on a corpus that has not
+changed yet.
