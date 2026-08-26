@@ -167,3 +167,35 @@ and the anchor was right both times:
 Neither changes a clause. They are recorded because the same arithmetic produced
 the predictions in the evidence table above, and a reader is entitled to know
 the error rate of the hand that wrote them.
+
+## Float-mode edges, measured before the spec was written
+
+`Not measured` above listed *"the fp16 subnormal boundary"*. A spec clause
+covering a case nobody measured is the d_dsp01 failure with extra steps, so
+probe 8 pinned them first. All fifteen vectors carry a transfer count.
+
+| case | in | out | reading |
+|---|---|---|---|
+| ±zero | `0x0000` / `0x8000` | `0x00000000` / `0x80000000` | signed zero preserved |
+| smallest subnormal | `0x0001` | **`0x33800000`** | 2⁻²⁴ **exactly** — not flushed |
+| mid subnormal | `0x0200` | `0x38000000` | exact |
+| largest subnormal | `0x03FF` | `0x387FC000` | exact |
+| negative subnormal | `0x8001` | `0xB3800000` | exact, sign preserved |
+| smallest normal | `0x0400` | `0x38800000` | 2⁻¹⁴ |
+| largest normal | `0x7BFF` / `0xFBFF` | `0x477FE000` / `0xC77FE000` | ±65504 |
+| infinity | `0x7C00` / `0xFC00` | `0x7F7FFFFF` / `0xFF7FFFFF` | **±FLT_MAX, symmetric** |
+| NaN | `0x7E00` / `0x7C01` / `0xFE00` | `0x7F800200` / `0x7F800001` / `0xFF800200` | `{sign, 8'hFF, 13'b0, mant[9:0]}` |
+| NaN, `nan_to_zero` | `0x7E00` / `0xFE00` | `0x00000000` / `0x00000000` | both signs zeroed |
+| inf, `nan_to_zero` | `0x7C00` | `0x7F7FFFFF` | **unaffected** — inf is not NaN |
+
+**The subnormal result is a second derived quantity**, alongside the exact
+product of F5. Every binary16 subnormal is a *normal* binary32 value, so an
+implementation that shuffles the exponent and mantissa fields across is wrong:
+the mantissa must be normalised and the exponent adjusted by the leading-zero
+count. A field-copying converter passes every normal value and fails only in the
+ten subnormal exponents.
+
+That is now clause F7 in `spec/sdp_requant_iface.sv`, and it was not in the
+landscape's mechanism list — which named four mechanisms, of which measurement
+refuted one, rewrote one, and missed both of the derived quantities that make
+this task worth setting.
