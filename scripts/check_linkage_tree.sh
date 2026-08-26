@@ -221,9 +221,26 @@ case "${1:---staged}" in
     # Wired here rather than left sitting in scripts/ because F96 counted
     # nineteen checkers and two reachable from a scored run. A tool is not wired
     # by living in the tools directory, and three of the unwired ones were mine.
-    if [ -f "$REPO/scripts/check_append_only.py" ]; then
-      if ! ao="$(cd "$REPO" && python3 scripts/check_append_only.py --staged \
-            FINDINGS.md RULES.md CONVENTIONS.md TASK_CATALOG.md 2>&1)"; then
+    # A MISSING DEPENDENCY IS A REFUSAL, NOT A SKIP. This was
+    # `if [ -f ... ]; then` with NO else, so a clone where nobody landed the
+    # script and a clone where the check ran and passed printed byte-identical
+    # `ok`. That is the defect this whole file is about -- declaring nothing,
+    # refusing nothing -- sitting inside the guard whose own header carries the
+    # anchoring table. Found by AGENT-DESIGN-43a92055.
+    if [ ! -f "$REPO/scripts/check_append_only.py" ]; then
+      echo "NO CONCLUSION -- scripts/check_append_only.py is not present, so the"
+      echo "append-only invariant was NOT checked. That is not the same as clean."
+      echo "Restore it, or say explicitly that you are proceeding without it."
+      exit 2
+    fi
+    # NO FILENAMES HERE, DELIBERATELY. The list used to be four names written
+    # inline on this line, and it went stale silently: docs/ documents and every
+    # MEASUREMENTS.md were outside it, so their appends passed only when someone
+    # ran the checker by hand. The set is declared in check_append_only.py, next
+    # to the code that says what append-only means, and adding a document is a
+    # one-line edit there rather than a change to this caller.
+    if true; then
+      if ! ao="$(cd "$REPO" && python3 scripts/check_append_only.py --staged 2>&1)"; then
         echo "APPEND-ONLY REFUSED, on the tree the index would commit:"
         printf '%s\n' "$ao" | sed 's/^/  /'
         echo
