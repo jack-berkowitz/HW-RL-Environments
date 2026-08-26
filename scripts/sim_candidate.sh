@@ -78,6 +78,7 @@ CAND_ARG="${2:?missing candidate .sv or directory}"
 # process hangs in infinite recursion with no output. Names reserved by the
 # wrapper and unusable here: VERILATOR_BIN, VERILATOR_ROOT, VERILATOR_GDB,
 # VERILATOR_VALGRIND, VERILATOR_TEST_FLAGS.
+VERILATOR_MIN_EXPLICIT="${VERILATOR_MIN+yes}"
 VERILATOR_MIN="${VERILATOR_MIN:-5.046}"
 if [ -n "${SIM_VERILATOR_EXE:-}" ]; then
   :
@@ -94,13 +95,26 @@ _vnum () { echo "$1" | grep -oE '[0-9]+\.[0-9]+' | head -1; }
 if [ -z "$VERILATOR_VERSION" ]; then
   echo "REFUSED: no verilator found. Set SIM_VERILATOR_EXE." >&2; exit 2
 fi
-_have="$(_vnum "$VERILATOR_VERSION")"; _need="$(_vnum "$VERILATOR_MIN")"
-if [ "$(printf '%s\n%s\n' "$_need" "$_have" | sort -V | head -1)" != "$_need" ]; then
-  echo "REFUSED: $SIM_VERILATOR_EXE is $VERILATOR_VERSION; this repo requires >= $VERILATOR_MIN." >&2
-  echo "  5.032 cannot compile refs/cvfpu (BLKANDNBLK at fpnew_fma.sv:111) and will" >&2
-  echo "  report a WORKING reference as failing. A sim result from it is not a result." >&2
-  echo "  Set SIM_VERILATOR_EXE to a newer binary, or VERILATOR_MIN if you have measured one." >&2
-  exit 2
+# THE VERSION FLOOR NO LONGER REFUSES HERE, AND THAT IS THE POINT. This block
+# runs before the task is resolved (the case at "$TASK_NAME" is ~100 lines below),
+# so at this moment the script does not know WHICH task was asked for, let alone
+# whether that task reads the sources the hazard lives in. A gate that cannot see
+# what it is guarding can only guard everything -- which is why d_ai04, whose
+# closure is one file with no vendored modules, was refused for a cvfpu defect
+# that could not reach it.
+#
+# The real question is asked twice, later and narrowly, at "TOOLCHAIN CAPABILITY":
+#   1. does THIS build's closure actually read refs/cvfpu or refs/redmule?
+#   2. if so, can THIS binary compile it -- asked of the compiler, not of a number?
+#
+# VERILATOR_MIN is kept as an explicit hard floor for anyone who wants one, but it
+# is no longer consulted unless it was set deliberately in the environment.
+if [ -n "${VERILATOR_MIN_EXPLICIT:-}" ]; then
+  _have="$(_vnum "$VERILATOR_VERSION")"; _need="$(_vnum "$VERILATOR_MIN")"
+  if [ "$(printf '%s\n%s\n' "$_need" "$_have" | sort -V | head -1)" != "$_need" ]; then
+    echo "REFUSED: $SIM_VERILATOR_EXE is $VERILATOR_VERSION; VERILATOR_MIN=$VERILATOR_MIN was set explicitly." >&2
+    exit 2
+  fi
 fi
 export PATH="$(dirname "$SIM_VERILATOR_EXE"):$PATH"
 export VERILATOR_VERSION
@@ -356,6 +370,63 @@ if [ -f "$FLAGFILE" ]; then
     case "$line" in ''|\#*) continue ;; esac
     EXTRA+=("${line//%REPO%/$REPO}")
   done < "$FLAGFILE"
+fi
+
+# --- TOOLCHAIN CAPABILITY, CHECKED AGAINST THIS BUILD'S ACTUAL CLOSURE --------
+# The two narrow questions the old global version floor could not ask, because it
+# ran before the task was known. See the note at VERILATOR_MIN.
+#
+#   1. does THIS build's closure actually read refs/cvfpu or refs/redmule?
+#   2. if so, can THIS binary compile them?
+#
+# Question 1 is a PROPERTY OF THE BUILD, read out of EXTRA, not a list of task
+# names. A hardcoded list would be right today and wrong the first time a task
+# gains a vendored dependency, and this repo already carries that mistake in
+# several places -- identify-by-enumeration is how d_ai04 got refused for a
+# hazard it cannot reach.
+#
+# WHY A PROBE AND NOT A NUMBER. The floor was 5.051, then 5.046, hand-edited each
+# time somebody measured a lower version that worked, while 5.033..5.045 were
+# never measured and were refused on no evidence whatsoever. A version string is
+# a proxy for "can this toolchain compile this closure"; the compiler answers the
+# real question for the cost of one lint, and keeps answering it correctly for
+# versions nobody has measured yet.
+#
+# WHY rc IS NOT THE SIGNAL. Linting cvfpu on a GOOD toolchain exits 1: ASCRANGE
+# warnings in fpnew_pkg.sv are fatal by default, measured at 5.046 with 185 lines
+# of output and zero BLKANDNBLK. The hazard is BLKANDNBLK specifically, so that
+# is what is matched. Do NOT add -Wno-fatal or -Wno-lint here -- they suppress
+# the very diagnostic this probe exists to find, and it would then pass on 5.032.
+if [ "$SIM" = "verilator" ] \
+   && printf '%s\n' ${EXTRA[@]+"${EXTRA[@]}"} | grep -qE 'refs/(cvfpu|redmule)'; then
+  _probe_pkg="$REPO/refs/cvfpu/src/fpnew_pkg.sv"
+  _probe_src="$REPO/refs/cvfpu/src/fpnew_fma.sv"
+  if [ -f "$_probe_pkg" ] && [ -f "$_probe_src" ]; then
+    # Cached per (toolchain version, probe-file bytes): one lint per toolchain,
+    # not one per run. A changed vendored file re-measures on its own.
+    _probe_key="$(printf '%s' "$VERILATOR_VERSION" | tr -c 'A-Za-z0-9.' '_')_$(shasum -a 256 "$_probe_src" 2>/dev/null | cut -c1-16)"
+    _probe_cache="${TMPDIR:-/tmp}/hwrl_cvfpu_probe_${_probe_key}"
+    if [ -f "$_probe_cache" ]; then
+      _probe_bad="$(cat "$_probe_cache")"
+    else
+      if verilator --lint-only -Wno-style \
+           +incdir+"$REPO/refs/cvfpu/src" +incdir+"$REPO/refs/common_cells/include" \
+           "$_probe_pkg" "$_probe_src" 2>&1 | grep -q 'BLKANDNBLK'; then
+        _probe_bad=1
+      else
+        _probe_bad=0
+      fi
+      printf '%s' "$_probe_bad" > "$_probe_cache" 2>/dev/null || true
+    fi
+    if [ "$_probe_bad" = "1" ]; then
+      echo "REFUSED: $SIM_VERILATOR_EXE ($VERILATOR_VERSION) reports BLKANDNBLK on" >&2
+      echo "  $_probe_src, and $TASK_NAME's closure reads refs/cvfpu or refs/redmule." >&2
+      echo "  It would report a WORKING reference as failing, so a sim result from it" >&2
+      echo "  is not a result. Set SIM_VERILATOR_EXE to a binary that compiles it." >&2
+      echo "  Probe cached at $_probe_cache -- delete it to re-measure." >&2
+      exit 2
+    fi
+  fi
 fi
 
 echo "task=$TASK_NAME  dut=$DUT_MOD  sim=$SIM  configs=${#CFGS[@]}  candidates=${#CANDS[@]}${EXTRA:+  extra_flags=${#EXTRA[@]}}"
@@ -809,7 +880,16 @@ for cand in "${CANDS[@]}"; do
   # CLASS NAMES makes a NEW class visible without burying the verdict. That is
   # the cheapest form of the fix and it closes most of the gap.
   WARNTOTAL=$(awk '{n+=$1} END{print n+0}' "$RAW_DIR/_warn_counts" 2>/dev/null)
-  WARNCLASSES="$(tr ',' '\n' < "$RAW_DIR/_warn_classes" 2>/dev/null | grep -v '^$' | sort -u | paste -sd, - 2>/dev/null)"
+  # THE `cat` IS LOAD-BEARING; DO NOT "SIMPLIFY" IT BACK TO `tr ... < file`.
+  # _warn_classes legitimately does not exist when no config emitted a warning
+  # class, and a shell INPUT REDIRECT that fails is reported by bash itself,
+  # before the command runs -- so the command's own 2>/dev/null never applies and
+  # the error is printed anyway. That put
+  #   sim_candidate.sh: line NNN: .../_warn_classes: No such file or directory
+  # into every sim log of a clean run. The record was always correct (WARNCLASSES
+  # ends up empty either way); only the log was alarming. Redirecting cat's
+  # stderr works because cat is a command, not a redirect.
+  WARNCLASSES="$(cat "$RAW_DIR/_warn_classes" 2>/dev/null | tr ',' '\n' | grep -v '^$' | sort -u | paste -sd, -)"
   LOOPSEEN=$(grep -c . "$RAW_DIR/_unoptflat" 2>/dev/null || echo 0)
   NBUILT=$(grep -c . "$RAW_DIR/_warn_counts" 2>/dev/null || echo 0)
   NNOBUILD=$(grep -c . "$RAW_DIR/_nobuild" 2>/dev/null || echo 0)
