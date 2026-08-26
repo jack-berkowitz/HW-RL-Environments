@@ -350,9 +350,27 @@ run_one() {
       # variable set here is invisible to the caller. The same reason the raw
       # per-config output is written to RAW_DIR rather than returned. Stats go
       # to files beside it, for the caller to total.
-      echo "$NWARN" >> "$RAW_DIR/_warn_counts"
-      [ -n "$WCLASSES" ] && echo "$WCLASSES" >> "$RAW_DIR/_warn_classes"
-      [ "${NLOOP:-0}" -gt 0 ] && echo 1 >> "$RAW_DIR/_unoptflat"
+      # ZERO WARNINGS FROM A BUILD THAT NEVER HAPPENED IS NOT A CLEAN BUILD.
+      # This counted unconditionally, so a submission whose configs all died at
+      # elaboration reported `warnings=0` -- byte-identical to a build that
+      # compiled and had nothing to say.
+      #
+      # AGENT-DESIGN-43a92055 nearly published exactly that number while
+      # DEMONSTRATING this class of defect: their first two loop builds printed
+      # "UNOPTFLAT lines: 0" from builds that had failed with MODMISSING. They
+      # caught it by checking whether a `sim` binary existed. The instrument
+      # built to demonstrate vacuity committed one on its first two runs, and the
+      # same hole was already here.
+      #
+      # Counts are now attributed to configs that PRODUCED A BINARY, and the
+      # configs that did not are reported separately rather than averaged in.
+      if [ "$out" = "COMPILE_ERROR" ]; then
+        echo 1 >> "$RAW_DIR/_nobuild"
+      else
+        echo "$NWARN" >> "$RAW_DIR/_warn_counts"
+        [ -n "$WCLASSES" ] && echo "$WCLASSES" >> "$RAW_DIR/_warn_classes"
+        [ "${NLOOP:-0}" -gt 0 ] && echo 1 >> "$RAW_DIR/_unoptflat"
+      fi
     fi
     printf '%s\n' "$out" > "$RAW_DIR/${tag}.txt"
     v="$(echo "$out" | grep -oE 'TEST_RESULT: (PASS|FAIL)' | head -1 | awk '{print $2}')"
@@ -675,9 +693,17 @@ for cand in "${CANDS[@]}"; do
   WARNTOTAL=$(awk '{n+=$1} END{print n+0}' "$RAW_DIR/_warn_counts" 2>/dev/null)
   WARNCLASSES="$(tr ',' '\n' < "$RAW_DIR/_warn_classes" 2>/dev/null | grep -v '^$' | sort -u | paste -sd, - 2>/dev/null)"
   LOOPSEEN=$(grep -c . "$RAW_DIR/_unoptflat" 2>/dev/null || echo 0)
-  printf '  compile: warnings=%s%s%s\n' "${WARNTOTAL:-0}" \
-    "${WARNCLASSES:+ classes=$WARNCLASSES}" \
-    "$([ "${LOOPSEEN:-0}" -gt 0 ] && echo "  *** COMBINATIONAL LOOP warning in ${LOOPSEEN} config(s) ***")"
+  NBUILT=$(grep -c . "$RAW_DIR/_warn_counts" 2>/dev/null || echo 0)
+  NNOBUILD=$(grep -c . "$RAW_DIR/_nobuild" 2>/dev/null || echo 0)
+  if [ "${NBUILT:-0}" -eq 0 ]; then
+    printf '  compile: NO CONFIG BUILT (%s failed) -- no warning count is available; this is not "clean"\n' "${NNOBUILD:-0}"
+  else
+    printf '  compile: warnings=%s over %s config(s) that built%s%s%s\n' \
+      "${WARNTOTAL:-0}" "${NBUILT}" \
+      "$([ "${NNOBUILD:-0}" -gt 0 ] && echo ", ${NNOBUILD} did NOT build")" \
+      "${WARNCLASSES:+ classes=$WARNCLASSES}" \
+      "$([ "${LOOPSEEN:-0}" -gt 0 ] && echo "  *** COMBINATIONAL LOOP warning in ${LOOPSEEN} config(s) ***")"
+  fi
   tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
   if ! rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
         "$(basename "$cand" .sv)" \
@@ -685,6 +711,8 @@ for cand in "${CANDS[@]}"; do
         "compile_warnings=${WARNTOTAL:-0}" \
         "compile_warning_classes=${WARNCLASSES:-}" \
         "comb_loop_configs=${LOOPSEEN:-0}" \
+        "compile_configs_built=${NBUILT:-0}" \
+        "compile_configs_failed=${NNOBUILD:-0}" \
         "$RAW_DIR")"; then
     echo "  RECORD NOT WRITTEN for $name -- see the error above. The run happened;" >&2
     echo "  nothing downstream can cite it until this is fixed." >&2
