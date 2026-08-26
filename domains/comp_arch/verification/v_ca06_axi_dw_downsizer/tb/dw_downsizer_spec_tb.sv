@@ -35,7 +35,7 @@ module dw_downsizer_tb;
   logic [2:0]       s_awsize=0, s_arsize=0;
   logic [1:0]       s_awburst=1, s_arburst=1, s_bresp, s_rresp;
   logic             s_awvalid=0, s_awready, s_wvalid=0, s_wready, s_wlast=0;
-  logic             s_bvalid, s_bready=1, s_arvalid=0, s_arready, s_rlast, s_rvalid, s_rready=1;
+  logic             s_bvalid, s_bready, s_arvalid=0, s_arready, s_rlast, s_rvalid, s_rready;
   logic [SW-1:0]    s_wdata=0, s_rdata;
   logic [SBY-1:0]   s_wstrb=0;
 
@@ -44,8 +44,8 @@ module dw_downsizer_tb;
   logic [7:0]       m_awlen, m_arlen;
   logic [2:0]       m_awsize, m_arsize;
   logic [1:0]       m_awburst, m_arburst, m_bresp=0, m_rresp=0;
-  logic             m_awvalid, m_awready=1, m_wvalid, m_wready=1, m_wlast;
-  logic             m_bvalid=0, m_bready, m_arvalid, m_arready=1, m_rlast=0, m_rvalid=0, m_rready;
+  logic             m_awvalid, m_awready, m_wvalid, m_wready, m_wlast;
+  logic             m_bvalid=0, m_bready, m_arvalid, m_arready, m_rlast=0, m_rvalid=0, m_rready;
   logic [MW-1:0]    m_wdata, m_rdata=0;
   logic [MBY-1:0]   m_wstrb;
 
@@ -442,6 +442,77 @@ module dw_downsizer_tb;
     chk_a = a; chk_len = l; chk_sz = sz; chk_arm = 1'b1;
   endtask
 
+  // ---- A5: BACKPRESSURE, and the antecedent it creates --------------------
+  // Held at 1, these five readies make A5's antecedent -- `valid && !ready` --
+  // unreachable on every channel, so a design that withdraws an offer before its
+  // ready is seen is undetectable and A5 is a clause with no instrument.
+  //
+  // THE ARM IS COMBINATIONAL ON valid. Registered, the stall lands one cycle
+  // after valid rose, and on a channel whose valid is high for a single cycle
+  // the beat has already been accepted -- the count comes back at 1, which is
+  // non-zero and useless. Measured on v_nw02 first; this is a port.
+  logic [2:0] st_sb=0, st_sr=0, st_maw=0, st_mw=0, st_mar=0;
+  logic [4:0] cd_sb=0, cd_sr=0, cd_maw=0, cd_mw=0, cd_mar=0;
+  wire arm_sb  = s_bvalid  && (st_sb ==0) && (cd_sb ==0);
+  wire arm_sr  = s_rvalid  && (st_sr ==0) && (cd_sr ==0);
+  wire arm_maw = m_awvalid && (st_maw==0) && (cd_maw==0);
+  wire arm_mw  = m_wvalid  && (st_mw ==0) && (cd_mw ==0);
+  wire arm_mar = m_arvalid && (st_mar==0) && (cd_mar==0);
+  assign s_bready  = (st_sb ==0) && !arm_sb;
+  assign s_rready  = (st_sr ==0) && !arm_sr;
+  assign m_awready = (st_maw==0) && !arm_maw;
+  assign m_wready  = (st_mw ==0) && !arm_mw;
+  assign m_arready = (st_mar==0) && !arm_mar;
+  int cov_bp_driven = 0;
+  always @(posedge clk) if (!rst_n) begin
+    st_sb<=0; st_sr<=0; st_maw<=0; st_mw<=0; st_mar<=0;
+    cd_sb<=0; cd_sr<=0; cd_maw<=0; cd_mw<=0; cd_mar<=0;
+  end else begin
+    if (st_sb !=0) st_sb <= st_sb -1; else if (cd_sb !=0) cd_sb <= cd_sb -1; else if (arm_sb ) begin st_sb <=3'd2; cd_sb <=5'd3; end
+    if (st_sr !=0) st_sr <= st_sr -1; else if (cd_sr !=0) cd_sr <= cd_sr -1; else if (arm_sr ) begin st_sr <=3'd2; cd_sr <=5'd3; end
+    if (st_maw!=0) st_maw<= st_maw-1; else if (cd_maw!=0) cd_maw<= cd_maw-1; else if (arm_maw) begin st_maw<=3'd2; cd_maw<=5'd3; end
+    if (st_mw !=0) st_mw <= st_mw -1; else if (cd_mw !=0) cd_mw <= cd_mw -1; else if (arm_mw ) begin st_mw <=3'd2; cd_mw <=5'd3; end
+    if (st_mar!=0) st_mar<= st_mar-1; else if (cd_mar!=0) cd_mar<= cd_mar-1; else if (arm_mar) begin st_mar<=3'd2; cd_mar<=5'd3; end
+    if (arm_sb||arm_sr||arm_maw||arm_mw||arm_mar) cov_bp_driven <= cov_bp_driven + 1;
+  end
+
+  // ---- A5's CHECKER -------------------------------------------------------
+  int cov_a5 [5];
+  logic pv [5];
+  logic [63:0] pp [5];
+  function automatic logic [63:0] pay(input int c);
+    case (c)
+      0: return {60'b0, s_bid};
+      1: return {s_rdata[31:0], 27'b0, s_rid, s_rlast};
+      2: return {m_awaddr[31:0], m_awlen, m_awsize, m_awburst, 19'b0};
+      3: return {m_wdata[15:0], m_wstrb[1:0], m_wlast, 45'b0};
+      default: return {m_araddr[31:0], m_arlen, m_arsize, m_arburst, 19'b0};
+    endcase
+  endfunction
+  // pv MUST clear on reset. F1 says the unit presents no valid while rst_ni is
+  // low, so an offer held across a reset is withdrawn LEGITIMATELY -- and a
+  // checker that only skips WHILE reset is low carries its stale held-offer into
+  // the first cycle after release. That fired on the GOLDEN before it was fixed.
+  always @(posedge clk) if (!rst_n) begin
+    for (int c = 0; c < 5; c++) pv[c] <= 1'b0;
+  end else begin
+    automatic logic v [5]; automatic logic r [5];
+    v[0]=s_bvalid;  r[0]=s_bready;   v[1]=s_rvalid;  r[1]=s_rready;
+    v[2]=m_awvalid; r[2]=m_awready;  v[3]=m_wvalid;  r[3]=m_wready;
+    v[4]=m_arvalid; r[4]=m_arready;
+    for (int c = 0; c < 5; c++) begin
+      if (pv[c]) begin
+        if (!v[c])
+          fail("A5", $sformatf("channel %0d: valid was withdrawn without a handshake (t=%0t)", c, $time));
+        else if (pay(c) !== pp[c])
+          fail("A5", $sformatf("channel %0d: the payload changed while the offer was held (t=%0t)", c, $time));
+      end
+      if (v[c] && !r[c]) cov_a5[c]++;
+      pv[c] <= v[c] && !r[c];
+      pp[c] <= pay(c);
+    end
+  end
+
   // ---- A4: at most MAX_READS reads outstanding ---------------------------
   // A4 is an UPPER bound whose permissive half says a further address "need not
   // be accepted until one retires", so accepting FEWER conforms -- dut2 accepts
@@ -650,6 +721,16 @@ module dw_downsizer_tb;
     @(negedge clk) rst_n=1; repeat (4) @(posedge clk);
     arm(32'hB000, 1, 3); do_read(4'h2, 32'hB000, 1, 3, 2'b01);   // F2, F3
 
+    // A5's antecedent REPORTS and does not gate: whether a conforming design's
+    // valid coincides with a stalled ready is its own timing, and a gate on it
+    // rejected dut2 and a perturbation on v_nw02. The STIMULUS half gates.
+    $display("  [coverage] A5 antecedent held: s_b=%0d s_r=%0d m_aw=%0d m_w=%0d m_ar=%0d",
+             cov_a5[0], cov_a5[1], cov_a5[2], cov_a5[3], cov_a5[4]);
+    for (int c = 0; c < 5; c++)
+      if (cov_a5[c] == 0)
+        $display("  [flag] A5 was never judged on channel %0d -- valid was never high while its ready was low. Not a failure: entering that state is the design's timing.", c);
+    if (cov_bp_driven < 8)
+      fail("FLOOR", $sformatf("backpressure was driven only %0d time(s) -- A5 cannot be judged on any channel without it, and that half is the harness's to provide", cov_bp_driven));
     // ---- coverage floors, all counted on STIMULUS (rule 4) ---------------
     if (cov_reads  < 40) fail("FLOOR", $sformatf("only %0d reads driven", cov_reads));
     if (cov_writes < 30) fail("FLOOR", $sformatf("only %0d writes driven", cov_writes));

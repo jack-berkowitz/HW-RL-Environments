@@ -34,7 +34,7 @@ harness:
   sim_timeout_s: 120
 
 spec: [spec/dw_downsizer_spec.md, spec/dw_downsizer_iface.sv]
-task_text_hash: ca63302d6b23df46
+task_text_hash: 949ffacfa1dd725b
 
 scored_configuration:
   SLV_DATA_W: 64
@@ -447,19 +447,114 @@ watchdog:
 
 readies_criterion:
   date: 2026-08-25
-  verdict: REACHABILITY GAP -- flagged, NOT gated
-  frozen: [m_arready, m_awready, m_wready, s_bready, s_rready]
-  test_applied: >
-    Does any check have an antecedent requiring one of these to be LOW? Measured
-    mechanically across the testbench: NONE does. And no clause in the spec
-    speaks about valid stability or ordering under stall -- there is no X3
-    equivalent here.
-  therefore: >
-    Not a defect by the criterion: a frozen ready is one when it gates a clause
-    about stability or ordering under stall, and no such clause exists to gate.
-    Flagged and not gated.
-  but_worth_saying: >
-    The absence is itself a contract gap of the E1 shape -- a design that
-    withdraws a valid before its ready is seen conforms to this specification AS
-    WRITTEN, because nothing forbids it. That is a clause question and a hash
-    move, not a testbench one, and it is not decided here.
+  verdict: CLOSED -- clause A5 added, readies made reactive, checker landed
+  was: >
+    REACHABILITY GAP -- flagged, not gated. Five readies were frozen at 1
+    (m_arready, m_awready, m_wready, s_bready, s_rready); no check had an
+    antecedent requiring any of them LOW, and no clause spoke about valid
+    stability under stall, so there was nothing to gate. The absence was itself
+    a contract gap: a design that withdrew a valid before its ready was seen
+    conformed to the specification AS WRITTEN.
+  closed_by:
+    clause: >
+      A5 in the spec's section 1 -- on every channel of both ports, once a
+      `valid` is asserted it remains asserted, with its payload unchanged, until
+      the corresponding `ready` is seen; and `valid` shall not depend
+      combinationally on `ready`. Authority is AMBA AXI4, and the anchor asserts
+      the same property internally at dut/rr_arb_tree.sv:391.
+    stimulus: >
+      All five readies changed from `=1` initialisers to reactive stalls with a
+      COMBINATIONAL arm, so the stall engages on the cycle the valid is offered
+      rather than one cycle later. Ported from v_nw02.
+    checker: >
+      Per-channel held-offer tracker (pv[5]/pp[5], payload via pay(c)), cleared
+      on reset because F1 legitimately drops valids across a reset. Withdrawal
+      and payload change are reported as separate failures.
+    floor: >
+      cov_bp_driven < 8 gates the STIMULUS half only. The A5 antecedent count is
+      REPORTED and never gates: whether a conforming design's valid coincides
+      with a stalled ready is its own timing.
+  hash: ca63302d6b23df46 -> 949ffacfa1dd725b
+  measured:
+    golden: PASS -- A5 antecedent held s_b=177 s_r=528 m_aw=153 m_w=393 m_ar=209
+    dut2: PASS
+    conformant: 5/5 PASS
+    mutants: 12/12 killed -- unchanged from before the boundary
+    gate_mutant: rejected
+    policy_independence: OK on both bases
+
+conformant_repairs:
+  date: 2026-08-25
+  ruling: >
+    dwc_c1 and dwc_c5 to be made conformant under backpressure -- holding valid
+    and payload until ready is seen, keeping the extra-latency and slow-intake
+    behaviour they exist to demonstrate, since neither requires withdrawing an
+    offer.
+  defect_1_withdrawal:
+    what: >
+      Both wrappers gated a `valid` on the way INTO the golden. The gate fell on
+      cycles where the golden held an unaccepted offer, which is a withdrawal.
+      The golden's own vendored arbiter fired on it:
+      rr_arb_tree.sv:391 "It is disallowed to deassert unserved request signals
+      when LockIn is enabled." Both perturbations CRASHed once A5's stimulus
+      existed.
+    repair: >
+      A gate may FALL only while nothing is pending. One flop per channel:
+      hold_x <= (valid_in & gate_x) & ~golden_ready; gate_x = slow | hold_x.
+      The perturbation keeps every cycle of slowness -- it still refuses to
+      BEGIN a transfer for the whole closed phase -- and gives up only the right
+      to take an offer back. hold_x is a flop, so the presented valid never
+      depends combinationally on the ready.
+    not_repairable_on_W: >
+      dwc_c1's W gate was removed outright rather than held. Stalling s_wvalid
+      starves a downstream burst the golden has already committed to, and the
+      golden responds by withdrawing m_wvalid itself -- an A5 violation on the
+      wrapper's own master port whose author is the golden, not the wrapper.
+  defect_2_inert_channel:
+    what: >
+      Both wrappers contained `assign m_rready = g_rready & <gate>;` AND a bare
+      `.m_rready` in the instantiation. The bare connection bound the GOLDEN'S
+      OUTPUT to the wrapper's m_rready -- a double drive -- and left g_rready
+      connected to nothing. The R half of "extra latency" and of "response
+      intake slow" had never been slow. Both perturbations passed every run for
+      as long as they have existed.
+    repair: .m_rvalid(m_rvalid & gate_r), .m_rready(g_rready) on both.
+    note: >
+      A conformant artefact that PASSES tells you it did not break the
+      testbench. It does not tell you it does what its name claims. Nothing in
+      the apparatus separates "legal" from "inert" -- both are green.
+
+d6_stickiness_open:
+  date: 2026-08-25
+  status: OPEN -- decision required, not taken here
+  finding: >
+    D6 requires a downstream read error to be STICKY onto later wide beats. The
+    anchor is sticky only while the downstream slave returns narrow beats
+    back-to-back. Measured with the testbench's own R slave simply presenting
+    the next beat N cycles later -- no wrapper, no valid gating, unambiguously
+    legal for a slave:
+      0,1,2 idle cycles -> golden PASS
+      3,4,8 idle cycles -> golden FAIL, 9 x D6 and nothing else
+    dut2 PASSES at every depth, so the clause is satisfiable; the anchor just
+    does not satisfy it.
+  which_half: >
+    Instrumented at the failure point with `own` = does the erroring narrow beat
+    belong to this wide beat. own=0 on all nine. The anchor NEVER loses an error
+    on the beat that carried it. Every failure is stickiness -- the half AXI
+    does not require. The anchor's stickiness is incidental: an accumulator that
+    happens not to be cleared while the pipeline is full.
+  cost_of_narrowing: >
+    D6 narrowed to ownership only was measured: golden PASS, dut2 PASS, 5/5
+    conformant PASS, gate rejected, 12/12 killed -- including dw_m6, dw_m11 and
+    dw_m12. Not one kill is lost. The sticky half carries no detection power and
+    does carry a risk: a submission asserting stickiness scores well and is
+    wrong about the contract.
+  why_it_is_not_taken_here: >
+    Narrowing D6 is a spec change outside the A5 boundary and outside the
+    conformant ruling, and it moves the hash for an unrelated reason.
+  interim: >
+    dwc_c1's R gate is HELD OPEN, which is the behaviour it has always actually
+    had (see defect_2_inert_channel), with the reason recorded in the artefact
+    itself. dwc_c5 keeps its R gate at depth 2 -- one cycle inside the
+    threshold, and the only place in the task where R intake is throttled at
+    all. Do not deepen it without re-reading D6.

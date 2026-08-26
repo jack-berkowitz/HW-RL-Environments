@@ -45,6 +45,22 @@ Throughout: **`beat_bytes(size)` = 2^`size`**, and
   final upstream response beat transfers. At most `MAX_READS` reads may be
   outstanding at once; a further read address need not be accepted until one
   retires.
+- **A5 — an offered beat is not withdrawn.** On every channel of both ports,
+  once a `valid` is asserted it remains asserted, with its payload unchanged,
+  until the corresponding `ready` is seen.
+
+  `valid` **shall not depend combinationally on `ready`.** A unit that offers
+  only into a ready sink satisfies the first sentence by never entering it, and
+  deadlocks against a consumer that waits for `valid` before asserting `ready`.
+  The second sentence is stated because the first is otherwise unfalsifiable.
+  *Authority: AMBA AXI4 — a source may not withdraw an offer, and may not wait
+  for the sink before making one. The anchor asserts the same property
+  internally: `rr_arb_tree.sv:391`, "it is disallowed to deassert unserved
+  request signals when LockIn is enabled".*
+  *Measured: on all five channels the antecedent is entered and the payload
+  holds. The count per channel is REPORTED and is not a pass condition —
+  whether a conforming design's `valid` coincides with a stalled `ready` is its
+  own timing, not the testbench's.*
 
 ---
 
