@@ -383,8 +383,18 @@ controls:
     expect: fail
     clause: A7
     exclusive: true
-    measured_by: hand_run
-    result: NOT RECORDED IN task.yaml -- see controls_unverified below
+    measured_by: scored_path
+    result: >
+      0/2 -- fails at BOTH widths on flags. First failure at vec 6300, fmt=0,
+      rnd=0: flags 00011 against the expected value. One distinct failure across
+      both configurations.
+    result_produced_on: 2026-08-25
+    note: >
+      DECLARED WITH AN EMPTY RESULT AND THE RUNNER PRODUCED ONE, which is what the
+      empty field was for. It rendered as a verdict the runner must produce rather
+      than as a control that passed -- the one state that cannot be mistaken for
+      evidence -- and then the verdict was produced. The field did its job by
+      being visibly incomplete.
 
 controls_schema_gap:
   field: "expect: PER_CONFIG with passes_at / fails_at"
@@ -410,9 +420,10 @@ controls_schema_gap:
 
 controls_unverified:
   note: >
-    STATED RATHER THAN LEFT BLANK. d_dsp03's nc_d_band_unbounded_tininess is
-    declared above because the file exists, and its verdict is NOT RECORDED in
-    this task.yaml. The declaration carries the expectation and no result. Under
-    the contract that renders as a control whose verdict the runner must produce,
-    not as one that passed -- which is the correct reading and the reason the
-    field is present and empty rather than absent.
+    RESOLVED 2026-08-25 -- the set has no unverified control now.
+    nc_d_band_unbounded_tininess was declared with an EMPTY result rather than
+    omitted, so it rendered as a verdict the runner must produce rather than as a
+    control that passed. It was then run: 0/2, failing at both widths on flags.
+    Kept as a record of the mechanism working -- an empty field that is visibly
+    empty is the one state that cannot be mistaken for evidence, and it was the
+    reason this control got run at all.

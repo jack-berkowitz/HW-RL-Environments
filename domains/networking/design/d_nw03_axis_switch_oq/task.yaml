@@ -254,6 +254,33 @@ controls:
       deadlocked under backpressure and made it fail C2 instead of C1. A CONTROL
       THAT TRIPS THE WRONG CHECK VALIDATES NEITHER -- which is assertion 3 in the
       contract, found here before the contract existed.
+  - file: controls/nc_r1_evades_antecedent.sv
+    kind: suppressing
+    expect: fail
+    clause: R1
+    exclusive: true
+    antecedent_counter: r1_hits
+    expect_count: 0
+    measured_by: scored_path
+    result: >
+      0/8, and the ONLY distinct failure across all eight configurations is
+      "R1 was never exercised -- m_valid_o was never high while m_ready_i was
+      low". It does not fail R1's stability check and it does not fail anything
+      else.
+    note: >
+      THE THIRD INSTANCE OF F86, AND THE FIRST FOUND BY THE SWEEP RATHER THAN BY
+      ACCIDENT. The sweep flagged R1 as a candidate because its antecedent is
+      design-controlled -- m_valid_o is an output -- and predicted a missing
+      MIRROR clause. It found a missing CHECK as well: R1's output side was not
+      verified at all before this.
+      .
+      Unlike d_dsp03's L4, which PERMITS the identical construction with a stated
+      reason, nothing on this task permits or forbids it. R1 is UNFALSIFIABLE
+      here, confirmed by measurement rather than by reading.
+      .
+      THE MIRROR CLAUSE IS NOT LANDED. It moves the task hash and that is not
+      mine to spend; text is prepared and referred. See r1b_proposed below.
+
   - file: controls/nc_h_overbuffered.sv
     kind: negative
     expect: fail
@@ -285,3 +312,33 @@ controls_schema_gap:
     is what proves the capability is scored. A schema that cannot express the
     split cannot express the evidence.
   sent_to: AGENT-VERIF-A2, for contract revision 3
+
+r1b_proposed:
+  status: WRITTEN, NOT LANDED -- it moves task_text_hash
+  measured_basis: >
+    controls/nc_r1_evades_antecedent.sv gates m_valid_o combinationally on
+    m_ready_i, is otherwise the reference verbatim, and fails 0/8 on the
+    condition floor and nothing else. R1's antecedent is emptied rather than its
+    consequent violated, and no clause on this task objects.
+  text: |
+    R1b. `m_valid_o` MUST NOT depend combinationally on `m_ready_i`. A sink may
+         hold `m_ready_i` low indefinitely, and a design that waits for it before
+         asserting `m_valid_o` deadlocks against a sink that waits for
+         `m_valid_o` before asserting `m_ready_i`.
+
+         R1's stability sentence is otherwise satisfiable by NEVER OFFERING: a
+         beat never presented to a stalled sink cannot be withdrawn from one.
+         R1 constrains what happens once a beat is offered; R1b is what makes R1
+         reachable.
+  consistency_with_the_other_two:
+    d_dsp02: H1b, landed 2026-08-25
+    d_ca01:  R1b, landed 2026-08-25
+    d_dsp03: >
+      L4 DELIBERATELY PERMITS the identical construction on both sides, with the
+      reason stated -- the harness drives neither from the other, and a fully
+      combinational unit is conformant. That is a DECISION and not a gap, and it
+      means the four tasks are not uniform. Landing R1b here should be decided
+      alongside whether d_dsp03's L4 stays as it is.
+  cost_if_landed: >
+    task_text_hash moves; probe/PASTE.md regenerates; the candidate set for this
+    task requires re-solicitation.

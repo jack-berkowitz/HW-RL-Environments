@@ -61,6 +61,51 @@ module axis_switch_oq_tb #(
     if (!cond) note_fail(msg);
   endtask
 
+  // ---------------------------------------------------------------------------
+  // R1 OUTPUT-SIDE STABILITY, AND IT WAS NOT CHECKED AT ALL.
+  //
+  // R1 says: "Once valid is asserted it stays asserted, with data, keep, last and
+  // dest held stable, until the transfer completes." It governs THE STREAM's
+  // valid and ready, which includes m_valid_o -- the DESIGN's output -- and
+  // nothing in this testbench checked that half. A design that withdrew an
+  // offered beat under backpressure was not caught. Found by the F86
+  // conditional-clause sweep, which flagged R1 as a candidate on the grounds that
+  // its antecedent is design-controlled; the sweep expected a missing MIRROR
+  // clause and found a missing CHECK as well.
+  //
+  // THE COUNT IS GATED, per rule 36. A stability check whose antecedent never
+  // occurs reports the same PASS as one that occurred and held, and this task's
+  // own history is why that matters: d_dsp02's H3 was scored for weeks against a
+  // check that could not fire (F82).
+  int r1_hits;
+  logic [M_COUNT-1:0]        r1_pv;
+  logic [M_COUNT*DATA_W-1:0] r1_pdata;
+  logic [M_COUNT*KEEP_W-1:0] r1_pkeep;
+  logic [M_COUNT-1:0]        r1_plast, r1_prdy;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      r1_pv <= '0; r1_prdy <= '1; r1_hits <= 0;
+    end else begin
+      for (int m = 0; m < M_COUNT; m++) begin
+        // BOTH TERMS LATCHED. Comparing a latched valid against a FRESH ready
+        // reports a legally accepted beat as a violation -- the defect that made
+        // d_dsp02's repaired H3 checker fail its own reference.
+        if (r1_pv[m] && !r1_prdy[m]) begin
+          r1_hits++;
+          if (!m_valid[m])
+            note_fail($sformatf("R1: output %0d withdrew m_valid while the beat was unaccepted", m));
+          else if (m_data[m*DATA_W +: DATA_W] !== r1_pdata[m*DATA_W +: DATA_W]
+                || m_keep[m*KEEP_W +: KEEP_W] !== r1_pkeep[m*KEEP_W +: KEEP_W]
+                || m_last[m] !== r1_plast[m])
+            note_fail($sformatf("R1: output %0d changed data/keep/last under backpressure", m));
+        end
+      end
+      r1_pv <= m_valid; r1_prdy <= m_ready;
+      r1_pdata <= m_data; r1_pkeep <= m_keep; r1_plast <= m_last;
+    end
+  end
+
   `LM_DECLARE(S_COUNT)
 
   logic clk, rst_n;
@@ -524,6 +569,11 @@ module axis_switch_oq_tb #(
       if (cov_contend < 1)   $display("COVERAGE HOLE: same-output contention never driven");
       if (cov_hol     < 1)   $display("COVERAGE HOLE: head-of-line condition never created");
       if (cov_c1      < 1)   $display("COVERAGE HOLE: C1 window never driven");
+      // CONDITION-side floor, not stimulus-side: m_valid_o is a DESIGN output, so
+      // whether the antecedent is ever reached is the design's to decide.
+      $display("METRIC: r1_guard_true=%0d (0 means R1's output side was not exercised)", r1_hits);
+      if (r1_hits == 0)
+        note_fail("R1 was never exercised -- m_valid_o was never high while m_ready_i was low");
       if ((pairs < int'(S_COUNT*M_COUNT)) || (cov_frames < 200) || (cov_contend < 1) || (cov_maxlen < 1) ||
           (cov_hol < 1) || (cov_c1 < 1))
         note_fail("coverage floors not met -- the run did not exercise the target conditions");
