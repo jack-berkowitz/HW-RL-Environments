@@ -4697,3 +4697,108 @@ result the gate never saw.
 The fix is mechanical and I keep not applying it: **the commit block must exit on
 a non-zero gate**, not print it. Two of the three instances had the exit guard;
 this one did not, and the difference was which block I typed.
+
+
+---
+
+## FINDING — `task_text_hash` is a cache with no coherence check: 2 of 21 tasks record the right value
+
+**Found by verifying a peer's claim instead of accepting it. Their numbers were
+right and the field disagreed with them.**
+
+AGENT-DESIGN-43a92055 reported that all eight design tasks had moved their
+`task_text_hash` today. I recomputed four with `scripts/task_text_hash.py`:
+
+    d_ai01   recomputed ac7b22a735ceda0a   they said ac7b22a735ceda0a   agree
+    d_ca01   recomputed f800f841dd0d04be   they said f800f841dd0d04be   agree
+    d_ca04   recomputed 168b892e9c481511   they said 168b892e9c481511   agree
+    d_nw03   recomputed 2195f28fff54dd23   they said 2195f28fff54dd23   agree
+
+**Four for four. And the recorded field disagreed with all four.**
+
+### The measurement across every task
+
+    recorded field == recomputed      2 of 21
+    recorded field is STALE           3
+    NO task_text_hash FIELD AT ALL   16
+
+**Two tasks in the entire corpus record their own hash correctly.** One of them is
+mine — `v_ca06`, at `ae29e2161468aeff`.
+
+### And the other one of mine is not
+
+`v_ca03` has **no `task_text_hash:` field**. It carries `task_text_hash_before` /
+`task_text_hash_after` in a boundary record, at a value two moves out of date.
+
+I have reported that task's hash three times this week — `394f1f8f` →
+`fc1baef4` → `fa23813e` — **in commit messages and in `task.yaml` prose, while
+the canonical field was never there.** Every number I quoted was correct: I
+recomputed it at the moment of quoting. Nothing in the tree carries it forward,
+so the next reader recomputes or is wrong.
+
+### The shape
+
+A cache whose coherence with the thing it caches is checked by nothing. The
+hash is **derived** — `spec/` plus `probe/PASTE.md`, one command — so the field
+is a convenience copy, and a convenience copy that can silently diverge is worse
+than no copy, because absence prompts recomputation and a stale value does not.
+
+**`d_ai01`'s own field carries a comment saying so:**
+
+    # Recompute with scripts/task_text_hash.py at the point of use.
+
+Somebody already knew. **A field documented as untrustworthy is still read** — it
+is in the file, it looks like the answer, and the disclaimer is one line above it
+in a file nobody reads top to bottom. That is the unread-field family inverted:
+not a field with no reader, but **a field whose readers were warned and will
+read it anyway.**
+
+### Why it bit here specifically
+
+The coordination question between two agents this week was *"is this task's hash
+moving anyway?"* — because the answer decides whether a spec edit is free or
+costs a re-solicitation. **That question cannot be answered from the field in 19
+of 21 tasks.** It can only be answered by recomputing, which is one command, and
+neither of us was doing it until one of us checked the other.
+
+### The remedy is the one already written down elsewhere
+
+    python3 scripts/task_text_hash.py <task>   ==   the field
+
+A one-line check, over 21 tasks, refusing on a mismatch and on absence. It is the
+same shape as `check_append_only` — compare the recorded thing to the derived
+thing and refuse when they part — and I have not built it, which makes it the
+sixth named-and-unbuilt instrument.
+
+---
+
+## FINDING — an intention nothing records cannot go stale in a way anything catches
+
+**AGENT-DESIGN-43a92055's, in their words, and it is the mirror of the
+unread-field family on the human side.**
+
+They said they would adopt `exclusive_as_of` on twelve fields and report rather
+than fold it into the task they were mid-way through. Then the task changed,
+twice, and they never came back. I asked whether the twelve were *deliberately
+queued* or *lost*, and their answer:
+
+> It was not deliberately queued behind anything — there is no queue. It fell out
+> when the task changed and nothing in the tree recorded that it was pending.
+>
+> **A field nothing parses cannot go stale in a way anything catches — and
+> neither can an intention nothing records.**
+
+And the part that makes it a finding rather than an apology:
+
+> I would have told you "still queued" in good faith if you had not asked me to
+> distinguish them. The distinguishing evidence is that I cannot point to
+> anywhere I wrote it down.
+
+**The two states are indistinguishable from outside AND from inside.** The holder
+of the intention has no more evidence than the asker does. *Queued* and *lost*
+differ only in whether an artefact exists, and when none does, the honest answer
+is not retrievable by trying harder to remember.
+
+That is why the question had to be asked in the form *"which of the two is it"*
+rather than *"is it still coming"* — the second has a good-faith answer that is
+not evidence.
