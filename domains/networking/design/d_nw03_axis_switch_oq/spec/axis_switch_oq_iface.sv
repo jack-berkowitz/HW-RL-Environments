@@ -66,6 +66,23 @@
 //       AUTHORITY: stated task intent -- the ordinary stream contract, stated so
 //       stability is a contract term rather than an assumption.
 //
+//   R1b. `m_valid_o` MUST NOT depend combinationally on `m_ready_i`. A sink may
+//       hold `m_ready_i` low indefinitely, and a design that waits for it before
+//       asserting `m_valid_o` deadlocks against a sink that waits for
+//       `m_valid_o` before asserting `m_ready_i`.
+//
+//       R1's stability sentence is otherwise satisfiable by NEVER OFFERING: a
+//       beat never presented to a stalled sink cannot be withdrawn from one. R1
+//       constrains what happens once a beat is offered; R1b is what makes R1
+//       reachable.
+//
+//       MEASURED, NOT ARGUED. `controls/nc_r1_evades_antecedent.sv` gates
+//       `m_valid_o` on `m_ready_i` and is otherwise the reference verbatim.
+//       Under the contract before this clause it satisfied every check while
+//       driving R1's firing count to zero at all eight configurations; its only
+//       distinct failure is the condition floor.
+//       AUTHORITY: stated task intent.
+//
 //   R2. A FRAME is a run of beats on one input ending with `s_last_i` set.
 //       `s_dest_i` is HELD CONSTANT for every beat of a frame and names the
 //       output port index. `s_keep_i` marks which bytes of the beat carry data;

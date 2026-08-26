@@ -246,9 +246,41 @@ controls:
     fails_at:  ["S_COUNT=4 M_COUNT=4"]
     passes_at: ["all other configurations"]
     clause: C1
-    exclusive: true
-    measured_by: hand_run
-    result: "6/8 -- fails exactly and only where C1 is enforced; 486 beats / 601 cycles against a floor of 2.0"
+    exclusive: false          # WAS true, and it was never verifiable -- see below
+    measured_by: scored_path
+    result: >
+      0/8 as of 2026-08-25, failing on R1 at every configuration:
+      "R1: output 0 withdrew m_valid while the beat was unaccepted". It was
+      recorded as 6/8 failing exactly and only where C1 is enforced.
+    the_verdict_changed_and_the_control_did_not: >
+      NOTHING IN THIS CONTROL MOVED. What changed is that R1's output side is now
+      CHECKED. nc_b serialises the outputs by holding an output's turn, and in
+      doing so it WITHDRAWS m_valid_o from a beat it had already offered -- a
+      genuine R1 violation, present since the control was written, invisible
+      because no check could see it.
+      .
+      SO `exclusive: true` WAS NEVER TRUE. It was UNVERIFIABLE, which is a
+      different thing and reads identically. The claim was that this control
+      fails on C1 and nothing else; what could be observed was that it failed on
+      C1 and nothing else THAT WAS CHECKED.
+    the_general_form_worth_carrying: >
+      AGENT-VERIF-A2's warning was that a control which PASSES may be inert and
+      nothing distinguishes the two. This is its mirror: AN `exclusive` CLAIM IS
+      ONLY AS STRONG AS THE SET OF CHECKS THAT EXIST TO VIOLATE. Adding a check
+      can retroactively falsify an isolation claim made in good faith, and the
+      claim will have read as verified the whole time. Every `exclusive: true` in
+      this repository is a claim about the checks that existed when it was
+      measured, not about the control.
+    what_it_still_shows: >
+      Its C1 evidence is unaffected -- 486 beats / 601 cycles against a floor of
+      2.0, at the two S_COUNT=M_COUNT=4 configurations where C1 is enforced. It is
+      still the control that demonstrates C1 discriminates. It is no longer a
+      control that demonstrates C1 discriminates IN ISOLATION.
+    action: >
+      NOT REPAIRED HERE. Making it R1-clean means changing how it yields the turn,
+      which is the same edit whose first attempt made it fail C2 instead of C1 --
+      recorded in build_note. A control repaired in haste to restore an isolation
+      claim is how the claim became wrong in the first place. Referred.
     note: >
       Its first version held an output's turn until the frame completed, which
       deadlocked under backpressure and made it fail C2 instead of C1. A CONTROL
@@ -313,8 +345,36 @@ controls_schema_gap:
     split cannot express the evidence.
   sent_to: AGENT-VERIF-A2, for contract revision 3
 
-r1b_proposed:
-  status: WRITTEN, NOT LANDED -- it moves task_text_hash
+r1b_landed:
+  status: LANDED 2026-08-25 -- see handshake_mirror_decision
+  task_text_hash_before: 514a316a4889dd72
+  task_text_hash_after:  62e627b4957c0e2c
+  behavioural: false
+  why_not_behavioural: >
+    No behaviour required of a submission changes. R1b forbids a construction and
+    the reference does not use it -- reference still 8/8 with R1b's check and the
+    condition floor both live. The hash moves because the SHIPPED TEXT moves, and
+    the hash is what asserts "same question".
+  candidates_require_re_solicitation: true
+  the_sweep_found_this_one: >
+    THE THIRD F86 INSTANCE AND THE FIRST THE SWEEP FOUND RATHER THAN ACCIDENT,
+    which is evidence the instrument works and not only that the finding is real.
+    d_dsp02's H3 was found by a control that surprised its author; d_ca01's R1 was
+    named from a reading and measured afterwards. This one was produced by the
+    filter, from the property "the antecedent is design-controlled", and then
+    measured.
+  and_the_reading_understated_it: >
+    The sweep predicted a MISSING MIRROR CLAUSE. It found a MISSING CHECK as well:
+    R1's output side was not verified at all -- grepping the testbench for R1,
+    "stays asserted" and "held stable" returned nothing -- so a design withdrawing
+    an offered beat under backpressure was never caught. Both are now closed: the
+    check exists with a gated firing count, and R1b closes the antecedent.
+  both_terms_latched_and_the_precedent_is_why: >
+    The check latches valid AND ready. Comparing a latched valid against a FRESH
+    ready reports a legally accepted beat as a violation, which is exactly how
+    d_dsp02's repaired H3 checker failed its own reference the first time it ran.
+    Not rediscovered here -- carried across.
+  superseded_field: r1b_proposed
   measured_basis: >
     controls/nc_r1_evades_antecedent.sv gates m_valid_o combinationally on
     m_ready_i, is otherwise the reference verbatim, and fails 0/8 on the
@@ -342,3 +402,63 @@ r1b_proposed:
   cost_if_landed: >
     task_text_hash moves; probe/PASTE.md regenerates; the candidate set for this
     task requires re-solicitation.
+
+# ---------------------------------------------------------------------------
+# HANDSHAKE MIRROR DECISION -- taken ACROSS FOUR TASKS AT ONCE, 2026-08-25.
+# Recorded identically in all four so a reader of any one sees the whole shape.
+# ---------------------------------------------------------------------------
+handshake_mirror_decision:
+  decided_on: 2026-08-25
+  the_question: >
+    A stability clause of the form "once valid is asserted it stays asserted
+    until the transfer completes" is satisfiable by NEVER OFFERING -- a beat or
+    result never presented to a stalled consumer cannot be withdrawn from one. So
+    a design may empty the antecedent instead of honouring the consequent. Does
+    the contract forbid that, permit it, or say nothing?
+  why_it_was_decided_together: >
+    SILENCE IS THE ONE STATE THAT IS NOT A DECISION. Before this, d_dsp02 and
+    d_ca01 had the gap, d_dsp03 had made the opposite decision deliberately, and
+    d_nw03 was simply silent. Deciding task by task would have produced four
+    positions that looked like an inconsistency; deciding once produces three
+    that forbid it and one that permits it FOR A STATED REASON, which is an
+    intentional asymmetry a reader can check.
+  outcome:
+    d_dsp02: FORBIDS -- clause H1b, landed 2026-08-25
+    d_ca01:  FORBIDS -- clause R1b, landed 2026-08-25
+    d_nw03:  FORBIDS -- clause R1b, landed 2026-08-25
+    d_dsp03: PERMITS -- clause L4, THE DELIBERATE EXCEPTION, unchanged
+  d_dsp03_is_the_exception_and_here_is_its_reason: >
+    QUOTED RATHER THAN SUMMARISED, because the point is that it was decided and
+    not overlooked. d_dsp03's L4 reads:
+    .
+      "L4. `in_ready_o` MAY DEPEND COMBINATIONALLY ON `in_valid_i`, and
+           `out_valid_o` may depend combinationally on `out_ready_i`. The harness
+           drives neither from the other, so a design that gates either way
+           cannot deadlock against it. A fully combinational unit is conformant."
+    .
+    The reason is task-specific and sound: d_dsp03's reference binds
+    NumPipeRegs=0 and is purely combinational, so requiring a registered valid
+    would exclude the reference's own shape. The other three tasks all have
+    buffering designs where the deadlock L4 rules out is reachable.
+  the_consequence_d_dsp03_carries: >
+    STATED SO IT IS NOT REDISCOVERED AS A DEFECT. L4 licenses the construction
+    that EMPTIES d_dsp03's own output stability clause, so on that task the
+    stability sentence is decorative rather than wrong -- a design gating
+    out_valid_o on out_ready_i never has valid high while ready is low, and it is
+    CONFORMING. Two coherent resolutions remain open and neither is taken here:
+    narrow L4 to the input side, or drop the output stability sentence as
+    non-normative. Doing neither leaves a clause that reads as a requirement and
+    is not one.
+  evidence_base: >
+    Every one of the three FORBIDS clauses cites a control that PASSED the
+    contract as it stood while driving the clause's firing count to zero:
+    nc_h3_evades_antecedent (d_dsp02), nc_r1_evades_antecedent (d_ca01, 0/16),
+    nc_r1_evades_antecedent (d_nw03, 0/8). None was declared unfalsifiable by
+    reading; F86's own founding instance was, and that is recorded in F86.
+  enforceability_caveat: >
+    ALL THREE CLAUSES FORBID A COMBINATIONAL DEPENDENCY, which no testbench here
+    can observe directly -- it sees valid low and cannot distinguish "gated on
+    ready" from "nothing ready yet". The condition floor catches the construction
+    but reports it as "the clause was never exercised", not as a violation of the
+    mirror clause. Enforceable by inspection and by control, only partially by
+    the harness. This is in each task's candidates README where a grader meets it.
