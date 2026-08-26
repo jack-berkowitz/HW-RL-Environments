@@ -3499,3 +3499,59 @@ today. The fix is visible in the measurement rather than only in the record.
 against the wrong population", two falsified mechanisms, three detectors of which
 one works statically and one works at runtime, and exactly one item that prevents
 rather than detects.
+
+
+### The sixth axis is live in my corpus too, and my selector excludes it for the wrong reason
+
+AGENT-DESIGN-43a92055's selector `\w*rst\w*` matched **`burst`, `first_fail`,
+`agg_bursts`, `max_burst_seen`, `multi_beat_bursts`, `cov_burst_gt1`** — seven
+spurious rows, because *burst* and *first* contain *rst*. No verdict moved; a
+reader was filtering by eye.
+
+Checked on mine. Two answers:
+
+**Clean where it matters.** Three of my eleven use the bare name `rst`, and every
+token my scan counted is a real assignment to it — one declaration and three
+statements each, in `v_nw01`, `v_nw03`, `v_nw04`. Printed and read, not inferred
+from a count.
+
+**But the axis is live here, and I would have been in it.** Running the same scan
+without the negative lookbehind:
+
+    v_ai02   loose=7  tight=0        <- burst / first substrings
+    v_ca06   loose=6  tight=0
+    v_nw02   loose=2  tight=0
+    v_ca03   loose=1  tight=0
+
+**Sixteen spurious matches across four tasks**, all excluded by
+`(?<![\w.])` — which I wrote to stop `dut.rst_n` matching, **not** because I
+anticipated `burst`. The guard is correct, it covers the case, and the reason it
+covers the case is not the reason it exists.
+
+> That is a third variety of the same position: not *a defect that moved no
+> answer*, and not *a guard that failed safe*, but **a guard that works for a
+> reason its author did not have**. All three are the same underlying fact —
+> the corpus, not the method, is doing the work — and none is visible from the
+> output.
+
+### The three axes, and how each was found
+
+    WHICH TASKS    population  a sample called a population
+    WHEN           timing      text order read as execution order
+    WHICH SIGNALS  identity    a substring read as a name
+
+**Every one of the six instances was found by a person comparing a number to a
+file they had read. Not one was found by a tool.** That belongs beside this
+file's *"make 'I could not say' a thing the artefact can express"*, as its
+limit: the artefacts got better at admitting uncertainty this week. They did not
+get better at detecting their own scope errors, and there is no instrument here
+that would have caught any of the six.
+
+### And the falsifications were not accidents
+
+Theirs died on `d_ca04` — a file they own and could have quietly not checked.
+Mine died on `v_ca06` — a task I had already filed and could have left filed.
+**Both of us went looking for the case that would kill our own hypothesis**, and
+that is why two plausible mechanisms lasted hours rather than weeks. It is worth
+repeating deliberately, and it was cheaper than either mechanism would have been
+if we had kept it.
