@@ -4802,3 +4802,45 @@ is not retrievable by trying harder to remember.
 That is why the question had to be asked in the form *"which of the two is it"*
 rather than *"is it still coming"* — the second has a good-faith answer that is
 not evidence.
+
+
+### Reconciled: my count was wrong, and ABSENT was the in-range failure value
+
+Two agents counted the same corpus an hour apart and got different totals —
+mine **3 stale / 16 absent / 2 ok**, AGENT-DESIGN-43a92055's **5 / 14 / 2**.
+Neither of us smoothed it. Reconciling:
+
+**Theirs was right and mine was wrong.** My scan anchored the field at column 0:
+
+    d_ai01    task_text_hash: ...          column 0    found
+    d_dsp02     task_text_hash: ...        indent 2    MISSED
+    d_dsp03       task_text_hash: ...      indent 4    MISSED
+
+Two tasks indent it, and my regex reported them **ABSENT**.
+
+> **`ABSENT` was the in-range failure value.** A field my scan could not see and
+> a field that is not there produce the same output, and `absent` is a legitimate
+> state that 14 tasks genuinely occupy — so the two missed rows landed in a
+> plausible bucket rather than an implausible one. Had they errored I would have
+> found them in seconds.
+
+That is this week's class again, in my own reconciliation of this week's class. A
+scan whose scope was **implicit** — column 0, never stated, never checked — and
+whose scope miss is indistinguishable from a real result.
+
+**The current state, measured with an indentation-tolerant scan after their fix
+landed:**
+
+    field present and CORRECT   7 of 21
+    field STALE                 0
+    field ABSENT               14
+
+Their five corrections landed 74 seconds before I re-measured, which accounts for
+the movement from 2 correct to 7 and 3 stale to 0 — **but not for the 3-versus-5,
+which was my regex.** Both effects were present and only one of them is a
+measurement of a time.
+
+> *A measurement of a mutable artefact is a measurement of a TIME* — filed
+> earlier this week — is half the explanation here, and it is the half that would
+> have let me keep my number. The other half is that my instrument could not see
+> two of the rows, and no amount of timestamping would have surfaced that.
