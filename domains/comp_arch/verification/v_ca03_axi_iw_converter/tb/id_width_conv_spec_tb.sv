@@ -41,7 +41,7 @@ module id_width_conv_tb;
   logic [DATA_W/8-1:0] s_wstrb=0;
   logic [1:0]          s_bresp, s_rresp;
   logic s_awvalid=0, s_awready, s_wlast=0, s_wvalid=0, s_wready;
-  logic s_bvalid, s_bready=1, s_arvalid=0, s_arready, s_rlast, s_rvalid, s_rready=1;
+  logic s_bvalid, s_bready, s_arvalid=0, s_arready, s_rlast, s_rvalid, s_rready;
 
   logic [MST_ID_W-1:0] m_awid, m_arid, m_bid=0, m_rid=0;
   logic [ADDR_W-1:0]   m_awaddr, m_araddr;
@@ -49,8 +49,8 @@ module id_width_conv_tb;
   logic [7:0]          m_awlen, m_arlen;
   logic [DATA_W/8-1:0] m_wstrb;
   logic [1:0]          m_bresp=0, m_rresp=0;
-  logic m_awvalid, m_awready=1, m_wlast, m_wvalid, m_wready=1;
-  logic m_bvalid=0, m_bready, m_arvalid, m_arready=1, m_rlast=0, m_rvalid=0, m_rready;
+  logic m_awvalid, m_awready, m_wlast, m_wvalid, m_wready;
+  logic m_bvalid=0, m_bready, m_arvalid, m_arready, m_rlast=0, m_rvalid=0, m_rready;
 
   id_width_conv #(.SLV_ID_W(SLV_ID_W), .MST_ID_W(MST_ID_W), .ADDR_W(ADDR_W),
                   .DATA_W(DATA_W), .MAX_UNIQ_IDS(MAX_UNIQ), .MAX_TXNS_PER_ID(MAX_TXN)) dut (
@@ -122,13 +122,28 @@ module id_width_conv_tb;
   // every beat looks like every other beat.
   int unsigned mq_id [$], mq_addr [$], mq_len [$];
   int unsigned m_beat = 0;
+  // THE TESTBENCH IS A SOURCE, AND D5 BINDS THE DESIGN -- but a source that
+  // withdraws its own offer makes the design LOOK like it withdrew. `reply_en`
+  // going low at the end of a `drain()` took back an R beat the design was still
+  // holding, and the design's s_rvalid followed:
+  //     DIAG t=8335 ch=1 withdraw | reply_en=0 mq=2 | m_rvalid=0 s_rvalid=0
+  // Two D5 failures on the GOLDEN, neither of them the golden's. `hold_m*` keeps
+  // an offer up once made until its ready is seen; `reply_en` still decides when
+  // a NEW response may start, which is all it was ever for.
+  logic hold_mr = 0, hold_mb = 0;
+  always @(posedge clk) if (!rst_n) begin
+    hold_mr <= 1'b0; hold_mb <= 1'b0;
+  end else begin
+    hold_mr <= m_rvalid && !m_rready;
+    hold_mb <= m_bvalid && !m_bready;
+  end
   logic reply_en = 0;
   always @(posedge clk) if (rst_n && m_arvalid && m_arready) begin
     n_mar++;
     mq_id.push_back(m_arid); mq_addr.push_back(m_araddr); mq_len.push_back(m_arlen);
   end
   always_comb begin
-    m_rvalid = reply_en && (mq_id.size() > 0);
+    m_rvalid = (reply_en || hold_mr) && (mq_id.size() > 0);
     m_rid    = (mq_id.size() > 0) ? MST_ID_W'(mq_id[0]) : '0;
     m_rdata  = (mq_id.size() > 0) ? (mq_addr[0] + m_beat) : '0;
     m_rlast  = (mq_id.size() > 0) && (m_beat == mq_len[0]);
@@ -156,7 +171,7 @@ module id_width_conv_tb;
     end
   end
   always_comb begin
-    m_bvalid = reply_en && (bq.size() > 0);
+    m_bvalid = (reply_en || hold_mb) && (bq.size() > 0);
     m_bid    = (bq.size() > 0) ? MST_ID_W'(bq[0]) : '0;
     m_bresp  = (bq_a.size() > 0) ? resp_of(ADDR_W'(bq_a[0])) : 2'b00;
   end
@@ -164,8 +179,100 @@ module id_width_conv_tb;
     void'(bq.pop_front()); void'(bq_a.pop_front());
   end
 
-  assign m_awready = 1'b1;
-  assign m_wready  = 1'b1;
+  // ---- D5: BACKPRESSURE, and the antecedent it creates ---------------------
+  // Held at 1, these five readies make D5's antecedent -- `valid && !ready` --
+  // unreachable on every channel the design drives, so a design that withdraws
+  // an offer before its ready is seen is undetectable and D5 is a clause with no
+  // instrument. Two halves, one boundary: the clause and the stimulus that can
+  // falsify it land together or neither lands.
+  //
+  // FREE-RUNNING, AND NOT ARMED BY `valid`. The first version of this stall
+  // armed combinationally on each channel's own valid, so the stall would land
+  // on the cycle the offer was made. That closes a loop -- ready -> design ->
+  // valid -> arm -> ready -- and here it did not converge:
+  //
+  //     %Warning-UNOPTFLAT: Circular combinational logic: 'id_width_conv_tb.m_awready'
+  //
+  //     26 failures across A1, A3, COVERAGE, D4, E1 and FLOOR, none of them a
+  //     design defect, and IDENTICAL for four different one-hot choices of which
+  //     single ready was made reactive. A defect that does not change when you
+  //     change which channel provokes it is a settle order, not a channel.
+  //
+  // On v_ca06 the same loop CONVERGED and gave the right answer. Nothing in
+  // either run said which had happened; the harness builds -Wno-fatal, which is
+  // right for a vendored anchor, and the anchor contributes its own UNOPTFLAT
+  // warnings that dilute this one to invisibility.
+  //
+  // Decoupling costs nothing. The objection to a REGISTERED arm -- the stall
+  // lands a cycle after valid rose, so a one-cycle valid is already accepted --
+  // does not reach a stall that is simply low some of the time regardless. The
+  // per-channel antecedent counts printed at the end are the evidence.
+  //
+  // Aperiodic on purpose: a fixed duty cycle can resonate with a design's own
+  // period and stall only in phases where nothing is offered. Different bit
+  // pairs per channel keep the five decorrelated.
+  logic [15:0] bp_lfsr = 16'hACE1;
+  always @(posedge clk) bp_lfsr <= !rst_n ? 16'hACE1
+      : {bp_lfsr[14:0], bp_lfsr[15]^bp_lfsr[13]^bp_lfsr[12]^bp_lfsr[10]};
+  wire stall_sb  = bp_lfsr[0] & bp_lfsr[5];
+  wire stall_sr  = bp_lfsr[1] & bp_lfsr[6];
+  wire stall_maw = bp_lfsr[2] & bp_lfsr[7];
+  wire stall_mw  = bp_lfsr[3] & bp_lfsr[8];
+  wire stall_mar = bp_lfsr[4] & bp_lfsr[9];
+  assign s_bready  = !stall_sb;
+  assign s_rready  = !stall_sr;
+  assign m_awready = !stall_maw;
+  assign m_wready  = !stall_mw;
+  assign m_arready = !stall_mar;
+  // The STIMULUS half, harness-determined by construction: how many cycles this
+  // testbench held a ready low. It reads no design output, so it cannot reject
+  // correct hardware -- which is why the ANTECEDENT counts are reported and this
+  // one is gated.
+  int cov_bp_driven = 0;
+  always @(posedge clk) if (rst_n && (stall_sb|stall_sr|stall_maw|stall_mw|stall_mar))
+    cov_bp_driven <= cov_bp_driven + 1;
+
+  // ---- D5's CHECKER --------------------------------------------------------
+  // The payload signature is EXACT here, not truncated: the widest channel is
+  // 42 bits (m_ar: id 2 + addr 32 + len 8), so every bit the clause speaks about
+  // is compared. A truncated signature cannot fail on the bits it drops, and a
+  // check that cannot fail on part of its subject should say which part.
+  int cov_d5 [5];
+  logic pv [5];
+  logic [63:0] pp [5];
+  function automatic logic [63:0] pay(input int c);
+    case (c)
+      0: return {58'b0, s_bid,  s_bresp};                    // 6 bits
+      1: return {25'b0, s_rid,  s_rdata, s_rresp, s_rlast};  // 39 bits
+      2: return {22'b0, m_awid, m_awaddr, m_awlen};          // 42 bits
+      3: return {27'b0, m_wdata, m_wstrb, m_wlast};          // 37 bits
+      default: return {22'b0, m_arid, m_araddr, m_arlen};    // 42 bits
+    endcase
+  endfunction
+  // pv MUST clear on reset. F1 says the design presents no response while
+  // rst_ni is low, so an offer held across a reset is withdrawn LEGITIMATELY --
+  // and a checker that only skips WHILE reset is low carries its stale
+  // held-offer into the first cycle after release. That fired on v_ca06's
+  // golden before it was fixed; it is not a hypothetical.
+  always @(posedge clk) if (!rst_n) begin
+    for (int c = 0; c < 5; c++) pv[c] <= 1'b0;
+  end else begin
+    automatic logic v [5]; automatic logic r [5];
+    v[0]=s_bvalid;  r[0]=s_bready;   v[1]=s_rvalid;  r[1]=s_rready;
+    v[2]=m_awvalid; r[2]=m_awready;  v[3]=m_wvalid;  r[3]=m_wready;
+    v[4]=m_arvalid; r[4]=m_arready;
+    for (int c = 0; c < 5; c++) begin
+      if (pv[c]) begin
+        if (!v[c])
+          fail("D5", $sformatf("channel %0d: valid was withdrawn without a handshake (t=%0t)", c, $time));
+        else if (pay(c) !== pp[c])
+          fail("D5", $sformatf("channel %0d: the payload changed while the offer was held (t=%0t)", c, $time));
+      end
+      if (v[c] && !r[c]) cov_d5[c]++;
+      pv[c] <= v[c] && !r[c];
+      pp[c] <= pay(c);
+    end
+  end
 
   // ---- model updates + checks ---------------------------------------------
   always @(posedge clk) begin
@@ -437,6 +544,28 @@ module id_width_conv_tb;
     end
     drain(400);
 
+    // ---- SUSTAINED TRAFFIC UNDER BACKPRESSURE ----------------------------
+    // Backpressure is on for the WHOLE run -- it does not need a window, and an
+    // earlier version of this comment claimed it did. That claim was wrong: the
+    // 26 failures that seemed to show the stalls breaking the A3/A4 budget
+    // probes were the combinational loop described above, not the stalls.
+    // Confirmed by removing the loop and leaving the stalls global, which passes
+    // every clause.
+    //
+    // This phase stays because the earlier phases reach D5's antecedent only
+    // lightly on the two address channels. Budgets are generous (400 cycles, not
+    // 8) because a design that is slow under backpressure is conforming --
+    // latitude item 2 -- and a budget that expired here would report a design's
+    // legal slowness as an A3 refusal.
+    phase = "sustained under backpressure -- D5";
+    for (int k = 0; k < 12; k++) begin
+      offer_ar(k % MAX_UNIQ, 400, acc, took, 3);
+      offer_aw(k % MAX_UNIQ, 400, acc, took, 1);
+      if (acc) begin n_aw_issued++; send_w(1); end
+      drain(60);
+    end
+    drain(600);
+
     if (cov_full_new < 2)  fail("FLOOR", "the table boundary was not exercised from both sides");
     if (cov_full_same < 1) fail("FLOOR", "a same-id request at a full table was never offered");
     if (cov_depth < 2)     fail("FLOOR", "the per-id depth boundary was not exercised from both sides");
@@ -453,16 +582,47 @@ module id_width_conv_tb;
     if (n_aw_issued < 16)
       fail("FLOOR", $sformatf("only %0d writes were issued", n_aw_issued));
 
+    // D5's antecedent REPORTS and does not gate. Whether a conforming design's
+    // valid ever coincides with a stalled ready is that design's own timing, and
+    // a gate on it REJECTS CORRECT HARDWARE -- measured on v_ca06, where a
+    // condition floor of this shape rejected dut2 and a conformant perturbation.
+    // The STIMULUS half is the harness's to provide and IS gated, below.
+    $display("  [coverage] D5 antecedent held: s_b=%0d s_r=%0d m_aw=%0d m_w=%0d m_ar=%0d",
+             cov_d5[0], cov_d5[1], cov_d5[2], cov_d5[3], cov_d5[4]);
+    for (int c = 0; c < 5; c++)
+      if (cov_d5[c] == 0)
+        $display("  [flag] D5 was never judged on channel %0d -- valid was never high while its ready was low. Not a failure: entering that state is the design's timing.", c);
+    if (cov_bp_driven < 200)
+      fail("FLOOR", $sformatf("a ready was held low on only %0d cycle(s) -- D5 cannot be judged on any channel without backpressure, and that half is the harness's to provide", cov_bp_driven));
+
     $display("METRIC: reads accepted %0d, master reads %0d, responses %0d", n_ar, n_mar, n_r);
-    if (n_fail == 0) $display("RESULT: PASS");
-    else             // E1's new half is unfalsifiable if every response returned is OKAY: the
+    // A DANGLING `else`, AND IT COST TWO THINGS. This read
+    //     if (n_fail == 0) $display("RESULT: PASS");
+    //     else  // comment
+    //     // comment
+    //     if (cov_err_r < 4) fail(...);
+    //     ...
+    //     $display("RESULT: FAIL (%0d failures)", n_fail);
+    // The `else` bound to the cov_err_r check, not to a FAIL display. So:
+    //   1. THE READ-COVERAGE FLOOR RAN ONLY ON A RUN THAT HAD ALREADY FAILED.
+    //      A floor that is skipped exactly when the run is otherwise clean is a
+    //      floor that cannot do the one job it has.
+    //   2. `RESULT: FAIL` PRINTED UNCONDITIONALLY -- every passing run of this
+    //      testbench ended with a FAIL line. The harness greps PASS first, so
+    //      the verdicts were right; they were right because of the ORDER OF TWO
+    //      GREPS in a file this testbench does not control.
+    // Floors run before the verdict is computed, and exactly one RESULT line is
+    // printed.
+    //
+    // E1's resp half is unfalsifiable if every response returned is OKAY: the
     // checker would be comparing against the constant the responder drives.
     if (cov_err_r < 4)
       fail("COVERAGE", $sformatf("only %0d non-OKAY READ responses were returned -- E1's resp half is untested at OKAY alone", cov_err_r));
     if (cov_err_b < 4)
       fail("COVERAGE", $sformatf("only %0d non-OKAY WRITE responses were returned -- E1's new B-channel half is untested at OKAY alone", cov_err_b));
     $display("  [coverage] non-OKAY responses returned: reads=%0d writes=%0d", cov_err_r, cov_err_b);
-    $display("RESULT: FAIL (%0d failures)", n_fail);
+    if (n_fail == 0) $display("RESULT: PASS");
+    else             $display("RESULT: FAIL (%0d failures)", n_fail);
     $finish;
   end
 

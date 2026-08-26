@@ -378,10 +378,31 @@ module iw_c3_ready_withheld #(
   wire block = (cnt == 2'd0);
 
   logic g_arvalid, g_arready, g_awvalid, g_awready;
-  assign g_arvalid = s_arvalid & ~block;
-  assign s_arready = g_arready & ~block;
-  assign g_awvalid = s_awvalid & ~block;
-  assign s_awready = g_awready & ~block;
+  // A GATE ON A VALID GOING INTO THE DESIGN IS A WITHDRAWAL, and D5 forbids it.
+  // The gate falls on a cycle where the design already holds an unaccepted
+  // offer, and the anchor's own vendored arbiter says so on the same event:
+  //     dut/rr_arb_tree.sv:391  "It is disallowed to deassert unserved request
+  //                              signals when LockIn is enabled."
+  // A gate may therefore FALL only while nothing is pending. `hold_*` is a flop,
+  // so the valid presented to the design never depends combinationally on its
+  // ready -- D5's second sentence, satisfied by construction. The perturbation
+  // keeps every cycle of the behaviour it exists to demonstrate: it still
+  // refuses to BEGIN a transfer for the whole closed phase. What it gives up is
+  // the right to take an offer back, which no conforming design has.
+  logic hold_ar, hold_aw;
+  wire  en_ar = ~block | hold_ar;
+  wire  en_aw = ~block | hold_aw;
+  always_ff @(posedge clk_i)
+    if (!rst_ni) begin
+      hold_ar <= 1'b0; hold_aw <= 1'b0;
+    end else begin
+      hold_ar <= (s_arvalid & en_ar) & ~g_arready;
+      hold_aw <= (s_awvalid & en_aw) & ~g_awready;
+    end
+  assign g_arvalid = s_arvalid & en_ar;
+  assign s_arready = g_arready & en_ar;
+  assign g_awvalid = s_awvalid & en_aw;
+  assign s_awready = g_awready & en_aw;
   id_width_conv #(
       .SLV_ID_W(SLV_ID_W), .MST_ID_W(MST_ID_W), .ADDR_W(ADDR_W), .DATA_W(DATA_W),
       .MAX_UNIQ_IDS(MAX_UNIQ_IDS), .MAX_TXNS_PER_ID(MAX_TXNS_PER_ID)
@@ -663,10 +684,31 @@ module iw_c5_channel_arbitration #(
   wire block_aw = both & ~turn;
 
   logic g_arvalid, g_arready, g_awvalid, g_awready;
-  assign g_arvalid = s_arvalid & ~block_ar;
-  assign s_arready = g_arready & ~block_ar;
-  assign g_awvalid = s_awvalid & ~block_aw;
-  assign s_awready = g_awready & ~block_aw;
+  // A GATE ON A VALID GOING INTO THE DESIGN IS A WITHDRAWAL, and D5 forbids it.
+  // The gate falls on a cycle where the design already holds an unaccepted
+  // offer, and the anchor's own vendored arbiter says so on the same event:
+  //     dut/rr_arb_tree.sv:391  "It is disallowed to deassert unserved request
+  //                              signals when LockIn is enabled."
+  // A gate may therefore FALL only while nothing is pending. `hold_*` is a flop,
+  // so the valid presented to the design never depends combinationally on its
+  // ready -- D5's second sentence, satisfied by construction. The perturbation
+  // keeps every cycle of the behaviour it exists to demonstrate: it still
+  // refuses to BEGIN a transfer for the whole closed phase. What it gives up is
+  // the right to take an offer back, which no conforming design has.
+  logic hold_ar, hold_aw;
+  wire  en_ar = ~block_ar | hold_ar;
+  wire  en_aw = ~block_aw | hold_aw;
+  always_ff @(posedge clk_i)
+    if (!rst_ni) begin
+      hold_ar <= 1'b0; hold_aw <= 1'b0;
+    end else begin
+      hold_ar <= (s_arvalid & en_ar) & ~g_arready;
+      hold_aw <= (s_awvalid & en_aw) & ~g_awready;
+    end
+  assign g_arvalid = s_arvalid & en_ar;
+  assign s_arready = g_arready & en_ar;
+  assign g_awvalid = s_awvalid & en_aw;
+  assign s_awready = g_awready & en_aw;
   id_width_conv #(
       .SLV_ID_W(SLV_ID_W), .MST_ID_W(MST_ID_W), .ADDR_W(ADDR_W), .DATA_W(DATA_W),
       .MAX_UNIQ_IDS(MAX_UNIQ_IDS), .MAX_TXNS_PER_ID(MAX_TXNS_PER_ID)

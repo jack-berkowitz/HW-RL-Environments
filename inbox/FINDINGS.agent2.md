@@ -2317,3 +2317,112 @@ call sites.
 3. **A result that is right by convergence is not a result.** v_ca06's committed
    numbers were correct. They were correct by luck of a settle order, and the
    run that produced them said nothing at all about that.
+
+
+---
+
+## FINDING — a dangling `else` split the verdict from the floors, and every passing run ended with a FAIL line
+
+**v_ca03's reference testbench. Two consequences, both silent, both live for as
+long as the file has existed.**
+
+    if (n_fail == 0) $display("RESULT: PASS");
+    else             // E1's new half is unfalsifiable if every response ...
+    // checker would be comparing against the constant the responder drives.
+    if (cov_err_r < 4)
+      fail("COVERAGE", ...);
+    if (cov_err_b < 4)
+      fail("COVERAGE", ...);
+    $display("RESULT: FAIL (%0d failures)", n_fail);
+
+The `else` binds to `if (cov_err_r < 4)`. Nothing else about the text suggests
+that, because two comment lines sit between the `else` and the `if` it captures.
+
+1. **The read-coverage floor ran only on a run that had ALREADY failed.** It is
+   skipped precisely when the run is otherwise clean — which is the only
+   situation a floor exists for. A floor whose antecedent is "something else
+   already failed" is not a floor.
+2. **`RESULT: FAIL` printed unconditionally.** Every passing run of this
+   testbench ended with a FAIL line. The verdicts were nonetheless right, because
+   `sim_verification.sh` greps `^RESULT: *PASS` before `^RESULT: *FAIL` — a
+   property of a file this testbench does not control, and one nobody chose for
+   this reason.
+
+> A verdict that is correct because of the order of two greps somewhere else is
+> not a verdict the testbench produced.
+
+### The syntactic scan was the wrong instrument; the behavioural one was right
+
+Grepping for `else` followed by comments and an `if` reports every legitimate
+`else if` chain: 0 to 10 hits per testbench, no signal. **Running all eleven
+reference testbenches and counting RESULT lines** answers the actual question in
+one number:
+
+    ten of ten runnable testbenches: exactly one RESULT line
+    v_ca03: two                     <- the only instance
+    v_dsp01: REJECTED, ships no testbench
+
+The scan itself needed two corrections before it was trustworthy — one task's
+`tb_module:` carries a trailing comment that a naive `sed` left in the string,
+and one task keeps its `task.yaml` elsewhere. Both showed up as BUILD_FAIL/SKIP
+rather than as a clean row, which is the right failure: **a sweep that cannot
+build a task must say so rather than score it 0 and move on.**
+
+---
+
+## FINDING — a negative control that PASSES has not exonerated the clause; it has failed to run
+
+**Two controls built this week, and the first version of each was wrong in a
+different way. One of them was wrong by passing.**
+
+A5 on v_ca06 and D5 on v_ca03 both landed with checkers that passed everything
+the task ships. That is what a correct clause looks like. It is also what a
+clause with no instrument looks like, and nothing in the task separated the two:
+every mutant in both sets dies on some other clause, so no mutant licensed a
+claim that the handshake checker fires at all.
+
+### Three ways the controls were wrong before they were right
+
+**1 — the obvious candidate was not a control for the clause.** `iw_c3` before
+its repair withdraws a valid, which is exactly what D5 forbids — but it
+withdraws one going INTO the design. It fails **C2, twenty times**, because the
+design's accounting diverges from the testbench's, and it never touches D5. D5
+binds the design's OUTPUTS. *A control has to violate the clause on the side the
+clause binds.*
+
+**2 — a control assembled by copying a neighbour inherits the neighbour's
+wiring.** The first D5 control was built from `iw_c3`'s instantiation, which
+binds `g_awvalid` and `g_arvalid` — signals that do not exist in the new module.
+It also gated the design's ready to avoid a phantom handshake. It hung the A4
+phase and reported A3, A4 and A5. *A control whose blast radius exceeds the
+clause it is for cannot license a claim about that clause.* Rebuilt by parsing
+the golden's own module header, so the port list cannot drift from it.
+
+**3 — and the one that matters: the A5 control PASSED.** At a threshold of three
+consecutive stalled cycles it never triggered, because backpressure is aperiodic
+and `m_arvalid` enters the antecedent only 18 times in the whole run.
+
+> **A control that passes is not evidence that the clause holds. It is evidence
+> that the control did not run.** The two are indistinguishable in the output,
+> and the second is the more likely of the two for any control whose trigger is
+> conditioned on rare timing.
+
+This is the same shape as the inert conformant channels — a green artefact that
+did nothing — and it is the fourth time this week that "it passed" has turned out
+to mean "it was not exercised". The remedy is the same and it is cheap: a control
+must report *whether it fired*, not only its verdict.
+
+### What the controls look like now
+
+Both withdraw `m_arvalid` **only on a cycle when `m_arready` is already low**, so
+no handshake is lost and the wrapped design sees a bit-identical environment —
+its ready is passed through untouched. The single observable difference is the
+one thing the clause forbids.
+
+    v_ca03  negctl/d5_withdraws_ar.sv   FAIL -- 11 x D5, channel 4, nothing else
+    v_ca06  negctl/a5_withdraws_ar.sv   FAIL --  5 x A5, channel 4, nothing else
+
+Both deliberately violate the clause's second sentence too — `m_arvalid` is
+combinational on `m_arready` in the control. That is safe *because* the
+testbench's readies are now LFSR-driven and read no design output; under the
+armed stall it would have closed a loop.

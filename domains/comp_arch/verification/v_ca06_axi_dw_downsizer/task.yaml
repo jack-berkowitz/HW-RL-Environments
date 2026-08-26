@@ -621,3 +621,25 @@ backpressure_instrument:
     -- every verdict identical to the armed run. The committed numbers were
     right; they were right by convergence, and the run did not say so.
   hash_unmoved: 6cb14e9d2e6381ac -- tb/ is not in task_text_hash
+
+a5_negative_control:
+  date: 2026-08-25
+  file: negctl/a5_withdraws_ar.sv
+  kind: negative
+  expect: fail
+  measured_by: hand_run
+  result: FAIL -- 5 x A5 on channel 4, and NOTHING ELSE
+  why_it_was_missing: >
+    A5 landed with a checker that passed everything the task ships, which is what
+    a correct clause looks like and also what a clause with no instrument looks
+    like. Every mutant here dies on some other clause, so none of them licensed a
+    claim that A5's checker fires at all. Rule 24 wants a control that REFUSES.
+  detail: >
+    Withdraws m_arvalid only on a cycle when m_arready is already low, so no
+    handshake is lost and the wrapped design sees a bit-identical environment.
+  first_version_passed: >
+    At a threshold of three consecutive stalled cycles it PASSED, because
+    backpressure is aperiodic and m_arvalid reaches the antecedent only 18 times
+    in the run. A control that passes is not evidence the clause holds; it is
+    evidence the control never ran. Threshold lowered to two: one stalled cycle
+    to enter the antecedent, the second to withdraw.

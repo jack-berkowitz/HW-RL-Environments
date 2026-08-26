@@ -140,6 +140,27 @@ transaction shall produce exactly one master transaction, carrying the same
 response.
 *Authority: task intent — this is a converter, not a splitter.*
 
+**D5 — an offered beat is not withdrawn.** On every channel of **both** ports
+that the design drives — `s_bvalid`, `s_rvalid`, `m_awvalid`, `m_wvalid`,
+`m_arvalid` — once a `valid` is asserted it shall remain asserted, with its
+payload unchanged, until the corresponding `ready` is seen.
+
+`valid` **shall not depend combinationally on `ready`.** A design that asserts
+`valid` only in cycles where `ready` happens to be high satisfies the letter of
+the sentence above and defeats it: nothing is ever withdrawn because nothing is
+ever offered into a stall.
+
+This binds the **design's outputs only**. It says nothing about the offers a
+testbench makes to the design: A3 and A4 permit a request not to be accepted,
+so a testbench that gives up on an offer after a bounded wait is doing what
+those clauses require of it, not violating this one.
+
+*Authority: AMBA AXI4 — `VALID` must remain asserted until the handshake
+completes, and the source may not wait for `READY` before asserting it. The
+anchor asserts the same property internally, on the same event:
+`dut/rr_arb_tree.sv:391` — "It is disallowed to deassert unserved request
+signals when LockIn is enabled."*
+
 ---
 
 ## 5. Payload integrity
