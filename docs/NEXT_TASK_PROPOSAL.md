@@ -306,3 +306,66 @@ scope already written above.** Its premise refutation stands — there is no
 violation detector and no replay — so the task is store-to-load forwarding and
 conservative hazard stalling, with the 9-bit approximate match as the latitude
 question.
+
+
+---
+
+# THE STORE QUEUE'S FLUSH CLAUSE, WRITTEN BEFORE THE SPEC EXISTS
+
+`store_buffer`'s `flush_i` **discards speculative entries and preserves committed
+ones**. That is selective invalidation of tagged state, and it is the same family
+as the reset clause that sat unexercised on `d_ca03` for the life of that task.
+
+**This is the first time the gap is identified before a spec is written**, so the
+clause gets its antecedent named in its own text rather than discovered later:
+
+    Fn. `flush_i` DISCARDS every speculative entry and PRESERVES every committed
+        one. A store that has been committed is owed to memory and a flush must
+        not lose it; a store that has not is squashed and must never reach memory.
+
+        SCORED WITH THE QUEUE NON-EMPTY IN BOTH CLASSES. A flush of an empty
+        queue, or of a queue holding only one of the two classes, satisfies this
+        clause without testing it -- the discard and the preservation are only
+        distinguishable when both are present. The check reports the count of
+        flushes observed with at least one speculative AND one committed entry
+        resident, and FAILS at zero.
+
+**Why the antecedent has to be in the clause and not only in the testbench.** The
+clause is what a submitter reads; a floor is what the harness enforces. Stating
+the condition in the clause tells a submitter *which situation their design is
+being judged in*, and it survives a testbench rewrite. `d_ca03`'s V2 said
+"`rst_ni` empties both TLBs" and was silent on when — so a testbench that only
+reset an empty machine satisfied it for the life of the task, and nothing in the
+clause objected.
+
+## Measured: the gap is REST-SPECIFIC in this corpus, and the reason is the mechanism
+
+`AGENT-VERIF-A2` predicted the class covers "flush, clear, invalidate" as well as
+reset. Checked across all eight design tasks:
+
+* **Four tasks have no flush/clear/invalidate INPUT PORT at all** — `d_ca01`,
+  `d_dsp02`, `d_dsp03`, `d_nw01`. Their spec mentions of the word are prose. No
+  clause, no gap.
+* **`d_ca03` has flush, and its flush clause was instrumented correctly from the
+  start.** `cov_flush_tlb` is set only when the post-flush request causes a
+  page-table read — `seq[i].ev == EV_FLUSH_TLB && last_acc > 0` — which is
+  exactly the antecedent gate V2 lacked. The flush case was already right on the
+  one task that has flush.
+* **`d_ai01` has `flush_i` and drives it three times**, inside the scored
+  sequence, with `cov_flush` and the C2 refill window built around it.
+
+**So the corpus has exactly one instance, and it is reset.** That refines the
+prediction rather than confirming it, and the refinement IS the mechanism:
+
+> The gap appears where the operation **doubles as the testbench's own
+> initialisation**. Reset is the one operation a testbench must perform to get
+> started, so it gets written as setup and the clause about what it does to state
+> never acquires a condition. Flush has no initialisation role — nobody reaches
+> for it to start a run — so its clause got a real antecedent from the beginning.
+
+The prediction "flush, clear and invalidate have the shape" is true of the shape
+and false of the population, **unless the operation is also how the machine is
+brought up.** For the store queue that matters directly: `flush_i` there is *not*
+an initialisation path, so on this evidence its clause is at lower risk than
+`rst_ni`'s — and both should be written with their antecedents named anyway,
+because the cost of doing so before the spec exists is zero.
