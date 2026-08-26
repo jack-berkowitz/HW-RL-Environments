@@ -60,6 +60,38 @@ area comparable at all: without it, area can be bought by relaxing timing.
   <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.75x, claude 0.75x, gemini 0.73x. Stream switch at 4.25 ns, reference 26,340 um2: all three missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat 1.80x, claude 1.05x, gemini fails correctness. Multi-format FMA at 70.5 ns, reference 177,557 um2: chat fails correctness, claude 1.42x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.36x, claude missed timing, gemini fails correctness." src="docs/assets/design_area_light.svg" width="100%">
 </picture>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_power_dark.svg">
+  <img alt="Total power relative to each task's reference, at its pinned clock. async CDC FIFO: chat 0.61x, claude 0.60x, gemini 0.62x. Stream switch: all three missed timing. FP32 FMA: chat 0.30x, claude 0.89x, gemini fails correctness. Multi-format FMA: chat fails correctness, claude 0.88x, gemini did not build. AXI4 crossbar: chat 1.06x, claude missed timing, gemini did not build. Non-blocking D-cache: chat 1.68x, claude 1.24x, gemini fails correctness. Sv39 MMU: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_power_light.svg" width="100%">
+</picture>
+
+**Power does not track area.** d_dsp02's `chat` is the clearest case: 1.80× the
+reference's area and **0.30× its power**. d_ca01's `chat` is the opposite — worse
+on both, 1.36× area and 1.68× power. A single figure of merit would have to
+weight these against each other, and nothing here establishes that weighting,
+which is why there is no combined score.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_capability_dark.svg">
+  <img alt="Area per unit of capability, relative to each task's reference. async CDC FIFO per capacity_beats_accepted: chat 0.91x, claude 0.91x, gemini 0.88x. Multi-format FMA per throughput_ops_per_1000cyc: claude 1.32x. AXI4 crossbar per aggregate_bursts_per_1000cyc: chat 2.59x. Non-blocking D-cache per max_outstanding_n: chat 1.36x, claude 1.15x." src="docs/assets/design_capability_light.svg" width="100%">
+</picture>
+
+**Raw area credits a design for being small when it was merely doing less**, and
+this chart is where that shows. Two conclusions from the area chart invert:
+
+- d_ca01's `claude` is **0.98×** on raw area — the only submission to come in
+  under a reference on a large design — and **1.15×** per unit of outstanding
+  capacity. The area win does not survive normalisation.
+- d_nw01's `chat` is 1.36× on area and **2.59×** per burst delivered. It is much
+  further behind than the raw figure suggests.
+- d_ca04's three narrow from 0.73–0.75× to 0.88–0.91×. Most of that headline gap
+  is two spill registers the reference has and they do not.
+
+Only tasks that **declare** a capability metric appear. d_dsp02 and d_ca03
+declare none, so they are absent rather than shown against an invented axis —
+"more is better and area buys it" is a claim about the contract, not something to
+infer from a metric's name.
+
 **Nine of twenty-one submissions produce a comparable area number.** Five missed
 timing, four fail correctness, and three were rejected by the synthesis frontend
 without ever running. That is the result, not a gap in the data.

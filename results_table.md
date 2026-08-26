@@ -178,7 +178,7 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| `id_width_conv_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `394f1f8fd51e8c2a` |
+| **reference testbench** | yes | yes | yes | 5/5 | **11/11** | establishes the ceiling |
 | `chat` | — | *not scored against this prompt* | — | — | — | last run answered task text `a04f965ad7552b22` |
 | `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `a04f965ad7552b22` |
 | `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `a04f965ad7552b22` |
