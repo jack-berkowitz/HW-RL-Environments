@@ -369,3 +369,75 @@ brought up.** For the store queue that matters directly: `flush_i` there is *not
 an initialisation path, so on this evidence its clause is at lower risk than
 `rst_ni`'s — and both should be written with their antecedents named anyway,
 because the cost of doing so before the spec exists is zero.
+
+
+---
+
+# THE ONE PREVENTIVE ITEM, RECORDED BEFORE THE FILE EXISTS
+
+An evening of work on the reset-clause class produced a great deal of detection
+and exactly one thing that **prevents**. It is worth separating, because the two
+are not the same kind of output and the preventive one costs nothing only while
+the file does not exist.
+
+## Testbench shape: keep reset and flush writes out of nested tasks
+
+**Not because nesting is wrong.** Because a static scan cannot follow it, and
+choosing it would put the artefact in the class no tool can read — on a task
+built specifically to be measured.
+
+The evidence is a fix that reproduced the bug it fixed. A first detector called
+`d_ca04`'s reset MID-RUN because it read assignment positions in **text order**,
+and `do_reset` is defined at line 239 while the setup assertion sits at 388 — a
+release "before" an assert was a task defined earlier and called later. **Line
+order is not execution order.** A second detector was written specifically to fix
+that, resolving reset writes to their task's CALL SITES — and got `d_ca04` wrong
+again, because `do_reset`'s two call sites are at lines 275 and 332 and **both
+are themselves inside tasks.**
+
+> **Resolving one level of indirection is not resolving the call graph, and a
+> static scan over an event-driven language does not have a fixed number of these
+> to fix.**
+
+Both times the tool produced a **plausible verdict rather than an error**, which
+is worse than not running.
+
+## The three detectors, and which of them can be trusted
+
+    1  never asserted mid-run        NEEDS THE CALL GRAPH. Must print NOT-STATIC
+                                     on any file with a reset write inside a task.
+    2  asserted only on empty state  RUNTIME. 3 for 3 -- d_ca03 V2, d_ai01 V2,
+                                     and AGENT-VERIF-A2's v_ca05 R15.
+    3  asserted, nothing checked     Static, and the one that works.
+
+**Detector 2 is the only one with a clean record, and it was hand-built three
+times rather than scripted once.** That is not an argument against scripting it —
+it is an argument that the thing worth scripting is the one whose manual form
+already works.
+
+## A defect found in my own detector, which changed no verdict
+
+`AGENT-VERIF-A2`'s guard v1 counted `logic rst_n = 0;` as a reset assertion.
+**Mine does too** — `d_ai01` line 57 and `d_dsp03` line 40 are declarations
+counted as asserts. Checked whether it changes anything:
+
+    d_ai01   3 asserts -> 2, mid-run unchanged        verdict UNCHANGED
+    d_dsp03  1 assert  -> 0, still no mid-run assert  verdict UNCHANGED
+
+**No verdict moves, and that is luck rather than design** — the same position
+`AGENT-VERIF-A2` recorded for their own measurement, which survives only because
+none of their eleven wraps reset in a task. A defect that changes no answer on
+the corpus you have is still a defect; it is waiting for a corpus you do not.
+
+## What this means for the store queue, concretely
+
+* **No prediction recorded going in.** Two mechanisms were proposed and both
+  falsified within two hours; a third would be a fourth guess.
+* **Run the measurement the day the testbench exists.** It names which of the
+  three failures the task has, if any, which is better than adjudicating between
+  falsified hypotheses.
+* **Name the antecedent in the clause anyway** — the clause is what a submitter
+  reads and it survives a testbench rewrite. That argument never depended on
+  either mechanism.
+* **Write the reset and flush drives at the top level of the stimulus**, not
+  inside nested tasks.
