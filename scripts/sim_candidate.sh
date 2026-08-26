@@ -431,16 +431,43 @@ for cand in "${CANDS[@]}"; do
   #
   # -F: these are literal strings, not patterns. "_tb." contains a regex
   # metacharacter and would otherwise match "_tbX".
-  leak=""
-  for tok in "TEST_RESULT" "_tb." "_tb " "golden_mem" "mem_stub" "reference_solutions"; do
-    if LC_ALL=C grep -qF -- "$tok" "$cand"; then leak="$tok"; break; fi
-  done
-  if [ -n "$leak" ]; then
+  # THE SCAN READS CODE, NOT COMMENTARY. This grepped the raw file, so
+  # d_nw01/controls/nc_i_overbuffered_r.sv was rejected outright for a COMMENT
+  # reading "Grepping tb/axi4_xbar_tb.sv for an occupancy counter finds nothing"
+  # -- prose explaining why the control matters, matched as if it were a
+  # hierarchical reference. A scanner that cannot tell code from commentary
+  # refuses a file for what it SAYS rather than what it DOES.
+  #
+  # leak_scan.py splits the tokens, because a string literal is safe for one
+  # class and IS the attack for the other: $display("TEST_RESULT: PASS") forges
+  # a verdict from inside a string, while axi4_xbar_tb.r_count inside a string
+  # is inert. A comment-aware rewrite that blanked strings for both would have
+  # opened verdict forgery, and this one did until it was tested.
+  #
+  # A token found only in commentary is REPORTED and not fatal. Silence would
+  # teach the reader there was nothing to say.
+  LEAKOUT="$(python3 "$REPO/scripts/leak_scan.py" "$cand" 2>/dev/null)"
+  LEAKKIND="${LEAKOUT%%	*}"; leak="${LEAKOUT##*	}"
+  if [ "$LEAKKIND" = "COMMENT" ]; then
+    printf '%-26s %-9s %s\n' "$name" "note" \
+      "mentions '$leak' in a comment only -- not a reference, not rejected"
+  fi
+  if [ "$LEAKKIND" = "CODE" ]; then
     case "$leak" in
       TEST_RESULT) why="forges a TEST_RESULT line" ;;
       *)           why="references harness-private '$leak' -- the submission may not see the testbench" ;;
     esac
     printf '%-26s %-9s %s\n' "$name" "REJECT" "$why"
+    # A REFUSAL THAT LEAVES NO TRACE IS INDISTINGUISHABLE FROM A RUN THAT NEVER
+    # HAPPENED. This used to `continue` straight past the recorder, so the
+    # scored path could reject a file every time and nothing durable said so --
+    # exactly what let d_nw01's nc_i control carry "passes both MAX_TRANS
+    # configs" from a hand run while the scored path silently refused it.
+    tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+    python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
+      "$(basename "$cand" .sv)" "task_text_hash=$tt" \
+      "build_status=rejected_leak_token" \
+      "build_error=$why" >/dev/null 2>&1 || true
     NREJECT=$((NREJECT+1)); continue
   fi
   if ! grep -qE "^[[:space:]]*module[[:space:]]+$DUT_MOD\b" "$cand"; then
