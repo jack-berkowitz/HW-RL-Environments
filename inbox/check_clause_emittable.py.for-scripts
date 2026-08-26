@@ -195,6 +195,45 @@ CHAIN = re.compile(
     r"(?:\s*else\s+(?:if\s*\([^;{]*?\)\s*)?[^;]*?;)+",  # (else [if (...)] stmt;)+
     re.S)
 
+# THE SECOND UNIT, AND ON MOST CORPORA IT IS THE PRIMARY ONE: THE CHECK MESSAGE.
+# From AGENT-DESIGN-43a92055, who could not run the block version and answered the
+# question a different way -- grep every check message for two or more clause ids.
+# It finds a DIFFERENT population from the chain scan and neither subsumes the
+# other:
+#
+#   message unit   one check that REPORTS FOR two clauses. The grouping is
+#                  declared in the text and a human confirms it in one read.
+#                  Found six genuine ones across four of their eight tasks, and
+#                  correctly surfaced a seventh -- d_ai01's C2/C3 in a METRIC
+#                  line, not a verdict -- which a reader discards immediately.
+#
+#   chain unit     several checks naming DIFFERENT single ids under one
+#                  condition. v_ca06's D5/D6/D7 name one id each, so the message
+#                  unit cannot see them; the founding case needs the branch scan.
+#
+# Their formulation of why the message is the better default is the one to keep:
+# A BLOCK IS A SCOPING ACCIDENT; A MESSAGE IS ONE OBSERVATION REPORTING ONE
+# VERDICT, which is precisely what the convention is about.
+CLAUSE_TOK = re.compile(r"\b([A-Z][0-9]+[a-z]?)\b")
+CHECKCALL = re.compile(r"\b(?:fail|chk)\s*\((.{0,400}?)\)\s*;", re.S)
+
+def shared_messages(text):
+    """-> [(reported ids, excerpt)] for checks whose call names >= 2 clause ids."""
+    src = re.sub(r"//[^\n]*", "", text)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    out, seen = [], set()
+    for m in CHECKCALL.finditer(src):
+        call = m.group(1)
+        ids = sorted({i for i in CLAUSE_TOK.findall(call)
+                      # a bare hex/width literal like 2'b10 is not a clause id
+                      if not re.search(r"'[bhd]?\s*%s\b" % i, call)})
+        if len(ids) >= 2 and tuple(ids) not in seen:
+            seen.add(tuple(ids))
+            txt = re.sub(r"\s+", " ", call)[:96]
+            out.append((ids, txt))
+    return out
+
+
 def shared_blocks(text):
     """-> [(0, sorted ids)] for if/else chains naming two or more clause ids."""
     src = re.sub(r"//[^\n]*", "", text)
@@ -278,13 +317,17 @@ def main(argv):
             tbs = sorted(glob.glob(os.path.join(d, "tb", "*_tb.sv")))
             if not tbs:
                 continue
-            rows = []
+            rows, msgs = [], []
             for f in tbs:
-                rows += shared_blocks(open(f, encoding="utf-8").read())
-            if rows:
+                s = open(f, encoding="utf-8").read()
+                rows += shared_blocks(s); msgs += shared_messages(s)
+            if rows or msgs:
                 print("  " + os.path.basename(d.rstrip("/")))
+                for ids, txt in msgs:
+                    print("      msg   %-16s %s" % (" + ".join(ids), txt))
+                    n += 1
                 for depth, ids in rows:
-                    print("      %s" % " + ".join(ids))
+                    print("      chain %s" % " + ".join(ids))
                     n += 1
         print("\n%d shared observation(s)." % n)
         return 0

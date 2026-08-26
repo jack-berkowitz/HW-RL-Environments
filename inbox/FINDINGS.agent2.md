@@ -2963,3 +2963,57 @@ ignored once for exactly that reason.
 > mine, and were right. Calibrating an instrument only on the corpus you wrote
 > is how it acquires your blind spot; 42 rows would have been dismissed as noise
 > and the five real ones lost inside them.
+
+
+### The second unit is a peer's, it finds a different population, and neither subsumes the other
+
+AGENT-DESIGN-43a92055 could not run `--shared` — they did not have the build —
+so they answered the question a different way: **grep every check message for two
+or more clause ids.** Their formulation of why that is the better default is the
+one to keep:
+
+> **A block is a scoping accident; a message is one observation reporting one
+> verdict**, which is precisely what the convention is about.
+
+Implemented and run on my eleven. **18 message rows and 5 chain rows, 23 total**,
+and the two units find genuinely different things:
+
+**1 — My corpus already declares grouping in the id field, in eight places, and
+nobody had enumerated them.**
+
+    v_ca03   "A3/A5"    id refused though the contract permits it
+    v_ca04   "R1/R4"    payload from an input that was never offered
+    v_nw01   "Q1/X3"    no response within N cycles
+    v_nw02   "F1/F2"    an AW reached the master port that no write asked for
+    v_nw02   "F4/F5"    an R beat arrived for an id nothing is owed
+    v_nw02   "W3/X4"    AW never accepted
+    v_nw02   "P3/X4"    an AR was offered for N cycles and never accepted
+    v_nw02   "W2/W3"    AWs admitted with no W burst completed downstream
+
+Eight checks reporting for two clauses each. **This is the convention I have
+been proposing, already in use, undeclared and uncounted** — the id field says
+`A3/A5` and the spec says nothing. The remedy for these is not new prose; it is
+to make the spec agree with the id string that already exists.
+
+**2 — A false-positive class, and it is the mirror of theirs.** Six rows are
+FLOOR or COVERAGE messages naming which clauses they protect —
+*"E1, C1 and D4 go unchecked on a single-beat run"*, *"W1 and W3 are untested"*.
+Those are not grouped verdicts; they are floors saying what they guard. Exactly
+their `d_ai01` `C2/C3` metric line: **the unit surfaces it and a human discards
+it in one read**, which is the correct division of labour and is not available
+from a block-based unit at all.
+
+**3 — The sharpest row in either corpus is `v_dsp02  S2 + S6 + S8 + S9`:**
+
+    fail(e.op == OP_MINMAX ? "S6"
+       : (e.op == OP_CMP ? (e.mode == 3'd2 ? "S9" : "S8") : "S2"), ...)
+
+**One check whose reported clause is selected at runtime from four.** Not two
+clauses sharing an observation — four clauses sharing a check, with the
+attribution computed. That is the grouping family at its limit and it was
+invisible to every pass before this one.
+
+**Neither unit subsumes the other.** `D5`/`D6`/`D7` name one id each, so the
+message unit cannot see them; the `X/Y` population names two ids in one call, so
+the chain unit cannot see it. Both passes are needed and the tool now runs both,
+labelled `msg` and `chain` so a reader knows which question produced each row.
