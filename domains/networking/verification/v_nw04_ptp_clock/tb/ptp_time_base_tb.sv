@@ -90,6 +90,46 @@ module ptp_time_base_tb;
     return longint'(t[45:16]) * FNS_PER_NS + longint'(t[15:0]);
   endfunction
 
+  // ---- A4 and S3: `ts_step_o` ---------------------------------------------
+  // UNTIL THIS BLOCK EXISTED, `ts_step_o` APPEARED ONCE IN THIS FILE -- in the
+  // port map. An entire output of the design had no checker, and the two clauses
+  // that describe it, A4 and S3, could not be reported by any `fail()` here.
+  // Found by the emittability scan and confirmed by grep: one occurrence.
+  //
+  // A4 is exact and so is this: ts_step_o is asserted on exactly the cycles
+  // adj_active_o is, plus the cycles S names, and on no others. So outside a
+  // set's window the two signals must be EQUAL, cycle for cycle -- not merely
+  // correlated, and not merely counted.
+  //
+  // S3 is per set, not per run. A global identity
+  //     steps == adj_active cycles + number of sets
+  // is satisfied by a design that raises two steps for one set and none for the
+  // next, so it is not the clause. The window below attributes each step to the
+  // set that owes it.
+  localparam int STEP_W = 4;        // cycles a set has to raise its single step
+  int step_window = 0, step_seen = 0;
+  int cov_steps = 0, cov_set_steps = 0, cov_step_windows = 0;
+  always @(posedge clk) if (!rst) begin
+    if (ts_step) cov_steps = cov_steps + 1;
+    if (set96_v || set64_v) begin
+      if (step_window > 0)
+        fail("S3", $sformatf("cycle %0d: a set was driven while the previous set's step window was still open; the two cannot be attributed", cyc));
+      step_window = STEP_W; step_seen = 0; cov_step_windows = cov_step_windows + 1;
+    end
+    if (step_window > 0) begin
+      if (ts_step && !adj_active) step_seen = step_seen + 1;
+      step_window = step_window - 1;
+      if (step_window == 0) begin
+        if (step_seen != 1)
+          fail("S3", $sformatf("cycle %0d: the set raised ts_step_o on %0d cycle(s) in %0d; exactly one is required",
+                               cyc, step_seen, STEP_W));
+        else cov_set_steps = cov_set_steps + 1;
+      end
+    end else if (checking && (ts_step !== adj_active))
+      fail("A4", $sformatf("cycle %0d: ts_step_o is %0b while adj_active_o is %0b, and no set is outstanding. A4 asserts them on exactly the same cycles.",
+                           cyc, ts_step, adj_active));
+  end
+
   function automatic string base_name(input int b);
     return (b == 0) ? "ts64_o" : "ts96_o";
   endfunction
@@ -232,16 +272,47 @@ module ptp_time_base_tb;
     m_adj = 0;
   endtask
 
+  // THE VALUE A SET WRITES WAS NEVER COMPARED. Both tasks drove the set and then
+  // raised `settle`, which suppresses the increment checker for a few cycles --
+  // so a design that set the base to ANY value at all passed, provided it kept
+  // incrementing legally afterwards. S1 and S2 had no instrument; this is it.
+  //
+  // The comparison allows for increments taken between the set and the sample,
+  // because the contract does not say the set is visible on a particular cycle.
+  // What it does not allow is an arbitrary value: the base must land in
+  // [set, set + SET_CHK x (period + |adj| + |drift|)], which a wrong value
+  // misses by orders of magnitude rather than by a beat.
+  localparam int SET_CHK = 6;
+  function automatic longint set_slack();
+    automatic longint a = (m_adj   < 0) ? -m_adj   : m_adj;
+    automatic longint d = (m_drift < 0) ? -m_drift : m_drift;
+    return longint'(SET_CHK) * (m_period + a + d) + 1;
+  endfunction
+
   task automatic set_ts96(input longint unsigned s, input longint unsigned ns);
+    automatic longint want, got, adv;
     @(negedge clk); set96 = {48'(s), 2'b00, 30'(ns), 16'd0}; set96_v = 1'b1;
+    want = ts96_fns(set96);
     @(negedge clk) set96_v = 1'b0;
     settle = SETTLE; last_drift[0] = -1; last_drift[1] = -1;
+    repeat (SET_CHK) @(posedge clk);
+    got = ts96_fns(ts96); adv = got - want;
+    if (adv < 0 || adv > set_slack())
+      fail("S1", $sformatf("cycle %0d: set_ts96_valid_i asked for %0d fns into the second; %0d cycles later ts96_o reads %0d, which is %0d away -- at most %0d is reachable by legal increments",
+                           cyc, want, SET_CHK, got, adv, set_slack()));
   endtask
 
   task automatic set_ts64(input longint unsigned ns);
+    automatic longint want, got, adv;
     @(negedge clk); set64 = 64'(ns << 16); set64_v = 1'b1;
+    want = longint'(set64);
     @(negedge clk) set64_v = 1'b0;
     settle = SETTLE; last_drift[0] = -1; last_drift[1] = -1;
+    repeat (SET_CHK) @(posedge clk);
+    got = longint'(ts64); adv = got - want;
+    if (adv < 0 || adv > set_slack())
+      fail("S2", $sformatf("cycle %0d: set_ts64_valid_i asked for %0d fns; %0d cycles later ts64_o reads %0d, which is %0d away -- at most %0d is reachable by legal increments",
+                           cyc, want, SET_CHK, got, adv, set_slack()));
   endtask
 
   // ---------------- coverage, on STIMULUS only ----------------
@@ -359,6 +430,12 @@ module ptp_time_base_tb;
     if (cov_neg_drifts < 2)  fail("COVERAGE", $sformatf("only %0d NEGATIVE drifts driven -- D3's signed half is untested without one", cov_neg_drifts));
     if (cov_ns_drifts < 2)   fail("COVERAGE", $sformatf("only %0d drifts of a whole nanosecond or more driven -- drift_ns_i stays at zero without them", cov_ns_drifts));
     if (cov_sets < 3)        fail("COVERAGE", $sformatf("only %0d timestamp sets driven", cov_sets));
+    $display("  [coverage] ts_step_o high on %0d cycle(s); %0d set window(s), %0d resolved",
+             cov_steps, cov_step_windows, cov_set_steps);
+    $display("FIRED nw04.ts_step %0d", cov_steps);
+    $display("FIRED nw04.set_windows %0d", cov_step_windows);
+    if (cov_step_windows < 3)
+      fail("COVERAGE", $sformatf("only %0d set(s) reached the ts_step_o window -- S3 is untested without them", cov_step_windows));
     if (!cov_wrap_driven)    fail("COVERAGE", "the one-second wrap was never driven -- W1 and W3 are untested");
     if (!cov_reset_mid)      fail("COVERAGE", "reset was never asserted mid-run -- R2 is untested");
 

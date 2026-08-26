@@ -2621,3 +2621,114 @@ claims about the set of checks these tasks had **on 2026-08-25**, and both now
 say so in `task.yaml`. My `v_ca07` H3 pair carries the same asterisk. The
 proposal that `exclusive:` carry the date or checker revision it was measured
 against is right and I support it for contract revision 3.
+
+---
+
+## FINDING — the emittability prediction is refuted as a predictor: 3 of 6, which is chance
+
+**All seven registered tasks worked by hand, 44 candidates classified. The
+hypothesis had no signal, and the real result is somewhere else: the gaps are
+CONCENTRATED, not spread.**
+
+### The seven, worked
+
+| task | predicted | false positive | grouped | **unchecked** | measured | |
+|---|---|---|---|---|---|---|
+| `v_ai02` | GROUPED | 4 | 2 | 0 | GROUPED | **✓** |
+| `v_nw02` | GROUPED | 1 | 3 | 0 | GROUPED | **✓** |
+| `v_ca07` | UNCHECKED | 3 | 0 | **2** | UNCHECKED | **✓** |
+| `v_nw01` | UNCHECKED | 0 | 2 | 0 | GROUPED | ✗ |
+| `v_nw03` | UNCHECKED | 8 | 1 | 0 | GROUPED | ✗ |
+| `v_nw04` | UNCHECKED | 1 | 8 | **6** | GROUPED | ✗ |
+| `v_ca04` | UNCHECKED | 3 | 0 | 0 | **no real candidates** | — |
+| | | **20** | **16** | **8** | | **3 / 6** |
+
+Three of six decidable. That is a coin. **The hypothesis — grouping dominates
+where a task has few observables, unchecked where it has many — carries no
+information**, and a new task's shape is not knowable from its spec. By the terms
+registered before measuring, the fix is a checklist rather than a design
+principle.
+
+`v_ca04` is excluded rather than scored: all three of its candidates are false
+positives, so it has no dominant shape to be right or wrong about. Counting it
+either way would be choosing a denominator after seeing the numerator.
+
+### The result that IS there: the gaps are concentrated
+
+**Six of the eight genuinely-unchecked clauses are in ONE task.** Five of the
+seven have none at all. Emittability gaps are not a systemic property of how
+these tasks are written — they are a `v_nw04` property, and to a much smaller
+extent a `v_ca07` one.
+
+That is a more useful finding than the one predicted, and it is the opposite
+shape: not a gradient across tasks, but a single outlier.
+
+### 45% of the candidate list is noise, and on one task it is 89%
+
+Twenty of 44 are definitions, permissions or obligations addressed to the tester
+— `v_nw03` contributes eight of nine. The tool says so in its header ("CANDIDATE
+LIST, NOT A VERDICT", calibrated at 2 real of 5) and the measured rate across
+seven tasks is **24 real of 44**, close to it. But the per-task spread is
+enormous, and a reader taking a per-task count at face value would be badly
+wrong about `v_nw03`.
+
+### `v_nw04`: an entire output had no reader, and a set's value was never compared
+
+    $ grep -c ts_step_o tb/ptp_time_base_tb.sv
+    1                    # the port map
+
+**A4** ("`ts_step_o` is asserted on exactly the cycles `adj_active_o` is, plus
+the cycles §S names, and on no others") and **S3** ("each such assertion raises
+`ts_step_o` for exactly one cycle") describe an output the testbench connected
+and never looked at. It is not a dead signal: measured, it is high on **35
+cycles** across **4 set windows**.
+
+**S1** and **S2** were worse. `set_ts96()` drove the set and raised `settle`,
+which suppresses the increment checker for a few cycles — so **a design that set
+the base to any value at all passed**, provided it kept incrementing legally
+afterwards. The value written was never compared to the value read.
+
+All four now have instruments:
+
+- **A4** is checked as an equality, cycle for cycle: outside a set's window
+  `ts_step_o` must EQUAL `adj_active_o`. Not correlated, not counted.
+- **S3** is checked **per set**, not per run. A global identity
+  `steps == adj_active cycles + sets` is satisfied by a design that raises two
+  steps for one set and none for the next, so it is not the clause.
+- **S1/S2** compare the base against the value written, allowing only the
+  increments reachable in the sampling window — a wrong value misses that
+  interval by orders of magnitude, not by a beat.
+
+**Validated by three controls that must fail, because no mutant exercises any of
+them** — by this file's own standard, a checker whose refusal is unverified is a
+checker that has not been shown to fire:
+
+| control | result |
+|---|---|
+| `ts_step_o` tied low | **FAIL — 24 × A4** |
+| `ts_step_o` tied high | **FAIL — 24 × A4** |
+| the set never reaches the design | **FAIL — 3 × S1, 3 × S3** (and 1 × W1, collateral) |
+
+Golden PASS, dut2 PASS, conformant PASS, gate rejected, **10/10 killed**.
+Candidates 15 → 11. `tb/` is not in `task_text_hash`, so no hash moved.
+
+The third control's blast radius exceeds one clause, so it licenses *"the
+checker refuses"* and not *"it refuses on this clause alone"*. Those are
+different claims and only the first is being made.
+
+### A shape worth naming: grouped AND unexercised is worse than either
+
+`v_nw01`'s **C2** — "the cache holds 4 entries; an insert never fails; when full
+it displaces an existing entry" — is reportable: a failed insert surfaces as a
+missed lookup under **Q1**. But `cov_hits >= 4` is the only floor near it and
+**nothing requires a fifth distinct insert**, so the clause is credited to
+another id *and* its antecedent may never be reached.
+
+> Grouping hides which clause was tested. An unguarded antecedent hides whether
+> anything was. Together the clause is scored, invisible, and possibly never run
+> — and each defect alone would have been easier to see than the pair.
+
+`v_nw01`'s **C1** is the honest opposite and worth the contrast: its text says
+*"answered from the cache under Q1"*. The clause **names the id that reports
+it**. That costs one clause of prose and removes the whole ambiguity, and it is
+the cheapest fix in this finding.
