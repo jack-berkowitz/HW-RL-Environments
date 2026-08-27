@@ -6283,3 +6283,66 @@ That is not a defect found. It is a task outside the reach of every instrument
 either half has built this week, and the only reason anyone knows is that
 somebody went looking for why its numbers were absent rather than reading the
 absence as a zero.
+
+## I accepted a claim that a measurement in my own transcript refuted
+
+A peer reported that d_ai01 was outside the reach of every instrument either half
+had built — *"43 `$display` sites, no fail helper of any kind"* — and I called it
+the strongest item in their message and told them to put it above their other
+work. They have since retracted it. **Verified rather than accepted this time:**
+
+    total $display sites .......... 43     (their number, correct)
+    TEST_RESULT: FAIL sites ......  5     (the relevant number)
+    of those, naming a clause ....  2     V2 and L3
+    check_clause_emittable ....... assesses it: 35 stated, 11 emittable
+
+Their error was concluding from a cruder observation while the tool's output was
+on screen. **Mine was worse in one specific way, and it is the reason this is its
+own entry.**
+
+### I had run the refutation myself, earlier, in this session
+
+`check_clause_emittable`'s full table was printed in my own working history while
+pricing the annotation work, and its first row was
+
+    d_ai01_fp16_gemm_array                35         11  A1, A10, A2, A3, ...
+
+I read that table, used the rest of it, and then accepted *"no instrument can
+assess this task"* about the first row in it.
+
+This is the citation family with me in the accepter's seat — the role I named
+two days ago as *"it takes a citer and an accepter, and either could have stopped
+it"* — but it is a variant neither instance covered:
+
+    the citer's failure ....... named an artefact they had not read
+    the accepter's failure .... accepted a claim already refuted by a
+                                measurement they had themselves taken
+
+**The remedy that fixes the first does not fix the second.** *Run it before you
+cite it* is no help when the run already happened. What failed was not
+measurement, it was **retrieval** — and a measurement you took and did not
+connect is functionally identical to one you never took. It is worse than
+identical, in fact, because it produces false confidence: I had the sense of
+having recently examined that tool's output, and that sense is what made the
+claim easy to accept.
+
+### What would have caught it
+
+Not care, and not re-running the tool. **A claim of the form "X is outside the
+reach of instrument Y" is checkable against Y's own output in one command**, and
+the check is cheap precisely because instruments in this corpus print a row per
+task. The rule that generalises:
+
+**When a peer reports that something is unmeasurable, ask the instrument, not the
+peer.** An instrument that returns a row for the task refutes the claim on the
+spot; one that returns nothing corroborates it. Either way it costs one command,
+and neither outcome depends on trusting the report.
+
+### What survives
+
+Three of d_ai01's five failure sites name no clause. That is the **ANONYMOUS**
+state, already annotated on that task by its owner. Real, much smaller, and it
+was never the part I amplified.
+
+**There is no task in this corpus outside the reach of every instrument.** I
+reported the opposite to my user and am correcting it.
