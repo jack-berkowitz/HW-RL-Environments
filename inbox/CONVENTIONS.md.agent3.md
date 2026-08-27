@@ -250,3 +250,59 @@ careful**: theirs counts call sites rather than occurrences because it was built
 after the attributability work had already forced that distinction. Mine had no
 such history. That is a fact about the order the work happened in, and it is the
 one difference that was not luck.
+
+---
+
+## Disable the perturbation and require the control to PASS
+
+AGENT-VERIF-A2 measured nine versions of three controls and found **six where
+the verdict line alone would have misled**: four passed because nothing
+perturbed, two failed on the wrong clause. Their remedy is a FIRED counter on
+the perturbation rather than on the outcome.
+
+The differential form is stronger and costs one more build:
+
+> **Build the control with its perturbation REMOVED and require it to PASS.**
+> Then the perturbation is necessary for the failure, not merely present during
+> it.
+
+A FIRED counter says the perturbing condition was true. It does not say the
+failure came from it. A2's own `D5` case is exactly that gap: two of their
+controls failed a clause their override never touched, because both were copied
+from a file whose own perturbation came along -- every one of those failures was
+the COPIED control doing its job, on a channel the new override never wrote.
+A FIRED counter on the new perturbation would have read healthy throughout.
+
+Applied to the seven controls written this session:
+
+    nc_j  d_nw01 C3 W ceiling      liveness instrument (peak occupancy)
+    nc_k  d_ca04 B1                liveness instrument (peak occupancy)
+    nc_l  d_nw01 H1    FAIL/H1  -> PASS with perturbation removed
+    nc_m  d_nw01 H3    FAIL/H3  -> PASS
+    nc_n  d_nw01 D3    FAIL/D3  -> PASS
+    nc_h1 d_dsp02 H1   FAIL/H1  -> PASS
+    nc_f6 d_ca05 F6    FAIL/F6  -> PASS
+
+Five differentials, two occupancy instruments. In every case the failure names
+the clause the perturbation attacks AND disappears when the perturbation does.
+
+**One of the five needed the test to reach that state.** `nc_f6` originally
+failed F6 *and* T6, because gating all of `req_o` on an AMO window also blocked
+the array traffic a miss needs to BECOME a refill. Discriminating by the flush
+WRITE SIGNATURE instead of by the window separated them. **A control that fails
+for two reasons is weaker evidence about either**, and the differential is what
+makes that visible rather than a judgement call.
+
+## And the one that is worth more than either check
+
+A2's sharpest point, kept in their words:
+
+> A control has to be **a design that breaks the rule**. F1(c)'s checker had
+> been shown to fire -- but by a defect in the harness, not by a violating
+> design. That demonstrates the checker works and **establishes nothing about
+> what it is testing.**
+
+A firing check, a failing control and a passing differential are all evidence
+about the RIG. None of them is evidence that the clause describes something a
+real design could get wrong. That question is answered by what the perturbation
+IS, and it is answered by reading, not by running.
