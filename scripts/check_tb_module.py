@@ -32,6 +32,9 @@ necessary condition and nothing more.
 """
 import os
 import re
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _terminal_state import terminal_state
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -64,40 +67,6 @@ def yaml_scalar(path, key):
         return None
     m = re.search(r"^[ \t]*%s:[ \t]*(\S+)" % re.escape(key), src, re.M)
     return m.group(1).split("#")[0].strip() if m else None
-
-
-def terminal_state(task_dir):
-    """-> a reason string if this task DECLARES itself terminal, else None.
-
-    TWO STATES THAT LOOKED IDENTICAL AND MEAN OPPOSITE THINGS. A task with no
-    task.yaml is either "deliberately absent, and recorded" or "missing, nobody
-    noticed", and this checker collapsed both to BROKEN. It has reported
-    d_dsp01 -- withdrawn under F54, recorded in its own NOTES.md, never to have a
-    task.yaml -- as broken for its whole existence, so its red carried no
-    information and anything gating on it was gated by a condition nobody could
-    clear. Reported by AGENT-DESIGN-43a92055.
-
-    THE MARKER IS DELIBERATELY TIGHT, and the loose version was measured before
-    this one was chosen. Six NOTES.md files in the corpus contain the word
-    "withdrawn" -- d_ca01, d_ca04, d_dsp02, d_dsp03, v_ca04 and d_dsp01 -- and
-    only the last is withdrawn; the rest mention it in passing. A grep for the
-    word would have exempted five live tasks from the check, which is a worse
-    failure than the one being fixed. So the declaration must be in the FIRST
-    HEADING LINE, where a task states what it is rather than discusses it.
-
-    Verified: this matches exactly the two tasks the checker calls broken today,
-    d_dsp01 and v_dsp01, and no live task.
-    """
-    rejected = os.path.join(task_dir, "REJECTED.md")
-    if os.path.isfile(rejected):
-        return "REJECTED.md"
-    notes = os.path.join(task_dir, "NOTES.md")
-    if os.path.isfile(notes):
-        with open(notes, encoding="utf-8", errors="replace") as fh:
-            first = fh.readline()
-        if re.match(r"^#.*\bWITHDRAWN\b", first, re.I):
-            return "NOTES.md declares WITHDRAWN"
-    return None
 
 
 def check_task(task_dir):

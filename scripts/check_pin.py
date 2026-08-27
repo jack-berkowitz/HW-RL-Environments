@@ -26,6 +26,8 @@ nothing to check" must not print the same.
   usage:  check_pin.py [task ...]        default: every design task
 """
 import glob, json, math, os, re, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _terminal_state import terminal_state
 
 RULE = "ceil(1.5 x converged / 0.25) * 0.25"
 PIN_RE = re.compile(r"pinned period is\s+([0-9]+(?:\.[0-9]+)?)\s*ns", re.I)
@@ -102,7 +104,7 @@ def main(argv):
     dirs = sorted(glob.glob("domains/*/design/d_*"))
     print(f"pin rule: {RULE}\n")
     print(f"{'task':<28} {'spec pin':>9} {'converged':>10} {'rule gives':>11}  verdict")
-    bad = noconc = 0
+    bad = noconc = terminal = 0
     for d in dirs:
         t = os.path.basename(d)
         short = "_".join(t.split("_")[:2])
@@ -127,6 +129,16 @@ def main(argv):
             if pnote:
                 bad += 1
         if pin is None and conv is None:
+            # A WITHDRAWN TASK IS NOT AN UNCHECKED ONE. d_dsp01 is withdrawn under
+            # F54 and must never have a pin or a sweep, and it sat in the same
+            # bucket as d_ca05, whose sweep is genuinely pending -- so rc=2 had a
+            # reason nobody could ever clear. Identical blindness to the one
+            # check_tb_module carried until bdb512c; the marker rule is shared
+            # rather than copied, because two copies drift.
+            why = terminal_state(d)
+            if why:
+                print(f"  {t:<26} {'-':>9} {'-':>10} {'-':>11}  TERMINAL -- {why}")
+                terminal += 1; continue
             print(f"  {t:<26} {'-':>9} {'-':>10} {'-':>11}  NO CONCLUSION -- no stated pin and no sweep")
             noconc += 1; continue
         if pin is None:
@@ -164,7 +176,7 @@ def main(argv):
             bad += 1
         print(f"  {t:<26} {pin:>9} {conv:>10} {want_pin:>11}  "
               f"{'ok' if ok else '*** MISMATCH ***'}{pnote}")
-    print(f"\n{bad} mismatch(es), {noconc} NO CONCLUSION.")
+    print(f"\n{bad} mismatch(es), {noconc} NO CONCLUSION, {terminal} terminal.")
     if noconc:
         print("A task with no conclusion was NOT checked. That is not a pass.")
     return 1 if bad else (2 if noconc else 0)
