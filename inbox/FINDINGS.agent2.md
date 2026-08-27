@@ -6770,3 +6770,99 @@ find — the run refused, the score was zero, both correct.
 The remedy is the same in both: **state the assumption the attribution rests
 on.** Not care, and not another control — a sentence at the point of display
 saying what would have to be true for the accusation to be the right one.
+
+## F1(a) and F1(c) built: the golden failed first, and it was the testbench
+
+    golden                     PASS
+    F1(c) coverage             reset dropped with 4 read id(s) and 4 write id(s)
+                               outstanding, survivor window ran 64 cycles
+    RULE24 negative control     PASS
+    RULE24 positive control     11 of 11 mutants produced a clause failure
+
+Kill table unchanged by the edits. F1 now has a site of its own for the two
+halves that had none.
+
+### What was built
+
+**F1(a)** is the only `always @(posedge clk) if (!rst_n)` block in the file that
+looks at the design. Five tests: AR, AW and W **handshakes**, plus bare
+`s_rvalid` and `s_bvalid`.
+
+*Handshakes, not readies*: a design that parks `s_arready` high while nothing is
+offered accepts nothing and is correct, so testing ready alone would reject
+conforming hardware (rule 24). The response channels take a bare valid because
+presenting one **is** the violation.
+
+**F1(c)** takes `pre_rst_r` / `pre_rst_w` masks **before** `rst_n` falls — the
+model's own state is wiped on that same edge, so the masks are the only thing
+that carries across — then drops reset with work in flight and opens a 64-cycle
+survivor window during which nothing is offered.
+
+**The precedence is at the site, in all three response branches:**
+
+    if (surv_win != 0 && pre_rst_r[s_rid]) begin
+      // F1 TAKES PRECEDENCE OVER C2 HERE. This id was outstanding when rst_ni
+      // went low and the model was cleared on the same edge, so C2's test below
+      // is true of it and says the wrong thing: the converter did not invent
+      // this response, it failed to discard it across a reset.
+      fail("F1", ...)
+    end else if (addr_q[s_rid].size() == 0) begin
+      fail("C2", ...)
+
+C2 is about a converter **inventing** a response; F1 is about one **surviving** a
+reset. Attributing a survivor to C2 would have been a fourth relabel inside the
+fix for relabels.
+
+### The golden failed first, and the file had already written the diagnosis
+
+Eight F1 failures on the first run. **Not the design.** The testbench's own
+downstream responder queues are never cleared on reset — `mq_id`/`mq_addr`/
+`mq_len` on the R path, `awq`/`awq_a`/`bq`/`bq_a` on the B path — so the model
+kept answering transactions the design had correctly discarded, and the design
+forwarded them.
+
+Three lines above the block I patched:
+
+> a source that withdraws its own offer makes the design LOOK like it withdrew.
+> `reply_en` going low at the end of a `drain()` took back an R beat the design
+> was still holding, and the design's `s_rvalid` followed. **Two D5 failures on
+> the GOLDEN, neither of them the golden's.**
+
+**I reproduced that failure in the same file, below the comment recording it.**
+AXI's `ARESETn` is global — master, interconnect and subordinate reset together —
+and the model plays the subordinate, so `rst_n` resets it too. Both paths now
+clear, and the reason is written where the next person will be standing.
+
+Worth noting what made it diagnosable in one step: the failure said *"write
+response for slave id 0 arrived 1 cycle after reset release"*, and a two-line
+`$display` showed `m_bvalid=1` with `m_bid` incrementing 0,1,2,3 while `mq=0` —
+the R queue was empty and something else was still answering. **The message named
+the channel and the cycle, so the diagnostic could be aimed rather than swept.**
+
+### The negative control I did not land
+
+Two versions. Both fire F1 correctly — 4 and 8 hits, right message, right
+window — and **both also trip D5**, because a valid raised while its ready is low
+and then released is a *withdrawal*, which is exactly what D5 forbids. Gating on
+`s_rready` made it worse: the valid then follows a toggling ready, so it
+withdraws repeatedly, 12 D5 to 8 F1.
+
+**A control that fails on two clauses isolates neither**, so it is deleted rather
+than shipped. `d5_withdraws_ar.sv`'s own header records this trap — *"the obvious
+candidate is not one"* — and I walked into it twice after reading that sentence.
+
+**So F1(a)'s checker is demonstrated to fire and is not yet controlled.** Both
+perturbations attributed to F1 with the correct message and time, which is
+evidence the checker works and is not a recorded control. The honest statement is
+the one that file already uses for D5 before its control existed.
+
+### And a process defect, twice in one sitting
+
+Twice I built a patch anchor from **displayed** text that a `sed 's/^/  /'` had
+indented, and both failed to match the source. The second time the assertion
+fired *after* an earlier edit had already been written, so the build succeeded
+and the missing phase was simply absent — a silent skip inside a successful
+build.
+
+The fix is not care. **Extract the anchor from the file, never from a rendering
+of it**, which is one `repr()` call and was available both times.

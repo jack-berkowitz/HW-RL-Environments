@@ -43,6 +43,7 @@ module id_width_conv_tb;
   localparam int MAX_UNIQ = 4, MAX_TXN = 2;
   localparam int NID = 1 << SLV_ID_W;
   localparam int RETIRE_WINDOW = 2;   // A4
+  localparam int SURV_WINDOW   = 64;  // F1(c): how long after release a survivor still counts
 
   logic clk = 0, rst_n = 0;
   always #5 clk = ~clk;
@@ -55,6 +56,59 @@ module id_width_conv_tb;
   logic [1:0]          s_bresp, s_rresp;
   logic s_awvalid=0, s_awready, s_wlast=0, s_wvalid=0, s_wready;
   logic s_bvalid, s_bready, s_arvalid=0, s_arready, s_rlast, s_rvalid, s_rready;
+
+  // ==== F1 =====================================================================
+  // F1 has three halves and until now none of them had a site of its own. The
+  // "table is empty after release" half is declared in the spec as reported under
+  // A3. These are the other two.
+  //
+  // (a) THE DESIGN IS IDLE WHILE rst_ni IS LOW.
+  //     Every other DUT checker in this file is gated `if (rst_n && ...)` -- 32 of
+  //     the 42 fail() sites live inside such a block -- so the reset window was
+  //     excluded from observation by construction. This block is the exception on
+  //     purpose and cannot reuse an existing one: their gate is the thing being
+  //     removed.
+  //
+  //     "No request is accepted" is a statement about HANDSHAKES, not about ready.
+  //     A design that parks s_arready high while nothing is offered accepts
+  //     nothing and is correct; testing ready alone would reject it (rule 24).
+  always @(posedge clk) if (!rst_n) begin
+    if (s_arvalid && s_arready)
+      fail("F1", $sformatf("AR handshake completed while rst_ni was low (id %0d)", s_arid));
+    if (s_awvalid && s_awready)
+      fail("F1", $sformatf("AW handshake completed while rst_ni was low (id %0d)", s_awid));
+    if (s_wvalid && s_wready)
+      fail("F1", "W handshake completed while rst_ni was low");
+    if (s_rvalid)
+      fail("F1", $sformatf("s_rvalid asserted while rst_ni was low (id %0d)", s_rid));
+    if (s_bvalid)
+      fail("F1", $sformatf("s_bvalid asserted while rst_ni was low (id %0d)", s_bid));
+  end
+
+  // (c) NOTHING OUTSTANDING BEFORE A RESET ANSWERS AFTER IT.
+  //     The model is CLEARED on the same edge that resets the design -- live_r,
+  //     live_w, addr_q, len_q, waddr_q, rbeat, map_valid and owner_valid all go
+  //     on `if (!rst_n)` -- so after release a surviving response finds nothing
+  //     outstanding and lands on C2's "none outstanding" branch. That is a
+  //     DIFFERENT CLAIM: C2 is about a converter inventing a response, F1 is
+  //     about one surviving a reset.
+  //
+  //     These two masks are the only model state the reset does not touch, and
+  //     they exist so the survivor is reported under F1. Ported from v_dsp02's
+  //     S15, which does the same job with exp_q.
+  //
+  //     PRECEDENCE, and it is stated here because it is the whole point: inside
+  //     the survivor window, an id in the mask is reported under F1 and the C2
+  //     branch is NOT taken for it. Attributing a cross-reset survivor to C2
+  //     would be a fourth relabel inside the fix for relabels.
+  logic [NID-1:0] pre_rst_r = '0, pre_rst_w = '0;
+  int unsigned    surv_win  = 0;      // cycles left in the survivor window
+  int unsigned    cov_survivor = 0;   // how many cycles the window was open
+  int unsigned    cov_pre_rst_r = 0, cov_pre_rst_w = 0;
+  always @(posedge clk) if (rst_n && surv_win != 0) begin
+    surv_win     <= surv_win - 1;
+    cov_survivor <= cov_survivor + 1;
+  end
 
   logic [MST_ID_W-1:0] m_awid, m_arid, m_bid=0, m_rid=0;
   logic [ADDR_W-1:0]   m_awaddr, m_araddr;
@@ -163,6 +217,20 @@ module id_width_conv_tb;
   logic hold_mr = 0, hold_mb = 0;
   always @(posedge clk) if (!rst_n) begin
     hold_mr <= 1'b0; hold_mb <= 1'b0;
+    // THE RESPONDER IS PART OF THE ENVIRONMENT AND `rst_n` RESETS ALL OF IT.
+    // AXI's ARESETn is global -- master, interconnect and subordinate reset
+    // together -- and this model plays the downstream subordinate. Leaving
+    // its queues up across a reset makes it keep answering transactions the
+    // DESIGN has correctly discarded, and the design forwards those answers.
+    // That is exactly the shape recorded above for `reply_en`, where a source
+    // that withdrew its own offer made the design look like it withdrew --
+    // two D5 failures on the golden, neither of them the golden's.
+    // Found by F1(c), which drops rst_n with work in flight and so had
+    // nothing else to blame. Without this the golden fails F1 for the
+    // TESTBENCH's arithmetic.
+    mq_id.delete(); mq_addr.delete(); mq_len.delete();   // the R path
+    awq.delete(); awq_a.delete(); bq.delete(); bq_a.delete();  // and the B path
+    m_beat <= 0;
   end else begin
     hold_mr <= m_rvalid && !m_rready;
     hold_mb <= m_bvalid && !m_bready;
@@ -330,7 +398,13 @@ module id_width_conv_tb;
       // ---- every read data BEAT, not only the last -----------------------
       if (s_rvalid && s_rready) begin
         n_rbeat++;
-        if (addr_q[s_rid].size() == 0) begin
+        if (surv_win != 0 && pre_rst_r[s_rid]) begin
+          // F1 TAKES PRECEDENCE OVER C2 HERE. This id was outstanding when
+          // rst_ni went low and the model was cleared on the same edge, so C2's
+          // test below is true of it and says the wrong thing: the converter did
+          // not invent this response, it failed to discard it across a reset.
+          fail("F1", $sformatf("read beat for slave id %0d arrived %0d cycle(s) after reset release; it was outstanding before the reset and F1 requires it discarded", s_rid, SURV_WINDOW - surv_win));
+        end else if (addr_q[s_rid].size() == 0) begin
           // C1/C2 together: either this beat carries an identifier that has
           // nothing outstanding, or an identifier that is not its own.
           fail("C2", $sformatf("read beat for slave id %0d with none outstanding", s_rid));
@@ -367,11 +441,17 @@ module id_width_conv_tb;
       end
       if (s_bvalid && s_bready) begin
         n_b++;
-        if (live_w[s_bid] == 0)
+        // F1 TAKES PRECEDENCE OVER C2 HERE, for the reason given at the read site.
+        if (surv_win != 0 && pre_rst_w[s_bid])
+          fail("F1", $sformatf("write response for slave id %0d arrived %0d cycle(s) after reset release; it was outstanding before the reset and F1 requires it discarded", s_bid, SURV_WINDOW - surv_win));
+        else if (live_w[s_bid] == 0)
           fail("C2", $sformatf("write response for slave id %0d with none outstanding", s_bid));
         else
           live_w[s_bid] <= live_w[s_bid] - 1;
-        if (waddr_q[s_bid].size() == 0)
+        if (surv_win != 0 && pre_rst_w[s_bid]) begin
+          // reported under F1 above; this C2 test is TRUE of a survivor and
+          // says the wrong thing about it, so it does not run for one.
+        end else if (waddr_q[s_bid].size() == 0)
           fail("C2", $sformatf("write response for slave id %0d with no write outstanding", s_bid));
         else begin
           if (s_bresp !== resp_of(ADDR_W'(waddr_q[s_bid][0])))
@@ -595,6 +675,48 @@ module id_width_conv_tb;
       drain(60);
     end
     drain(600);
+
+    // ---- F1(c): a reset with transactions outstanding ------------------------
+    // The half of F1 that no stimulus reached. Ported from v_dsp02's S15 phase:
+    // put work in flight, drop reset on top of it, and require that nothing owed
+    // before the reset is answered after it.
+    //
+    // The masks are taken BEFORE rst_n falls, because the model's own state
+    // (live_r, live_w, addr_q, waddr_q, ...) is wiped on that same edge. They are
+    // the only thing that carries across, and without them a survivor would be
+    // reported under C2 -- see the precedence at the two response sites.
+    phase = "F1(c): reset with work outstanding";
+    for (int k = 0; k < MAX_UNIQ; k++) begin
+      offer_ar(k, 400, acc, took, 3);
+      offer_aw(k, 400, acc, took, 1);
+      if (acc) begin n_aw_issued++; send_w(1); end
+    end
+    @(negedge clk);
+    for (int i = 0; i < NID; i++) begin
+      pre_rst_r[i] = (live_r[i] != 0);
+      pre_rst_w[i] = (live_w[i] != 0);
+    end
+    cov_pre_rst_r = $countones(pre_rst_r);
+    cov_pre_rst_w = $countones(pre_rst_w);
+    @(negedge clk) rst_n = 1'b0;
+    repeat (4) @(posedge clk);
+    @(negedge clk) rst_n = 1'b1;
+    surv_win = SURV_WINDOW;
+    // Nothing is offered during the window: a response arriving now can only be
+    // one the design held across the reset, and the two response checkers report
+    // it under F1 rather than C2.
+    drain(SURV_WINDOW + 8);
+    // and the design must be usable again -- F1's "table is empty after release"
+    // half, which A3 checks and which the spec declares as reported under A3.
+    offer_ar(0, 400, acc, took, 0);
+    if (!acc)
+      fail("F1", "no request was accepted after reset release -- the table is required to be empty");
+    drain(200);
+
+    if (cov_pre_rst_r == 0 && cov_pre_rst_w == 0)
+      fail("FLOOR", "the reset phase dropped rst_ni with NOTHING outstanding -- F1's discard requirement was not exercised");
+    $display("  [coverage] F1(c): reset dropped with %0d read id(s) and %0d write id(s) outstanding, survivor window ran %0d cycle(s)",
+             cov_pre_rst_r, cov_pre_rst_w, cov_survivor);
 
     if (cov_full_new < 2)  fail("FLOOR", "the table boundary was not exercised from both sides");
     if (cov_full_same < 1) fail("FLOOR", "a same-id request at a full table was never offered");
