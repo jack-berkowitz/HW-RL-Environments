@@ -5311,3 +5311,182 @@ price the work: **emittable was measured as "the id appears in a printable
 string", which is correct for every non-compound id and silently wrong for
 eight.** A clause id inside a compound is credited to a verdict that cannot be
 routed to it.
+
+## The compound-id scan of the results records was vacuous, and that is the finding
+
+Asked to grep every results record for compound clause ids before touching the
+three sites. Result:
+
+    result records scanned ............................... 758
+    records containing a compound id ....................... 0
+    records containing ANY clause-shaped token ............. 0
+
+**The second line is why the first is worthless.** No stored result carries a
+clause id of any kind, so a scan for compound ones could not have found one.
+Reporting *"clean"* here would have been the vacuous-check family in the check I
+ran to protect against a different defect.
+
+The reason is structural, not accidental:
+
+    fail(req, msg)   ->  $display("[FAIL] %s : %s ...", req, msg)   a log line
+    runner/score.py  ->  VERDICT_RE = ^TEST_RESULT:\s*(PASS|FAIL)(?::\s*(.*))?$
+    runs/*__sim.json ->  all_passed, faults_caught, conformant_accepted, ...
+
+The clause id reaches a **diagnostic line a human reads**. `score.py` parses one
+`TEST_RESULT:` line per run; the record stores aggregate counts. The first
+argument of `fail()` never reaches the results record at all.
+
+So **no results need repair, and the reason is not that the compound ids were
+caught.** It is that per-clause attribution does not reach the record, so nothing
+downstream could have been misled by an unroutable id — and nothing downstream
+could be informed by a correct one either.
+
+That has a consequence for the annotation convention, whose stated purpose is
+*"so scoring can decide deliberately instead of the grouping being discovered by
+someone reading a failure message"*. **Scoring cannot currently see clauses at
+all.** Today the annotation is for the reader of the spec and the reader of the
+log, which is still worth doing — but the sentence claiming a scoring benefit is
+ahead of the apparatus, and should say so until a clause id reaches a record.
+
+### And a correction to what I said about the extractor
+
+I reported that `check_clause_emittable` credits `R1` because the id extractor
+finds it *inside* the compound string. That is wrong, and the truth is more
+interesting. It splits deliberately:
+
+    for part in re.split(r"[/,]", m.group(1)):
+        if re.fullmatch(r"[A-Z][0-9]+[a-z]?", part):
+            out.add(part)
+
+Each part must **fullmatch** a clause id. This is not a substring accident — it
+is a considered rule, and it is **correct for the question the tool asks**, which
+its own docstring states as the ids appearing in a string the testbench can
+print. `R1/R4` does contain a printable `R1`.
+
+**The defect is mine: I used its output to answer a different question.** Priced
+the annotation work off `emittable` while needing *attributable* — can a verdict
+be routed to this clause — and those differ exactly on the compound ids. The tool
+measured what it said. I cited what it printed.
+
+### The corrected number
+
+Re-measured with the split removed and nothing else changed, so the first `fail()`
+argument must be the whole field:
+
+    task                       stated  printable  attributable   lost
+    v_ai02_stream_realign          18          7             7      -
+    v_ca03_axi_iw_converter        18          9             9      -
+    v_ca04_stream_xbar             19         12            11     R1
+    v_ca05_id_queue                15          6             6      -
+    v_ca06_axi_dw_downsizer        39         23            23      -
+    v_ca07_clk_int_div             27         13            13      -
+    v_dsp02_fp_noncomp             23          9             9      -
+    v_nw01_arp_engine              18         12            12      -
+    v_nw02_axi_atop_filter         25         15            13     F5, W3
+    v_nw03_axis_arb_mux            14          5             5      -
+    v_nw04_ptp_clock               28         11            11      -
+
+**Three clauses, in two tasks.** The other five compound halves have their own
+site elsewhere, so the compound is an extra rather than the only route.
+
+**Design half: NOT MEASURABLE by this instrument, and for a stronger reason than
+a convention mismatch.** Its helper is `chk(input logic cond, input string msg)`
+— there is no clause field for an id to be the whole of. Attributability is not a
+property that can be low there; it is one that cannot be expressed. Running the
+measure anyway returns 0 for all eleven, which reads as clean and means
+*the scan did not look*.
+
+## A floor names the clauses it protects, and naming is not grouping
+
+Six of the ten floor rows in the shared-observation enumeration are not
+groupings, and the distinction will be lost by the next reader without a
+sentence for it.
+
+    fail("FLOOR", "no burst longer than one beat was ever issued
+                   -- E1, C1 and D4 go unchecked on a single-beat run")
+
+Three clause ids in one message, reported under `"FLOOR"`. The enumerator counts
+ids per message, and a floor message legitimately carries one id per clause the
+floor protects — that is what a floor is for: it says *this stimulus did not run,
+so these clauses were not judged*. Listing them is the content of the report.
+
+**A grouping says two clauses share one verdict. A floor says several clauses
+share one stimulus gap.** The first is a scoring fact; the second is a coverage
+fact. They look identical to any instrument that counts clause ids per message,
+and they are opposite in what they ask a reader to do.
+
+## The three unattributable sites: can the check tell which clause was violated?
+
+One question per site, answered from the state the testbench already holds. No
+owner picked where the evidence does not pick one.
+
+### v_ca04 R1/R4 — YES, splittable, from state in scope
+
+    else if (pair_q[s][j].size() == 0)
+      fail("R1/R4", "... delivered payload %08x from input %0d, which was never
+                     accepted bound for this output ...")
+
+`pair_q [N_IN][N_OUT][$]` is indexed by **(source, destination)**, so every queue
+for source `s` is in scope at the failing line. Testing membership of `d` in
+`pair_q[s][j']` for `j' != j` separates the two causes:
+
+    found in pair_q[s][j'] .... accepted bound for j', delivered on j    -> R1
+    found nowhere ............. delivered a beat never accepted at all   -> neither
+
+The duplicate case cannot reach this branch — `seen.exists(d)` catches it eight
+lines earlier and already reports **R4** under its own id. So this site is **not
+R1/R4 at all**: it is R1, plus a third state (a fabricated beat) that no clause
+currently names. **Split it, and the leftover state is a finding for the task
+owner rather than a clause.**
+
+### v_nw02 W2/W3 — YES, splittable, on the comparison direction
+
+    if (admitted != MAXW)
+      fail("W2/W3", "with no W burst completed downstream, %0d AWs were admitted;
+                     the bound is %0d")
+
+    admitted < MAXW ... an AW was stalled while the debt was below the bound  -> W3
+    admitted > MAXW ... more AWs admitted than the bound allows               -> W2
+
+The value is already computed; only the equality test hides the direction. And
+**W2 already has its own dedicated site** at line 162 (`debt > MAXW`), so the
+over-admission half is a second route to a clause that is not in danger. The
+under-admission half is W3's only structural check.
+
+### v_nw02 W3/X4 — YES, splittable, using a counter already in scope
+
+    if (!ok) fail("W3/X4", "AW id=%0d was never accepted (cycle %0d)")
+
+`int debt = 0` is maintained at line 148 and read at the failing moment:
+
+    debt <  MAXW ... the bound does not license the stall               -> W3
+    debt == MAXW ... the bound licenses it; not accepting within 64
+                     cycles of the debt falling is the liveness fault   -> X4
+
+W3 is *"while the debt is strictly below MAX_WRITE_TXNS, this bound alone does not
+stall a non-atomic AW"*, so `debt` is literally the clause's antecedent. The
+timeout is 4000 cycles against X4's bound of 64, so the two are separable on
+duration as well.
+
+### v_nw02 F4/F5 — NO, not from current state, and the reason is a deletion
+
+    for (k = 0; k < er_id.size(); k++) if (er_id[k] == int'(s_rid)) found = 1;
+    if (!found) fail("F4/F5", "an R beat arrived for id=%0d that nothing is owed")
+
+    F5 ... a write owing no read response produced R beats
+    F4 ... a burst ran past its awlen+1 beats
+
+These differ by whether the id was **ever** owed. `er_id.delete(k)` at line 253
+removes an entry as it is paid off, so *"never owed"* and *"fully paid"* are the
+same state by the time the check runs, and the compound id is an honest record of
+that.
+
+**This is not the "it was never two checks" case.** The two clauses are genuinely
+distinct and the check could distinguish them — it would need a retained
+paid-off record, one array, rather than reading what is already there. So the
+honest classification is **splittable at a cost**, not **indistinguishable**, and
+which of those the task takes is the owner's call and not this pass's.
+
+I am reporting it rather than annotating it as a grouping, because annotating it
+would assert that one clause owns the observation when what is true is that the
+testbench threw away the state that tells them apart.
