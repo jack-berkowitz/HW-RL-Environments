@@ -5632,3 +5632,78 @@ Two defects found by checking that, rather than by writing it:
 * **R13's text said "the authority line above says so"** — and PASTE.md strips
   `*Authority:*` lines. The sentence was true in the file I wrote it in and
   dangling in the file it was for. Reworded to stand alone.
+
+## A scan restricted to direct calls cannot report that a wrapper exists
+
+Filed on its own because the shape recurs and the numbers make the point better
+than the argument does.
+
+I censused compound reporting ids by scanning `fail("LITERAL"`. It produced
+**8 sites and 3 unattributable clauses**, and I gave both numbers as measured.
+Re-scanning across every helper that forwards a clause string gave **13 sites**,
+and a different set of clauses.
+
+**It was wrong in both directions, which is the part worth keeping:**
+
+    missed 5 sites ......... v_nw02 routes six calls through expect_quiet(),
+                             including two THREE-way compounds, F2/F3/F5 and
+                             P1/P2/P4. Invisible to a scan for `fail("`.
+    counted a loss that
+    was not one ............ F5 was reported unattributable. It is emitted
+                             under its own id at an expect_quiet call site the
+                             scan could not see.
+    missed a real loss ..... W1 was emitted ONLY inside expect_quiet("W1/W4").
+                             Not in the 3, and the only clause in the corpus
+                             with no routable verdict at all.
+
+A one-directional error is a coverage gap and reads like one. **An error that
+overcounts and undercounts at once reads like a measurement**, because the total
+moved by a plausible amount and nothing about the number looked wrong.
+
+### The remedy, which is the one already in hand
+
+**Enumerate the helpers; do not assume the call shape.** Eleven tasks declare
+between one and three tasks whose first argument is a clause string, and the
+enumeration takes one regex over the file.
+
+And one correction to that remedy, found by running it: **enumerating helpers by
+signature is itself over-broad.** `task automatic check_line(input string what,
+...)` matches the same pattern and its first argument is a *description*, not a
+clause. Four tasks have one. It cost nothing here — a description never
+fullmatches a clause id, so both columns ignore it — but the enumeration is
+correct today for a property of the strings, not of the method, and that is the
+sentence this whole week has been about.
+
+The check that would settle it: **the helper must pass its first argument into
+`fail()`'s clause slot.** That is a two-line read of the task body and it is the
+difference between "takes a string first" and "reports under it".
+
+## The annotation's stated purpose is ahead of the apparatus, and the text should say so
+
+`check_clause_emittable.py`'s header says the annotation makes grouping credit
+visible **"so scoring can decide deliberately instead of the grouping being
+discovered by someone reading a failure message and noticing the wrong letter."**
+
+Measured: **no clause id reaches a results record.** 758 records, zero
+clause-shaped tokens. `fail(req, msg)` prints `[FAIL] req : msg` to the log;
+`score.py` parses one `TEST_RESULT:` line per run; the JSON stores aggregate
+counts. Scoring cannot see clauses at all, so it cannot decide anything about
+them, deliberately or otherwise.
+
+The annotation is still worth every line of it — but for **the reader of the spec
+and the reader of the log**, which is a different and smaller claim. Proposed
+replacement for the sentence, for the file's owner to take or leave:
+
+> It records grouping honestly; it does not remove it. What changes is that the
+> credit becomes VISIBLE **to the submitter, who reads it in the spec before
+> building, and to whoever reads a failure message afterwards** — rather than
+> being discovered from a failure message that names the wrong letter. **It is
+> not visible to scoring: no clause id reaches a results record today** (the id
+> goes to a `[FAIL]` log line, `score.py` parses only `TEST_RESULT:`, and the
+> JSON stores aggregate counts). If that changes, this sentence should change
+> with it.
+
+**A capability described but absent is the sentence a future reader cites as a
+control.** That is the citation family with the tense moved: not *"a checker I
+did not read"* but *"a checker that does not exist yet"*, and the second is
+harder to catch because nothing is there to open.
