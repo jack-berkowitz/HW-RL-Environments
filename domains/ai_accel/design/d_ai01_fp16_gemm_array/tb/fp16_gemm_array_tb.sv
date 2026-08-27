@@ -225,15 +225,14 @@ module fp16_gemm_array_tb;
       for (int rr = 0; rr < W; rr++) begin
         if (gate_left[rr] == 0) begin          // this row is scored this cycle
           if (z[rr] !== r.z[rr]) any_z = 1'b1;
-          // z_o IS specified while flush_i is high -- C2 pins it at +0 for
-          // every clocked row and held for a gated one -- so it stays scored.
-          // status_o is NOT: C2 pins only z_o during assertion, and its
-          // unspecified window is the refill AFTER flush_i falls. Whether flush
-          // clears the flags is a question this contract does not settle, and
-          // two independently solicited designs both answered "yes" against a
-          // reference that answers "no". Twelve of one candidate's twenty-three
-          // status mismatches were flush-high cycles and nothing else.
-          if (!r.flush && status[rr] !== r.status[rr]) any_s = 1'b1;
+          // BOTH are specified while flush_i is high. C2 pins z_o at +0 in
+          // every clocked row and held in a gated one, and now pins status_o
+          // as UNAFFECTED -- A10 governs the flags throughout. An earlier
+          // version of this line suppressed status scoring during assertion,
+          // which was excusing a real difference rather than declining to
+          // score an unspecified one. The clause was the thing that was
+          // missing, and it now says so.
+          if (status[rr] !== r.status[rr]) any_s = 1'b1;
         end
       end
       if (any_z) begin

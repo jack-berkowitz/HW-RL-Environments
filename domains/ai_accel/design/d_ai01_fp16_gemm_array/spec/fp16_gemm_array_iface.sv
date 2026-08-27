@@ -245,6 +245,22 @@
 //     flush_i DOES take precedence over reg_enable_i: with reg_enable_i low and
 //     flush_i high, every clocked row clears. Also measured.
 //
+//     flush_i DOES NOT AFFECT status_o. This clause zeroes the inter-stage
+//     registers, and that is a statement about z_o. A10 governs status_o
+//     throughout, including while flush_i is asserted: status_o[r][k](t) still
+//     reports the operation whose operands were sampled 2 enabled ticks
+//     earlier. Flags are not cleared, and z_o reading +0 does not imply
+//     status_o reading zero.
+//
+//     STATED BECAUSE THE WORDS PERMITTED BOTH READINGS AND TWO SUBMISSIONS TOOK
+//     THE OTHER ONE. An earlier draft of this clause said only that flush zeroes
+//     the registers so z_o reads +0, and said nothing about the flags. Two
+//     independently solicited designs both cleared status_o during assertion
+//     against a reference that does not, and they were not wrong to -- the text
+//     did not say. This is A10's own defect one clause over, and A10's verdict
+//     applies to it: both readings were legal, and the clause was wrong to
+//     permit both.
+//
 //     THE REFILL WINDOW IS NOT SCORED. On deassertion the chain refills from the
 //     operand field then in force. The values delivered on z_o and status_o
 //     during the first D*(HEIGHT-1)+3 ENABLED TICKS after flush_i falls -- 31 at
