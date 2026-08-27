@@ -230,6 +230,15 @@ to an operation any other way.*
 cycles. No result shall be lost, duplicated or reordered as a result.
 *Authority: standard ready/valid handshake.*
 
+*All three of those are H2's subject matter, whatever caused them: H2 requires
+that results be delivered in the order the operations were accepted, and a lost
+or duplicated result is a mismatch between what was accepted and what arrived.
+So a violation of this clause is **reported under H2**. A submission that checks
+H2 under backpressure is credited with this clause; that is deliberate and
+recorded here so it is visible rather than discovered from a failure message.
+Backpressure is not optional stimulus for it — the testbench is required to hold
+`out_ready_i` low, and a floor refuses a run with fewer than 20 stall cycles.*
+
 **H4 — source obligation (this constrains the TESTBENCH, not the design).** Once
 `in_valid_i` is asserted it shall remain asserted, with all four operation inputs
 held stable, until the operation is accepted. The design's behaviour if this is

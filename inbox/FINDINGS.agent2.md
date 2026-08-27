@@ -6492,3 +6492,111 @@ difference is the whole subject of this week: `witness.sh` reports exactly what
 it says it reports, and I read a first-failure line as a coverage statement.
 Scope stated: two mutants checked directly, the remaining eight inferred from
 what they mutate, and that inference is the weaker half of this entry.
+
+## v_ca03 F1 sized; v_dsp02 H3 declared; the attribution-mutant hole scoped; and the -m1 sweep
+
+### 1. v_ca03 F1 — three halves, three sizes, three different needs
+
+    always @(posedge clk) blocks ............ 11
+      gated `if (rst_n && ...)`  ............  7   holding 32 of the 42 fail() sites
+      gated `if (!rst_n)` .................... 2   model bookkeeping only
+    fail("F1") sites ......................... 0
+    rst_n driven low after time zero ......... 0
+
+**(a) The reset window is excluded by construction — 32 of 42 sites.** Seven
+always-blocks carry `if (rst_n && ...)` and every DUT check lives inside one.
+*Needs:* a checker that runs **while** `rst_n` is low and asserts the negative —
+no `s_arready`/`s_awready`, no `s_rvalid`/`s_bvalid`. One new always-block; it
+cannot reuse an existing one, because their gate is the thing being removed. It
+also needs the model to not be cleared underneath it: the two `!rst_n` blocks
+wipe `live_r`, `live_w`, `addr_q`, `len_q`, `waddr_q`, `rbeat`, `map_valid`,
+`owner_valid` and `pv` on the same edge.
+
+**(b) The table-empty half is observed by A3, incidentally — 7 sites.** Every one
+is about the boundary at `MAX_UNIQ_IDS`, and a design coming up with a non-empty
+table would be refused early and caught. *Needs:* nothing built. It needs a
+**declaration** — F1's post-reset half is reported under A3 — which is the
+annotation form, one sentence, no new check. **But it is only true because every
+run begins post-reset**, so the declaration should say that rather than implying
+A3 aims at it.
+
+**(c) The cross-reset half is unexercisable — 0 mid-run resets.** *Needs:*
+stimulus, and it is the largest of the three. A reset asserted with transactions
+outstanding, then a check that none of them answers afterwards. The model clears
+listed above are exactly what makes it non-trivial: the testbench must remember
+which ids were outstanding **across** the clear in order to assert that none
+replies, so it needs a survivor list the reset blocks do not touch.
+
+**v_dsp02 does all of this already** — `// -- E: reset with an operation in
+flight (S15)`, an op issued, `rst_n` dropped, `cov_reset` incremented, two S15
+sites. That is the shape and the size: one phase and one survivor check.
+
+### 2. v_dsp02 H3 — declared
+
+    v_dsp02_fp_noncomp  task_text_hash  0d8119950359c940   (2026-08-27T0505Z)
+    declarations()      spec {'H3': 'H2'}   PASTE {'H3': 'H2'}   golden PASS
+
+Spec and `probe/PASTE.md` together. The annotation records the grouping and adds
+the part that is specific to this one: **backpressure is not optional stimulus
+for it.** The testbench is required to hold `out_ready_i` low and a floor refuses
+a run with fewer than 20 stall cycles, so a submission cannot satisfy H2 without
+entering H3's territory.
+
+### 3. The attribution-mutant hole, scoped
+
+**Every relabel in this corpus is correct-by-construction rather than measured,
+and no existing mutant set can change that.** A behaviour mutant changes what the
+design *does*, so it drives paths that change outputs. A relabel changes which
+name a path *reports under*. Orthogonal — the mutant set moves the design, and
+attribution is a property of the testbench.
+
+**What an attribution mutant is.** Not a mutated design. **A mutated
+*testbench*,** run against the unmodified golden and a known-defective design,
+asserting that the id on the failure line is the expected one. The kill count is
+already 1-of-1 for a behaviour mutant; what is unmeasured is *which name it
+carried*.
+
+    behaviour mutant   mutate the DUT      assert: SOME clause fails
+    attribution mutant mutate the CHECKER  assert: THAT clause fails, and no other
+
+**The minimal set, and it is per-branch, not per-task.** One case per branch of
+every id-selecting construct:
+
+    v_ca03  gov_r()          2 branches (A3, A5) -- A5 has no witness today
+    v_ca04  R1 vs UNCLAIMED  2 branches
+    v_nw02  W2 vs W3         2
+            W3 vs X4         2
+            expect_quiet     4 obligations x {F3, P4} for the B owner = 5
+    v_nw01  X3 vs Q1         2
+            Q2               3 sites, one case each
+    v_dsp02 computed `cl`    3 assignments (S1, S7, S12)
+
+**23 cases across 6 tasks.** Each is a directed stimulus that forces one branch
+and asserts one id — no new mutants, no new DUTs, and it reuses the existing
+build. The expensive part is not the cases; it is that **three of them cannot be
+written today**, because `gov_r`'s A5, v_nw02's W3 and v_nw01's Q2 have no
+stimulus that reaches them at all. Those three need stimulus first, which is the
+same work item as F1(c).
+
+Not building it. **The number that matters for the decision is that 23 cases
+would move every relabel in the corpus from asserted to measured**, and that
+today the count of relabels verified by anything is zero.
+
+### 4. The `-m1` sweep
+
+    witness harnesses using grep -m1 ....... 7 of 11
+      v_ca03 v_ca05 v_ca06 v_ca07 v_dsp02 v_nw01 v_nw03
+
+**No wrong claim found.** Every claim in the corpus sourced from those harnesses
+is a **kill count** — *"12/12 killed"*, *"10 of 10"*, *"11 of 11"* — and `-m1`
+answers that question correctly: *did this mutant produce a clause failure at
+all* is settled by the first match. Searched my findings, the shared `FINDINGS.md`
+and every `MEASUREMENTS.md` for an id read as coverage; nothing.
+
+The one instance was mine, `Q2: 0`, and it was caught in the command that
+produced it and never left this session.
+
+**So the exposure is real and unrealised.** Seven harnesses print a line that
+looks like *"this is what fired"* and means *"this is what fired first"*, and
+nothing in the output says which. **One header line would close it** — the same
+remedy as `compared N of M`: not care, a channel that states what the number is.
