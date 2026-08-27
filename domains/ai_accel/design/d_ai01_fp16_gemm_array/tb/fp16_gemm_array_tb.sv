@@ -77,7 +77,12 @@ module fp16_gemm_array_tb;
   rec_t             r;
   string            vfile;
 
-  int unsigned errs_z, errs_st, reported, n, checked;
+  // SEPARATE BUDGETS, one per failure class. They shared one, and status
+  // mismatches consumed the whole of it: not a single z mismatch was printed in
+  // the scored run, though four existed. A shared budget systematically hides
+  // the rarer class behind the noisier one, and the rarer one is the
+  // interesting one -- here it was the only real finding.
+  int unsigned errs_z, errs_st, rep_z, rep_st, n, checked;
   int unsigned refill_left, acc_left, skipped;
   int unsigned gate_left [0:`VW-1];
   bit          prev_acc;
@@ -119,7 +124,7 @@ module fp16_gemm_array_tb;
     cov_sub_delivered = 0; cov_inf_delivered = 0; cov_nan_delivered = 0;
     cov_negzero_delivered = 0;
     cov_tallied = 0;
-    errs_z = 0; errs_st = 0; reported = 0; checked = 0;
+    errs_z = 0; errs_st = 0; rep_z = 0; rep_st = 0; checked = 0;
     refill_left = 0; acc_left = 0; skipped = 0;
     prev_acc = 1'b0; prev_gate = {W{1'b1}};
     for (int gi = 0; gi < W; gi++) gate_left[gi] = 0;
@@ -197,7 +202,18 @@ module fp16_gemm_array_tb;
       // ---- C4 per-row exclusion: only the row whose gate moved -------------
       for (int gi = 0; gi < W; gi++) begin
         if (r.row_gate[gi] !== prev_gate[gi]) gate_left[gi] = REFILL_W;
-        else if (gate_left[gi] != 0 && r.reg_enable) gate_left[gi] = gate_left[gi] - 1;
+        // A1: an enabled tick FOR ROW r needs reg_enable_i AND
+        // row_clk_gate_en_i[r] high, and "all timing below is counted in
+        // enabled ticks of the row in question, not in raw clock edges."
+        // Decrementing on reg_enable alone counted this window in the WRONG
+        // CLOCK: it ran down while the row was frozen, so the window expired
+        // under a row still holding whatever it froze with. Measured: row 2's
+        // gate fell at cycle 2622, INSIDE C2's post-flush unspecified window,
+        // so it froze holding unspecified state and held it until 2641 -- and
+        // cycles 2637-2640 were scored against it. Both solicited candidates
+        // failed there, bit-identically, on a value this contract never pinned.
+        else if (gate_left[gi] != 0 && r.reg_enable && r.row_gate[gi])
+          gate_left[gi] = gate_left[gi] - 1;
       end
       prev_gate = r.row_gate;
 
@@ -208,21 +224,29 @@ module fp16_gemm_array_tb;
       any_z = 1'b0; any_s = 1'b0;
       for (int rr = 0; rr < W; rr++) begin
         if (gate_left[rr] == 0) begin          // this row is scored this cycle
-          if (z[rr]      !== r.z[rr])      any_z = 1'b1;
-          if (status[rr] !== r.status[rr]) any_s = 1'b1;
+          if (z[rr] !== r.z[rr]) any_z = 1'b1;
+          // z_o IS specified while flush_i is high -- C2 pins it at +0 for
+          // every clocked row and held for a gated one -- so it stays scored.
+          // status_o is NOT: C2 pins only z_o during assertion, and its
+          // unspecified window is the refill AFTER flush_i falls. Whether flush
+          // clears the flags is a question this contract does not settle, and
+          // two independently solicited designs both answered "yes" against a
+          // reference that answers "no". Twelve of one candidate's twenty-three
+          // status mismatches were flush-high cycles and nothing else.
+          if (!r.flush && status[rr] !== r.status[rr]) any_s = 1'b1;
         end
       end
       if (any_z) begin
         errs_z++;
-        if (reported < MAX_REPORT) begin
-          reported++;
+        if (rep_z < MAX_REPORT) begin
+          rep_z++;
           $display("MISMATCH z   cycle %0d: expected %h got %h", n, r.z, z);
         end
       end
       if (any_s) begin
         errs_st++;
-        if (reported < MAX_REPORT) begin
-          reported++;
+        if (rep_st < MAX_REPORT) begin
+          rep_st++;
           $display("MISMATCH st  cycle %0d: expected %h got %h", n, r.status, status);
         end
       end
