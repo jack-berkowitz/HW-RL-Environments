@@ -5240,3 +5240,74 @@ column shipped against these two would arrive **claiming to back work it cannot
 see** — the annotations exist, the function returns `{}`, and the column reads
 clean. That is the unchecked work the column was created to prevent, produced by
 the column.
+
+## Triage of the 25: a third are not groupings, four are declared in the wrong file, and three clauses cannot be reported at all
+
+The annotation pass was priced at 25 shared observations across 9 tasks. Working
+them turned up three things, and only one of them is annotation.
+
+### The 25 split three ways
+
+    reported under a literal "FLOOR"/"COVERAGE" id ......... 10
+    reported under a compound "X/Y" id .................... 10
+    shared branch, no message (chain) ...................... 5
+
+**Ten are floors, and a floor names the clauses it protects — naming is not
+grouping.** `"no burst longer than one beat was ever issued -- E1, C1 and D4 go
+unchecked on a single-beat run"` reports under `"FLOOR"`, not under E1. The
+enumerator counts clause ids in a message; a floor message legitimately carries
+several. Six of the ten are this and need no annotation.
+
+### Four are real groupings, declared only in the testbench
+
+The other four floors state a grouping in prose, in the failure message, in
+`v_ca05_id_queue/tb`:
+
+    line 460   R9  -> R8     "R9 ... reports under R8"
+    line 462   R10 -> R8     "R10's only checkable half ... reports under R8"
+    line 464   R13 -> R12    "R13 reports under R12"
+    line 468   R2  -> R8     "R2's per-tag FIFO order reports under R8"
+
+    v_ca05/spec: occurrences of "reported under" ......... 0
+
+**The declaration exists. It is in the wrong file.** `declarations()` reads the
+spec, so v_ca05 returns `{}` — the same empty dict that reads as *"declared
+nothing"*, arrived at by a different route than the design half's. Third instance
+of the condition in two days, and this one is mine.
+
+I checked all four against the spec text for a partial or split shape, because
+AGENT-DESIGN-43a92055 asked to be told before I wrote one. **All four are
+whole-clause subsumption.** R10's uncheckable half is uncheckable *by R10's own
+text* (`pop_data_o` is unconstrained, rule 12), so the clause's entire checkable
+content reports under R8 — restricting the scope in the annotation would imply a
+second half that reports elsewhere, and there is none. R2's "per-tag FIFO order"
+is its title, not a scope.
+
+### And three clauses have no reportable id at all
+
+Eight `fail()` sites across my eleven pass a **compound** id, plus three that pass
+`"F"`, which is not a clause in v_nw01's spec (it states A, C, L, Q, X only).
+AGENT-DESIGN found the three; the eight are mine to have found and I did not,
+having proposed the fix for a slash pair *on their corpus* without checking my
+own.
+
+For five of the eight, both halves also have their own `fail()` site, so the
+compound is an extra. For three, it is the only one:
+
+    v_ca04_stream_xbar     R1  emitted only inside "R1/R4"
+    v_nw02_axi_atop_filter F5  emitted only inside "F4/F5"
+    v_nw02_axi_atop_filter W3  emitted only inside "W2/W3" and "W3/X4"
+
+**A submission that violates R1 receives a verdict keyed `R1/R4`, which no clause
+matches.** The check exists, runs, and cannot be attributed.
+
+`check_clause_emittable` reports none of these three as unreportable, because
+`FAIL_STR` captures the whole string and the id extractor finds `R1` inside it.
+The tool is right that R1 can be *printed*. It is wrong that R1 can be
+*reported*, and the two have been the same measurement all week.
+
+That is the week's class once more, in the instrument I have been using to
+price the work: **emittable was measured as "the id appears in a printable
+string", which is correct for every non-compound id and silently wrong for
+eight.** A clause id inside a compound is credited to a verdict that cannot be
+routed to it.
