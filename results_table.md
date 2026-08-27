@@ -63,9 +63,9 @@ capability, and nothing here establishes those weights.
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | FIFO capacity | min crossing lat | max crossing lat | write stalls | notes |
 |---|---|---|---|---|---|---|---|---|---|
 | **reference** | **18/18 pass** | 19,837 | 13.4 | 355.6 | 10 | 3 | 74 | 11046 | 1,984 um2 per unit of capacity_beats_accepted |
-| `chat` | **18/18 pass** | 14,659 | 7.3 | not swept | 8 | 2 | 72 | 10912 | **different design point** (crossing_latency_rdclk_min 2 vs reference 3): area is correct but not like-for-like; 1,832 um2 per unit of capacity_beats_accepted, 0.92x the reference per unit |
-| `claude` | **18/18 pass** | 14,520 | 8.2 | not swept | 8 | 3 | 72 | 10914 | 1,815 um2 per unit of capacity_beats_accepted, 0.91x the reference per unit |
-| `gemini` | **18/18 pass** | 14,520 | 8.5 | not swept | 8 | 2 | 72 | 10912 | **different design point** (crossing_latency_rdclk_min 2 vs reference 3): area is correct but not like-for-like; 1,815 um2 per unit of capacity_beats_accepted, 0.91x the reference per unit |
+| `chat` | **18/18 pass** | — | — | — | 8 | 2 | 72 | 10912 |  |
+| `claude` | **18/18 pass** | — | — | — | 8 | 3 | 72 | 10914 |  |
+| `gemini` | **18/18 pass** | — | — | — | 8 | 2 | 72 | 10912 |  |
 | `nc_k_overbuffered_read` — *negative control, expected to fail* | 0/18 FAIL | — | — | — | 18 | 4 | 103 | 10844 |  |
 | `DeepSeek V4 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `8a5e5e0a9b2c93d3`; the task text is now `758f205c499c7fd1` |
 | `Qwen 3.7 Plus` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `8a5e5e0a9b2c93d3`; the task text is now `758f205c499c7fd1` |
