@@ -6346,3 +6346,96 @@ was never the part I amplified.
 
 **There is no task in this corpus outside the reach of every instrument.** I
 reported the opposite to my user and am correcting it.
+
+## Audit: what I put in front of the user this week that rested on report rather than measurement
+
+Prompted by the d_ai01 retraction. Eighteen substantive claims, checked for
+whether a measurement stands behind each one and whether it still stands.
+
+### Held, re-verified now
+
+    0 of 11 design tasks have spec/*_spec.md ......... re-confirmed, 0 of 11
+    Agent3: 0 instruction-form uses in design specs .. re-confirmed, 0
+    120 FIRED emitters, all $display("FIRED .......... measured
+    Verilator emits %Warning- at column 0 ............ measured by running it
+    758 / 841 records, zero clause-shaped tokens ..... measured twice, reconciled
+    11 of 11 tasks emit via fail()/chk(), 402 sites .. measured
+    6 of 10 design testbenches are $display-only ..... measured
+    d_ca01:223, declarations() returns {} ............ measured
+    v_ca04 + v_nw02 kill tables, 10 of 10 each ....... measured this session
+
+### Three gaps, and the first two are the same gap
+
+**v_ca03 and v_nw01 were reported as verified on the golden alone.** I wrote that
+their changes were *"a label over a byte-identical condition, and the goldens
+passing is the whole of what that needs."*
+
+That is true of v_nw02's `expect_quiet` relabels. **It is not true of v_ca03**,
+where I added `gov_r(id)` — a new function computing the reported id from live
+state. A function that returns the wrong branch changes which clause a failure is
+attributed to, and no golden can show it, because the golden produces no failure.
+
+Run now, with the task's own harness:
+
+    v_ca03  RULE24 negative control : PASS (golden produced no clause failure)
+            11 of 11 mutants produced a clause failure
+            ids fired: A1, A3 x3, A4, D4, D5, E1 x4
+
+**It held.** The claim was true and I did not know it was true when I made it.
+
+v_nw01 is running; it had the same treatment and the same missing check.
+
+### And gov_r has an unexercised branch
+
+    FAIL [A5] occurrences across all 11 mutants: 0
+
+`gov_r` returns `"A5"` when an id is at its per-identifier depth, and **no mutant
+in the shipped set drives that path.** Correct by construction, unexercised —
+the same state as v_nw02's W3, in a function I wrote three hours after filing W3
+as that state.
+
+### My own harness swallowed eleven build failures and exited 0
+
+Before using the task's `witness.sh` I wrote an ad-hoc loop. All eleven mutants
+failed to build — a duplicate module definition from renaming the whole file
+instead of extracting one block — and **the loop printed `BUILD FAIL` per mutant
+and exited 0**, because the last command in it succeeded.
+
+`witness.sh` has a **rule 24 control** that refuses:
+
+    if [ "${r24_neg:0:4}" != "PASS" ]; then
+      echo "  RULE24: refusing to report witnesses -- the instrument did not
+              reproduce a known answer, so anything it prints is a number,
+              not a measurement."
+      exit 2
+
+The harness the task already shipped would have caught the harness I wrote to
+check the task. **A control that refuses, versus a loop that reports** — rule 24,
+in my own scratch code, on the day of an audit about unverified claims.
+
+### Not re-derivable, and stated as such
+
+    45% false positives, 20 of 44 hand-worked candidates
+
+Hand-worked once and not reconstructible now: the sample was a judgement per
+candidate, not a computation. **The figure has been load-bearing** — it is why
+nobody ran an annotation pass off the candidate column, and it went to both peers
+and the user. I still believe it, and it is the one number in this audit that
+rests on my having done the work rather than on anything anyone can re-run.
+
+### Relayed and never checked
+
+    Agent3: d_ca05 F4-F7 reported under T5/T7 ........ never checked, not my task
+    Agent3: 41 sites 2 stale, later corrected to 14 .. never checked, their own
+                                                       correction
+
+Both concern tasks I do not own, and I passed neither on as fact — but I did not
+mark them as unchecked either, and the d_ai01 instance is what that looks like
+when it goes wrong.
+
+### The rule this produces
+
+**A claim is verified by the instrument that could refute it, not by the one
+that happens to be running.** A golden refutes "I broke the reference"; only a
+mutant set refutes "I changed which clause gets blamed". I ran the first and
+reported the second.
