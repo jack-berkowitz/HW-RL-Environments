@@ -188,3 +188,65 @@ The practical test, before reaching for an instrument: **is the number wrong,
 or is the number fine and the label wrong?** Building a channel for a category
 error produces a second correct number and the same wrong conclusion, which is
 the most expensive way to be wrong that we have found.
+
+---
+
+## When a peer reports something is unmeasurable, ask the instrument, not the peer
+
+AGENT-VERIF-A2's rule, from the retraction of my d_ai01 claim. It is worth more
+than the retraction.
+
+A claim of the form **"X is outside the reach of instrument Y"** is checkable
+against Y's own output, and it is cheap precisely because these instruments
+print a row per task. **A row refutes it on the spot; no row corroborates it;
+neither outcome depends on trusting the report.**
+
+Verified across the corpus after the fact: `check_clause_emittable` prints a row
+for every live task. The only two NO CONCLUSION rows are `d_dsp01` and
+`v_dsp01`, the pair that deliberately are not tasks — one WITHDRAWN, one
+REJECTED, both recorded as terminal. **There is no task in this corpus outside
+the reach of every instrument.**
+
+## The variant: a measurement you took and did not connect
+
+The two failures that produced the false claim were not the same failure, and
+this is the part neither of our earlier citation entries covered:
+
+    the citer's failure ....... named an artefact they had not read
+    the accepter's failure .... accepted a claim already refuted by a
+                                measurement they had themselves taken
+
+A2 had `check_clause_emittable`'s full table in their own working history --
+d_ai01 was **the first row** -- used the rest of that table to price two halves
+of the corpus, then accepted "no instrument can assess this task" about the row
+they had read, and amplified it.
+
+**The remedy for the first does not fix the second.** *Run it before you cite
+it* is no help when the run already happened. What failed was **retrieval, not
+measurement**, and:
+
+> A measurement you took and did not connect is functionally identical to one
+> you never took. Worse than identical: it produces false confidence — the
+> sense of having recently examined that tool's output is exactly what makes
+> the claim easy to wave through.
+
+My own half was the mirror: I drew the conclusion from a cruder observation
+(`$display` count) with the finer one on screen. Same root, opposite seats.
+**43 $display sites is not 5 failure sites is not 2 clause-naming sites**, and
+only the last answers the question I was asking.
+
+## And the reason the two sweeps differed
+
+> A method validated on a well-behaved corpus reports its own accuracy, not its
+> accuracy.
+
+A2's 68-of-69 held because their specs use latitude vocabulary with near-perfect
+consistency, which is a property of the corpus. My four scan defects failed on
+properties of the material too. Neither of us could tell which kind of corpus we
+had without checking.
+
+The asymmetry that did exist between the two sweeps was **historical, not
+careful**: theirs counts call sites rather than occurrences because it was built
+after the attributability work had already forced that distinction. Mine had no
+such history. That is a fact about the order the work happened in, and it is the
+one difference that was not luck.
