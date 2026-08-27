@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=fp16_gemm_array; CORE_UTILIZATION=30; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=50000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; VERILOG_TOP_PARAMS=HEIGHT 4 WIDTH 8; sdc.clk_period=50.0; override.CLK_PERIOD_NS=16.75; note.abc_runtime_target_ps=16750 (make-line override; the hashed ABC value above is the config.mk text resolved against the SDC, not this);",
+  "build_config_hash": "27df19881ed535f0",
+  "clk_period_ns": "16.75",
+  "correctness_gate": "passed:2026-08-26T042949Z__fp16_gemm_array_top__sim.json 2/2 configs",
+  "design_area_um2": "708442",
+  "git_sha": "25b47c68d26252d73b69c7931fd436cec31b15ff-dirty",
+  "kind": "ppa",
+  "label": "reference_fx16.75",
+  "orfs_nickname": "d_ai01_fp16_gemm_array",
+  "pdk": "sky130hd",
+  "power_w": "2.78e-01",
+  "status": "completed",
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/ref/fp16_gemm_array_top.sv",
+  "submission_sha256_16": "023cd4e46559334e",
+  "synth_area_um2": "643044.230399",
+  "task": "d_ai01_fp16_gemm_array",
+  "timestamp_utc": "2026-08-26T22:49:57Z",
+  "wns_ns": "2.3684"
+}

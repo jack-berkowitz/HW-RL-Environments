@@ -1,0 +1,53 @@
+{
+  "all_passed": false,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "2",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ASCRANGE,WIDTHEXPAND",
+  "compile_warnings": "22",
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "git_sha": "25b47c68d26252d73b69c7931fd436cec31b15ff-dirty",
+  "kind": "sim",
+  "label": "claude",
+  "metrics": {
+    "+HH_4": {
+      "H": "4",
+      "expected": "15",
+      "latency_ticks": "13",
+      "v2_array_nonzero_before_reset": "1"
+    },
+    "+HH_8": {
+      "H": "8",
+      "expected": "31",
+      "latency_ticks": "29",
+      "v2_array_nonzero_before_reset": "1"
+    }
+  },
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "candidates/d_ai01/claude.sv",
+  "submission_sha256_16": "3c23dabcde5fbde5",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "8ec0b4fd8769d737",
+  "timestamp_utc": "2026-08-26T22:07:06Z"
+}
