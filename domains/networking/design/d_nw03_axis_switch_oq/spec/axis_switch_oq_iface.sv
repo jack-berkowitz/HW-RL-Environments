@@ -66,7 +66,13 @@
 //       AUTHORITY: stated task intent -- the ordinary stream contract, stated so
 //       stability is a contract term rather than an assumption.
 //
-//   R1b. `m_valid_o` MUST NOT depend combinationally on `m_ready_i`. A sink may
+//   R1b. REPORTED UNDER R1. The stability check that observes this -- output
+//       withdrew `m_valid_o` while the beat was unaccepted -- is the same
+//       comparison that observes R1, so a failure here prints an R1 message.
+//       The grouping is stated so it is visible rather than discovered from the
+//       letter in a failure string.
+//
+//       `m_valid_o` MUST NOT depend combinationally on `m_ready_i`. A sink may
 //       hold `m_ready_i` low indefinitely, and a design that waits for it before
 //       asserting `m_valid_o` deadlocks against a sink that waits for
 //       `m_valid_o` before asserting `m_ready_i`.
@@ -110,7 +116,13 @@
 //       interface does not make buildable. Found by trying to construct the
 //       store-and-forward design, not by reading L2.
 //
-//   R5. ORDER BETWEEN FRAMES FROM ONE INPUT TO ONE OUTPUT IS PRESERVED. Two
+//   R5. REPORTED UNDER R3. Order has no counter of its own: the
+//       scoreboard builds each expected payload from the next sequence number
+//       due on that input-output pair, so a frame delivered out of order is
+//       compared against the payload of the frame that should have come first
+//       and fails as an R3 data mismatch. Grouped, not unchecked.
+//
+//       ORDER BETWEEN FRAMES FROM ONE INPUT TO ONE OUTPUT IS PRESERVED. Two
 //       frames from the same input to the same output are delivered in the
 //       order they were accepted. No ordering is promised between different
 //       inputs, or between different outputs -- see L4.
@@ -161,7 +173,12 @@
 //       frames to a ready output.
 //       AUTHORITY: stated task intent.
 //
-//   C3. FORWARD PROGRESS. With frames continuously offered on every input and
+//   C3. REPORTED UNDER R3/C2, one half each. "Every accepted frame is
+//       eventually delivered" is the accepted-versus-delivered count, which
+//       fails as R3. "No input goes unserved while others are being served" is
+//       the starvation check, which fails as C2. There is no C3 message.
+//
+//       FORWARD PROGRESS. With frames continuously offered on every input and
 //       every output eventually ready, every accepted frame is eventually
 //       delivered, and no input goes unserved while others are being served.
 //       AUTHORITY: stated task intent.
@@ -207,9 +224,20 @@
 //       Simulation uses Verilator; physical synthesis reads the same file with
 //       slang. A file one accepts and the other rejects cannot be built.
 //   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
-//       BLOCK. SystemVerilog forbids a declaration after a statement inside a
-//       block; this is the most common compile failure here and the error text
-//       names neither declarations nor placement.
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at module
+//       scope, before any assignment, loop or $display in that block.
+//   
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model. An earlier version of this clause called it
+//       "the most common compile failure here", which reads as though the failure
+//       is VISIBLE. Under Verilator it is not.
 //   T3. THE MODULE MUST BE NAMED `axis_switch_oq` with the exact port list
 //       below, including port names.
 //   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to

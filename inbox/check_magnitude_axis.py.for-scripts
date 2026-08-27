@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Refuse a perturbation whose magnitude was justified on a different axis.
+
+    check_magnitude_axis.py PLAN.md
+
+Reads a magnitude table with two axis columns and refuses when they disagree:
+
+    | task | axis perturbed | magnitude | axis the justification is about |
+    | v_ca06 | inter-beat gap | 9 | inter-beat gap |          ok
+    | v_nw01 | inter-beat gap | 65 | inter-transaction gap |  REFUSE
+
+WHY THIS EXISTS
+---------------
+`v_nw01`'s depth was 65, justified as "one past REQUEST_RETRY_INTERVAL=64, so a
+stall shorter than 64 never lets a retry fire". That is an argument about the gap
+BETWEEN REQUESTS. It was applied BETWEEN PAYLOAD BYTES: 28 bytes x 65 = 1820
+cycles per frame, against a REQUEST_TIMEOUT of 256. The lookup expired before the
+reply finished arriving and the run reported a clause failure.
+
+    ABC units       a real number in the wrong unit
+    wrong baseline  a real comparison against the wrong reference
+    this            a real justification for a different axis
+
+None is a wrong number. Each is a RIGHT NUMBER DETACHED FROM WHAT MADE IT RIGHT,
+and the detachment leaves no trace: the row still carries a citation, the citation
+is still true, and it is about something else.
+
+WHY A COLUMN AND NOT CARE
+-------------------------
+The table already recorded the axis per row. The justification did not carry one,
+and that asymmetry is the whole defect. **Care would not have caught it: both
+columns were written in one sitting, by one author, and read as agreeing.** A
+mismatch is only visible when the two are named in the same vocabulary and
+something compares them.
+
+THIS REFUSES. It does not warn. A magnitude with no stated justification axis is
+also a refusal -- an unstated axis cannot be checked against anything, and
+treating it as agreement is the defect one level up.
+"""
+import re
+
+# THE ANCHOR IS THE FORMAT'S OWN RULE -- NOT COLUMN 0, AND NOT "ANY INDENT".
+# Every regex in this file was once `^`-anchored and every one was correct only
+# because its input happens to begin at column 0. That is a property of the
+# INPUT, not of the method. The same defect cost two rows in a corpus sweep: a
+# `task_text_hash:` field indented by two and another by four read as ABSENT, a
+# state 14 tasks legitimately occupy, so the miss landed in a plausible bucket
+# rather than an implausible one and announced nothing.
+#
+# The first fix was `^[ \t]*` -- ANY indent -- and it was wrong in the other
+# direction: it replaced an accidental bound with no bound at all, which is the
+# same mistake with the sign flipped. AGENT-PPA-2381f2fe caught it on the
+# markdown side: CommonMark allows 0-3 spaces before an ATX heading, and at four
+# or more the line is an INDENTED CODE BLOCK -- not a heading, not a table row.
+# A tab counts as four columns, so a tab is code too.
+#
+# AGENT-DESIGN-43a92055's remedy is A CASE LIST THAT FAILS WHEN THE SCOPE
+# NARROWS. A case list that accepts everything cannot fail that way either, so
+# the bound below is taken from the input format and --selftest asserts BOTH
+# directions: the widest legal form is accepted and the first illegal one is
+# refused.
+#
+# THIS TOOL'S INPUT IS MARKDOWN, so the bound is CommonMark's: 0-3 spaces. A
+# `|` line indented four or more is an indented code block, not a table row.
+# Measured on this repo: the loose form newly accepted one such line, and the
+# full ROW body happened to reject it anyway -- which is exactly the kind of
+# luck this comment exists to stop being load-bearing.
+
+import sys
+
+ROW = re.compile(r"^ {0,3}\|\s*`?(\w+)`?\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|", re.M)
+NORM = re.compile(r"[^a-z]+")
+
+
+def norm(s):
+    return NORM.sub("", s.lower())
+
+
+def check(text):
+    """-> (rows, mismatches, unstated)"""
+    rows, bad, unstated = [], [], []
+    for m in ROW.finditer(text):
+        task, perturbed, mag, justified = m.groups()
+        rows.append((task, perturbed, mag, justified))
+        if not justified.strip() or justified.strip() in ("-", "?"):
+            unstated.append(task)
+        elif norm(perturbed) != norm(justified):
+            bad.append((task, perturbed, justified, mag))
+    return rows, bad, unstated
+
+
+# --selftest: the case list the header promises, asserting BOTH directions.
+# The 3-space case is the widest LEGAL indent under CommonMark and the 4-space
+# case is the first ILLEGAL one; a bound with only one of them is not a bound.
+_ROW = "| t | inter-beat | 40 | inter-beat |"
+_CASES = [
+    (_ROW,            1, "column 0"),
+    ("   " + _ROW,    1, "3 spaces: the widest indent CommonMark still calls a table"),
+    ("    " + _ROW,   0, "4 spaces: an indented code block, not a table row"),
+    ("\t" + _ROW,     0, "tab counts as four columns, so also code"),
+    ("      |- asserted at time zero by a STATEMENT, never again", 0,
+     "a real line from this repo -- indented, pipe-led, and not a row"),
+]
+
+
+def selftest():
+    bad = 0
+    for text, want, why in _CASES:
+        got = len(ROW.findall(text))
+        ok = got == want
+        bad += not ok
+        print("  %-4s %-46s %s" % ("ok" if ok else "FAIL", repr(text)[:46], why))
+    print("%s: %d/%d" % ("OK" if not bad else "REFUSED", len(_CASES) - bad, len(_CASES)))
+    return 2 if bad else 0
+
+
+def main(argv):
+    if argv and argv[0] == "--selftest":
+        return selftest()
+    if not argv:
+        sys.exit(__doc__.strip().splitlines()[0])
+    rows, bad, unstated = check(open(argv[0], encoding="utf-8").read())
+    if not rows:
+        print("REFUSED: no magnitude table found in %s." % argv[0])
+        print("  A plan with no table cannot be checked, and reporting that as")
+        print("  OK is the defect this tool is for.")
+        return 2
+    print("  %d magnitude row(s) read." % len(rows))
+    for task, p, j, mag in bad:
+        print("  REFUSE  %-10s perturbs %r at %s, justified on %r" % (task, p, mag, j))
+    for task in unstated:
+        print("  REFUSE  %-10s states no axis for its justification" % task)
+    if bad or unstated:
+        print("REFUSED: %d magnitude(s) justified on an axis other than the one "
+              "being perturbed." % (len(bad) + len(unstated)))
+        print("  A right number detached from what made it right leaves no trace:")
+        print("  the citation is still true, and it is about something else.")
+        return 2
+    print("OK: every magnitude is justified on the axis it perturbs.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

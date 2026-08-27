@@ -37,7 +37,7 @@
 //   Fixed by this contract and NOT parameters: ADDR_W = 32 (byte address),
 //   ID_W = 4, BLOCK_WORDS = 4. They are localparams below. A quantity that is
 //   never swept is a constant, not a capability, and declaring it as a
-//   parameter would claim a flexibility nothing checks.
+//   parameter would claim a flexibility the harness never exercises.
 //
 //   AUTHORITY for the legal sets (rule 15): stated task intent. Two values on
 //   each axis is the minimum that can bind the parameter -- a single value is
@@ -114,7 +114,12 @@
 //       contract and is stated so that stability is a contract term rather than
 //       an assumption.
 //
-//   R1b. `rsp_valid_o` MUST NOT depend combinationally on `rsp_ready_i`. The
+//   R1b. REPORTED UNDER R1. The check that observes this -- rsp_valid dropped
+//       while the response was unaccepted, and rsp_id/rsp_data changing under
+//       backpressure -- carries its id in TRAILING PARENTHESES rather than as a
+//       prefix, so it is easy to miss when grepping for the clause.
+//
+//       `rsp_valid_o` MUST NOT depend combinationally on `rsp_ready_i`. The
 //       consumer may hold `rsp_ready_i` low indefinitely, and a design that
 //       waits for it before asserting `rsp_valid_o` deadlocks against a consumer
 //       that waits for `rsp_valid_o` before asserting `rsp_ready_i`.
@@ -135,7 +140,12 @@
 //       R1's firing count to zero at all sixteen configurations.
 //       AUTHORITY: stated task intent.
 //
-//   R2. OPERATIONS. `req_op_i` is 1'b0 for LOAD, 1'b1 for STORE.
+//   R2. REPORTED UNDER R3/R5. A wrong LOAD value or a STORE that wrote the
+//       wrong bytes surfaces as the scoreboard's value comparison, which prints
+//       "R3/R5: a LOAD returned the wrong value for its id". R2 defines the
+//       operations; R3/R5 is where a violation of them is reported.
+//
+//       OPERATIONS. `req_op_i` is 1'b0 for LOAD, 1'b1 for STORE.
 //       LOAD returns the addressed word. STORE writes the bytes of
 //       `req_data_i` selected by `req_mask_i`; bytes whose mask bit is 0 are
 //       left unchanged.
@@ -146,15 +156,16 @@
 //
 //   R3. EVERY ACCEPTED REQUEST PRODUCES EXACTLY ONE RESPONSE, tagged with that
 //       request's `req_id_i` on `rsp_id_o`. For a LOAD, `rsp_data_o` is the
-//       addressed word. For a STORE, `rsp_data_o` IS NOT CONSTRAINED and is
-//       not checked -- a design may return anything, including zero.
+//       addressed word. STORE RESPONSE DATA IS FREE -- for a STORE a design
+//       may return anything on `rsp_data_o`, including zero, and any value
+//       satisfies this clause.
 //       AUTHORITY: stated task intent. The id is what makes an out-of-order
 //       response stream decodable; constraining store response data would
 //       encode a choice nothing needs.
 //
 //   R4. RESPONSE ORDER IS FREE, WITH ONE EXCEPTION THAT FOLLOWS FROM C2.
 //       Responses may be returned in any order with respect to request order.
-//       Nothing rewards or penalises reordering, and no check counts it.
+//       Reordering is neither rewarded nor penalised; it is a free choice.
 //
 //       THE EXCEPTION: a response that is ready must not be held behind one
 //       that is not. STRICTLY IN-ORDER RETIREMENT IS THEREFORE NOT CONFORMANT
@@ -222,8 +233,8 @@
 //       whichever direction it runs in. The block-aligned address and the
 //       ascending word order are reported under M2 alone.
 //       AUTHORITY: stated task intent -- write-back is stated in the task
-//       title; writing back a clean line is permitted but wasteful and is not
-//       checked either way.
+//       title. CLEAN-VICTIM WRITEBACK IS FREE -- writing back a clean line is
+//       permitted but wasteful, and either choice satisfies this clause.
 //
 //   M3. AT MOST ONE MEMORY TRANSACTION IS OUTSTANDING. A new
 //       `mem_req_valid_o` is not asserted until the previous transaction's
@@ -241,7 +252,7 @@
 //       With memory held so that nothing completes, the design must accept
 //       requests to MAX_MISSES distinct lines before it may stop accepting.
 //       AUTHORITY: stated task intent -- this is the capability the parameter
-//       names, and a parameter no check enforces will be ignored.
+//       names, and a parameter the harness never exercises will be ignored.
 //
 //       MEASURED AT THE REFERENCE BEFORE BEING WRITTEN, at four settings:
 //       the reference accepts exactly MAX_MISSES + 1, at 2, 4, 8 and 16. The
@@ -265,12 +276,25 @@
 //       non-blocking, and without it the parameter in C1 is the only thing
 //       separating this from a blocking cache with a queue in front.
 //
-//   C3. FORWARD PROGRESS. With requests continuously offered and memory always
+//   C3. REPORTED UNDER R3/C2, one half each. "Every accepted request is
+//       eventually answered" is the accepted-versus-answered count and fails as
+//       R3. "No id is starved while others are being served" is the acceptance
+//       check and fails as C2. There is no C3 message.
+//
+//       FORWARD PROGRESS. With requests continuously offered and memory always
 //       eventually responding, every accepted request is eventually answered,
 //       and no id is starved while others are being served.
 //       AUTHORITY: stated task intent.
 //
-//   C4. BLOCK-DATA BUFFERING IS BOUNDED. Outside the tag and data arrays, a
+//   C4. `C4` appears ZERO times in tb/.
+//
+//       Recorded here rather than left to be discovered. Nothing observes how
+//       much block data a design holds, so this is a stated requirement with
+//       no enforcement: a submission that buffers four lines instead of two is
+//       non-conforming and passes. It is not grouped under another id -- there
+//       is no id.
+//
+//       BLOCK-DATA BUFFERING IS BOUNDED. Outside the tag and data arrays, a
 //       design may hold at most TWO cache lines of block data at any time --
 //       one for the fill in flight and one for the writeback in flight -- plus,
 //       per pending miss, at most ONE WORD of merged store data and its byte
@@ -314,7 +338,7 @@
 //
 //   L2. HOW OUTSTANDING MISSES ARE TRACKED IS FREE. A queue, a register file
 //       of miss records, per-line state, or anything else. This contract names
-//       no structure, and no check can distinguish them.
+//       no structure, and the two are indistinguishable at this interface.
 //
 //   L3. CRITICAL-WORD-FIRST IS OUT OF SCOPE. M1 pins ascending word order, so
 //       returning the requested word first is NOT permitted here even though it
@@ -363,11 +387,20 @@
 //       one frontend accepting a file does not make it legal.
 //
 //   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
-//       BLOCK. SystemVerilog forbids a declaration after a statement inside a
-//       block. This is stated explicitly because it is by a wide margin the
-//       most common way a submission here fails to compile, and the error text
-//       names neither declarations nor placement.
-//
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at module
+//       scope, before any assignment, loop or $display in that block.
+//   
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model. An earlier version of this clause called it
+//       "the most common compile failure here", which reads as though the failure
+//       is VISIBLE. Under Verilator it is not.
 //   T3. THE MODULE MUST BE NAMED `nonblocking_dcache` and must match the port
 //       list below exactly, including port names.
 //
@@ -549,7 +582,7 @@ module nonblocking_dcache #(
 
   // BLOCK_WORDS is fixed at 4 by this contract. It is a localparam rather than
   // a parameter because it is never swept, and an unswept parameter claims a
-  // flexibility no check enforces.
+  // flexibility the harness never exercises.
   localparam int unsigned BLOCK_WORDS = 4;
 
   // Implementation goes here.

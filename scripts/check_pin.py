@@ -80,6 +80,23 @@ def apply_rule(c):
     return round(math.ceil(c * 1.5 / 0.25) * 0.25, 4)
 
 
+DENIED_RE = re.compile(r"NOT YET SET|SWEEP HAS NOT BEEN RUN", re.I)
+
+
+def sweep_denied(task_dir):
+    """-> the file claiming this task's sweep has not run, or None.
+
+    Checks spec/ AND probe/, because they are separate documents that go stale
+    independently -- see prompt_pin(). Returns the first file found so the message
+    names something the reader can open.
+    """
+    for sub, pat in (("spec", "*.sv"), ("probe", "*.md")):
+        for f in sorted(glob.glob(os.path.join(task_dir, sub, pat))):
+            if DENIED_RE.search(open(f, errors="replace").read()):
+                return os.path.join(sub, os.path.basename(f))
+    return None
+
+
 def main(argv):
     want = [a for a in argv[1:] if not a.startswith("-")]
     dirs = sorted(glob.glob("domains/*/design/d_*"))
@@ -113,6 +130,29 @@ def main(argv):
             print(f"  {t:<26} {'-':>9} {'-':>10} {'-':>11}  NO CONCLUSION -- no stated pin and no sweep")
             noconc += 1; continue
         if pin is None:
+            # THE THIRD STALENESS VECTOR: a claim falsified by a BUILD FINISHING.
+            #
+            # AGENT-DESIGN-43a92055 named the three after sweeping 41 disclaimer
+            # sites: a claim about ANOTHER task's checker, falsified by someone who
+            # never opens the file; a claim about THIS task's checker, falsified by
+            # whoever edits the checker; and a claim about work NOT YET DONE,
+            # falsified by an artefact appearing. The third has no editing event to
+            # hang a check on -- nobody touched d_ai04 when its sweep converged --
+            # so the only signal is the artefact, which is on this side.
+            #
+            # d_ai04 carried "THAT SWEEP HAS NOT BEEN RUN for this task. No PPA
+            # number may be reported until it is" while its sweep had converged at
+            # 22.5 ns. Correct when written, false from a build completing, and no
+            # gate looked at it. d_ca05 carries the identical paragraph and it is
+            # still TRUE, which is why this checks the artefact rather than the
+            # words: the same sentence is a fact in one task and a falsehood in the
+            # other, and only the fmax record tells them apart.
+            claim = sweep_denied(d)
+            if claim:
+                print(f"  {t:<26} {'-':>9} {conv:>10} {'-':>11}  "
+                      f"*** STALE: {claim} says the sweep has not run, and "
+                      f"{short}_fmax.json exists ***")
+                bad += 1; continue
             print(f"  {t:<26} {'-':>9} {conv:>10} {'-':>11}  NO CONCLUSION -- spec states no pin")
             noconc += 1; continue
         if conv is None:

@@ -167,7 +167,8 @@ grading run for everything queued behind it.
 
 ## 7. Named latitude (rule 12)
 
-The following are **explicitly out of scope and shall not be checked.** Each is
+The following are **explicitly out of scope. NOT SPECIFIED — A TESTBENCH THAT
+CHECKS ANY OF THEM REJECTS CORRECT HARDWARE.** Each is
 a point where the contract above admits more than one correct design, and a
 testbench that pins one of them will reject correct hardware.
 
@@ -180,7 +181,7 @@ testbench that pins one of them will reject correct hardware.
    design is idle (S6).
 4. **`m_tdata_o`, `m_tkeep_o` and `m_tuser_o` while `m_tvalid_o` is low** — the
    values on those signals are unconstrained. They may hold their previous
-   value, be zero, or be arbitrary. They shall not be checked.
+   value, be zero, or be arbitrary. They are free.
 5. **Whether a new frame may begin on the output in the same cycle the previous
    frame's `m_tlast_o` beat transfers**, or whether idle cycles separate frames.
    Both are legal, and the number of idle cycles is unbounded.

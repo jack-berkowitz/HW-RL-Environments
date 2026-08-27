@@ -126,7 +126,7 @@ probe: probe/PASTE.md
 # below is the live one; 86b7d95729381055 was recorded on 08-23 and three
 # spec-wide commits moved it on 08-24 without this field being touched. See
 # missed_boundaries. Recompute with scripts/task_text_hash.py at the point of use.
-task_text_hash: 2f2c4cd76f582ae1
+task_text_hash: 0d712c90a76b8385
 
 interface_boundary:
   changed_on: 2026-08-25

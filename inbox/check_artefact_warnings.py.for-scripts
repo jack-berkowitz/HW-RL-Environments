@@ -87,6 +87,35 @@ Run it on both logs, or on one `--binary -Wall` build.
 """
 import os
 import re
+
+# THE ANCHOR IS THE FORMAT'S OWN RULE -- NOT COLUMN 0, AND NOT "ANY INDENT".
+# Every regex in this file was once `^`-anchored and every one was correct only
+# because its input happens to begin at column 0. That is a property of the
+# INPUT, not of the method. The same defect cost two rows in a corpus sweep: a
+# `task_text_hash:` field indented by two and another by four read as ABSENT, a
+# state 14 tasks legitimately occupy, so the miss landed in a plausible bucket
+# rather than an implausible one and announced nothing.
+#
+# The first fix was `^[ \t]*` -- ANY indent -- and it was wrong in the other
+# direction: it replaced an accidental bound with no bound at all, which is the
+# same mistake with the sign flipped. AGENT-PPA-2381f2fe caught it on the
+# markdown side: CommonMark allows 0-3 spaces before an ATX heading, and at four
+# or more the line is an INDENTED CODE BLOCK -- not a heading, not a table row.
+# A tab counts as four columns, so a tab is code too.
+#
+# AGENT-DESIGN-43a92055's remedy is A CASE LIST THAT FAILS WHEN THE SCOPE
+# NARROWS. A case list that accepts everything cannot fail that way either, so
+# the bound below is taken from the input format and --selftest asserts BOTH
+# directions: the widest legal form is accepted and the first illegal one is
+# refused.
+#
+# THIS TOOL'S INPUT IS PROGRAM OUTPUT, NOT MARKDOWN, so its bound is tighter
+# than CommonMark's: exactly column 0. Measured, not assumed -- Verilator 5.046
+# emits `%Warning-KIND:` at column 0 and indents only its continuation lines,
+# which do not begin with `%Warning-` (verified by running the linter on a file
+# with an undriven signal). An indented `%Warning-` line is therefore not a
+# build warning; it is a log excerpt quoted inside prose.
+
 import sys
 
 REFUSE = ("UNDRIVEN", "MULTIDRIVEN", "UNOPTFLAT", "IMPLICIT", "LATCH",
@@ -120,7 +149,39 @@ def classify(text, task):
     return mine, theirs
 
 
+# --selftest: the case list the header promises, asserting BOTH directions.
+# The rejection cases are lines that really occur in this repo's own documents,
+# where a build log is quoted inside an indented prose block.
+_CASES = [
+    ("%Warning-UNDRIVEN: extra.sv:108:9: Signal is not driven: 'g_rready'", 1,
+     "column 0, as Verilator emits it"),
+    ("%Warning-UNOPTFLAT: tb.sv:12:3: Circular combinational logic", 1,
+     "a refusing kind at column 0"),
+    ("                    : ... note: In instance 'x'", 0,
+     "Verilator's own continuation line, indented, correctly ignored"),
+    ("    %Warning-UNDRIVEN: extra.sv:108:9: Signal is not driven: 'g'", 0,
+     "4-space: a log excerpt in prose, not a build warning"),
+    ("  %Warning-UNDRIVEN: extra.sv:108:9: Signal is not driven: 'g'", 0,
+     "2-space: same"),
+    ("\t%Warning-UNDRIVEN: extra.sv:108:9: Signal is not driven: 'g'", 0,
+     "tab: same"),
+]
+
+
+def selftest():
+    bad = 0
+    for text, want, why in _CASES:
+        got = len(WARN.findall(text))
+        ok = got == want
+        bad += not ok
+        print("  %-4s %-46s %s" % ("ok" if ok else "FAIL", repr(text)[:46], why))
+    print("%s: %d/%d" % ("OK" if not bad else "REFUSED", len(_CASES) - bad, len(_CASES)))
+    return 2 if bad else 0
+
+
 def main(argv):
+    if argv and argv[0] == "--selftest":
+        return selftest()
     if len(argv) < 3 or "--task" not in argv:
         sys.exit(__doc__.strip().splitlines()[0])
     log = argv[0]

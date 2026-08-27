@@ -34,7 +34,7 @@ probe: probe/PASTE.md
 # absence was not a stale value going unnoticed -- it was a field nobody had ever
 # filled, which is the harder kind to see because there is no wrong number to
 # catch. Recompute with scripts/task_text_hash.py at the point of use.
-task_text_hash: f7a68c4dbec4a1b7    # spec/ + probe/PASTE.md
+task_text_hash: cb910c9196c73809    # spec/ + probe/PASTE.md
 
 version_boundary:
   changed_on: 2026-08-25

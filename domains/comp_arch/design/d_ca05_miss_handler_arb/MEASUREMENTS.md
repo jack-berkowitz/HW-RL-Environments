@@ -105,3 +105,57 @@ property of this anchor and must not be specified as one.
 - `AMO_LR`/`AMO_SC` reservation behaviour; only `AMO_ADD` was exercised
 - overlap with `d_ca01`'s scored surface, which the landscape flags as the risk
   to check first and which remains unchecked
+
+# The two "Not measured" lines closed, before any spec clause was written
+
+## MSHR matching, and the two things reading would have got wrong
+
+`miss_handler.sv:509-519` compares a presented address against the in-flight
+miss two ways at once:
+
+    addr  match:  mshr_q.valid && mshr_addr_i[i][55:4] == mshr_q.addr[55:4]
+    index match:  mshr_q.valid && mshr_addr_i[i][11:4] == mshr_q.addr[11:4]
+
+With the MSHR holding `0x00000000012340`:
+
+| port | presented | addr match | index match |
+|---|---|---|---|
+| p0 | `0x00000000012340` — identical | **1** | **1** |
+| p1 | `0x0000000001234C` — same line, offset differs | **1** | **1** |
+| p2 | `0xAABBBBCCC12340` — same index, different tag | 0 | **1** |
+| p3 | `0x00000000099990` — different index | 0 | 0 |
+| any | with no miss in flight | 0 | 0 |
+| any | after the miss retired | 0 | 0 |
+
+**An address match IMPLIES an index match.** The index field `[11:4]` is a subset
+of the address field `[55:4]`, so the two assert *together* — they are not
+alternatives. The comment in the anchor reads *"same as previous, but checking
+only the index"*, and the natural implementation of that sentence makes them
+mutually exclusive. Measurement says otherwise, and this is the clause a
+submission is most likely to get wrong for a reason that looks like care.
+
+**The port being served is NOT excluded, and the anchor's own comment says it
+is.** Line 510 reads *"exclude the unit currently being served"*; port 0 was the
+requester whose miss is in flight, and `addr_matches_o[0]` measures **1**.
+Comment and code disagree and only one can be the contract. **The code is the
+contract**, because the code is what the anchor does — recorded here so nobody
+later reads the comment and calls the measurement a bug.
+
+## The flush walk on the cache array
+
+| quantity | measured |
+|---|---|
+| cycles, `flush_i` to IDLE | **513** |
+| array requests (`\|req_o`) | **512** |
+| array writes (`\|req_o && we_o`) | **256** |
+| first / last `addr_o` | `0x000` / `0xff0` |
+| `be_o.vldrty` bits seen | `11111111` |
+
+256 writes over `NUM_WORDS = 256` sets, addresses stepping by 16 — which is
+`2^OFFSET_WIDTH` — so the walk visits **every set exactly once** and asserts
+`vldrty` for **all eight ways**. Two array accesses per set, one read and one
+write.
+
+That fixes the flush's cost as well as its effect: a design that walks the array
+in a different number of accesses is visible on the array port even when the
+final cache state is identical.

@@ -242,6 +242,28 @@ endmodule
 //
 // T8. SUSTAINED THROUGHPUT (A4) over a long open-flow burst.
 //
+// T9. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator, and passing
+//     simulation is not sufficient. The synthesis frontend is slang, so a
+//     construct Verilator accepts silently can be a hard error there -- in which
+//     case a correct submission produces NO PPA NUMBER AT ALL. That is the worst
+//     shape a failure can take here: it reads as a missing measurement rather
+//     than as a rejected submission.
+//
+//     THE REJECTION THIS MOST OFTEN PRODUCES is a variable declared after a
+//     statement inside a begin/end block:
+//
+//         error: declaration must come before all statements in the block
+//
+//     slang enforces the LRM rule that every declaration in a block precedes
+//     every statement in that block. VERILATOR DOES NOT DIAGNOSE THE VIOLATION,
+//     so the file simulates clean and then yields nothing. Declare every
+//     variable at the top of the block that uses it, or at module scope, before
+//     any assignment, loop or $display in that block.
+//
+//     This is measured history, not caution: ten run records across four tasks
+//     in this repository were killed by exactly that error, nine of them from
+//     one model.
+//
 // -----------------------------------------------------------------------------
 // G -- GRADING
 // -----------------------------------------------------------------------------
@@ -257,11 +279,24 @@ endmodule
 //        PERIOD rather than by sweeping for a maximum frequency, so every
 //        submission is compared at one frequency.
 //
-//        THE PINNED PERIOD IS NOT YET SET. It is derived as 1.5x the reference
-//        implementation's own measured period, rounded up to the next 0.25 ns,
-//        from a single reference Fmax sweep -- and THAT SWEEP HAS NOT BEEN RUN
-//        for this task. No PPA number may be reported for d_ai04 until it is.
-//        This is recorded as missing rather than filled with a plausible value.
+//        THE PINNED PERIOD IS 33.75 ns on sky130hd. It is derived as 1.5x the
+//        reference implementation's own measured period (22.5 ns, 44.44 MHz,
+//        WNS +0.01, DRC 0 at every iteration), rounded up to the next 0.25 ns:
+//
+//            ceil(1.5 x 22.5 / 0.25) x 0.25  =  135 x 0.25  =  33.75 ns
+//
+//        ONE SWEEP, ON ONE MACHINE. d_ai01's pin converged twice on two hosts
+//        with the second not told the first's answer; this one has not had that
+//        treatment. The bisection landed on a 0.25 ns boundary exactly rather
+//        than rounding up to one, which is worth stating because it means the
+//        rounding step did nothing here and a re-measurement that moved the
+//        converged period even slightly would move the pin.
+//
+//        THIS PARAGRAPH PREVIOUSLY SAID THE SWEEP HAD NOT BEEN RUN, and that
+//        was true when written. It is recorded because the three candidates
+//        solicited for this task were written against it -- they were told the
+//        target frequency was unknown -- and are re-solicited for that reason
+//        rather than because anything about the contract changed.
 //
 //        The period does not move in response to what is submitted. Pinning the
 //        row at the slowest submission's own Fmax rewards a slow design by

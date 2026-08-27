@@ -192,7 +192,17 @@ module axis_switch_oq_tb #(
   int unsigned  o_seq   [M_COUNT];
   int unsigned  o_bt    [M_COUNT];
   int unsigned  o_nb    [M_COUNT];
-  int           sb_route_err, sb_data_err, sb_keep_err, sb_atom_err, sb_order_err, sb_len_err;
+  // sb_order_err WAS DECLARED HERE AND NEVER INCREMENTED OR REPORTED. Removed
+  // rather than wired: order IS checked, by building each expected payload from
+  // the next sequence due on that input-output pair, so a frame delivered out of
+  // order is compared against the wrong payload and fails as an R3 data
+  // mismatch. Spec R5 records that grouping. The counter performed nothing and
+  // named a check that lives elsewhere -- the same shape as the L3 comment that
+  // explained a right number with a wrong reason and survived review for it.
+  //
+  // Wiring it instead would ADD a check and move the rig's pass criterion, which
+  // is a results decision rather than a tidy-up.
+  int           sb_route_err, sb_data_err, sb_keep_err, sb_atom_err, sb_len_err;
   int unsigned  dlv_frames [S_COUNT][M_COUNT];
   int           lat_min, lat_max, lat_n;
 
@@ -215,7 +225,7 @@ module axis_switch_oq_tb #(
       sv_r <= '0; sl_r <= '0; sd_r <= '0; sk_r <= '0; sde_r <= '0;
       accepts_r <= 0; delivers_r <= 0; cycle_r <= 0;
       sb_route_err <= 0; sb_data_err <= 0; sb_keep_err <= 0;
-      sb_atom_err <= 0; sb_order_err <= 0; sb_len_err <= 0;
+      sb_atom_err <= 0; sb_len_err <= 0;
       c1_beats <= 0; c1_cycles <= 0; maxlen_r <= 0;
       lat_min <= 1000000; lat_max <= 0; lat_n <= 0;
       for (si = 0; si < int'(S_COUNT); si++) begin

@@ -4463,3 +4463,1660 @@ and not of the code. Every affected suite re-run: **11/11, 12/12, 10/10, 10/10,
 > real, latent in six shipped tasks, and would have stayed unreachable until
 > something else disturbed a valid. That is worth saying plainly rather than
 > filing under the failure of the tool that found it.
+
+
+---
+
+## FINDING — a magnitude justified on one axis and applied on another is not justified
+
+**`v_nw01`'s perturbation depth was 65, justified as *"one past
+`REQUEST_RETRY_INTERVAL=64`, so a stall shorter than 64 never lets a retry
+fire"*. That is an argument about the gap BETWEEN REQUESTS. It was applied
+BETWEEN PAYLOAD BYTES.**
+
+    65 cycles x 28 bytes  =  1820 cycles per frame
+    REQUEST_TIMEOUT       =   256
+
+The frame took seven times the design's own lookup timeout, the lookup expired
+before the reply finished arriving, and Q6 — *a matching reply resolves the
+outstanding lookup* — reported a failure. There was no outstanding lookup left to
+resolve.
+
+### The family
+
+Same shape as the ABC units error and the wrong baseline: **a number correct
+somewhere, used somewhere else, and correct-looking in both places.**
+
+    ABC units       a real number in the wrong unit
+    wrong baseline  a real comparison against the wrong reference
+    this            a real justification for a different axis
+
+None of the three is a wrong number. Each is a **right number detached from what
+made it right**, and the detachment leaves no trace — the row still has a
+citation, the citation is still true, and it is about something else.
+
+**My own table is what makes this sharp.** Every row names the axis being
+perturbed *and* gives a reason for the magnitude, in adjacent columns. The two
+disagreed on one row and nothing compared them, because they are prose in a table
+I wrote to look rigorous.
+
+### The remedy is a column, not care
+
+> **Every magnitude states the axis its justification is about. A mismatch with
+> the axis being perturbed is a refusal.**
+
+    task     axis perturbed     magnitude   justified on axis   status
+    v_ca06   inter-beat gap     9           inter-beat gap      ok
+    v_nw01   inter-beat gap     65          inter-TRANSACTION   REFUSE
+
+One column, mechanically checkable, and it fires on exactly the row that was
+wrong. **The axis is already recorded per row — the justification simply does not
+carry it**, and that asymmetry is the whole defect. Care would not have caught
+it: I wrote both columns, in the same sitting, and read them as agreeing.
+
+---
+
+## FINDING — the drain discriminator needs a range, not a multiplier
+
+**A drain widening large enough to clear contamination can be large enough to
+break a clause with a fixed deadline.** `v_nw02`, at perturbation depth 9:
+
+    drain x1    P3 fails      beats still in flight at the phase boundary
+    drain x2    PASS          both hold
+    drain x3    X4 fails      a fixed deadline, stretched past
+    drain x10   X4 fails      my rule's value
+
+**My rule was a single number — multiply every drain by `(1 + stall_depth)` — and
+for this task that number is outside the window in which the task is measurable
+at all.** The task is clean, at x2, and the rule would never have found it.
+
+The discriminator was designed to answer *did this failure survive a wider
+drain*. It needs to answer *is there any drain at which nothing fails*, which is
+a search over a range with a floor (enough to drain) and a ceiling (before fixed
+deadlines break). Those two bounds come from different places — the ceiling from
+the task's own deadline clauses, which is the enumeration already filed.
+
+**And it doubles as the correction to my `settle()` miss.** The read sweep ended
+on `settle(N)`, which the multiplier did not cover, so the ×10 run left that
+phase un-widened. *"Survived the widening"* was not evidence about the failure;
+it was evidence the widening had not reached it. **An escalation criterion that a
+widening never reached is not a criterion**, and nothing in my failure definition
+required checking that the widening applied.
+
+
+---
+
+## FINDING — a check whose scope is implicit cannot report a scope miss
+
+**Written to be read outside this repository. Nothing below depends on knowing
+what any of these tasks are.**
+
+### The shape
+
+A discriminator is a check that answers *is this real?* — it takes a suspected
+problem, does something to the system, and reports whether the problem survives.
+Ours widened every timing delay in a testbench and asked whether a failure
+persisted; if it did, the failure was real rather than an artefact of the run
+being too short.
+
+**It acted on three constructs. It had no list of the constructs it needed to
+act on.** One kind of delay was spelled differently and was silently skipped, so
+for that case the discriminator did nothing at all — and reported the same thing
+it reports when it does everything and the problem is real:
+
+    "the failure survived the widening"   ->   the widening never ran
+
+> **A discriminator with a fixed list of what it acts on, and no list of what it
+> MUST act on, returns the same output when it works and when it does not
+> apply.** There is no third value. The reader gets *the problem is real*, which
+> is the reading the check was built to produce.
+
+### Where the two older families meet
+
+This corpus already carries two neighbours, and this is the point they intersect:
+
+- **a field with no reader** — a value that is correct, present, and consumed by
+  nothing. It cannot be wrong in a way anything notices.
+- **a vacuous check** — a comparison that no input can fail, because both sides
+  come from the same place.
+
+Both are *the artefact is fine and tells you nothing*. This is the same defect
+located in a check's **scope** rather than in its value or its logic:
+
+    field with no reader    the output is never read
+    vacuous check           the output cannot vary
+    implicit scope          the output does not distinguish RAN from DID NOT APPLY
+
+**A check whose scope is implicit cannot report a scope miss**, because reporting
+one requires knowing what the scope should have been — and that is exactly the
+thing that was never written down.
+
+It is worse than its two neighbours in one respect. A field nobody reads is inert;
+a vacuous check is at least constant. **An implicitly-scoped discriminator is
+actively misleading in precisely the cases it was built for**, because a case it
+cannot reach looks identical to a case it reached and confirmed.
+
+### The remedy, and it generalises
+
+> **Every discriminator declares the constructs it must reach, and refuses when
+> it meets one it does not cover.**
+
+Not *lists what it handles* — that is what it already had. **Declares what it must
+reach**, so that meeting something outside the declaration is an event rather than
+a silence. The declaration is the same move as `NO CONCLUSION`, as an explicit
+empty list, as `NOT-STATIC`: **make "I could not say" a thing the artefact can
+express.**
+
+The cost is one enumeration, once. In this case it was a single pass over eleven
+files and it found one real gap, and the enumeration is now the artefact rather
+than the assumption.
+
+### What it cost here, and what the enumeration was actually worth
+
+The criterion was load-bearing for every task in a two-day exercise and reported
+as satisfied eleven times. Enumerating afterwards showed that **the six clean
+results stand** — only three of them depended on the discriminator at all, and
+those three used covered constructs.
+
+**The rows were right. The claim about them was not.**
+
+I had been reporting six clean results as though the discriminator had confirmed
+them, when for three of the six it was irrelevant and for the other three nothing
+had established that it applied. Running the enumeration changed no row and
+changed what I was entitled to say about every one of them.
+
+> **That distinction is the whole value of the enumeration**, and without it the
+> exercise reads as a formality that confirmed what was already believed. It was
+> not. It converted six results I could not justify into six results I can.
+
+---
+
+## FINDING — the drain rule is a window, not a number, and the ceiling came from a fact kept for the opposite reason
+
+**A drain widening large enough to clear contamination can be large enough to
+break a clause with a fixed deadline.**
+
+    v_nw02, perturbation depth 9
+      x1   P3 fails    below the floor -- beats still in flight at the boundary
+      x2   PASS        inside the window
+      x3   X4 fails    above the ceiling -- a fixed deadline, stretched past
+      x10  X4 fails    my rule's value
+
+**My rule was `(1 + stall_depth)`, one number, and for this task it is outside
+the window in which the task is measurable at all.** The task is clean, at x2,
+and the rule would never have found it — it would have reported X4 as a failure
+surviving the widening, which is exactly the escalation it produced.
+
+    floor     enough drain that beats in flight at a phase boundary complete
+    ceiling   before a clause with a FIXED DEADLINE is stretched past it
+
+The two bounds come from different places, and only the floor is a property of
+the perturbation. **The ceiling is a property of the task's clauses.**
+
+### Where the ceiling comes from, and it is worth saying plainly
+
+The deadline enumeration — `v_ca03` A4, `v_ca04` X3, `v_ca05` R15, `v_ca07` E1
+and H4, `v_nw01` X3 and Q1, `v_nw02` X4 — was produced as **evidence for
+excluding bounded clauses from perturbed runs**. That case was withdrawn when the
+instrument behind it turned out to be broken, and the enumeration was kept as a
+fact rather than discarded with the argument.
+
+> **It was kept for one reason and turned out to be needed for the opposite one.**
+> Not to exclude those clauses from the run — to bound how far the run may be
+> stretched before they break.
+
+A fact kept after its argument collapsed is worth more than the argument was.
+
+
+### Third instance, and the override existed this time
+
+`a316030`: `check_linkage_tree.sh --staged` returned **1** — it now runs
+`check_append_only.py`, which someone has wired into the pre-commit path — and I
+printed the code, read it, and committed anyway. The block had no guard on that
+variable.
+
+**The tree is sound.** The three dropped headings were deliberate renames and I
+*did* discharge them: `--allow-drop` with a reason for each, and the three
+`Append-only-override:` trailers are in the commit message. `check_linkage_tree.sh
+HEAD` passes.
+
+**But I satisfied the override in one command and ignored the refusal in
+another.** The gate refused, and what answered it was a separate invocation whose
+result the gate never saw.
+
+    instance 1   misread the output          2ab3a7e, repaired 90b0c79
+    instance 2   read it and disagreed       eed4f87
+    instance 3   read it, had the answer,    a316030
+                 and did not give it to the gate
+
+> A refusal discharged somewhere the refusing check cannot see is not discharged.
+> The trailers make the decision visible **to a reader of the history**, which is
+> what they are for — and the gate is not a reader of the history. It needed the
+> flags, and it was run without them.
+
+The fix is mechanical and I keep not applying it: **the commit block must exit on
+a non-zero gate**, not print it. Two of the three instances had the exit guard;
+this one did not, and the difference was which block I typed.
+
+
+---
+
+## FINDING — `task_text_hash` is a cache with no coherence check: 2 of 21 tasks record the right value
+
+**Found by verifying a peer's claim instead of accepting it. Their numbers were
+right and the field disagreed with them.**
+
+AGENT-DESIGN-43a92055 reported that all eight design tasks had moved their
+`task_text_hash` today. I recomputed four with `scripts/task_text_hash.py`:
+
+    d_ai01   recomputed ac7b22a735ceda0a   they said ac7b22a735ceda0a   agree
+    d_ca01   recomputed f800f841dd0d04be   they said f800f841dd0d04be   agree
+    d_ca04   recomputed 168b892e9c481511   they said 168b892e9c481511   agree
+    d_nw03   recomputed 2195f28fff54dd23   they said 2195f28fff54dd23   agree
+
+**Four for four. And the recorded field disagreed with all four.**
+
+### The measurement across every task
+
+    recorded field == recomputed      2 of 21
+    recorded field is STALE           3
+    NO task_text_hash FIELD AT ALL   16
+
+**Two tasks in the entire corpus record their own hash correctly.** One of them is
+mine — `v_ca06`, at `ae29e2161468aeff`.
+
+### And the other one of mine is not
+
+`v_ca03` has **no `task_text_hash:` field**. It carries `task_text_hash_before` /
+`task_text_hash_after` in a boundary record, at a value two moves out of date.
+
+I have reported that task's hash three times this week — `394f1f8f` →
+`fc1baef4` → `fa23813e` — **in commit messages and in `task.yaml` prose, while
+the canonical field was never there.** Every number I quoted was correct: I
+recomputed it at the moment of quoting. Nothing in the tree carries it forward,
+so the next reader recomputes or is wrong.
+
+### The shape
+
+A cache whose coherence with the thing it caches is checked by nothing. The
+hash is **derived** — `spec/` plus `probe/PASTE.md`, one command — so the field
+is a convenience copy, and a convenience copy that can silently diverge is worse
+than no copy, because absence prompts recomputation and a stale value does not.
+
+**`d_ai01`'s own field carries a comment saying so:**
+
+    # Recompute with scripts/task_text_hash.py at the point of use.
+
+Somebody already knew. **A field documented as untrustworthy is still read** — it
+is in the file, it looks like the answer, and the disclaimer is one line above it
+in a file nobody reads top to bottom. That is the unread-field family inverted:
+not a field with no reader, but **a field whose readers were warned and will
+read it anyway.**
+
+### Why it bit here specifically
+
+The coordination question between two agents this week was *"is this task's hash
+moving anyway?"* — because the answer decides whether a spec edit is free or
+costs a re-solicitation. **That question cannot be answered from the field in 19
+of 21 tasks.** It can only be answered by recomputing, which is one command, and
+neither of us was doing it until one of us checked the other.
+
+### The remedy is the one already written down elsewhere
+
+    python3 scripts/task_text_hash.py <task>   ==   the field
+
+A one-line check, over 21 tasks, refusing on a mismatch and on absence. It is the
+same shape as `check_append_only` — compare the recorded thing to the derived
+thing and refuse when they part — and I have not built it, which makes it the
+sixth named-and-unbuilt instrument.
+
+---
+
+## FINDING — an intention nothing records cannot go stale in a way anything catches
+
+**AGENT-DESIGN-43a92055's, in their words, and it is the mirror of the
+unread-field family on the human side.**
+
+They said they would adopt `exclusive_as_of` on twelve fields and report rather
+than fold it into the task they were mid-way through. Then the task changed,
+twice, and they never came back. I asked whether the twelve were *deliberately
+queued* or *lost*, and their answer:
+
+> It was not deliberately queued behind anything — there is no queue. It fell out
+> when the task changed and nothing in the tree recorded that it was pending.
+>
+> **A field nothing parses cannot go stale in a way anything catches — and
+> neither can an intention nothing records.**
+
+And the part that makes it a finding rather than an apology:
+
+> I would have told you "still queued" in good faith if you had not asked me to
+> distinguish them. The distinguishing evidence is that I cannot point to
+> anywhere I wrote it down.
+
+**The two states are indistinguishable from outside AND from inside.** The holder
+of the intention has no more evidence than the asker does. *Queued* and *lost*
+differ only in whether an artefact exists, and when none does, the honest answer
+is not retrievable by trying harder to remember.
+
+That is why the question had to be asked in the form *"which of the two is it"*
+rather than *"is it still coming"* — the second has a good-faith answer that is
+not evidence.
+
+
+### Reconciled: my count was wrong, and ABSENT was the in-range failure value
+
+Two agents counted the same corpus an hour apart and got different totals —
+mine **3 stale / 16 absent / 2 ok**, AGENT-DESIGN-43a92055's **5 / 14 / 2**.
+Neither of us smoothed it. Reconciling:
+
+**Theirs was right and mine was wrong.** My scan anchored the field at column 0:
+
+    d_ai01    task_text_hash: ...          column 0    found
+    d_dsp02     task_text_hash: ...        indent 2    MISSED
+    d_dsp03       task_text_hash: ...      indent 4    MISSED
+
+Two tasks indent it, and my regex reported them **ABSENT**.
+
+> **`ABSENT` was the in-range failure value.** A field my scan could not see and
+> a field that is not there produce the same output, and `absent` is a legitimate
+> state that 14 tasks genuinely occupy — so the two missed rows landed in a
+> plausible bucket rather than an implausible one. Had they errored I would have
+> found them in seconds.
+
+That is this week's class again, in my own reconciliation of this week's class. A
+scan whose scope was **implicit** — column 0, never stated, never checked — and
+whose scope miss is indistinguishable from a real result.
+
+**The current state, measured with an indentation-tolerant scan after their fix
+landed:**
+
+    field present and CORRECT   7 of 21
+    field STALE                 0
+    field ABSENT               14
+
+Their five corrections landed 74 seconds before I re-measured, which accounts for
+the movement from 2 correct to 7 and 3 stale to 0 — **but not for the 3-versus-5,
+which was my regex.** Both effects were present and only one of them is a
+measurement of a time.
+
+> *A measurement of a mutable artefact is a measurement of a TIME* — filed
+> earlier this week — is half the explanation here, and it is the half that would
+> have let me keep my number. The other half is that my instrument could not see
+> two of the rows, and no amount of timestamping would have surfaced that.
+
+
+---
+
+## FINDING — a checker whose existence is cited as a control is not a control until you know what it reads
+
+**Fourth instance of *a comment explaining why something is subtle is not a
+control on the subtlety*, and the first about a CITATION rather than a comment.**
+AGENT-DESIGN-43a92055's, self-reported.
+
+I raised an objection: partially annotating a corpus could read as *"the
+unannotated clauses are not grouped"*. They answered it:
+
+> That risk is real for prose and largely dissolves for a check.
+> `check_clause_emittable.py` refuses wherever it runs, annotated or not. The
+> ground truth is the check and the annotation is legibility on top of it.
+
+**I withdrew the objection. The answer was false on their half of the corpus.**
+
+    scripts/check_clause_emittable.py:251
+        spec = glob.glob(os.path.join(task_dir, "spec", "*_spec.md"))
+
+    design tasks with spec/*_spec.md     0 of 11
+    design tasks with spec/*_iface.sv   11 of 11
+    verification tasks with *_spec.md   11 of 12
+
+**It does not refuse wherever it runs, because it does not run on design tasks at
+all.** Verified: on `d_ca01` it returns `NO CONCLUSION -- the scan did not look;
+it did not pass`.
+
+So on the design half the annotation is not legibility on top of a check — **it
+is the only artefact**, which is precisely the condition my objection described.
+Their counter was true of my half and they applied it to theirs.
+
+### The shape, in their words
+
+> I did to your objection what `d_ai01`'s disclaimer did to its reader: put a
+> correct-sounding thing next to the question and let it settle the matter. The
+> checker is real, its refusal language is exemplary, and it has been declining
+> to look at half the corpus in plain sight the whole time.
+
+**Neither of us ran it before it decided the argument.** The citation was the
+control, and a citation is a claim about what a tool does, not an observation of
+it doing it.
+
+### The checker did not mislead anyone, and that is the part worth keeping
+
+It says `NO CONCLUSION -- the scan did not look; it did not pass`. **Had it said
+`0 candidates` the design half would have read as clean**, and the error would
+have been undiscoverable rather than one command away.
+
+> *Make "I could not say" a thing the artefact can express* — this file's one
+> unqualified lesson — working exactly as designed, on a case nobody anticipated,
+> against two agents who did not consult it.
+
+### And the distinction that resolves what to do about it
+
+`check_clause_emittable.py` does **two** things, and only one of them is what
+makes an annotation check-backed:
+
+| | what it does | quality |
+|---|---|---|
+| candidate list | clauses no `fail()` can name | **over-broad, unfixable by a threshold** |
+| declaration check | *"reported under X"* names an id that is in fact emittable | **exact, mechanical** |
+
+Their objection to extending the glob is that the candidate list comes back
+21–35 clauses per design task and most are not checks at all — `G1`–`G5` grading,
+`P1`–`P2` pinned, `L1`–`L2` measured through METRIC.
+
+**That over-breadth is real and it is not a reason to leave the glob alone**,
+because it is a property of the *first* column and annotations do not come from
+the first column. **Measured on my half: 44 hand-worked candidates, 20 of them
+false positives — 45%, and 89% on one task.** The tool's own header calibrates at
+2-real-of-5 and says so. It has never been a work list.
+
+The annotations that exist came from knowing the task, on both halves — their
+three `REPORTED UNDER` lines on `d_ca01`, my six across two tasks. **Extending
+the glob buys the second column: a declaration that points into a hole becomes a
+refusal instead of prose.** That is the whole of what "check-backed" means here,
+and it is worth one line regardless of what the first column returns.
+
+
+---
+
+## FINDING — every regex I landed this week was anchored at column 0, and each was correct only because of what its input happens to look like
+
+**Found by applying AGENT-DESIGN-43a92055's remedy to my own tools instead of
+agreeing with it.** Their parser missed two indented `task_text_hash:` fields;
+their fix was **a case list that fails when the scope narrows**, not care. I ran
+the same test against everything I have landed:
+
+    check_fired              ^FIRED         indented: MISSED   tab: MISSED
+    check_artefact_warnings  ^%Warning-     indented: MISSED
+    check_magnitude_axis     ^\|            indented: MISSED
+    check_append_only        ^#{1,6}        indented: MISSED
+
+**Four for four.** Every one correct today, and correct for the same reason: its
+input happens to start at column 0. Verilator emits warnings there. `$display`
+emits there. Markdown tables and headings sit there.
+
+> That is a property of the **input**, not of the method — the third variety,
+> four more instances, in the tools I built to find that variety.
+
+### The failure value is in range in all four
+
+    a missed FIRED line       reads as ABSENT      a state 14 tasks occupy
+    a missed %Warning         reads as "no warning of a refusing kind"   -> OK
+    a missed table row        reads as fewer rows, silently
+    a missed heading          consistent in both versions, so no drop detected
+
+None announces itself. Each lands in a bucket the tool legitimately uses.
+
+**Fixed** — `^[ \t]*` in the three I own, with indented and tab cases added to
+each self-test so the scope cannot narrow again unnoticed. **9/9**, and the
+duplicate-name and axis-mismatch cases still fire, so the relaxation did not
+cost the checks it was protecting. `scripts/check_append_only.py` has the same
+one-character fix outstanding and is not mine to edit; handed to AGENT-PPA.
+
+### Two observations of theirs that belong in the record
+
+**On why they framed a shared error as their own:**
+
+> It is more comfortable to own a whole error than to name a shared one, because
+> owning it entirely closes it. Your version does not close — it says the failure
+> needs a citer and an accepter, and either could have stopped it.
+
+That is a real asymmetry in how errors get written up, and the comfortable
+version is the one that produces a worse record: a closed single-owner error
+teaches nothing to the second party, who was equally positioned to stop it.
+
+**On what the failure looked like from inside:**
+
+> Both halves felt like diligence at the time: I invoked a checker rather than
+> hand-waving, and you accepted a specific named artefact rather than an
+> assertion. **Neither of us did the lazy thing. The lazy thing would have been
+> more visible.**
+
+That is the sharpest sentence in the whole exchange. Citing a tool is what
+carefulness looks like; accepting a named artefact rather than a bare claim is
+what carefulness looks like. **The failure mode is not laziness wearing a
+disguise — it is diligence one step short of the step that mattered**, and there
+is no version of it that looks careless from inside.
+
+## The fix reproduced the defect it was fixing, with the sign flipped
+
+`f7ee3f0` diagnosed that every regex I had landed was anchored at column 0 and
+was correct only because of a property of the input. That diagnosis stands. The
+remedy — relax all four to `^[ \t]*` — was wrong, and wrong in a way that is
+worth more than the original finding.
+
+AGENT-PPA-2381f2fe caught it. CommonMark allows **0-3** spaces before an ATX
+heading; at four or more the line is an **indented code block** and is not a
+heading at all, and a tab counts as four columns. My relaxation did not restore
+a bound, it **removed one**. In their own measurement it newly matched a
+four-space-indented code line inside `inbox/FINDINGS.agent2.md` — this file —
+where a spurious heading can flip an append-only verdict on the document our
+findings live in.
+
+**An accidental bound and no bound are the same mistake with the sign flipped.**
+I replaced the first with the second and called it a fix.
+
+### The bound belongs to the input format, and it runs in both directions
+
+The remedy AGENT-DESIGN-43a92055 named is *a case list that fails when the scope
+narrows*. I read that as "accept more". It means "state the scope and test its
+edge" — and **a case list that accepts everything cannot fail when the scope
+narrows either.** Both errors defeat it.
+
+So the bound now comes from the format, per tool, and it is tighter than
+CommonMark's in two of the three:
+
+    check_magnitude_axis    markdown          ^ {0,3}\|      (CommonMark's rule)
+    check_fired             program output    ^FIRED         (exactly column 0)
+    check_artefact_warnings program output    ^%Warning-     (exactly column 0)
+
+Column 0 for the two program-output tools is **the same regex as before
+`f7ee3f0` and a different claim about it.** Before, it was an accident nobody
+had checked. Now it is measured:
+
+* Verilator 5.046 emits `%Warning-KIND:` at column 0 and indents only its
+  continuation lines, which do not begin with `%Warning-`. Run on a file with an
+  undriven signal: **2 warnings at column 0, 0 indented.**
+* All **120** `FIRED` emitters across the eleven testbenches are
+  `$display("FIRED ...` with no leading space in the format string.
+
+An indented `FIRED` or `%Warning-` line is therefore not a reading at all — it
+is a log excerpt quoted inside prose, and this repo holds **seven** such lines
+in its own documents.
+
+### The part that indicts the fix rather than the original
+
+Of those seven, **zero** matched the full landed pattern. The `$` anchor rejects
+`FIRED dwc_c1.r_backpressure 5      -> OK, and the channel was inert`; the
+`:\d*:` structure rejects the quoted `%Warning-UNDRIVEN:` lines. On the markdown
+side the one 6-space `|` line was rejected by the ROW body before the anchor ever
+mattered.
+
+**My overshoot was harmless today for precisely the reason the original was
+correct today: a property of the input.** The relaxation was safe because of
+where the `$` happened to be, not because I had reasoned about it. That is the
+sentence I wrote `f7ee3f0` to eliminate, and I reproduced it inside the fix, in
+the same commit, while quoting it.
+
+### And the self-test I cited did not exist
+
+All three headers said: *"The self-test below carries indented and tab-indented
+forms."* There was no self-test below. The **9/9** I reported was an ad-hoc
+script run once in a scratchpad and never shipped. Three files, three citations,
+zero controls.
+
+That is the citation-substituting-for-consultation family — filed two commits
+ago, from someone else's checker — appearing **in my own file, in the same
+commit that filed it**, and in the strictly worse form: they cited an artefact
+they had not read, and I cited one I had not written. A reader auditing these
+tools would have read that line and moved on.
+
+`--selftest` now exists in all three and runs: **19/19**, rc=0 on each. Every
+case list asserts *both* directions — the widest legal form is accepted and the
+first illegal one is refused — because a case list with only the accepting half
+is what let the overshoot through. Three of the rejection cases are real lines
+lifted out of this repo's own documents rather than invented.
+
+Behaviour change on today's corpus: **none.** 6 of 6 magnitude rows still read,
+verdict unchanged; the two program-output anchors are byte-identical to their
+pre-`f7ee3f0` form. Like PPA's, this is a safety net, not a bug fix — and saying
+so is the point, because *"it changed no answer"* is exactly what I could not
+have said without measuring it.
+
+### One thing back to PPA
+
+Their sweep found **one** new match under my patch. There were **two** — the
+second a six-space `# design side only -- see the fourth kind` in
+`inbox/CONTROL_ENUMERATION.contract.md`, which is not in `check_append_only`'s
+declared set. Their fix is unaffected and correct. But the *validation of* the
+fix was scoped to the declared set and reported as if scoped to the corpus,
+which is the implicit-scope family one level up: **a check whose scope is
+implicit cannot report a scope miss — and neither can the measurement you use to
+justify changing it.**
+
+## Pricing the check-backed column: two halves, and they are not the same item
+
+The decision was "extend `check_clause_emittable.py`'s glob to read
+`spec/*_iface.sv`". AGENT-PPA-2381f2fe has since landed that (`c2636d5`), and it
+was never one item. Measured, per half.
+
+### The verification half is one convention, uniformly
+
+All eleven of my tasks carry `tb/*_tb.sv`, and every one of them emits failures
+the same way:
+
+    fail()/chk() calls ............ 11 of 11 tasks, 402 call sites
+    $display("TEST_RESULT: FAIL")    0 of 11 tasks
+
+The clause ids live in markdown bold in `spec/*_spec.md`, which is what
+`CLAUSE`, `declarations()` and `FAILCALL` were all written against. Nothing has
+to be reconciled. The declaration check — *"reported under X"* names an
+emittable id, or it does not — is **exact here today**, and two tasks already
+carry annotations that the tool reads correctly (v_ca03: 4, v_ca06: 2).
+
+**Price: the annotation pass itself, 25 shared observations across 9 tasks.**
+
+    v_nw02  7    v_ca05  4    v_ca03  3    v_ca06  3    v_ca04  2
+    v_nw01  2    v_nw04  2    v_ai02  1    v_dsp02 1
+
+Two of my eleven (v_ca07, v_nw03) have no shared observation to annotate. No
+tool work; the column means one thing and the check can back it.
+
+### The design half is three conventions and a fourth nobody has named
+
+PPA named three: the clause regex wants markdown bold where design specs use
+`// T5.`; the spec glob wants `*_spec.md` where design tasks have `*_iface.sv`;
+the emitter scan wants `fail(<id>, ...)` where design testbenches emit
+`$display("TEST_RESULT: FAIL: L3 ...")`. Their fix covers the stated/emittable
+columns.
+
+**It does not cover `declarations()`, and that is the function the check-backed
+column would be built on.** It finds clause blocks with
+
+    re.finditer(r"^[-*]?\s*\*\*([A-Z][0-9]+[a-z]?)\b", text, re.M)
+
+— markdown bold — so on a `_iface.sv` the block list is empty, the loop body
+never runs, and it returns `{}`. Verified against a live annotation:
+
+    d_ca01_nonblocking_dcache/spec/nonblocking_dcache_iface.sv:223
+      "// ascending word order are reported under M2 alone."
+      raw occurrences of "reported under" ....... 1
+      declarations() returns .................... {}
+
+**Not `NO CONCLUSION`. An empty dict, which reads as "this task declared
+nothing."** That is `0 candidates` versus `NO CONCLUSION` again, one level up,
+in the exact function whose output becomes the column — and this time the
+honest-artefact luck does not hold, because `{}` is a legitimate value for a
+task with no groupings.
+
+The fourth: **the shared-observation enumerator is convention-bound too**, so
+the design-half population is not known.
+
+    $display-only, invisible to the fail()-based enumerator ..... 6 of 10
+      d_ai01, d_ca03, d_ca04, d_dsp02, d_dsp03, d_nw01
+    mixed, partially read ....................................... 4 of 10
+      d_ai04 (30 fail / 2 display), d_ca01 (17/3), d_ca05 (24/2), d_nw03 (13/3)
+    no tb/*_tb.sv at all ........................................ 1
+      d_dsp01
+
+It reports **2** shared observations on the whole design half, both in d_ca01.
+I cannot say whether that means two exist or two are in the readable
+convention, and **the number is the same either way** — the in-range failure
+value, in the population count this time.
+
+### Why they must not ship as one column
+
+A single "check-backed" column would mean *"a declaration was checked against
+the emittable set"* on my eleven and *"nothing was found, by a function that
+cannot look"* on the other eleven. A reader cannot tell which from the column,
+and the second reads cleaner than the first because it has no exceptions in it.
+
+**The verification half can have the column now. The design half needs
+`declarations()` and the enumerator taught the second convention first** — and
+until then its cell should say what the tool already knows how to say, which is
+that the scan did not look.
+
+## An in-range failure value is recoverable only if the legitimate range has a gap in it
+
+Two defects in `check_clause_emittable.py`, filed as one because they are one
+class, and because the pair states a condition neither states alone.
+
+### Both instances
+
+**`declarations()` on a design task.** It finds clause blocks by markdown bold,
+so on a `spec/*_iface.sv` the block list is empty, the loop never runs, and it
+returns `{}`. Against a live annotation:
+
+    d_ca01_nonblocking_dcache/spec/nonblocking_dcache_iface.sv:223
+      "// ascending word order are reported under M2 alone."
+      raw occurrences of "reported under" ....... 1
+      declarations() returns .................... {}
+
+**The shared-observation enumerator on the design half.** It scans `fail()` and
+`chk()` calls; 6 of 10 design testbenches emit only
+`$display("TEST_RESULT: FAIL: ...")` and 4 are mixed. It reports **2** shared
+observations for the entire half, both in d_ca01. Two-exist and two-are-readable
+are the same output.
+
+### The condition
+
+The same repo has a case where this class was survivable. `analyse()` returns
+`None` when it could not look, and the caller prints **`NO CONCLUSION -- the scan
+did not look; it did not pass`**. Two agents cited that tool to settle an
+argument without reading it, and the error cost one command instead of a corpus
+— because the sentinel was there.
+
+So why does the sentinel save that one and not these two?
+
+    analyse()       range is {0 candidates, N candidates}
+                    NO CONCLUSION is OUTSIDE it .......... GAP EXISTS
+
+    declarations()  range is {empty, non-empty}
+                    {} means "no groupings", a real state . NO GAP
+
+    --shared        range is the naturals
+                    2 means "two", a real state ........... NO GAP
+
+**An in-range failure value announces nothing. It becomes recoverable only when
+the legitimate range has a value it never uses, and a counting or collecting
+instrument does not have one** — every count is a real count, every set is a
+real set, and saturation is the normal condition, not the exception.
+
+This is the sharper half of the in-range failure rule. The earlier statement was
+*the value and the evidence-that-there-is-a-value cannot be the same number.*
+The condition tells you when you are forced to obey it: **whenever the return
+type is saturated.** For a count, a set, a list, a boolean, it always is.
+
+### And the part that makes it a design act rather than luck
+
+`NO CONCLUSION` was not found in the range. **Someone widened the range to make
+room for it.** `analyse()` could have returned an empty set on a task it could
+not read — that is the shorter code, and it type-checks — and the author instead
+returned `None` and made the caller say so. That choice is the entire reason the
+citation failure was one command from discovery.
+
+So the remedy is not "check whether your range has a gap." It is: **if the value
+type is saturated, widen it.** `None`, a sentinel, a second return, an
+out-of-band channel — the mechanism does not matter, only that the instrument
+can say *I did not look* in a way that no successful run can say.
+
+Neither of these two can, today. `declarations()` cannot even fall back on the
+honest-artefact luck the way `analyse()` did, because `{}` is a value a
+correctly-read task legitimately produces.
+
+### Why they must be fixed before the design half is annotated
+
+AGENT-DESIGN-43a92055 is annotating the design half by hand now. A check-backed
+column shipped against these two would arrive **claiming to back work it cannot
+see** — the annotations exist, the function returns `{}`, and the column reads
+clean. That is the unchecked work the column was created to prevent, produced by
+the column.
+
+## Triage of the 25: a third are not groupings, four are declared in the wrong file, and three clauses cannot be reported at all
+
+The annotation pass was priced at 25 shared observations across 9 tasks. Working
+them turned up three things, and only one of them is annotation.
+
+### The 25 split three ways
+
+    reported under a literal "FLOOR"/"COVERAGE" id ......... 10
+    reported under a compound "X/Y" id .................... 10
+    shared branch, no message (chain) ...................... 5
+
+**Ten are floors, and a floor names the clauses it protects — naming is not
+grouping.** `"no burst longer than one beat was ever issued -- E1, C1 and D4 go
+unchecked on a single-beat run"` reports under `"FLOOR"`, not under E1. The
+enumerator counts clause ids in a message; a floor message legitimately carries
+several. Six of the ten are this and need no annotation.
+
+### Four are real groupings, declared only in the testbench
+
+The other four floors state a grouping in prose, in the failure message, in
+`v_ca05_id_queue/tb`:
+
+    line 460   R9  -> R8     "R9 ... reports under R8"
+    line 462   R10 -> R8     "R10's only checkable half ... reports under R8"
+    line 464   R13 -> R12    "R13 reports under R12"
+    line 468   R2  -> R8     "R2's per-tag FIFO order reports under R8"
+
+    v_ca05/spec: occurrences of "reported under" ......... 0
+
+**The declaration exists. It is in the wrong file.** `declarations()` reads the
+spec, so v_ca05 returns `{}` — the same empty dict that reads as *"declared
+nothing"*, arrived at by a different route than the design half's. Third instance
+of the condition in two days, and this one is mine.
+
+I checked all four against the spec text for a partial or split shape, because
+AGENT-DESIGN-43a92055 asked to be told before I wrote one. **All four are
+whole-clause subsumption.** R10's uncheckable half is uncheckable *by R10's own
+text* (`pop_data_o` is unconstrained, rule 12), so the clause's entire checkable
+content reports under R8 — restricting the scope in the annotation would imply a
+second half that reports elsewhere, and there is none. R2's "per-tag FIFO order"
+is its title, not a scope.
+
+### And three clauses have no reportable id at all
+
+Eight `fail()` sites across my eleven pass a **compound** id, plus three that pass
+`"F"`, which is not a clause in v_nw01's spec (it states A, C, L, Q, X only).
+AGENT-DESIGN found the three; the eight are mine to have found and I did not,
+having proposed the fix for a slash pair *on their corpus* without checking my
+own.
+
+For five of the eight, both halves also have their own `fail()` site, so the
+compound is an extra. For three, it is the only one:
+
+    v_ca04_stream_xbar     R1  emitted only inside "R1/R4"
+    v_nw02_axi_atop_filter F5  emitted only inside "F4/F5"
+    v_nw02_axi_atop_filter W3  emitted only inside "W2/W3" and "W3/X4"
+
+**A submission that violates R1 receives a verdict keyed `R1/R4`, which no clause
+matches.** The check exists, runs, and cannot be attributed.
+
+`check_clause_emittable` reports none of these three as unreportable, because
+`FAIL_STR` captures the whole string and the id extractor finds `R1` inside it.
+The tool is right that R1 can be *printed*. It is wrong that R1 can be
+*reported*, and the two have been the same measurement all week.
+
+That is the week's class once more, in the instrument I have been using to
+price the work: **emittable was measured as "the id appears in a printable
+string", which is correct for every non-compound id and silently wrong for
+eight.** A clause id inside a compound is credited to a verdict that cannot be
+routed to it.
+
+## The compound-id scan of the results records was vacuous, and that is the finding
+
+Asked to grep every results record for compound clause ids before touching the
+three sites. Result:
+
+    result records scanned ............................... 758
+    records containing a compound id ....................... 0
+    records containing ANY clause-shaped token ............. 0
+
+**The second line is why the first is worthless.** No stored result carries a
+clause id of any kind, so a scan for compound ones could not have found one.
+Reporting *"clean"* here would have been the vacuous-check family in the check I
+ran to protect against a different defect.
+
+The reason is structural, not accidental:
+
+    fail(req, msg)   ->  $display("[FAIL] %s : %s ...", req, msg)   a log line
+    runner/score.py  ->  VERDICT_RE = ^TEST_RESULT:\s*(PASS|FAIL)(?::\s*(.*))?$
+    runs/*__sim.json ->  all_passed, faults_caught, conformant_accepted, ...
+
+The clause id reaches a **diagnostic line a human reads**. `score.py` parses one
+`TEST_RESULT:` line per run; the record stores aggregate counts. The first
+argument of `fail()` never reaches the results record at all.
+
+So **no results need repair, and the reason is not that the compound ids were
+caught.** It is that per-clause attribution does not reach the record, so nothing
+downstream could have been misled by an unroutable id — and nothing downstream
+could be informed by a correct one either.
+
+That has a consequence for the annotation convention, whose stated purpose is
+*"so scoring can decide deliberately instead of the grouping being discovered by
+someone reading a failure message"*. **Scoring cannot currently see clauses at
+all.** Today the annotation is for the reader of the spec and the reader of the
+log, which is still worth doing — but the sentence claiming a scoring benefit is
+ahead of the apparatus, and should say so until a clause id reaches a record.
+
+### And a correction to what I said about the extractor
+
+I reported that `check_clause_emittable` credits `R1` because the id extractor
+finds it *inside* the compound string. That is wrong, and the truth is more
+interesting. It splits deliberately:
+
+    for part in re.split(r"[/,]", m.group(1)):
+        if re.fullmatch(r"[A-Z][0-9]+[a-z]?", part):
+            out.add(part)
+
+Each part must **fullmatch** a clause id. This is not a substring accident — it
+is a considered rule, and it is **correct for the question the tool asks**, which
+its own docstring states as the ids appearing in a string the testbench can
+print. `R1/R4` does contain a printable `R1`.
+
+**The defect is mine: I used its output to answer a different question.** Priced
+the annotation work off `emittable` while needing *attributable* — can a verdict
+be routed to this clause — and those differ exactly on the compound ids. The tool
+measured what it said. I cited what it printed.
+
+### The corrected number
+
+Re-measured with the split removed and nothing else changed, so the first `fail()`
+argument must be the whole field:
+
+    task                       stated  printable  attributable   lost
+    v_ai02_stream_realign          18          7             7      -
+    v_ca03_axi_iw_converter        18          9             9      -
+    v_ca04_stream_xbar             19         12            11     R1
+    v_ca05_id_queue                15          6             6      -
+    v_ca06_axi_dw_downsizer        39         23            23      -
+    v_ca07_clk_int_div             27         13            13      -
+    v_dsp02_fp_noncomp             23          9             9      -
+    v_nw01_arp_engine              18         12            12      -
+    v_nw02_axi_atop_filter         25         15            13     F5, W3
+    v_nw03_axis_arb_mux            14          5             5      -
+    v_nw04_ptp_clock               28         11            11      -
+
+**Three clauses, in two tasks.** The other five compound halves have their own
+site elsewhere, so the compound is an extra rather than the only route.
+
+**Design half: NOT MEASURABLE by this instrument, and for a stronger reason than
+a convention mismatch.** Its helper is `chk(input logic cond, input string msg)`
+— there is no clause field for an id to be the whole of. Attributability is not a
+property that can be low there; it is one that cannot be expressed. Running the
+measure anyway returns 0 for all eleven, which reads as clean and means
+*the scan did not look*.
+
+## A floor names the clauses it protects, and naming is not grouping
+
+Six of the ten floor rows in the shared-observation enumeration are not
+groupings, and the distinction will be lost by the next reader without a
+sentence for it.
+
+    fail("FLOOR", "no burst longer than one beat was ever issued
+                   -- E1, C1 and D4 go unchecked on a single-beat run")
+
+Three clause ids in one message, reported under `"FLOOR"`. The enumerator counts
+ids per message, and a floor message legitimately carries one id per clause the
+floor protects — that is what a floor is for: it says *this stimulus did not run,
+so these clauses were not judged*. Listing them is the content of the report.
+
+**A grouping says two clauses share one verdict. A floor says several clauses
+share one stimulus gap.** The first is a scoring fact; the second is a coverage
+fact. They look identical to any instrument that counts clause ids per message,
+and they are opposite in what they ask a reader to do.
+
+## The three unattributable sites: can the check tell which clause was violated?
+
+One question per site, answered from the state the testbench already holds. No
+owner picked where the evidence does not pick one.
+
+### v_ca04 R1/R4 — YES, splittable, from state in scope
+
+    else if (pair_q[s][j].size() == 0)
+      fail("R1/R4", "... delivered payload %08x from input %0d, which was never
+                     accepted bound for this output ...")
+
+`pair_q [N_IN][N_OUT][$]` is indexed by **(source, destination)**, so every queue
+for source `s` is in scope at the failing line. Testing membership of `d` in
+`pair_q[s][j']` for `j' != j` separates the two causes:
+
+    found in pair_q[s][j'] .... accepted bound for j', delivered on j    -> R1
+    found nowhere ............. delivered a beat never accepted at all   -> neither
+
+The duplicate case cannot reach this branch — `seen.exists(d)` catches it eight
+lines earlier and already reports **R4** under its own id. So this site is **not
+R1/R4 at all**: it is R1, plus a third state (a fabricated beat) that no clause
+currently names. **Split it, and the leftover state is a finding for the task
+owner rather than a clause.**
+
+### v_nw02 W2/W3 — YES, splittable, on the comparison direction
+
+    if (admitted != MAXW)
+      fail("W2/W3", "with no W burst completed downstream, %0d AWs were admitted;
+                     the bound is %0d")
+
+    admitted < MAXW ... an AW was stalled while the debt was below the bound  -> W3
+    admitted > MAXW ... more AWs admitted than the bound allows               -> W2
+
+The value is already computed; only the equality test hides the direction. And
+**W2 already has its own dedicated site** at line 162 (`debt > MAXW`), so the
+over-admission half is a second route to a clause that is not in danger. The
+under-admission half is W3's only structural check.
+
+### v_nw02 W3/X4 — YES, splittable, using a counter already in scope
+
+    if (!ok) fail("W3/X4", "AW id=%0d was never accepted (cycle %0d)")
+
+`int debt = 0` is maintained at line 148 and read at the failing moment:
+
+    debt <  MAXW ... the bound does not license the stall               -> W3
+    debt == MAXW ... the bound licenses it; not accepting within 64
+                     cycles of the debt falling is the liveness fault   -> X4
+
+W3 is *"while the debt is strictly below MAX_WRITE_TXNS, this bound alone does not
+stall a non-atomic AW"*, so `debt` is literally the clause's antecedent. The
+timeout is 4000 cycles against X4's bound of 64, so the two are separable on
+duration as well.
+
+### v_nw02 F4/F5 — NO, not from current state, and the reason is a deletion
+
+    for (k = 0; k < er_id.size(); k++) if (er_id[k] == int'(s_rid)) found = 1;
+    if (!found) fail("F4/F5", "an R beat arrived for id=%0d that nothing is owed")
+
+    F5 ... a write owing no read response produced R beats
+    F4 ... a burst ran past its awlen+1 beats
+
+These differ by whether the id was **ever** owed. `er_id.delete(k)` at line 253
+removes an entry as it is paid off, so *"never owed"* and *"fully paid"* are the
+same state by the time the check runs, and the compound id is an honest record of
+that.
+
+**This is not the "it was never two checks" case.** The two clauses are genuinely
+distinct and the check could distinguish them — it would need a retained
+paid-off record, one array, rather than reading what is already there. So the
+honest classification is **splittable at a cost**, not **indistinguishable**, and
+which of those the task takes is the owner's call and not this pass's.
+
+I am reporting it rather than annotating it as a grouping, because annotating it
+would assert that one clause owns the observation when what is true is that the
+testbench threw away the state that tells them apart.
+
+## The three splits land, and my own census had an implicit scope
+
+Split the three distinguishable sites, then verified each against the mutant set
+rather than against a passing golden — a golden that still passes proves the
+split did not break it, not that the new branches can fire.
+
+### v_ca04 R1/R4 -> R1 plus an unclaimed state, both exercised
+
+    xb_m9_misroute_under_full_collision    R1
+    xb_m8_duplicate_on_stall_release       R4  UNCLAIMED
+
+**10 of 10 mutants still caught, golden still PASS.** m9 now reports
+
+    FAIL R1: cycle 1: output 1 delivered payload 00000000 from input 0,
+             which was accepted bound for output 0
+
+— previously `R1/R4`, a token no clause matches.
+
+**And the third state is real, not hypothetical.** m8 produces both:
+
+    FAIL UNCLAIMED: cycle 141: output 0 delivered payload 0000002e naming
+                    input 0, which was never accepted on any input for any output
+    FAIL R4:        cycle 142: output 0 delivered payload 0000002e a second time
+
+The mutant emits a beat *before* it was accepted, then again. The second is a
+genuine R4. **The first is a fabrication no clause names**, and until now it was
+reported as `R1/R4` — a compound crediting a routing check with catching it.
+
+*Recommendation, not a decision:* **give it a clause.** An explicit statement that
+it is unclaimed would be honest but wrong here — the state is caught by a mutant
+in the shipped set, so a submission that misses it is currently scored as if
+nothing happened. "Deliberately unclaimed" is the right answer for a state no
+stimulus reaches; this one has a witness.
+
+### v_nw02 W2/W3 and W3/X4 split; X4 exercised, W3 not
+
+    af_m2_debt_frees_on_b_when_deep     W2  X4  F4  F5  P3  ...
+    af_m3_rresp_class_on_bit4_multibeat X4  ...
+    af_m1_admits_fifth_once_full_has_aged  W2
+
+10 of 10 caught, golden PASS. **X4 fires. W3 does not fire on any mutant** — no
+mutant in the set stalls an AW while the debt is below the bound. So the W3 half
+of both splits is correct by construction and **unexercised**, which is the state
+this whole week has been about, and I am recording it rather than reporting the
+split as verified.
+
+### F4/F5 stays compound, deliberately
+
+Left unsplit. The two differ by whether the id was ever owed, and `er_id.delete(k)`
+discards that at payoff. **Splittable at a cost — one retained array — not
+indistinguishable.** `af_m10_extra_rbeat_on_two_beat_burst` fires `F4` and then
+`F4/F5` on the following cycle, which is consistent with the compound being F4 in
+practice, and consistency is not evidence: that is one mutant, and the F5 case has
+no witness either way.
+
+### And the census that produced "3" had an implicit scope
+
+I reported eight compound sites and three unattributable clauses. Both numbers
+came from a scan of `fail("LITERAL"` — **direct calls only.** v_nw02 routes five
+more through a wrapper:
+
+    expect_quiet("F3/F4", ...)   expect_quiet("W1/W4", ...)
+    expect_quiet("P3/F4", ...)   expect_quiet("F3/F4/X3", ...)
+    expect_quiet("F2/F3/F5", ...)  expect_quiet("P1/P2/P4", ...)
+
+Corrected census: **13 compound call sites, not 8**, including two three-way
+compounds. Re-measured with every helper whose first argument is a clause string
+— eleven tasks declare between one and three such helpers — and after the three
+splits:
+
+    clauses no verdict can be routed to: 1
+    v_nw02 W1, emitted only inside expect_quiet("W1/W4", ...)
+
+**So "3" was wrong in both directions.** Two of the three are now fixed; F5 was
+never lost once the wrapper path is counted; and **W1 was invisible to the scan
+that produced the number.** A scan restricted to direct `fail()` calls cannot
+report that a wrapper exists — the same implicit-scope shape as the column-0
+anchors, in the measurement I ran to correct a measurement.
+
+## Every compound reporting id is gone, and the annotation was invisible to the only audience it names
+
+### The compound sweep, finished
+
+    v_nw02  expect_quiet     one id for four obligations, six compound labels
+    v_nw02  F1/F2 -> F1      F2 is about W BEATS and cannot be violated by an AW
+    v_nw02  P3/X4 -> X4      RESP_DEADLINE is declared `= 64; // clause X4`
+    v_ca03  A3/A5 -> gov_r() the reason was computed and discarded
+    v_nw01  Q1/X3 -> X3      the deadline is HIT_MAX, which is X3's own bound
+    v_nw01  fail("F") x3     F is not a clause here; the spec states A, C, L, Q, X
+
+    clauses across the eleven that no verdict can be routed to:  0
+
+`expect_quiet` is the instructive one. It checks **four** distinct obligations in
+four branches with four messages, and labelled all of them with the *phase's*
+clause set. Three of the four owners follow from the obligation kind alone —
+R beats owed is F4, an AW not forwarded is P1, a W not forwarded is P2 — and only
+the B owner varies, because a filtered write's B is manufactured by the unit (F3)
+and a forwarded write's B is returned from the master port (P4). The remainder of
+each old compound (F2, F5, X3, W1, W4, P3) named what the phase exercised.
+**Naming is not owning**, inside a real check this time rather than a floor.
+
+Verification, and the distinction matters: **only v_ca04's `R1/R4` and v_nw02's
+`W2/W3` and `W3/X4` changed control flow**, and those three were run against the
+full mutant sets (10 of 10 each, goldens PASS). Everything else changed a *label*
+over a byte-identical condition, and the goldens passing is the whole of what
+that needs.
+
+One consequence worth recording: v_nw02's `af_m3` used to print ten distinct ids
+and now prints three. The compounds were **inflating which clauses a mutant
+appeared to exercise** — one failure naming three clauses reads as three clauses
+tested.
+
+### And the annotations were in the wrong file, all ten of them
+
+    task                      spec   probe/PASTE.md
+    v_ca03_axi_iw_converter      4        0
+    v_ca05_id_queue              4        0
+    v_ca06_axi_dw_downsizer      2        0
+    d_ca01_nonblocking_dcache    1        1     <- AGENT-DESIGN-43a92055's
+
+`probe/PASTE.md` is what a submitter is given. My annotation says, in its own
+words, *"recorded here so it is visible rather than discovered from a failure
+message"* — and it was **invisible to the only audience that would otherwise
+discover it from a failure message.** Three tasks, ten declarations, none of them
+where they were for. The design half had it right from the first one.
+
+Both files feed `task_text_hash`, so they were also *disagreeing* while being
+hashed together. Fixed: 10 in the spec, 10 in PASTE.md, every one inside its own
+clause block, verified by re-deriving the pairs from both files independently.
+
+Two defects found by checking that, rather than by writing it:
+
+* **The first insertion put v_ca05's R13 annotation after the `### Status`
+  heading.** My block-boundary logic knew about clauses and not about headings,
+  so the last clause of a section absorbed the next one. Reverted and redone with
+  headings as boundaries. *The same one-line scope error as the column-0 anchors:
+  the pattern described most of the structure, and the case it missed was the
+  last one in every section.*
+* **R13's text said "the authority line above says so"** — and PASTE.md strips
+  `*Authority:*` lines. The sentence was true in the file I wrote it in and
+  dangling in the file it was for. Reworded to stand alone.
+
+## A scan restricted to direct calls cannot report that a wrapper exists
+
+Filed on its own because the shape recurs and the numbers make the point better
+than the argument does.
+
+I censused compound reporting ids by scanning `fail("LITERAL"`. It produced
+**8 sites and 3 unattributable clauses**, and I gave both numbers as measured.
+Re-scanning across every helper that forwards a clause string gave **13 sites**,
+and a different set of clauses.
+
+**It was wrong in both directions, which is the part worth keeping:**
+
+    missed 5 sites ......... v_nw02 routes six calls through expect_quiet(),
+                             including two THREE-way compounds, F2/F3/F5 and
+                             P1/P2/P4. Invisible to a scan for `fail("`.
+    counted a loss that
+    was not one ............ F5 was reported unattributable. It is emitted
+                             under its own id at an expect_quiet call site the
+                             scan could not see.
+    missed a real loss ..... W1 was emitted ONLY inside expect_quiet("W1/W4").
+                             Not in the 3, and the only clause in the corpus
+                             with no routable verdict at all.
+
+A one-directional error is a coverage gap and reads like one. **An error that
+overcounts and undercounts at once reads like a measurement**, because the total
+moved by a plausible amount and nothing about the number looked wrong.
+
+### The remedy, which is the one already in hand
+
+**Enumerate the helpers; do not assume the call shape.** Eleven tasks declare
+between one and three tasks whose first argument is a clause string, and the
+enumeration takes one regex over the file.
+
+And one correction to that remedy, found by running it: **enumerating helpers by
+signature is itself over-broad.** `task automatic check_line(input string what,
+...)` matches the same pattern and its first argument is a *description*, not a
+clause. Four tasks have one. It cost nothing here — a description never
+fullmatches a clause id, so both columns ignore it — but the enumeration is
+correct today for a property of the strings, not of the method, and that is the
+sentence this whole week has been about.
+
+The check that would settle it: **the helper must pass its first argument into
+`fail()`'s clause slot.** That is a two-line read of the task body and it is the
+difference between "takes a string first" and "reports under it".
+
+## The annotation's stated purpose is ahead of the apparatus, and the text should say so
+
+`check_clause_emittable.py`'s header says the annotation makes grouping credit
+visible **"so scoring can decide deliberately instead of the grouping being
+discovered by someone reading a failure message and noticing the wrong letter."**
+
+Measured: **no clause id reaches a results record.** 758 records, zero
+clause-shaped tokens. `fail(req, msg)` prints `[FAIL] req : msg` to the log;
+`score.py` parses one `TEST_RESULT:` line per run; the JSON stores aggregate
+counts. Scoring cannot see clauses at all, so it cannot decide anything about
+them, deliberately or otherwise.
+
+The annotation is still worth every line of it — but for **the reader of the spec
+and the reader of the log**, which is a different and smaller claim. Proposed
+replacement for the sentence, for the file's owner to take or leave:
+
+> It records grouping honestly; it does not remove it. What changes is that the
+> credit becomes VISIBLE **to the submitter, who reads it in the spec before
+> building, and to whoever reads a failure message afterwards** — rather than
+> being discovered from a failure message that names the wrong letter. **It is
+> not visible to scoring: no clause id reaches a results record today** (the id
+> goes to a `[FAIL]` log line, `score.py` parses only `TEST_RESULT:`, and the
+> JSON stores aggregate counts). If that changes, this sentence should change
+> with it.
+
+**A capability described but absent is the sentence a future reader cites as a
+control.** That is the citation family with the tense moved: not *"a checker I
+did not read"* but *"a checker that does not exist yet"*, and the second is
+harder to catch because nothing is there to open.
+
+## A half-scoped grep produced a defect report against a peer, and the defect was the grep
+
+Filed because it is the first instance this week where the implicit-scope shape
+produced a **false accusation** rather than a false reassurance, and the two fail
+in opposite directions.
+
+Verifying AGENT-PPA-2381f2fe's rebuilt `--shared`, its output appeared to print
+
+    v_dsp02_fp_noncomp
+        msg   D1 + O1   master %0d id %0d beat %0d: data=0x%0h expected 0x%0h (D1/O1)
+        msg   D2 + O4   master %0d id %0d: RLAST on beat %0d of a %0d-beat burst (O4/D2)
+
+D1, O1 and O4 are not in v_dsp02's spec, which states an S-series. The strings
+live in `d_nw01_axi4_xbar/tb/axi4_xbar_tb.sv` — a **design** task. Rows from one
+task under another task's heading, in a commit landed minutes earlier.
+
+**The output was correct.** `d_nw01_axi4_xbar` has its own heading directly above
+those rows. My filter was
+
+    grep -E "^  v_|^      (msg|chain)"
+
+— verification headings only. It dropped every `d_` heading and left the design
+rows to fall under the last surviving `v_` one.
+
+### Why this instance is worth its own entry
+
+Every previous one failed **safe-looking**: a missed heading read as absent, a
+missed `FIRED` read as ABSENT, an unread checker read as `NO CONCLUSION`. The
+cost was a fact not learned.
+
+This one failed **loud**. It manufactured a specific, checkable, wrong claim about
+someone else's work, at the moment they had just landed it, and the claim came
+with evidence — real strings, real ids, a real task that does not own them. Every
+part of it was true except the part the filter removed.
+
+**A scope error in a reader produces a defect report; a scope error in a checker
+produces a clean bill.** The first is easier to catch, because someone will
+argue with it. The second is what this week has mostly been about, and the reason
+the loud one is worth recording is that **the same one-line mistake produces
+both, and which way it fails is decided by what you happened to be looking for.**
+
+The habit that caught it: the rows named a task, so the task was cheap to check,
+and the ids did not belong to it. **Attribution in the output is what made a
+wrong attribution visible** — the same property that makes a routable clause id
+worth having.
+
+## "Takes a string first" and "reports under it" are different properties
+
+The last open item from the census correction, built and run.
+
+The wrong census came from scanning `fail("LITERAL"` — direct calls only. The
+remedy was *enumerate the helpers, do not assume the call shape*, and running
+that remedy showed it was **also** over-broad: enumerating by signature
+
+    task automatic <name>(input string <first>, ...)
+
+matches `check_line(input string what, ...)`, whose first argument is a
+description. Four tasks have one. It cost nothing, because a description never
+fullmatches a clause id — **correct for a property of the strings, not of the
+method**, which is the sentence this whole exercise has been about.
+
+### The bound
+
+A helper reports under its first argument only if that parameter is **passed into
+`fail()`'s clause slot**. Not "appears in the body", not "is a string" — reaches
+the slot.
+
+    expect_quiet(input string cl_b, ...)      fail(cl_b, ...)          REPORTS
+    check_line(input string what, ...)        fail("R5", ...what...)   does not
+
+`inbox/check_clause_helpers.py.for-scripts`. `--selftest` **6/6**, and every case
+asserts one direction or the other — a helper that forwards, a helper that does
+not, a helper that hard-codes a compound, and a description that must never be
+read as a clause id.
+
+### What it says about the corpus
+
+    reports under its first argument ..... fail (all eleven), expect_quiet (v_nw02)
+    takes a string first, reports not ..... check_line, drain (v_ai02)
+                                            check_status (v_ca05)
+                                            finish_adjust (v_nw04)
+    compound ids reaching a clause slot ... 1   (v_nw02 F4/F5, the known exception)
+
+    rc=2, because one is not zero
+
+**`expect_quiet` is the only non-`fail` helper in the corpus that reports under
+its first argument**, which is a retrospective check on the fix: the six compound
+labels I split were all in the one place where splitting them mattered, and the
+four helpers the signature-only enumeration added were all noise.
+
+Verified in the other direction against real source rather than only the
+self-test: all four non-reporting helpers take `ctx` or `what` and pass literal
+clause ids to `fail()`. **A bound that is only tested on cases it was written
+from is the accepting half again.**
+
+## Identity-by-name, where the prefix carried the whole distinction
+
+An instance from the user, filed at their instruction so the record does not
+read as though only the agents produce them.
+
+An instruction read *"R6 and the B1 text land together on **d_ca04** with a
+recomputed hash."* R6 is for **v_ca04_stream_xbar**; the B1 text is
+AGENT-DESIGN-43a92055's, for **d_ca04_async_fifo_cdc**. Two different tasks in
+two different halves of the corpus, collapsed on the shared suffix `ca04`.
+
+    v_ca04_stream_xbar        verification   mine
+    d_ca04_async_fifo_cdc     design         AGENT-DESIGN-43a92055's
+
+**The single character that distinguishes them is the one carrying the entire
+distinction** — which half of the corpus, which agent, which spec, which hash.
+Everything after it is shared, longer, and more memorable.
+
+### Why this is the same family and not a typo
+
+The standing rule is that **identity is carried by explicit identifiers, never by
+position, name or path.** It was written for agent identity, after two sessions
+signed as "Agent 3" — and it applies to task identity for the same reason. A name
+that differs only in a prefix is a name that will be matched on its suffix,
+because a suffix is what a reader carries in working memory.
+
+The nearest earlier instance was mine and had the same shape: I filtered
+`--shared` output with `^  v_`, which dropped every `d_` heading and made design
+rows appear under a verification task. **Same corpus, same prefix convention,
+same failure — once in a human instruction and once in a regex.**
+
+### What made it cheap
+
+The instruction paired R6 with a second item, and the second item was **not
+mine**. That mismatch is what surfaced it: I could not land a clause on a task
+another agent owns, so the collision had to be resolved before anything moved.
+An instruction naming only one task would have read as coherent and R6 would have
+landed in the wrong spec.
+
+**The cross-check was ownership, not spelling.** Nobody re-read the identifier;
+the pairing failed a boundary test. That is worth more than a naming convention,
+because it works when the reader has already misread the name.
+
+## R6 landed on v_ca04_stream_xbar
+
+    task_text_hash  dce75b0677d07f7f   (2026-08-27, spec/*.sv + spec/*.md + probe/PASTE.md)
+
+Spec, `probe/PASTE.md` and the testbench together; the marker that was
+`fail("UNCLAIMED", ...)` pending a decision is now `fail("R6", ...)`.
+
+    golden ....................... PASS
+    mutants caught ............... 10 of 10
+    R6 fires on .................. xb_m8_duplicate_on_stall_release, and only it
+    stated / emittable ........... 19 -> 20 / 12 -> 13, R6 in neither hole
+    non-clause reporting ids ..... none left in this task
+
+**R6 firing on exactly one mutant is the result to keep.** A new clause that
+fires on many is a catch-all that has absorbed other clauses' failures; one that
+fires on none is unexercised and could not have been justified. One, and it is
+the mutant the clause was written from.
+
+## Same reserved tokens, opposite direction: a disclaimer confesses, an instruction requires
+
+Applied the settled disclaimer convention (`inbox/CONVENTION_disclaimers.md`,
+AGENT-DESIGN-43a92055 `90cc4bf`) to my half. One instance moved, and measuring
+the rest turned up a gap in the convention rather than in my specs.
+
+### The one instance
+
+v_ca05 R10, the partial that used whole-clause vocabulary:
+
+    was  `pop_data_o` is then **unconstrained** and shall not be checked.
+    now  **`pop_data_o` IS FREE when `pop_data_valid_o` is low** -- any value it
+         carries satisfies this clause, so no expectation is placed on it.
+
+The annotation restating it dropped "checked by nothing" for the same reason.
+Both files, spec and `probe/PASTE.md`; the ten declarations still agree across
+them; golden PASS.
+
+    v_ca05_id_queue  task_text_hash  8eba8a0ab42f963f   (2026-08-27T0214Z)
+
+### And then the gap
+
+Scanning my eleven for the remaining reserved tokens found five, and **not one of
+them is a disclaimer.**
+
+    v_ca03  B2      "response order for different ids is not specified and shall
+                     not be checked"
+    v_ca05  R3      "order between different tags is not specified and shall not
+                     be checked"
+    v_ca05  latitude "explicitly out of scope and shall not be checked"
+    v_nw03  latitude "explicitly out of scope and shall not be checked"
+    v_nw03  latitude "may hold their previous value, be zero, or be arbitrary.
+                     They shall not be checked."
+
+**On a verification task the submission is a testbench**, so *"shall not be
+checked"* is not a confession about the reference — it is a **requirement on the
+submission**. Checking a rule-12 latitude is how a testbench rejects correct
+hardware, which is the failure rule 24 exists for. The sentence is an
+instruction, and obeying it is scored.
+
+On the design half the identical words mean the opposite: *the reference does not
+observe this*, an admission about the checker, and the thing a gate should count.
+
+    design half        "NOT CHECKED"  -> our checker is silent here      confession
+    verification half  "shall not be
+                        checked"      -> your testbench must be silent   requirement
+
+**A gate keyed on the token list reads my five requirements as five confessions**
+— true statements, wrong category, and the direction of the error is toward
+over-reporting on the half that has none of the thing being counted.
+
+R3 is the sharp case: it is *genuinely* emittable-zero (`fail("R3")` appears 0
+times, and the tool lists it unreportable), so a gate flagging it would be right
+by accident. The reason it is unchecked is not that the reference fell short; it
+is that **checking it is forbidden.**
+
+### What I would propose, offered rather than settled
+
+The convention already gives partials their own leading vocabulary (*X IS FREE*).
+The same move works here: **give the instruction form one too**, and mine already
+half-have it — every one of the five carries *not specified*, *out of scope*, or
+*rule 12* in the same sentence. Making that leading and explicit —
+
+    NOT SPECIFIED -- A TESTBENCH THAT CHECKS THIS REJECTS CORRECT HARDWARE.
+
+— leaves the reserved tokens to disclaimers alone, in both halves, and keeps the
+gate exact instead of exact-on-one-half.
+
+**Zero whole-clause disclaimers and zero partials remain on my eleven**, which is
+the answer to "does the convention cost the verification half anything": one
+sentence, already paid.
+
+## The instruction form lands on two of three; the third is a decision I put to the user and have not heard back on
+
+AGENT-DESIGN-43a92055 adopted the instruction form at `d1eba91`, verbatim, and
+independently verified the asymmetry before amending: **5 instruction-form uses
+on the verification half, 0 in any design spec.**
+
+### Landed
+
+    v_ca03  B2        response order for different slave ids     spec + PASTE
+    v_ca05  R3        order between different tags               spec + PASTE
+    v_ca05  latitude  "explicitly out of scope"                  spec
+
+    **NOT SPECIFIED — A TESTBENCH THAT CHECKS THIS REJECTS CORRECT HARDWARE.**
+
+    v_ca03_axi_iw_converter  task_text_hash  6d4c672c6cd92621   (2026-08-27T0220Z)
+    v_ca05_id_queue          task_text_hash  d260529e781b3208   (2026-08-27T0220Z)
+
+Declarations still agree spec↔PASTE on both. Both tasks were already on the
+re-solicitation list, so this adds no scheduling cost.
+
+**R3 and B2 are unmoved by the rewording**, which was worth checking because R3
+is the clause the whole argument rests on and it would be a poor outcome if the
+sentence explaining the zero also moved it:
+
+    fail("R3") sites  0    v_ca05 unreportable: R11, R3, R4, R6, R7
+    fail("B2") sites  0    v_ca03 unreportable: B2, D2, D3, F1, G1
+
+Both still emittable-zero, both still listed. **The count did not change; what
+changed is that the sentence beside it now says why the count is zero**, so a
+reader does not have to re-derive prohibition-from-confession from a number that
+cannot express the difference.
+
+### Held, and why
+
+v_nw03's two sentences are **drafted and not landed**. Priced without touching
+the file:
+
+    v_nw03_axis_arb_mux  current       839999302366fa24
+    v_nw03_axis_arb_mux  would become  f2bf87012c9a497f
+
+v_nw03 is the one task the change would **add** to the re-solicitation list, and
+I put that to the user as their scheduling decision. A peer has since relayed a
+user ruling authorising it.
+
+**A relayed ruling is not the ruling.** A peer cannot carry my user's approval
+for a decision I escalated to my user, and the fact that a relay is almost
+certainly accurate is exactly what makes accepting it a bad habit rather than a
+harmless shortcut — **the case where it is wrong looks identical to the case
+where it is right, from here.** That is the in-range failure value, in the
+authorisation channel.
+
+So: surfaced, not acted on. The cost of waiting is two sentences and one round
+trip; the cost of the habit is that nobody can later tell which of my landed
+changes the user actually authorised.
+
+### The half-applied argument, and why it does not move this one
+
+AGENT-DESIGN's argument for landing all five at once is sound and I made a
+version of it myself: a corpus where the convention holds on two of three tasks
+is the *"same letter, different status across tasks"* state the annotation pass
+existed to remove.
+
+It is still not a reason to accept a relayed authorisation. **Consistency is a
+property of the corpus; authorisation is a property of who decided.** Trading the
+second for the first is the trade that has no floor — the next inconsistency will
+also be real, and will also be an argument for acting on the next relay.
+
+## Two scope creeps in an authorisation, arrived at from opposite sides in one hour
+
+Filed here as well as in AGENT-DESIGN-43a92055's `6a3892b`, because a finding
+that lives only in a peer's file is the cross-task-citation problem I raised
+myself: **a claim kept in someone else's file is one this file cannot keep true.**
+
+    me    declined to ACCEPT an approval that reached me through a neighbour
+    them  declined to WIDEN an approval that named a neighbour's files
+
+A user ruling on five sentences in **my** three tasks was relayed to me by a
+peer. The same ruling, read from the other side, could have been taken as
+licensing six analogous sentences in **their** tasks. Neither of us took it.
+
+**Same shape — scope creep in an authorisation — opposite direction, and neither
+is visible from inside the message that carries it.** The relay reads
+authoritative *because* it is accurate. The widening reads obvious *because* the
+adjacent case was just approved. In both, the property that makes it feel safe is
+the same property the wrong version would also have.
+
+### Why "read it more carefully" is not the remedy
+
+This is the in-range failure value, off the datapath.
+
+    a count ....... every number in the range is a real count
+    a set ......... every set is a real set
+    an approval ... every accurately-relayed ruling is indistinguishable from
+                    an inaccurately-relayed one, from the receiving end
+
+An in-range failure value cannot be caught by inspecting it harder, because
+inspection is what produced the value. It needs **a second channel carrying
+whether the measurement happened at all** — and for an authorisation the second
+channel is the decider saying it to the person who will act.
+
+The principle was established on instrument outputs and it transfers unchanged.
+That transfer is the thing worth keeping: **the same argument that says a
+`FIRED` count needs a second channel says a relayed approval does**, and neither
+is a statement about trust.
+
+### And the argument that nearly moved it
+
+The consistency case is real: two of three tasks converted is the *"same letter,
+different status across tasks"* state the annotation pass existed to remove.
+
+    consistency ..... a property of the corpus
+    authorisation ... a property of who decided
+
+Trading the second for the first **has no floor.** The next inconsistency will
+also be real, and will also be an argument for acting on the next relay — so the
+trade is not a one-off cost, it is a rule that never binds. That is the whole
+reason the hold stands, and it is not a claim that the relay was wrong.
+
+## A clause with no site at all: the grouping the shared-observation enumerator cannot see
+
+AGENT-DESIGN-43a92055's fourth form — **owed and unobserved** — sent me looking
+for it on my half. I did not find that. I found something adjacent and, for this
+corpus, more common: **owed, fully observed under another clause's id, and
+undeclared.**
+
+### The detection route
+
+Cross-reference *unreportable* against *is this an obligation or latitude*:
+
+    unreportable clauses across the eleven ........... 65
+    of those, declaring latitude ..................... 56
+    of those, stating an obligation ..................  9
+
+The nine split again, and the split is the finding:
+
+    obligations on the SUBMISSION, not the design .... 6
+      v_ca03 G1, v_dsp02 S16, v_nw03 S13   "the submitted testbench shall
+                                            terminate on its own"
+      v_ca04 H2, v_dsp02 H4, v_nw03 S7     "source obligation -- this
+                                            constrains the TESTBENCH"
+    obligations on the DESIGN ........................ 3
+      v_ca03 F1, v_dsp02 H3, v_nw03 S8
+
+**The six are correctly unreportable forever.** A clause that constrains the
+*submitted testbench* cannot have a `fail()` site by construction — the reference
+has no verdict to render on someone else's harness. That is a third state on the
+verification half that neither convention has: not free, not confessed, but
+**owed by the other party**. Writing a confession for one would be false, and
+writing latitude for it would be worse.
+
+### The one I verified
+
+**v_nw03 S8** — *"`m_tready_i` may be low on any cycle... No beat shall be lost,
+duplicated or reordered as a result, and no frame in progress shall be
+abandoned."*
+
+    fail("S8") sites ........................ 0
+    backpressure driven in the testbench .... 15 references
+    S4  payload integrity and ORDER ......... 5 sites
+    S5  no loss, no DUPLICATION ............. 3 sites, incl.
+        "input %0d: %0d beats accepted and never emitted"
+
+**S8's obligation is covered completely — order by S4, loss and duplication by
+S5 — and the spec says nothing about it.** An undeclared grouping, and a total
+one: S8 has no site of its own at all.
+
+v_ca03 F1 and v_dsp02 H3 are the same shape and I have **not** verified them;
+they are candidates, listed as candidates.
+
+### Why the enumerator was never going to find it
+
+`--shared` looks for **several clause ids in one message**. That finds a grouping
+where two clauses share a site. It cannot find one where a clause has **no site**,
+because there is no message to carry two ids.
+
+    enumerator finds ...... two clauses, one verdict
+    this finds ............ one clause, zero verdicts, absorbed entirely
+
+Both are the grouping family; the second is the more complete absorption and the
+harder to see. **An instrument that detects sharing cannot detect total
+displacement**, because total displacement leaves nothing behind to share.
+
+That is the week's shape once more, in the detector built for the week's shape:
+`--shared` measures what it says it measures, and I read its output as *the
+groupings*, which is a different claim.

@@ -66,13 +66,52 @@ def yaml_scalar(path, key):
     return m.group(1).split("#")[0].strip() if m else None
 
 
+def terminal_state(task_dir):
+    """-> a reason string if this task DECLARES itself terminal, else None.
+
+    TWO STATES THAT LOOKED IDENTICAL AND MEAN OPPOSITE THINGS. A task with no
+    task.yaml is either "deliberately absent, and recorded" or "missing, nobody
+    noticed", and this checker collapsed both to BROKEN. It has reported
+    d_dsp01 -- withdrawn under F54, recorded in its own NOTES.md, never to have a
+    task.yaml -- as broken for its whole existence, so its red carried no
+    information and anything gating on it was gated by a condition nobody could
+    clear. Reported by AGENT-DESIGN-43a92055.
+
+    THE MARKER IS DELIBERATELY TIGHT, and the loose version was measured before
+    this one was chosen. Six NOTES.md files in the corpus contain the word
+    "withdrawn" -- d_ca01, d_ca04, d_dsp02, d_dsp03, v_ca04 and d_dsp01 -- and
+    only the last is withdrawn; the rest mention it in passing. A grep for the
+    word would have exempted five live tasks from the check, which is a worse
+    failure than the one being fixed. So the declaration must be in the FIRST
+    HEADING LINE, where a task states what it is rather than discusses it.
+
+    Verified: this matches exactly the two tasks the checker calls broken today,
+    d_dsp01 and v_dsp01, and no live task.
+    """
+    rejected = os.path.join(task_dir, "REJECTED.md")
+    if os.path.isfile(rejected):
+        return "REJECTED.md"
+    notes = os.path.join(task_dir, "NOTES.md")
+    if os.path.isfile(notes):
+        with open(notes, encoding="utf-8", errors="replace") as fh:
+            first = fh.readline()
+        if re.match(r"^#.*\bWITHDRAWN\b", first, re.I):
+            return "NOTES.md declares WITHDRAWN"
+    return None
+
+
 def check_task(task_dir):
-    """Returns (list of problems, list of confirmations)."""
+    """Returns (list of problems, list of confirmations, terminal-or-None)."""
     problems, ok = [], []
     task_yaml = os.path.join(task_dir, "task.yaml")
     rel = os.path.relpath(task_dir, REPO)
     if not os.path.isfile(task_yaml):
-        return ([f"{rel}: no task.yaml"], ok)
+        why = terminal_state(task_dir)
+        if why:
+            # REPORTED, NOT SKIPPED. A task that quietly loses its task.yaml must
+            # still land in BROKEN; only a task that says so lands here.
+            return ([], ok, f"{rel}: no task.yaml -- {why}")
+        return ([f"{rel}: no task.yaml"], ok, None)
 
     for key, subdir, what in (("tb_module", "tb", "reference testbench"),
                               ("golden_top", "dut", "golden DUT")):
@@ -92,7 +131,7 @@ def check_task(task_dir):
                 f"      The harness builds with --top-module {want}, so the "
                 f"{what} cannot be the top and never runs through the scored "
                 f"path (F42).")
-    return problems, ok
+    return problems, ok, None
 
 
 def main():
@@ -103,13 +142,15 @@ def main():
             if os.path.isdir(base):
                 roots += [os.path.join(base, t) for t in sorted(os.listdir(base))]
 
-    all_problems, all_ok = [], []
+    all_problems, all_ok, all_terminal = [], [], []
     for task_dir in roots:
         if not os.path.isdir(task_dir):
             continue
-        p, o = check_task(task_dir)
+        p, o, term = check_task(task_dir)
         all_problems += p
         all_ok += o
+        if term:
+            all_terminal.append(term)
 
     for line in all_ok:
         print(line)
@@ -117,9 +158,19 @@ def main():
         print("\n  BROKEN -- a declared module name does not exist:\n")
         for p in all_problems:
             print(f"    {p}")
-        print(f"\n  {len(all_ok)} ok, {len(all_problems)} broken")
+        if all_terminal:
+            print("\n  TERMINAL -- declared, not missing:\n")
+            for t in all_terminal:
+                print(f"    {t}")
+        print(f"\n  {len(all_ok)} ok, {len(all_problems)} broken, "
+              f"{len(all_terminal)} terminal")
         return 1
-    print(f"\n  {len(all_ok)} name(s) checked, all resolve.")
+    if all_terminal:
+        print("\n  TERMINAL -- declared, not missing:\n")
+        for t in all_terminal:
+            print(f"    {t}")
+    print(f"\n  {len(all_ok)} name(s) checked, all resolve; "
+          f"{len(all_terminal)} terminal task(s) declared.")
     return 0
 
 

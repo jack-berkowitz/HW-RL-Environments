@@ -165,7 +165,12 @@ module atop_filter_tb;
       if (m_awatop != 6'b000000)
         fail("F1", $sformatf("forwarded AW carries atop=%b, must be zero (cycle %0d)", m_awatop, cyc));
       if (fa_id.size() == 0)
-        fail("F1/F2", $sformatf("an AW reached the master port that no non-atomic write asked for -- id=%0d (cycle %0d)", m_awid, cyc));
+        // WAS "F1/F2". F2 is exclusively about W BEATS -- "the W beats belonging
+        // to a filtered write are consumed on the slave port and never forwarded"
+        // -- and cannot be violated by an AW arriving at the master port. It was
+        // in the label by association, not by ownership. F1 is the whole of it:
+        // an atomic AW is never forwarded.
+        fail("F1", $sformatf("an AW reached the master port that no non-atomic write asked for -- id=%0d (cycle %0d)", m_awid, cyc));
       else begin
         if (int'(m_awid) != fa_id[0] || int'(m_awaddr) != fa_addr[0] || int'(m_awlen) != fa_len[0])
           fail("P1", $sformatf("forwarded AW altered: got id=%0d addr=%08x len=%0d, expected id=%0d addr=%08x len=%0d",
@@ -450,7 +455,23 @@ module atop_filter_tb;
   task automatic issue_aw(input int id, input int addr, input int len, input logic [5:0] atop);
     bit ok;
     try_aw(id, addr, len, atop, 4000, ok);
-    if (!ok) fail("W3/X4", $sformatf("AW id=%0d was never accepted (cycle %0d)", id, cyc));
+    // WAS fail("W3/X4", ...) -- one compound id for two clauses that `debt`
+    // separates at the failing moment. W3's own text makes the debt its
+    // antecedent: "while the debt is strictly below MAX_WRITE_TXNS, this bound
+    // alone does not stall a non-atomic AW". So:
+    //   debt <  MAXW  the bound does not license the stall            -> W3
+    //   debt == MAXW  the bound licenses it, and failing to accept is
+    //                 a liveness fault against the 64-cycle bound     -> X4
+    // The timeout here is 4000 cycles against X4's 64, so the two are separable
+    // on duration as well; the debt is the sharper test and is read directly.
+    if (!ok) begin
+      if (debt < MAXW)
+        fail("W3", $sformatf("AW id=%0d was never accepted with the downstream write debt at %0d, below the bound of %0d (cycle %0d)",
+                             id, debt, MAXW, cyc));
+      else
+        fail("X4", $sformatf("AW id=%0d was never accepted; the debt sat at the bound of %0d and never fell far enough to admit it within %0d cycles (cycle %0d)",
+                             id, MAXW, 4000, cyc));
+    end
   endtask
 
   // Sends a W burst. `filtered` says whether these beats belong to a filtered
@@ -518,7 +539,11 @@ module atop_filter_tb;
         @(posedge clk);
         if (s_arvalid && s_arready) begin took = 1'b1; break; end
       end
-      if (!took) fail("P3/X4", $sformatf("an AR was offered for %0d cycles and never accepted (cycle %0d); the read path is never filtered and must not be blocked", RESP_DEADLINE, cyc));
+      // WAS "P3/X4". The deadline here is RESP_DEADLINE, declared at line 34 as
+      // `localparam int RESP_DEADLINE = 64; // clause X4` -- it IS X4's bound, and
+      // the source already said so. A miss is a liveness fault, not an alteration
+      // of the read path, which is what P3 covers.
+      if (!took) fail("X4", $sformatf("an AR was offered for %0d cycles and never accepted (cycle %0d); the read path is never filtered and must not be blocked", RESP_DEADLINE, cyc));
     end
     @(negedge clk) s_arvalid = 1'b0;
   endtask
@@ -527,15 +552,40 @@ module atop_filter_tb;
     repeat (n) @(posedge clk);
   endtask
 
-  task automatic expect_quiet(input string clause, input string what);
+  // WAS expect_quiet(clause, what) WITH ONE ID FOR FOUR OBLIGATIONS, and six of
+  // its twelve call sites passed a COMPOUND -- P1/P2/P4, F2/F3/F5, F3/F4 twice,
+  // F3/F4/X3, P3/F4, W1/W4 -- none of which is a clause. The verdict named a
+  // token no clause matches, and W1 had NO OTHER SITE, so a violation of it
+  // could not be routed anywhere at all.
+  //
+  // The four branches already distinguish WHICH obligation is outstanding. What
+  // they shared was the label, and the label was the PHASE's clause set, not the
+  // branch's. Three of the four owners follow from the obligation kind alone and
+  // do not vary by phase:
+  //
+  //   R beats still owed .... F4 is the only clause that requires R beats to be
+  //                           produced. F5 is the opposite direction -- an R
+  //                           present when none is owed -- and is checked at the
+  //                           upstream R checker, not here.
+  //   AW never forwarded .... P1: a non-atomic AW is forwarded to the master port.
+  //   W never forwarded ..... P2: the W beats of a forwarded write are forwarded.
+  //
+  // Only the B owner varies, because a filtered write's B is MANUFACTURED by the
+  // unit (F3) and a forwarded write's B is RETURNED from the master port (P4).
+  // That one is passed per call.
+  //
+  // The remainder of each old compound -- F2, F5, X3, W1, W4, P3 -- named what
+  // the phase was exercising rather than what the branch reports. That is the
+  // floor pattern inside a real check: naming is not owning.
+  task automatic expect_quiet(input string cl_b, input string what);
     if (eb_id.size() != 0)
-      fail(clause, $sformatf("%s: %0d B response(s) still owed, oldest id=%0d", what, eb_id.size(), eb_id[0]));
+      fail(cl_b, $sformatf("%s: %0d B response(s) still owed, oldest id=%0d", what, eb_id.size(), eb_id[0]));
     if (er_id.size() != 0)
-      fail(clause, $sformatf("%s: %0d R beat(s) still owed, oldest id=%0d", what, er_id.size(), er_id[0]));
+      fail("F4", $sformatf("%s: %0d R beat(s) still owed, oldest id=%0d", what, er_id.size(), er_id[0]));
     if (fa_id.size() != 0)
-      fail(clause, $sformatf("%s: %0d AW(s) never reached the master port", what, fa_id.size()));
+      fail("P1", $sformatf("%s: %0d AW(s) never reached the master port", what, fa_id.size()));
     if (fw_data.size() != 0)
-      fail(clause, $sformatf("%s: %0d W beat(s) never reached the master port", what, fw_data.size()));
+      fail("P2", $sformatf("%s: %0d W beat(s) never reached the master port", what, fw_data.size()));
   endtask
 
   initial begin
@@ -551,21 +601,21 @@ module atop_filter_tb;
 
     // -- 1. an ordinary write passes through, and its B comes back ------------
     issue_aw(1, 32'h1000, 0, 6'b000000); send_w(1, 1'b0); settle(40);
-    expect_quiet("P1/P2/P4", "after one ordinary write");
+    expect_quiet("P4", "after one ordinary write");
 
     // -- 2. an atomic store: filtered, one SLVERR B, and NO R beats -----------
     issue_aw(2, 32'h1100, 0, 6'b010000); send_w(1, 1'b1); settle(40);
-    expect_quiet("F2/F3/F5", "after one atomic store");
+    expect_quiet("F3", "after one atomic store");
 
     // -- 3. an atomic load, single beat, then a four-beat one -----------------
     issue_aw(3, 32'h1200, 0, 6'b100000); send_w(1, 1'b1); settle(40);
     issue_aw(4, 32'h1300, 3, 6'b100000); send_w(4, 1'b1); settle(60);
-    expect_quiet("F3/F4", "after two atomic loads");
+    expect_quiet("F3", "after two atomic loads");
 
     // -- 4. two atomic loads with DIFFERENT ids, back to back -----------------
     issue_aw(9, 32'h1400, 1, 6'b100000); send_w(2, 1'b1); settle(40);
     issue_aw(5, 32'h1500, 1, 6'b100000); send_w(2, 1'b1); settle(40);
-    expect_quiet("F3/F4", "after two atomic loads with different ids");
+    expect_quiet("F3", "after two atomic loads with different ids");
 
     // -- 5. the bound. Fill it with W beats withheld, and prove a slot is
     //       freed by a COMPLETED W BURST and not by a B arriving. ------------
@@ -576,9 +626,23 @@ module atop_filter_tb;
         try_aw(i, 32'h2000 + i*16, 0, 6'b000000, 40, ok);
         if (ok) admitted++;
       end
-      if (admitted != MAXW)
-        fail("W2/W3", $sformatf("with no W burst completed downstream, %0d AWs were admitted; the bound is %0d",
-                                admitted, MAXW));
+      // WAS fail("W2/W3", ...) ON `admitted != MAXW` -- one compound id, and the
+      // equality test was the only thing hiding which clause was violated. The
+      // DIRECTION separates them, and the value is already computed:
+      //   admitted < MAXW  an AW was stalled while the debt was below the bound.
+      //                    W3 says this bound alone does not stall a non-atomic
+      //                    AW, so this is W3 and this is W3's only structural
+      //                    check -- there is no other site that can catch it.
+      //   admitted > MAXW  more AWs admitted than the bound allows. That is W2,
+      //                    which ALSO has its own dedicated site (`debt > MAXW`),
+      //                    so this half is a second route to a clause already
+      //                    covered rather than a clause's only route.
+      if (admitted < MAXW)
+        fail("W3", $sformatf("with no W burst completed downstream, only %0d of %0d AWs were admitted -- the debt stayed below the bound and W3 says the bound alone does not stall a non-atomic AW",
+                             admitted, MAXW));
+      else if (admitted > MAXW)
+        fail("W2", $sformatf("with no W burst completed downstream, %0d AWs were admitted; the bound is %0d",
+                             admitted, MAXW));
       // No B has been returned yet (BLAG=20 from each AW, and none has been
       // acknowledged upstream). Complete ONE W burst and require a slot to free.
       send_w(1, 1'b0);
@@ -589,7 +653,7 @@ module atop_filter_tb;
       // drain
       for (int i = 0; i < admitted - 1; i++) send_w(1, 1'b0);
       settle(120);
-      expect_quiet("W1/W4", "after draining the bound test");
+      expect_quiet("P4", "after draining the bound test");
     end
 
     // -- 6. reads pass through untouched, alongside a filtered atomic ---------
@@ -607,9 +671,9 @@ module atop_filter_tb;
     issue_ar(5, 32'h7400, 0); settle(14);
     issue_ar(6, 32'h8800, 4); settle(26);
     issue_ar(9, 32'h9C00, 1); settle(20);
-    expect_quiet("P3", "after the read sweep");
+    expect_quiet("P4", "after the read sweep");
     issue_aw(8, 32'h3100, 2, 6'b110000); send_w(3, 1'b1); settle(60);
-    expect_quiet("P3/F4", "after a read alongside an atomic load");
+    expect_quiet("F3", "after a read alongside an atomic load");
 
     // -- 7. backpressure: hold both response channels off, then release ------
     cov_backpressure = 1'b1;
@@ -618,7 +682,7 @@ module atop_filter_tb;
     settle(30);
     @(negedge clk) s_bready = 1'b1; s_rready = 1'b1;
     settle(80);
-    expect_quiet("F3/F4/X3", "after backpressure on both response channels");
+    expect_quiet("F3", "after backpressure on both response channels");
 
     // -- 8. an atomic store and an atomic load distinguished by bit 5 only ----
     issue_aw(10, 32'h5000, 2, 6'b010000); send_w(3, 1'b1); settle(60);

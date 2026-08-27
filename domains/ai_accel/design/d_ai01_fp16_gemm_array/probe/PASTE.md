@@ -94,6 +94,38 @@ Everything normative is in the interface below.
 // -----------------------------------------------------------------------------
 // A -- ARITHMETIC
 // -----------------------------------------------------------------------------
+// A1-A10, C1, F2 AND F3 ARE CHECKED ANONYMOUSLY, AND THAT IS ONE MESSAGE FOR ALL
+//     OF THEM. Every clause in this section is observed by a single comparison
+//     of z_o and status_o against the reference, whose failure reads
+//
+//         "%0d z mismatches, %0d status mismatches over %0d scored cycles"
+//
+//     and carries NO CLAUSE ID. A failure tells you a cycle disagreed, not which
+//     clause it disagreed with -- the operand skew of A3, the rounding of A4,
+//     the subnormal exactness of A7 and the flag timing of A10 all surface
+//     identically. They are neither grouped under another clause nor unchecked;
+//     they are checked without attribution.
+//
+//     TWO CLAUSES IN THIS TASK DO NAME THEMSELVES, so the absence is specific
+//     rather than a property of the rig: L3 prints "L3 latency floor" and V2
+//     prints "V2 -- reset did not clear the array". Everything else is silent
+//     about which clause it is.
+//
+//     This is stated because the alternative reading -- that clauses with no id
+//     in the failure output are unchecked -- is wrong here. ANONYMOUS and
+//     UNCHECKED look identical from a grep and mean opposite things: an
+//     anonymous check refuses a wrong design without naming the clause, an
+//     unchecked clause refuses nothing at all. Both states exist across this
+//     corpus. Which one applies is a fact about a particular task, established
+//     by reading its checker, and is never inferred from the shape of a
+//     failure message.
+//
+//     STATED WITHOUT NAMING ANOTHER TASK, deliberately. This paragraph used to
+//     cite a specific task's four unchecked clauses as the contrasting case.
+//     Checks were written for all four, and the sentence went false here --
+//     in a file nobody was editing at the time. A claim about another task's
+//     checker is a claim this task cannot keep true.
+//
 // A1. ENABLED TICK. For row r, an enabled tick is a rising edge of clk_i at
 //     which both reg_enable_i and row_clk_gate_en_i[r] are high. All timing
 //     below is counted in enabled ticks of the row in question, not in raw
@@ -130,8 +162,8 @@ Everything normative is in the interface below.
 //         p[r][0] = fma( x_i[r][0](t-d(0)), w_i[0](t-d(0)), y_i[r](t-d(0)) )
 //         p[r][k] = fma( x_i[r][k](t-d(k)), w_i[k](t-d(k)), p[r][k-1] )
 //
-//     Stage 0 consumes the OLDEST operands, d(0) = D*(H-1)+2, and stage H-1 the
-//     newest, d(H-1) = 2. Successive stages are exactly D apart. The bias y_i
+//     Stage 0 consumes the OLDEST operands, d(0) = D*(H-1)+3, and stage H-1 the
+//     newest, d(H-1) = 3. Successive stages are exactly D apart. The bias y_i
 //     is sampled with stage 0's delay, d(0) -- measured, not assumed.
 //
 //     For H=8: d = 30, 26, 22, 18, 14, 10, 6, 2 for k = 0 .. 7.
@@ -275,10 +307,10 @@ Everything normative is in the interface below.
 //     THE FED-BACK VALUE IS SAMPLED ONE TICK EARLIER THAN STAGE 0's OPERANDS.
 //     Writing z_o[r](t - dfb) for the value used,
 //
-//       dfb = D*(H-1) + 3 = d(0) + 1
+//       dfb = D*(H-1) + 4 = d(0) + 1
 //
-//     so at HEIGHT=8 the feedback carries 31 enabled ticks and at HEIGHT=4 it
-//     carries 15. The extra tick over d(0) is because z_o is already a
+//     so at HEIGHT=8 the feedback carries 32 enabled ticks and at HEIGHT=4 it
+//     carries 16. The extra tick over d(0) is because z_o is already a
 //     registered value when the multiplexer selects it, so it is one register
 //     deeper into the past than an operand presented at the same edge.
 //
@@ -332,11 +364,23 @@ Everything normative is in the interface below.
 //     is not an implementation choice: it sets the operand skew of A3, so a
 //     different D delivers different results for the same input stream.
 //
-// L2. The delay from a stage's operands to z_o is d(k) = D*(H-1-k)+2 enabled
+// L2. The delay from a stage's operands to z_o is d(k) = D*(H-1-k)+3 enabled
 //     ticks, per A3.
 //
-// L3. Total latency from stage 0's operands to z_o is D*(H-1)+2 enabled ticks:
-//     30 at HEIGHT=8, 14 at HEIGHT=4.
+// L3. Total latency from stage 0's operands to z_o is D*(H-1)+3 enabled ticks:
+//     31 at HEIGHT=8, 15 at HEIGHT=4.
+//
+//     CORRECTED 2026-08-26 FROM D*(H-1)+2, WHICH WAS LOW BY ONE. The earlier
+//     constant failed a compliant submission: a design delivering the 14 this
+//     clause used to state was rejected by a testbench requiring 15, and the
+//     testbench was right. Measured two ways, on two hosts -- an impulse at every
+//     stage giving d(k) = D*(H-1-k)+3 for all k, and a recirculation period
+//     settling dfb at d(0)+1.
+//
+//     ONE CONSTANT WAS WRONG AND EVERY RELATION WAS RIGHT. Stages are D apart,
+//     the feedback is one tick deeper than stage 0's operands, and the reason
+//     given above for that extra tick is what the hardware does. A design built
+//     against the old text has the right structure and one stage too few.
 //
 // -----------------------------------------------------------------------------
 // P -- PARAMETERS
@@ -410,6 +454,17 @@ Everything normative is in the interface below.
 //     synthesis frontend with this exact error, which is why that task carries
 //     the same clause. This task's own second source hit it again, on the same
 //     construct, before this clause existed.
+// 
+//     AND THE REJECTION THIS MOST OFTEN PRODUCES is a variable declared after a
+//     statement inside a begin/end block:
+//         error: declaration must come before all statements in the block
+//     slang enforces the LRM rule that every declaration in a block precedes
+//     every statement in it, and VERILATOR DOES NOT DIAGNOSE THE VIOLATION -- so
+//     the file simulates clean and then yields NO PPA NUMBER AT ALL, reading as a
+//     missing measurement rather than a rejected submission. Declare every
+//     variable at the top of the block that uses it, or at module scope, before
+//     any assignment, loop or $display in that block. Ten run records across four
+//     tasks here were killed by exactly that error, nine from one model.
 //
 // -----------------------------------------------------------------------------
 // G -- GRADING

@@ -341,3 +341,232 @@ class this whole file is about.
 
 **7 of 11 measurable. Same stopping rule: report on the first escalation, no
 sweep, no clause moves.**
+
+
+---
+
+# THIRD RUN — per-task RGAP, seven edits. Five clean, two escalations.
+
+**No sweep. No clause moved.**
+
+## Results
+
+| task | depth | narrow drain | wide drain | verdict |
+|---|---|---|---|---|
+| `v_ca06` | 9 | FAIL 38 (drain) | **PASS**, FLOOR only | **CLEAN** |
+| `v_ca03` | 9 | **PASS** | FLOOR only | **CLEAN** |
+| `v_nw03` | 5 | **PASS** | **PASS** | **CLEAN** |
+| `v_ai02` | 6 | **PASS** | **PASS** | **CLEAN** |
+| `v_ca04` | 4 | FAIL 2 (I1, I2) | **PASS** | **CLEAN** — narrow failures were drain |
+| `v_nw02` | 9 | FAIL P3 | FAIL P3 | **ESCALATION** |
+| `v_nw01` | 65 | FAIL Q6 | FAIL Q6 | **ESCALATION** |
+
+Perturbation live on all seven: `perturb_at_depth` from 26 to 1380, never zero.
+
+**Five of seven clean on the axis D6 lives on**, including `v_ca06` at three times
+the depth the old sticky D6 broke at — now confirmed by a third independent
+mechanism.
+
+## Escalation 1 — `v_nw02` P3
+
+    FAIL P3: after the read sweep: 3 R beat(s) still owed, oldest id=6
+
+P3 is *"the read address path is never altered… a read is never filtered."* The
+message is not about alteration — it is **beats still in flight at a phase
+boundary**. The R responder is held back 9 cycles per beat and the read sweep's
+end-of-phase check runs before they drain.
+
+**It survived the ×10 widening, which is what makes it an escalation by my own
+definition** — but the widening multiplies `repeat(N)`, `t < N` and `drain(N)`,
+and if that phase ends on a different construct the widening never reached it.
+**I have not confirmed which**, and that is the next thing to check rather than a
+conclusion to draw.
+
+## Escalation 2 — `v_nw01` Q6, and the magnitude is my error
+
+    FAIL Q6: a matching reply did not resolve the lookup
+
+**The depth is wrong and the table says why.** I justified 65 as *"one past
+`REQUEST_RETRY_INTERVAL=64`, so a stall shorter than 64 never lets a retry fire"*
+— which is an argument about the gap **between requests**. The inter-beat axis
+applies it **between payload bytes**, and the frame is 28 bytes:
+
+    65 cycles x 28 bytes = 1820 cycles per frame
+    REQUEST_TIMEOUT      = 256
+
+**The frame takes seven times the design's own lookup timeout.** The lookup
+expires before the reply finishes arriving, and Q6 — *a matching reply resolves
+the outstanding lookup* — cannot hold because there is no outstanding lookup left.
+
+> **A magnitude justified on one axis and applied on another is not justified.**
+> My own table names the axis for each task and I derived this one from an
+> inter-transaction quantity, then applied it per beat. The table looked
+> rigorous — every row has a reason — and the reason for this row is about a
+> different measurement.
+
+The correct depth for `v_nw01`'s inter-beat axis comes from what the design
+buffers *within* a frame, not from its retry interval. **I do not currently know
+that number**, and picking one without it would repeat the error.
+
+## What this does and does not establish
+
+**Establishes:** five tasks clean on the inter-beat axis at a justified depth, by
+a mechanism that gates nothing and cannot produce a phantom transfer. `v_ca06`
+clean under three independent mechanisms.
+
+**Does not establish:** anything about `v_nw02` or `v_nw01`. One has an unverified
+widening and one has a depth I derived wrongly. **Neither is a statement about
+the design yet**, and by the pattern of this whole exercise the prior should be
+that they are not.
+
+
+---
+
+# FINAL — six clean, five not measurable, ZERO escalations standing
+
+## The standing result
+
+**Six of eleven tasks are measured clean on the inter-beat axis — the axis D6
+lives on — by a mechanism that gates nothing and cannot produce a phantom
+transfer.**
+
+| task | depth | drain | result |
+|---|---|---|---|
+| `v_ca06` | 9 | x10 | **CLEAN** |
+| `v_ca03` | 9 | x10 | **CLEAN** |
+| `v_nw02` | 9 | **x2** | **CLEAN** |
+| `v_ai02` | 6 | x7 | **CLEAN** |
+| `v_nw03` | 5 | x6 | **CLEAN** |
+| `v_ca04` | 4 | x5 | **CLEAN** |
+
+**`v_ca06` is clean at three times the depth the old sticky D6 broke at, under a
+third independent mechanism.** That result has now survived the gate, the
+task-top delay, and the per-task RGAP edit — three instruments with three
+different defects, agreeing.
+
+## Both escalations dissolved
+
+### `v_nw02` P3 — the widening never reached that phase
+
+The read sweep ends on `settle(20)`, `settle(14)`, … and my widening multiplied
+`repeat(N)`, `t < N` and `drain(N)`. **`settle(N)` was not in the list.**
+
+> *"The failure survived the widening"* was not evidence about the failure. It
+> was evidence that the widening had no effect on that phase. **An escalation
+> criterion that a widening never reached is not a criterion.**
+
+With `settle()` widened, P3 is gone.
+
+### And the drain multiplier has an UPPER bound, which my rule did not have
+
+Widening `settle()` by x10 then produced **4 x X4** — the deadline clause. A
+drain large enough to clear contamination is large enough to push events past a
+fixed deadline.
+
+    drain x1    P3 fails      not enough drain
+    drain x2    PASS          <-- both hold
+    drain x3    X4 fails      deadline stretched
+    drain x5    X4 fails
+    drain x10   X4 fails
+
+**My rule was "multiply by (1 + stall_depth)" — a single number, x10 here, which
+is outside the window where this task is measurable at all.** The discriminator
+needs a RANGE and a search, not a multiplier. `v_nw02` is clean at x2 and that
+is the whole of the escalation.
+
+### `v_nw01` Q6 — the magnitude was mine, and the axis has no depth
+
+Withdrawn as an escalation. Two separate things were wrong:
+
+1. **The magnitude.** 65 was justified as *"one past `REQUEST_RETRY_INTERVAL=64`"*
+   — a quantity about the gap **between requests** — and applied **between
+   payload bytes**. 28 bytes x 65 = 1820 cycles per frame against a
+   `REQUEST_TIMEOUT` of 256.
+2. **The rule has no operand here.** *"One past the deepest buffer on that
+   channel"* needs a buffer. Searched across **all** the ARP engine's sources —
+   `arp.sv`, `arp_eth_rx.sv`, `arp_eth_tx.sv`, `arp_cache.sv` — there is no FIFO,
+   no byte-indexed store, no per-frame buffer of any kind. **The design holds
+   PARSER STATE, not buffered beats.**
+
+*(`arp_engine.sv` alone has zero clocked processes — it is a wrapper. My first
+search read only the wrapper and concluded the design held nothing, which was
+right by accident. The four files that matter were not in scope.)*
+
+**`v_nw01` is NOT MEASURABLE on the inter-beat axis**, and reported as such rather
+than perturbed at a guessed depth. The design's own `REQUEST_TIMEOUT` spans a
+frame, so any inter-byte gap large enough to be interesting collides with a
+timeout that is **correct behaviour**, not a defect.
+
+## Not measurable — five, and that is a result
+
+| task | why |
+|---|---|
+| `v_nw01` | no buffer between beats; the design holds parser state. Depth rule has no operand |
+| `v_ca05` | no beats — single-beat req/gnt operations |
+| `v_ca07` | no beats — one value per handshake, output is a clock |
+| `v_dsp02` | no beats — one operand per handshake |
+| `v_nw04` | no handshake at all — pulse inputs, no ready |
+
+**Five honest rows beat five guessed depths.** Each would have produced a number,
+and each number would have been a clean row meaning untested.
+
+---
+
+# THE MAGNITUDE TABLE, WITH THE AXIS ITS JUSTIFICATION IS ABOUT
+
+**Checked by `check_magnitude_axis.py`, which REFUSES on a mismatch and on an
+unstated axis. Not a convention.**
+
+| task | axis perturbed | magnitude | axis the justification is about |
+| `v_ca06` | inter-beat gap | 9 | inter-beat gap |
+| `v_ca03` | inter-beat gap | 9 | inter-beat gap |
+| `v_nw02` | inter-beat gap | 9 | inter-beat gap |
+| `v_ai02` | inter-beat gap | 6 | inter-beat gap |
+| `v_nw03` | inter-beat gap | 5 | inter-beat gap |
+| `v_ca04` | inter-beat gap | 4 | inter-beat gap |
+
+`v_nw01` is absent because it has no row to state: its axis has no depth, so
+there is no magnitude to justify. **That is why it is NOT MEASURABLE and not a
+corrected number.** Had it stayed, the checker would have refused it —
+`inter-beat gap` perturbed, `inter-transaction gap` justified.
+
+# THE DRAIN WINDOW — the rule is not a number
+
+    floor     enough drain that beats in flight at a phase boundary complete
+    ceiling   before a clause with a FIXED DEADLINE is stretched past it
+
+    v_nw02, depth 9:   x1 P3 fails (below floor) | x2 PASS | x3,x5,x10 X4 fails (above ceiling)
+
+**My rule was `(1 + stall_depth)` — a single number, x10 here, above the ceiling
+for this task.** A task can be clean and the rule can never find it.
+
+**The ceiling comes from the deadline enumeration** — `v_ca03` A4, `v_ca04` X3,
+`v_ca05` R15, `v_ca07` E1 and H4, `v_nw01` X3 and Q1, `v_nw02` X4. That
+enumeration was produced as evidence for excluding bounded clauses, the exclusion
+case was withdrawn, and it was kept as a fact. **It was kept for one reason and
+turned out to be needed for the opposite one:** not to exclude those clauses from
+the run, but to bound how far the run may be stretched before they break.
+
+# EVERY DRAIN-SHAPED CONSTRUCT ACROSS THE ELEVEN
+
+| construct | covered by the widener | tasks |
+|---|---|---|
+| `repeat (N) @(posedge clk)` | **yes** | all eleven |
+| `for (t = 0; t < N; ...)` | **yes** | all eleven |
+| `drain(N)` | **yes** | v_ca03 |
+| `settle(N)` | **yes, added after it was missed** | v_ca07, v_nw02 |
+| `check_ratio(N)` | via `settle` | v_ca07 |
+| `wait_frames(N)` | **not needed** — waits on frames, not cycles | v_nw03 |
+| `quiet(N)` | not needed — v_nw04 is NOT MEASURABLE | v_nw04 |
+| `send_w(N)` | not a drain — sends beats | v_ca03 |
+| literal timeout arguments | **not covered** | v_ca05 (NOT MEASURABLE) |
+| `#N` | the watchdog, not a phase drain | six tasks |
+
+**Which clean rows depend on the widener at all:** only those that failed at the
+narrow drain and passed at the wide one — `v_ca06`, `v_ca04`, `v_nw02`. All three
+use `repeat`, `t < N` and `settle` only, all covered. **The other three clean rows
+— `v_ca03`, `v_nw03`, `v_ai02` — passed at the NARROW drain**, so nothing about
+them rests on the widening.
+
+The six clean rows stand. **I could not have said that before running this
+enumeration**, and nothing in the exercise required it.

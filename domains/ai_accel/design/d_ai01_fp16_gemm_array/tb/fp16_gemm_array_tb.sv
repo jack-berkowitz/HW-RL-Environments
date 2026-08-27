@@ -73,6 +73,7 @@ module fp16_gemm_array_tb;
   );
 
   logic [REC_W-1:0] recs [0:NCYC-1];
+  int unsigned      n_rec;
   rec_t             r;
   string            vfile;
 
@@ -134,12 +135,21 @@ module fp16_gemm_array_tb;
     // cross-geometry experiments.
     if (!$value$plusargs("vec=%s", vfile))
       vfile = $sformatf("vectors/vectors_h%0d.hex", H);
+    // PRE-ZERO, THEN COUNT NON-ZERO. The premise of the previous guard was that
+    // "$readmemh on a missing file leaves the array X", and it tested
+    // recs[0] === 'x. THAT PREMISE IS FALSE UNDER VERILATOR, which is 2-state: a
+    // failed load leaves ZEROS, the comparison is never true, and the guard
+    // could not fire. A run with no vectors at all reported PASS -- observed,
+    // with "$readmem file not found" and "TEST_RESULT: PASS" in the same output.
+    //
+    // The premise is what made it look correct to every reader. This is
+    // d_dsp02's pattern, which is the one that is right for a 2-state simulator.
+    for (int i = 0; i < NCYC; i++) recs[i] = '0;
     $readmemh(vfile, recs);
-    if (recs[0] === 'x) begin
-      // $readmemh on a missing file warns and leaves the array X. A run that
-      // compares against X vectors reports mismatches on everything, which
-      // reads as a catastrophically wrong design rather than a missing file.
-      $display("TEST_RESULT: FAIL: vector file %s did not load", vfile);
+    n_rec = 0;
+    for (int i = 0; i < NCYC; i++) if (recs[i] !== '0) n_rec = i + 1;
+    if (n_rec == 0) begin
+      $display("TEST_RESULT: FAIL: no vectors loaded from %s", vfile);
       $finish;
     end
 
@@ -278,7 +288,7 @@ module fp16_gemm_array_tb;
     else if (!floors_v2_ok)
       $display("TEST_RESULT: FAIL: V2 -- reset did not clear the array, or was never exercised on a non-zero array");
     else if (!lat_ok)
-      $display("TEST_RESULT: FAIL: L3 latency floor -- measured %0d ticks at HEIGHT=%0d, expected %0d (L3 D*(H-1)+2 = %0d plus one sampling edge)",
+      $display("TEST_RESULT: FAIL: L3 latency floor -- measured %0d ticks at HEIGHT=%0d, expected %0d (L3 D*(H-1)+3 = %0d plus one counting offset)",
                lat_meas, H, EXP_LAT, L3_LAT);
     else $display("TEST_RESULT: FAIL: %0d z mismatches, %0d status mismatches over %0d scored cycles (H=%0d)",
                   errs_z, errs_st, checked, H);
@@ -297,8 +307,8 @@ module fp16_gemm_array_tb;
   // MAX_TRANS=2, and A PASS AT THE LOW SETTING IS NOT CAPABILITY EVIDENCE -- and
   // the scored setting here is now the low one.
   //
-  // WHAT IT ASSERTS. Total latency is L3's D*(H-1)+2: 14 enabled ticks at
-  // HEIGHT=4, 30 at HEIGHT=8. The value is DERIVED FROM H, so a design carrying a
+  // WHAT IT ASSERTS. Total latency is L3's D*(H-1)+3: 15 enabled ticks at
+  // HEIGHT=4, 31 at HEIGHT=8. The value is DERIVED FROM H, so a design carrying a
   // CONSTANT latency satisfies at most one of the two legal geometries and the
   // pair catches it. The measurement is printed at both, so the derivation is
   // readable across the pair rather than asserted.
@@ -336,23 +346,44 @@ module fp16_gemm_array_tb;
   // exactly the sign it is CONSTRUCTIBLE AND NOT PLAUSIBLE. No submission builds
   // for a height above the one it was given, and a control nobody would write
   // measures the checker rather than the contract.
-  // THE CONVENTION IS +1 AND IT IS THE RIG, NOT THE DESIGN. First cut asserted
-  // L3's D*(H-1)+2 directly and the REFERENCE measured one tick more at BOTH
-  // geometries -- 15 against 14 at H=4, 31 against 30 at H=8. A UNIFORM offset
-  // across both is the signature of a counting convention, not of a design
-  // defect: this loop counts the edge at which the impulse is SAMPLED as tick 1,
-  // and L3 counts from the sample. MEASUREMENTS.md section 3 records probe_skew_tb
-  // making the identical mistake -- a uniform 2-cycle shortfall at every stage,
-  // formula wrong rather than instrument -- and the same test settled it, because
-  // the H-DEPENDENCE was intact: 31 - 15 = 16 = D*(8-4), exactly L3's slope.
+  // THE +1 WAS OBSERVED, INVESTIGATED, EXPLAINED AND DOCUMENTED -- INCORRECTLY.
+  // This comment used to read: "THE CONVENTION IS +1 AND IT IS THE RIG, NOT THE
+  // DESIGN. First cut asserted L3's D*(H-1)+2 directly and the REFERENCE measured
+  // one tick more at BOTH geometries -- 15 against 14 at H=4, 31 against 30 at
+  // H=8. A UNIFORM offset across both is the signature of a counting convention,
+  // not of a design defect."
+  //
+  // THE DATA WAS RIGHT AND THE INFERENCE WAS WRONG. A uniform offset across both
+  // geometries is EQUALLY the signature of a spec constant that is low by one,
+  // which is what it was. The discrepancy was not missed -- it was seen, probed,
+  // and argued away, and the argument was written into the rig as a
+  // justification. That is why it survived: a wrong reason attached to a right
+  // number reads as diligence.
+  //
+  // Settled 2026-08-26 by measuring the impulse at EVERY stage rather than only
+  // stage 0 -- d(k) = D*(H-1-k)+3 for all k, so the whole family was low by one,
+  // not the rig -- and by a recirculation period fixing dfb at d(0)+1. Both
+  // reproduced on a second host. spec/ now states +3 and this rig asserts it.
   //
   // THE SLOPE IS THE REAL ASSERTION and it is what "derived rather than constant"
   // means. One elaboration measures one geometry, so this floor asserts the
   // absolute value under the stated convention and the PAIR carries the slope. A
   // design with constant latency has slope 0 and fails at one of the two heights
   // necessarily.
-  localparam int unsigned L3_LAT  = 4*(H-1) + 2;   // the contract's number
-  localparam int unsigned EXP_LAT = L3_LAT + 1;    // +1 for the sampling edge
+  // L3_LAT is the CONTRACT'S NUMBER and the contract has been corrected: the
+  // spec stated D*(H-1)+2 and the reference delivers D*(H-1)+3, measured two
+  // ways on two hosts. The old constant failed a compliant submission that
+  // delivered exactly the 14 the spec asked for.
+  //
+  // EXP_LAT's +1 IS NOW WHAT ITS COMMENT ALWAYS CLAIMED. The impulse is applied
+  // at a NEGEDGE, so it is settled before the posedge that samples it, and the
+  // counting loop begins at that same posedge -- which means the loop's origin
+  // sits one edge before the sampling edge and the observed count is the depth
+  // plus one. That is a counting offset, not a pipeline stage. It used to be a
+  // pipeline stage wearing this label, which is why the discrepancy survived
+  // review for as long as it did.
+  localparam int unsigned L3_LAT  = 4*(H-1) + 3;   // the contract's number, corrected
+  localparam int unsigned EXP_LAT = L3_LAT + 1;    // +1: the loop's origin precedes the sampling edge
   int unsigned lat_meas;
   bit          lat_ok;
   bit          floors_v2_ok = 1'b1;
@@ -374,7 +405,16 @@ module fp16_gemm_array_tb;
       flush = 1'b0;
       repeat (EXP_LAT + 8) @(posedge clk);                  // let the flush drain
 
-      // IMPULSE AT STAGE 0, whose delay IS the total latency D*(H-1)+2.
+      // IMPULSE AT STAGE 0, whose delay IS the total latency D*(H-1)+3.
+      //
+      // APPLIED AT A NEGEDGE. The previous version assigned here immediately
+      // after `repeat (...) @(posedge clk)`, i.e. AT the posedge -- the same
+      // instant the DUT's flops sample -- while every other stimulus site in
+      // this file drives at a negedge for exactly that reason. The race did not
+      // change the measured depth, but it made which edge sampled the operand
+      // ambiguous, and that ambiguity is what let a wrong explanation of the +1
+      // stand.
+      @(negedge clk);
       wt[0] = 16'h3C00;                                     // 1.0 at stage 0 only
       t = 0;
       for (t = 1; t <= EXP_LAT + 20; t++) begin
@@ -386,7 +426,7 @@ module fp16_gemm_array_tb;
         end
       end
       lat_ok = (lat_meas == EXP_LAT);
-      $display("METRIC: latency_ticks=%0d expected=%0d (L3 D*(H-1)+2=%0d, +1 sampling edge) H=%0d ok=%s",
+      $display("METRIC: latency_ticks=%0d expected=%0d (L3 D*(H-1)+3=%0d, +1 counting offset) H=%0d ok=%s",
                lat_meas, EXP_LAT, L3_LAT, H, lat_ok ? "yes" : "NO");
       if (lat_meas == 0)
         $display("  L3 FLOOR: the impulse never emerged within %0d ticks -- not measured, not passed",

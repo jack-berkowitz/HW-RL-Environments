@@ -54,6 +54,33 @@
 // -----------------------------------------------------------------------------
 // A -- TRANSLATION
 // -----------------------------------------------------------------------------
+// A1-A11, C1, C3, C4 AND F1-F3 ARE CHECKED ANONYMOUSLY. Every translation
+//     clause below is observed by ONE per-step comparison whose failure reads
+//
+//         "step %0d %s va=%016x: expected valid=%0b pa=%014x exc=%0b cause=%0d"
+//
+//     and carries NO CLAUSE ID. A wrong physical address, a wrong fault cause
+//     and a wrong valid all surface identically, so a failure names the step
+//     rather than the clause. They are neither grouped under another clause nor
+//     unchecked; they are checked without attribution.
+//
+//     FIVE CLAUSES IN THIS TASK DO NAME THEMSELVES -- A5, T4, T9, T10 and V2 --
+//     so the silence is specific rather than a property of the rig.
+//
+//     Stated because the alternative reading, that a clause absent from failure
+//     output is unchecked, is WRONG here. ANONYMOUS and UNCHECKED look
+//     identical from a grep and mean opposite things: an anonymous check
+//     refuses a wrong design without naming the clause, an unchecked clause
+//     refuses nothing at all. Which one applies is a fact about a particular
+//     task, established by reading its checker, never inferred from the shape
+//     of a failure message.
+//
+//     STATED WITHOUT NAMING ANOTHER TASK, deliberately. This paragraph used to
+//     cite a specific task's unchecked clauses as the contrasting case; checks
+//     were written for them and the sentence went false here, in a file nobody
+//     was editing. A claim about another task's checker is a claim this task
+//     cannot keep true.
+//
 // A1. THE WALK. With translation enabled, a request for virtual address va is
 //     resolved by descending the table from the root at satp_ppn_i:
 //       a = satp_ppn_i << 12
@@ -403,7 +430,8 @@
 //         pass must issue NO page-table read on mem_*.
 //       * translate a 17th distinct page, then translate all 17. This pass MUST
 //         issue at least one page-table read.
-//     Which of the 17 is displaced is not checked.
+//     REPLACEMENT CHOICE IS FREE -- whichever of the 17 is displaced
+//     satisfies this clause.
 //
 //     FOR THIS CHECK ONLY, the presence or absence of mem_* activity during the
 //     replay is scored, as an exception to T2. The COUNT and ORDER of accesses
@@ -436,6 +464,17 @@
 //     A per-bit search nested inside a per-entry loop reaches it quickly. Give
 //     every loop a small constant bound. This is reproduced history: two earlier
 //     tasks in this repository hit that exact error.
+// 
+//     AND THE REJECTION THIS MOST OFTEN PRODUCES is a variable declared after a
+//     statement inside a begin/end block:
+//         error: declaration must come before all statements in the block
+//     slang enforces the LRM rule that every declaration in a block precedes
+//     every statement in it, and VERILATOR DOES NOT DIAGNOSE THE VIOLATION -- so
+//     the file simulates clean and then yields NO PPA NUMBER AT ALL, reading as a
+//     missing measurement rather than a rejected submission. Declare every
+//     variable at the top of the block that uses it, or at module scope, before
+//     any assignment, loop or $display in that block. Ten run records across four
+//     tasks here were killed by exactly that error, nine from one model.
 //
 // T7. A submission must pass every clause above; there is no partial credit.
 // T8. EVERY INPUT THIS CONTRACT GIVES MEANING TO MUST TAKE MORE THAN ONE VALUE
@@ -554,9 +593,11 @@
 //          P2 here: flip-flop count after synthesis against the field-list floor
 //          G4 already quotes -- 3,467 in the reference against a floor of about
 //          3,168 for 32 entries. That measurement belongs to whoever runs PPA
-//          and IS NOT IN PLACE. UNTIL IT IS, P2's instruction-side budget is
-//          priced but not enforced. Recorded so that nobody reads T4 and
-//          concludes both TLBs are covered.
+//          and IS NOT IN PLACE. P2'S INSTRUCTION-SIDE BUDGET IS PRICED, NOT
+//          BOUNDED -- the cycle axis charges under-provisioning as described
+//          above, and nothing places a ceiling on it until that measurement
+//          exists. Recorded so that nobody reads T4 and concludes both TLBs
+//          are covered.
 //
 // -----------------------------------------------------------------------------
 // G -- GRADING

@@ -4,6 +4,13 @@ module: fp_multifmt_fma
 domain: dsp
 type: design
 catalog: TASK_CATALOG.md
+# THE TASK'S OWN declaration, top level. The nested task_text_hash fields
+# further down belong to HISTORICAL RECORDS -- which text a past result ran
+# against, which text a candidate set was solicited against -- and are not
+# this. A fixer that took first-match-wins overwrote one of those on
+# 2026-08-26 and made the file assert that a past measurement used today's
+# text; restored from git, and this field exists so the two are distinct.
+task_text_hash: 1952c56cdca33f36
 procedure: TIER-B
 
 catalog_divergence: >

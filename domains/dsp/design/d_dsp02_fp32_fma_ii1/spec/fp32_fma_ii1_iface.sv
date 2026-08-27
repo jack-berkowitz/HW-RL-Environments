@@ -28,6 +28,14 @@
 // -----------------------------------------------------------------------------
 // ARITHMETIC -- normative
 // -----------------------------------------------------------------------------
+//   A1-A9 ARE CHECKED ANONYMOUSLY. Every arithmetic clause below is observed by
+//       the same two comparisons -- result against the reference, and flags
+//       against the reference -- and NEITHER MESSAGE CARRIES A CLAUSE ID. So a
+//       failure tells you a vector disagreed, not which clause it disagreed
+//       with. That is a property of this rig, not of the clauses, and it is
+//       stated here so the absence of A-ids in failure output is not read as the
+//       A-clauses being unchecked.
+//
 //   A1. RESULT = round( a*b + c ), where the product a*b is NOT rounded before
 //       the addition. There is exactly ONE rounding, applied to the exact
 //       product-sum.
@@ -292,7 +300,12 @@
 //       makes unlimited spending conforming.
 //
 //   H1. `in_ready` MUST NOT depend combinationally on `in_valid`.
-//   H1b. `out_valid` MUST NOT depend combinationally on `out_ready`. The
+//   H1b. REPORTED UNDER H3. The check that observes this -- "out_valid dropped
+//       while the result was unaccepted (H3)", and result or flags changing
+//       under backpressure -- is the same comparison that observes H3, and H3
+//       carries its own never-exercised guard.
+//
+//       `out_valid` MUST NOT depend combinationally on `out_ready`. The
 //       consumer may hold `out_ready` low indefinitely, and a design that waits
 //       for it before asserting `out_valid` deadlocks against a consumer that
 //       waits for `out_valid` before asserting `out_ready`.
@@ -309,15 +322,54 @@
 //       operands stable, until accepted. The checker honours this.
 //   H3. When `out_valid` is high and `out_ready` is low, `out_valid` must
 //       remain high and the result and flags must remain stable.
-//   H4. Results are returned IN ORDER. This is not a reordering unit.
+//   H4. CHECKED, BUT ITS FAILURE NAMES NO CLAUSE. The result comparison walks
+//       the vector set in order, so a reordered result is compared against the
+//       wrong vector and fails as "vector %0d: ... result %08h, reference says
+//       %08h" -- a message carrying no clause id at all. It is neither grouped
+//       under another clause nor unchecked; it is checked anonymously.
+//
+//       Results are returned IN ORDER. This is not a reordering unit.
 //
 // -----------------------------------------------------------------------------
 // RESET
 // -----------------------------------------------------------------------------
 //   R1. `rst_n` is ACTIVE-LOW and SYNCHRONOUS.
 //   R2. While `rst_n` is low, `out_valid` is 0.
-//   R3. Reset discards work in flight; no result from before reset may appear
+//   R3. REPORTED UNDER R2. A result surviving a reset surfaces as "out_valid
+//       asserted while rst_n low (R2)". R3 states the requirement; R2 is where
+//       breaking it is reported.
+//
+//       Reset discards work in flight; no result from before reset may appear
 //       afterwards.
+// -----------------------------------------------------------------------------
+// TOOL REQUIREMENTS -- stated, because a submission cannot pass what it is not told
+// -----------------------------------------------------------------------------
+//   T1. THE SUBMISSION MUST ELABORATE UNDER BOTH slang AND Verilator.
+//       Simulation runs on Verilator; physical synthesis reads the same file
+//       with slang. They disagree about what is legal, so a file one accepts and
+//       the other rejects cannot be built -- and a submission that cannot be
+//       built produces NO PPA NUMBER AT ALL, recorded as a failure rather than
+//       as a missing measurement. One frontend accepting a file does not make
+//       it legal.
+//
+//       THIS TASK CARRIED NO SUCH CLAUSE UNTIL NOW, and it has two recorded
+//       deaths from a slang-only error while telling submitters nothing about
+//       slang being in the path. That is the defect this clause closes.
+//
+//   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at
+//       module scope, before any assignment, loop or $display in that block.
+//
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model, and TWO OF THE TEN ARE THIS TASK'S.
+//
 // -----------------------------------------------------------------------------
 // G. GRADING -- how a submission is judged, and against what
 // -----------------------------------------------------------------------------

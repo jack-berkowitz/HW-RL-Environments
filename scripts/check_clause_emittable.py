@@ -63,6 +63,35 @@ that is a change to where it looks, not to what it computes.
 import os, re, sys, glob
 
 CLAUSE   = re.compile(r"^\s*-?\s*\*\*([A-Z][0-9]+[a-z]?)\b", re.M)
+
+# THE DESIGN HALF, WHICH THIS SCAN COULD NOT SEE UNTIL NOW. analyse() globbed
+# spec/*_spec.md only; 0 of 11 design tasks have one and all 11 have
+# spec/*_iface.sv, so every design task returned NO CONCLUSION for the whole life
+# of this file. It said so honestly -- "the scan did not look; it did not pass" --
+# and that honesty is the only reason the gap was one command away rather than
+# undiscoverable. Two agents cited this checker as a control in an argument
+# without running it. Found by AGENT-DESIGN-43a92055.
+#
+# THREE CONVENTIONS DIFFER, NOT ONE, which is why this is not a wider glob:
+#   stated:    markdown says **T5**;              an interface says `// T5.`
+#   emittable: a verification tb calls fail("R1"); a design tb prints
+#              $display("TEST_RESULT: FAIL: %s", why) with the id inside a STRING,
+#              so any id appearing in any quoted string is emittable.
+CLAUSE_SV = re.compile(r"^\s*//\s*([A-Z][0-9]+[a-z]?)\.", re.M)
+_STRING   = re.compile(r'"([^"\n]*)"')
+_IDTOK    = re.compile(r"\b([A-Z][0-9]+[a-z]?)\b")
+
+
+def ids_in_spec_sv(text):
+    return set(CLAUSE_SV.findall(text))
+
+
+def ids_emittable_sv(text):
+    """Any clause id appearing in a quoted string the testbench can print."""
+    out = set()
+    for lit in _STRING.findall(text):
+        out |= set(_IDTOK.findall(lit))
+    return out
 FAIL_STR = re.compile(r'fail\(\s*"([^"]+)"')
 FAIL_TERN= re.compile(r'fail\(\s*[^,"]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"')
 
@@ -117,30 +146,83 @@ def ids_emittable(text):
 # and it is cheaper than all of them.
 #
 # It records grouping honestly; it does not remove it. What changes is that the
-# credit becomes VISIBLE, so scoring can decide deliberately instead of the
-# grouping being discovered by someone reading a failure message and noticing
-# the wrong letter.
+# credit becomes VISIBLE -- to a submitter reading the spec, and to whoever reads
+# a failure message -- instead of the grouping being discovered by someone
+# noticing the wrong letter.
+#
+# WHAT IT DOES NOT DO, AND THIS SENTENCE USED TO SAY OTHERWISE. It said the credit
+# becomes visible "so scoring can decide deliberately". Scoring cannot decide
+# anything about clauses, because no clause id reaches a results record: the id
+# exists at the fail() site, is printed into a log line, and is dropped there.
+# score.py captures only ^TEST_RESULT: (PASS|FAIL), and I measured 841 run
+# records with ZERO clause-shaped tokens in any verdict field. Reported by
+# AGENT-VERIF-A2, who found their own scan of those records was VACUOUS -- it
+# returned a clean answer about compound ids from a corpus that carries no ids at
+# all -- and said so rather than reporting the clean answer.
+#
+# That is worse than an ordinary imprecision and it belongs to the citation family
+# with the tense moved. A checker cited without being read is recoverable: the
+# artefact exists and one command settles it. A CAPABILITY DESCRIBED BUT ABSENT
+# has nothing to open. A future reader citing this sentence as evidence that
+# scoring accounts for grouping would find no file to be wrong about.
+#
+# If clause ids are ever plumbed into the run record, change this paragraph.
 #
 # The form is deliberately one that reads as English, because a clause a human
 # will not read is a clause that will not be kept true:
 #     "... and is **reported under C4**."
 FAILCALL = re.compile(r'fail\(\s*"([A-Z][0-9]+[a-z]?)"')
-DECLARED = re.compile(r"reported under\s*[`*]*([A-Z][0-9]+[a-z]?)[`*]*", re.I)
+# THE SLASH FORM IS THE HOUSE CONVENTION AND IT USED TO TRUNCATE. This captured
+# ONE id, so "REPORTED UNDER R3/R5" registered R3 and dropped R5 silently -- the
+# truncation yields a well-formed declaration, so nothing looks wrong. Three in
+# the corpus were half-read: d_ca01's R3/R5 and M1/M2, d_nw03's R3/C2. Found by
+# AGENT-DESIGN-43a92055 while annotating.
+#
+# It matters because of what the column claims. "The id this clause names must be
+# emittable" is satisfied by one id; "this grouping is real" is not -- with the
+# second half dropped, an unemittable C2 would pass unnoticed. The corpus already
+# expects pairs, and slashes are the only expressible form: two `reported under`
+# markers in one clause block collide, because the dict is keyed by the enclosing
+# clause and the last write wins.
+DECLARED = re.compile(
+    r"reported under\s*[`*]*([A-Z][0-9]+[a-z]?(?:\s*/\s*[A-Z][0-9]+[a-z]?)*)[`*]*", re.I)
 
-def declarations(text):
+def declarations(text, sv=False):
     """-> {clause id -> id it says reports it}. Keyed by the clause the marker
-       sits inside, which is the clause block it belongs to."""
+       sits inside, which is the clause block it belongs to.
+
+    THE FOURTH CONVENTION. c2636d5 fixed the stated and emittable columns for
+    design tasks and left this one markdown-only, so the block list came back
+    empty on every _iface.sv, the loop body never ran, and this returned {}.
+    Found by AGENT-VERIF-A2 against a live annotation: d_ca01's interface says
+    "are reported under M2 alone" at line 223 and this reported nothing.
+
+    THAT FAILURE HAS NO SENTINEL, which makes it worse than the one it followed.
+    A task that could not be read returns NO CONCLUSION and says so. A task whose
+    declarations could not be READ returns {} -- and {} is exactly what a task
+    with no groupings returns. The honest-artefact luck that made the *_spec.md
+    glob one command away does not hold here; nothing distinguishes "declared
+    nothing" from "could not look".
+
+    DECLARED itself needs no variant -- "reported under M2" matches the same in a
+    comment as in markdown. Only the block boundaries are convention-bound.
+    """
     out = {}
     blocks = []
-    for m in re.finditer(r"^[-*]?\s*\*\*([A-Z][0-9]+[a-z]?)\b", text, re.M):
+    _blockre = CLAUSE_SV if sv else re.compile(r"^[-*]?\s*\*\*([A-Z][0-9]+[a-z]?)\b", re.M)
+    for m in _blockre.finditer(text):
         blocks.append((m.start(), m.group(1)))
     blocks.append((len(text), None))
     for i, (pos, cid) in enumerate(blocks[:-1]):
         if cid is None:
             continue
         d = DECLARED.search(text[pos:blocks[i + 1][0]])
-        if d and d.group(1).upper() != cid.upper():
-            out.setdefault(cid, d.group(1).upper())
+        if d:
+            # Normalise the slash list; a marker naming only its own clause is
+            # not a declaration that it is reported elsewhere.
+            ids = [x.strip().upper() for x in d.group(1).split("/") if x.strip()]
+            if ids and set(ids) != {cid.upper()}:
+                out.setdefault(cid, "/".join(ids))
     return out
 
 
@@ -234,6 +316,46 @@ def shared_messages(text):
     return out
 
 
+def shared_messages_sv(text):
+    """-> [(ids, excerpt)] for a DESIGN testbench, whose convention is different.
+
+    A verification tb names the clause in the call: fail("R1", ...). A design tb
+    prints $display("TEST_RESULT: FAIL: %s", why) and the id lives in the STRING
+    assigned to `why`, so a shared observation is one string naming two or more
+    clause ids. Measured: 6 of 10 design tasks have ZERO fail()/chk() sites, so
+    CHECKCALL saw nothing in them at all.
+    """
+    src = re.sub(r"//[^\n]*", "", text)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    out, seen = [], set()
+    for lit in re.findall(r'"([^"\n]*)"', src):
+        ids = sorted({i for i in CLAUSE_TOK.findall(lit)
+                      if not re.search(r"'[bhd]?\s*%s\b" % i, lit)})
+        if len(ids) >= 2 and tuple(ids) not in seen:
+            seen.add(tuple(ids))
+            out.append((ids, re.sub(r"\s+", " ", lit)[:96]))
+    return out
+
+
+def shared_convention(text):
+    """Which reporting convention this testbench uses, or None if neither.
+
+    WIDENING THE RANGE, WHICH IS THE ONLY REMEDY THAT WORKS HERE. AGENT-VERIF-A2
+    put the general form better than I had it: an in-range failure value becomes
+    recoverable only when the legitimate range has a value it never uses, and a
+    COUNTING instrument has no such value -- every count is a real count, so
+    saturation is the normal condition. analyse() escapes that only because it
+    returns None on a task it could not read instead of an empty set. This does
+    the same for the enumerator: a task whose convention is unreadable reports NO
+    CONCLUSION rather than contributing 0 to a total that looks measured.
+    """
+    if re.search(r"\b(?:fail|chk)\s*\(", text):
+        return "call"
+    if re.search(r'\$display\s*\(\s*"[^"]*TEST_RESULT', text):
+        return "display"
+    return None
+
+
 def shared_blocks(text):
     """-> [(0, sorted ids)] for if/else chains naming two or more clause ids."""
     src = re.sub(r"//[^\n]*", "", text)
@@ -249,26 +371,42 @@ def shared_blocks(text):
 def analyse(task_dir):
     """-> (stated, emittable, unreportable) or None when it could not look."""
     spec = sorted(glob.glob(os.path.join(task_dir, "spec", "*_spec.md")))
+    sv   = not spec and sorted(glob.glob(os.path.join(task_dir, "spec", "*_iface.sv")))
+    if sv:
+        spec = sv
     tb   = sorted(glob.glob(os.path.join(task_dir, "tb", "*_tb.sv")))
     if not spec or not tb:
         return None
+    _stated_of = ids_in_spec_sv    if sv else ids_in_spec
+    _emit_of   = ids_emittable_sv  if sv else ids_emittable
     stated = set()
-    for p in spec: stated |= ids_in_spec(open(p, encoding="utf-8").read())
+    for p in spec: stated |= _stated_of(open(p, encoding="utf-8", errors="replace").read())
     emit = set()
-    for p in tb:   emit   |= ids_emittable(open(p, encoding="utf-8").read())
+    for p in tb:   emit   |= _emit_of(open(p, encoding="utf-8", errors="replace").read())
     if not stated:
         return None
     # X and L sections state what is NOT required and what is deliberately free.
     # They have nothing to emit by construction, so they are not candidates.
-    excl = {c for c in stated if c[0] in "XL"}
+    # G IS EXCLUDED ON THE DESIGN HALF FOR THE SAME REASON X AND L ARE. G1-G5 are
+    # the grading section -- "Correctness is a GATE, not a weighting", "WHAT IS
+    # COMPARED", "WHAT IS NOT AVAILABLE TO OPTIMISE" -- they describe how a
+    # submission is scored, not a requirement a testbench can fail. Listing them
+    # as unreported would put five false candidates in every design task, and
+    # annotating one with "reported under X" would be a false statement.
+    excl = {c for c in stated if c[0] in ("XLG" if sv else "XL")}
     decl = {}
-    for p in spec: decl.update(declarations(open(p, encoding="utf-8").read()))
+    for p in spec: decl.update(declarations(open(p, encoding="utf-8", errors="replace").read(), sv=bool(sv)))
     # A DECLARED clause is not a candidate -- its author has said where it is
     # reported -- but the declaration is CHECKED, not taken. Naming an id that
     # nothing can emit annotates the clause into a hole and is worse than
     # leaving it silent, because it reads as resolved.
-    bad = sorted(c for c, under in decl.items() if under not in emit)
-    good = {c for c, under in decl.items() if under in emit}
+    # EVERY id in a slash list must be emittable, not just the first. A grouping
+    # is only verified if each clause it names can actually be reported.
+    _parts = lambda u: [x for x in u.split("/") if x]
+    bad = sorted(c for c, under in decl.items()
+                 if any(x not in emit for x in _parts(under)))
+    good = {c for c, under in decl.items()
+            if all(x in emit for x in _parts(under))}
     return stated, emit, sorted(stated - emit - excl - good), decl, bad
 
 def self_test():
@@ -313,24 +451,50 @@ def main(argv):
         print("MISSED, not misreported -- see the header for why that is the")
         print("right way for this to fail.\n")
         n = 0
+        unreadable = []
         for d in roots:
             tbs = sorted(glob.glob(os.path.join(d, "tb", "*_tb.sv")))
             if not tbs:
+                unreadable.append((os.path.basename(d.rstrip("/")), "no tb/*_tb.sv"))
                 continue
             rows, msgs = [], []
+            _seen_conv = set()
             for f in tbs:
-                s = open(f, encoding="utf-8").read()
-                rows += shared_blocks(s); msgs += shared_messages(s)
+                s = open(f, encoding="utf-8", errors="replace").read()
+                conv = shared_convention(s)
+                _seen_conv.add(conv)
+                if conv == "call":
+                    rows += shared_blocks(s); msgs += shared_messages(s)
+                elif conv == "display":
+                    msgs += shared_messages_sv(s)
+            if _seen_conv == {None}:
+                unreadable.append((os.path.basename(d.rstrip("/")),
+                                   "no fail()/chk() and no $display TEST_RESULT"))
+                continue
             if rows or msgs:
-                print("  " + os.path.basename(d.rstrip("/")))
+                full = os.path.basename(d.rstrip("/"))
+                # EVERY ROW CARRIES ITS TASK, because a row that is attributable
+                # only by the heading above it is attributable only to whoever
+                # does not filter. AGENT-VERIF-A2 swept this output with a
+                # verification-only grep, which dropped the d_ headings, and two
+                # d_nw01 rows landed under v_dsp02 -- ids that task does not
+                # state, in a commit I had just pushed. They caught it as their
+                # own scope and reported it rather than filing it. The next
+                # person may not, so the shape is removed instead of documented.
+                short = re.match(r"[dv]_[a-z]+[0-9]+", full)
+                short = short.group(0) if short else full
+                print("  " + full)
                 for ids, txt in msgs:
-                    print("      msg   %-16s %s" % (" + ".join(ids), txt))
+                    print("    %-8s msg   %-16s %s" % (short, " + ".join(ids), txt))
                     n += 1
                 for depth, ids in rows:
-                    print("      chain %s" % " + ".join(ids))
+                    print("    %-8s chain %s" % (short, " + ".join(ids)))
                     n += 1
-        print("\n%d shared observation(s)." % n)
-        return 0
+        for name, why in unreadable:
+            print("  %-32s  NO CONCLUSION -- %s." % (name, why))
+            print("  %-32s  The scan did not look; it did not find zero." % "")
+        print("\n%d shared observation(s), %d NO CONCLUSION." % (n, len(unreadable)))
+        return 2 if unreadable else 0
     roots = [a for a in argv[1:] if not a.startswith("-")]
     if not roots:
         roots = sorted(glob.glob("domains/*/*/[dv]_*"))
@@ -355,10 +519,40 @@ def main(argv):
         for c in bad:
             broken.append((name, c, decl[c]))
     for name in noconc:
-        print(f"  {name:<32}  NO CONCLUSION -- no spec/*_spec.md or no tb/*_tb.sv")
+        print(f"  {name:<32}  NO CONCLUSION -- no spec/*_spec.md, no spec/*_iface.sv,")
+        print(f"  {'':<32}  or no tb/*_tb.sv")
         print(f"  {'':<32}  was read. The scan did not look; it did not pass.")
     print(f"\n{looked} task(s) read, {tot} candidate(s). "
           f"{len(noconc)} NO CONCLUSION.")
+    # THE CANDIDATE COLUMN IS NOT A WORK LIST, AND SAYING SO IS PART OF THE
+    # OUTPUT RATHER THAN A CAVEAT SOMEBODY REMEMBERS. AGENT-VERIF-A2 hand-worked
+    # 44 of them and found 20 false positives -- 45%, and 89% on one task. A
+    # clause can appear here because it is genuinely unreportable, or because it
+    # is reported under another clause, or because it is not a check at all.
+    # A regex cannot tell those apart.
+    #
+    # The DECLARATION column below is the exact one: "reported under X" either
+    # names an id something can emit or it does not, and that is decidable. When
+    # this scan is cited as a control, it is that column that is the control.
+    print("  The candidate column is OVER-BROAD -- measured 45% false positives "
+          "on a hand-worked\n  sample. It is not a work list. The REFUSED lines "
+          "below are the exact result.")
+    # AND IT IS ALSO NARROW, IN A WAY THAT MUST NOT BE "FIXED" BY TIGHTENING
+    # emittable. A clause named only inside a compound string -- d_ca01's R5
+    # appears solely in "R3/R5: a LOAD returned the wrong value", never alone --
+    # counts as emittable, and that is CORRECT: it is reported, jointly. Ten such
+    # ids exist corpus-wide, seven on the design half, found by
+    # AGENT-DESIGN-43a92055 and AGENT-VERIF-A2.
+    #
+    # Dropping compound substrings from emittable would move all ten into the
+    # candidate column, which asserts "stated and cannot be reported at all" --
+    # false for every one of them. The real property, that their failure is not
+    # separately ATTRIBUTABLE, is what --shared reports, and it reports all ten.
+    # That is the division this tool was built on: the note above about v_ca06's
+    # D6/D7 says the candidate column cannot contain a grouping by construction.
+    print("  Read it WITH --shared. A clause named only inside a compound "
+          "(\"R3/R5: ...\") is\n  emittable and correctly so; that its failure is "
+          "not separately attributable is\n  what --shared reports, not this column.")
     for name, c, under in broken:
         print(f"REFUSED: {name}: {c} says it is reported under {under}, and no "
               f"fail() can emit {under}.")

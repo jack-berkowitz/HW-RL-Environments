@@ -25,7 +25,12 @@ merely expensive.
 ## What to submit
 
 **One self-contained file** containing only `module axi4_xbar`, with the exact
-port list below. No package, no include, nothing outside the file.
+port list below. It must open with `import axi4_xbar_pkg::*;` — the port list is
+written in that package's types. Beyond that import: no other package, no
+include, nothing outside the module.
+
+**The package is the FIRST code block below and ships with this task.** It is
+compiled for you. Do not paste it into your file and do not redeclare its types.
 
 Two things that account for most failures here:
 
@@ -44,6 +49,241 @@ Everything below is the contract, and all of it is normative. Note that the
 clauses labelled `L`n here are the LIVENESS requirements -- they are not optional
 and not choices. Where the specification leaves something open it says so in
 words at that clause.
+
+First, the package the port list is written in. It is SUPPLIED and compiled for
+you — read it, import it, do not reproduce it.
+
+```systemverilog
+// =============================================================================
+// axi4_xbar_pkg.sv -- TYPE DEFINITIONS SHIPPED WITH THE SPEC (d_nw01)
+// =============================================================================
+// These are part of the problem statement, not a hint. An AXI4 crossbar's ports
+// are five channels in each direction on every port; spelling them out as flat
+// vectors would make the interface unreadable and would force an arbitrary bit
+// ordering into the contract. Named structs are how AXI is written in practice.
+//
+// Field names and ORDER follow the AXI4 specification. The order matters: these
+// are PACKED structs, so the layout is normative and a design that reorders
+// fields is not interoperable even if every field is individually correct.
+//
+// The parameters below are FIXED for this task. They are not free choices.
+// =============================================================================
+
+package axi4_xbar_pkg;
+
+  // ---- fixed geometry -------------------------------------------------------
+  parameter int unsigned ADDR_W   = 32;
+  parameter int unsigned DATA_W   = 64;
+  parameter int unsigned STRB_W   = DATA_W / 8;
+  parameter int unsigned SLV_ID_W = 4;    // ID width presented BY each master
+  parameter int unsigned USER_W   = 1;
+
+  typedef logic [ADDR_W-1:0]   addr_t;
+  typedef logic [DATA_W-1:0]   data_t;
+  typedef logic [STRB_W-1:0]   strb_t;
+  typedef logic [USER_W-1:0]   user_t;
+  typedef logic [SLV_ID_W-1:0] slv_id_t;
+
+  // Slave-side IDs are widened so a response can name the master it belongs to.
+  // The width is fixed at SLV_ID_W + MST_IDX_W rather than varying with the
+  // parameter -- a SystemVerilog package cannot be parameterised, and one fixed
+  // layout has to keep the struct definitions below valid at every legal
+  // configuration.
+  //
+  // *** THIS CAPS NUM_MST AT 4. ***
+  // MST_IDX_W = 2 supplies exactly enough index bits for 4 masters:
+  //     NUM_MST = 2  -> needs 1 bit, one spare
+  //     NUM_MST = 4  -> needs 2 bits, exact
+  //     NUM_MST = 8  -> needs 3 bits, WHICH THIS LAYOUT CANNOT SUPPLY.
+  // At NUM_MST = 8 two masters would share an index, their responses would
+  // misroute, and the failure would look like an ordering bug rather than a
+  // width bug. NUM_MST > 4 is therefore ILLEGAL and the checker aborts on it
+  // rather than producing a plausible-looking wrong answer. Raising the cap
+  // means widening MST_IDX_W here and re-verifying every geometry.
+  parameter int unsigned MST_IDX_W = 2;
+  parameter int unsigned MST_ID_W  = SLV_ID_W + MST_IDX_W;
+  typedef logic [MST_ID_W-1:0] mst_id_t;
+
+  // ---- AXI4 burst / response encodings -------------------------------------
+  parameter logic [1:0] BURST_FIXED = 2'b00;
+  parameter logic [1:0] BURST_INCR  = 2'b01;
+  parameter logic [1:0] BURST_WRAP  = 2'b10;
+
+  parameter logic [1:0] RESP_OKAY   = 2'b00;
+  parameter logic [1:0] RESP_EXOKAY = 2'b01;
+  parameter logic [1:0] RESP_SLVERR = 2'b10;
+  parameter logic [1:0] RESP_DECERR = 2'b11;   // returned for an unmapped address
+
+  // ---- channels, slave side (what a master drives into the crossbar) -------
+  // ===========================================================================
+  // CHANNEL SIGNAL DIRECTIONS — normative, AMBA AXI4 §A3.1
+  // ===========================================================================
+  // WHICH STRUCT A HANDSHAKE SIGNAL LIVES IN FOLLOWS FROM ITS DIRECTION, and
+  // the two are easy to conflate. `b_ready` is the case that catches people:
+  // B is called "the response channel", but BREADY is driven by the MASTER, so
+  // it belongs to the REQUEST struct, not the response.
+  //
+  //   channel  VALID driven by   READY driven by   -> req_t holds   resp_t holds
+  //   AW       master            slave                aw, aw_valid    aw_ready
+  //   W        master            slave                w,  w_valid     w_ready
+  //   B        SLAVE             MASTER               b_ready         b, b_valid
+  //   AR       master            slave                ar, ar_valid    ar_ready
+  //   R        SLAVE             MASTER               r_ready         r, r_valid
+  //
+  // Authority: AMBA AXI4 §A3.1 fixes the directions. The grouping into these
+  // two structs follows from them and is not a free choice.
+  //
+  // WHY THIS IS STATED RATHER THAN LEFT TO BE READ OFF THE STRUCTS. Two
+  // independent submissions reached for `slv_resp_t.b_ready` and failed to
+  // elaborate, losing their entire result (FINDINGS.md F35, F38). That is a
+  // packaging-lookup error, and packaging is on NONE of the axes this task
+  // measures -- outstanding-ID tracking, per-ID response ordering, deadlock
+  // freedom, arbitration. A barrier that is not on the measured axes and costs
+  // 100 % of the score is noise, and removing it makes none of those four
+  // easier.
+  // ===========================================================================
+
+  typedef struct packed {
+    slv_id_t      id;
+    addr_t        addr;
+    logic [7:0]   len;      // beats - 1
+    logic [2:0]   size;     // log2(bytes per beat)
+    logic [1:0]   burst;
+    logic         lock;
+    logic [3:0]   cache;
+    logic [2:0]   prot;
+    logic [3:0]   qos;
+    logic [3:0]   region;
+    logic [5:0]   atop;     // tied 0 for this task; ATOPs are out of scope
+    user_t        user;
+  } slv_aw_t;
+
+  typedef struct packed {
+    data_t        data;
+    strb_t        strb;
+    logic         last;
+    user_t        user;
+  } w_t;
+
+  typedef struct packed {
+    slv_id_t      id;
+    logic [1:0]   resp;
+    user_t        user;
+  } slv_b_t;
+
+  typedef struct packed {
+    slv_id_t      id;
+    addr_t        addr;
+    logic [7:0]   len;
+    logic [2:0]   size;
+    logic [1:0]   burst;
+    logic         lock;
+    logic [3:0]   cache;
+    logic [2:0]   prot;
+    logic [3:0]   qos;
+    logic [3:0]   region;
+    user_t        user;
+  } slv_ar_t;
+
+  typedef struct packed {
+    slv_id_t      id;
+    data_t        data;
+    logic [1:0]   resp;
+    logic         last;
+    user_t        user;
+  } slv_r_t;
+
+  // Aggregated request / response, one per port. Field order is normative.
+  typedef struct packed {
+    slv_aw_t  aw;   logic aw_valid;
+    w_t       w;    logic w_valid;
+    logic     b_ready;
+    slv_ar_t  ar;   logic ar_valid;
+    logic     r_ready;
+  } slv_req_t;
+
+  typedef struct packed {
+    logic     aw_ready;
+    logic     ar_ready;
+    logic     w_ready;
+    logic     b_valid;  slv_b_t b;
+    logic     r_valid;  slv_r_t r;
+  } slv_resp_t;
+
+  // ---- channels, master side (what the crossbar drives at a slave) ---------
+  // Identical to the slave-side channels except the id field is widened. The
+  // upper MST_IDX_W bits name the originating master; the lower SLV_ID_W bits
+  // are the id that master issued and are what must be presented back to it.
+  typedef struct packed {
+    mst_id_t      id;
+    addr_t        addr;
+    logic [7:0]   len;
+    logic [2:0]   size;
+    logic [1:0]   burst;
+    logic         lock;
+    logic [3:0]   cache;
+    logic [2:0]   prot;
+    logic [3:0]   qos;
+    logic [3:0]   region;
+    logic [5:0]   atop;
+    user_t        user;
+  } mst_aw_t;
+
+  typedef struct packed {
+    mst_id_t      id;
+    logic [1:0]   resp;
+    user_t        user;
+  } mst_b_t;
+
+  typedef struct packed {
+    mst_id_t      id;
+    addr_t        addr;
+    logic [7:0]   len;
+    logic [2:0]   size;
+    logic [1:0]   burst;
+    logic         lock;
+    logic [3:0]   cache;
+    logic [2:0]   prot;
+    logic [3:0]   qos;
+    logic [3:0]   region;
+    user_t        user;
+  } mst_ar_t;
+
+  typedef struct packed {
+    mst_id_t      id;
+    data_t        data;
+    logic [1:0]   resp;
+    logic         last;
+    user_t        user;
+  } mst_r_t;
+
+  typedef struct packed {
+    mst_aw_t  aw;   logic aw_valid;
+    w_t       w;    logic w_valid;
+    logic     b_ready;
+    mst_ar_t  ar;   logic ar_valid;
+    logic     r_ready;
+  } mst_req_t;
+
+  typedef struct packed {
+    logic     aw_ready;
+    logic     ar_ready;
+    logic     w_ready;
+    logic     b_valid;  mst_b_t b;
+    logic     r_valid;  mst_r_t r;
+  } mst_resp_t;
+
+  // ---- address map ----------------------------------------------------------
+  // One rule per master port. A request whose address falls in [start, end) is
+  // routed to `mst_port`. Ranges do not overlap.
+  typedef struct packed {
+    logic [$clog2(8)-1:0] mst_port;
+    addr_t                start_addr;
+    addr_t                end_addr;
+  } xbar_rule_t;
+
+endpackage
+```
 
 ```systemverilog
 // =============================================================================
@@ -122,7 +362,14 @@ words at that clause.
 //       len+1 R beats with the last carrying `last`.
 //       *** A dropped unmapped transaction is a deadlock, because the master
 //       waits forever for a response that is never coming. ***
-//   D3. Decode is on the address only. QoS, cache, prot and region are carried
+//   D3. CHECKED. The four fields are driven as a non-zero function of the
+//       ADDRESS and recomputed at the slave, so nothing has to be correlated:
+//       the address arrives unmodified by D1, so what the master must have
+//       sent follows from what the slave sees. Non-zero deliberately -- a
+//       design that ties these fields to 0 matches a checker that also drives
+//       0, which is the one value the violation reproduces for free.
+//
+//       Decode is on the address only. QoS, cache, prot and region are carried
 //       through unmodified and never affect routing.
 //
 // -----------------------------------------------------------------------------
@@ -184,10 +431,25 @@ words at that clause.
 // HANDSHAKE
 // -----------------------------------------------------------------------------
 //   Standard AXI4 valid/ready on all five channels of all ports.
-//   H1. No *_ready may depend combinationally on the corresponding *_valid.
+//   H1. CHECKED, in cycle. The checker toggles a master's valid BETWEEN clock
+//       edges and requires the corresponding ready not to move: a
+//       combinational path shows up immediately, a registered one cannot.
+//       Probed on AW, AR and W. Each probe carries a vacuity guard, because a
+//       ready that is low whatever the valid does could not have moved either
+//       way and "it did not move" would prove nothing.
+//
+//       No *_ready may depend combinationally on the corresponding *_valid.
 //   H2. Once a master asserts a valid it holds the channel payload stable until
 //       ready. The checker honours this.
-//   H3. A crossbar output holding valid with ready low must keep valid high and
+//   H3. CHECKED on every output the design drives: R and B toward the masters,
+//       AW, AR and W toward the slaves. Whenever a valid was high with its
+//       ready low, the next cycle must still show that valid high and the same
+//       payload. The antecedent is counted PER CHANNEL and a zero on any one
+//       of the five fails -- a stability check whose antecedent never held is
+//       indistinguishable from one that passed, and an aggregate count would
+//       hide a channel that never fired behind the other four.
+//
+//       A crossbar output holding valid with ready low must keep valid high and
 //       the payload stable.
 //
 // -----------------------------------------------------------------------------
@@ -222,7 +484,19 @@ words at that clause.
 //       refuses a second ID fails here. O2 grants you the right to RETURN
 //       different IDs out of order; it does not grant the right to REFUSE them.
 //
-//   C3. RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
+//   C3. CHECKED, AT REST, IN BOTH DIRECTIONS. A ceiling is violated by doing
+//       MORE, so ordinary stimulus never reveals it -- an over-buffering design
+//       looks identical on every phase that measures throughput, ordering or
+//       latency. It is visible only at rest. Two phases: masters refuse
+//       r_ready while the slaves keep answering, then the slaves refuse
+//       w_ready while the masters keep pushing. Every beat the crossbar
+//       accepts is one it cannot deliver, so what it swallows before it stops
+//       IS its internal storage. Both phases carry a pressurisation witness,
+//       because holding zero is the correct answer for a design that
+//       backpressures instead of buffering and is also what a phase that
+//       offered nothing would report.
+//
+//       RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
 //       and 4 W beats per master port** in flight inside the crossbar. Storage
 //       beyond that is NON-CONFORMING, not a design choice.
 //
@@ -271,16 +545,20 @@ words at that clause.
 // -----------------------------------------------------------------------------
 // LATENCY
 // -----------------------------------------------------------------------------
-//   NOT CONSTRAINED AND NOT CHECKED. Pipeline as deeply as you like; added
-//   latency is never penalised. Note that this is a statement about DELAY, not
-//   about CAPACITY -- C1 and C2 above are requirements and are checked.
+//   PIPELINE DEPTH IS FREE. Pipeline as deeply as you like; added latency is
+//   never penalised. Note that this is a statement about DELAY, not about
+//   CAPACITY -- C1 and C2 above are requirements and are checked.
 //
 // -----------------------------------------------------------------------------
 // RESET
 // -----------------------------------------------------------------------------
 //   rst_n is ACTIVE-LOW and SYNCHRONOUS.
 //   R1. While rst_n is low every output valid is 0.
-//   R2. Reset discards all in-flight transactions. After release the crossbar
+//   R2. REPORTED UNDER R1. A response emitted from before the reset surfaces as
+//       "response valid asserted while rst_n low (R1)". R2 states the
+//       requirement; R1 is where breaking it is reported.
+//
+//       Reset discards all in-flight transactions. After release the crossbar
 //       starts clean; no response from before reset may be emitted.
 //
 // -----------------------------------------------------------------------------
@@ -291,12 +569,38 @@ words at that clause.
 //       slang. A file one accepts and the other rejects cannot be built, and a
 //       submission that cannot be built produces no PPA number at all -- see G1.
 //   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
-//       BLOCK -- SystemVerilog forbids a declaration after a statement inside a
-//       block, and the error text names neither.
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at module
+//       scope, before any assignment, loop or $display in that block.
+//   
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model. An earlier version of this clause called it
+//       "the most common compile failure here", which reads as though the failure
+//       is VISIBLE. Under Verilator it is not.
 //   T3. THE MODULE MUST BE NAMED `axi4_xbar` with the exact port list below,
 //       including port names.
-//   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to
-//       anything outside itself.
+//   T4. ONE SELF-CONTAINED FILE, PLUS THE SUPPLIED PACKAGE. Submit exactly one
+//       file containing only `module axi4_xbar`. It MUST open with
+//       `import axi4_xbar_pkg::*;`: the port list below is written in that
+//       package's types and cannot be expressed without them. The package
+//       ships with this task, is part of the problem statement, and is
+//       compiled for you -- do not paste it into your file and do not
+//       redeclare its types. Beyond that one import: no other package, no
+//       include, no reference to anything outside itself, and nothing declared
+//       outside the module.
+//
+//       THIS CLAUSE USED TO FORBID THE IMPORT IT NOW REQUIRES. It read "No
+//       package, no include", while the module immediately below it opened
+//       with `import axi4_xbar_pkg::*;` and the port list was written in
+//       package types. Every submission disobeyed T4 as written, because the
+//       alternative was not matching the port list. A normative clause that
+//       every correct answer must break is a defect in the clause.
 // -----------------------------------------------------------------------------
 // G. GRADING -- how a submission is judged, and against what
 // -----------------------------------------------------------------------------

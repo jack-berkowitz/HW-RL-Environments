@@ -261,6 +261,11 @@ module fp_multifmt_fma_tb #(
   logic [WIDTH-1:0] held_res;
   logic [4:0]       held_fl;
   logic             was_holding;
+  // H1's antecedent, counted. It was a bare signal, so the stability clause
+  // could stop being exercised and nothing would say so -- check_fired had no
+  // artefact to read on the one clause L4's licence bears on.
+  int unsigned      h1_stall_offered;   // ov && !orr   -- a result offered while stalled
+  int unsigned      h1_antecedent;      // was_holding && ov -- the clause's antecedent
 
   always @(posedge clk) if (rst_n) begin
     cyc <= cyc + 1;
@@ -289,6 +294,8 @@ module fp_multifmt_fma_tb #(
     logic [287:0] w;
 
     // H1: while a result is offered and not taken, it must not move.
+    if (ov && !orr)        h1_stall_offered++;
+    if (was_holding && ov) h1_antecedent++;
     if (was_holding && ov && (held_res !== res || held_fl !== fl))
       note_fail($sformatf("result_o/flags_o moved while out_valid_o held and out_ready_i low (cycle %0d)", cyc));
     was_holding <= ov && !orr;
@@ -344,6 +351,7 @@ module fp_multifmt_fma_tb #(
     checks = 0; fails = 0; issued = 0; retired = 0; cyc = 0;
     lat_sum = 0; lat_min = 32'hFFFF_FFFF; lat_max = 0; holes = 0;
     bp_on = 0; was_holding = 0; first_fail = "";
+    h1_stall_offered = 0; h1_antecedent = 0;
     for (i = 0; i < 3; i++) begin cov_fmt[i]=0; cov_vecf[i]=0; cov_sub[i]=0; cov_distinct[i]=0; cov_band[i]=0; cov_band_combo[i]='0; end
     for (i = 0; i < 5; i++) cov_rnd[i]=0;
     cov_nx=0; cov_of=0; cov_uf=0; cov_nv=0; cov_zero=0; cov_inf=0; cov_nan=0;
@@ -458,6 +466,9 @@ module fp_multifmt_fma_tb #(
     $display("METRIC: flags nx=%0d of=%0d uf=%0d nv=%0d subn=%0d/%0d/%0d",
              cov_nx, cov_of, cov_uf, cov_nv, cov_sub[0], cov_sub[1], cov_sub[2]);
 
+    // FIRED, at column 0 in the format string -- check_fired requires that.
+    $display("FIRED d_dsp03.h1_stall_offered %0d", h1_stall_offered);
+    $display("FIRED d_dsp03.h1_antecedent %0d", h1_antecedent);
     if (fails == 0 && holes == 0) $display("TEST_RESULT: PASS");
     else begin
       if (fails > 8) $display("[FAIL] ... and %0d more", fails - 8);

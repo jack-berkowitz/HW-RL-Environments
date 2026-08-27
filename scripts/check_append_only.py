@@ -87,11 +87,52 @@ import re
 import subprocess
 import sys
 
-HEAD = re.compile(r"^#{1,6} .*$", re.M)
+# BOTH HALVES OF THIS ARE LOAD-BEARING, AND NEITHER WAS WRONG YESTERDAY.
+#
+# The anchor used to be r"^#{1,6} .*$", which cannot see an indented heading.
+# AGENT-VERIF-A2 found the same column-0 assumption in four checkers at once --
+# ^FIRED, ^%Warning-, ^\| and this one -- and the point that matters is WHY all
+# four were correct: Verilator emits at column 0, $display emits at column 0,
+# markdown headings sit at column 0. That is a property of today's INPUT, not of
+# the method, and every one of them fails silently when it stops holding, because
+# a missed heading reads as ABSENT and absent is a state real documents occupy.
+#
+# But relaxing the anchor alone makes this checker WORSE, which is why the fence
+# stripping is here too. Measured on the declared set before changing anything:
+# relaxing by itself introduced exactly one new match, and it was false --
+#     '    # Recompute with scripts/task_text_hash.py at the point of use.'
+# an indented comment inside a fenced code block in inbox/FINDINGS.agent2.md,
+# which would have been read as a section heading and could flip an append-only
+# verdict. The fence hazard already existed for column-0 comments and measured
+# zero instances today -- the same property-of-the-input luck, one layer down.
+#
+# THE RELAXATION IS BOUNDED AT THREE SPACES, WHICH IS NOT ARBITRARY. CommonMark
+# allows an ATX heading up to 3 leading spaces; at 4 or more the line is an
+# INDENTED CODE BLOCK and is not a heading at all. A2's proposed r"^[ \t]*#{1,6}"
+# overshoots that boundary, and it is not theoretical -- measured on the declared
+# set, it newly matched
+#     '    # Recompute with scripts/task_text_hash.py at the point of use.'
+# which is 4-space-indented code in inbox/FINDINGS.agent2.md, not a heading, and
+# survives fence stripping because it is an indented block rather than a ``` one.
+# A tab is worth 4 columns in markdown, so tabs are excluded for the same reason.
+# So: skip fenced blocks, then match a heading at 0-3 spaces, per the actual rule.
+HEAD = re.compile(r"^ {0,3}#{1,6} .*$", re.M)
+
+
+def _outside_fences(text):
+    """The document with ``` fenced blocks removed, so code is never a heading."""
+    out, in_fence = [], False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            out.append(line)
+    return "\n".join(out)
 
 
 def headings(text):
-    return [h.strip() for h in HEAD.findall(text)]
+    return [h.strip() for h in HEAD.findall(_outside_fences(text))]
 
 
 def at_ref(path, ref):

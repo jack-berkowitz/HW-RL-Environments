@@ -74,7 +74,14 @@
 //       len+1 R beats with the last carrying `last`.
 //       *** A dropped unmapped transaction is a deadlock, because the master
 //       waits forever for a response that is never coming. ***
-//   D3. Decode is on the address only. QoS, cache, prot and region are carried
+//   D3. CHECKED. The four fields are driven as a non-zero function of the
+//       ADDRESS and recomputed at the slave, so nothing has to be correlated:
+//       the address arrives unmodified by D1, so what the master must have
+//       sent follows from what the slave sees. Non-zero deliberately -- a
+//       design that ties these fields to 0 matches a checker that also drives
+//       0, which is the one value the violation reproduces for free.
+//
+//       Decode is on the address only. QoS, cache, prot and region are carried
 //       through unmodified and never affect routing.
 //
 // -----------------------------------------------------------------------------
@@ -136,10 +143,25 @@
 // HANDSHAKE
 // -----------------------------------------------------------------------------
 //   Standard AXI4 valid/ready on all five channels of all ports.
-//   H1. No *_ready may depend combinationally on the corresponding *_valid.
+//   H1. CHECKED, in cycle. The checker toggles a master's valid BETWEEN clock
+//       edges and requires the corresponding ready not to move: a
+//       combinational path shows up immediately, a registered one cannot.
+//       Probed on AW, AR and W. Each probe carries a vacuity guard, because a
+//       ready that is low whatever the valid does could not have moved either
+//       way and "it did not move" would prove nothing.
+//
+//       No *_ready may depend combinationally on the corresponding *_valid.
 //   H2. Once a master asserts a valid it holds the channel payload stable until
 //       ready. The checker honours this.
-//   H3. A crossbar output holding valid with ready low must keep valid high and
+//   H3. CHECKED on every output the design drives: R and B toward the masters,
+//       AW, AR and W toward the slaves. Whenever a valid was high with its
+//       ready low, the next cycle must still show that valid high and the same
+//       payload. The antecedent is counted PER CHANNEL and a zero on any one
+//       of the five fails -- a stability check whose antecedent never held is
+//       indistinguishable from one that passed, and an aggregate count would
+//       hide a channel that never fired behind the other four.
+//
+//       A crossbar output holding valid with ready low must keep valid high and
 //       the payload stable.
 //
 // -----------------------------------------------------------------------------
@@ -174,7 +196,19 @@
 //       refuses a second ID fails here. O2 grants you the right to RETURN
 //       different IDs out of order; it does not grant the right to REFUSE them.
 //
-//   C3. RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
+//   C3. CHECKED, AT REST, IN BOTH DIRECTIONS. A ceiling is violated by doing
+//       MORE, so ordinary stimulus never reveals it -- an over-buffering design
+//       looks identical on every phase that measures throughput, ordering or
+//       latency. It is visible only at rest. Two phases: masters refuse
+//       r_ready while the slaves keep answering, then the slaves refuse
+//       w_ready while the masters keep pushing. Every beat the crossbar
+//       accepts is one it cannot deliver, so what it swallows before it stops
+//       IS its internal storage. Both phases carry a pressurisation witness,
+//       because holding zero is the correct answer for a design that
+//       backpressures instead of buffering and is also what a phase that
+//       offered nothing would report.
+//
+//       RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
 //       and 4 W beats per master port** in flight inside the crossbar. Storage
 //       beyond that is NON-CONFORMING, not a design choice.
 //
@@ -223,16 +257,20 @@
 // -----------------------------------------------------------------------------
 // LATENCY
 // -----------------------------------------------------------------------------
-//   NOT CONSTRAINED AND NOT CHECKED. Pipeline as deeply as you like; added
-//   latency is never penalised. Note that this is a statement about DELAY, not
-//   about CAPACITY -- C1 and C2 above are requirements and are checked.
+//   PIPELINE DEPTH IS FREE. Pipeline as deeply as you like; added latency is
+//   never penalised. Note that this is a statement about DELAY, not about
+//   CAPACITY -- C1 and C2 above are requirements and are checked.
 //
 // -----------------------------------------------------------------------------
 // RESET
 // -----------------------------------------------------------------------------
 //   rst_n is ACTIVE-LOW and SYNCHRONOUS.
 //   R1. While rst_n is low every output valid is 0.
-//   R2. Reset discards all in-flight transactions. After release the crossbar
+//   R2. REPORTED UNDER R1. A response emitted from before the reset surfaces as
+//       "response valid asserted while rst_n low (R1)". R2 states the
+//       requirement; R1 is where breaking it is reported.
+//
+//       Reset discards all in-flight transactions. After release the crossbar
 //       starts clean; no response from before reset may be emitted.
 //
 // -----------------------------------------------------------------------------
@@ -243,12 +281,38 @@
 //       slang. A file one accepts and the other rejects cannot be built, and a
 //       submission that cannot be built produces no PPA number at all -- see G1.
 //   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
-//       BLOCK -- SystemVerilog forbids a declaration after a statement inside a
-//       block, and the error text names neither.
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at module
+//       scope, before any assignment, loop or $display in that block.
+//   
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model. An earlier version of this clause called it
+//       "the most common compile failure here", which reads as though the failure
+//       is VISIBLE. Under Verilator it is not.
 //   T3. THE MODULE MUST BE NAMED `axi4_xbar` with the exact port list below,
 //       including port names.
-//   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to
-//       anything outside itself.
+//   T4. ONE SELF-CONTAINED FILE, PLUS THE SUPPLIED PACKAGE. Submit exactly one
+//       file containing only `module axi4_xbar`. It MUST open with
+//       `import axi4_xbar_pkg::*;`: the port list below is written in that
+//       package's types and cannot be expressed without them. The package
+//       ships with this task, is part of the problem statement, and is
+//       compiled for you -- do not paste it into your file and do not
+//       redeclare its types. Beyond that one import: no other package, no
+//       include, no reference to anything outside itself, and nothing declared
+//       outside the module.
+//
+//       THIS CLAUSE USED TO FORBID THE IMPORT IT NOW REQUIRES. It read "No
+//       package, no include", while the module immediately below it opened
+//       with `import axi4_xbar_pkg::*;` and the port list was written in
+//       package types. Every submission disobeyed T4 as written, because the
+//       alternative was not matching the port list. A normative clause that
+//       every correct answer must break is a defect in the clause.
 // -----------------------------------------------------------------------------
 // G. GRADING -- how a submission is judged, and against what
 // -----------------------------------------------------------------------------

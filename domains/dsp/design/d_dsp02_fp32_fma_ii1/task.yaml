@@ -4,6 +4,13 @@ module: fp32_fma_ii1
 domain: dsp
 type: design
 catalog: TASK_CATALOG.md
+# THE TASK'S OWN declaration, top level. The nested task_text_hash fields
+# further down belong to HISTORICAL RECORDS -- which text a past result ran
+# against, which text a candidate set was solicited against -- and are not
+# this. A fixer that took first-match-wins overwrote one of those on
+# 2026-08-26 and made the file assert that a past measurement used today's
+# text; restored from git, and this field exists so the two are distinct.
+task_text_hash: a3dfc6d107b61503
 
 # CLASS A, not B. The catalog listed this as Class B, which was stale from when
 # the task was planned around a locally-written Python model. What it actually

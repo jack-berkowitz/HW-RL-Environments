@@ -114,6 +114,35 @@ the line, and the reader sees a healthy number. If two things fire, they get two
 names.
 """
 import re
+
+# THE ANCHOR IS THE FORMAT'S OWN RULE -- NOT COLUMN 0, AND NOT "ANY INDENT".
+# Every regex in this file was once `^`-anchored and every one was correct only
+# because its input happens to begin at column 0. That is a property of the
+# INPUT, not of the method. The same defect cost two rows in a corpus sweep: a
+# `task_text_hash:` field indented by two and another by four read as ABSENT, a
+# state 14 tasks legitimately occupy, so the miss landed in a plausible bucket
+# rather than an implausible one and announced nothing.
+#
+# The first fix was `^[ \t]*` -- ANY indent -- and it was wrong in the other
+# direction: it replaced an accidental bound with no bound at all, which is the
+# same mistake with the sign flipped. AGENT-PPA-2381f2fe caught it on the
+# markdown side: CommonMark allows 0-3 spaces before an ATX heading, and at four
+# or more the line is an INDENTED CODE BLOCK -- not a heading, not a table row.
+# A tab counts as four columns, so a tab is code too.
+#
+# AGENT-DESIGN-43a92055's remedy is A CASE LIST THAT FAILS WHEN THE SCOPE
+# NARROWS. A case list that accepts everything cannot fail that way either, so
+# the bound below is taken from the input format and --selftest asserts BOTH
+# directions: the widest legal form is accepted and the first illegal one is
+# refused.
+#
+# THIS TOOL'S INPUT IS PROGRAM OUTPUT, NOT MARKDOWN, so its bound is tighter
+# than CommonMark's: exactly column 0. Measured, not assumed -- all 120 FIRED
+# emitters across the eleven testbenches are `$display("FIRED ...` with no
+# leading space in the format string. An indented `FIRED` line is therefore not
+# a reading; it is a log excerpt quoted inside prose, and this repo holds four
+# such lines in its own documents. Accepting them would invent counts.
+
 import sys
 
 LINE = re.compile(r"^FIRED\s+([A-Za-z_][\w.:-]*)\s+(\d+)\s*$", re.M)
@@ -136,7 +165,37 @@ def check(text, required=()):
     return counts, dup, zero, absent
 
 
+# --selftest: the case list the header promises. Each case is (text, accepted?)
+# and BOTH directions are asserted -- the legal form parses, the first illegal
+# form does not. The rejection cases are the ones that would have caught the
+# `^[ \t]*` overshoot, and they are taken from lines that really occur in this
+# repo's own documents.
+_CASES = [
+    ("FIRED a.b 3",                    [("a.b", "3")], "column 0, the only legal form"),
+    ("x\nFIRED a.b 0\ny",              [("a.b", "0")], "zero is a reading, not an absence"),
+    ("FIRED v_ai02.cov_beats 12",      [("v_ai02.cov_beats", "12")], "real emitter shape"),
+    ("    FIRED a.b 3",                [], "4-space: a log excerpt in prose, not a reading"),
+    ("  FIRED a.b 3",                  [], "2-space: same, and CommonMark's 0-3 does not apply"),
+    ("\tFIRED a.b 3",                  [], "tab: same"),
+    ("FIRED a.b 3 -> OK, inert",       [], "trailing prose: not a bare reading"),
+    ("xFIRED a.b 3",                   [], "not at a line start at all"),
+]
+
+
+def selftest():
+    bad = 0
+    for text, want, why in _CASES:
+        got = LINE.findall(text)
+        ok = got == want
+        bad += not ok
+        print("  %-4s %-46s %s" % ("ok" if ok else "FAIL", repr(text)[:46], why))
+    print("%s: %d/%d" % ("OK" if not bad else "REFUSED", len(_CASES) - bad, len(_CASES)))
+    return 2 if bad else 0
+
+
 def main(argv):
+    if argv and argv[0] == "--selftest":
+        return selftest()
     if not argv or argv[0] in ("-h", "--help"):
         sys.exit(__doc__.strip().splitlines()[0])
     log, required = argv[0], []

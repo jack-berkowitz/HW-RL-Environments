@@ -40,6 +40,29 @@
 // not a parameter, so 64 exceeds it at every configuration and the expected
 // verdict is the same at both. The two configurations are run to show the result
 // is not a configuration artefact.
+//
+// ---------------------------------------------------------------------------
+// POSTSCRIPT, 2026-08-26. THE PREDICTION ABOVE IS NOW FALSE, AND IT WAS RIGHT
+// WHEN IT WAS WRITTEN. Read in that order or the file reads as a contradiction.
+//
+// It predicted PASS at both configurations, and it passed, and that PASS was
+// the evidence that C3 was a stated clause the harness did not enforce. The
+// clause is now enforced: the scoring testbench has a ceiling phase that stalls
+// every master, lets the slaves keep answering, and counts what the crossbar
+// swallows. This control now FAILS 0/16, naming C3, holding 128 R beats against
+// an allowance of 4 per master port.
+//
+// So the verdict flipped BY CONSTRUCTION, not by discovery. Nothing about this
+// file changed; the check it was built to prove missing now exists, and this
+// control is what validated it. Its job changed from evidence-of-a-gap to
+// regression-control for the check that closed the gap.
+//
+// Its W-channel twin, nc_j_overbuffered_w, was written at the same time and for
+// a reason worth stating: C3 bounds R beats AND W beats, and a ceiling check
+// covering only R would have left half the clause unenforced while looking
+// enforced from the results -- the same defect this control was built to expose,
+// one level up.
+// ---------------------------------------------------------------------------
 // ============================================================================
 `timescale 1ns/1ps
 

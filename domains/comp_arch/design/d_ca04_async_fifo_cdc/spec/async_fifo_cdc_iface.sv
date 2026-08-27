@@ -51,7 +51,26 @@
 // -----------------------------------------------------------------------------
 // WHAT THE FIFO MUST DO
 // -----------------------------------------------------------------------------
-//   B1. STORAGE BEYOND THE FIFO IS BOUNDED. The FIFO holds 2**LOG_DEPTH
+//   B1. CHECKED, AT REST. The capacity phase stops the reader, offers writes
+//       until the design has refused for 64 consecutive cycles, and counts what
+//       it accepted. With nothing draining, that count IS the design's total
+//       storage, and it is compared against the ceiling below.
+//
+//       IT WAS NOT ALWAYS CHECKED, and the reason given is worth keeping
+//       because the reason was correct -- about a different number. Occupancy
+//       sampled on `wr_clk` while both sides run sees a stale `rd_idx` and
+//       OVERSTATES, so a bound asserted on it would fail conforming designs.
+//       That is true of the running occupancy estimate, which is COVERAGE ONLY
+//       and must stay that way. It is NOT true of the at-rest count: with the
+//       reader stopped and the writer refused, the synchroniser has converged
+//       and the read pointer has not moved from where it started. The
+//       testbench carries two occupancy numbers; the objection was written
+//       about the live one and applied to both.
+//
+//       (d_nw03's B1 is also enforced; the same letter is still not the same
+//       status across tasks.)
+//
+//       STORAGE BEYOND THE FIFO IS BOUNDED. The FIFO holds 2**LOG_DEPTH
 //       entries. A design may add **at most 4 further beats of storage in
 //       total** across both clock domains -- pipeline or output registers on
 //       the read side, input registration on the write side. Storage beyond
@@ -91,7 +110,13 @@
 //       on the strength of a pointer value that is still in flight through the
 //       synchronisers -- that is the classic false-empty/false-full bug and it
 //       only appears at particular clock ratios.
-//   C6. CORRECT AT ANY RATIO. All of the above hold for arbitrary, unrelated
+//   C6. NOT A SEPARATE CHECK -- IT IS THE CONDITION THE OTHERS RUN UNDER. There
+//       is no C6 message and there should not be one: the clock-ratio phases are
+//       the axis along which every other check is repeated, so a design that is
+//       correct only at one ratio fails whichever clause it actually breaks, at
+//       the ratio that breaks it. Stated so C6 is not read as unchecked.
+//
+//       CORRECT AT ANY RATIO. All of the above hold for arbitrary, unrelated
 //       `wr_clk` and `rd_clk` frequencies and phases. The checker exercises
 //       fast-write/slow-read, slow-write/fast-read, near-equal-but-drifting,
 //       and integer ratios in both directions.
@@ -120,7 +145,13 @@
 //
 //   R1. THE TWO RESETS ARE ASSERTED SIMULTANEOUSLY. This is a power-on reset:
 //       both domains go into reset together. You may rely on that.
-//   R2. DE-ASSERTION IS PER-DOMAIN AND NOT SIMULTANEOUS. `wr_rst_n` is released
+//   R2. REPORTED UNDER R4/R5. A design that mishandles staggered release
+//       surfaces as R4 -- wr_ready did not assert within 16 wr_clk cycles of
+//       reset release -- or as R5, rd_valid asserted while rd_rst_n was still
+//       low. R2 states the condition; R4/R5 is where failing to tolerate it is
+//       reported.
+//
+//       DE-ASSERTION IS PER-DOMAIN AND NOT SIMULTANEOUS. `wr_rst_n` is released
 //       synchronously to `wr_clk` and `rd_rst_n` synchronously to `rd_clk`, so
 //       one side can leave reset several cycles before the other. Your design
 //       must tolerate that: the side that comes out first must not emit or
@@ -153,8 +184,20 @@
 //       slang. A file one accepts and the other rejects cannot be built, and a
 //       submission that cannot be built produces no PPA number at all -- see G1.
 //   T2. DECLARE EVERY VARIABLE BEFORE THE FIRST STATEMENT IN ITS PROCEDURAL
-//       BLOCK -- SystemVerilog forbids a declaration after a statement inside a
-//       block, and the error text names neither.
+//       BLOCK. slang enforces the LRM rule that every declaration in a block
+//       precedes every statement in that block, and VERILATOR DOES NOT DIAGNOSE
+//       THE VIOLATION. The file therefore simulates clean and then yields NO PPA
+//       NUMBER AT ALL -- it reads as a missing measurement rather than as a
+//       rejected submission, which is the worst shape a failure can take here.
+//       Declare every variable at the top of the block that uses it, or at module
+//       scope, before any assignment, loop or $display in that block.
+//   
+//       MEASURED HISTORY, NOT CAUTION. Ten run records across four tasks in this
+//       repository were killed by exactly
+//           error: declaration must come before all statements in the block
+//       nine of them from one model. An earlier version of this clause called it
+//       "the most common compile failure here", which reads as though the failure
+//       is VISIBLE. Under Verilator it is not.
 //   T3. THE MODULE MUST BE NAMED `async_fifo_cdc` with the exact port list below,
 //       including port names.
 //   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to

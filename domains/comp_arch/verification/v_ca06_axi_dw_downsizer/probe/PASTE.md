@@ -207,7 +207,19 @@ Let `size` and `len` be the upstream request's, and let
 ## 3. Burst types that are refused
 
 - **C1.** A **`WRAP`** burst is refused.
+
+*Which bursts are refused is observed through the RESPONSE to a refusal,
+  so a violation of this clause is **reported under C4**. A submission that
+  checks C4 is credited with this clause; that is deliberate and recorded
+  here so it is visible rather than discovered from a failure message.*
+
 - **C2.** A **`FIXED`** burst of **more than one beat** (`len != 0`) is refused.
+
+*Which bursts are refused is observed through the RESPONSE to a refusal,
+  so a violation of this clause is **reported under C4**. A submission that
+  checks C4 is credited with this clause; that is deliberate and recorded
+  here so it is visible rather than discovered from a failure message.*
+
 - **C3.** A `FIXED` burst of **exactly one beat** (`len == 0`) is **accepted** and
   converted under §2 like any other.
   *The verdict turns on a single beat: `FIXED len=0` is served, `FIXED len=1` is
