@@ -1,3 +1,4 @@
+// DIFFERENTIAL: drop = 1'b0
 // A5 NEGATIVE CONTROL for v_ca06 -- it MUST FAIL, and on A5 alone.
 //
 // A5 was landed with a checker that passed everything the task ships, which is

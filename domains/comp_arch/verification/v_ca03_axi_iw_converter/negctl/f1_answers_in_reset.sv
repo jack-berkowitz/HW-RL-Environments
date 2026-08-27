@@ -1,3 +1,4 @@
+// DIFFERENTIAL: force_r = 1'b0
 // F1(a) NEGATIVE CONTROL for v_ca03 -- it MUST FAIL, and on F1 alone.
 //
 // F1(a) asserts the design is idle WHILE rst_ni is low. Every other DUT checker

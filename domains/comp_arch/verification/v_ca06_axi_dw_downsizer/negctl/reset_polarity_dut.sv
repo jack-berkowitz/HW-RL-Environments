@@ -1,3 +1,7 @@
+// DIFFERENTIAL: rst_flip = rst_ni
+// (the GOLDEN BEHAVIOUR, not zero -- this term is an INVERSION, and
+//  zeroing it would hold the design permanently in reset, which is a
+//  different perturbation rather than the absence of one.)
 // NEGATIVE CONTROL (b) -- a KNOWN-BAD DUT that must be CAUGHT.
 // rst_ni is treated as active high, so the design is held in reset exactly
 // when it should be running. Clause F1 fixes the polarity; a testbench that

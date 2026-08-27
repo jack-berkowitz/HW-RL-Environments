@@ -7218,3 +7218,95 @@ no instrument for it and there should not be one pretended into existence.
 Saying so is a stronger claim than the three instruments alone: it bounds what
 the rig can establish, which is the thing this corpus has been wrong about all
 week.
+
+## Zeroing is not neutralising, and it produced a false positive on the instrument's second use
+
+**The differential's neutral form is the GOLDEN BEHAVIOUR, not zero**, and the
+distinction is not pedantic: it fabricated a defect the second time the
+instrument was used.
+
+`reset_polarity_dut`'s perturbation is
+
+    wire rst_flip = ~rst_ni;      feeding  .rst_ni(rst_flip)
+
+Neutralised to `1'b0`, the differential returned **196 failures, identical to the
+control** — which reads exactly like a control the differential has caught: the
+perturbation removed, the failures unchanged, therefore something else causes
+them.
+
+**Nothing else caused them.** Zeroing an inversion does not remove a perturbation;
+it substitutes a different one, a design held permanently in reset. Neutralised
+to `rst_ni` — the golden behaviour — the run **PASSES**.
+
+    gating term   (drop, force_r, force_b)   0 means "do not gate"    zeroing works
+    inversion     (rst_flip)                 0 means "always reset"   zeroing lies
+
+The two coincide for a gate, which is why the error survived four uses before
+appearing: the first four controls were all gating terms. **A rule that is right
+for the first four cases of a kind and wrong for the fifth is indistinguishable
+from a correct rule until the fifth arrives.**
+
+And the failure direction is the bad one: it produces a **failing** differential,
+which reads as a defect in the *control* rather than in the *test*, and sends the
+reader to audit a control that is sound.
+
+### Which is why the neutral form is declared and not inferred
+
+It cannot be derived from the expression — `~rst_ni` and `cnt && !ready` are
+both single terms and their neutral values are different in kind. So the control
+states it:
+
+    // DIFFERENTIAL: rst_flip = rst_ni
+
+and a control without that line is **refused, not guessed at.**
+
+## The substitution matched nothing, and only an impossible result caught it
+
+Before either differential result, both v_ca06 runs came back **PASS with the
+perturbation nominally in.** That is not a possible outcome for a shipped
+control.
+
+    tb:      dw_downsizer dut (.clk_i(clk), .rst_ni(rst_n), .*);
+    pattern: \bdw_downsizer\s+#\(
+
+No parameter list, so the pattern matched nothing, replaced nothing, and built
+the **golden** — which passes. Reported twice, both green.
+
+**Nothing checked the substitution.** What caught it was that a control passing is
+impossible — a fact about the artefact, not about the run. **Had the differential
+been the only instrument, the without-PASS would have read as success**, and the
+with-PASS is the only reason I looked.
+
+`d5_withdraws_ar.sv`'s own header records the identical shape:
+
+> a rename using `\b` in BSD `sed`, which matched nothing, so ten witnesses ran
+
+Same defect, same file's own history, a different regex. **Every substitution is
+now counted and refused at zero.**
+
+## The applicability test is in the instrument, not in a document
+
+`inbox/check_control_differential.py.for-scripts`, `--selftest` **7/7**.
+
+    discriminable   5
+    refused        24     null testbench                      7
+                          perturbation IS the design         17
+
+It **refuses** rather than reporting a pass, with the reason and the remedy:
+
+    REFUSED: stuck_dut.sv cannot be discriminated by a differential.
+      its perturbation IS the design, so removing it means writing a correct one
+      -- the golden -- and the differential would pass by construction.
+      A pass here would establish nothing about the control, which is why this
+      refuses instead of running it. Use the FIRED counter and the clause id on
+      the failure line; neither is covered by the other.
+
+**A convention would have been applied to all 29 by the next person who read the
+rule and not the measurement.** The rule is a paragraph; the measurement is a
+number in a finding nobody re-reads. Putting the test in the instrument is the
+only version where the 24 cannot be run by accident — and the refusal names the
+two instruments that *do* apply, so being refused is not a dead end.
+
+**Seventeen defect-injected controls have the golden as their counterfactual and
+pass by construction.** That is the scope limit, and it is a property of what a
+control *is*, not of how carefully it was written.

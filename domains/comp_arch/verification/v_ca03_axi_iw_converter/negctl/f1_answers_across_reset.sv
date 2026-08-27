@@ -1,3 +1,4 @@
+// DIFFERENTIAL: force_b = 1'b0
 // F1(c) NEGATIVE CONTROL for v_ca03 -- it MUST FAIL, and on F1 alone.
 //
 // F1(c) is the half that says no transaction outstanding before a reset produces

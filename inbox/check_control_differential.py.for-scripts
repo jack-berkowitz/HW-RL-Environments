@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""check_control_differential.py -- prepare a negative control's differential, and
+REFUSE when the differential cannot discriminate.
+
+    check_control_differential.py <control.sv> --task <dir> [--out <file>]
+    check_control_differential.py --selftest
+
+THE DIFFERENTIAL. Build a negative control with its perturbation removed and
+require the run to PASS. That makes the perturbation NECESSARY for the failure
+rather than merely present during it -- which a FIRED counter cannot establish.
+Proposed by AGENT-DESIGN-43a92055.
+
+WHY THIS IS A TOOL AND NOT A CONVENTION. Measured across one half of the corpus,
+the differential can discriminate for 5 of 29 controls. For the other 24 it
+passes BY CONSTRUCTION, and a green that means nothing is the defect this corpus
+keeps finding. A rule in a document gets applied to all 29 by the next person who
+reads the rule and not the measurement. So the applicability test lives here, and
+this refuses rather than reporting a pass:
+
+    null testbench      not a perturbed design at all
+    defect-injected     the perturbation IS the design. Removing it means
+                        writing a correct one -- the golden -- so the
+                        counterfactual passes by construction and establishes
+                        nothing about the control
+    removable           one named term that can be replaced by golden behaviour
+
+NEUTRALISING IS NOT ZEROING, and this is why the neutral form must be DECLARED
+rather than inferred. On its second use the instrument produced a false positive:
+`reset_polarity_dut`'s perturbation is `wire rst_flip = ~rst_ni;` feeding
+`.rst_ni(rst_flip)`, and setting it to 1'b0 gave 196 failures identical to the
+control -- which read as a control the differential had caught. It had not.
+Zeroing an INVERSION substitutes a different perturbation (a design held
+permanently in reset) instead of removing one.
+
+    gating term   0 means "do not gate"    -> zeroing happens to work
+    inversion     0 means "always reset"   -> zeroing lies
+
+The correct form is REPLACE THE PERTURBATION WITH THE GOLDEN BEHAVIOUR. That
+cannot be inferred from the expression, so the control declares it:
+
+    // DIFFERENTIAL: rst_flip = rst_ni
+
+and a control without that line is REFUSED, not guessed at.
+
+AND THE SUBSTITUTION ASSERTS IT CHANGED SOMETHING. A pattern requiring `\\s+#\\(`
+matched nothing against `dw_downsizer dut (.clk_i(clk), ...)`, replaced nothing,
+built the GOLDEN and reported PASS -- twice, once with the perturbation nominally
+in. What caught it was that a control passing is impossible, not that anything
+checked the substitution; had the differential been the only run, the
+without-PASS would have read as success. d5_withdraws_ar.sv's own header records
+the identical shape from a BSD `sed` rename that matched nothing, so ten
+witnesses ran. Every substitution below is counted and refused at zero.
+"""
+import os, re, sys
+
+DECL = re.compile(r"^\s*//\s*DIFFERENTIAL:\s*(\w+)\s*=\s*(.+?)\s*$", re.M)
+
+
+def strip_comments(src):
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    return "\n".join(l.split("//")[0] for l in src.split("\n"))
+
+
+def golden_top(task_dir):
+    y = os.path.join(task_dir, "task.yaml")
+    if not os.path.isfile(y):
+        return None
+    m = re.search(r"^\s*golden_top:\s*(\S+)", open(y, encoding="utf-8").read(), re.M)
+    return m.group(1) if m else None
+
+
+def classify(src, golden):
+    """-> 'null-tb' | 'defect-injected' | 'removable'."""
+    bare = strip_comments(src)
+    mod = re.search(r"^\s*module\s+(\w+)", bare, re.M)
+    if mod and mod.group(1).endswith("_tb"):
+        return "null-tb"
+    if not golden:
+        return "defect-injected"
+    # a wrapper INSTANTIATES the golden: `<golden> <inst> (` or `<golden> #(`
+    if not re.search(r"\b%s(_golden)?\s+(?:#\(|\w+\s*\()" % re.escape(golden), bare):
+        return "defect-injected"
+    return "removable" if DECL.search(src) else "defect-injected"
+
+
+def neutralise(src, term, neutral):
+    """-> (new source, substitutions made). Replaces the DECLARATION of `term`."""
+    pat = re.compile(r"^(\s*(?:wire|logic|assign)\s+(?:\[[^\]]*\]\s*)?%s\s*=\s*)[^;]+;"
+                     % re.escape(term), re.M)
+    new, n = pat.subn(lambda m: "%s%s;  // DIFFERENTIAL" % (m.group(1), neutral), src, count=1)
+    return new, n
+
+
+def main(argv):
+    if argv and argv[0] == "--selftest":
+        return selftest()
+    if not argv:
+        sys.exit(__doc__.strip().splitlines()[0])
+    ctrl = argv[0]
+    task = argv[argv.index("--task") + 1] if "--task" in argv else os.path.dirname(os.path.dirname(ctrl))
+    out = argv[argv.index("--out") + 1] if "--out" in argv else None
+    src = open(ctrl, encoding="utf-8").read()
+    kind = classify(src, golden_top(task))
+
+    if kind != "removable":
+        why = {"null-tb": "it is a null testbench, not a perturbed design",
+               "defect-injected": ("its perturbation IS the design, so removing it means "
+                                   "writing a correct one -- the golden -- and the "
+                                   "differential would pass by construction")}[kind]
+        print("REFUSED: %s cannot be discriminated by a differential." % os.path.basename(ctrl))
+        print("  %s." % why)
+        print("  A pass here would establish nothing about the control, which is why")
+        print("  this refuses instead of running it. Use the FIRED counter and the")
+        print("  clause id on the failure line; neither is covered by the other.")
+        if kind == "defect-injected" and not DECL.search(src):
+            print("  If this control DOES have one removable term, declare it:")
+            print("      // DIFFERENTIAL: <term> = <golden behaviour>")
+            print("  and note that the neutral form is the GOLDEN BEHAVIOUR, not zero.")
+        return 2
+
+    term, neutral = DECL.search(src).groups()
+    new, n = neutralise(src, term, neutral)
+    if n != 1:
+        print("REFUSED: the declared term %r was not substituted (%d replacements)." % (term, n))
+        print("  A substitution that matches nothing builds the UNMODIFIED control and")
+        print("  reports whatever that does. Refusing is the only safe answer.")
+        return 2
+    if out:
+        open(out, "w", encoding="utf-8").write(new)
+    print("OK: %s is discriminable; %r -> %r, 1 substitution." % (os.path.basename(ctrl), term, neutral))
+    print("  Build both and require: WITH the perturbation FAIL, WITHOUT it PASS.")
+    return 0
+
+
+_WRAP = '''// DIFFERENTIAL: drop = 1'b0
+module nc_x (input logic clk_i, input logic rst_ni, output logic v);
+  wire drop = cnt && !ready;
+  assign v = g_v & ~drop;
+  the_golden u (.clk_i(clk_i), .rst_ni(rst_ni));
+endmodule
+'''
+_INV = '''// DIFFERENTIAL: rst_flip = rst_ni
+module nc_y (input logic clk_i, input logic rst_ni);
+  wire rst_flip = ~rst_ni;
+  the_golden u (.clk_i(clk_i), .rst_ni(rst_flip));
+endmodule
+'''
+_NODECL = _WRAP.split("\n", 1)[1]
+_NULLTB = "module foo_tb;\n  initial $display(\"x\");\nendmodule\n"
+_REPLACE = "module the_golden (input logic clk_i);\n  // a whole design, no golden inside\nendmodule\n"
+
+_CASES = [
+    ("a wrapper with a declared removable term is discriminable",
+     lambda: classify(_WRAP, "the_golden") == "removable"),
+    ("the same wrapper WITHOUT the declaration is refused, not guessed",
+     lambda: classify(_NODECL, "the_golden") == "defect-injected"),
+    ("a null testbench is refused",
+     lambda: classify(_NULLTB, "the_golden") == "null-tb"),
+    ("a design that does not instantiate the golden is refused",
+     lambda: classify(_REPLACE, "the_golden") == "defect-injected"),
+    ("a gating term neutralises to the declared value",
+     lambda: neutralise(_WRAP, "drop", "1'b0")[1] == 1
+             and "wire drop = 1'b0;" in neutralise(_WRAP, "drop", "1'b0")[0]),
+    ("an INVERSION neutralises to rst_ni, not to zero",
+     lambda: "wire rst_flip = rst_ni;" in neutralise(_INV, "rst_flip", "rst_ni")[0]),
+    ("a term that is not there yields ZERO substitutions, and is refused",
+     lambda: neutralise(_WRAP, "nosuchterm", "1'b0")[1] == 0),
+]
+
+
+def selftest():
+    bad = 0
+    for why, fn in _CASES:
+        try:
+            ok = bool(fn())
+        except Exception:
+            ok = False
+        bad += not ok
+        print("  %-4s %s" % ("ok" if ok else "FAIL", why))
+    print("%s: %d/%d" % ("OK" if not bad else "REFUSED", len(_CASES) - bad, len(_CASES)))
+    return 2 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,3 +1,4 @@
+// DIFFERENTIAL: drop = 1'b0
 // D5 NEGATIVE CONTROL for v_ca03 -- it MUST FAIL, and on D5 alone.
 //
 // Why it is needed: D5's checker fired on the GOLDEN before the testbench's own
