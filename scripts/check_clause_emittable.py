@@ -63,6 +63,35 @@ that is a change to where it looks, not to what it computes.
 import os, re, sys, glob
 
 CLAUSE   = re.compile(r"^\s*-?\s*\*\*([A-Z][0-9]+[a-z]?)\b", re.M)
+
+# THE DESIGN HALF, WHICH THIS SCAN COULD NOT SEE UNTIL NOW. analyse() globbed
+# spec/*_spec.md only; 0 of 11 design tasks have one and all 11 have
+# spec/*_iface.sv, so every design task returned NO CONCLUSION for the whole life
+# of this file. It said so honestly -- "the scan did not look; it did not pass" --
+# and that honesty is the only reason the gap was one command away rather than
+# undiscoverable. Two agents cited this checker as a control in an argument
+# without running it. Found by AGENT-DESIGN-43a92055.
+#
+# THREE CONVENTIONS DIFFER, NOT ONE, which is why this is not a wider glob:
+#   stated:    markdown says **T5**;              an interface says `// T5.`
+#   emittable: a verification tb calls fail("R1"); a design tb prints
+#              $display("TEST_RESULT: FAIL: %s", why) with the id inside a STRING,
+#              so any id appearing in any quoted string is emittable.
+CLAUSE_SV = re.compile(r"^\s*//\s*([A-Z][0-9]+[a-z]?)\.", re.M)
+_STRING   = re.compile(r'"([^"\n]*)"')
+_IDTOK    = re.compile(r"\b([A-Z][0-9]+[a-z]?)\b")
+
+
+def ids_in_spec_sv(text):
+    return set(CLAUSE_SV.findall(text))
+
+
+def ids_emittable_sv(text):
+    """Any clause id appearing in a quoted string the testbench can print."""
+    out = set()
+    for lit in _STRING.findall(text):
+        out |= set(_IDTOK.findall(lit))
+    return out
 FAIL_STR = re.compile(r'fail\(\s*"([^"]+)"')
 FAIL_TERN= re.compile(r'fail\(\s*[^,"]*\?\s*"([^"]+)"\s*:\s*"([^"]+)"')
 
@@ -249,18 +278,29 @@ def shared_blocks(text):
 def analyse(task_dir):
     """-> (stated, emittable, unreportable) or None when it could not look."""
     spec = sorted(glob.glob(os.path.join(task_dir, "spec", "*_spec.md")))
+    sv   = not spec and sorted(glob.glob(os.path.join(task_dir, "spec", "*_iface.sv")))
+    if sv:
+        spec = sv
     tb   = sorted(glob.glob(os.path.join(task_dir, "tb", "*_tb.sv")))
     if not spec or not tb:
         return None
+    _stated_of = ids_in_spec_sv    if sv else ids_in_spec
+    _emit_of   = ids_emittable_sv  if sv else ids_emittable
     stated = set()
-    for p in spec: stated |= ids_in_spec(open(p, encoding="utf-8").read())
+    for p in spec: stated |= _stated_of(open(p, encoding="utf-8", errors="replace").read())
     emit = set()
-    for p in tb:   emit   |= ids_emittable(open(p, encoding="utf-8").read())
+    for p in tb:   emit   |= _emit_of(open(p, encoding="utf-8", errors="replace").read())
     if not stated:
         return None
     # X and L sections state what is NOT required and what is deliberately free.
     # They have nothing to emit by construction, so they are not candidates.
-    excl = {c for c in stated if c[0] in "XL"}
+    # G IS EXCLUDED ON THE DESIGN HALF FOR THE SAME REASON X AND L ARE. G1-G5 are
+    # the grading section -- "Correctness is a GATE, not a weighting", "WHAT IS
+    # COMPARED", "WHAT IS NOT AVAILABLE TO OPTIMISE" -- they describe how a
+    # submission is scored, not a requirement a testbench can fail. Listing them
+    # as unreported would put five false candidates in every design task, and
+    # annotating one with "reported under X" would be a false statement.
+    excl = {c for c in stated if c[0] in ("XLG" if sv else "XL")}
     decl = {}
     for p in spec: decl.update(declarations(open(p, encoding="utf-8").read()))
     # A DECLARED clause is not a candidate -- its author has said where it is
@@ -355,10 +395,24 @@ def main(argv):
         for c in bad:
             broken.append((name, c, decl[c]))
     for name in noconc:
-        print(f"  {name:<32}  NO CONCLUSION -- no spec/*_spec.md or no tb/*_tb.sv")
+        print(f"  {name:<32}  NO CONCLUSION -- no spec/*_spec.md, no spec/*_iface.sv,")
+        print(f"  {'':<32}  or no tb/*_tb.sv")
         print(f"  {'':<32}  was read. The scan did not look; it did not pass.")
     print(f"\n{looked} task(s) read, {tot} candidate(s). "
           f"{len(noconc)} NO CONCLUSION.")
+    # THE CANDIDATE COLUMN IS NOT A WORK LIST, AND SAYING SO IS PART OF THE
+    # OUTPUT RATHER THAN A CAVEAT SOMEBODY REMEMBERS. AGENT-VERIF-A2 hand-worked
+    # 44 of them and found 20 false positives -- 45%, and 89% on one task. A
+    # clause can appear here because it is genuinely unreportable, or because it
+    # is reported under another clause, or because it is not a check at all.
+    # A regex cannot tell those apart.
+    #
+    # The DECLARATION column below is the exact one: "reported under X" either
+    # names an id something can emit or it does not, and that is decidable. When
+    # this scan is cited as a control, it is that column that is the control.
+    print("  The candidate column is OVER-BROAD -- measured 45% false positives "
+          "on a hand-worked\n  sample. It is not a work list. The REFUSED lines "
+          "below are the exact result.")
     for name, c, under in broken:
         print(f"REFUSED: {name}: {c} says it is reported under {under}, and no "
               f"fail() can emit {under}.")
