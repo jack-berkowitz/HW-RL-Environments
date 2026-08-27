@@ -298,6 +298,46 @@ def shared_messages(text):
     return out
 
 
+def shared_messages_sv(text):
+    """-> [(ids, excerpt)] for a DESIGN testbench, whose convention is different.
+
+    A verification tb names the clause in the call: fail("R1", ...). A design tb
+    prints $display("TEST_RESULT: FAIL: %s", why) and the id lives in the STRING
+    assigned to `why`, so a shared observation is one string naming two or more
+    clause ids. Measured: 6 of 10 design tasks have ZERO fail()/chk() sites, so
+    CHECKCALL saw nothing in them at all.
+    """
+    src = re.sub(r"//[^\n]*", "", text)
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    out, seen = [], set()
+    for lit in re.findall(r'"([^"\n]*)"', src):
+        ids = sorted({i for i in CLAUSE_TOK.findall(lit)
+                      if not re.search(r"'[bhd]?\s*%s\b" % i, lit)})
+        if len(ids) >= 2 and tuple(ids) not in seen:
+            seen.add(tuple(ids))
+            out.append((ids, re.sub(r"\s+", " ", lit)[:96]))
+    return out
+
+
+def shared_convention(text):
+    """Which reporting convention this testbench uses, or None if neither.
+
+    WIDENING THE RANGE, WHICH IS THE ONLY REMEDY THAT WORKS HERE. AGENT-VERIF-A2
+    put the general form better than I had it: an in-range failure value becomes
+    recoverable only when the legitimate range has a value it never uses, and a
+    COUNTING instrument has no such value -- every count is a real count, so
+    saturation is the normal condition. analyse() escapes that only because it
+    returns None on a task it could not read instead of an empty set. This does
+    the same for the enumerator: a task whose convention is unreadable reports NO
+    CONCLUSION rather than contributing 0 to a total that looks measured.
+    """
+    if re.search(r"\b(?:fail|chk)\s*\(", text):
+        return "call"
+    if re.search(r'\$display\s*\(\s*"[^"]*TEST_RESULT', text):
+        return "display"
+    return None
+
+
 def shared_blocks(text):
     """-> [(0, sorted ids)] for if/else chains naming two or more clause ids."""
     src = re.sub(r"//[^\n]*", "", text)
@@ -393,14 +433,26 @@ def main(argv):
         print("MISSED, not misreported -- see the header for why that is the")
         print("right way for this to fail.\n")
         n = 0
+        unreadable = []
         for d in roots:
             tbs = sorted(glob.glob(os.path.join(d, "tb", "*_tb.sv")))
             if not tbs:
+                unreadable.append((os.path.basename(d.rstrip("/")), "no tb/*_tb.sv"))
                 continue
             rows, msgs = [], []
+            _seen_conv = set()
             for f in tbs:
-                s = open(f, encoding="utf-8").read()
-                rows += shared_blocks(s); msgs += shared_messages(s)
+                s = open(f, encoding="utf-8", errors="replace").read()
+                conv = shared_convention(s)
+                _seen_conv.add(conv)
+                if conv == "call":
+                    rows += shared_blocks(s); msgs += shared_messages(s)
+                elif conv == "display":
+                    msgs += shared_messages_sv(s)
+            if _seen_conv == {None}:
+                unreadable.append((os.path.basename(d.rstrip("/")),
+                                   "no fail()/chk() and no $display TEST_RESULT"))
+                continue
             if rows or msgs:
                 print("  " + os.path.basename(d.rstrip("/")))
                 for ids, txt in msgs:
@@ -409,8 +461,11 @@ def main(argv):
                 for depth, ids in rows:
                     print("      chain %s" % " + ".join(ids))
                     n += 1
-        print("\n%d shared observation(s)." % n)
-        return 0
+        for name, why in unreadable:
+            print("  %-32s  NO CONCLUSION -- %s." % (name, why))
+            print("  %-32s  The scan did not look; it did not find zero." % "")
+        print("\n%d shared observation(s), %d NO CONCLUSION." % (n, len(unreadable)))
+        return 2 if unreadable else 0
     roots = [a for a in argv[1:] if not a.startswith("-")]
     if not roots:
         roots = sorted(glob.glob("domains/*/*/[dv]_*"))
