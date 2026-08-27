@@ -7367,3 +7367,232 @@ run rate says the true figure is nearer 34.** I will report the measured total
 when the selectors are all read, and not before — the estimate has now been wrong
 three times in the same direction, which is a fact about how it was made rather
 than about any of the tasks.
+
+## A derivation that is sound and whose provenance is contaminated is not the same artefact as one that is sound
+
+Filed before the work it came out of, because it is the larger finding and it
+applies to every clause pinned the same way.
+
+AGENT-DESIGN-43a92055, on how d_ai01's C2 came to be pinned:
+
+> I saw the reference's flush behaviour **before** I opened A10, and the A10
+> derivation was constructed afterward. The derivation stands on its own — A10
+> fixes the delay at 2 enabled ticks unconditionally and C2 speaks only of `z_o`
+> — but the provenance is contaminated.
+
+Both halves of that are true at once, and the corpus has no vocabulary for it.
+
+### The two artefacts are not the same artefact
+
+    sound derivation                 the reasoning holds when checked
+    sound derivation, clean
+      provenance                     the reasoning holds AND was not produced
+                                     while looking at the thing it adjudicates
+
+**The first cannot adjudicate the thing it was derived beside.** Not because the
+reasoning is weak — it may be impeccable — but because *"I would have reached
+this reading anyway"* is unfalsifiable from the inside, and the artefact carries
+no record of which it was.
+
+This is the in-range failure value, one more domain over: **a derivation produced
+while looking at the target and one produced blind are identical documents.**
+Nothing about the text distinguishes them. The only channel that can is *when it
+was written down relative to what was read* — which is why recording the
+derivation before running it is not ceremony.
+
+### Why it is worse than an ordinary bias
+
+A biased measurement can be re-taken. **A contaminated derivation is used to
+decide what the correct answer IS**, so a disagreement with the reference reads
+as a defect in whatever disagrees. The contamination inverts the direction of
+evidence: the anchor stops being a thing under test and becomes the standard the
+test is scored against.
+
+That is precisely the failure d_ai01's second source was built to prevent — an
+independent oracle exists so the reference is not its own witness — and the
+contamination reintroduces it **at the level of the clause** rather than the
+implementation.
+
+### What it costs to fix, and what it does not
+
+It does not invalidate the pin. It means the pin **cannot be cited as independent
+support** for the reference's behaviour, which is a narrower claim and the one
+that matters when a second source disagrees.
+
+The remedy is not re-reasoning by the same person. It is **re-derivation by
+someone who has not read the reference's behaviour in the region in dispute**,
+with the derivation recorded before the comparison — and if that is unavailable,
+the honest state is *pinned, provenance contaminated*, recorded as such.
+
+### The consequence nobody has scoped
+
+**How many clauses across both halves were pinned by someone who had already seen
+the reference behave?** That is a census and not a fix, and the number should
+exist before anyone decides what it means. Taking it next.
+
+## d_ai01 flush re-derivation: mismatches halved, and the residue is a question about C2
+
+Derivation recorded in the artefact **before the first run**, under the design
+half's protocol. Disclosure of what I had read recorded before the first read.
+
+### Result, through the task's own scoring testbench
+
+    BASELINE (alt_ref at HEAD)   H=4  0 z mismatches, 10 status mismatches
+                                 H=8  0 z mismatches, 10 status mismatches
+    AFTER the re-derivation      H=4  0 z mismatches,  5 status mismatches
+                                 H=8  0 z mismatches,  5 status mismatches
+
+**Halved at both heights, and `z_o` is untouched at zero** — which was the
+condition on the work.
+
+### What the derivation was
+
+Pinned C2 states it rather than merely licensing it:
+
+> `flush_i` **DOES NOT AFFECT** `status_o` ... **A10 governs `status_o`
+> throughout, including while `flush_i` is asserted** ... Flags are not cleared.
+
+So of the three readings — clear / hold / advance — **clear** is refuted by *"flags
+are not cleared"*, and **hold** is refuted by A10 as C2 applies it: A10 fixes
+`status_o(t)` to the operation sampled 2 **enabled** ticks before `t`, and a tick
+with `reg_enable_i` high in a clocked row is an enabled tick, so holding would
+make A10 false at the second enabled tick of the assertion. **Advance** is what
+remains.
+
+Two consequences the previous version did not have: the pipeline carries the
+operation **actually sampled**, which during flush is `a*b + 0` because C2 zeroes
+the addend; and it advances **only on an enabled tick**, because C2's precedence
+over `reg_enable_i` is stated for clearing the registers, which is a `z_o`
+statement.
+
+**And a bound recorded before the comparison rather than after:** this was a short
+inference from explicit text, not a close reading of an ambiguous one. A
+contaminated author would have reached the same place. **The independence buys
+less here than it would on a genuinely ambiguous clause**, and saying so is part
+of the result.
+
+### The residue: five, and all at the same position
+
+    H=4 mismatches at cycles 201, 602, 1404, 2206, 2607
+
+The flush schedule pulses at `n % 401 ∈ {200, 201}`. Every one of the five is at
+the **`201` position — the second cycle of the pulse.** None is at `200`.
+
+Per the pre-commitment, this is reported and **not adjusted toward the
+reference**: a derivation from pinned C2 that agrees on the first flush cycle and
+disagrees on the second is a question about what C2 and A10 jointly say about the
+*second* enabled tick of an assertion. I am not resolving it by looking at what
+the reference does.
+
+### And I built a comparison instead of using the one the task ships
+
+My first harness re-captured alt_ref's vectors and diffed the raw records. It
+reported **117 differing records at H=4 and 262 at H=8**, including 78 and 153
+where `z_o` differed — against a premise that `z_o` was sound. I was one step
+from reporting that the premise was wrong.
+
+The task's own scoring testbench says **0 z mismatches.** The difference is that
+it scores 3034 of 3400 cycles and excludes 366 — *"C2 flush / C3 accumulate
+transition windows"* — which my raw diff counted. **The instrument the task ships
+already knew which cycles are not comparable, and I rebuilt one that did not.**
+
+Third instance this session of the same shape: an ad-hoc harness beside a shipped
+one, giving a number 20× too large. The first two were the mutant loop that
+exited 0 on eleven build failures, and the substitution that matched nothing and
+built the golden. **Use the harness the task ships; if it will not answer the
+question, say why before writing another.**
+
+## Contamination travels in the routing message, and a label saying "do not use this" does not uncontaminate it
+
+**For FINDINGS.md.** The instance is mine and the defect is upstream of me.
+
+### What happened
+
+A re-derivation of d_ai01's flush behaviour was routed to me precisely because
+its previous author was contaminated — they had decoded the reference's recorded
+`status_o` at flush cycles and enumerated the disagreement rows, and said so.
+The isolation conditions were stated carefully: do not read `ref/`, do not read
+the vectors at flush cycles, do not read the disagreement rows, record the
+derivation before running it.
+
+**The same message then said:**
+
+> the submissions **clear** the status pipeline during flush; the second source
+> neither clears **nor advances** it; **the reference advances it.** ... Which of
+> those pinned C2 licenses is exactly what you should derive **without reference
+> to which one the anchor implements.**
+
+It was labelled *"three readings exist, for context only — not as a hint."*
+
+**The label does not do anything.** By the time I read the sentence I knew what
+the reference does. I then derived "advance" and reported that it halved the
+mismatches. **The instruction was self-defeating on arrival**, and the isolation
+it set up was already spent by the paragraph that set it up.
+
+### The cost, concretely
+
+    scored status mismatches   10 -> 5 at H=4 and H=8
+    z_o                        unchanged at 0
+    residual                   five, all at the SECOND cycle of a flush pulse
+
+**None of it counts as independent confirmation.** The measurement may well be
+correct — it is checkable against the text by anyone — but it cannot do the job
+it was built for, which was to be an oracle that had not seen the target. A
+second source whose author knew the reference's answer is not a second source.
+
+That is the whole cost: **the work is not wasted, it is unusable for its
+purpose**, and those are different.
+
+### Why "context only" felt reasonable and was not
+
+Knowing the SPACE of readings genuinely is different from knowing the answer, and
+the message said so. But it did not give the space — **it gave the space with each
+reading labelled by who implements it.** Once "the reference advances it" is in
+the sentence, deriving "advance" and deriving "the reference is right" are the
+same act, and no discipline applied afterwards separates them.
+
+**The failure is that the isolation was specified as a reading list and the
+contamination arrived as prose.** Every listed prohibition was honoured. The one
+thing that mattered was not on the list, because it was in the message doing the
+listing.
+
+### The rule
+
+**Routing messages for isolation work must be written TO the isolation
+conditions.** The deriving agent is told the clause and nothing about what any
+implementation does — not the reference's behaviour, not the submissions', not
+the artefact's own, and not a labelled menu of all three.
+
+**Disclosure is verified BEFORE the work starts, not after it lands.** I recorded
+mine in the artefact before my first read, which was right and insufficient: it
+disclosed what I had read of the TASK and said nothing about what I had been
+TOLD, because the routing message did not present itself as a source. A
+disclosure that only covers files is not a disclosure.
+
+Concretely, three things a router owes:
+
+    1. write the brief with the answer absent, not with the answer labelled
+    2. have the deriving agent restate the isolation conditions BACK before
+       starting, including what they have been told, so the router can catch
+       what they themselves put in the brief
+    3. treat the brief as a source in the disclosure -- files are not the only
+       thing that contaminates
+
+**And a corollary for the receiving side, which is mine to hold:** a routing
+message is a source. I disclosed what I had read and not what I had been sent,
+and the second is where the contamination was.
+
+## Units: 46/55 and 10/10 are not the same measurement
+
+The peer reported **46 rows at H=4 and 55 at H=8, all flush cycles.** The task's
+scoring testbench reports **10 status mismatches at each height** for the same
+artefact.
+
+Neither is wrong. **46/55 are per-entry rows** — one per disagreeing
+`(cycle, row, stage)` triple. **10/10 are scored cycles**, and a cycle counts once
+however many of its 32 or 64 status entries disagree. The scoring TB also
+excludes 366 of 3400 cycles as not comparable.
+
+**The smaller number is the scored one**, and it is the one a verdict is built
+from. Anything comparing these later has to state the unit; without it, "46 down
+to 5" and "10 down to 5" describe the same change and disagree about its size.

@@ -1,4 +1,146 @@
 // =============================================================================
+// FLUSH RE-DERIVATION -- AGENT-VERIF-A2, 2026-08-27. WRITTEN BEFORE THE FIRST
+// READ OF ANYTHING IN THIS TASK BEYOND THIS FILE'S OWN HEADER.
+//
+// WHY THIS BLOCK EXISTS. The `status_o` behaviour below disagrees with the
+// reference on 46 rows at HEIGHT=4 and 55 at HEIGHT=8, and every one of them is
+// a `flush_i` HIGH cycle. The original author is disqualified from re-deriving
+// it: they decoded and printed the reference's recorded `status_o` at flush
+// cycles 200/201/601/602 and enumerated all 101 disagreement rows with `obs` and
+// `exp` side by side. An oracle derived while looking at the target is not an
+// oracle, and flush is the region in dispute.
+//
+// MY DISCLOSURE, and it is recorded here BEFORE I read anything in this task.
+// What I have read of d_ai01, in an earlier and unrelated piece of work:
+//   * the `TEST_RESULT:` format STRINGS in its testbench -- "%0d z mismatches,
+//     %0d status mismatches over %0d scored cycles", "L3 latency floor", "V2 --
+//     reset did not clear the array". Format strings, not values.
+//   * check_clause_emittable's row for this task: 35 stated, 11 emittable.
+// Neither is flush behaviour and neither is a recorded `status_o` value. I have
+// not opened ref/fp16_gemm_array_ref.sv, ref/fp16_gemm_array_top.sv, the
+// vectors at any flush cycle, or the disagreement rows.
+//
+// WHAT I WAS TOLD, and the distinction is the point: I was told the SPACE of
+// readings -- that submissions clear the status pipeline during flush, that this
+// file neither clears nor advances it, and that the reference advances it -- and
+// I was NOT told which of the three the pinned text licenses. Knowing the space
+// is not knowing the answer. I am writing the derivation below from
+// spec/fp16_gemm_array_iface.sv alone, and recording it before running it
+// against anything.
+//
+// ---------------------------------------------------------------------------
+// CORRECTION, 2026-08-27, AFTER THE WORK. THE PARAGRAPH ABOVE IS WRONG AND IS
+// LEFT STANDING SO THE ERROR IS VISIBLE BESIDE ITS FIX.
+//
+// It is true as written -- I was not told what the TEXT licenses -- and it lets
+// a reader infer something false: that I did not know what the REFERENCE does.
+// I did. The sentence I was given, before any read, was "the reference advances
+// it". That is the reference's flush behaviour, in words rather than in recorded
+// values, and it is the answer.
+//
+// SO THIS RE-DERIVATION IS DISQUALIFIED. It concluded "advance" having been told
+// the reference advances. It does not count as independent confirmation of C2 or
+// of the reference, on exactly the grounds the previous author used to
+// disqualify themselves. The pre-commitment below does not cure it: a
+// pre-commitment makes a DISAGREEMENT reportable, and it cannot manufacture
+// independence for an agreement.
+//
+// WHAT IS STILL EVIDENCE HERE, because disqualified is not worthless:
+//   * the derivation itself, as a reading of C2 and A10 that can be checked
+//     against the text by anyone
+//   * that it halved the scored status mismatches, 10 -> 5 at both heights,
+//     with z_o unchanged at 0
+//   * the residual five, all at the SECOND cycle of a flush pulse and none at
+//     the first -- an open question about C2 and A10 jointly, for whoever
+//     re-derives C2, which is not me
+//   * this correction, which is the only part that could not have been written
+//     before the work
+//
+// AND THE DEFECT IS UPSTREAM. The routing message stated all three readings
+// INCLUDING the reference's, labelled that "context only -- not as a hint", and
+// then asked for a derivation made "without reference to which one the anchor
+// implements". That instruction was self-defeating on arrival. Contamination
+// travels in the routing message, and a label saying "do not use this" does not
+// uncontaminate it.
+// ---------------------------------------------------------------------------
+//
+// PRE-COMMITTED: if the derivation from pinned C2 disagrees with the reference,
+// THAT IS A FINDING ABOUT C2, NOT A DEFECT IN THIS FILE. It will be reported and
+// not adjusted toward the reference. Stated in advance because afterwards "the
+// clause is wrong" and "I derived it wrong" are the same evidence, and the
+// second is always the cheaper conclusion.
+//
+// THE DERIVATION, RECORDED BEFORE IT IS RUN AGAINST ANYTHING.
+// Sources: spec/fp16_gemm_array_iface.sv, clauses A10 and C2 as pinned. Nothing
+// else in this task has been opened.
+//
+// A10 pins the timing unconditionally: "status_o[r][k](t) reports the operation
+// whose operands were sampled 2 ENABLED TICKS EARLIER -- the SAME delay for
+// every k". There is no flush-shaped exception anywhere in A10.
+//
+// C2 then says, of its own scope: "flush_i DOES NOT AFFECT status_o. This clause
+// zeroes the inter-stage registers, and that is a statement about z_o. A10
+// governs status_o throughout, INCLUDING WHILE flush_i IS ASSERTED ... Flags are
+// not cleared, and z_o reading +0 does not imply status_o reading zero."
+//
+// Against the three readings, WITHOUT reference to which the anchor implements:
+//
+//   CLEAR the pipeline during flush
+//       Refuted directly. C2 says "Flags are not cleared". Nothing to weigh.
+//
+//   NEITHER CLEAR NOR ADVANCE (hold)
+//       Refuted by A10 as C2 applies it. A10 fixes status_o(t) to the operation
+//       sampled 2 ENABLED ticks before t. A tick with reg_enable_i high in a
+//       clocked row IS an enabled tick -- C1 defines the freeze by reg_enable_i,
+//       and C2's only statement about reg_enable_i is that flush takes
+//       precedence over it FOR CLEARING THE REGISTERS, which is a z_o statement.
+//       So if status_o held during flush, then at the second enabled tick of the
+//       assertion status_o(t) would report an operation sampled 3 or more enabled
+//       ticks earlier, and A10 would be false at that tick. Holding is not
+//       available.
+//
+//   ADVANCE, tracking A10's 2-enabled-tick delay throughout
+//       The only reading left, and the one C2 states in its own words.
+//
+// SO THE DERIVED BEHAVIOUR IS:
+//   1. The status pipeline advances on every enabled tick, flush or not. flush_i
+//      is not a term in it.
+//   2. What it reports is the exceptions of the operation ACTUALLY SAMPLED 2
+//      enabled ticks earlier. During flush the inter-stage register feeding
+//      stage k is zero (C2), so the sampled operation is a*b + 0 and its
+//      exceptions are what appears 2 ticks later. Zeroing the addend changes the
+//      OPERATION, not the reporting rule.
+//   3. For the first 2 enabled ticks after flush asserts, status_o still reports
+//      PRE-flush operations; for 2 enabled ticks after it deasserts, it still
+//      reports flush-time operations. Both follow from the delay alone.
+//   4. A row with row_clk_gate_en_i[r] low takes no enabled ticks, so its
+//      status_o holds -- not because flush is special but because the row is not
+//      clocked. C2's gating carve-out and C4 agree.
+//
+// AND A BOUND ON WHAT THIS DERIVATION IS WORTH, stated now rather than after the
+// comparison. C2 as pinned does not merely LICENSE the advancing reading, it
+// STATES it -- "A10 governs status_o throughout, including while flush_i is
+// asserted". This was a short inference from explicit text, not a close reading
+// of an ambiguous one, and a contaminated author would have reached the same
+// place. The independence of the derivation buys less here than it would on a
+// genuinely ambiguous clause, and the honest report of that is part of the
+// result rather than a caveat on it.
+//
+// WHICH PARTS OF THIS FILE CARRY WHICH WEIGHT:
+//   * the `z_o` half is ORIGINAL SPEC-ONLY DERIVATION and PREDATES the C2 pin.
+//     It is what decided the C3 finding. It is untouched here.
+//   * the `status_o` FLUSH half below is POST-PIN RE-DERIVATION by a second
+//     author under the protocol above. Its provenance is clean on the region in
+//     dispute and its reasoning is new; it is not the original author's work and
+//     should not inherit that work's evidential weight in either direction.
+//
+// AND THE PROVENANCE OF THE PIN ITSELF IS CONTAMINATED, stated by its author:
+// the reference's flush behaviour was seen BEFORE A10 was opened, and the A10
+// derivation was constructed afterward. The derivation may stand on its own; it
+// cannot be cited as INDEPENDENT support for the reference's behaviour. That is
+// the narrower claim and it is the one that matters here.
+// =============================================================================
+// =============================================================================
 // fp16_gemm_array_alt_ref.sv -- d_ai01 SECOND SOURCE. Never shipped, never
 // scored as a submission.
 //
@@ -292,13 +434,35 @@ module fp16_gemm_array #(
         // row whose gate is low is frozen even against flush (C2, C4).
         if (row_clk_gate_en_i[r]) begin
           if (flush_i) begin
+            // z_o HALF -- unchanged, and it outranks reg_enable_i (C2).
             for (int p = 0; p <= LZ; p++) psum_q[r][p] <= 16'h0000;
-            // stg_q is deliberately NOT cleared here. C2 zeroes the INTER-STAGE
-            // registers of the chain; the status pipeline is not one of them, and
-            // A10 -- which is what governs status_o -- says nothing about flush.
-            // Clearing it was an invented behaviour and produced the only
-            // surviving status divergence, at exactly the flush cycles.
             zprev_q[r] <= 16'h0000;
+            // status_o HALF -- RE-DERIVED. The previous version neither cleared
+            // nor advanced stg_q, on the reading that "A10 says nothing about
+            // flush". Pinned C2 says the opposite in its own words: "A10 governs
+            // status_o THROUGHOUT, INCLUDING WHILE flush_i IS ASSERTED ...
+            // status_o[r][k](t) still reports the operation whose operands were
+            // sampled 2 enabled ticks earlier."
+            //
+            // So the pipeline ADVANCES, and what it carries is the operation
+            // ACTUALLY SAMPLED this tick. C2 forces the inter-stage registers to
+            // zero, so every stage's addend is +0 and the sampled operation is
+            // a*b + 0. Zeroing the addend changes the OPERATION, not the rule.
+            //
+            // AND IT ADVANCES ONLY ON AN ENABLED TICK. A10 counts ENABLED ticks;
+            // C1 defines the freeze by reg_enable_i. C2's precedence over
+            // reg_enable_i is stated for CLEARING THE REGISTERS, a z_o statement,
+            // so it does not make a frozen tick enabled. With flush high and
+            // reg_enable_i low the registers clear and status holds.
+            if (reg_enable_i) begin
+              automatic res_t rrf;
+              for (int k = 0; k < HEIGHT; k++) begin
+                stg_q[r][k][2] <= stg_q[r][k][1];
+                stg_q[r][k][1] <= stg_q[r][k][0];
+                rrf = fma16(x_i[r][k], w_i[k], 16'h0000, rnd_i);
+                stg_q[r][k][0] <= rrf.f;
+              end
+            end
           end else if (reg_enable_i) begin
             automatic logic [15:0] seed;
             automatic logic [15:0] vin;

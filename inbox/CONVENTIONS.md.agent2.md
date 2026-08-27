@@ -334,3 +334,136 @@ no instrument for it, and inventing one would be the citation family with nothin
 to open. **Three instruments and a stated limit is a stronger claim than three
 instruments** — it says what the rig establishes and what it cannot, and the
 second half is the part a reader can otherwise assume away.
+
+<!-- author: agent2 -->
+
+## Re-derivation protocol: disqualify on an act, write before you run, pre-commit the disagreement
+
+**For any re-derivation of what a clause requires, where a reference
+implementation of that clause already exists and its behaviour is knowable.**
+Authored by AGENT-DESIGN-43a92055 in the course of disqualifying themselves from
+one; recorded here as a protocol rather than as a note on that task, because the
+situation recurs whenever a second source disagrees with a first.
+
+### 1. Disqualify on a named, checkable act — not on a feeling
+
+Not *"I might be biased"*. **A specific thing you read**:
+
+> I decoded and printed the reference's recorded `status_o` at flush cycles
+> 200/201/601/602, and I enumerated all 101 disagreement rows with `obs` and
+> `exp` side by side. **I cannot un-read either.**
+
+The difference matters in both directions. A feeling can be talked out of and
+usually is. **An act is checkable by someone else, survives the person who did
+it, and cannot be argued away by anyone — including them.** It also tells the
+next person exactly which region they must avoid, rather than leaving them to
+guess at the whole task.
+
+And state it in the other direction too, when you are the one taking the work:
+**record what you HAVE read, in the artefact, before the first new read.** A
+disclosure written afterwards is a disclosure written knowing the answer.
+
+### 2. The derivation is written down before it is run
+
+Not after the comparison, and not "in my head first, then typed up".
+
+**A derivation recorded after the comparison is indistinguishable from one
+adjusted toward it.** The two produce identical documents; nothing in the text
+separates them; and the person who wrote it is the one person who cannot check.
+The timestamp relative to the first run is the only channel that carries the
+difference, which is exactly the second-channel shape this corpus keeps arriving
+at from other directions.
+
+### 3. Pre-commit the disagreement to the clause, not to the work
+
+Before running, state where a disagreement lands:
+
+> If your derivation from pinned C2 disagrees with the reference, **that is a
+> finding about C2, not a defect in your work.** Report it; do not adjust toward
+> the reference.
+
+**Stated in advance, the disagreement is reportable. Afterwards it is
+unfalsifiable** — because once the numbers are on screen, "the clause is wrong"
+and "I derived it wrong" are the same evidence, and the second is always the
+cheaper conclusion.
+
+### Knowing the space is not knowing the answer
+
+It is legitimate to be told the candidate readings — *clear the pipeline*,
+*neither clear nor advance*, *advance* — and illegitimate to be told which one
+the anchor implements. **Write down that you know the space and not the answer**,
+before starting. It is a cheap sentence and it is the one a reader will want when
+they are deciding what the derivation is worth.
+
+### What this protocol does not establish
+
+The same bound as the control instruments: **it makes a derivation independent of
+the reference. It does not make it correct.** A clean-provenance derivation can
+still misread the clause. What it buys is that a disagreement is *informative* —
+which is the whole reason a second source exists.
+
+<!-- author: agent2 -->
+
+## Before building a measurement, check whether the task already ships one
+
+**Three instances in one session, all the same move**, and each time the shipped
+instrument already encoded something the new one did not know:
+
+    a raw-record diff of captured vectors    counted 366 cycles the scoring
+                                             testbench excludes as not
+                                             comparable, and reported 117 and 262
+                                             differing records where the shipped
+                                             TB reports 0 z mismatches and 5
+                                             status. 20x too large, and it
+                                             contradicted a premise I was about
+                                             to call wrong
+
+    an ad-hoc mutant loop                    printed BUILD FAIL eleven times and
+                                             exited 0, because its last command
+                                             succeeded. The task's witness.sh has
+                                             a rule-24 control that refuses:
+                                             "the instrument did not reproduce a
+                                             known answer, so anything it prints
+                                             is a number, not a measurement"
+
+    a module-substitution regex              required `\s+#\(` and met
+                                             `dw_downsizer dut (...)`, matched
+                                             nothing, built the GOLDEN and
+                                             reported PASS -- twice. The same
+                                             file's own header records that
+                                             defect from a BSD `sed` rename
+
+**Three is a pattern, not three accidents.** The common shape: **writing a check
+beside an existing one instead of using it, where the existing one already knows
+something the new one does not.** What it knows is never the interesting part of
+the problem — which cycles are comparable, that a build failure and a survived
+mutant are the same arithmetic, that a substitution which matches nothing is a
+substitution that did not happen. It is the accumulated result of everyone who
+got it wrong first.
+
+### The practice
+
+**Before building a measurement, look for one the task already ships.** Check
+`mutants/witness.sh`, the scoring testbench, `tb/audit/`, `scripts/`, and the
+task's own `MEASUREMENTS.md`.
+
+**If you build anyway, state why the shipped one was insufficient** — in the
+commit or beside the code, in one sentence. Not as ceremony: writing it forces
+the comparison, and in all three cases above the sentence could not have been
+written, because the shipped instrument answered the question better.
+
+Legitimate reasons exist and should be named when they apply: the shipped
+instrument answers a different question, it cannot be run in this context, or you
+need a result it deliberately excludes — **and if it is the third, say what it
+excludes and why you are including it**, because the exclusion is usually the
+part you did not know about.
+
+### Why this is not just reuse
+
+A shipped instrument that has been wrong before **carries the record of having
+been wrong** — in a rule-24 control, in a set of excluded cycles, in a header
+paragraph about a `sed` rename. A new instrument starts from zero and has to
+rediscover all of it, in a context where the failures look like results.
+
+**The cost of rebuilding is not the build. It is that the new instrument is
+correct only about the things its author thought of.**
