@@ -154,7 +154,20 @@ def ids_emittable(text):
 # will not read is a clause that will not be kept true:
 #     "... and is **reported under C4**."
 FAILCALL = re.compile(r'fail\(\s*"([A-Z][0-9]+[a-z]?)"')
-DECLARED = re.compile(r"reported under\s*[`*]*([A-Z][0-9]+[a-z]?)[`*]*", re.I)
+# THE SLASH FORM IS THE HOUSE CONVENTION AND IT USED TO TRUNCATE. This captured
+# ONE id, so "REPORTED UNDER R3/R5" registered R3 and dropped R5 silently -- the
+# truncation yields a well-formed declaration, so nothing looks wrong. Three in
+# the corpus were half-read: d_ca01's R3/R5 and M1/M2, d_nw03's R3/C2. Found by
+# AGENT-DESIGN-43a92055 while annotating.
+#
+# It matters because of what the column claims. "The id this clause names must be
+# emittable" is satisfied by one id; "this grouping is real" is not -- with the
+# second half dropped, an unemittable C2 would pass unnoticed. The corpus already
+# expects pairs, and slashes are the only expressible form: two `reported under`
+# markers in one clause block collide, because the dict is keyed by the enclosing
+# clause and the last write wins.
+DECLARED = re.compile(
+    r"reported under\s*[`*]*([A-Z][0-9]+[a-z]?(?:\s*/\s*[A-Z][0-9]+[a-z]?)*)[`*]*", re.I)
 
 def declarations(text, sv=False):
     """-> {clause id -> id it says reports it}. Keyed by the clause the marker
@@ -186,8 +199,12 @@ def declarations(text, sv=False):
         if cid is None:
             continue
         d = DECLARED.search(text[pos:blocks[i + 1][0]])
-        if d and d.group(1).upper() != cid.upper():
-            out.setdefault(cid, d.group(1).upper())
+        if d:
+            # Normalise the slash list; a marker naming only its own clause is
+            # not a declaration that it is reported elsewhere.
+            ids = [x.strip().upper() for x in d.group(1).split("/") if x.strip()]
+            if ids and set(ids) != {cid.upper()}:
+                out.setdefault(cid, "/".join(ids))
     return out
 
 
@@ -325,8 +342,13 @@ def analyse(task_dir):
     # reported -- but the declaration is CHECKED, not taken. Naming an id that
     # nothing can emit annotates the clause into a hole and is worse than
     # leaving it silent, because it reads as resolved.
-    bad = sorted(c for c, under in decl.items() if under not in emit)
-    good = {c for c, under in decl.items() if under in emit}
+    # EVERY id in a slash list must be emittable, not just the first. A grouping
+    # is only verified if each clause it names can actually be reported.
+    _parts = lambda u: [x for x in u.split("/") if x]
+    bad = sorted(c for c, under in decl.items()
+                 if any(x not in emit for x in _parts(under)))
+    good = {c for c, under in decl.items()
+            if all(x in emit for x in _parts(under))}
     return stated, emit, sorted(stated - emit - excl - good), decl, bad
 
 def self_test():
