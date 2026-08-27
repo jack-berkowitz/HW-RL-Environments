@@ -282,11 +282,45 @@ module async_fifo_cdc_tb;
         end
         cap_accepted = wr_idx;
         wr_en = 1'b0;
-        $display("METRIC: capacity_beats_accepted=%0d (DEPTH=%0d)", cap_accepted, DEPTH);
+        $display("METRIC: capacity_beats_accepted=%0d (DEPTH=%0d, B1 ceiling=%0d)",
+                 cap_accepted, DEPTH, DEPTH + 4);
+
+        // THE SETTLE GUARD, which this measurement never had. cap_accepted is
+        // only a capacity if the writer was actually refused and STAYED
+        // refused; exiting on the 4000-cycle guard instead of on 64 quiet
+        // cycles means the phase never came to rest, and the number is
+        // whatever had been accepted when the clock ran out. That reading
+        // already gated C4's floor.
+        checks++;
+        if (quiet < 64)
+            note_fail($sformatf(
+                "capacity phase never came to rest -- %0d quiet cycles of the 64 required after %0d cycles; cap_accepted=%0d measures nothing (C4/B1)",
+                quiet, guard, cap_accepted));
+
         if (cap_accepted < DEPTH)
             note_fail($sformatf(
                 "accepted only %0d beats with the reader stopped; LOG_DEPTH=%0d requires at least %0d (C4)",
                 cap_accepted, LOG_DEPTH, DEPTH));
+
+        // ---- B1, the ceiling on the SAME number the floor already uses -----
+        // B1 was left unenforced for a stated reason, and the reason was right
+        // about the wrong quantity. The objection is that occupancy sampled on
+        // wr_clk sees a STALE rd_idx and overstates, so a bound on it would
+        // fail conforming designs. That is true of peak_occupancy_estimate,
+        // which is sampled while both sides are running -- and it is not true
+        // of cap_accepted, which is measured with the reader STOPPED and the
+        // writer refused for 64 consecutive cycles. At rest the synchroniser
+        // has converged, the read pointer has not moved from 0, and the count
+        // is exact. The tb carries two occupancy numbers; the objection was
+        // written about the live one and applied to both.
+        //
+        // Nothing here is new measurement. The floor above trusts this number
+        // already; a ceiling is the other side of it.
+        checks++;
+        if (cap_accepted > DEPTH + 4)
+            note_fail($sformatf(
+                "held %0d beats at rest with the reader stopped; the FIFO holds %0d and B1 permits at most 4 further beats of storage in total, so the ceiling is %0d (B1)",
+                cap_accepted, DEPTH, DEPTH + 4));
         // let the read side drain what we just wrote before the next phase.
         // rd_weight MUST be restored: it was set to 0 to stop the reader, and
         // leaving it there made the drain loop spin without ever asserting
