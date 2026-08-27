@@ -281,11 +281,15 @@ class SubscriptionTransportTests(unittest.TestCase):
 class TaskDiscoveryTests(unittest.TestCase):
     def test_current_packaged_task_set_is_complete_and_typed(self):
         tasks = discover_tasks()
-        self.assertEqual(len(tasks), 14)
-        self.assertEqual(sum(task.kind == "design" for task in tasks), 5)
-        self.assertEqual(sum(task.kind == "verification" for task in tasks), 9)
-        self.assertNotIn("d_ca04", {task.task_id for task in tasks})
-        self.assertNotIn("d_nw01", {task.task_id for task in tasks})
+        repo_root = Path(__file__).resolve().parent.parent
+        registered_directories = {
+            prompt_path.parent.parent
+            for prompt_path in repo_root.glob("domains/*/*/*/probe/PASTE.md")
+            if (prompt_path.parent.parent / "task.yaml").is_file()
+        }
+        self.assertEqual({task.directory for task in tasks}, registered_directories)
+        self.assertNotIn("d_dsp01", {task.task_id for task in tasks})
+        self.assertEqual({task.kind for task in tasks}, {"design", "verification"})
         for task in tasks:
             self.assertEqual(
                 task.prompt_sha256,

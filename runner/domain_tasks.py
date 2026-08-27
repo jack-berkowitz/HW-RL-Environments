@@ -57,7 +57,9 @@ def discover_tasks(repo_root: Path = REPO_ROOT) -> list[DomainTask]:
         task_dir = prompt_path.parent.parent
         metadata_path = task_dir / "task.yaml"
         if not metadata_path.is_file():
-            raise TaskDiscoveryError(f"{task_dir} has a prompt but no task.yaml")
+            # Prompt-only directories can be retained for withdrawn tasks. A
+            # task.yaml file is the explicit registration boundary for sweeps.
+            continue
         metadata = metadata_path.read_text(encoding="utf-8")
         task_id = _yaml_scalar(metadata, "id")
         kind = _yaml_scalar(metadata, "type")

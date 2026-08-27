@@ -411,10 +411,10 @@ bash scripts/sim_verification.sh domains/comp_arch/verification/v_ca05_id_queue 
 ### Automated model submissions
 
 `runner.domain_sweep` replaces the manual prompt/chat/copy loop for every task
-that has a canonical `probe/PASTE.md`. It sends that prompt to a selected model,
-extracts the submitted module, and dispatches to the existing design or
-verification grader. The two older design tasks without packaged prompts
-(`d_ca04` and `d_nw01`) are deliberately absent.
+that has a canonical `probe/PASTE.md` and a registering `task.yaml`. It sends
+that prompt to a selected model, extracts the submitted module, and dispatches
+to the existing design or verification grader. Prompt-only directories retained
+for withdrawn tasks, such as `d_dsp01`, are deliberately skipped.
 
 To use included ChatGPT, Claude, or Gemini subscription quota instead of paying
 for API tokens, authenticate the provider CLIs and select the subscription
