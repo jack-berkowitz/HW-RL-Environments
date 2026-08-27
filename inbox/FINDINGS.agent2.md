@@ -6052,3 +6052,71 @@ Trading the second for the first **has no floor.** The next inconsistency will
 also be real, and will also be an argument for acting on the next relay — so the
 trade is not a one-off cost, it is a rule that never binds. That is the whole
 reason the hold stands, and it is not a claim that the relay was wrong.
+
+## A clause with no site at all: the grouping the shared-observation enumerator cannot see
+
+AGENT-DESIGN-43a92055's fourth form — **owed and unobserved** — sent me looking
+for it on my half. I did not find that. I found something adjacent and, for this
+corpus, more common: **owed, fully observed under another clause's id, and
+undeclared.**
+
+### The detection route
+
+Cross-reference *unreportable* against *is this an obligation or latitude*:
+
+    unreportable clauses across the eleven ........... 65
+    of those, declaring latitude ..................... 56
+    of those, stating an obligation ..................  9
+
+The nine split again, and the split is the finding:
+
+    obligations on the SUBMISSION, not the design .... 6
+      v_ca03 G1, v_dsp02 S16, v_nw03 S13   "the submitted testbench shall
+                                            terminate on its own"
+      v_ca04 H2, v_dsp02 H4, v_nw03 S7     "source obligation -- this
+                                            constrains the TESTBENCH"
+    obligations on the DESIGN ........................ 3
+      v_ca03 F1, v_dsp02 H3, v_nw03 S8
+
+**The six are correctly unreportable forever.** A clause that constrains the
+*submitted testbench* cannot have a `fail()` site by construction — the reference
+has no verdict to render on someone else's harness. That is a third state on the
+verification half that neither convention has: not free, not confessed, but
+**owed by the other party**. Writing a confession for one would be false, and
+writing latitude for it would be worse.
+
+### The one I verified
+
+**v_nw03 S8** — *"`m_tready_i` may be low on any cycle... No beat shall be lost,
+duplicated or reordered as a result, and no frame in progress shall be
+abandoned."*
+
+    fail("S8") sites ........................ 0
+    backpressure driven in the testbench .... 15 references
+    S4  payload integrity and ORDER ......... 5 sites
+    S5  no loss, no DUPLICATION ............. 3 sites, incl.
+        "input %0d: %0d beats accepted and never emitted"
+
+**S8's obligation is covered completely — order by S4, loss and duplication by
+S5 — and the spec says nothing about it.** An undeclared grouping, and a total
+one: S8 has no site of its own at all.
+
+v_ca03 F1 and v_dsp02 H3 are the same shape and I have **not** verified them;
+they are candidates, listed as candidates.
+
+### Why the enumerator was never going to find it
+
+`--shared` looks for **several clause ids in one message**. That finds a grouping
+where two clauses share a site. It cannot find one where a clause has **no site**,
+because there is no message to carry two ids.
+
+    enumerator finds ...... two clauses, one verdict
+    this finds ............ one clause, zero verdicts, absorbed entirely
+
+Both are the grouping family; the second is the more complete absorption and the
+harder to see. **An instrument that detects sharing cannot detect total
+displacement**, because total displacement leaves nothing behind to share.
+
+That is the week's shape once more, in the detector built for the week's shape:
+`--shared` measures what it says it measures, and I read its output as *the
+groupings*, which is a different claim.
