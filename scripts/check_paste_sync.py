@@ -93,6 +93,31 @@ def rebuild(paste_text, iface_text):
     return "".join(lines[:start + 1]) + iface_text + "```\n"
 
 
+def rebuild_pair(paste_text, pkg_text, iface_text):
+    """Two-block rebuild: header, package block, interface block.
+
+    --fix COULD NOT REPAIR THE TASKS IT POLICES. The package branch returns
+    before reaching the fix branch, so on d_nw01 and d_ca05 --fix reported STALE
+    and did nothing -- silently, and on exactly the two prompts most likely to go
+    stale, because they have two sources to drift from instead of one. d_nw01's
+    interface block changed four times in a day and --fix declined each time.
+    Reported by AGENT-DESIGN-43a92055, who rebuilt both by hand.
+
+    The header is kept verbatim to the first fence, as the one-block form does --
+    rule 13 says the header may motivate and must not add terms, so regeneration
+    must never author one. Everything from the first fence on is replaced, which
+    also discards any stray blocks between them rather than preserving something
+    the checker would then refuse.
+    """
+    lines = paste_text.splitlines(keepends=True)
+    start = next(i for i, ln in enumerate(lines) if FENCE_OPEN.match(ln))
+    head = "".join(lines[:start])
+    return (head
+            + "```systemverilog\n" + pkg_text + "```\n"
+            + "\n"
+            + "```systemverilog\n" + iface_text + "```\n")
+
+
 def main():
     fix = "--fix" in sys.argv[1:]
     bad = 0
@@ -131,6 +156,11 @@ def main():
                       f"imports {os.path.basename(pkgs[0])[:-3]} and needs 2, "
                       f"package then interface")
                 bad += 1
+                if fix and blocks:
+                    open(paste, "w").write(rebuild_pair(paste_text, pkg_text, iface_text))
+                    print(f"{'':32s}       regenerated both blocks from "
+                          f"{os.path.relpath(pkgs[0], REPO)} and "
+                          f"{os.path.relpath(ifaces[0], REPO)}")
                 continue
             if blocks == want:
                 print(f"{name:32s} ok    (package + interface)")
@@ -139,6 +169,11 @@ def main():
             bad += 1
             print(f"{name:32s} STALE the {which} block differs from "
                   f"spec/{os.path.basename(pkgs[0] if which == 'package' else ifaces[0])}")
+            if fix:
+                open(paste, "w").write(rebuild_pair(paste_text, pkg_text, iface_text))
+                print(f"{'':32s}       regenerated both blocks from "
+                      f"{os.path.relpath(pkgs[0], REPO)} and "
+                      f"{os.path.relpath(ifaces[0], REPO)}")
             continue
         body = fenced_body(paste_text)
         if body is None:
