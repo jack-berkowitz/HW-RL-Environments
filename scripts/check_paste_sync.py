@@ -54,6 +54,38 @@ def fenced_body(paste_text):
     return None
 
 
+def fenced_blocks(paste_text):
+    """Every fenced block's contents, in document order.
+
+    THE TWO-FILE SHAPE. fenced_body() returns everything between the FIRST open
+    and the LAST close, which is correct for a one-block prompt and silently wrong
+    for two -- it swallows the intermediate fences and the comparison then fails
+    as STALE rather than as a shape error. d_nw01 and d_ca05 are the two design
+    tasks whose interface opens `import <task>_pkg::*;`, and their packages --
+    229 and 142 lines of typedefs the port list is written in -- were NAMED in the
+    prompt and not supplied. A model was told the types live in a file it was
+    never given.
+
+    Order is load-bearing, not cosmetic: SystemVerilog requires the package to be
+    elaborated before the module that imports it, so the package block comes
+    first. Checking [pkg, iface] as an ordered pair is what makes the prompt
+    compile in the order it is read.
+    """
+    lines = paste_text.splitlines(keepends=True)
+    out, cur, inside = [], [], False
+    for ln in lines:
+        if not inside and FENCE_OPEN.match(ln):
+            inside, cur = True, []
+            continue
+        if inside and FENCE_CLOSE.match(ln):
+            out.append("".join(cur))
+            inside = False
+            continue
+        if inside:
+            cur.append(ln)
+    return out
+
+
 def rebuild(paste_text, iface_text):
     """Header kept verbatim, body replaced. Never invents a header."""
     lines = paste_text.splitlines(keepends=True)
@@ -83,6 +115,31 @@ def main():
             continue
         paste_text = open(paste).read()
         iface_text = open(ifaces[0]).read()
+        # A task whose interface imports a package must ship that package IN the
+        # prompt, as its own block, before the interface. Referencing it by path
+        # is not shipping it -- see fenced_blocks().
+        pkgs = sorted(glob.glob(os.path.join(task, "spec", "*_pkg.sv")))
+        if pkgs:
+            if len(pkgs) > 1:
+                print(f"{name:32s} SKIP  {len(pkgs)} packages; ambiguous")
+                continue
+            pkg_text = open(pkgs[0]).read()
+            blocks = fenced_blocks(paste_text)
+            want = [pkg_text, iface_text]
+            if len(blocks) != 2:
+                print(f"{name:32s} SHAPE {len(blocks)} fenced block(s); this task "
+                      f"imports {os.path.basename(pkgs[0])[:-3]} and needs 2, "
+                      f"package then interface")
+                bad += 1
+                continue
+            if blocks == want:
+                print(f"{name:32s} ok    (package + interface)")
+                continue
+            which = "package" if blocks[0] != pkg_text else "interface"
+            bad += 1
+            print(f"{name:32s} STALE the {which} block differs from "
+                  f"spec/{os.path.basename(pkgs[0] if which == 'package' else ifaces[0])}")
+            continue
         body = fenced_body(paste_text)
         if body is None:
             print(f"{name:32s} SHAPE no single ```systemverilog block")
