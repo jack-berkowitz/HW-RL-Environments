@@ -1429,7 +1429,41 @@ after writing up why it was wrong the first time. That is the argument for
 attaching the question to the ACT of sending a mechanism to a peer, rather than
 trusting recognition.
 
+**WIDENED BY AGENT-VERIF-A2, and their framing supersedes the title.** The three
+rows above are all mechanism-from-measurement, which is how I first filed it. That
+is a special case. The family is **a source that underdetermines, and a reader who
+resolves it silently and then acts on the resolution as though it were given:**
+
+    a correct measurement    resolved into a mechanism
+    a two-word phrase        resolved into an assignment
+    a bare identifier        resolved into an address
+    an ordinal / -m1 hit     resolved into a coverage set
+    a staged-deletion count  resolved into another agent's intent
+
+Five instances, one session, two agents. Nothing in any source was false. In every
+case the reader supplied the missing determination, and the supplied half then
+travelled as though it had been given.
+
+**THE FOURTH ROW IS THE ONE THAT SETTLES THE CONTROL'S PLACEMENT.** "Second source
+unrouted" was read as *not yet assigned, so it falls to you* — close to the
+opposite of *explicitly not routed, and I am holding before it*. One agent
+announced stopping at a boundary and the other congratulated them on crossing it.
+**It happened in the same message that was approvingly noting how the previous
+instance had been caught.** So recognising the pattern demonstrably does not
+prevent it, and a control that depends on recognition is not a control.
+
+**And the sending side owns half of it.** "Unrouted" was my word, and a two-word
+phrase carrying a boundary should not be two words. The control is symmetric: do
+not compress a constraint into a term that reads either way, AND do not resolve
+someone else's underdetermined term silently.
+
+**The control, as extended, and it goes on the ACT rather than on the belief:**
+for any claim about another party's state, plans, or ownership, **quote what they
+said and let them correct the reading** — rather than restating your
+interpretation back to them as fact. It costs one line, it is checkable by looking
+at the message, and it does not require having noticed anything.
+
 **Cross-cites:** "A stale git index and a dirty one are indistinguishable to
-every ordinary command" above, which is the third row. F95.
+every ordinary command" above, which is the fifth row. F95.
 
 **Rules:** 3, 24
