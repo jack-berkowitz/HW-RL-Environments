@@ -6210,3 +6210,76 @@ count distinguishes them**:
 **S8, H3 and F1 are indistinguishable in the emittable column** and need three
 different remedies. That column is a count, and this is the fourth time this week
 a count has been read as a diagnosis.
+
+## The fifth state does not mirror onto the verification half, and the reason is how many parties are in the contract
+
+A peer proposed a fifth state completing the set: **promises the harness makes to
+the submission** — *"the two resets are asserted simultaneously... you may rely on
+that"* — unreportable because the harness cannot fail its own promise, and put
+forward as the mirror of my six *obligations the submission owes*.
+
+Measured on my eleven: **0 harness-to-submission guarantees.** The search found
+one *"you may rely on them"* and it is in a document preamble about fixed
+parameter values, not a clause.
+
+### Why the mirror does not exist here
+
+It is not the same contract with the arrow reversed. **It is a different number
+of parties.**
+
+    design half        harness  <->  submission (the DUT)                2 parties
+                       a guarantee from the harness lands ON the submission
+
+    verification half  harness  ->  submission (a testbench)  ->  DUT     3 parties
+                       the guarantees in my spec are made TO THE DUT, which is
+                       not the submission; the submission is the party that
+                       judges whether they were kept
+
+So a verification spec does contain harness guarantees — v_dsp02's *"`op_mode_i`
+values not listed in §0. Never driven"* is one — but they flow to a **third
+party**. The submission receives obligations and no guarantees, which is why my
+six exist and their mirror does not.
+
+**The design half has a two-party contract and the verification half a
+three-party one**, and every attempt to map a state across halves has to survive
+that. The four forms map cleanly because they are about the DUT contract, which
+both halves contain. The fifth does not, because it is about the *submission*,
+and the submission is a different kind of thing on each side.
+
+### And a self-check on my own classifier, since theirs was under-reporting
+
+My obligation-versus-latitude split was **a regex over clause text** — the same
+class of instrument, and it deserves the same scrutiny.
+
+The weakness: the latitude pattern includes `shall not`, which appears inside
+real obligations. Tested by isolating blocks whose *only* latitude evidence is
+that token:
+
+    1 of 69 classifications rest on `shall not` alone
+    and it is v_nw03 S5a, which is genuinely BOTH -- latitude for the design
+    ("the design is not required to emit any of that frame's beats") and an
+    obligation on the testbench ("a testbench shall complete every frame it
+    starts") in one clause
+
+So the classifier was not wrong. **It held because my specs use explicit latitude
+vocabulary — "not specified", "unconstrained", "rule 12" — with near-perfect
+consistency, which is a property of the corpus and not of the method.** Sixty-
+eight of sixty-nine had a second, unambiguous token to rest on. On a corpus that
+did not, the same regex would under-report exactly the way theirs did.
+
+My sweep does not share their fourth defect — it counts `fail("X")` **call
+sites**, not occurrences, so a clause named only in a comment cannot enter the
+population. That one was structural rather than careful: I built it after the
+attributability work, which had already forced the call-site distinction.
+
+### The item worth carrying out of their message
+
+**d_ai01's checker reports through bare `$display` — 43 sites, no fail helper of
+any kind.** `check_clause_emittable`, `--shared` and the obligation cross-
+reference all key on a call whose argument carries the clause id, so **none of the
+three instruments can assess that task at all.**
+
+That is not a defect found. It is a task outside the reach of every instrument
+either half has built this week, and the only reason anyone knows is that
+somebody went looking for why its numbers were absent rather than reading the
+absence as a zero.
