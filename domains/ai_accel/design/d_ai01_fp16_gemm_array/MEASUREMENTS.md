@@ -837,3 +837,98 @@ Not defects-with-a-fix, and no fix is implied by the wording below.
    determinations applies — before or after rounding — is not stated, the
    distinction is reachable at this precision, and the flags differ between them.
    OPEN.
+
+## 20. The second source, run against tb/ and ref/. 2026-08-27
+
+`inbox/d_ai01_second_source_fp16_gemm_array.sv`, derived against `9da6e62`, never
+run by its author. **C3 confirmed intact before anything was run:** the relation
+`dfb = D*(H-1)+4 = d(0)+1` is stated identically in the post-CF-4 text — the edit
+corrected two cited instances and added a history note, and did not touch the
+relation the implementation encodes. The region is not void.
+
+### Scored path: 0/2 configurations
+
+| | H=4 | H=8 |
+|---|---|---|
+| first failure | L3 latency floor, measured **15**, expected **16** | L3 latency floor, measured **31**, expected **32** |
+| z mismatches | 2631 / 3034 cycles | 2354 / 2741 |
+| status mismatches | 2183 | 2248 |
+| band-freeze floor | antecedent 1286, violations **0** | antecedent 1456, violations **0** |
+
+One tick short at both geometries — **exactly D1**, their own most load-bearing
+free choice: *"the post-edge convention, under which every path needs d(k)+1
+registers and L3's 15 becomes 16 registers of latency."*
+
+### `probe_shift_tally_tb` — because twelve log lines are not a population
+
+The scoring tb caps its log at `MAX_REPORT=12`, and every reported mismatch
+satisfied `got[n] == expected[n+1]`, 11/11 consecutive pairs per signal per
+geometry. **A hypothesis read off twelve lines is a hypothesis about twelve
+lines**, and this task has been bitten once already by `MAX_REPORT` hiding a
+population. The probe tallies agreement between the DUT at cycle `n` and the
+record at `n+SH` over all 3400 cycles, with `SH=2` as the paired control.
+
+**Scored row-samples, per-row windows applied at the shifted cycle:**
+
+| SH | H=4 z | H=4 status | H=8 z | H=8 status |
+|---|---|---|---|---|
+| 0 | 14.14% | 61.36% | 16.00% | 45.33% |
+| **1** | **93.85%** | **97.00%** | **93.78%** | **96.31%** |
+| 2 (control) | 15.25% | 61.95% | 17.09% | 45.98% |
+
+**D1 CONFIRMED.** Realignment by one tick takes z from 14% to 94%, and the
+control at SH=2 stays at 15-17%, so the tally discriminates rather than rewarding
+any shift.
+
+### A residual survives realignment, and it is not the flag predictions
+
+| | H=4 | H=8 |
+|---|---|---|
+| scored row-samples | 22373 | 19231 |
+| z disagree after realignment | 1377 (6.2%) | 1196 (6.2%) |
+| **status-only disagreements** | **0** | **11** |
+| z-only | 705 | 497 |
+| both | 672 | 699 |
+| z residual on inf/NaN | 102 | 77 |
+| z residual on zero/subnormal | **0** | **0** |
+| z residual on a NORMAL value | 1275 | 1119 |
+
+**Their triage rule makes this readable.** D8, D9, D12 and D10 — the four ranked
+ABOVE D1 — are flag-only: they move `status_o` and leave `z_o` bit-identical. A
+flag-only divergence therefore appears as a **status-only** disagreement.
+Measured: **0 at HEIGHT=4 and 11 at HEIGHT=8**, out of ~22k and ~19k scored
+row-samples, on a stimulus whose own coverage tally reaches A5 overflow 10/10,
+A6 underflow 10/10, and delivers NaN, infinity, subnormal and negative zero.
+**The corners are exercised and the predicted divergences are not there.**
+
+The surviving z residual sits on NORMAL values, with none at all on
+zero/subnormal — not an arithmetic-corner signature, which points at D2
+(register split) or an unpredicted structural effect rather than at any of the
+free arithmetic choices.
+
+**WHAT THIS MEASUREMENT CANNOT SETTLE.** The probe's window replication is its
+own, not the scoring tb's: it removes 4819 row-samples where the tb's tally
+removes about 4287 net, and it skips every flush-high cycle outright. So the
+residual is measured under a MORE conservative exclusion than the tb applies and
+is not an artifact of under-skipping — but boundary alignment of a SHIFTED window
+against an unshifted control stream can misclassify samples at a window's edge,
+and that has not been separated out. The residual's existence is established;
+its exact count is not.
+
+### status_o has an independent instrument now, and this is its first reading
+
+Before this run, no instrument in this task had read `status_o` against anything
+but the reference that produced the vectors. This is the first independent
+implementation compared against it. The reading: **wherever `z_o` agrees,
+`status_o` agrees** — 0 status-only disagreements at HEIGHT=4 and 11 at
+HEIGHT=8. That is a positive result about the status contract and it is the
+first one on the record.
+
+### T5 NOT RUN
+
+`sim_candidate.sh` reported *"docker unavailable or unresponsive within 10s --
+SKIPPING the slang gate"*, and a direct `docker ps` confirmed it. **T5 is unrun,
+not passed.** Their flagged uncertainty — whether `read_slang` takes `--top` and
+the file list in that order — is untested. T5 is the gate that turns a bit-exact
+design into no PPA number at all, so this is an open row, and it is a harness row
+rather than a result about their RTL.
