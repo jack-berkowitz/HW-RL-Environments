@@ -8050,3 +8050,74 @@ never-first.
 
 **Until it lands those three are UNKNOWN, not unreached.** The distinction is the
 one this corpus has spent a week on and it applies to my own table.
+
+## Reachability, now exact on every row: 15 of 22 branches, and each of the 7 classified
+
+The patched shipped harness ran clean — **rule-24 negative PASS, positive 10 of
+10** — and v_dsp02's all-ids union is `S1 S3 S4 S6 S7 S9 S12`, **identical to the
+`-m1` union.** Every mutant in that task produces exactly one id, so `-m1`
+coincided with the true answer rather than bounding it. **That was not knowable
+without running it**, which is the whole reason the rows were marked UNKNOWN.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2       2       all-ids, exact
+    v_ai02   gov_beat              2       2       2       all-ids, exact
+    v_nw02   gov_admitted          3       3       1       all-ids, exact
+    v_nw02   gov_aw_timeout        2       2       1       all-ids, exact
+    v_ca03   gov_r                 3       3       2*      all-ids, exact by ID
+    v_dsp02  gov_result            6       7       5       all-ids, exact
+    v_dsp02  gov_nv                4       4       2       all-ids, exact
+    ------------------------------------------------------------------------
+                                  22      25      15
+
+    * by id. gov_r has three returns and two ids -- A5 twice -- and reachability
+      is measured from printed ids, so ONE of the two A5 returns is reached and
+      which one is not observable from outside.
+
+### The seven, each resolved
+
+**UNREACHABLE BY DESIGN — 1.** `gov_admitted`'s empty return, taken when
+`admitted == MAXW`. **That is the no-fault case**: exactly the bound is neither a
+stall below it nor an admission past it, and the selector returns `""` so no
+`fail()` is emitted. **No mutant can drive it to a failure because it produces
+none.** It is not a gap and should not read as one — to be stated at the site.
+
+**NOT OBSERVABLE BY THIS INSTRUMENT — 1.** `gov_r`'s second `A5` return. Both
+returns carry the same id, so the mutants prove one is reached and cannot say
+which. **The case list already distinguishes them**; the reachability measurement
+structurally cannot. Needs no mutant — needs the limit stated.
+
+**REACHABLE, NEEDS A MUTANT — 5.**
+
+    W3   in gov_aw_timeout   a design that stalls a non-atomic AW while the debt
+    W3   in gov_admitted     is strictly below MAX_WRITE_TXNS. One defect reaches
+                             BOTH branches -- the two selectors report the same
+                             clause from different sites.
+    S5   gov_result          minmax with BOTH operands NaN. S4 (exactly one NaN)
+                             is reachable in both orders, so the set drives the
+                             asymmetric case and not the symmetric one.
+    S8   gov_nv              compare in QUIET mode raising NV. fn_m4
+                             (feq_is_signalling) drives S9, the signalling half;
+                             the mirror is unwritten.
+    S2   gov_nv              NV on an operation that is neither minmax nor
+                             compare.
+
+### The cost, measured rather than estimated
+
+    base variant                  448 lines
+    af_m1's variant               394 lines
+    diff base -> af_m1            100 changed lines
+
+Each mutant is a **separate variant module** in `dut/`, not an edit to a shared
+file, following the set's guarded shape: *defect := wrong_behaviour AND
+rare_predicate*. So five mutants is five variant files of that order, plus five
+wrapper entries in `mutants.sv`.
+
+**W3 is the one worth writing regardless of the other four**, because it is the
+clause two compound-id splits were made to give a routable verdict to and nothing
+in the corpus drives it — the repair currently routes to something no failure
+reaches. **One mutant closes both of its branches.**
+
+The remaining four (S5, S8, S2) are real gaps rather than by-design cases, and
+each is one variant file. **Whether they are worth four variant files is a
+scheduling question, not a technical one**, and the number above is what it costs.
