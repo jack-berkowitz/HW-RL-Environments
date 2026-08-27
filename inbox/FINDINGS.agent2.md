@@ -5082,3 +5082,85 @@ fix was scoped to the declared set and reported as if scoped to the corpus,
 which is the implicit-scope family one level up: **a check whose scope is
 implicit cannot report a scope miss — and neither can the measurement you use to
 justify changing it.**
+
+## Pricing the check-backed column: two halves, and they are not the same item
+
+The decision was "extend `check_clause_emittable.py`'s glob to read
+`spec/*_iface.sv`". AGENT-PPA-2381f2fe has since landed that (`c2636d5`), and it
+was never one item. Measured, per half.
+
+### The verification half is one convention, uniformly
+
+All eleven of my tasks carry `tb/*_tb.sv`, and every one of them emits failures
+the same way:
+
+    fail()/chk() calls ............ 11 of 11 tasks, 402 call sites
+    $display("TEST_RESULT: FAIL")    0 of 11 tasks
+
+The clause ids live in markdown bold in `spec/*_spec.md`, which is what
+`CLAUSE`, `declarations()` and `FAILCALL` were all written against. Nothing has
+to be reconciled. The declaration check — *"reported under X"* names an
+emittable id, or it does not — is **exact here today**, and two tasks already
+carry annotations that the tool reads correctly (v_ca03: 4, v_ca06: 2).
+
+**Price: the annotation pass itself, 25 shared observations across 9 tasks.**
+
+    v_nw02  7    v_ca05  4    v_ca03  3    v_ca06  3    v_ca04  2
+    v_nw01  2    v_nw04  2    v_ai02  1    v_dsp02 1
+
+Two of my eleven (v_ca07, v_nw03) have no shared observation to annotate. No
+tool work; the column means one thing and the check can back it.
+
+### The design half is three conventions and a fourth nobody has named
+
+PPA named three: the clause regex wants markdown bold where design specs use
+`// T5.`; the spec glob wants `*_spec.md` where design tasks have `*_iface.sv`;
+the emitter scan wants `fail(<id>, ...)` where design testbenches emit
+`$display("TEST_RESULT: FAIL: L3 ...")`. Their fix covers the stated/emittable
+columns.
+
+**It does not cover `declarations()`, and that is the function the check-backed
+column would be built on.** It finds clause blocks with
+
+    re.finditer(r"^[-*]?\s*\*\*([A-Z][0-9]+[a-z]?)\b", text, re.M)
+
+— markdown bold — so on a `_iface.sv` the block list is empty, the loop body
+never runs, and it returns `{}`. Verified against a live annotation:
+
+    d_ca01_nonblocking_dcache/spec/nonblocking_dcache_iface.sv:223
+      "// ascending word order are reported under M2 alone."
+      raw occurrences of "reported under" ....... 1
+      declarations() returns .................... {}
+
+**Not `NO CONCLUSION`. An empty dict, which reads as "this task declared
+nothing."** That is `0 candidates` versus `NO CONCLUSION` again, one level up,
+in the exact function whose output becomes the column — and this time the
+honest-artefact luck does not hold, because `{}` is a legitimate value for a
+task with no groupings.
+
+The fourth: **the shared-observation enumerator is convention-bound too**, so
+the design-half population is not known.
+
+    $display-only, invisible to the fail()-based enumerator ..... 6 of 10
+      d_ai01, d_ca03, d_ca04, d_dsp02, d_dsp03, d_nw01
+    mixed, partially read ....................................... 4 of 10
+      d_ai04 (30 fail / 2 display), d_ca01 (17/3), d_ca05 (24/2), d_nw03 (13/3)
+    no tb/*_tb.sv at all ........................................ 1
+      d_dsp01
+
+It reports **2** shared observations on the whole design half, both in d_ca01.
+I cannot say whether that means two exist or two are in the readable
+convention, and **the number is the same either way** — the in-range failure
+value, in the population count this time.
+
+### Why they must not ship as one column
+
+A single "check-backed" column would mean *"a declaration was checked against
+the emittable set"* on my eleven and *"nothing was found, by a function that
+cannot look"* on the other eleven. A reader cannot tell which from the column,
+and the second reads cleaner than the first because it has no exceptions in it.
+
+**The verification half can have the column now. The design half needs
+`declarations()` and the enumerator taught the second convention first** — and
+until then its cell should say what the tool already knows how to say, which is
+that the scan did not look.
