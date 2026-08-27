@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""check_clause_helpers.py -- which testbench helpers actually REPORT under their
+first argument, and which merely take a string first.
+
+    check_clause_helpers.py <task-dir>...      -> the helper table, and the
+                                                  compound reporting ids that
+                                                  reach a clause slot
+    check_clause_helpers.py --selftest
+
+WHY THIS EXISTS. A census of compound clause ids was run by scanning
+`fail("LITERAL"` -- direct calls only. It reported 8 sites and 3 unattributable
+clauses, and both numbers were wrong IN BOTH DIRECTIONS:
+
+    missed 5 sites ....... v_nw02 routes six calls through expect_quiet(),
+                           including two THREE-way compounds
+    counted a loss that
+    was not one .......... F5 was called unattributable; it is emitted under
+                           its own id at a site the scan could not see
+    missed a real loss ... W1 was emitted ONLY inside expect_quiet("W1/W4")
+
+A one-directional error is a coverage gap and reads like one. AN ERROR THAT
+OVERCOUNTS AND UNDERCOUNTS AT ONCE READS LIKE A MEASUREMENT, because the total
+moves by a plausible amount and nothing about the number looks wrong.
+
+THE FIRST REMEDY WAS ALSO OVER-BROAD, and that is the reason this file is a tool
+rather than a wider regex. Enumerating helpers by SIGNATURE --
+
+    task automatic <name>(input string <first>, ...)
+
+-- matches `check_line(input string what, ...)`, whose first argument is a
+DESCRIPTION. Four tasks have one. It cost nothing, because a description never
+fullmatches a clause id, so the enumeration was correct for a property of the
+STRINGS and not of the method. That is the sentence this whole exercise is about.
+
+THE BOUND, and it is a different property. A helper reports under its first
+argument only if that parameter is PASSED INTO fail()'s clause slot:
+
+    task automatic expect_quiet(input string cl_b, ...);
+      fail(cl_b, ...);            <- cl_b reaches the clause slot: REPORTS
+    task automatic check_line(input string what, ...);
+      fail("R3", $sformatf(..., what));   <- what reaches the MESSAGE: does not
+
+"Takes a string first" and "reports under it" are different properties and only
+the second one matters. Both are tested below, in both directions.
+"""
+import os, re, sys, glob
+
+SIG   = re.compile(r"task\s+automatic\s+(\w+)\s*\(\s*input\s+string\s+(\w+)\b")
+FAILC = re.compile(r"\bfail\s*\(\s*([^,()]*?)\s*,", re.S)
+CLAUSE_LIT = re.compile(r'^"([A-Z][0-9]+[a-z]?)"$')
+COMPOUND   = re.compile(r'^"([A-Z][0-9]+[a-z]?(?:/[A-Z][0-9]+[a-z]?)+)"$')
+
+
+def body_of(text, name):
+    """The source between `task automatic <name>(` and its `endtask`."""
+    m = re.search(r"task\s+automatic\s+%s\s*\(" % re.escape(name), text)
+    if not m:
+        return ""
+    end = text.find("endtask", m.end())
+    return text[m.end():end if end != -1 else len(text)]
+
+
+def helpers(text):
+    """-> {name: (first_param, reports_under_it)}.
+
+    `fail` itself is the base case: it IS the clause slot, so it reports under
+    its first argument by definition rather than by inspection."""
+    out = {}
+    for m in SIG.finditer(text):
+        name, first = m.group(1), m.group(2)
+        if name == "fail":
+            out[name] = (first, True)
+            continue
+        reports = any(a.strip() == first for a in FAILC.findall(body_of(text, name)))
+        out[name] = (first, reports)
+    return out
+
+
+def compounds(text, reporting):
+    """-> [(helper, compound-id)] for every call whose clause slot is a compound.
+
+    Only helpers that REPORT under their first argument are scanned. A compound
+    inside a message string is a legibility problem, not an attribution one, and
+    conflating the two is what produced the wrong census."""
+    hits = []
+    if not reporting:
+        return hits
+    pat = re.compile(r"\b(?:%s)\s*\(\s*(\"[^\"]*\")" % "|".join(map(re.escape, reporting)))
+    for line in text.splitlines():
+        if line.lstrip().startswith("//"):
+            continue
+        for m in pat.finditer(line):
+            c = COMPOUND.match(m.group(1))
+            if c:
+                hits.append(c.group(1))
+    return hits
+
+
+_SELF = '''
+  task automatic fail(input string req, input string msg);
+    $display("[FAIL] %s : %s", req, msg);
+  endtask
+  task automatic expect_quiet(input string cl_b, input string what);
+    if (n != 0) fail(cl_b, $sformatf("%s: still owed", what));
+  endtask
+  task automatic check_line(input string what, input int n);
+    fail("R3", $sformatf("%s: line %0d", what, n));
+  endtask
+  task automatic drain(input string what);
+    fail("W1/W4", what);
+  endtask
+'''
+
+_CASES = [
+    ("fail reports under its first argument by definition",
+     lambda h, c: h["fail"] == ("req", True)),
+    ("a helper that passes its first param to fail() REPORTS under it",
+     lambda h, c: h["expect_quiet"] == ("cl_b", True)),
+    ("a helper whose first param reaches only the MESSAGE does not",
+     lambda h, c: h["check_line"] == ("what", False)),
+    ("a helper that hard-codes a compound still reports (under the literal)",
+     lambda h, c: h["drain"] == ("what", False)),
+    ("the compound in a non-reporting helper's own body is still found",
+     lambda h, c: "W1/W4" in c),
+    ("a description is never mistaken for a clause id",
+     lambda h, c: all("/" in x for x in c)),
+]
+
+
+def selftest():
+    h = helpers(_SELF)
+    reporting = [n for n, (_, r) in h.items() if r]
+    c = compounds(_SELF, reporting) + compounds(_SELF, ["fail"])
+    bad = 0
+    for why, fn in _CASES:
+        try:
+            ok = bool(fn(h, c))
+        except Exception:
+            ok = False
+        bad += not ok
+        print("  %-4s %s" % ("ok" if ok else "FAIL", why))
+    print("%s: %d/%d" % ("OK" if not bad else "REFUSED", len(_CASES) - bad, len(_CASES)))
+    return 2 if bad else 0
+
+
+def main(argv):
+    if argv and argv[0] == "--selftest":
+        return selftest()
+    if not argv:
+        sys.exit(__doc__.strip().splitlines()[0])
+    total_c = 0
+    for d in argv:
+        tbs = sorted(glob.glob(os.path.join(d, "tb", "*_tb.sv")))
+        if not tbs:
+            print("  %-26s NO CONCLUSION -- no tb/*_tb.sv was read." % os.path.basename(d))
+            print("    The scan did not look; it did not pass.")
+            continue
+        text = "".join(open(p, encoding="utf-8", errors="replace").read() for p in tbs)
+        h = helpers(text)
+        reporting = [n for n, (_, r) in h.items() if r]
+        taking = [n for n, (_, r) in h.items() if not r]
+        c = compounds(text, reporting)
+        total_c += len(c)
+        print("  %-26s reports-under-first: %-28s takes-a-string-first-only: %s"
+              % (os.path.basename(d), ", ".join(sorted(reporting)) or "-",
+                 ", ".join(sorted(taking)) or "-"))
+        if c:
+            print("    %d compound id(s) in a clause slot: %s" % (len(c), ", ".join(sorted(set(c)))))
+    print("\n  compound reporting ids reaching a clause slot: %d" % total_c)
+    return 2 if total_c else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

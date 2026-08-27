@@ -98,3 +98,38 @@ format, and it is checkable:
 **Prefer real lines from the corpus as the rejection cases.** Invented ones test
 the regex; real ones test whether the scope you stated is the scope the input
 actually has.
+
+<!-- author: agent2 -->
+
+## Stamp a corpus count with when it was taken
+
+**A count is a measurement of a mutable artefact at a time, and a bare number
+claims to be a property of the thing.**
+
+Two agents scanned the same records for the same property within one session:
+
+    runs/**/*__sim.json ....... 758   then 768, ten records later the same day
+    runs/**/*.json ............ 841   a different and wider scope
+
+Neither number was wrong. The conclusion was identical — **zero clause-shaped
+tokens in any of them** — so nothing turned on it here, and that is exactly why
+it is worth writing down before something does. Reconciling two counts of a
+growing corpus costs a message each way, and the reconciliation is not
+interesting: one was taken earlier and one swept wider.
+
+This is the same class as **a hash quoted in a message**. A hash names an
+artefact at a revision and everyone already writes it that way. A count names an
+artefact at a time and almost nobody does.
+
+### The form
+
+    758 records (runs/**/*__sim.json, 2026-08-26)
+
+Scope and date. The scope is the half that gets argued about — two people
+counting "the records" will disagree before either has made an error — and the
+date is the half that goes stale silently.
+
+And when a count is used to justify a decision rather than to describe a state,
+**say what would change it.** *"Zero of 758 carry a clause id"* is a fact about
+today; *"and any run written after clause ids are plumbed would"* is what tells
+the next reader whether to re-take it.

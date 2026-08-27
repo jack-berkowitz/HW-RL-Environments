@@ -5753,3 +5753,52 @@ The habit that caught it: the rows named a task, so the task was cheap to check,
 and the ids did not belong to it. **Attribution in the output is what made a
 wrong attribution visible** — the same property that makes a routable clause id
 worth having.
+
+## "Takes a string first" and "reports under it" are different properties
+
+The last open item from the census correction, built and run.
+
+The wrong census came from scanning `fail("LITERAL"` — direct calls only. The
+remedy was *enumerate the helpers, do not assume the call shape*, and running
+that remedy showed it was **also** over-broad: enumerating by signature
+
+    task automatic <name>(input string <first>, ...)
+
+matches `check_line(input string what, ...)`, whose first argument is a
+description. Four tasks have one. It cost nothing, because a description never
+fullmatches a clause id — **correct for a property of the strings, not of the
+method**, which is the sentence this whole exercise has been about.
+
+### The bound
+
+A helper reports under its first argument only if that parameter is **passed into
+`fail()`'s clause slot**. Not "appears in the body", not "is a string" — reaches
+the slot.
+
+    expect_quiet(input string cl_b, ...)      fail(cl_b, ...)          REPORTS
+    check_line(input string what, ...)        fail("R5", ...what...)   does not
+
+`inbox/check_clause_helpers.py.for-scripts`. `--selftest` **6/6**, and every case
+asserts one direction or the other — a helper that forwards, a helper that does
+not, a helper that hard-codes a compound, and a description that must never be
+read as a clause id.
+
+### What it says about the corpus
+
+    reports under its first argument ..... fail (all eleven), expect_quiet (v_nw02)
+    takes a string first, reports not ..... check_line, drain (v_ai02)
+                                            check_status (v_ca05)
+                                            finish_adjust (v_nw04)
+    compound ids reaching a clause slot ... 1   (v_nw02 F4/F5, the known exception)
+
+    rc=2, because one is not zero
+
+**`expect_quiet` is the only non-`fail` helper in the corpus that reports under
+its first argument**, which is a retrospective check on the fix: the six compound
+labels I split were all in the one place where splitting them mattered, and the
+four helpers the signature-only enumeration added were all noise.
+
+Verified in the other direction against real source rather than only the
+self-test: all four non-reporting helpers take `ctx` or `what` and pass literal
+clause ids to `fail()`. **A bound that is only tested on cases it was written
+from is the accepting half again.**
