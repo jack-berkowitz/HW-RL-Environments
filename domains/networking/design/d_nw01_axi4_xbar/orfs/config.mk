@@ -49,4 +49,21 @@ export VERILOG_INCLUDE_DIRS = /work/refs/axi/include /work/refs/common_cells/inc
 export CORE_UTILIZATION = 10
 export PLACE_DENSITY    = 0.50
 export TNS_END_PERCENT  = 100
-export ABC_CLOCK_PERIOD_IN_PS := $(shell awk '/^set clk_period/{printf "%d", $$3*1000; exit}' $(SDC_FILE))
+# ABC WAS TOLD A PERIOD THE DESIGN IS NOT CONSTRAINED TO. This awk reads the
+# STATIC TEXT of constraint.sdc, but the sdc overrides that same variable from
+# $::env(CLK_PERIOD_NS) at build time -- so every build at a pin different from
+# the file's default synthesised against one period while STA checked another.
+# Measured across all ten design tasks: nine mismatched, d_ai01 worst at 50.0 ns
+# told to ABC against 16.75 ns checked. The synthesis hint and the timing
+# constraint disagreed, and nothing compared them.
+#
+# ovr= threads the same environment variable the sdc reads, so the two cannot
+# diverge again. Unset, it yields the file's value exactly as before.
+#
+# $$CLK_PERIOD_NS, NOT $(CLK_PERIOD_NS), AND THAT IS LOAD-BEARING. make expands
+# $$ to $ and hands the shell an env reference; build_config_hash.py evaluates
+# this same $(shell ...) body in bash and does the identical .replace("$$","$").
+# The make-variable form works under make and resolves to EMPTY under the hash
+# script, which would make the recorded build_config_hash disagree with the
+# configuration ORFS actually used -- the one thing that field exists to prevent.
+export ABC_CLOCK_PERIOD_IN_PS := $(shell awk -v ovr="$$CLK_PERIOD_NS" '/^set clk_period/{p=$$3} END{if(ovr!="") p=ovr; printf "%d", p*1000}' $(SDC_FILE))
