@@ -833,7 +833,14 @@ Not defects-with-a-fix, and no fix is implied by the wording below.
    OF flag for an exact result of 65530.** Whether OF is raised there is not
    settled by the text. OPEN.
 
-3. **Tininess detection is never named.** Which of the two IEEE 754 tininess
+3. **D1 — what "signal at enabled tick t" means.** Sampling instant, or
+   post-edge? The two readings differ by exactly one register on every path;
+   both satisfy every stated number. The reference implements post-edge, the
+   second source implements sampling-instant, and the measurement settles which
+   each took but not which the text requires. Written up for a fresh reader in
+   `inbox/UNASSIGNED_d_ai01_D1_sampling_convention.md`. OPEN.
+
+4. **Tininess detection is never named.** Which of the two IEEE 754 tininess
    determinations applies — before or after rounding — is not stated, the
    distinction is reachable at this precision, and the flags differ between them.
    OPEN.
@@ -932,3 +939,95 @@ not passed.** Their flagged uncertainty — whether `read_slang` takes `--top` a
 the file list in that order — is untested. T5 is the gate that turns a bit-exact
 design into no PPA number at all, so this is an open row, and it is a harness row
 rather than a result about their RTL.
+
+## 21. status_o: the first independent reading this task has ever had. 2026-08-27
+
+**Stated on its own because it has been unavailable all session and it should not
+sit inside a comparison report.**
+
+Until today every instrument that read `status_o` on d_ai01 read it against the
+reference that produced the vectors, or against a candidate solicited from the
+same text. There was no independent implementation to compare against. There is
+now: `inbox/d_ai01_second_source_fp16_gemm_array.sv`, derived from the contract
+text alone, never run by its author against `ref/` or `tb/`.
+
+**THE READING IS POSITIVE. Wherever `z_o` agrees, `status_o` agrees.** On
+22,461 scored row-samples at HEIGHT=4 and 19,314 at HEIGHT=8, once the
+one-tick offset is removed, disagreements that touch `status_o` and NOT `z_o`
+number **5 and 17**. Every other status disagreement is co-located with a `z_o`
+disagreement and is a consequence of it.
+
+**The limit this carries.** The comparison is against a recorded stream, not a
+live reference, and the alignment is a global one-tick shift that is correct for
+the pipeline and wrong at the flush edge (see §22). The positive result is
+therefore about the scored, realigned, non-flush population. It is not a proof
+that the two status implementations agree everywhere; it is the first evidence
+from outside that they agree at all.
+
+## 22. The residual, chased to the end: D1 and its two interactions. 2026-08-27
+
+§20 recorded a residual surviving realignment and stated a limit: the probe's
+window replication was its own. **That limit is now closed and then the residual
+is fully accounted for.**
+
+### Closing the window limit
+
+The window state machine ran over `recs[c+sh]`, so its history was truncated by
+`sh` records, and its scored condition carried an extra `|| flush` that the
+scoring tb does not have. Both were over-conservative. The mask is now computed
+**once per record index from record 0 forward**, using the scoring tb's exact
+per-row condition (`gate_left==0 && !c2_open && !c3_open`, no flush term), then
+indexed at `c+sh`.
+
+| | before | after |
+|---|---|---|
+| H=4 scored row-samples | 22,373 | 22,461 |
+| H=4 z residual at SH=1 | 1377 | **1421** (+44) |
+| H=4 status-only | 0 | **5** |
+| H=8 z residual at SH=1 | 1196 | **1237** (+41) |
+| H=8 status-only | 11 | **17** |
+
+**The count moved by about 3%; the population survived intact.** ~6.2% → ~6.3%
+of scored z at both geometries. The residual was not a window artefact.
+
+### Where it sits
+
+| population | H=4 | H=8 | what it is |
+|---|---|---|---|
+| z disagreements at SH=1 | 1421 | 1237 | |
+| **inside a C1 stall** | **1385 (97.5%)** | **1204 (97.3%)** | D1, frozen in |
+| free-running | 36 | 33 | all at flush cycles |
+| unexplained after both | ~0 | ~0 | |
+
+**The stall population is D1 and cannot be anything else.** C1 freezes every row
+when `reg_enable_i` is low. Both designs freeze; the DUT froze one tick further
+along. **A frozen stream cannot be realigned by a shift** — shifting a constant
+leaves it constant — so the offset that realignment removes while running is
+baked in across every freeze boundary. Sampled rows confirm it directly: the
+reference holds one constant through the stall and the DUT holds a different one.
+
+**The free-running population is an artefact of MY comparison, not their design.**
+All 36 and all 33 sit at flush cycles — 200, 601, 1403, 2205, 2606, the same
+cycles at both geometries — with `ref=0000` and the DUT non-zero. Measured
+directly over all 112 flush row-samples per geometry:
+
+    DUT UNSHIFTED matches the reference   108 / 112  (96.43%)
+    DUT shifted by one matches            54 / 112  (48.21%)
+
+**FLUSH IS NOT SHIFTED.** It acts on the output register directly and does not
+travel the pipeline, so a global one-tick shift is the wrong comparison at
+exactly that edge and manufactures the mismatch. Identical figures at both
+geometries.
+
+### The answer to "D2, or unpredicted?" is neither
+
+It is **D1 and its two interactions** — one with C1's stall, which is real and
+theirs, and one with C2's flush, which is an artefact of my instrument. Nothing
+in the disagreement requires D2 or any unpredicted mechanism. That is a cleaner
+result than either option and it is why the residual was worth chasing rather
+than classifying.
+
+**ONE BOUNDED REMAINDER, named rather than dissolved.** 4 of 112 flush
+row-samples disagree even unshifted, at both geometries. 3.6%, identical count at
+two geometries, not chased further. It is small, it is real, and it is not
+covered by anything above.

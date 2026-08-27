@@ -69,6 +69,7 @@ module probe_shift_tally_tb;
   int unsigned shit [0:MAXSH];
   int unsigned pairs[0:MAXSH];
   int unsigned szpair[0:MAXSH], szhit[0:MAXSH], sshit[0:MAXSH], sskip[0:MAXSH];
+  bit smask [0:NCYC-1][0:`VW-1];
   localparam int unsigned REFILL_W = 4*(H-1) + 3;
   localparam int unsigned ACC_W    = 2*4*(H-1) + 7;
 
@@ -161,69 +162,137 @@ module probe_shift_tally_tb;
         prev_gate = q.row_gate;
       end
     end
-    // ---- CLASSIFY the SH=1 residual by the REFERENCE value's class ---------
-    // Their triage: D8/D9/D12/D10 are FLAG-ONLY -- they move status_o and leave
-    // z_o bit-identical. So a surviving z residual cannot come from any of the
-    // four they ranked above D1, by their own rule. This tallies where it does
-    // sit: exponent all-ones is inf/NaN, exponent zero is zero/subnormal.
+    // ---- SCORED MASK, precomputed from the FULL record stream ---------------
+    // THE LIMIT THIS CLOSES. A first version ran the window state machine over
+    // recs[c+sh], so the machine's history was truncated by sh records and the
+    // scored condition carried an extra `|| flush` the scoring tb does not have.
+    // Both were over-conservative, so the residual could not have been an
+    // under-skipping artefact -- but a window evaluated on a truncated stream can
+    // misclassify at a window edge, and that was unmeasured. The mask is now
+    // computed ONCE per record index from record 0 forward, using the scoring
+    // tb's exact per-row condition, and then INDEXED at c+sh.
     begin
-      int unsigned rl2 [0:`VW-1]; int unsigned al2 [0:`VW-1]; int unsigned gl2 [0:`VW-1];
-      bit pa; logic [W-1:0] pg; bit o2, o3; rec_t q2;
-      int unsigned cls_inf, cls_sub, cls_norm, zonly, stonly, both_;
-      logic [15:0] rv;
-      cls_inf=0; cls_sub=0; cls_norm=0; zonly=0; stonly=0; both_=0;
-      for (int gi = 0; gi < W; gi++) begin rl2[gi]=0; al2[gi]=0; gl2[gi]=0; end
-      pa=1'b0; pg='1;
-      for (int c = 0; c + 1 < NCYC; c++) begin
-        q2 = rec_t'(recs[c + 1]);
+      int unsigned rl [0:`VW-1]; int unsigned al [0:`VW-1]; int unsigned gl [0:`VW-1];
+      bit pa; logic [W-1:0] pg; rec_t q;
+      for (int gi = 0; gi < W; gi++) begin rl[gi]=0; al[gi]=0; gl[gi]=0; end
+      pa = 1'b0; pg = '1;
+      for (int nn = 0; nn < NCYC; nn++) begin
+        q = rec_t'(recs[nn]);
         for (int gi = 0; gi < W; gi++) begin
-          o2=1'b0; o3=1'b0;
-          if (q2.flush) rl2[gi]=REFILL_W;
-          else if (rl2[gi]!=0) begin o2=1'b1; if (q2.reg_enable && q2.row_gate[gi]) rl2[gi]=rl2[gi]-1; end
-          if (q2.accumulate !== pa) al2[gi]=ACC_W;
-          else if (al2[gi]!=0) begin o3=1'b1; if (q2.reg_enable && q2.row_gate[gi]) al2[gi]=al2[gi]-1; end
-          if (q2.row_gate[gi] !== pg[gi]) gl2[gi]=REFILL_W;
-          else if (gl2[gi]!=0) begin if (q2.reg_enable && q2.row_gate[gi]) gl2[gi]=gl2[gi]-1; end
-          if (!(o2 || o3 || gl2[gi]!=0 || q2.flush)) begin
+          bit c2o, c3o;
+          c2o = 1'b0; c3o = 1'b0;
+          if (q.flush) rl[gi] = REFILL_W;
+          else if (rl[gi] != 0) begin
+            c2o = 1'b1;
+            if (q.reg_enable && q.row_gate[gi]) rl[gi] = rl[gi] - 1;
+          end
+          if (q.accumulate !== pa) al[gi] = ACC_W;
+          else if (al[gi] != 0) begin
+            c3o = 1'b1;
+            if (q.reg_enable && q.row_gate[gi]) al[gi] = al[gi] - 1;
+          end
+          if (q.row_gate[gi] !== pg[gi]) gl[gi] = REFILL_W;
+          else if (gl[gi] != 0 && q.reg_enable && q.row_gate[gi]) gl[gi] = gl[gi] - 1;
+          // the scoring tb's condition, verbatim: no flush term
+          smask[nn][gi] = (gl[gi] == 0) && !c2o && !c3o;
+        end
+        pa = q.accumulate; pg = q.row_gate;
+      end
+    end
+
+    for (int sh = 0; sh <= MAXSH; sh++) begin
+      rec_t q3;
+      szpair[sh]=0; szhit[sh]=0; sshit[sh]=0; sskip[sh]=0;
+      for (int c = 0; c + sh < NCYC; c++) begin
+        q3 = rec_t'(recs[c + sh]);
+        for (int gi = 0; gi < W; gi++) begin
+          if (!smask[c + sh][gi]) sskip[sh]++;
+          else begin
+            szpair[sh]++;
+            if (dz[c][gi]  === q3.z[gi])      szhit[sh]++;
+            if (dst[c][gi] === q3.status[gi]) sshit[sh]++;
+          end
+        end
+      end
+    end
+
+    // ---- CLASSIFY the SH=1 residual by the REFERENCE value's class ---------
+    begin
+      rec_t q2, qprev; logic [15:0] rv;
+      int unsigned cls_inf, cls_sub, cls_norm, zonly, stonly, both_, shown, en0, en1;
+      cls_inf=0; cls_sub=0; cls_norm=0; zonly=0; stonly=0; both_=0; shown=0; en0=0; en1=0;
+      for (int c = 0; c + 1 < NCYC; c++) begin
+        q2    = rec_t'(recs[c + 1]);
+        qprev = rec_t'(recs[c]);
+        for (int gi = 0; gi < W; gi++) begin
+          if (smask[c + 1][gi]) begin
             automatic bit zbad = (dz[c][gi]  !== q2.z[gi]);
             automatic bit sbad = (dst[c][gi] !== q2.status[gi]);
-            if (zbad || sbad) begin
-              if (zbad && sbad) both_++; else if (zbad) zonly++; else stonly++;
-            end
+            if (zbad && sbad) both_++; else if (zbad) zonly++; else if (sbad) stonly++;
             if (zbad) begin
               rv = q2.z[gi];
+              if (q2.reg_enable) en1++; else en0++;
               if (rv[14:10] == 5'h1F)      cls_inf++;
               else if (rv[14:10] == 5'h00) cls_sub++;
               else                         cls_norm++;
+              // Dump ONLY the free-running ones: the stall population is
+              // explained and would bury the ~35 that are not.
+              if (q2.reg_enable && shown < 40) begin
+                $display("      FR cyc=%0d row=%0d ref=%h dut=%h  acc=%b flush=%b gate=%b  prev_en=%b",
+                         c+1, gi, q2.z[gi], dz[c][gi], q2.accumulate, q2.flush,
+                         q2.row_gate[gi], qprev.reg_enable);
+                shown++;
+              end
             end
           end
         end
-        pa = q2.accumulate; pg = q2.row_gate;
       end
-      $display("  --- SH=1 residual, classified by the REFERENCE value ---");
+      $display("  --- SH=1 residual, windows from the FULL stream, tb condition verbatim ---");
       $display("      z wrong on inf/NaN (exp=1F) : %0d", cls_inf);
       $display("      z wrong on zero/subnormal   : %0d", cls_sub);
       $display("      z wrong on a NORMAL value   : %0d", cls_norm);
       $display("      z-only %0d   status-only %0d   both %0d", zonly, stonly, both_);
-      $display("      THEIR TRIAGE: D8/D9/D12/D10 are flag-only and leave z_o identical.");
-      $display("      So a z residual of %0d is NOT explained by any prediction above D1.",
-               cls_inf+cls_sub+cls_norm);
+      $display("  --- THE SAME RESIDUAL SPLIT BY reg_enable_i AT THE COMPARED CYCLE ---");
+      $display("      z wrong with reg_enable HIGH (free-running) : %0d", en1);
+      $display("      z wrong with reg_enable LOW  (C1 stall)     : %0d", en0);
+      $display("      %s",
+        (en1 == 0) ? "ENTIRE z RESIDUAL IS INSIDE A STALL. Nothing disagrees while running."
+                   : "residual is NOT confined to the stall -- a free-running difference exists");
     end
-    $display("  --- SCORED row-samples only (same per-row windows as the scoring tb) ---");
+    $display("  --- SCORED row-samples only (mask from full stream, indexed at c+sh) ---");
     $display("  SH  scored   skipped     z agree            status agree");
     for (int sh = 0; sh <= MAXSH; sh++)
       $display("  %0d  %6d  %6d   %6d (%6.2f%%)   %6d (%6.2f%%)",
                sh, szpair[sh], sskip[sh],
                szhit[sh], 100.0*szhit[sh]/(szpair[sh]==0?1:szpair[sh]),
                sshit[sh], 100.0*sshit[sh]/(szpair[sh]==0?1:szpair[sh]));
-
-    $display("  SH  cycles      z agree            status agree");
-    for (int sh = 0; sh <= MAXSH; sh++)
-      $display("  %0d   %5d   %6d (%6.2f%%)   %6d (%6.2f%%)",
-               sh, pairs[sh],
-               zhit[sh], 100.0*zhit[sh]/pairs[sh],
-               shit[sh], 100.0*shit[sh]/pairs[sh]);
-
+    // ---- IS THE FLUSH RESPONSE SHIFTED AT ALL? -----------------------------
+    // The free-running residual is entirely at flush cycles, ref=0000. flush
+    // acts on the output register DIRECTLY; it does not travel the pipeline. So
+    // a GLOBAL one-tick shift may be the wrong comparison at exactly that edge.
+    // Test it: at every flush-high record cycle, compare the DUT UNSHIFTED.
+    begin
+      int unsigned fl_n, fl_sh1_ok, fl_sh0_ok;
+      rec_t qf;
+      fl_n=0; fl_sh1_ok=0; fl_sh0_ok=0;
+      for (int c = 1; c + 1 < NCYC; c++) begin
+        qf = rec_t'(recs[c]);
+        if (qf.flush) begin
+          for (int gi = 0; gi < W; gi++) begin
+            fl_n++;
+            if (dz[c][gi]     === qf.z[gi]) fl_sh0_ok++;   // unshifted
+            if (dz[c-1][gi]   === qf.z[gi]) fl_sh1_ok++;   // shifted by one
+          end
+        end
+      end
+      $display("  --- FLUSH-CYCLE ALIGNMENT (all flush-high record cycles) ---");
+      $display("      flush row-samples            : %0d", fl_n);
+      $display("      DUT UNSHIFTED matches ref    : %0d (%6.2f%%)", fl_sh0_ok, 100.0*fl_sh0_ok/fl_n);
+      $display("      DUT shifted-by-one matches   : %0d (%6.2f%%)", fl_sh1_ok, 100.0*fl_sh1_ok/fl_n);
+      $display("      %s", (fl_sh0_ok > fl_sh1_ok)
+        ? "FLUSH RESPONSE IS NOT SHIFTED. The global shift mismeasures this edge."
+        : "flush response carries the same shift as the pipeline");
+    end
     $display("--- CONTROL: SH=2 must NOT also score high, or the tally is inert ---");
     $display("    SH=1 z %.2f%%   SH=2 z %.2f%%   %s",
              100.0*zhit[1]/pairs[1], 100.0*zhit[2]/pairs[2],
