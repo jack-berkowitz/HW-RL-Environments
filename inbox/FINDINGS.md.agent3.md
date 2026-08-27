@@ -594,7 +594,7 @@ audited for how it got there.
 
 ---
 ---
-## FOR THE CATALOG — seventeen entries; nine landed as F98-F106, eight are not yet in the catalog
+## FOR THE CATALOG — eighteen entries; twelve landed as F98-F109, six are not yet in the catalog
 
 ---
 
@@ -1467,3 +1467,58 @@ at the message, and it does not require having noticed anything.
 every ordinary command" above, which is the fifth row. F95.
 
 **Rules:** 3, 24
+
+---
+
+### A prediction that a divergence exists and a prediction of its shape fail independently
+
+> **An author's RANKING of where they expect to diverge is a different artifact
+> from their ACCOUNT of what each divergence would look like. The second can be
+> sound while the first is inverted, and the sound one is what does the work.**
+
+A second source for d_ai01 was delivered with two forecasting artifacts, frozen
+in the RTL header with a commit SHA behind them, before any comparison was run.
+One earned its keep and one did not.
+
+**THE TRIAGE NOTE WORKED, AND IT IS WHAT MADE THE RESULT LEGIBLE.** It stated
+that four of the six predicted divergences — D8, D9, D12, D10 — are *flag-only*:
+they move `status_o` and leave `z_o` bit-identical. That single rule converted an
+unreadable 6% residual into a decidable question, because a flag-only divergence
+must appear as a **status-only** disagreement and can therefore be counted. It
+also told the comparison how to order its hypotheses — a broad `z_o` disagreement
+means something structural, and one of the structural candidates was given its
+own signature, *a uniform one-tick shift on everything at both heights*. That
+signature was measured and confirmed: realignment took agreement from 14% to 94%
+with a flat paired control at both geometries.
+
+**THE RANKING DID NOT.** It read D8 → D9 → D12 → D10 → D1 → D5. The sole
+confirmed divergence was **D1, fifth of six**. The four ranked above it are
+measured **absent** — 5 and 17 status-only disagreements out of 22,461 and
+19,314 scored row-samples — on a stimulus whose own coverage tally reaches A5
+overflow 10/10 and A6 underflow 10/10 and delivers NaN, infinity, subnormal and
+negative zero. The corners are exercised. The predicted divergences are not there.
+
+**THE TWO ARTIFACTS HAVE DIFFERENT EPISTEMIC BASES, which is why they fail
+independently.** An account of a divergence's SHAPE is derived from the mechanism:
+*if this choice differs, this signal moves and that one does not.* It is checkable
+against the design's own structure before any comparison exists. A RANKING is a
+judgement about which reading another party will have taken — a claim about
+someone else's inference from the same text, with no access to them. The first is
+analysis; the second is a guess about a mind. They should not be presented as one
+artifact and should not be discounted together when one fails.
+
+**AND THE AUTHOR COULD NOT HAVE CAUGHT THIS.** "Measured absent after
+realignment" requires realignment, which requires the comparison, which their
+protocol forbade them from running. The ranking is not a lapse — it is an artifact
+whose accuracy was not available to its author, delivered by someone who
+correctly declined to check it. That is why the entry is about the artifact class
+and not about the author.
+
+**The practical consequence for anyone reading a pre-committed prediction set:**
+take the shape accounts as instruments and use them; take the ranking as
+provenance — evidence that the predictions were made before the result, which is
+what makes them admissible at all — and not as a claim about likelihood. A second
+source that predicted its own divergences is a stronger instrument than one that
+merely produced them, and that strength lives in the shapes, not in the order.
+
+**Rules:** 24
