@@ -6439,3 +6439,56 @@ when it goes wrong.
 that happens to be running.** A golden refutes "I broke the reference"; only a
 mutant set refutes "I changed which clause gets blamed". I ran the first and
 reported the second.
+
+## Audit closed: v_nw01 holds, and three relabels are correct-by-construction and unexercised
+
+    v_nw01  RULE24 negative control : PASS (golden produced no clause failure)
+            10 of 10 mutants produced a clause failure
+
+Both gaps from the audit are now closed by the instrument that could refute them
+rather than the one that happened to be running. **Both claims held, and neither
+was known to hold when I made it.**
+
+### The relabel I could not previously claim, now shown
+
+    ae_m4_insert_dropped_when_full      FAIL X3: ... no response within 40 cycles
+    ae_m5_requests_not_learned_after_two FAIL X3: ... no response within 40 cycles
+
+`X3` is my relabel of the compound `Q1/X3`. **Two mutants drive it and it is
+attributed correctly** — which is exactly the thing a passing golden cannot show,
+and exactly what I asserted on a passing golden.
+
+### And the third instance of the same unexercised state
+
+    gov_r's "A5" return   (v_ca03)   0 of 11 mutants
+    W3 after the split    (v_nw02)   0 of 10 mutants
+    Q2, from fail("F")    (v_nw01)   unexercised
+
+Q2's three sites check the ARP wire format of **transmitted** requests — a
+28-byte payload, `eth_type 0806`, and the fixed `htype/ptype/hlen/plen` header —
+and no mutant in the set corrupts that format. Correct by construction and never
+driven, in three separate tasks, all of them changes I made this week.
+
+**Three of my repairs this week produced a branch nothing exercises.** That is not
+a defect in any of them; it is a fact about repairing attribution against a mutant
+set built to test behaviour. A set built for behaviour drives the paths that
+change outputs, and a relabel changes which name a path reports under, which is
+orthogonal. **Attribution repairs need attribution mutants, and the set has none.**
+
+### A caveat I nearly published as a result
+
+I first read `Q2: 0` out of `witness.sh`'s output. **That output is a
+first-failure report** — the harness greps `-m1` per mutant — so a zero there
+proves only *"never the first failure"*, not *"never fired"*.
+
+Re-checked by collecting **all** ids from the two mutants most likely to touch
+Q2's sites:
+
+    ae_m2_last_request_wrong_target  -> Q3 only
+    ae_m8_ethtype_low_nibble_ignored -> A3 only
+
+The conclusion survived. **The reasoning that produced it did not**, and the
+difference is the whole subject of this week: `witness.sh` reports exactly what
+it says it reports, and I read a first-failure line as a coverage statement.
+Scope stated: two mutants checked directly, the remaining eight inferred from
+what they mutate, and that inference is the weaker half of this entry.
