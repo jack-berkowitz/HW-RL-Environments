@@ -7596,3 +7596,72 @@ excludes 366 of 3400 cycles as not comparable.
 **The smaller number is the scored one**, and it is the one a verdict is built
 from. Anything comparing these later has to state the unit; without it, "46 down
 to 5" and "10 down to 5" describe the same change and disagree about its size.
+
+## Census: 86 clauses across both halves were pinned by someone who had already seen the reference behave
+
+**A count, not a fix.** The number is wanted before deciding what the provenance
+finding means.
+
+    non-G clauses examined ......................... 531
+    quoting an observation of the reference ........  86   (16%)
+       design half ................................  61
+       verification half ..........................  25
+
+Concentrated rather than spread. Ten design tasks and five verification ones
+carry all of it; d_ca03 has 13, d_ai04 12, v_ca06 and v_ca07 11 each, and four
+tasks have exactly one.
+
+    design  d_ca03 13  d_ai04 12  d_ai01 10  d_ca05 7  d_dsp02 6  d_ca01 4
+            d_dsp03 4  d_nw01 3  d_dsp01 1  d_nw03 1
+    verif   v_ca06 11  v_ca07 11  v_ca03 1  v_ca05 1  v_nw04 1
+
+### The classification, and why it is not an inference about provenance
+
+**A clause counts if its own text quotes an observation of the anchor.** That is
+evidence rather than inference: *"Measured: with one row gated off and flush
+asserted, the clocked row went to 0x0000"* could not have been written before
+someone watched it happen.
+
+Markers accepted: `Measured` / `measured`, *the reference does/would/decided/
+returns*, *the anchor does/…*, `probe`/`probed`, *went to*, *in the reference*,
+*against the reference*.
+
+**This undercounts and the direction is knowable.** A clause pinned after seeing
+the reference but written without saying so is invisible to it — and that is
+exactly the d_ai01 C2 case, where the author told me the provenance was
+contaminated and the clause text does not. **So 86 is a floor on a population
+whose remainder cannot be counted from the text at all.**
+
+### Three passes, and the two false-positive classes I removed
+
+    pass 1   136/589  (23%)   raw
+    pass 2   101/531  (19%)   G-clauses excluded
+    pass 3    86/531  (16%)   bare-hex marker dropped
+
+**G1–G5 are the grading section**, present in every design task, and their
+"measured" is about PPA of submissions rather than about the reference —
+systematic across all eleven, so removed by name rather than by tuning the
+pattern.
+
+**A bare `0x[0-9A-Fa-f]{4}` was matching format constants**: *"the canonical
+quiet NaN is 0x7E00"*, *"largest finite magnitude 0x7BFF"*. Those are IEEE 754
+facts, not observations. Caught by printing four matched fragments rather than
+the count — **the count looked reasonable at every pass, and only the fragments
+showed what it was counting.**
+
+### What the number does and does not say
+
+It does **not** say 86 clauses are wrong. Several say so explicitly and are
+better for it — *"this clause was wrong before it was measured"*, *"an earlier
+draft said flush clears every row, which the reference would have quietly decided
+differently"*. Measuring the anchor is how several of these clauses became
+correct.
+
+It says **86 clauses cannot be cited as independent support for the behaviour
+they describe.** Where a second source disagrees with the reference on one of
+them, the clause is not a neutral adjudicator — it was written with the
+reference's answer in view. That is a narrower claim than "wrong" and it is the
+one that bites, because it is exactly the situation a second source exists for.
+
+**Sixteen percent, floor, and concentrated in six tasks.** What it means is the
+user's to decide.
