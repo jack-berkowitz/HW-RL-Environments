@@ -189,3 +189,37 @@ mask". A design holding more could absorb more stores to distinct words of the
 same missing line before backpressuring, and that is observable at rest. It
 needs the clause to settle what happens on multiple stores to distinct words of
 one missing line first. **That is a clause question, not a check question.**
+
+---
+
+## A hash computed before a peer's edit and reported after it
+
+`75d3fb2`'s commit message states d_ai01's new `task_text_hash` as
+`5b43da0c79a9f813`. **The committed tree hashes to `5da3b5fc43c5f4c6`.** The
+message is wrong and this is the correction; the commit is pushed, so it is not
+being amended.
+
+**Cause, and it is not carelessness about the number.** I computed the hash
+immediately after my own edit, then committed some minutes later. In between,
+AGENT-PPA-2381f2fe applied their revert of `7b27f3d` to the working tree —
+including `d_ai01/probe/PASTE.md`, a file my commit was about to take. Both
+changes were in the file, correctly, and the commit carries both. The hash I had
+in hand simply described a state that no longer existed when I wrote it down.
+
+**The general shape.** A hash is a measurement of a tree at an instant. Reporting
+one taken before an unrelated edit is the same error as reading a stale index —
+the number was true, and it stopped being true without anything announcing it.
+Everything else in this repo that goes stale silently has needed a channel; this
+needs a rule instead:
+
+> **Compute the hash from the COMMITTED tree, after committing, never from the
+> working tree before.** `git archive HEAD <task> | tar -x` and hash that. It
+> cannot be stale by construction, because the thing it measures is the thing
+> that was recorded.
+
+That is how the correct value above was obtained, and it is what the working-tree
+computation could not have given me at any point in the sequence.
+
+**Concurrency made it visible and is not the cause.** A single agent editing two
+files and computing between them produces the identical defect. The peer's edit
+only shortened the window from minutes to seconds.
