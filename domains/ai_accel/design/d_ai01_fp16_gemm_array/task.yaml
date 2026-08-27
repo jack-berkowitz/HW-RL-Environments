@@ -594,6 +594,48 @@ results:
     delivered_classes: [subnormal, infinity, nan, negative_zero]
     floors: OK
 
+clause_enforcement:
+  # Recorded per HALF, because C5's two halves differ and a single status for the
+  # clause would be false either way. Vocabulary is the emittability one:
+  # CHECKED / GROUPED / ANONYMOUS / UNCHECKED.
+  C5:
+    movement_half:
+      status: CHECKED
+      what: "C1/C4 hold through C3's interval -- a row with no enabled tick holds z_o"
+      check: "band-freeze floor, tb/fp16_gemm_array_tb.sv"
+      control: controls/nc_i_band_unstable.sv
+      antecedent_H4: 1286
+      antecedent_H8: 1456
+      control_violations_H4: 88
+      control_violations_H8: 176
+      reference_violations: 0
+      second_source_violations: 0
+    wellformedness_half:
+      status: UNCHECKED
+      what: "z_o carries a defined 16-bit value -- no X, no Z, no undriven bits"
+      occurrences_of_C5_in_tb: 0
+      why_not_checked: >
+        No X or Z test can fire in this task's simulator. Verilator is 2-state,
+        and this testbench's own vector guard records a test for X that passed a
+        run with no vectors loaded at all -- writing one here would be the same
+        defect.
+      synthesis_frontend_does_not_cover_it:
+        measured: 2026-08-27
+        method: "yosys read_slang --top fp16_gemm_array, openroad/orfs:latest"
+        undriven_case: "module with the entire 16-bit z_o[0] slice undriven"
+        undriven_result: "Build succeeded: 0 errors, 0 warnings; exit 0"
+        positive_control: "same module with a genuine syntax error"
+        positive_control_result: "Build failed: 1 error; ERROR: Compilation failed"
+        conclusion: >
+          The gate fires, and it does not fire on a structurally undriven output.
+          Reported as a paired result rather than as an absence, because a check
+          whose failure mode is silence has to be shown firing before its silence
+          means anything.
+      consequence: >
+        A submission that drives z_o with an undriven or floating bus inside C3's
+        interval is NON-CONFORMING and passes today. Recorded rather than carried
+        silently.
+
 negative_controls:
   measured_over: vectors/vectors_h8.hex, 3400 cycles
   record: controls/CONTROLS.md

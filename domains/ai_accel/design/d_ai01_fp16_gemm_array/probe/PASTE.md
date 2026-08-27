@@ -400,6 +400,48 @@ Everything normative is in the interface below.
 //     time-varying field the released row diverges for one pipeline depth,
 //     starting on the first tick after release.
 //
+//   C5. AN UNSPECIFIED VALUE IS STILL A DEFINED VALUE. Within the interval where
+//       C3 leaves z_o's value unspecified, z_o shall nonetheless carry a defined
+//       16-bit value at every cycle: no X, no Z, no undriven bits.
+//
+//       C3 SUSPENDS THE COMPARISON, NOT THE WELLFORMEDNESS. It excludes z_o's
+//       value from being compared against the reference. It does not suspend C1
+//       or C4, which govern when z_o may change, and it does not license an
+//       undriven or floating output. The value carried during the interval is
+//       not constrained and is not compared.
+//
+//       WHY THIS EXISTS. The interval is 2*D*(HEIGHT-1)+7 enabled ticks after
+//       every change of accumulate_i -- 63 at HEIGHT=8, 5.8% of scored samples --
+//       and it GROWS LINEARLY WITH HEIGHT, which is this task's scored axis. So
+//       the unscored region is widest exactly where the task is hardest. Without
+//       this clause a submission may put an unstable or undriven bus there and
+//       pass everything.
+//
+//       THE TWO HALVES HAVE DIFFERENT ENFORCEMENT, and that is stated rather
+//       than left to be discovered:
+//
+//       * THE MOVEMENT HALF IS CHECKED. C1 and C4 hold through the interval: a
+//         row with no enabled tick holds its output. The checker compares z_o
+//         only against ITS OWN previous sample there, never against the
+//         reference, so nothing here pins a microarchitecture.
+//
+//       * THE WELLFORMEDNESS HALF IS NOT CHECKED. `C5` appears ZERO times in
+//         tb/. No X or Z test can fire in this task's simulator: Verilator is
+//         2-state, and this file's own vector guard records a test for X that
+//         passed a run with NO VECTORS LOADED AT ALL. Writing one here would be
+//         the same defect.
+//
+//         The synthesis frontend does not cover it either. MEASURED, with a
+//         paired control: `yosys read_slang` on a module whose entire 16-bit
+//         z_o[0] slice has no driver reports "Build succeeded: 0 errors, 0
+//         warnings" and exits 0, while the same frontend on a genuine syntax
+//         error reports "Build failed: 1 error" -- so the gate fires, and it
+//         does not fire on this. A structurally undriven output is not
+//         diagnosed by anything this task runs.
+//
+//         Recorded as UNENFORCED rather than carried silently. A submission that
+//         violates the wellformedness half is non-conforming and passes today.
+//
 // -----------------------------------------------------------------------------
 // L -- LATENCY
 // -----------------------------------------------------------------------------
