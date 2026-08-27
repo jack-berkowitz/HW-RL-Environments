@@ -153,3 +153,84 @@ continuations; AGENT-VERIF-A2's R10 wrapped behind a markdown line break. Same
 cause: **prose wraps wherever the column runs out, which is unrelated to where
 the meaning breaks.** A line is not a unit of meaning in either format, and a
 scanner that treats it as one under-reports in both.
+
+---
+
+# Two corrections, forced by applying it to all eleven design tasks
+
+Landed `fc629cd`. Both change what a checker built on this should match.
+
+## 1. "never gated" is NOT a reserved token — it is a SCORING statement
+
+The first token set reserved `never gated`, `gates nothing`, `not gated`.
+Wrong, and wrong in the direction that matters.
+
+> A quantity reported as a METRIC and never gated **is observed.** It is
+> measured, it is printed, and it simply does not affect the verdict.
+
+That is a statement about SCORING, not about whether the harness sees it. The
+reserved set exists to mark *the harness is silent here*, and these say the
+opposite — the harness is loud here and the verdict ignores it. Reserving them
+would have reworded eight correct sentences and taught the gate to match a form
+meaning the inverse of what it looks for.
+
+Dropping them cut the design-half scan from **28 sentences to 18**.
+
+    RESERVED (the harness does not observe this)
+      NOT CHECKED · is/are not checked · cannot be checked · shall not be
+      checked · appears ZERO times · no enforcement · not enforced ·
+      unenforced · nothing observes · unobserved · not observed · no check ·
+      does not check · nothing checks · COVERAGE ONLY · no assertion ·
+      never an assertion · not verified · untested
+
+    NOT RESERVED (observed, not scored)        never gated · gates nothing ·
+                                               not gated · ungated
+    NOT RESERVED (contract, not harness)       NOT CONSTRAINED · out of scope ·
+                                               IS FREE
+
+## 2. A fourth form: PARTIAL CONFESSION
+
+The convention had a form for a sub-property that is **free** and none for one
+that is **required and unobserved**. Those are not the same and the difference
+is the whole point of the exercise.
+
+d_ca03's P2 is the case: the instruction-side flip-flop budget is a real
+obligation, the cycle axis charges under-provisioning, and nothing places a
+ceiling on it until a synthesis measurement exists. Calling it free would be
+false; calling it a whole-clause confession would be false too, since P2's data
+side IS covered.
+
+    PARTIAL CONFESSION   name the part, then say which of the two states it is
+                         P2'S INSTRUCTION-SIDE BUDGET IS PRICED, NOT BOUNDED.
+
+So four forms, and the deciding question in each case is **what does the
+contract owe here, and what does the harness see** — free/checked,
+free/unchecked, owed/checked-elsewhere, owed/unseen.
+
+## 3. RATIONALE is exempt and must be written to stay exempt
+
+Five design-half sentences mentioned checking while disclaiming nothing —
+*"a parameter no check enforces will be ignored"*, *"a stability check whose
+antecedent never held"*. They are arguments about why the contract is written
+as it is, and they would have produced false flags forever.
+
+Reworded to avoid the reserved set rather than exempted by rule: *"a parameter
+the harness never exercises"*, *"a channel that never fired"*. An exemption a
+checker has to recognise is a second heuristic; a sentence that simply does not
+use the words needs no exemption.
+
+## The permitted residue
+
+Four reserved-token sentences survive across all eleven design tasks. Each is
+permitted, and the last two are named here so they are not rediscovered as
+defects:
+
+    1  `C4` appears ZERO times in tb/.          the confession, exact form
+    2  ...no enforcement: a submission that...  its qualification, following it
+    3  AN EARLIER DRAFT SAID THIS COULD NOT...  a quoted superseded position
+    4  ...COVERAGE ONLY and must stay that way  names its quantity first
+
+**A quoted historical position must contain the words it quotes**, and a
+partial that leads with its quantity is exactly the form the convention asks
+for. Neither can be written any other way, so a checker either tolerates both
+or is wrong four times.
