@@ -667,10 +667,32 @@ slang_check() {   # $1 = design file (host path); echoes a reason on failure
                elif [ \"\$ni\" -eq \"\$n\" ]; then echo \"TOOLFAIL exit \$rc -- all \$n diagnostic(s) are slang internal errors, not statements about the design; first: \$first\"; \
                else echo \"\$n error(s); first: \$freal\"; fi; fi" 2>/dev/null
 }
-if [ "$SLANG" = "1" ] && ! docker info >/dev/null 2>&1; then
-  echo "note: docker unavailable -- SKIPPING the slang synthesis-frontend gate."
-  echo "      a candidate that passes here may still fail ORFS on a parse error."
-  SLANG=0
+# THE AVAILABILITY PROBE MUST NOT BE ABLE TO HANG, AND THIS ONE COULD.
+# `docker info` does not fail fast when Docker Desktop is not running -- it
+# BLOCKS, waiting on a socket that will never answer. This line was written to
+# ask "is docker there?", and when the answer was no it stopped asking and never
+# returned. Two sim runs sat at 17 and 12 minutes with no compiler underneath
+# them, each with a `docker info` child and no output, on a task whose simulation
+# needs Verilator and nothing else.
+#
+# The 20-minute `timeout` around the script would have eventually fired, so this
+# was a stall rather than a deadlock -- which is worse in one respect: it consumes
+# the whole window and then reports a timeout, which reads as a slow task rather
+# than as a probe that never answered.
+#
+# A probe for AVAILABILITY has to bound its own wait. Unreachable and slow are the
+# same answer for this decision, and 10s is far beyond a healthy daemon's reply.
+if [ "$SLANG" = "1" ]; then
+  if command -v timeout >/dev/null 2>&1; then
+    _dockok=0; timeout 10 docker info >/dev/null 2>&1 && _dockok=1
+  else
+    _dockok=0; docker info >/dev/null 2>&1 && _dockok=1
+  fi
+  if [ "$_dockok" != "1" ]; then
+    echo "note: docker unavailable or unresponsive within 10s -- SKIPPING the slang gate."
+    echo "      a candidate that passes here may still fail ORFS on a parse error."
+    SLANG=0
+  fi
 fi
 
 cd "$TASK_DIR" || exit 2     # gotcha 1: vectors resolve relative to here
