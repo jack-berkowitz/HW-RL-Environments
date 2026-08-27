@@ -39,22 +39,36 @@ treating it as agreement is the defect one level up.
 """
 import re
 
-# LEADING WHITESPACE IS ALLOWED, AND THE ANCHOR USED TO BE COLUMN 0.
-# Every regex in this file was `^`-anchored and every one of them was correct
-# only because its input happens to start at column 0 -- Verilator emits
-# warnings there, `$display` emits there, markdown tables and headings sit
-# there. That is a property of the INPUT, not of the method.
+# THE ANCHOR IS THE FORMAT'S OWN RULE -- NOT COLUMN 0, AND NOT "ANY INDENT".
+# Every regex in this file was once `^`-anchored and every one was correct only
+# because its input happens to begin at column 0. That is a property of the
+# INPUT, not of the method. The same defect cost two rows in a corpus sweep: a
+# `task_text_hash:` field indented by two and another by four read as ABSENT, a
+# state 14 tasks legitimately occupy, so the miss landed in a plausible bucket
+# rather than an implausible one and announced nothing.
 #
-# It cost two rows in a corpus sweep: a `task_text_hash:` field indented by two
-# and another by four read as ABSENT, which is a legitimate state 14 tasks
-# occupy, so the miss landed in a plausible bucket instead of an implausible
-# one. AGENT-DESIGN-43a92055's parser had the same defect and their remedy is
-# the one taken here: not care, but A CASE LIST THAT FAILS WHEN THE SCOPE
-# NARROWS. The self-test below carries indented and tab-indented forms.
+# The first fix was `^[ \t]*` -- ANY indent -- and it was wrong in the other
+# direction: it replaced an accidental bound with no bound at all, which is the
+# same mistake with the sign flipped. AGENT-PPA-2381f2fe caught it on the
+# markdown side: CommonMark allows 0-3 spaces before an ATX heading, and at four
+# or more the line is an INDENTED CODE BLOCK -- not a heading, not a table row.
+# A tab counts as four columns, so a tab is code too.
+#
+# AGENT-DESIGN-43a92055's remedy is A CASE LIST THAT FAILS WHEN THE SCOPE
+# NARROWS. A case list that accepts everything cannot fail that way either, so
+# the bound below is taken from the input format and --selftest asserts BOTH
+# directions: the widest legal form is accepted and the first illegal one is
+# refused.
+#
+# THIS TOOL'S INPUT IS MARKDOWN, so the bound is CommonMark's: 0-3 spaces. A
+# `|` line indented four or more is an indented code block, not a table row.
+# Measured on this repo: the loose form newly accepted one such line, and the
+# full ROW body happened to reject it anyway -- which is exactly the kind of
+# luck this comment exists to stop being load-bearing.
 
 import sys
 
-ROW = re.compile(r"^[ \t]*\|\s*`?(\w+)`?\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|", re.M)
+ROW = re.compile(r"^ {0,3}\|\s*`?(\w+)`?\s*\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|", re.M)
 NORM = re.compile(r"[^a-z]+")
 
 
@@ -75,7 +89,34 @@ def check(text):
     return rows, bad, unstated
 
 
+# --selftest: the case list the header promises, asserting BOTH directions.
+# The 3-space case is the widest LEGAL indent under CommonMark and the 4-space
+# case is the first ILLEGAL one; a bound with only one of them is not a bound.
+_ROW = "| t | inter-beat | 40 | inter-beat |"
+_CASES = [
+    (_ROW,            1, "column 0"),
+    ("   " + _ROW,    1, "3 spaces: the widest indent CommonMark still calls a table"),
+    ("    " + _ROW,   0, "4 spaces: an indented code block, not a table row"),
+    ("\t" + _ROW,     0, "tab counts as four columns, so also code"),
+    ("      |- asserted at time zero by a STATEMENT, never again", 0,
+     "a real line from this repo -- indented, pipe-led, and not a row"),
+]
+
+
+def selftest():
+    bad = 0
+    for text, want, why in _CASES:
+        got = len(ROW.findall(text))
+        ok = got == want
+        bad += not ok
+        print("  %-4s %-46s %s" % ("ok" if ok else "FAIL", repr(text)[:46], why))
+    print("%s: %d/%d" % ("OK" if not bad else "REFUSED", len(_CASES) - bad, len(_CASES)))
+    return 2 if bad else 0
+
+
 def main(argv):
+    if argv and argv[0] == "--selftest":
+        return selftest()
     if not argv:
         sys.exit(__doc__.strip().splitlines()[0])
     rows, bad, unstated = check(open(argv[0], encoding="utf-8").read())
