@@ -35,6 +35,10 @@ else
 fi
 rm -rf "$OUT/_control"
 echo "  RULE24 negative control : $r24_neg"
+echo "  NOTE: each line below is the FIRST clause failure of that mutant, not the"
+echo "        set. COUNTING the lines gives a kill count and that is exact. The id"
+echo "        ON a line is the first id to fire, not the only one -- reading the id"
+echo "        column as coverage is a wrong claim with a right number."
 if [ "${r24_neg:0:4}" != "PASS" ]; then
   echo "  RULE24: refusing to report witnesses -- the instrument did not reproduce"
   echo "          a known answer, so anything it prints is a number, not a measurement."

@@ -196,6 +196,17 @@ shall produce a response afterwards.**
 discard requirement is task intent, stated because AXI4 does not settle whether
 transactions survive a reset.*
 
+*The **table-is-empty-after-release** half of this clause is **reported under
+A3**, and for a reason worth stating exactly: A3 is not aimed at reset. A3
+checks the `MAX_UNIQ_IDS` boundary, and it catches a design that comes up with a
+non-empty table **only because every run begins after reset release**, so the
+first identifiers offered meet a table this clause requires to be empty. That is
+a property of where the run starts, not of a check written for F1. A submission
+that checks A3 is credited with this half; that is deliberate and recorded here
+so it is visible rather than discovered from a failure message. **The other two
+halves are not covered by it** — the behaviour while `rst_ni` is low, and the
+discard of transactions outstanding across a reset, are separate obligations.*
+
 ---
 
 ## 7. Termination — a requirement on the submitted testbench

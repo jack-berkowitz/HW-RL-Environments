@@ -44,6 +44,10 @@ elif [ -n "$neg" ]; then
   exit 2
 else
   echo "  RULE24 negative control : PASS (golden produced no clause failure)"
+  echo "  NOTE: each line below is the FIRST clause failure of that mutant, not the"
+  echo "        set. COUNTING the lines gives a kill count and that is exact. The id"
+  echo "        ON a line is the first id to fire, not the only one -- reading the id"
+  echo "        column as coverage is a wrong claim with a right number."
 fi
 
 python3 -c "
