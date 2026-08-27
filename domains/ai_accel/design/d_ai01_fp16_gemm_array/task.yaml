@@ -104,8 +104,12 @@ anchor_conformance:
       2-cycle shortfall at every stage. The stage-to-stage spacing came back as
       exactly 4, which is origin-independent and agreed with probe_schedule_tb, so
       the formula was wrong rather than the instrument. Corrected to
-      delay(k) = D*(H-1-k)+2 and re-measured: 0 mismatches out of 6 trials at H=4
-      and 0 out of 10 at H=8, bias path included.
+      delay(k) = D*(H-1-k)+2 IN RAW CLOCK CYCLES -- this probe's own convention,
+      which is one lower than the contract's d(k) = D*(H-1-k)+3 IN ENABLED TICKS
+      (A1) because the impulse is applied in enabled ticks and the emergence is
+      recorded against a free-running counter. Both are correct in their own unit;
+      see MEASUREMENTS.md section 3. Re-measured: 0 mismatches out of 6 trials at
+      H=4 and 0 out of 10 at H=8, bias path included.
     - >
       probe_corners_tb's first cut read z=0 for EVERY corner case while the status
       flags varied correctly -- a one-edge-early sample, not an anchor returning
