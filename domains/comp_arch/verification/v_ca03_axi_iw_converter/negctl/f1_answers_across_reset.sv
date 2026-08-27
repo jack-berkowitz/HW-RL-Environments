@@ -7,6 +7,16 @@
 // design forwarded it. That demonstrated the checker fires. It is not a control:
 // the cause was a defect in the harness, not a design violating the clause.
 //
+//
+// DIFFERENTIAL, and it is stronger than the FIRED counter beside it. Build this
+// file with the perturbation replaced by a constant 0 and the run must PASS.
+// That makes the perturbation NECESSARY for the failure rather than merely
+// present during it -- which a FIRED counter cannot establish, and which is
+// exactly the gap that let two earlier versions of the F1(a) control fail on D5
+// while their own counter read healthy. Proposed by the design half; measured
+// here:
+//     with the perturbation     FAIL, F1 only, 1 failure, force 2
+//     with it replaced by 1'b0  PASS
 // WHAT THIS PERTURBS: exactly one write response, carried across the reset. The
 // wrapper latches the id of a B response in flight when rst_ni falls and presents
 // it once after release. Nothing else is touched.

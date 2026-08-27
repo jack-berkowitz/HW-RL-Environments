@@ -7048,3 +7048,81 @@ states what it is, versus a task that discusses what it might be.** A word can
 appear in both and means opposite things, and the position of the word — first
 heading line or body prose — is what separates them. That is a marker rule doing
 work a keyword cannot.
+
+## The differential is stronger than the FIRED counter, and it would have caught what the counter could not
+
+The design half proposed a test for negative controls that I did not have:
+
+> Build the control with its perturbation **removed** and require it to PASS.
+
+That makes the perturbation **necessary** for the failure rather than merely
+present during it. Run against both of mine:
+
+    F1(a)  with the perturbation      FAIL, F1 only, force 8
+           with it replaced by 1'b0   PASS
+    F1(c)  with the perturbation      FAIL, F1 only, force 2
+           with it replaced by 1'b0   PASS
+
+Both hold. Recorded in each control's header with the measured result, so the
+next person runs it rather than reads about it.
+
+### Why it is strictly stronger, and my own case is the proof
+
+A FIRED counter says **the perturbing condition was true**. It does not say the
+failure came from it.
+
+My two rejected F1(a) versions are exactly that gap. They failed D5, and their
+counter on the *new* perturbation would have read healthy the whole time —
+because the D5 failures came from a **different** perturbation, inherited by
+copying `d5_withdraws_ar.sv` and never removed. A counter on my override could
+not have seen a perturbation that was not mine.
+
+    FIRED counter  catches: the control never ran
+    differential   catches: the control ran AND something else caused the failure
+
+Two different blindnesses, and I had only the instrument for the first.
+
+### The one it does not cover, and the peer stated it better than I would have
+
+> a firing check, a failing control and a passing differential are **all evidence
+> about the rig.** None of them says the clause describes something a real design
+> could get wrong.
+
+That is the bound on all three at once. A control can fire, fail on one clause,
+and pass its differential, and still be testing a rule no plausible design would
+break. **That question is answered by what the perturbation is, by reading** —
+there is no instrument for it, and pretending otherwise would be the citation
+family again.
+
+### And their instance of the wrong-clause failure
+
+`nc_f6` on d_ca05 first failed **F6 and T6 together**: gating `req_o` on an AMO
+window also blocked the array traffic a miss needs in order to become a refill.
+What separated them was discriminating on the flush **write signature** rather
+than on the window.
+
+Same shape as my D5 case, opposite cause — theirs was a perturbation with a
+side effect, mine was a second perturbation I had brought along. **A control
+that fails for two reasons is weaker evidence about either**, and the
+differential turns that from a judgement into a measurement.
+
+## The first attribution cases land
+
+    ATTRIB ok gov_r A5  -- id at the per-identifier depth
+    ATTRIB ok gov_r A3  -- a new id at the table boundary
+    ATTRIB ok gov_r A5  -- outstanding and below depth
+    FIRED v_ca03.attrib_cases 3
+    RESULT: PASS
+
+Three, not two. `gov_r` has **three return statements** and two of them return
+`A5` for different reasons — at the per-identifier depth, and outstanding below
+depth. A case list testing "the A5 branch" would have covered one of them and
+read as complete; a change to the other would have been invisible.
+
+**Per branch, not per id**, and the difference showed up in the first selector I
+wrote a case for.
+
+The cases are direct calls with the state constructed and restored, so they cost
+nothing at run time and need no new build. `FIRED v_ca03.attrib_cases` counts
+them, because a case list that silently runs three of four is the same failure as
+a control that never fires.

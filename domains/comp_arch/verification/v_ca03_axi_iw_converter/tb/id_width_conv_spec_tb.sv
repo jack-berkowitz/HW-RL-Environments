@@ -773,6 +773,59 @@ module id_width_conv_tb;
     if (cov_err_b < 4)
       fail("COVERAGE", $sformatf("only %0d non-OKAY WRITE responses were returned -- E1's new B-channel half is untested at OKAY alone", cov_err_b));
     $display("  [coverage] non-OKAY responses returned: reads=%0d writes=%0d", cov_err_r, cov_err_b);
+    // ---- ATTRIBUTION CASES: does the SELECTOR return the id it should? ------
+    // A behaviour mutant changes what the DESIGN does, so it drives paths that
+    // change outputs. A relabel changes which NAME a path reports under, and no
+    // mutation of the design can move that. The mutant set therefore cannot
+    // verify an attribution -- every relabel in this corpus is correct by
+    // construction and measured by nothing.
+    //
+    // This is the other half: force each branch of the id selector and assert
+    // the id it returns. `gov_r` is a pure function of live_r, so the cases are
+    // direct calls with the state set, and cost nothing at run time.
+    //
+    // ATTRIB lines are counted, so a case that is skipped is visible. A case
+    // list that only ever runs its passing half is the accepting-half failure
+    // this corpus keeps re-finding.
+    begin
+      automatic int unsigned save [NID];
+      automatic int n_attrib = 0, n_attrib_bad = 0;
+      for (int i = 0; i < NID; i++) save[i] = live_r[i];
+      for (int i = 0; i < NID; i++) live_r[i] = 0;
+
+      // A5 -- at the per-identifier depth. A3 says explicitly that a request
+      // carrying an id already outstanding "is not blocked by this clause".
+      live_r[1] = MAX_TXN;
+      n_attrib++;
+      if (gov_r(1) != "A5") begin
+        n_attrib_bad++;
+        $display("ATTRIB FAIL gov_r: id at depth %0d returned %s, expected A5", MAX_TXN, gov_r(1));
+      end else $display("ATTRIB ok gov_r A5  -- id at the per-identifier depth");
+
+      // A3 -- a NEW id, which is the table boundary and nothing else.
+      live_r[1] = 0;
+      n_attrib++;
+      if (gov_r(1) != "A3") begin
+        n_attrib_bad++;
+        $display("ATTRIB FAIL gov_r: a new id returned %s, expected A3", gov_r(1));
+      end else $display("ATTRIB ok gov_r A3  -- a new id at the table boundary");
+
+      // and the third branch, which is A5 for a DIFFERENT reason: outstanding
+      // but below depth. Written because the two A5 returns are separate lines
+      // and a change to either would be invisible to a case that tests one.
+      live_r[1] = 1;
+      n_attrib++;
+      if (gov_r(1) != "A5") begin
+        n_attrib_bad++;
+        $display("ATTRIB FAIL gov_r: outstanding-below-depth returned %s, expected A5", gov_r(1));
+      end else $display("ATTRIB ok gov_r A5  -- outstanding and below depth");
+
+      for (int i = 0; i < NID; i++) live_r[i] = save[i];
+      $display("FIRED v_ca03.attrib_cases %0d", n_attrib);
+      if (n_attrib_bad != 0)
+        fail("ATTRIB", $sformatf("%0d attribution case(s) returned the wrong clause id", n_attrib_bad));
+    end
+
     // ---- FIRED: did the artefacts that must fire, fire? ---------------------
     // Every counter here GATES A FLOOR. The floor already refuses on zero, so
     // these lines add one thing the floor cannot: they distinguish a floor that

@@ -18,6 +18,16 @@
 // records the same trap one step earlier, where it was built from iw_c3 and
 // inherited bindings that do not exist here. Twice in one file, from two sources.
 //
+//
+// DIFFERENTIAL, and it is stronger than the FIRED counter beside it. Build this
+// file with the perturbation replaced by a constant 0 and the run must PASS.
+// That makes the perturbation NECESSARY for the failure rather than merely
+// present during it -- which a FIRED counter cannot establish, and which is
+// exactly the gap that let two earlier versions of the F1(a) control fail on D5
+// while their own counter read healthy. Proposed by the design half; measured
+// here:
+//     with the perturbation     FAIL, F1 only, 8 failures, force 8
+//     with it replaced by 1'b0  PASS
 // WHAT THIS ONE PERTURBS, and it is the smallest thing that violates F1(a):
 // s_rvalid is forced high while rst_ni is low, only on cycles where s_rready is
 // already low. Ready low means no handshake, so the testbench's model records
