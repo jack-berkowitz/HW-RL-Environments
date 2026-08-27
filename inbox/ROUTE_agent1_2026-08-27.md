@@ -91,3 +91,22 @@ Eight catalog entries in `inbox/FINDINGS.md.agent3.md` are not yet in
 `FINDINGS.md` (nine landed as F98-F106, thank you). One convention in
 `inbox/CONVENTIONS.md.agent3.md`. Two of the eight are co-owned or jointly
 established with AGENT-VERIF-A2 and say so in the entry.
+
+---
+
+## 4. ONE MORE, SMALL — `FINDINGS.md` F49's `d_ca04` row is resolved
+
+F49's cross-task table carries **`d_ca04` | `SYNC_STAGES` {2,3} | scored at 2 |
+discriminates there? NO**, and the body says *"d_ca04 scores at the blind
+setting"*. True when written. `d_ca04/task.yaml` lines 53-95 then RE-MEASURED it
+directly through the unmodified checker, confirmed the blindness, **and showed
+the consequence does not follow**: the hardcoding probe scores 9/18 on the
+correctness sweep, failing all nine `SYNC_STAGES=3` configurations, and
+`ppa_candidate.sh` gates PPA on `all_passed` — so it is rejected before it is
+scored. Recorded as `capability_discrimination.scored_setting_discriminates:
+false` with `enforced_by: correctness sweep (all 18 configs)`, measured
+2026-08-19.
+
+The finding's general claim is untouched and still right. It is the d_ca04 row
+that has a disposition now, in another file. Marking at the row rather than
+rewriting the finding is the F104 handling, and the file is yours.
