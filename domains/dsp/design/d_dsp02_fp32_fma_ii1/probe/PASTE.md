@@ -18,6 +18,8 @@ vectors, not on a rate. And the underflow flag is pinned longhand in A6 — read
 it rather than assuming a convention, because the two readings of "tininess
 after rounding" disagree and this task pins one of them explicitly.
 
+Your submission will be graded on correctness as well as power, performance, and area (PPA), latency, throughput, and any other task-specific performance metrics. Keep these reward signals in mind when choosing an implementation.
+
 ## What to submit
 
 **One self-contained file** containing only `module fp32_fma_ii1`, with the

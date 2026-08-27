@@ -26,6 +26,8 @@ The domains path (scripts/sim_candidate.sh + scripts/ppa_candidate.sh) is
 independent of this package and is unaffected.
 """
 
+from __future__ import annotations
+
 """
 Task definitions: what modules exist, what parameter configurations they are
 graded under, and where the tools live.
@@ -41,8 +43,6 @@ header. The testbenches self-check their configuration and abort with
 TEST_RESULT: FAIL on an illegal one, so an illegal entry here shows up as a
 grading failure against a correct design -- keep them in sync with the specs.
 """
-
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
