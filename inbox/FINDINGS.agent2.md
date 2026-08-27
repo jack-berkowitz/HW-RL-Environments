@@ -8358,3 +8358,151 @@ rewards — is what produced the misaim.
 is on an output must state, at the guard, how the guard reaches that output's
 operation; if the answer is "the DUT is combinational" that is a sentence worth
 writing, because it stops being true when someone sets `NumPipeRegs`.
+
+### Correction to the section above: the corpus already knew this
+
+I wrote that "nothing in the pattern says which kind it is safe for". That is
+wrong, and I had not read the file that says it. `mutants/policy/fn_p*.sv` opens,
+in every one of the ten:
+
+    Every mutant perturbs the golden's INPUTS. That is deliberate: an output-side
+    mutation on a pipelined unit needs the operation tracked through the
+    handshake to land on the right result, and a wrapper carrying that much state
+    can fail for reasons unrelated to its defect.
+
+The hazard, the mechanism and the design response, stated by the task's author
+before I arrived. **Sixth instance of losing what the shipped instrument already
+knew**, and the most embarrassing, because I filed a finding claiming the
+knowledge was absent from a corpus that carries it ten times over.
+
+What is genuinely new is smaller and worth keeping at its real size:
+
+    the author's rule       perturb inputs, and the alignment problem cannot arise
+    the unexamined case     three clauses cannot be reached from the inputs AT ALL
+    so the rule has an      an exception it never anticipated, and the exception
+    exception               is where the hazard it was written to avoid returns
+
+And one place the knowledge did NOT reach: `mutants/README.md` opened with "has
+no alignment to get wrong, and is correct everywhere except the case it rewrites
+— by construction", stating the *conclusion* without the *precondition*. The
+policy files carry the reasoning; the README carries only the result. **A reader
+of the README alone — which is the file its name invites you to read first —
+gets a property with no statement of what it depends on**, and would extend the
+set exactly as I did. That file now carries the precondition.
+
+## A green witness gate is not evidence of a clean index
+
+Two surfaces, independent, and I nearly took one for the other.
+
+    check_witness_sync at HEAD    green, all 11 tasks
+    the shared git index          would commit a tree with af_m11 absent from
+                                  v_nw02/mutants/mutants.sv entirely -- 0
+                                  matches, 752 deletions against HEAD, the whole
+                                  W3 change reverted
+
+The mutant file sits on disk byte-identical to HEAD while the index holds it as a
+staged delete. Nothing in the gate looks at the index, and nothing in the index
+is visible to a reader who checks that the gate is green.
+
+**The temp-index discipline is what makes this a non-event rather than a
+near-miss.** Seeding a fresh index from HEAD and adding only explicit paths means
+the shared index's contents cannot reach my commit at all — I did not have to
+notice the staged deletions to be safe from them, and I only noticed because I
+listed paths before staging. A discipline that protects you when you are NOT
+paying attention is the only kind worth having; this one paid out today without
+being consulted.
+
+Not repaired: the index is shared state and another agent may be mid-operation
+inside it. Reported to the peer, left alone.
+
+## I sent a peer an untested mechanism, one message after they retracted one
+
+AGENT-DESIGN-43a92055 reported the linkage gate reads the working tree, and
+retracted it: it reads the tree the index would commit, and their 4-vs-1 split
+came from two different invocations of their own, not from the gate. Their
+refutation was inside output they had themselves pasted.
+
+I then did the same thing in the opposite direction. Having measured that the
+shared index would revert 752 lines, I told them their commit would carry those
+deletions. It would not: the tree I measured is `2e4f7b7f`, the tree their gate
+evaluated is `2d23ed4`, and theirs must contain af_m11 or the checker could not
+have complained that af_m11 lacks a *witness*. One measurement, a mechanism
+inferred from it, never tested, shipped to a peer as a reason to stop work.
+
+    theirs   asserted NO coupling where there is some
+    mine     asserted coupling where there is none
+    shared   a mechanism inferred from a single reading and never tested against
+             the thing it made a claim about
+
+**Symmetric, one message apart, between two agents who had just watched each
+other do it.** The lesson neither of us can claim to have learned from the
+other's instance: a measurement licenses a statement about what was measured, and
+a mechanism is a different claim needing its own test. I had the means to test
+mine — build their tree, diff it — and did not, because the warning felt urgent.
+Urgency is when the discipline is load-bearing, not when it is suspendable.
+
+I also told them a green working tree unblocked them. On the real mechanism it
+would have failed them a second time.
+
+### Correction: the index was STALE, not dirty, and I made the same error a third time
+
+The 752 deletions are real and my causal story about them was wrong. Verified
+with AGENT-DESIGN-43a92055's discriminator, run myself:
+
+    index tree                    2e4f7b7f693799fc105d9ae25b8b990bda4cfed4
+    tree of 34af408 (their commit) 2e4f7b7f693799fc105d9ae25b8b990bda4cfed4
+    HEAD tree                     dd3a80e07a1f6a6b386ba50a91a27e8a61b827a1
+
+The index is byte-identical to the tree of an earlier commit. It is **stale, not
+dirty** — it predates my own W3 commit, so everything W3 ADDED reads as a staged
+DELETION when that old index is diffed against a newer HEAD. **The 752 lines I
+described as "someone's staged reversion of my work" are my own work, seen from
+an index that predates it.** There is no other agent's intent in there and never
+was.
+
+    what I measured    correct, and reported correctly
+    what I inferred    latent intent by another agent -- wrong, and untested
+    third time today   theirs about the gate, mine about their commit, mine here
+
+**That is the same error three times in one exchange between two agents who had
+each just retracted an instance of it.** The pattern is stable enough to name: a
+measurement licenses a claim about *what was measured*; the *cause* is a separate
+claim that needs its own test. `git diff --cached` told me what the index differs
+from HEAD by. It did not tell me why, and I supplied a why.
+
+And the discriminator is one line, which is the part worth keeping:
+
+    IDX=$(git write-tree)
+    for c in $(git rev-list -12 HEAD); do
+      [ "$(git rev-parse $c^{tree})" = "$IDX" ] && echo "STALE: index == tree of $c"
+    done
+
+A match means stale. `git status`, `git diff --cached` and `git diff HEAD` all
+show staged deletions in BOTH cases and cannot separate them. `git write-tree` is
+read-only, so the check is free.
+
+The peer had this identical artefact from the opposite side — an index 21 commits
+stale made them read a peer's *committed* work as uncommitted, where it made me
+read my own committed work as staged for deletion. **Same artefact, opposite
+misreading, and the sign of the error depends only on which side of the stale
+index your own commits fell.**
+
+### What survives from that section
+
+Not much, and it should be stated at its real size.
+
+A bare `git commit` would still write the stale tree and revert the difference,
+so the temp-index discipline does still pay here — but it pays against
+*staleness*, a mechanical artefact of everyone using temp indices, not against a
+peer's dangerous staging. And the repair is cheap and known: after committing
+through a temp index, `unset GIT_INDEX_FILE; git read-tree HEAD` refreshes the
+real one. My procedure omits that step, which is precisely why the shared index
+was left pointing at an old tree for other agents to misread. **The peer's helper
+does it and mine does not, and the artefact I raised the alarm about is one my
+own omission helped produce.**
+
+Pairing correction, theirs and taken: "a green gate is not evidence of a clean
+index" is right but underspecified. The gate reads the tree the index would
+COMMIT. So a green gate IS evidence about that tree, and is silent about the
+working tree and about staleness. Three objects — working tree, index tree,
+committed tree — and today every one of us conflated at least two.
