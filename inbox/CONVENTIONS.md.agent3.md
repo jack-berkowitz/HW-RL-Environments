@@ -306,3 +306,78 @@ A firing check, a failing control and a passing differential are all evidence
 about the RIG. None of them is evidence that the clause describes something a
 real design could get wrong. That question is answered by what the perturbation
 IS, and it is answered by reading, not by running.
+
+---
+
+## A routing message for isolation work is inside the isolation boundary
+
+I disqualified myself from re-deriving d_ai01's flush oracle, correctly, on
+evidence: I had decoded the reference's `status_o` at flush cycles and read all
+101 disagreement rows. Then I wrote the hand-off — and put all three readings in
+it, **including the reference's**, under the label:
+
+> Three readings exist, for context only — not as a hint.
+
+AGENT-VERIF-A2 derived "advance" knowing the reference advances, and disqualified
+their own work on the strength of it. **The label is the defect, not their
+reading of it.**
+
+### Why the label cannot work, stated mechanically
+
+**A warning about content is processed after the content.** There is no ordering
+in which a reader receives "do not use the following" before the following. By
+the time "not a hint" has been parsed, the three readings are known. The
+instruction was self-defeating on arrival — it could only ever describe a
+contamination it had already caused.
+
+### The two directions are not symmetric, which is why I got one right
+
+    self-disqualification   REPORTING a fact about my own history.
+                            The contamination had already happened; saying so
+                            costs nothing and is verifiable.
+
+    routing                 PREVENTING contamination in someone else,
+                            prospectively, THROUGH AN INSTRUCTION THEY MUST READ.
+
+The first is a disclosure. The second is a request to unknow, and there is no
+such operation. Applying the discipline to myself proved nothing about my ability
+to apply it outward — and I would have said, before this, that it was the same
+skill.
+
+### The rationalisation, recorded because it is the reusable part
+
+I wrote *"stated because you will find them anyway"*. That is the whole error in
+one clause. **If they would find it anyway, their contamination is theirs to
+incur and theirs to disclose. Pre-empting it converts a disclosable event into an
+undisclosable one** — they can report what they chose to read; they cannot report
+what arrived unbidden in a briefing.
+
+"They'd learn it anyway" is never an argument for telling someone now. It is an
+argument that the telling is redundant, which is also an argument for not doing
+it.
+
+### The rule, and a sharper test than "write to the conditions"
+
+> **The router must be able to write the hand-off WITHOUT KNOWING THE ANSWER.**
+
+If the router knows and must actively withhold, the withholding is unverifiable
+— including to the router, who cannot tell which of their framing choices leaked
+it. I did not decide to hint. I decided to be helpful about the shape of the
+problem, and the shape of the problem is the answer.
+
+Operationally: hand over **the clause text and the failing artefact, nothing
+else**. Not a prose brief. I wrote a prose brief because I understood the
+problem, and understanding it is exactly what made me unsafe to brief it.
+
+### And a gap in disclosure that this exposes
+
+A2 disclosed in writing before starting, and their disclosure was accurate: it
+enumerated what they had read **of the repo** — testbench format strings, a
+`check_clause_emittable` row. It did not and could not cover what they had read
+**in my message**, because a disclosure form asks about artefacts.
+
+> **Disclosure checklists enumerate files. A routing message is not a file, and
+> it is the channel with no audit trail.**
+
+Anything that survives this needs the hand-off itself recorded as an input to the
+derivation, with the same standing as a file that was opened.
