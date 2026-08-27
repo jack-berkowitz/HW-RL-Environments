@@ -141,15 +141,14 @@ module route_xbar_tb;
               fail("R1", $sformatf("cycle %0d: output %0d delivered payload %08x from input %0d, which was accepted bound for output %0d -- R1 says a beat accepted while in_sel_i names j is delivered on j and on no other",
                                    cyc, j, d, s, bound_for));
             else
-              // NO CLAUSE NAMES THIS STATE. The beat was never accepted on any
-              // input for any output, so it is neither a routing fault (R1) nor
-              // a delivery-count fault (R4) -- the design produced a beat out of
-              // nothing. Reported under an explicit non-clause marker rather than
-              // borrowed from R1, because attributing it to R1 would credit a
-              // submission that checks routing with catching fabrication.
-              // PENDING: this needs a clause of its own or a spec statement that
-              // it is deliberately unclaimed. Not decided here.
-              fail("UNCLAIMED", $sformatf("cycle %0d: output %0d delivered payload %08x naming input %0d, which was never accepted on any input for any output (cycle %0d)",
+              // R6. The beat was never accepted on any input for any output, so
+              // it is neither a routing fault (R1) nor a delivery-count fault
+              // (R4) -- both presuppose acceptance and a fabricated beat
+              // satisfies them vacuously. R6 was added for this state, on the
+              // evidence that xb_m8_duplicate_on_stall_release reaches it: the
+              // mutant emits a beat before anything accepted it, then again.
+              // The second emission is a genuine R4; the first had no clause.
+              fail("R6", $sformatf("cycle %0d: output %0d delivered payload %08x naming input %0d, which was never accepted on any input for any output (cycle %0d)",
                                    cyc, j, d, s, cyc));
           end
           else if (pair_q[s][j][0] !== d) begin

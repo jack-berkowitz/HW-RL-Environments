@@ -5802,3 +5802,63 @@ Verified in the other direction against real source rather than only the
 self-test: all four non-reporting helpers take `ctx` or `what` and pass literal
 clause ids to `fail()`. **A bound that is only tested on cases it was written
 from is the accepting half again.**
+
+## Identity-by-name, where the prefix carried the whole distinction
+
+An instance from the user, filed at their instruction so the record does not
+read as though only the agents produce them.
+
+An instruction read *"R6 and the B1 text land together on **d_ca04** with a
+recomputed hash."* R6 is for **v_ca04_stream_xbar**; the B1 text is
+AGENT-DESIGN-43a92055's, for **d_ca04_async_fifo_cdc**. Two different tasks in
+two different halves of the corpus, collapsed on the shared suffix `ca04`.
+
+    v_ca04_stream_xbar        verification   mine
+    d_ca04_async_fifo_cdc     design         AGENT-DESIGN-43a92055's
+
+**The single character that distinguishes them is the one carrying the entire
+distinction** — which half of the corpus, which agent, which spec, which hash.
+Everything after it is shared, longer, and more memorable.
+
+### Why this is the same family and not a typo
+
+The standing rule is that **identity is carried by explicit identifiers, never by
+position, name or path.** It was written for agent identity, after two sessions
+signed as "Agent 3" — and it applies to task identity for the same reason. A name
+that differs only in a prefix is a name that will be matched on its suffix,
+because a suffix is what a reader carries in working memory.
+
+The nearest earlier instance was mine and had the same shape: I filtered
+`--shared` output with `^  v_`, which dropped every `d_` heading and made design
+rows appear under a verification task. **Same corpus, same prefix convention,
+same failure — once in a human instruction and once in a regex.**
+
+### What made it cheap
+
+The instruction paired R6 with a second item, and the second item was **not
+mine**. That mismatch is what surfaced it: I could not land a clause on a task
+another agent owns, so the collision had to be resolved before anything moved.
+An instruction naming only one task would have read as coherent and R6 would have
+landed in the wrong spec.
+
+**The cross-check was ownership, not spelling.** Nobody re-read the identifier;
+the pairing failed a boundary test. That is worth more than a naming convention,
+because it works when the reader has already misread the name.
+
+## R6 landed on v_ca04_stream_xbar
+
+    task_text_hash  dce75b0677d07f7f   (2026-08-27, spec/*.sv + spec/*.md + probe/PASTE.md)
+
+Spec, `probe/PASTE.md` and the testbench together; the marker that was
+`fail("UNCLAIMED", ...)` pending a decision is now `fail("R6", ...)`.
+
+    golden ....................... PASS
+    mutants caught ............... 10 of 10
+    R6 fires on .................. xb_m8_duplicate_on_stall_release, and only it
+    stated / emittable ........... 19 -> 20 / 12 -> 13, R6 in neither hole
+    non-clause reporting ids ..... none left in this task
+
+**R6 firing on exactly one mutant is the result to keep.** A new clause that
+fires on many is a catch-all that has absorbed other clauses' failures; one that
+fires on none is unexercised and could not have been justified. One, and it is
+the mutant the clause was written from.

@@ -104,6 +104,21 @@ selector is `in_sel_i[k*SEL_W +: SEL_W]`, and output `j`'s source index is
 - **R5.** Beats accepted from the **same input** and bound for the **same
   output** are delivered in the order they were accepted.
 
+- **R6 — every delivered beat was accepted.** A beat appearing on an output
+  shall be one that was accepted on some input. The unit delivers beats; it
+  does not originate them.
+
+  *This is not implied by R1 or R4. R1 governs WHICH output an accepted beat
+  reaches and R4 governs HOW MANY TIMES it is delivered; both presuppose that
+  the beat was accepted. A beat that entered the unit at no input satisfies
+  both vacuously — there is no binding to be wrong about, and no first delivery
+  to count a second against.*
+
+  *Authority: task intent. The interface has no source of payload other than
+  the input side, so a beat with no acceptance is not an under-specified case
+  but an impossible one, and a design that produces it is wrong for a reason
+  the other clauses cannot name.*
+
 Nothing is promised about the relative order of beats from *different* inputs.
 
 ## A. Arbitration
