@@ -37,7 +37,7 @@
 //   Fixed by this contract and NOT parameters: ADDR_W = 32 (byte address),
 //   ID_W = 4, BLOCK_WORDS = 4. They are localparams below. A quantity that is
 //   never swept is a constant, not a capability, and declaring it as a
-//   parameter would claim a flexibility nothing checks.
+//   parameter would claim a flexibility the harness never exercises.
 //
 //   AUTHORITY for the legal sets (rule 15): stated task intent. Two values on
 //   each axis is the minimum that can bind the parameter -- a single value is
@@ -156,15 +156,16 @@
 //
 //   R3. EVERY ACCEPTED REQUEST PRODUCES EXACTLY ONE RESPONSE, tagged with that
 //       request's `req_id_i` on `rsp_id_o`. For a LOAD, `rsp_data_o` is the
-//       addressed word. For a STORE, `rsp_data_o` IS NOT CONSTRAINED and is
-//       not checked -- a design may return anything, including zero.
+//       addressed word. STORE RESPONSE DATA IS FREE -- for a STORE a design
+//       may return anything on `rsp_data_o`, including zero, and any value
+//       satisfies this clause.
 //       AUTHORITY: stated task intent. The id is what makes an out-of-order
 //       response stream decodable; constraining store response data would
 //       encode a choice nothing needs.
 //
 //   R4. RESPONSE ORDER IS FREE, WITH ONE EXCEPTION THAT FOLLOWS FROM C2.
 //       Responses may be returned in any order with respect to request order.
-//       Nothing rewards or penalises reordering, and no check counts it.
+//       Reordering is neither rewarded nor penalised; it is a free choice.
 //
 //       THE EXCEPTION: a response that is ready must not be held behind one
 //       that is not. STRICTLY IN-ORDER RETIREMENT IS THEREFORE NOT CONFORMANT
@@ -232,8 +233,8 @@
 //       whichever direction it runs in. The block-aligned address and the
 //       ascending word order are reported under M2 alone.
 //       AUTHORITY: stated task intent -- write-back is stated in the task
-//       title; writing back a clean line is permitted but wasteful and is not
-//       checked either way.
+//       title. CLEAN-VICTIM WRITEBACK IS FREE -- writing back a clean line is
+//       permitted but wasteful, and either choice satisfies this clause.
 //
 //   M3. AT MOST ONE MEMORY TRANSACTION IS OUTSTANDING. A new
 //       `mem_req_valid_o` is not asserted until the previous transaction's
@@ -251,7 +252,7 @@
 //       With memory held so that nothing completes, the design must accept
 //       requests to MAX_MISSES distinct lines before it may stop accepting.
 //       AUTHORITY: stated task intent -- this is the capability the parameter
-//       names, and a parameter no check enforces will be ignored.
+//       names, and a parameter the harness never exercises will be ignored.
 //
 //       MEASURED AT THE REFERENCE BEFORE BEING WRITTEN, at four settings:
 //       the reference accepts exactly MAX_MISSES + 1, at 2, 4, 8 and 16. The
@@ -285,12 +286,13 @@
 //       and no id is starved while others are being served.
 //       AUTHORITY: stated task intent.
 //
-//   C4. NOT CHECKED BY THE TESTBENCH, and that is recorded here rather than
-//       left to be discovered. `C4` appears ZERO times in tb/, and no check
-//       observes how much block data a design holds. This clause is a stated
-//       requirement with no enforcement: a submission that buffers four lines
-//       instead of two is non-conforming and passes. It is not grouped under
-//       another id -- there is no id.
+//   C4. `C4` appears ZERO times in tb/.
+//
+//       Recorded here rather than left to be discovered. Nothing observes how
+//       much block data a design holds, so this is a stated requirement with
+//       no enforcement: a submission that buffers four lines instead of two is
+//       non-conforming and passes. It is not grouped under another id -- there
+//       is no id.
 //
 //       BLOCK-DATA BUFFERING IS BOUNDED. Outside the tag and data arrays, a
 //       design may hold at most TWO cache lines of block data at any time --
@@ -336,7 +338,7 @@
 //
 //   L2. HOW OUTSTANDING MISSES ARE TRACKED IS FREE. A queue, a register file
 //       of miss records, per-line state, or anything else. This contract names
-//       no structure, and no check can distinguish them.
+//       no structure, and the two are indistinguishable at this interface.
 //
 //   L3. CRITICAL-WORD-FIRST IS OUT OF SCOPE. M1 pins ascending word order, so
 //       returning the requested word first is NOT permitted here even though it
@@ -580,7 +582,7 @@ module nonblocking_dcache #(
 
   // BLOCK_WORDS is fixed at 4 by this contract. It is a localparam rather than
   // a parameter because it is never swept, and an unswept parameter claims a
-  // flexibility no check enforces.
+  // flexibility the harness never exercises.
   localparam int unsigned BLOCK_WORDS = 4;
 
   // Implementation goes here.

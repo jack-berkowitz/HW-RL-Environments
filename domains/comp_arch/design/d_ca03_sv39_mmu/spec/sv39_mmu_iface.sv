@@ -430,7 +430,8 @@
 //         pass must issue NO page-table read on mem_*.
 //       * translate a 17th distinct page, then translate all 17. This pass MUST
 //         issue at least one page-table read.
-//     Which of the 17 is displaced is not checked.
+//     REPLACEMENT CHOICE IS FREE -- whichever of the 17 is displaced
+//     satisfies this clause.
 //
 //     FOR THIS CHECK ONLY, the presence or absence of mem_* activity during the
 //     replay is scored, as an exception to T2. The COUNT and ORDER of accesses
@@ -592,9 +593,11 @@
 //          P2 here: flip-flop count after synthesis against the field-list floor
 //          G4 already quotes -- 3,467 in the reference against a floor of about
 //          3,168 for 32 entries. That measurement belongs to whoever runs PPA
-//          and IS NOT IN PLACE. UNTIL IT IS, P2's instruction-side budget is
-//          priced but not enforced. Recorded so that nobody reads T4 and
-//          concludes both TLBs are covered.
+//          and IS NOT IN PLACE. P2'S INSTRUCTION-SIDE BUDGET IS PRICED, NOT
+//          BOUNDED -- the cycle axis charges under-provisioning as described
+//          above, and nothing places a ceiling on it until that measurement
+//          exists. Recorded so that nobody reads T4 and concludes both TLBs
+//          are covered.
 //
 // -----------------------------------------------------------------------------
 // G -- GRADING

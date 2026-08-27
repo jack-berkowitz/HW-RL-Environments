@@ -116,7 +116,7 @@
 //       interface does not make buildable. Found by trying to construct the
 //       store-and-forward design, not by reading L2.
 //
-//   R5. REPORTED UNDER R3. Order is not checked by a counter of its own: the
+//   R5. REPORTED UNDER R3. Order has no counter of its own: the
 //       scoreboard builds each expected payload from the next sequence number
 //       due on that input-output pair, so a frame delivered out of order is
 //       compared against the payload of the frame that should have come first

@@ -323,8 +323,9 @@ exact port list below. No package, no include, nothing outside the file.
 // -----------------------------------------------------------------------------
 //   L1. THE ALGORITHM IS FREE. How the product is formed, how the addend is
 //       aligned, how many bits of the intermediate are kept, whether the three
-//       formats share a datapath or not -- nothing observes any of it. Sharing
-//       is what the task is ABOUT, but it is rewarded by PPA, not gated here.
+//       formats share a datapath or not -- all of it is a design choice.
+//       Sharing is what the task is ABOUT, but it is rewarded by PPA, not
+//       gated here.
 //
 //   L2. LATENCY IS FREE and is reported as a METRIC, never gated. One cycle or
 //       fifty; it may vary per format, per lane count and per operand.

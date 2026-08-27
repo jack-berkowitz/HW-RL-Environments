@@ -159,7 +159,7 @@
 //       payload. The antecedent is counted PER CHANNEL and a zero on any one
 //       of the five fails -- a stability check whose antecedent never held is
 //       indistinguishable from one that passed, and an aggregate count would
-//       hide an untested channel behind the other four.
+//       hide a channel that never fired behind the other four.
 //
 //       A crossbar output holding valid with ready low must keep valid high and
 //       the payload stable.
@@ -257,9 +257,9 @@
 // -----------------------------------------------------------------------------
 // LATENCY
 // -----------------------------------------------------------------------------
-//   NOT CONSTRAINED AND NOT CHECKED. Pipeline as deeply as you like; added
-//   latency is never penalised. Note that this is a statement about DELAY, not
-//   about CAPACITY -- C1 and C2 above are requirements and are checked.
+//   PIPELINE DEPTH IS FREE. Pipeline as deeply as you like; added latency is
+//   never penalised. Note that this is a statement about DELAY, not about
+//   CAPACITY -- C1 and C2 above are requirements and are checked.
 //
 // -----------------------------------------------------------------------------
 // RESET
