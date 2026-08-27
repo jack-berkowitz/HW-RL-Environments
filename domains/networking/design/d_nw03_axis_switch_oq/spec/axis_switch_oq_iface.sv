@@ -66,7 +66,13 @@
 //       AUTHORITY: stated task intent -- the ordinary stream contract, stated so
 //       stability is a contract term rather than an assumption.
 //
-//   R1b. `m_valid_o` MUST NOT depend combinationally on `m_ready_i`. A sink may
+//   R1b. REPORTED UNDER R1. The stability check that observes this -- output
+//       withdrew `m_valid_o` while the beat was unaccepted -- is the same
+//       comparison that observes R1, so a failure here prints an R1 message.
+//       The grouping is stated so it is visible rather than discovered from the
+//       letter in a failure string.
+//
+//       `m_valid_o` MUST NOT depend combinationally on `m_ready_i`. A sink may
 //       hold `m_ready_i` low indefinitely, and a design that waits for it before
 //       asserting `m_valid_o` deadlocks against a sink that waits for
 //       `m_valid_o` before asserting `m_ready_i`.
@@ -110,7 +116,13 @@
 //       interface does not make buildable. Found by trying to construct the
 //       store-and-forward design, not by reading L2.
 //
-//   R5. ORDER BETWEEN FRAMES FROM ONE INPUT TO ONE OUTPUT IS PRESERVED. Two
+//   R5. REPORTED UNDER R3. Order is not checked by a counter of its own: the
+//       scoreboard builds each expected payload from the next sequence number
+//       due on that input-output pair, so a frame delivered out of order is
+//       compared against the payload of the frame that should have come first
+//       and fails as an R3 data mismatch. Grouped, not unchecked.
+//
+//       ORDER BETWEEN FRAMES FROM ONE INPUT TO ONE OUTPUT IS PRESERVED. Two
 //       frames from the same input to the same output are delivered in the
 //       order they were accepted. No ordering is promised between different
 //       inputs, or between different outputs -- see L4.
@@ -161,7 +173,12 @@
 //       frames to a ready output.
 //       AUTHORITY: stated task intent.
 //
-//   C3. FORWARD PROGRESS. With frames continuously offered on every input and
+//   C3. REPORTED UNDER R3 AND C2, one half each. "Every accepted frame is
+//       eventually delivered" is the accepted-versus-delivered count, which
+//       fails as R3. "No input goes unserved while others are being served" is
+//       the starvation check, which fails as C2. There is no C3 message.
+//
+//       FORWARD PROGRESS. With frames continuously offered on every input and
 //       every output eventually ready, every accepted frame is eventually
 //       delivered, and no input goes unserved while others are being served.
 //       AUTHORITY: stated task intent.

@@ -333,10 +333,38 @@ exact port list below. No package, no include, nothing outside the file.
 //       in flight is permitted and so is refusing to. Reported as a METRIC,
 //       never gated. C1 requires progress, not a rate.
 //
-//   L4. `in_ready_o` MAY DEPEND COMBINATIONALLY ON `in_valid_i`, and
-//       `out_valid_o` may depend combinationally on `out_ready_i`. The harness
-//       drives neither from the other, so a design that gates either way cannot
-//       deadlock against it. A fully combinational unit is conformant.
+//   L4. COMBINATIONAL PATHS, ENUMERATED. This clause is EXHAUSTIVE about the
+//       four handshake paths: silence below is not latitude.
+//
+//       FORBIDDEN:
+//         `in_ready_o` MUST NOT depend combinationally on `in_valid_i`.
+//         `out_valid_o` MUST NOT depend combinationally on `out_ready_i`.
+//
+//       PERMITTED:
+//         `in_ready_o` MAY depend combinationally on `out_ready_i`.
+//         `out_valid_o` MAY depend combinationally on `in_valid_i`.
+//
+//       A FULLY COMBINATIONAL UNIT IS STILL CONFORMANT, and that is not in
+//       tension with the two prohibitions -- it is what the reference is. At
+//       NumPipeRegs=0 the reference drives `out_valid_o` from `in_valid_i` and
+//       `in_ready_o` from `out_ready_i`, both within a cycle, and uses NEITHER
+//       forbidden path. Measured, not assumed: toggling `out_ready_i` inside a
+//       cycle leaves `out_valid_o` unmoved, and toggling `in_valid_i` inside a
+//       cycle leaves `in_ready_o` unmoved. See tb/audit/probe_l4_combinational_tb.sv.
+//
+//       WHY THE TWO ARE FORBIDDEN RATHER THAN LICENSED. `out_valid_o` following
+//       `out_ready_i` lets a design withdraw a result the instant the sink stops
+//       taking it, which is exactly what H1 forbids -- so licensing that path
+//       made H1 unfalsifiable for any design that used it. The prohibition is
+//       what gives H1 something to catch. `in_ready_o` following `in_valid_i` is
+//       forbidden for the symmetric reason on the input side.
+//
+//       AN EARLIER VERSION OF THIS CLAUSE LICENSED BOTH and said "a design that
+//       gates either way cannot deadlock against it", which is true of the
+//       harness and irrelevant to the stability requirement it was emptying.
+//       The two paths it named turned out to be the two the reference does not
+//       use, so bounding them cost nothing and was worth measuring before it was
+//       decided rather than after.
 //
 //   L5. BITS OF THE OPERANDS ABOVE THE LANES IN USE ARE FREE AND ARE NEVER
 //       DRIVEN TO A FIXED VALUE. The harness puts arbitrary bits there
