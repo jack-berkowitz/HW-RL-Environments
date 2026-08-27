@@ -146,9 +146,27 @@ def ids_emittable(text):
 # and it is cheaper than all of them.
 #
 # It records grouping honestly; it does not remove it. What changes is that the
-# credit becomes VISIBLE, so scoring can decide deliberately instead of the
-# grouping being discovered by someone reading a failure message and noticing
-# the wrong letter.
+# credit becomes VISIBLE -- to a submitter reading the spec, and to whoever reads
+# a failure message -- instead of the grouping being discovered by someone
+# noticing the wrong letter.
+#
+# WHAT IT DOES NOT DO, AND THIS SENTENCE USED TO SAY OTHERWISE. It said the credit
+# becomes visible "so scoring can decide deliberately". Scoring cannot decide
+# anything about clauses, because no clause id reaches a results record: the id
+# exists at the fail() site, is printed into a log line, and is dropped there.
+# score.py captures only ^TEST_RESULT: (PASS|FAIL), and I measured 841 run
+# records with ZERO clause-shaped tokens in any verdict field. Reported by
+# AGENT-VERIF-A2, who found their own scan of those records was VACUOUS -- it
+# returned a clean answer about compound ids from a corpus that carries no ids at
+# all -- and said so rather than reporting the clean answer.
+#
+# That is worse than an ordinary imprecision and it belongs to the citation family
+# with the tense moved. A checker cited without being read is recoverable: the
+# artefact exists and one command settles it. A CAPABILITY DESCRIBED BUT ABSENT
+# has nothing to open. A future reader citing this sentence as evidence that
+# scoring accounts for grouping would find no file to be wrong about.
+#
+# If clause ids are ever plumbed into the run record, change this paragraph.
 #
 # The form is deliberately one that reads as English, because a clause a human
 # will not read is a clause that will not be kept true:
