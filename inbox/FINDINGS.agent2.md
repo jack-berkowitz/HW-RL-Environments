@@ -7126,3 +7126,95 @@ The cases are direct calls with the state constructed and restored, so they cost
 nothing at run time and need no new build. `FIRED v_ca03.attrib_cases` counts
 them, because a case list that silently runs three of four is the same failure as
 a control that never fires.
+
+## The differential swept across my half: its scope is narrower than the control set, and neutralising is not always zeroing
+
+Ran the design half's differential — *build the control with its perturbation
+removed and require it to PASS* — against every control in my eleven.
+
+### It applies to five of twenty-nine, and that is the first result
+
+    29 negative controls across 8 tasks
+       7  null-tb          a null testbench, not a perturbed design
+      17  defect-injected  a design written to break a rule; "the perturbation"
+                           IS the design, and removing it means writing a correct
+                           one -- i.e. the golden, which passes trivially
+       5  removable        a single named term that can be neutralised
+
+**Running the differential on the other twenty-four would produce a pass that
+means nothing**, because the counterfactual is the golden by construction. A
+green there is the vacuous-check family with an extra build — and the rule as
+stated does not say so.
+
+    d5_withdraws_ar        drop        v_ca03
+    a5_withdraws_ar        drop        v_ca06
+    f1_answers_in_reset    force_r     v_ca03
+    f1_answers_across_reset force_b    v_ca03
+    reset_polarity_dut     rst_flip    v_ca06
+
+### Results on the five
+
+    d5_withdraws_ar          with FAIL D5 x12   without PASS
+    a5_withdraws_ar          with FAIL A5 x5    without PASS
+    f1_answers_in_reset      with FAIL F1 x8    without PASS
+    f1_answers_across_reset  with FAIL F1 x1    without PASS
+    reset_polarity_dut       with FAIL A2/A3/A4 x196   without PASS
+
+**All five hold.** Every one fails on the clause its perturbation attacks and
+passes when the perturbation goes.
+
+### Neutralising is not zeroing, and I got it wrong first
+
+`reset_polarity_dut`'s perturbation is `wire rst_flip = ~rst_ni;` feeding
+`.rst_ni(rst_flip)`. Setting it to `1'b0` gave **196 failures, identical to the
+control** — and for a moment that looked like a control the differential had
+caught.
+
+It was my neutralisation. **Zeroing an inversion does not remove a perturbation;
+it substitutes a different one** — a design held permanently in reset. The
+correct differential is `wire rst_flip = rst_ni;`, restoring golden behaviour,
+and that passes.
+
+    gating term  (drop, force_r, force_b)   0 means "do not gate"      -> zeroing works
+    inversion    (rst_flip)                 0 means "always reset"     -> zeroing lies
+
+**The differential is "replace the perturbation with the golden behaviour", not
+"replace it with zero."** Those coincide for a gate and diverge for anything
+else, and the divergence produces a *failing* differential, which reads as a
+defect in the control rather than in the test.
+
+### And my harness bound the golden and I nearly believed it
+
+Before either result, the v_ca06 runs came back **PASS with the perturbation in**.
+That is not a possible outcome for a shipped control, and the tell was the *with*
+case, not the *without* one.
+
+Cause: v_ca06's testbench instantiates `dw_downsizer dut (.clk_i(clk), ...)` with
+no parameter list, and my substitution matched only `dw_downsizer\s+#\(`. It
+replaced nothing, built the golden, and reported PASS twice. **A substitution
+that matches nothing produces a clean run of the wrong thing** — the same defect
+recorded in `d5_withdraws_ar.sv`'s header as *"a rename using `\b` in BSD `sed`,
+which matched nothing, so ten witnesses ran"*.
+
+The fix was one alternation. **What caught it was that a control passing is
+impossible, not that anything checked the substitution** — and if the differential
+had been the only run, the *without*-PASS would have looked like a success.
+
+### Three instruments and a stated limit
+
+    FIRED counter   catches: the control never ran
+    differential    catches: the control ran AND something else caused the failure
+    clause id       catches: the control ran, caused it, and hit the wrong clause
+
+None of the three covers another, and the design half's bound holds over all of
+them, kept in their words:
+
+> a firing check, a failing control and a passing differential are **all evidence
+> about the rig.** None of them says the clause describes something a real design
+> could get wrong.
+
+**That question is constructible-versus-plausible, and it stays human.** There is
+no instrument for it and there should not be one pretended into existence.
+Saying so is a stronger claim than the three instruments alone: it bounds what
+the rig can establish, which is the thing this corpus has been wrong about all
+week.

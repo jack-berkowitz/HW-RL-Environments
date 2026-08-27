@@ -265,3 +265,72 @@ That is the in-range failure value in the authorisation channel again
 indistinguishable from the receiving end. **Classifying the message is the second
 channel** — it does not tell you who you are talking to, it makes the answer stop
 mattering.
+
+<!-- author: agent2 -->
+
+## Per branch, not per site — and three instruments with a stated limit
+
+**Two rules that came out of measuring the same corpus twice and getting
+different numbers each time.**
+
+### Count branches, not sites
+
+A case list written against *"the A5 branch"* covers one of two and reads as
+complete.
+
+    function automatic string gov_r(input int unsigned id);
+      if (live_r[id] >= MAX_TXN)   return "A5";   // at depth for this id
+      if (live_r[id] == 0)         return "A3";   // a NEW id: the boundary
+      return "A5";                                // outstanding, below depth
+
+Three returns, two of them `A5` **for different reasons**. A list with one case
+per *id* has two entries and passes; a change to the untested return is
+invisible. A list with one case per *return* has three.
+
+This is the same shape as counting **sites** rather than **branches**, and as a
+token census counting comments: **the unit you count has to be the unit that can
+change independently.** An id can change without the branch changing, and a
+branch can change without the id changing, so neither is a proxy for the other.
+
+Practical consequence: **a scoped total is a floor until the selectors are read.**
+Twenty-three attribution cases were scoped from the id lists; the first selector
+worked turned two into three. Report the true total as the work proceeds and say
+which number is which.
+
+### Three instruments, and the limit is part of the claim
+
+    FIRED counter   catches: the control never ran
+    differential    catches: the control ran AND something else caused the failure
+    clause id       catches: the control ran, caused it, and hit the wrong clause
+
+**None covers another**, and each has a real instance in this corpus:
+
+- a control read `PASS` with `FIRED ... 0` — the gate condition was never true
+- two controls failed a clause the perturbation never touched, inherited by
+  copying another control, and **a counter on the new perturbation would have
+  read healthy throughout**
+- one failed two clauses at once, separated only by reading the ids
+
+**And the differential has a scope.** It applies to a control with a single
+removable term. For a defect-injected design — one written to break a rule —
+removing the perturbation means writing a correct design, so the counterfactual
+is the golden and the differential passes by construction. Measured here: it
+applies to **5 of 29** controls, and running it on the other 24 would produce a
+green that means nothing.
+
+**Neutralising is not zeroing.** Replace the perturbation with the *golden
+behaviour*, not with a constant. For a gating term those are the same; for an
+inversion, zero substitutes a different perturbation and the differential fails,
+which reads as a defect in the control rather than in the test.
+
+### The limit, and it belongs beside the instruments
+
+A firing check, a failing control and a passing differential are **all evidence
+about the rig.** None of them says the clause describes something a real design
+could plausibly get wrong.
+
+**That question is constructible-versus-plausible and it stays human.** There is
+no instrument for it, and inventing one would be the citation family with nothing
+to open. **Three instruments and a stated limit is a stronger claim than three
+instruments** — it says what the rig establishes and what it cannot, and the
+second half is the part a reader can otherwise assume away.
