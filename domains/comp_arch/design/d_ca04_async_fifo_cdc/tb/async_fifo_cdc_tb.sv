@@ -285,7 +285,15 @@ module async_fifo_cdc_tb;
         $display("METRIC: capacity_beats_accepted=%0d (DEPTH=%0d, B1 ceiling=%0d)",
                  cap_accepted, DEPTH, DEPTH + 4);
 
-        // THE SETTLE GUARD, which this measurement never had. cap_accepted is
+        // THE SETTLE GUARD, which this measurement never had. It reports as
+        // MEASUREMENT INVALID rather than under C4/B1, because a phase that
+        // did not settle says nothing about whether either clause holds -- and
+        // a compound id would make one rig failure read as two clauses
+        // exercised. (The first version of this line was tagged "(C4/B1)",
+        // written the same day as the census that found compound ids inflate
+        // exactly that way.)
+        //
+        // cap_accepted is
         // only a capacity if the writer was actually refused and STAYED
         // refused; exiting on the 4000-cycle guard instead of on 64 quiet
         // cycles means the phase never came to rest, and the number is
@@ -294,7 +302,7 @@ module async_fifo_cdc_tb;
         checks++;
         if (quiet < 64)
             note_fail($sformatf(
-                "capacity phase never came to rest -- %0d quiet cycles of the 64 required after %0d cycles; cap_accepted=%0d measures nothing (C4/B1)",
+                "MEASUREMENT INVALID, no clause violated: the capacity phase never came to rest -- %0d quiet cycles of the 64 required after %0d cycles, so cap_accepted=%0d is whatever had been accepted when the clock ran out. C4's floor and B1's ceiling both read that number and neither can be judged from this run.",
                 quiet, guard, cap_accepted));
 
         if (cap_accepted < DEPTH)
