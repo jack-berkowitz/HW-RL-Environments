@@ -302,6 +302,16 @@ Everything normative is in the interface below.
 //     from it. NO SCORING WINDOW DEPENDS ON THIS PARAGRAPH, and none should be
 //     reintroduced from it.
 //
+//     MEASURED 2026-08-27, AND IT WAS REASONING WHEN IT WAS WRITTEN.
+//     tb/audit/probe_flush_stall_edge_tb.sv: z_o reads 0x0000 on the FIRST edge
+//     of the assertion at both legal HEIGHTs, uniform across every clocked row,
+//     and with reg_enable_i low as well as high. Zeros marching one stage per
+//     tick would have shown it at edge 3 for HEIGHT=4 and edge 7 for HEIGHT=8.
+//     THE PREMISE IS NOW MEASURED RATHER THAN ARGUED, AND THAT MAKES THE
+//     PARAGRAPH MORE DANGEROUS, NOT LESS: a measured simultaneity reads as a
+//     stronger invitation to rebuild the deleted 3-tick window than an argued
+//     one did. It is not one. NOTHING IS SCORED FROM THIS PARAGRAPH.
+//
 //     flush_i DOES take precedence over reg_enable_i: with reg_enable_i low and
 //     flush_i high, every clocked row clears. Also measured.
 //
@@ -488,9 +498,13 @@ Everything normative is in the interface below.
 //       written for C3's interval alone and silently missed C2's and C4's, both
 //       of which predated it -- so the per-interval form demonstrably does not
 //       propagate on its own, and this enumeration is a maintenance obligation
-//       rather than a description. It is checkable: every site in this file
-//       matching "excluded from scoring" appears above, and every clause named
-//       above appears in G1's delegation.
+//       rather than a description. It is checkable: every site in this file that
+//       EXCLUDES something from scoring appears above, and every clause named
+//       above appears in G1's delegation. THE TEST IS ON WHAT A SENTENCE DOES,
+//       NOT ON THE WORDS IT CONTAINS. A sentence stating that nothing is
+//       excluded is not an exclusion site; neither is this one, which only names
+//       the words. The rule was written as a text match and a neighbouring
+//       clause began failing it by using the same words to say the opposite.
 //
 //       AN EXCLUSION SUSPENDS THE COMPARISON, NOT THE WELLFORMEDNESS. It
 //       excludes the value from being compared against the reference. It does

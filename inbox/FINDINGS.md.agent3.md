@@ -594,7 +594,7 @@ audited for how it got there.
 
 ---
 ---
-## FOR THE CATALOG — nine entries, formatted to be landed into FINDINGS.md as-is
+## FOR THE CATALOG — eleven entries, formatted to be landed into FINDINGS.md as-is
 
 ---
 
@@ -975,5 +975,102 @@ the enumeration and the conclusions in the same file.
 **Not a duplicate of "a containment claim needs its sweep stated".** That one is
 about a claim whose scope is unmeasured. This one is about a claim whose scope is
 measured, written down in the same document, and then not consulted.
+
+**Rules:** 24, 36
+
+---
+
+### A correction reaches the normative text and not the record it was derived from
+
+> **A correction reaches the normative text and not the record the text was
+> derived from. The record then reads as a live claim to anyone arriving by
+> search, and quoting it propagates the dead version forward.**
+
+Two instances in one file, found within an hour of each other, pointing the same
+way.
+
+**One.** d_ai01's C2 was corrected in commit `0477595` to say flush clears every
+row *whose clock is enabled*, and MEASUREMENTS Sec 7 was written in the same
+commit to record why — quoting the dead draft in the past tense: *"C2 said flush
+forces every inter-stage register of every row to zero"*. A later reader
+searching the file for that string landed on the quotation and reported it as a
+live defect in current clause text. **The string appears zero times in the spec.**
+The correction was complete; the record of it was indistinguishable from the
+thing it corrected, to a reader who arrived at the line rather than at the
+paragraph.
+
+**Two.** The same file's Sec 6, written *before* the measurement that produced
+Sec 7, still said "while `flush_i` is asserted every inter-stage register reads
+zero" — the unqualified universal, two sections above its own refutation, never
+amended when the clause was. That one was live and had been for as long as the
+clause was wrong plus everything since.
+
+**The two failure modes are opposite and the cause is one.** A quotation of a
+dead claim reads as live; a superseded claim in a narrative reads as live. Both
+happen because the correction is applied where the *rule* lives and the *record*
+is left as an append-only history that nobody re-reads as a whole.
+
+**Handling, and it is not "delete the record".** Records are append-only for good
+reason — an artefact that only shows its corrected state cannot be audited for
+how it got there. The obligation is to MARK, at the sentence: a quotation of
+superseded text is marked as a quotation, and a superseded assertion is marked
+with the date and what falsifies it. Both cost one line and both are invisible to
+a reader who does not need them.
+
+**The sweep this implies.** When a clause is corrected, the sweep is not only
+over other copies of the clause — it is over every document that *quotes,
+restates or reasons from* the old text. Those sites do not match a search for the
+new wording, only for the old, which is exactly the search nobody runs after a
+fix.
+
+**Cross-cites:** "Marking a block SUPERSEDED does not mark the claims inside it"
+above — both are about a reader arriving at a LINE rather than at a document, and
+the fix in both is a marker at the sentence rather than at the container. Also
+"A correction reaches the copy whose purpose it was argued from", which is the
+same under-propagation confined to the normative text.
+
+**Rules:** 24, 26
+
+---
+
+### A maintenance obligation stated as a grep is only as good as the grep
+
+> **A clause that makes itself checkable by naming a string has delegated its
+> correctness to a text match, and a neighbouring clause can break it by using
+> the same words to say the opposite thing.**
+
+d_ai01's C5 enumerates every interval this contract excludes from scoring, and
+states the obligation as a test: *"every site in this file matching 'excluded
+from scoring' appears above"*. That was true when written. It **began failing in
+the same commit that landed it**, because the C2 rewrite beside it contains the
+sentence `NOTHING IS EXCLUDED FROM SCORING DURING AN ASSERTION` — a negation,
+matching the string exactly, asserting the reverse. C5's own self-reference
+matched too. Three of five matches were not exclusion sites.
+
+**The failure is not the wording, it is the delegation.** A grep tests
+CONTAINMENT of words. A maintenance obligation is about what a sentence DOES.
+Those coincide only while no neighbouring text discusses the same subject, which
+is the one condition a clause cannot rely on: the neighbours of a clause about
+exclusions are clauses about exclusions.
+
+**Narrowed 2026-08-27** to test what a sentence does rather than the words it
+contains, with the negation and the self-reference named as non-sites. **And the
+narrowing has a cost that should be stated rather than discovered:** the test is
+no longer executable by a grep. It now needs a reader who can tell an exclusion
+from a statement about exclusions. "Checkable" moved from *mechanical* to
+*checkable by someone who reads it*, which is weaker and is what the honest
+version of the clause claims.
+
+**The general form.** When a document makes itself self-checking, state whether
+the check is MECHANICAL or requires judgement, and never let a mechanical check
+be phrased over a string that ordinary discussion of the subject would also
+produce. A mechanical check on vocabulary is a check on the absence of neighbours.
+
+**Cross-cites:** "A containment claim in a finding summary is a measurement"
+above — that entry requires a sweep to be stated; this one is what happens when
+the sweep IS stated and the sweep is the wrong instrument. Also the text-sweep
+half of "A correction reaches the copy whose purpose it was argued from": a text
+sweep on a relation fails on a capitalisation, and a text sweep on an obligation
+fails on a synonym or a negation.
 
 **Rules:** 24, 36
