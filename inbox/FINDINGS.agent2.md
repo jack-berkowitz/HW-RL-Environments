@@ -7857,3 +7857,136 @@ mode C2 actually had.
 contaminated and the rest were known clean, the remedy would be re-derive 86. What
 the corpus has instead is no mechanism that ever recorded independence, so there
 is nothing to re-derive *against*.
+
+## Reachability, per selector: 25 cases, 8 branches shown reachable, and the gap is the point
+
+The pairing applied. **A case list is not complete until its branches are shown
+reachable from a shipped mutant**, and reporting the case count alone is reporting
+the half that looks finished.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2      2        all-ids per mutant
+    v_ai02   gov_beat              2       2      2        all-ids per mutant
+    v_nw02   gov_admitted          3       3      1        all-ids per mutant
+    v_nw02   gov_aw_timeout        2       2      1        all-ids per mutant
+    v_ca03   gov_r                 3       3      1        witness -m1, LOWER BOUND
+    v_dsp02  gov_nv                4       4      1        witness -m1, LOWER BOUND
+    v_dsp02  gov_result            6       7      ?        pending
+    v_ca04   bound_output_for      -       2      via R1   names an output, not an id
+    ------------------------------------------------------------------------
+                                  22      25      8+       of 22 branches
+
+**Eight of twenty-two branches are shown reachable from a shipped mutant.** Every
+one of the twenty-five cases passes. The two numbers are not measuring the same
+thing and only one of them was ever going to be small.
+
+### What is unreached, and it is not noise
+
+    v_nw02  gov_admitted   W3, and the "exactly the bound, no fault" return
+    v_nw02  gov_aw_timeout W3
+    v_ca03  gov_r          A5, both returns
+    v_dsp02 gov_nv         S8, S9, S2
+
+**W3 is unreached in both of its selectors.** That is the clause I split two
+compounds to give a routable verdict to, and no mutant in either shipped set
+drives it. The split is correct by construction and has never fired — which was
+already recorded, and the reachability pass turns it from an observation about
+one branch into a property of the clause: **W3 has no witness anywhere in this
+corpus.**
+
+`gov_nv`'s S8/S9 pair is the sharper case for the pairing. Both have cases, both
+pass, they differ **only on the mode**, and neither is reachable. A reader of the
+case list sees four branches covered and four passes.
+
+### Two methods, and the weaker one is marked per row
+
+    all-ids per mutant   every clause id printed by every mutant. Exact.
+    witness -m1          the FIRST failure per mutant. A LOWER BOUND: a branch
+                         that only ever fires second is invisible to it.
+
+v_ca03 and v_dsp02 are on the lower bound because my all-ids harness failed on
+both — v_ca03's mutants wrap the golden differently and the rename produced a
+duplicate module. **I did not iterate on the ad-hoc harness a fourth time**; the
+shipped `witness.sh` answers a weaker question and the weakness is stated per row
+rather than folded into the total.
+
+**So `8` is itself a floor**, and two rows of it are floors for a second reason.
+The honest total is *at least eight of twenty-two*, with three rows exact and
+three approximate — which is worth more than a single number that hides which is
+which.
+
+### And the case count was never the finding
+
+Twenty-five cases, twenty-five passes, and it establishes that **every branch
+returns the id its author intended.** That is worth having and it is not what
+anyone reading "25/25" would take from it. The complementary number says
+**fourteen of twenty-two branches have never been reached by a real failure**, and
+neither instrument can produce the other's answer.
+
+### Correction to the table above: v_dsp02's two rows, now measured
+
+The `v_dsp02` rows were filed from a **tail-only view** of the witness output and
+both were wrong. The full first-failure set is `S1 S3 S4 S6 S7 S9 S12`:
+
+    v_dsp02  gov_result   6 branches, 7 cases   5 reachable   S5 unreached
+    v_dsp02  gov_nv       4 branches, 4 cases   2 reachable   S8, S2 unreached
+
+`gov_nv` was filed as **1 reachable** on the strength of having seen `S6` in the
+last two lines of a run. `S9` is reachable too. **I read a tail as a set** — the
+same error as reading a `-m1` line as coverage, one layer up: not the instrument's
+scope this time but the size of the window I looked at.
+
+Corrected totals, with v_ca03 still pending:
+
+    branches ....................... 22
+    cases .......................... 25, all passing
+    shown reachable ................ 13+  (was reported 8+)
+
+**S5 is the interesting single unreached branch.** It is `gov_result`'s
+both-operands-NaN arm, and it has a case that passes. `S4` — exactly one operand
+NaN — is reachable in both orders. So the mutant set drives the asymmetric NaN
+cases and not the symmetric one, which is a fact about the mutant set worth
+recording beside the clause rather than a defect in either.
+
+And `S8`/`S2` remain unreached where `S9`/`S6` are, which keeps the sharper point
+intact: **the S8/S9 pair differs only on the mode, both have passing cases, and
+only one of the two is driven by anything.**
+
+### Final table: 22 branches, 25 cases all passing, 13 shown reachable
+
+`v_ca03`'s first-failure set is `A1 A3 A4 D4 D5 E1`, so `gov_r` is 1 of 3 — `A3`
+reachable, both `A5` returns not.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2      2        all-ids, exact
+    v_ai02   gov_beat              2       2      2        all-ids, exact
+    v_nw02   gov_admitted          3       3      1        all-ids, exact
+    v_nw02   gov_aw_timeout        2       2      1        all-ids, exact
+    v_ca03   gov_r                 3       3      1        witness -m1, lower bound
+    v_dsp02  gov_result            6       7      5        witness -m1, lower bound
+    v_dsp02  gov_nv                4       4      2        witness -m1, lower bound
+    v_ca04   bound_output_for      -       2      via R1   not a clause id
+    ------------------------------------------------------------------------
+                                  22      25     13
+
+**Every case passes. Nine of twenty-two branches have never been reached by a
+real failure**, and three of the eight rows are lower bounds because `-m1` reports
+only the first failure per mutant.
+
+The unreached set:
+
+    v_nw02  W3            in BOTH selectors -- the clause has no witness anywhere
+    v_nw02  gov_admitted  the "exactly the bound, no fault" return
+    v_ca03  A5            both returns
+    v_dsp02 S5            both operands NaN, where one-operand-NaN is reachable
+                          in both orders
+    v_dsp02 S8, S2        where S9 and S6 are reachable
+
+**W3 is the one that matters.** It is the clause two compound-id splits were made
+to give a routable verdict to, and nothing in either shipped mutant set drives it.
+The repair is correct by construction and has never fired — which the reachability
+pass turns from an observation about one branch into a property of the clause.
+
+**And the shape holds across every selector: the case list is uniformly complete
+and the reachability is uniformly not.** 25 of 25 against 13 of 22, from two
+instruments neither of which can produce the other's answer.
