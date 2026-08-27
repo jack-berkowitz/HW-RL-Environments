@@ -63,9 +63,14 @@ echo
 if [ "$fails" -eq 0 ]; then
   echo "OK: all 11 checks here pass -- the clean policy implementation, and each"
   echo "    of the ten defects re-derived on it. THIS SCRIPT COVERS THE POLICY"
-  echo "    BASE ONLY. The golden-base half (golden PASS, ten mutants killed) is"
-  echo "    established by scripts/sim_verification.sh, not here. Saying \"both"
-  echo "    bases\" in this message would claim a check this script never ran."
+  echo "    BASE ONLY. The golden-base half (golden PASS, ELEVEN mutants"
+  echo "    killed) is established by scripts/sim_verification.sh, not here."
+  echo "    Saying \"both bases\" here would claim a check this script never ran."
+  echo
+  echo "    AND THE TWO SETS ARE NO LONGER THE SAME SIZE. af_m11, added to give"
+  echo "    W3 a witness, has NO policy-base counterpart: ten of the eleven"
+  echo "    golden-base mutants are covered here, not eleven. That is a real"
+  echo "    gap and it is stated rather than absorbed into \"all checks pass\"."
 else
   echo "MISMATCH in $fails case(s) -- a mutant is sensitive to the policy choice."
 fi
