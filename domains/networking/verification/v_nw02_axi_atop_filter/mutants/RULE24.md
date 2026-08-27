@@ -63,3 +63,18 @@ reference testbench vs the POLICY-DIVERGENT base and its ten defects
 OK: every defect is caught on BOTH bases, so none of them is killed by
     the latitude choice. The clean policy implementation still passes.
 ```
+
+  # RE-RUN 2026-08-27, after af_m12_stalls_aw_with_no_debt was added because
+  # af_m11 reaches only ONE of W3's two reporting sites. Transcripts above are
+  # left as recorded -- each was true of the set it described.
+  af_m12_stalls_aw_with_no_debt: first difference at cycle 139 -- s_awready (the write-admission bound)
+
+  # Reference-testbench side, read by SITE rather than by id, because both sites
+  # print "W3" and the id alone cannot separate them:
+  #   af_m11   W3 from gov_admitted 1, from gov_aw_timeout 0   ids P2 W3 W4 X4
+  #   af_m12   W3 from gov_admitted 1, from gov_aw_timeout 1   ids P2 W3 W4 X3 X4
+  # Ordinal sweep for af_m12 (clean-run supply is TWO presentations):
+  #   0 FAIL16 aw_timeout=1 unguarded | 1 FAIL17 aw_timeout=1 CHOSEN
+  #   2 FAIL11 aw_timeout=0           | 3 PASS   out of reach
+  # Differential control: with the ordinal neutralised the reference PASSES, so
+  # the perturbation is entirely guard-gated.

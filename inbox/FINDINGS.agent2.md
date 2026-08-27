@@ -8614,3 +8614,124 @@ Note the case list already covers this branch: `tb/atop_filter_tb.sv:814` assert
 `gov_aw_timeout(MAXW-1, MAXW) == "W3"`. **The attribution case passes and the
 branch is unreached** — which is the exact pairing this whole pass exists to
 expose, arriving one last time on the row I expected to close for free.
+
+## The fifth row closes: 20 of 22 reachable, 22 of 22 accounted for
+
+`af_m12_stalls_aw_with_no_debt` drives W3 from `gov_aw_timeout`, the branch
+af_m11 could not reach.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2       2       all-ids, exact
+    v_ai02   gov_beat              2       2       2       all-ids, exact
+    v_nw02   gov_admitted          3       3       2       af_m11, by message text
+    v_nw02   gov_aw_timeout        2       2       2       af_m12, by message text
+    v_ca03   gov_r                 3       3       2*      all-ids, exact by ID
+    v_dsp02  gov_result            6       7       6       witness.sh, exact
+    v_dsp02  gov_nv                4       4       4       witness.sh, exact
+    ------------------------------------------------------------------------
+                                  22      25      20
+
+    * one of two identical-id A5 returns; which one is not observable.
+
+**Twenty is the ceiling, not a shortfall.** The remaining two are classified, not
+open: `gov_admitted`'s no-fault return emits no `fail()` at all, so no mutant can
+drive it to a failure; `gov_r`'s second A5 carries the same id as the first, so
+the instrument cannot say which of the two is reached. 22 of 22 are accounted
+for; 20 of 22 are reachable and that number cannot go higher without changing
+the selectors themselves.
+
+### The calibration, which is the part worth reading
+
+    ordinal   result      ids                W3@aw_timeout  W3@admitted
+    (none)    PASS        --                      0              0    <- differential
+    0         FAIL 16     P2 W3 W4 X4             1              1
+    1         FAIL 17     P2 W3 W4 X3 X4          1              1    <- chosen
+    2         FAIL 11     P2 W3 W4 X3 X4          0              1
+    3         PASS        --                      0              0
+
+**Clean-run supply is two presentations**, and that is the whole constraint. One
+is the only ordinal that is guarded at all *and* reaches the target site. It is
+shallower than the rest of the set, which runs 4th-10th, and the shallowness is
+supply rather than choice.
+
+Three false starts got there, each worth its line:
+
+    counted CYCLES, not presentations   aw_valid is HELD until accepted, so an
+                                        ordinal over cycles counts how long ONE
+                                        AW waited. 8 class-cycles clean, 4304
+                                        once stalling held aw_valid high, and
+                                        ordinals 1/2/3 produced byte-identical
+                                        runs -- an unguarded defect wearing an
+                                        ordinal
+    relaxed the debt to <= 1 for supply LOST the branch entirely (aw_timeout
+                                        1 -> 0). The debt the guard admits is
+                                        not a tuning knob; it SELECTS WHICH of
+                                        W3's two sites reports
+    renamed af_m11 -> af_m12 by string  "axi_atop_filter_m11_..." does not
+                                        contain "af_m11_...", so the wrapper
+                                        still instantiated af_m11's variant. The
+                                        FIRED counters said nc_m11 and the run
+                                        reproduced af_m11's exact violation
+                                        count
+
+**The third is the one that would have shipped.** It built, it failed, it
+produced a plausible W3 line — and it was af_m11 under a new name. What caught it
+was a counter naming its own module, not the verdict. v_nw02's own witness.sh
+header lists "a rename that silently matched nothing" as one of two bugs that
+runner actually had; I reproduced it in an ad-hoc harness two directories away
+from where it is documented.
+
+I also ran the golden through my harness as a negative control only AFTER the
+neutralised mutant surprised me, rather than before reading anything from it.
+Seventh instance of skipping the control on a harness I wrote myself.
+
+## A generator that deletes what it does not know, and a script that tells you to run it
+
+Found while trying to give af_m12 a policy-base counterpart.
+
+`mutants/gen_mutants.py` rewrites `mutants/mutants.sv` **wholesale** from a
+ten-entry `MUT` list. af_m11 and af_m12 were written by hand and are in neither
+`MUT` nor `POLICY`. Measured in a copy of the task:
+
+    regenerated dut files vs disk    10 identical, 0 differing
+    af_m11 survives regeneration     no
+    af_m12 survives regeneration     no
+    file still says afterwards       "GENERATED by mutants/gen_mutants.py"
+
+**And `check_policy_independence.sh` advised running it.** Its count guard fires
+when the anchor and policy sets differ in size — which is exactly what a
+hand-written mutant produces — and the message said "Re-run gen_mutants.py." That
+would have "fixed" the count by deleting the two mutants that caused it, leaving
+a file that still describes itself as generated.
+
+    the trigger    two hand-written mutants
+    the advice     an action that deletes hand-written mutants
+    the result     counts agree, W3 loses both witnesses, nothing reports an error
+
+This has been live since 59f2654 — my commit. I added af_m11 by hand to a
+generated file and did not notice it had a generator, which is the same failure
+as the five earlier ones: **the task shipped an instrument and I worked beside it
+rather than through it.** Seventh instance.
+
+### What I did and what I deliberately did not
+
+Fixed: the generator now REFUSES when `mutants.sv` holds modules it does not
+define, naming them, rather than dropping them silently. The destructive advice
+in `check_policy_independence.sh` is replaced with the actual remedy, and its
+summary is corrected from "ten of the eleven" to "ten of the twelve".
+
+Not fixed, and sized rather than hand-waved: folding af_m11 and af_m12 into `MUT`
+and `POLICY` so the generator is the source of truth again. That is the clean
+fix, and the byte-identical measurement above says the path is clear — but it
+means expressing two large guard blocks as generator edit-pairs, regenerating,
+and re-verifying twelve witnesses plus a twelve-way policy run, with a live risk
+that a regenerated af_m11 no longer produces the cycle-145 witness recorded in
+task.yaml. That is a separate piece of work, not a forty-line one, and I am
+reporting it at that size rather than starting it inside a task about one mutant.
+
+**Consequence while it stands: `check_policy_independence.sh` for v_nw02 runs
+nothing at all.** It exits on the count guard before its first build. Tier-B 5c
+for this task is currently unmeasured — it has been since af_m11 landed, and the
+prose I added in e312ee3 describing the gap sits in a branch the guard makes
+unreachable. **I documented a gap in a code path that cannot execute**, which is
+the same shape as a caveat nobody reads, one level down.

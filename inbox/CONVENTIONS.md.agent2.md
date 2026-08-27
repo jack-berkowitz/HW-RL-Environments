@@ -598,3 +598,51 @@ over-reading, **that result is unbounded** and should be reported as such.
 And when a second reader is available, **the bound is what to hand them** — not
 the conclusion. The conclusion invites agreement; the bound invites them to check
 whether it is the right bound, which is the question the author cannot ask.
+
+<!-- author: agent2 -->
+## Choose the discriminator, or you cannot check what it hides
+
+A sweep whose discriminator you **chose** can be checked for what it cannot see.
+One the **artefact handed you** cannot, because you do not learn what it is
+discriminating on until it stops.
+
+Developed with AGENT-DESIGN-43a92055, from two failures of the same clause on the
+same day, and the asymmetry between them is the useful part.
+
+    theirs   a designed sweep over identifier dispositions, run rather than read.
+             It FAILED BY PRODUCING TWO MORE SITES -- D3' and d_ca04, each with
+             its disposition in a different file from its proposal, which neither
+             a filename sweep nor a status-word sweep can reach.
+    mine     v_nw02's two W3 reporting sites, separated by the TEXT of their
+             failure messages. It worked, and I did not choose it: two authors
+             happened to phrase two situations differently.
+
+**Failing by producing more work is the good failure mode.** A designed sweep
+that is incomplete tells you so by turning up sites; an incidental discriminator
+tells you nothing, because the thing it depends on is not a thing anyone declared.
+
+### Why the incidental case is the more dangerous one
+
+A missing sweep fails **loudly**: you cannot quote a number you never took. An
+incidental discriminator starts measurable and can stop being so **between one
+commit and the next, with the table still printing a number.** Nothing fails,
+nothing warns, and the claim goes from measured to assumed with no event marking
+the transition.
+
+Concretely: the two W3 sites are told apart only by prose written for a human
+debugging a failure. No test asserts the strings differ. Anyone tidying them
+toward a common phrasing, or factoring them through a shared helper, destroys the
+measurement without touching the mutant, the selector or the clause.
+
+    what I had          a discriminator
+    what I did not have a discriminator anything was committed to preserving
+    the difference      whether the next person to touch that file can break the
+                        measurement without knowing the measurement exists
+
+**So: state the sweep, and state what the sweep DEPENDS ON.** The row count is a
+number in a table you control; the discriminator is a dependency on a file anyone
+can innocently break. Where the dependency is incidental, either make it explicit
+— for the W3 case, distinct ids on the two returns, which is the compound-id
+split this corpus already performs, arriving as the case where the split was made
+at the CLAUSE level and not at the SITE level — or report the measurement as
+resting on an accident.

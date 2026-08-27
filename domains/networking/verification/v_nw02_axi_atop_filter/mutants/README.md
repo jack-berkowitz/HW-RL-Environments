@@ -31,7 +31,7 @@ Two constraints bound how far this can go, and both are load-bearing:
 - **Fairness.** Every guard names a condition the spec states as a checkable
   bound at a named boundary, so the catching act is derivable from the spec text
   alone. No mutant punishes an unstated expectation.
-- **Reference reachability.** The reference testbench kills all ten. A mutant
+- **Reference reachability.** The reference testbench kills all twelve. A mutant
   the reference cannot reach is not difficult, it is *unverified* — it would be
   scored against submissions on evidence the task itself cannot produce.
 
@@ -54,6 +54,8 @@ such registers to read.
 | `af_m8_stale_id_when_atomics_close` | **F3/F4** | a filtered write follows the previous within twelve cycles | the id is not captured, so the response is stale |
 | `af_m9_b_okay_on_first_atomic` | **F3** | the first filtered write after reset | the manufactured B carries OKAY |
 | `af_m10_extra_rbeat_on_two_beat_burst` | **F4** | the burst is exactly two beats | it receives three beats |
+| `af_m11_stalls_aw_below_bound` | **W3** | the FIFTH non-atomic AW offered while the debt is below the bound | the AW is stalled although the bound does not license it |
+| `af_m12_stalls_aw_with_no_debt` | **W3** | the SECOND non-atomic AW presented while the debt is EMPTY | the AW is stalled with nothing outstanding at all |
 
 ## Non-equivalence witnesses — rule 16
 
@@ -86,3 +88,54 @@ Attribution matters here. Clause F4 lets an injected R beat precede both the
 manufactured B and the write's own W burst, so beats must be attributed by
 `s_rid_o`, never by arrival order. A monitor that pairs responses positionally
 reports failures on the golden.
+
+
+## W3 needed two mutants, not one, and the id column cannot show why
+
+`af_m11` was written to give W3 a witness and does — at **one** of W3's two
+reporting sites. Measured against the reference testbench:
+
+    af_m11    W3 from gov_admitted 1, from gov_aw_timeout 0    ids P2 W3 W4 X4
+    af_m12    W3 from gov_admitted 1, from gov_aw_timeout 1    ids P2 W3 W4 X3 X4
+
+The reason is arithmetic. `AxiMaxWriteTxns` is 4, and af_m11 fires from the fifth
+non-atomic AW offered below the bound — by which point four writes are
+outstanding, so the debt is **at** the bound when the AW finally times out, and
+`gov_aw_timeout`'s `(debt_now < bound_) ? "W3" : "X4"` takes the other branch.
+The stall was below the bound; the timeout was at it. `af_m12` stalls with the
+debt empty, so it is still 0 at the timeout.
+
+**Both sites print the id `W3`.** They are separable only by the text of their
+failure messages, and nothing asserts those strings differ — unifying the wording
+would destroy the distinction with no test failing. The reachability claim for
+this clause depends on that accident, and says so.
+
+### af_m12's ordinal is 1, and 1 is the only value that works
+
+    ordinal   result      ids                W3@aw_timeout  W3@admitted
+    (none)    PASS        --                      0              0    <- supply probe
+    0         FAIL 16     P2 W3 W4 X4             1              1
+    1         FAIL 17     P2 W3 W4 X3 X4          1              1    <- chosen
+    2         FAIL 11     P2 W3 W4 X3 X4          0              1
+    3         PASS        --                      0              0
+
+Clean-run supply is **two presentations**. Ordinal 0 is unguarded; ordinal 2
+still fires but loses the branch the mutant exists for; ordinal 3 is out of
+reach. This is shallower than the rest of the set (4th–10th) **because of supply,
+not choice** — the reference offers exactly two non-atomic AWs with an empty
+debt. The stated fix for a guard out of reach is to extend the reference rather
+than dial the guard back; that is not done here because it would change the
+supply the other eleven guards were calibrated against.
+
+## Two known gaps, stated rather than absorbed
+
+1. **`af_m11` and `af_m12` have no policy-base counterparts.** `mutants/policy/`
+   holds ten re-derivations for twelve anchor mutants, so
+   `check_policy_independence.sh` exits on its count guard and currently runs
+   **nothing**. It has been in that state since af_m11 landed.
+
+2. **Neither is in `gen_mutants.py`.** That generator rewrites `mutants.sv`
+   wholesale from a ten-entry list, so running it would delete both — and the
+   count-mismatch message used to advise exactly that. The generator now refuses
+   instead. Regenerating was measured to reproduce all ten generated dut files
+   byte-for-byte, so the clean fix is to add both to `MUT` and `POLICY`.

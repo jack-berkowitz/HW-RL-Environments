@@ -183,6 +183,24 @@ mutants:
      guard: "the fifth non-atomic write presented while the debt is BELOW its bound",
      defect: "aw is stalled although the bound has not been reached",
      witness: "cycle 145, s_awready (the write-admission bound)"}
+  - {id: af_m12_stalls_aw_with_no_debt, violates: "W3",
+     guard: "the SECOND non-atomic write presented while the debt is EMPTY",
+     defect: "aw is stalled with no downstream write outstanding at all",
+     witness: "cycle 139, s_awready (the write-admission bound)"}
+  w3_needed_two_mutants_not_one: >
+    af_m11 was written to give W3 a witness and does -- but at ONE of W3's two
+    reporting sites only. Measured against the reference testbench it drives W3
+    from gov_admitted and never from gov_aw_timeout, which reports X4 instead.
+    The reason is arithmetic: AxiMaxWriteTxns is 4 and af_m11 fires from the
+    FIFTH non-atomic AW offered below the bound, by which point four writes are
+    outstanding, so the debt is AT the bound when the AW times out and
+    gov_aw_timeout's `(debt_now < bound_) ? "W3" : "X4"` takes the other branch.
+    The stall was below the bound; the timeout was at it. af_m12 stalls with the
+    debt EMPTY, so it is still 0 at the timeout and the antecedent holds.
+
+    The two sites are separable ONLY by their message text -- nothing asserts
+    those strings differ, and unifying the wording would destroy the distinction
+    silently. Recorded because the reachability claim depends on it.
   depth: >
     None falls to a single atomic through an idle filter. Reaching them needs
     burst lengths driven to specific values rather than left at one; a second
@@ -197,7 +215,7 @@ mutants:
   witness_runner: mutants/witness.sh
   generator: mutants/gen_mutants.py
   reference_reachability: >
-    The reference testbench kills all eleven. That is the binding constraint on how
+    The reference testbench kills all twelve. That is the binding constraint on how
     far a guard can be narrowed: a mutant the reference does not reach is not
     difficult, it is unverified, and it would be scored against submissions on
     evidence the task itself cannot produce.
