@@ -1,0 +1,12 @@
+{
+  "build_error": "TOOLFAIL slang rejected this and verilator --lint-only accepts the same bytes; an uncorroborated rejection is not a verdict -- 7 error(s); first: ",
+  "build_status": "slang_tool_error",
+  "git_sha": "630b8a1a8c0e973150c5ea6066de196df436e969-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_ai01/gemini.sv",
+  "submission_sha256_16": "e63b1bcd045dd00a",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2cf1ff4be7bf693a",
+  "timestamp_utc": "2026-08-25T22:56:27Z"
+}

@@ -1,0 +1,14 @@
+21:19:16 === d_ai01 reference Fmax sweep, HEIGHT=4 WIDTH=8 ===
+21:19:16 build_config_hash at launch: 0403c77ec5509d34
+=== [1/3] Simulating d_ai01_fp16_gemm_array (reference) over every legal config ===
+task=d_ai01_fp16_gemm_array  dut=fp16_gemm_array  sim=verilator  configs=2  candidates=1  extra_flags=20
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+fp16_gemm_array_top.sv     2/2       
+  compile: warnings=224 over 2 config(s) that built classes=ASCRANGE,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_ai01_fp16_gemm_array/2026-08-26T041925Z__fp16_gemm_array_top__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+
+=== --sim-only: d_ai01_fp16_gemm_array passed; stopping before ORFS ===

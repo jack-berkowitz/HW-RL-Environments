@@ -1,0 +1,56 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "2",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ASCRANGE,TIMESCALEMOD,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "284",
+  "configs_no_verdict": 0,
+  "configs_passed": 2,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "expected_verdict": "PASS",
+  "git_sha": "f8f2831382b7f02034e7262f6d787a063593bb87-dirty",
+  "kind": "sim",
+  "label": "nc_h_echo_band_only",
+  "metrics": {
+    "+HH_4": {
+      "H": "4",
+      "expected": "16",
+      "latency_ticks": "16",
+      "ok": "yes",
+      "v2_array_nonzero_before_reset": "1"
+    },
+    "+HH_8": {
+      "H": "8",
+      "expected": "32",
+      "latency_ticks": "32",
+      "ok": "yes",
+      "v2_array_nonzero_before_reset": "1"
+    }
+  },
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "PASS"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/controls/nc_h_echo_band_only.sv",
+  "submission_sha256_16": "becc5c772948a5ea",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "b9ff647ed1ad2810",
+  "timestamp_utc": "2026-08-27T07:16:22Z"
+}

@@ -1,0 +1,52 @@
+{
+  "all_passed": false,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "2",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ASCRANGE,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "224",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "git_sha": "05a3702cb553ae891dcc739f0095c48c843a4b5a-dirty",
+  "kind": "sim",
+  "label": "nc_g_height_blind_depth",
+  "metrics": {
+    "+HH_4": {
+      "H": "4",
+      "expected": "15",
+      "latency_ticks": "15",
+      "ok": "yes",
+      "v2_array_nonzero_before_reset": "1"
+    },
+    "+HH_8": {
+      "H": "8",
+      "expected": "31",
+      "latency_ticks": "15",
+      "v2_array_nonzero_before_reset": "1"
+    }
+  },
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "PASS"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/controls/nc_g_height_blind_depth.sv",
+  "submission_sha256_16": "3033c35f647ed1d1",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2f2c4cd76f582ae1",
+  "timestamp_utc": "2026-08-26T05:21:02Z"
+}

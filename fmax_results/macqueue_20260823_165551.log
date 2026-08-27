@@ -1,0 +1,30 @@
+16:55:51 === MAC QUEUE START ===
+16:55:51 --- d_ca04 ---
+16:55:51 SWEEP d_ca04 reference (seed 4.5ns)
+16:55:52 SKIP sweep d_ca04_cand_chat_v2 (converged)
+16:55:52 SKIP sweep d_ca04_cand_claude_v2 (converged)
+16:55:52 d_ca04 common clock = 3.6562 ns
+16:55:52 SKIP build d_ca04/reference at 3.6562 (done)
+16:55:52 SKIP build d_ca04/chat at 3.6562 (done)
+16:55:52 SKIP build d_ca04/claude at 3.6562 (done)
+16:55:52 --- d_nw03 ---
+16:55:52 SWEEP d_nw03 reference (seed 4.0ns)
+16:55:53 SKIP sweep d_nw03_cand_chat_v2 (converged)
+16:55:53 SKIP sweep d_nw03_cand_claude_v2 (converged)
+16:55:54 SKIP sweep d_nw03_cand_gemini_v2 (converged)
+16:55:54 d_nw03 common clock = 4.7500 ns
+16:55:54 SKIP build d_nw03/reference at 4.7500 (done)
+16:55:54 SKIP build d_nw03/chat at 4.7500 (done)
+16:55:55 SKIP build d_nw03/claude at 4.7500 (done)
+16:55:55 SKIP build d_nw03/gemini at 4.7500 (done)
+16:55:55 --- d_dsp03 ---
+16:55:55 SWEEP d_dsp03 reference (seed 12.0ns)
+16:55:56 SWEEP d_dsp03_cand_chat_v2 (seed 12.0ns)
+16:55:57 SWEEP d_dsp03_cand_claude_v2 (seed 12.0ns)
+16:55:57 d_dsp03: no periods, no builds
+16:55:57 --- d_dsp02 ---
+16:55:57 SWEEP d_dsp02 reference (seed 20.25ns)
+16:55:57 SWEEP d_dsp02_cand_chat_v2 (seed 20.25ns)
+16:55:57 SWEEP d_dsp02_cand_claude_v2 (seed 20.25ns)
+16:55:58 d_dsp02: no periods, no builds
+16:55:58 === MAC QUEUE DONE ===

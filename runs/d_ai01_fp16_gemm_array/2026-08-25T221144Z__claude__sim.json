@@ -1,0 +1,33 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "git_sha": "1609791c6142ccd4c36030798f63a74c5912cbcc-dirty",
+  "kind": "sim",
+  "label": "claude",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "candidates/d_ai01/claude.sv",
+  "submission_sha256_16": "3c23dabcde5fbde5",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2b7c36c5b08e7965",
+  "timestamp_utc": "2026-08-25T22:11:44Z"
+}

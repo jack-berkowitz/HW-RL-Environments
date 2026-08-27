@@ -1,0 +1,26 @@
+{
+  "all_passed": null,
+  "configs_no_verdict": 2,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {},
+  "git_sha": "31e2c380ceaab610f240f95c22c0dee7132f80dc-dirty",
+  "kind": "sim",
+  "label": "fp16_gemm_array_top",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "HEIGHT_4_WIDTH_8",
+      "verdict": "NO_VERDICT"
+    },
+    {
+      "config": "HEIGHT_8_WIDTH_8",
+      "verdict": "NO_VERDICT"
+    }
+  ],
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/ref/fp16_gemm_array_top.sv",
+  "submission_sha256_16": "023cd4e46559334e",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2b7c36c5b08e7965",
+  "timestamp_utc": "2026-08-25T07:25:51Z"
+}

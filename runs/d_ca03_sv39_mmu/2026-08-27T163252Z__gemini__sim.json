@@ -1,0 +1,14 @@
+{
+  "build_error": "4 error(s); first: sanitised_gemini.sv:430:23: error: use of undeclared identifier 'clk' ",
+  "build_status": "slang_rejected",
+  "git_sha": "0d11eaaa7b355176d2bde9306e9c6bb13f077ee9-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ca03/gemini.sv",
+  "submission_sha256_16": "a7d9a8051e3e33b0",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "5c30f59627bedc60",
+  "timestamp_utc": "2026-08-27T16:32:52Z"
+}

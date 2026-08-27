@@ -1,0 +1,14 @@
+{
+  "build_error": "1 error(s); first: sanitised_gemini.sv:376:53: error: hierarchical index -1 is out of scope's declared range ",
+  "build_status": "slang_rejected",
+  "git_sha": "a55e51273a899ee781212a8f11b412814df0dbed-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ai01/gemini.sv",
+  "submission_sha256_16": "1c87eba49997a714",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "a3f4cd1a5abd48de",
+  "timestamp_utc": "2026-08-27T04:45:59Z"
+}

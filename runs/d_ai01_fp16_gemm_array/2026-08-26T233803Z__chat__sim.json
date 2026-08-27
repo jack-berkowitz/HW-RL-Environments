@@ -1,0 +1,53 @@
+{
+  "all_passed": false,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "2",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ASCRANGE,WIDTHEXPAND",
+  "compile_warnings": "36",
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "git_sha": "4f96e79113d693f759353f2c0769815418949a59-dirty",
+  "kind": "sim",
+  "label": "chat",
+  "metrics": {
+    "+HH_4": {
+      "H": "4",
+      "expected": "16",
+      "latency_ticks": "15",
+      "v2_array_nonzero_before_reset": "1"
+    },
+    "+HH_8": {
+      "H": "8",
+      "expected": "32",
+      "latency_ticks": "31",
+      "v2_array_nonzero_before_reset": "1"
+    }
+  },
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ai01/chat.sv",
+  "submission_sha256_16": "bc8603a724eaadad",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "ac7b22a735ceda0a",
+  "timestamp_utc": "2026-08-26T23:38:03Z"
+}

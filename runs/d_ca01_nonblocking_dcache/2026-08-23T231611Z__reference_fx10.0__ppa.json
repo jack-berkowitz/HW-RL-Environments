@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=nonblocking_dcache; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=<unset>; ABC_CLOCK_PERIOD_IN_PS=10000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0; override.CLK_PERIOD_NS=10.0;",
+  "build_config_hash": "2b6866a5ff9e9e63",
+  "clk_period_ns": "10.0",
+  "correctness_gate": "passed:2026-08-19T233947Z__nonblocking_dcache_ref__sim.json",
+  "design_area_um2": "578032",
+  "git_sha": "4326ac07ea31ae8b200cda3ab8bd5250d8c64890-dirty",
+  "kind": "ppa",
+  "label": "reference_fx10.0",
+  "orfs_nickname": "d_ca01_nonblocking_dcache",
+  "pdk": "sky130hd",
+  "power_w": "1.15e-01",
+  "status": "completed",
+  "submission": "domains/comp_arch/design/d_ca01_nonblocking_dcache/ref/nonblocking_dcache_ref.sv",
+  "submission_sha256_16": "5d73b213c9dc2e06",
+  "synth_area_um2": "449760.105600",
+  "task": "d_ca01_nonblocking_dcache",
+  "timestamp_utc": "2026-08-23T23:16:11Z",
+  "wns_ns": "0.0416414"
+}

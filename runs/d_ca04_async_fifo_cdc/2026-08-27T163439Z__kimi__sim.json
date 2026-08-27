@@ -1,0 +1,14 @@
+{
+  "build_error": "TOOLFAIL slang rejected this and verilator --lint-only accepts the same bytes; an uncorroborated rejection is not a verdict -- 1 error(s); first: sanitised_kimi.sv:79:33: error: identifier 'rd_gray' used before its declaration",
+  "build_status": "slang_tool_error",
+  "git_sha": "0d11eaaa7b355176d2bde9306e9c6bb13f077ee9-dirty",
+  "kind": "sim",
+  "label": "kimi",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ca04/kimi.sv",
+  "submission_sha256_16": "c68b3d4158858c2b",
+  "task": "d_ca04_async_fifo_cdc",
+  "task_text_hash": "758f205c499c7fd1",
+  "timestamp_utc": "2026-08-27T16:34:39Z"
+}

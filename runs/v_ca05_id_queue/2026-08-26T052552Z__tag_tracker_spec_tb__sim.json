@@ -1,0 +1,21 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "4/4",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "10/10",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "90df0e112d043a68c893881f991e160ed7fdbb39-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "tag_tracker_spec_tb",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "domains/comp_arch/verification/v_ca05_id_queue/tb/tag_tracker_spec_tb.sv",
+  "submission_sha256_16": "fa7d3790ff7daf1b",
+  "task": "v_ca05_id_queue",
+  "task_text_hash": "fd2ae1ad9bf3719d",
+  "timestamp_utc": "2026-08-26T05:25:52Z"
+}

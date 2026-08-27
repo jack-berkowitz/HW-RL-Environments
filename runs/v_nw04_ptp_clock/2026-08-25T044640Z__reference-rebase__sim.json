@@ -1,0 +1,21 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "10/10",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "be07e9f32437435c56d9979af722decdc1333720-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "reference-rebase",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "domains/networking/verification/v_nw04_ptp_clock/tb/ptp_time_base_tb.sv",
+  "submission_sha256_16": "4cc0de9d9d6b1f86",
+  "task": "v_nw04_ptp_clock",
+  "task_text_hash": "b963a88053bae3da",
+  "timestamp_utc": "2026-08-25T04:46:40Z"
+}

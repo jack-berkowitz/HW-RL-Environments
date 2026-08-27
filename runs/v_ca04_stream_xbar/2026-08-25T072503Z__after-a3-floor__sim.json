@@ -1,0 +1,21 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "10/10",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "31e2c380ceaab610f240f95c22c0dee7132f80dc-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "after-a3-floor",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "domains/comp_arch/verification/v_ca04_stream_xbar/tb/route_xbar_tb.sv",
+  "submission_sha256_16": "6b180c5f441951a3",
+  "task": "v_ca04_stream_xbar",
+  "task_text_hash": "f4ed051311687cf7",
+  "timestamp_utc": "2026-08-25T07:25:03Z"
+}

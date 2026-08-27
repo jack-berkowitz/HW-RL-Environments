@@ -1,0 +1,29 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "",
+  "compile_warnings": "0",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "93fe8842ee25b90a4ab688af1fd9e97329321d2b-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ai04/gemini.sv",
+  "submission_sha256_16": "d813a9f3f21a1f86",
+  "task": "d_ai04_sdp_requant",
+  "task_text_hash": "6254d37b17244bb0",
+  "timestamp_utc": "2026-08-27T00:13:46Z"
+}

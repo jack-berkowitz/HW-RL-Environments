@@ -1,0 +1,26 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 2,
+  "coverage": {},
+  "git_sha": "3acdc066b293902717cdd3eb5dea2b1e1872835d-dirty",
+  "kind": "sim",
+  "label": "nc_g_height_blind_depth",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "PASS"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/controls/nc_g_height_blind_depth.sv",
+  "submission_sha256_16": "3033c35f647ed1d1",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2b7c36c5b08e7965",
+  "timestamp_utc": "2026-08-25T07:34:09Z"
+}

@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "discriminates": "false",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "5b668ae08f6f65de22be0a0d0f0403b6094be625-dirty",
+  "golden_accepted": "FAIL",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "chat",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "candidates/v_ca04/chat.sv",
+  "submission_sha256_16": "f6c0c612a64ced5c",
+  "task": "v_ca04_stream_xbar",
+  "task_text_hash": "f4ed051311687cf7",
+  "timestamp_utc": "2026-08-23T23:52:12Z"
+}

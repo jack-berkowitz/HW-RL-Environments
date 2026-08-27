@@ -1,0 +1,33 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "_unparsed": "COVERAGE over 207 requests: hit=1 walk=1 superpage=1"
+    }
+  },
+  "git_sha": "956c5b359c4515bfe1d7cdf46d820fedcf6c7393-dirty",
+  "kind": "sim",
+  "label": "chat",
+  "metrics": {
+    "": {
+      "hit_pct": "49",
+      "pte_reads": "586",
+      "tlb_hits": "103",
+      "total_cycles": "978"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "candidates/d_ca03/chat.sv",
+  "submission_sha256_16": "16130f9743b1f5bc",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "d79170d3b150c5e6",
+  "timestamp_utc": "2026-08-25T17:51:23Z"
+}

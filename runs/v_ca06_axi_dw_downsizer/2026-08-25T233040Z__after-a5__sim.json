@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "3/5",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "b1f6ac93113dc60e2c3471b69beed65233a42ead-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "after-a5",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "domains/comp_arch/verification/v_ca06_axi_dw_downsizer/tb/dw_downsizer_spec_tb.sv",
+  "submission_sha256_16": "93409017b9b2a0a1",
+  "task": "v_ca06_axi_dw_downsizer",
+  "task_text_hash": "c1de26c772eb754d",
+  "timestamp_utc": "2026-08-25T23:30:40Z"
+}

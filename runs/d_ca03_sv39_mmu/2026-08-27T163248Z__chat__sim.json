@@ -1,0 +1,40 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "IMPLICITSTATIC,SELRANGE,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "26",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "_unparsed": "COVERAGE over 207 requests: hit=1 walk=1 superpage=1"
+    }
+  },
+  "git_sha": "0d11eaaa7b355176d2bde9306e9c6bb13f077ee9-dirty",
+  "kind": "sim",
+  "label": "chat",
+  "metrics": {
+    "": {
+      "hit_pct": "50",
+      "pte_reads": "584",
+      "tlb_hits": "104",
+      "total_cycles": "976"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ca03/chat.sv",
+  "submission_sha256_16": "721acbfa787cf0b2",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "5c30f59627bedc60",
+  "timestamp_utc": "2026-08-27T16:32:48Z"
+}

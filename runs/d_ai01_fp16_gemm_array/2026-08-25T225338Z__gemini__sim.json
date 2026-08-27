@@ -1,0 +1,12 @@
+{
+  "build_error": "TOOLFAIL exit 133 -- all 7 diagnostic(s) are slang internal errors, not statements about the design; first: sanitised_gemini.sv:83:24: error: internal error: evaluation does not resolve to a constant in design initialization -- host/tool failure, NOT a verdict",
+  "build_status": "slang_tool_error",
+  "git_sha": "ba0b16e727c9fe727f069764a1abcc93d3344636-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_ai01/gemini.sv",
+  "submission_sha256_16": "e63b1bcd045dd00a",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2cf1ff4be7bf693a",
+  "timestamp_utc": "2026-08-25T22:53:38Z"
+}

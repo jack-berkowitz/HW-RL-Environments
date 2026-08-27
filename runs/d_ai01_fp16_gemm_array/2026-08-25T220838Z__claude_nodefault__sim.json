@@ -1,0 +1,12 @@
+{
+  "build_error": "TOOLFAIL exit 133 -- host/tool failure, NOT a verdict",
+  "build_status": "slang_tool_error",
+  "git_sha": "36d45f7af67124c4f42aab57b8283b0589f1a4eb-dirty",
+  "kind": "sim",
+  "label": "claude_nodefault",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/43a92055-d290-4ffc-97a9-82b348bec2e9/scratchpad/claude_nodefault.sv",
+  "submission_sha256_16": "786deb229bbdbede",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2b7c36c5b08e7965",
+  "timestamp_utc": "2026-08-25T22:08:38Z"
+}

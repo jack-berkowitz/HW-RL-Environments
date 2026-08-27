@@ -1,0 +1,12 @@
+{
+  "build_error": "7 error(s); first: sanitised_gemini.sv:83:24: error: internal error: evaluation does not resolve to a constant in design initialization ",
+  "build_status": "slang_rejected",
+  "git_sha": "97742c6b14a4ba1385b00080a99cd7fa90f187e1-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "submission": "candidates/d_ai01/gemini.sv",
+  "submission_sha256_16": "e63b1bcd045dd00a",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2cf1ff4be7bf693a",
+  "timestamp_utc": "2026-08-25T22:51:25Z"
+}

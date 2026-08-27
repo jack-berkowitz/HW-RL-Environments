@@ -1,0 +1,14 @@
+{
+  "build_error": "1 error(s); first: sanitised_gemini.sv:99:7: error: incrementing previous value 2'b11 would overflow enum base type 'logic[1:0]' ",
+  "build_status": "slang_rejected",
+  "git_sha": "0d11eaaa7b355176d2bde9306e9c6bb13f077ee9-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ca01/gemini.sv",
+  "submission_sha256_16": "385b4af403c34816",
+  "task": "d_ca01_nonblocking_dcache",
+  "task_text_hash": "63385929275747be",
+  "timestamp_utc": "2026-08-27T16:42:14Z"
+}

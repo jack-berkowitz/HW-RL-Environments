@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=async_fifo_cdc; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=5000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.rd_period=8; sdc.wr_period=5; override.CLK_PERIOD_NS=4.25; note.abc_runtime_target_ps=4250 (make-line override; the hashed ABC value above is the config.mk text resolved against the SDC, not this);",
+  "build_config_hash": "2f457b3175a614da",
+  "clk_period_ns": "4.25",
+  "correctness_gate": "passed:2026-08-27T163405Z__claude__sim.json",
+  "design_area_um2": "14520",
+  "git_sha": "713abc736da95b51060dc1a072aaa5c771d251e9-dirty",
+  "kind": "ppa",
+  "label": "claude_pin4p25",
+  "orfs_nickname": "d_ca04_cand_claude_pin4p25",
+  "pdk": "sky130hd",
+  "power_w": "8.24e-03",
+  "status": "completed",
+  "submission": "candidates/d_ca04/claude.sv",
+  "submission_sha256_16": "a5caaaa105614f5f",
+  "synth_area_um2": "10904.208000",
+  "task": "d_ca04_async_fifo_cdc",
+  "timestamp_utc": "2026-08-27T16:59:36Z",
+  "wns_ns": "0.479401"
+}

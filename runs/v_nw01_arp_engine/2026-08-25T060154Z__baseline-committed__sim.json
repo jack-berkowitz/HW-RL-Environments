@@ -1,0 +1,21 @@
+{
+  "all_passed": "true",
+  "conformant_accepted": "1/1",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "10/10",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "846c961ca60eb3a6f4dea897b591ef34752e3279-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "baseline-committed",
+  "second_dut_accepted": "PASS",
+  "status": "completed",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/0f6f5c72-f4e8-494d-afad-482534d98f0e/scratchpad/nw01/tb_committed.sv",
+  "submission_sha256_16": "adef0fced27846b9",
+  "task": "v_nw01_arp_engine",
+  "task_text_hash": "63dbe82fceded681",
+  "timestamp_utc": "2026-08-25T06:01:54Z"
+}

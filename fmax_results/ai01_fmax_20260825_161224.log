@@ -1,0 +1,20 @@
+16:12:24 === d_ai01 reference Fmax sweep, HEIGHT=4 WIDTH=8 ===
+16:12:24 build_config_hash before: e3bc15f8c4884a89
+=== [1/3] Simulating d_ai01_fp16_gemm_array (reference) over every legal config ===
+task=d_ai01_fp16_gemm_array  dut=fp16_gemm_array  sim=verilator  configs=2  candidates=1  extra_flags=20
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+fp16_gemm_array_ref.sv     REJECT    declares 'fp16_gemm_array_ref_inner', expected 'fp16_gemm_array'
+--------------------------------------------------------------------------------
+NOTHING RUN: 1 candidate(s) rejected as ineligible for task d_ai01.
+This is a setup problem, not a result. No implementation was evaluated.
+design d_ai01 (ai_accel, sky130hd)
+config domains/ai_accel/design/d_ai01_fp16_gemm_array/orfs/config.mk
+orfs output directory: d_ai01_fp16_gemm_array
+
+=== simulation gate (once) ===
+ERROR: d_ai01 does not pass its testbench. Fmax of RTL that does not work is meaningless -- fix it first.
+16:12:25   sweep exit 1
+16:12:25   NO fmax json -- sweep produced nothing, flow output KEPT
+16:12:25 === DONE ===

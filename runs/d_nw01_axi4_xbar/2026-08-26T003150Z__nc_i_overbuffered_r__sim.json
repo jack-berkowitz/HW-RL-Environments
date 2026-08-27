@@ -1,0 +1,82 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 16,
+  "coverage": {},
+  "git_sha": "d8fd62cb1bab18030d0cca675986ef4c7b9f29e1-dirty",
+  "kind": "sim",
+  "label": "nc_i_overbuffered_r",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "NUM_MST_2_NUM_SLV_2_MAX_TRANS_2_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_2_NUM_SLV_2_MAX_TRANS_2_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_2_NUM_SLV_2_MAX_TRANS_8_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_2_NUM_SLV_2_MAX_TRANS_8_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_2_NUM_SLV_4_MAX_TRANS_2_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_2_NUM_SLV_4_MAX_TRANS_2_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_2_NUM_SLV_4_MAX_TRANS_8_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_2_NUM_SLV_4_MAX_TRANS_8_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_2_MAX_TRANS_2_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_2_MAX_TRANS_2_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_2_MAX_TRANS_8_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_2_MAX_TRANS_8_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_4_MAX_TRANS_2_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_4_MAX_TRANS_2_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_4_MAX_TRANS_8_MAX_BURST_LEN_255",
+      "verdict": "COMPILE"
+    },
+    {
+      "config": "NUM_MST_4_NUM_SLV_4_MAX_TRANS_8_MAX_BURST_LEN_3",
+      "verdict": "COMPILE"
+    }
+  ],
+  "submission": "domains/networking/design/d_nw01_axi4_xbar/controls/nc_i_overbuffered_r.sv",
+  "submission_sha256_16": "c695ba0f425dc9f9",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "29910fdec8a8e5d9",
+  "timestamp_utc": "2026-08-26T00:31:50Z"
+}

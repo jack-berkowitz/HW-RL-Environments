@@ -1,0 +1,236 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 8,
+  "coverage": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "1125 1169"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "1125 1169"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "1273 1331"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "1273 1331"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "636 698 640 648"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "636 698 640 648"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "1026 1072 1049 1040"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "1026 1072 1049 1040"
+    }
+  },
+  "git_sha": "0c0078a15b8d9a832d7891129e5e900ce9d7ad69-dirty",
+  "kind": "sim",
+  "label": "nc_h_overbuffered",
+  "metrics": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "72",
+      "beats": "see fields",
+      "beats_accepted": "10536",
+      "beats_cycles": "8130",
+      "beats_delivered": "10536",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "2340",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "53",
+      "r1_guard_true": "503"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "72",
+      "beats": "see fields",
+      "beats_accepted": "10536",
+      "beats_cycles": "8130",
+      "beats_delivered": "10536",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "2340",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "53",
+      "r1_guard_true": "503"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "72",
+      "beats": "see fields",
+      "beats_accepted": "11963",
+      "beats_cycles": "8523",
+      "beats_delivered": "11963",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2658",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "53",
+      "r1_guard_true": "506"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "72",
+      "beats": "see fields",
+      "beats_accepted": "11963",
+      "beats_cycles": "8523",
+      "beats_delivered": "11963",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "984",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2658",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "53",
+      "r1_guard_true": "506"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "144",
+      "beats": "see fields",
+      "beats_accepted": "11918",
+      "beats_cycles": "8633",
+      "beats_delivered": "11918",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "983",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2650",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "52",
+      "r1_guard_true": "508"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "144",
+      "beats": "see fields",
+      "beats_accepted": "11918",
+      "beats_cycles": "8633",
+      "beats_delivered": "11918",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "983",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2650",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "52",
+      "r1_guard_true": "508"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "144",
+      "beats": "see fields",
+      "beats_accepted": "19314",
+      "beats_cycles": "9102",
+      "beats_delivered": "19314",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1963",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "4290",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "52",
+      "r1_guard_true": "711"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "144",
+      "beats": "see fields",
+      "beats_accepted": "19314",
+      "beats_cycles": "9102",
+      "beats_delivered": "19314",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1963",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "4290",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "52",
+      "r1_guard_true": "711"
+    }
+  },
+  "per_config": [
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "domains/networking/design/d_nw03_axis_switch_oq/controls/nc_h_overbuffered.sv",
+  "submission_sha256_16": "e2893c7e93974ecf",
+  "task": "d_nw03_axis_switch_oq",
+  "task_text_hash": "62e627b4957c0e2c",
+  "timestamp_utc": "2026-08-26T01:38:52Z"
+}

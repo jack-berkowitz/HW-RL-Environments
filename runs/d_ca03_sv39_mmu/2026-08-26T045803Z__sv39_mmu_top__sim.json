@@ -1,0 +1,38 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "IMPLICITSTATIC,LATCH,SELRANGE,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "39",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "_unparsed": "COVERAGE over 207 requests: hit=1 walk=1 superpage=1"
+    }
+  },
+  "git_sha": "7528c8e2c02c363c61a8b11e3d4ecd794271c04c-dirty",
+  "kind": "sim",
+  "label": "sv39_mmu_top",
+  "metrics": {
+    "": {
+      "hit_pct": "55",
+      "pte_reads": "502",
+      "tlb_hits": "115",
+      "total_cycles": "1269"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "domains/comp_arch/design/d_ca03_sv39_mmu/ref/sv39_mmu_top.sv",
+  "submission_sha256_16": "e66009f6491b253b",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "d79170d3b150c5e6",
+  "timestamp_utc": "2026-08-26T04:58:03Z"
+}

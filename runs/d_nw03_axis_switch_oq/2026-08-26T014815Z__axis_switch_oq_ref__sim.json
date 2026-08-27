@@ -1,0 +1,236 @@
+{
+  "all_passed": true,
+  "configs_no_verdict": 0,
+  "configs_passed": 8,
+  "configs_total": 8,
+  "coverage": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "868 915"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "868 915"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "941 978"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "941 978"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "650 693 656 648"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "650 693 656 648"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "823 861 811 809"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "823 861 811 809"
+    }
+  },
+  "git_sha": "7a989e1a90d18ccf9d3f18ae5baa09e1141b2d56-dirty",
+  "kind": "sim",
+  "label": "axis_switch_oq_ref",
+  "metrics": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "4",
+      "beats": "see fields",
+      "beats_accepted": "8022",
+      "beats_cycles": "7704",
+      "beats_delivered": "8022",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "721",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "1783",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "40",
+      "r1_guard_true": "431"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "4",
+      "beats": "see fields",
+      "beats_accepted": "8022",
+      "beats_cycles": "7704",
+      "beats_delivered": "8022",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "721",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "1783",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "40",
+      "r1_guard_true": "431"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "3",
+      "beats": "see fields",
+      "beats_accepted": "8644",
+      "beats_cycles": "7960",
+      "beats_delivered": "8644",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "721",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "1919",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "40",
+      "r1_guard_true": "435"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "3",
+      "beats": "see fields",
+      "beats_accepted": "8644",
+      "beats_cycles": "7960",
+      "beats_delivered": "8644",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "721",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "1919",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "40",
+      "r1_guard_true": "435"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "4",
+      "beats": "see fields",
+      "beats_accepted": "11914",
+      "beats_cycles": "7751",
+      "beats_delivered": "11914",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1126",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2647",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "1",
+      "r1_guard_true": "431"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "4",
+      "beats": "see fields",
+      "beats_accepted": "11914",
+      "beats_cycles": "7751",
+      "beats_delivered": "11914",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1126",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "2647",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "1",
+      "r1_guard_true": "431"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "8",
+      "beats": "see fields",
+      "beats_accepted": "14882",
+      "beats_cycles": "8021",
+      "beats_delivered": "14882",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1441",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "3304",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "565"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "8",
+      "beats": "see fields",
+      "beats_accepted": "14882",
+      "beats_cycles": "8021",
+      "beats_delivered": "14882",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "1441",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "3304",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "565"
+    }
+  },
+  "per_config": [
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_8",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_8",
+      "verdict": "PASS"
+    }
+  ],
+  "submission": "domains/networking/design/d_nw03_axis_switch_oq/ref/axis_switch_oq_ref.sv",
+  "submission_sha256_16": "fe8041fbf21e7238",
+  "task": "d_nw03_axis_switch_oq",
+  "task_text_hash": "62e627b4957c0e2c",
+  "timestamp_utc": "2026-08-26T01:48:15Z"
+}

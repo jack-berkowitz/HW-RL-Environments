@@ -1,0 +1,14 @@
+{
+  "build_error": "20 error(s); first: typedef.svh': No such file or directory ",
+  "build_status": "slang_rejected",
+  "git_sha": "102cd038c77675bc5f1276aff0a463884f3ae045-dirty",
+  "kind": "sim",
+  "label": "nc_l_inert",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/43a92055-d290-4ffc-97a9-82b348bec2e9/scratchpad/inert/nc_l_inert.sv",
+  "submission_sha256_16": "33aa34cb8446c225",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "0d484a57107f3502",
+  "timestamp_utc": "2026-08-27T06:25:44Z"
+}

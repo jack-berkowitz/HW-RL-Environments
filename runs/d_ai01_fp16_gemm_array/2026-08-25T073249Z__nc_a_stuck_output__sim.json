@@ -1,0 +1,26 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {},
+  "git_sha": "31e2c380ceaab610f240f95c22c0dee7132f80dc-dirty",
+  "kind": "sim",
+  "label": "nc_a_stuck_output",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "domains/ai_accel/design/d_ai01_fp16_gemm_array/controls/nc_a_stuck_output.sv",
+  "submission_sha256_16": "dc48c6ba9d6d9ce2",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "2b7c36c5b08e7965",
+  "timestamp_utc": "2026-08-25T07:32:49Z"
+}

@@ -1,0 +1,236 @@
+{
+  "all_passed": false,
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 8,
+  "coverage": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "0 0"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "0 0"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "0 0"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "0 0"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "served_per_requester": "0 0 0 0"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "served_per_requester": "0 0 0 0"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "served_per_requester": "0 0 0 0"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "served_per_requester": "0 0 0 0"
+    }
+  },
+  "git_sha": "0c0078a15b8d9a832d7891129e5e900ce9d7ad69-dirty",
+  "kind": "sim",
+  "label": "nc_a_reset_polarity",
+  "metrics": {
+    "S_COUNT_2_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7647",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    },
+    "S_COUNT_2_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7647",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "17",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7893",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    },
+    "S_COUNT_2_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7893",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_32": {
+      "M_COUNT": "2",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7651",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    },
+    "S_COUNT_4_M_COUNT_2_DATA_W_8": {
+      "M_COUNT": "2",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7651",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "0",
+      "checks": "see fields",
+      "checks_n": "25",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_32": {
+      "M_COUNT": "4",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7901",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    },
+    "S_COUNT_4_M_COUNT_4_DATA_W_8": {
+      "M_COUNT": "4",
+      "b1_beats_held": "0",
+      "beats": "see fields",
+      "beats_accepted": "0",
+      "beats_cycles": "7901",
+      "beats_delivered": "0",
+      "c1_rate": "see fields",
+      "c1_rate_beats": "0",
+      "c1_rate_cycles": "601",
+      "c1_rate_gated": "1",
+      "checks": "see fields",
+      "checks_n": "42",
+      "frames": "see fields",
+      "frames_total": "0",
+      "liveness": "see fields",
+      "liveness_global_idle_max_seen": "0",
+      "liveness_worst_wait": "0",
+      "r1_guard_true": "0"
+    }
+  },
+  "per_config": [
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_2_DATA_W_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_2_M_COUNT_4_DATA_W_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_2_DATA_W_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "S_COUNT_4_M_COUNT_4_DATA_W_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "submission": "domains/networking/design/d_nw03_axis_switch_oq/controls/nc_a_reset_polarity.sv",
+  "submission_sha256_16": "49a66f4d98c41854",
+  "task": "d_nw03_axis_switch_oq",
+  "task_text_hash": "62e627b4957c0e2c",
+  "timestamp_utc": "2026-08-26T01:38:20Z"
+}

@@ -1,0 +1,14 @@
+{
+  "build_error": "12 error(s); first: nc_h1_inert.sv:74:5: error: unknown class or package 'fpnew_pkg' ",
+  "build_status": "slang_rejected",
+  "git_sha": "102cd038c77675bc5f1276aff0a463884f3ae045-dirty",
+  "kind": "sim",
+  "label": "nc_h1_inert",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "/private/tmp/claude-501/-Users-jackberkowitz-Desktop-hw-rl-benchmark/43a92055-d290-4ffc-97a9-82b348bec2e9/scratchpad/inert/nc_h1_inert.sv",
+  "submission_sha256_16": "99f0e724d754510d",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "fd4d334195354cfa",
+  "timestamp_utc": "2026-08-27T06:25:35Z"
+}
