@@ -12,19 +12,19 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | notes |
 |---|---|---|---|---|---|
-| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `81bc38524d7a4949` |
-| `Claude Opus 5` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `81bc38524d7a4949` |
-| `claude_nodefault` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `81bc38524d7a4949` |
-| `fp16_gemm_array_top` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `81bc38524d7a4949` |
-| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `81bc38524d7a4949` |
-| `nc_a_stuck_output` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `81bc38524d7a4949` |
-| `nc_b_extra_pipe_stage` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `81bc38524d7a4949` |
-| `nc_c_flush_subnormal` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `81bc38524d7a4949` |
-| `nc_d_overflow_always_inf` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `81bc38524d7a4949` |
-| `nc_e_positive_zero_only` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `81bc38524d7a4949` |
-| `nc_f_reversed_chain` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `81bc38524d7a4949` |
-| `nc_g_height_blind_depth` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `81bc38524d7a4949` |
-| `nc_h_echo_band_only` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `81bc38524d7a4949` |
+| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `b62c72cf684c1eff` |
+| `Claude Opus 5` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `b62c72cf684c1eff` |
+| `claude_nodefault` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
+| `fp16_gemm_array_top` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `b62c72cf684c1eff` |
+| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `b62c72cf684c1eff` |
+| `nc_a_stuck_output` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `b62c72cf684c1eff` |
+| `nc_b_extra_pipe_stage` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
+| `nc_c_flush_subnormal` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
+| `nc_d_overflow_always_inf` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
+| `nc_e_positive_zero_only` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
+| `nc_f_reversed_chain` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
+| `nc_g_height_blind_depth` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `b62c72cf684c1eff` |
+| `nc_h_echo_band_only` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `b62c72cf684c1eff` |
 
 ## d_ai04 — SDP requantise / convert unit
 
@@ -41,7 +41,7 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | outstd | fills | notes |
 |---|---|---|---|---|---|---|---|---|---|
-| `chat` | **16/16 pass** | — | — | — | 3 | 226 | 14 | 501 |  |
+| `chat` | **16/16 pass** | withheld | withheld | not swept | 3 | 226 | 14 | 501 | **PPA withheld — the build did not meet timing** (slack -0.049 ns at 15.0 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; **different design point** (latency_min 3 vs reference 2): area is correct but not like-for-like; 70,342 um2 per unit of max_outstanding_n, 1.23x the reference per unit |
 | `claude` | **16/16 pass** | — | — | — | 1 | 20057 | 9 | 493 |  |
 | `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | **build failure** — 1 error(s); first: sanitised_gemini.sv:99:7: error: incrementing previous value 2'b11 would overflow enum base type 'logic[1:0]'  |
 | `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `63385929275747be` |
@@ -63,9 +63,9 @@ capability, and nothing here establishes those weights.
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | FIFO capacity | min crossing lat | max crossing lat | write stalls | notes |
 |---|---|---|---|---|---|---|---|---|---|
 | **reference** | **18/18 pass** | 19,837 | 13.4 | 355.6 | 10 | 3 | 74 | 11046 | 1,984 um2 per unit of capacity_beats_accepted |
-| `chat` | **18/18 pass** | — | — | — | 8 | 2 | 72 | 10912 |  |
-| `claude` | **18/18 pass** | — | — | — | 8 | 3 | 72 | 10914 |  |
-| `gemini` | **18/18 pass** | — | — | — | 8 | 2 | 72 | 10912 |  |
+| `chat` | **18/18 pass** | 14,659 | 7.3 | not swept | 8 | 2 | 72 | 10912 | **different design point** (crossing_latency_rdclk_min 2 vs reference 3): area is correct but not like-for-like; 1,832 um2 per unit of capacity_beats_accepted, 0.92x the reference per unit |
+| `claude` | **18/18 pass** | 14,520 | 8.2 | not swept | 8 | 3 | 72 | 10914 | 1,815 um2 per unit of capacity_beats_accepted, 0.91x the reference per unit |
+| `gemini` | **18/18 pass** | 14,520 | 8.5 | not swept | 8 | 2 | 72 | 10912 | **different design point** (crossing_latency_rdclk_min 2 vs reference 3): area is correct but not like-for-like; 1,815 um2 per unit of capacity_beats_accepted, 0.91x the reference per unit |
 | `nc_k_overbuffered_read` — *negative control, expected to fail* | 0/18 FAIL | — | — | — | 18 | 4 | 103 | 10844 |  |
 | `DeepSeek V4 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `8a5e5e0a9b2c93d3`; the task text is now `758f205c499c7fd1` |
 | `Qwen 3.7 Plus` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `8a5e5e0a9b2c93d3`; the task text is now `758f205c499c7fd1` |
@@ -78,19 +78,22 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | area | power | notes |
 |---|---|---|---|---|---|---|---|---|
+| `chat` | **1/1 pass** | — | — | — | — | — | — |  |
+| `claude` | 0/1 FAIL | — | — | — | — | — | — |  |
+| `gemini` | 0/1 FAIL | — | — | — | — | — | — |  |
 | **reference** | **1/1 pass** | — | — | — | — | — | — |  |
 
 ## d_dsp02 — FP32 fused multiply-add
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | latency | init interval | notes |
 |---|---|---|---|---|---|---|---|
+| `chat` | **1/1 pass** | — | — | — | 4 *(req. added later)* | 1 | **not scored against the current spec** — submitted 2026-08-15, before the 3-cycle latency requirement was added 2026-08-16; the spec it was given said "latency is not constrained" |
+| `claude` | **1/1 pass** | — | — | — | 3 | 1 |  |
+| `gemini` | **FAILS** | n/a | n/a | n/a | n/a | n/a | **fails correctness** — fails the contract at vector 4 (a=1.0, b=0); no PPA, a number for a design that fails its contract is not a result |
 | `nc_h1_comb_ready` — *negative control, expected to fail* | 0/1 FAIL | — | — | — | 3 | 1 |  |
 | `nc_h1_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | **build failure** — 12 error(s); first: nc_h1_inert.sv:74:5: error: unknown class or package 'fpnew_pkg'  |
-| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `a3dfc6d107b61503`; the task text is now `fd4d334195354cfa` |
-| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `a3dfc6d107b61503`; the task text is now `fd4d334195354cfa` |
 | `DeepSeek V4 Pro` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `5ad30593403b4ae2`; the task text is now `fd4d334195354cfa` |
 | `fp32_fma_ii1_ref` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `a3dfc6d107b61503`; the task text is now `fd4d334195354cfa` |
-| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `a3dfc6d107b61503`; the task text is now `fd4d334195354cfa` |
 | `nc_h3_drops_valid` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `a3dfc6d107b61503`; the task text is now `fd4d334195354cfa` |
 | `nc_h3_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `a3dfc6d107b61503`; the task text is now `fd4d334195354cfa` |
 | `Qwen 3.7 Plus` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `5ad30593403b4ae2`; the task text is now `fd4d334195354cfa` |
@@ -101,24 +104,24 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | ops/1k | notes |
 |---|---|---|---|---|---|---|---|---|
-| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
-| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
+| `chat` | **2/2 pass** | — | — | — | 1 | 14 | 460 |  |
+| `claude` | **2/2 pass** | — | — | — | 0 | 0 | 427 |  |
+| `gemini` | 0/2 FAIL | — | — | — | 1 | 14 | 460 |  |
 | `fp_multifmt_fma_ref` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
-| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
 | `nc_d_band_unbounded_tininess` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
 
 ## d_nw01 — AXI4 crossbar
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | capacity (C1) | 1-pair thruput | 2-pair thruput | aggregate thruput | beat rate | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
+| `chat` | **16/16 pass** | n/a | n/a | n/a | — | — | — | — | — | **area, power and Fmax unavailable** — place-and-route exceeded the 5.8 GB container memory limit during detailed routing (peak 5.70 GB) — a limit of this test setup, not a property of the design, which was at 75 DRC violations and improving; scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
+| `claude` | **16/16 pass** | — | — | — | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
+| `gemini` | 0/16 FAIL | — | — | — | — | — | — | — | — |  |
 | `nc_l_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
 | `nc_m_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
 | `nc_n_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
 | `axi4_xbar_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
-| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `29910fdec8a8e5d9`; the task text is now `0d484a57107f3502` |
-| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `29910fdec8a8e5d9`; the task text is now `0d484a57107f3502` |
 | `DeepSeek V4 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `4e277da1edfe8af7`; the task text is now `0d484a57107f3502` |
-| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `29910fdec8a8e5d9`; the task text is now `0d484a57107f3502` |
 | `nc_i_overbuffered_r` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
 | `nc_j_overbuffered_w` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
 | `nc_l_comb_ready` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad79bb69c9a09efb`; the task text is now `0d484a57107f3502` |
@@ -136,10 +139,10 @@ capability, and nothing here establishes those weights.
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | beats | cycles | wait.max | notes |
 |---|---|---|---|---|---|---|---|---|
 | **second source** | **8/8 pass** | — | — | — | 14633 | 8183 | 41 |  |
+| `chat` | **8/8 pass** | — | — | — | 18254 | 8010 | 0 |  |
+| `claude` | **8/8 pass** | — | — | — | 18267 | 8025 | 1 |  |
+| `gemini` | **8/8 pass** | — | — | — | 18376 | 8066 | 54 |  |
 | `axis_switch_oq_ref` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
-| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `514a316a4889dd72`; the task text is now `f621889159c58a9d` |
-| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `514a316a4889dd72`; the task text is now `f621889159c58a9d` |
-| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `514a316a4889dd72`; the task text is now `f621889159c58a9d` |
 | `nc_a_reset_polarity` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
 | `nc_b_outputs_serialised` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
 | `nc_h_overbuffered` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
@@ -311,7 +314,7 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
+| **reference testbench** | yes | yes | yes | 1/1 | **11/11** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 | `Claude Opus 5` | yes | yes | yes | 1/1 | **10/10** |  |
 | `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |

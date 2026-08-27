@@ -12,7 +12,19 @@ generated: 2026-08-14
 verilator: "5.046 2026-02-28 rev vUNKNOWN-built20260228"
 icarus: "13.0 (stable) v13_0"
 yosys_host: "0.67+post (b8e7da6f)"
-formal: "eqy + sby v0.67 inside openroad/orfs:latest (read_slang frontend); no host install"
+# BOUNDED, NOT PROVEN -- and the caveat is AT THE LINE deliberately. refs.lock is
+# the machine-readable toolchain declaration and is read ON ITS OWN; a reader
+# arriving here never sees CONVENTIONS.md 706-722, README.md 397, or F47, which is
+# where every qualification used to live. Read alone this line said the project
+# does formal equivalence checking. It does not: the ORFS image carries no SMT
+# solver, so smtbmc cannot run on any design and every result is a BOUNDED model
+# check via abc bmc3. A PASS is "no counterexample within the depth reached", never
+# "equivalent". Only a counterexample proves anything, and it proves NON-equivalence
+# (RULES.md 21). This is F47, in F104's shape: marked at the container, not at the
+# line. Reported by AGENT-DESIGN-43a92055, whose sweep found no overclaim anywhere
+# else -- zero hits for "proven equivalent", "formally verified", "equivalence
+# proof", "exhaustively", "for all inputs" -- so this was the one live site.
+formal: "eqy + sby v0.67 inside openroad/orfs:latest (read_slang frontend); no host install -- BOUNDED BMC ONLY (abc bmc3), no SMT backend in the image; a PASS is not a proof of equivalence"
 scratch_dir: /Users/jackberkowitz/hw_rl_benchmark_refs_scratch
 
 # ---------------------------------------------------------------------------

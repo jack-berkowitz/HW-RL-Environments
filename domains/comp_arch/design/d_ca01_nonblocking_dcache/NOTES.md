@@ -1033,6 +1033,26 @@ cheapest to meet, so that is where a capability defect hides.**
 
 ### The cross-task check, which is where the reach is
 
+> **d_ca04's ROW IS RESOLVED, and resolved better than the three options below;
+> marked 2026-08-27, twelfth stale site on this task.** `d_ca04/task.yaml` lines
+> 53-95 RE-MEASURED it directly rather than reading it off F3's table, through
+> the unmodified checker at the scored `DATA_W=32/LOG_DEPTH=3`, and confirmed the
+> blindness exactly as stated: at `SS=2` the hardcoding probe and a correct design
+> both read 2 and both pass.
+>
+> **And then showed the consequence does not follow.** The probe scores 9/18 on
+> the correctness sweep — it fails all nine `SYNC_STAGES=3` configurations — and
+> `ppa_candidate.sh` gates PPA on `all_passed`, so a design that hardcodes two
+> flops is rejected before it is scored and can never appear with a clean
+> capability number. The discrimination is performed elsewhere and was measured.
+> Recorded machine-readably as `capability_discrimination.scored_setting_discriminates:
+> false` with `enforced_by: correctness sweep (all 18 configs)`, measured
+> 2026-08-19.
+>
+> So "recorded for whoever picks it up" was answered eight days before this
+> marker. **F49 in `FINDINGS.md` carries the same unresolved d_ca04 row** and is
+> Agent 1's file; routed, not edited.
+
 Every design task with a swept capability parameter, against where its **scored
 configuration** sits:
 
@@ -1072,6 +1092,12 @@ evidence that is a second criterion, and it is not currently anywhere.
 ---
 
 ## Conformant set — the overlap, stated before it is built
+
+> **D3′ IS DEAD; marked 2026-08-27, eleventh stale site.** The second row of the
+> table below is void. `c03` was built to D3′'s licence and failed C2, R4 was
+> narrowed, the artifact became `mutants/m06`, and `task.yaml` records
+> "Second-source difference D3' is dead with it. D3'' (early fill forwarding)".
+> D2 (true LRU) is unaffected and the overlap argument still holds for it.
 
 **D2 and D3′ are both second-source differences and conformant perturbations,
 and they will be the SAME artifacts serving two purposes.** Saying so now rather
@@ -1411,3 +1437,26 @@ understating what exists.** Nine for nine is not a slip; it is what an
 append-only working record does by default, and the top status block going stale
 one row at a time while its neighbours stayed current is the sharpest version of
 it.
+
+
+---
+
+## Twelve, and the last two came from running my own proposed check by hand
+
+Sites 11 and 12 were not found by reading. They were found by applying Part 3 of
+`inbox/PROPOSED_CHECK_record_drift.md` — the identifier disposition index —
+manually: take an identifier this record names, find every mention of it
+anywhere, and compare the dispositions.
+
+    D3'      proposed live here; "is dead with it" in task.yaml
+    d_ca04   "recorded for whoever picks it up" here; scored_setting_discriminates:
+             false, measured 2026-08-19, in d_ca04/task.yaml
+
+Both dispositions live in a DIFFERENT FILE from the proposal, which is the case
+the filename sweep and the status-word sweep cannot reach and the case Part 3 was
+designed for. **That is forward validation on fresh instances rather than a
+retrospective fit** — the proposal was written before these two were found.
+
+Running total on this task: twelve stale sites, every one understating what
+exists. Parts 1 and 2 caught seven, Part 3 has now caught four by hand, and one
+came out by ordinary reading.

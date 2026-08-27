@@ -8283,3 +8283,455 @@ worse state. It is an argument that **the comparability key is narrower than
 comparability**, and a scoring change that leaves the key untouched is invisible
 to anyone reconciling records later. Reported, not fixed: `task_text_hash` is not
 mine.
+
+## A guard written for an input-side defect silently misaims an output-side one
+
+Ten of v_dsp02's eleven existing mutants perturb the golden's **inputs**: fn_m10
+quiets a signalling NaN on `operand_a_i` and gates that on `operand_a_i`. Guard
+and perturbation sit on the same side of the pipeline, so they name the same
+operation **by construction**, and the pattern never has to say so.
+
+Three of the five clauses I was closing cannot be driven from the inputs at all:
+
+    S5   minmax, both operands NaN -> canonical qNaN     no input makes minmax
+                                                         return a NON-canonical
+                                                         NaN; the output is
+                                                         canonical for every
+                                                         NaN input pair
+    S8   FLT/FLE raise NV on a NaN of EITHER kind        replacing the qNaN with
+                                                         a number drops NV, but
+                                                         also changes the
+                                                         BOOLEAN -- that trips
+                                                         S7, a different clause
+    S2   SGNJ raises NO flags, for any operand           no input makes SGNJ
+                                                         raise a flag; that IS
+                                                         the clause
+
+So all three perturb an **output**. And the golden is `NumPipeRegs=1,
+PipeConfig=BEFORE` — bound in the DUT header as a scored configuration, chosen
+precisely so "the handshake contract has no state to be wrong about" would not be
+true. The operands are registered before the arithmetic, so `result_o` belongs to
+an operation **accepted earlier**, and under a stalling handshake not even a
+fixed number of cycles earlier.
+
+**Gating an output on `operand_a_i` therefore corrupts whichever operation
+happened to be at the output when the guard's operation was at the input.** I
+wrote all three that way first, following the shipped pattern.
+
+### The failure mode is a right number with a wrong meaning
+
+A misaligned guard does **not** produce a mutant that survives. It produces a
+mutant that fails on a *neighbouring* clause. The kill count is identical, the
+rule-24 positive control is satisfied, and the witness line is well-formed. Only
+the **id** is wrong.
+
+That matters here more than it usually would, because the entire purpose of these
+five mutants is to drive **specific previously-undriven clauses**. A misaligned
+fn_m11 would have reported S3 or S4 — both already witnessed by fn_m2 and fn_m3 —
+and the row I was closing would still be open while the table said it was shut.
+
+    the instrument that catches it   the clause id on the witness line
+    what that id normally means      which clause fired FIRST, not the only one
+    what it ALSO means here          whether the guard is aligned to its own
+                                     operation
+
+The id is doing double duty for output-side mutants, and I have said so at the
+site rather than only here. Same shape as `-m1` coinciding with the true answer
+and as the commit message that claimed an edit that never landed: **the number
+was never wrong, the sentence attached to it was.**
+
+### The transferable part
+
+The guard is now loaded on acceptance and carried across the register on the port
+handshake alone — one flag, because one stage holds one operation — so nothing
+inside the golden is read and the guard still restates against any
+implementation.
+
+But the point is not the flag. It is that **a template encodes an assumption its
+instances do not restate.** fn_m10's pattern is correct for every defect its
+author wrote and unsafe for three of the five I was asked to add, and there is
+nothing in the pattern that says which kind it is safe for. Following it
+mechanically — the normally-correct instinct, and the one the house style
+rewards — is what produced the misaim.
+
+**Proposed, as a one-line rule for CONVENTIONS.md:** a mutant whose perturbation
+is on an output must state, at the guard, how the guard reaches that output's
+operation; if the answer is "the DUT is combinational" that is a sentence worth
+writing, because it stops being true when someone sets `NumPipeRegs`.
+
+### Correction to the section above: the corpus already knew this
+
+I wrote that "nothing in the pattern says which kind it is safe for". That is
+wrong, and I had not read the file that says it. `mutants/policy/fn_p*.sv` opens,
+in every one of the ten:
+
+    Every mutant perturbs the golden's INPUTS. That is deliberate: an output-side
+    mutation on a pipelined unit needs the operation tracked through the
+    handshake to land on the right result, and a wrapper carrying that much state
+    can fail for reasons unrelated to its defect.
+
+The hazard, the mechanism and the design response, stated by the task's author
+before I arrived. **Sixth instance of losing what the shipped instrument already
+knew**, and the most embarrassing, because I filed a finding claiming the
+knowledge was absent from a corpus that carries it ten times over.
+
+What is genuinely new is smaller and worth keeping at its real size:
+
+    the author's rule       perturb inputs, and the alignment problem cannot arise
+    the unexamined case     three clauses cannot be reached from the inputs AT ALL
+    so the rule has an      an exception it never anticipated, and the exception
+    exception               is where the hazard it was written to avoid returns
+
+And one place the knowledge did NOT reach: `mutants/README.md` opened with "has
+no alignment to get wrong, and is correct everywhere except the case it rewrites
+— by construction", stating the *conclusion* without the *precondition*. The
+policy files carry the reasoning; the README carries only the result. **A reader
+of the README alone — which is the file its name invites you to read first —
+gets a property with no statement of what it depends on**, and would extend the
+set exactly as I did. That file now carries the precondition.
+
+## A green witness gate is not evidence of a clean index
+
+Two surfaces, independent, and I nearly took one for the other.
+
+    check_witness_sync at HEAD    green, all 11 tasks
+    the shared git index          would commit a tree with af_m11 absent from
+                                  v_nw02/mutants/mutants.sv entirely -- 0
+                                  matches, 752 deletions against HEAD, the whole
+                                  W3 change reverted
+
+The mutant file sits on disk byte-identical to HEAD while the index holds it as a
+staged delete. Nothing in the gate looks at the index, and nothing in the index
+is visible to a reader who checks that the gate is green.
+
+**The temp-index discipline is what makes this a non-event rather than a
+near-miss.** Seeding a fresh index from HEAD and adding only explicit paths means
+the shared index's contents cannot reach my commit at all — I did not have to
+notice the staged deletions to be safe from them, and I only noticed because I
+listed paths before staging. A discipline that protects you when you are NOT
+paying attention is the only kind worth having; this one paid out today without
+being consulted.
+
+Not repaired: the index is shared state and another agent may be mid-operation
+inside it. Reported to the peer, left alone.
+
+## I sent a peer an untested mechanism, one message after they retracted one
+
+AGENT-DESIGN-43a92055 reported the linkage gate reads the working tree, and
+retracted it: it reads the tree the index would commit, and their 4-vs-1 split
+came from two different invocations of their own, not from the gate. Their
+refutation was inside output they had themselves pasted.
+
+I then did the same thing in the opposite direction. Having measured that the
+shared index would revert 752 lines, I told them their commit would carry those
+deletions. It would not: the tree I measured is `2e4f7b7f`, the tree their gate
+evaluated is `2d23ed4`, and theirs must contain af_m11 or the checker could not
+have complained that af_m11 lacks a *witness*. One measurement, a mechanism
+inferred from it, never tested, shipped to a peer as a reason to stop work.
+
+    theirs   asserted NO coupling where there is some
+    mine     asserted coupling where there is none
+    shared   a mechanism inferred from a single reading and never tested against
+             the thing it made a claim about
+
+**Symmetric, one message apart, between two agents who had just watched each
+other do it.** The lesson neither of us can claim to have learned from the
+other's instance: a measurement licenses a statement about what was measured, and
+a mechanism is a different claim needing its own test. I had the means to test
+mine — build their tree, diff it — and did not, because the warning felt urgent.
+Urgency is when the discipline is load-bearing, not when it is suspendable.
+
+I also told them a green working tree unblocked them. On the real mechanism it
+would have failed them a second time.
+
+### Correction: the index was STALE, not dirty, and I made the same error a third time
+
+The 752 deletions are real and my causal story about them was wrong. Verified
+with AGENT-DESIGN-43a92055's discriminator, run myself:
+
+    index tree                    2e4f7b7f693799fc105d9ae25b8b990bda4cfed4
+    tree of 34af408 (their commit) 2e4f7b7f693799fc105d9ae25b8b990bda4cfed4
+    HEAD tree                     dd3a80e07a1f6a6b386ba50a91a27e8a61b827a1
+
+The index is byte-identical to the tree of an earlier commit. It is **stale, not
+dirty** — it predates my own W3 commit, so everything W3 ADDED reads as a staged
+DELETION when that old index is diffed against a newer HEAD. **The 752 lines I
+described as "someone's staged reversion of my work" are my own work, seen from
+an index that predates it.** There is no other agent's intent in there and never
+was.
+
+    what I measured    correct, and reported correctly
+    what I inferred    latent intent by another agent -- wrong, and untested
+    third time today   theirs about the gate, mine about their commit, mine here
+
+**That is the same error three times in one exchange between two agents who had
+each just retracted an instance of it.** The pattern is stable enough to name: a
+measurement licenses a claim about *what was measured*; the *cause* is a separate
+claim that needs its own test. `git diff --cached` told me what the index differs
+from HEAD by. It did not tell me why, and I supplied a why.
+
+And the discriminator is one line, which is the part worth keeping:
+
+    IDX=$(git write-tree)
+    for c in $(git rev-list -12 HEAD); do
+      [ "$(git rev-parse $c^{tree})" = "$IDX" ] && echo "STALE: index == tree of $c"
+    done
+
+A match means stale. `git status`, `git diff --cached` and `git diff HEAD` all
+show staged deletions in BOTH cases and cannot separate them. `git write-tree` is
+read-only, so the check is free.
+
+The peer had this identical artefact from the opposite side — an index 21 commits
+stale made them read a peer's *committed* work as uncommitted, where it made me
+read my own committed work as staged for deletion. **Same artefact, opposite
+misreading, and the sign of the error depends only on which side of the stale
+index your own commits fell.**
+
+### What survives from that section
+
+Not much, and it should be stated at its real size.
+
+A bare `git commit` would still write the stale tree and revert the difference,
+so the temp-index discipline does still pay here — but it pays against
+*staleness*, a mechanical artefact of everyone using temp indices, not against a
+peer's dangerous staging. And the repair is cheap and known: after committing
+through a temp index, `unset GIT_INDEX_FILE; git read-tree HEAD` refreshes the
+real one. My procedure omits that step, which is precisely why the shared index
+was left pointing at an old tree for other agents to misread. **The peer's helper
+does it and mine does not, and the artefact I raised the alarm about is one my
+own omission helped produce.**
+
+Pairing correction, theirs and taken: "a green gate is not evidence of a clean
+index" is right but underspecified. The gate reads the tree the index would
+COMMIT. So a green gate IS evidence about that tree, and is silent about the
+working tree and about staleness. Three objects — working tree, index tree,
+committed tree — and today every one of us conflated at least two.
+
+## The five closed four: one defect did NOT close both W3 branches
+
+The plan was that af_m11 closes W3 in both selectors, since "the two selectors
+report the same clause from different sites". Measured against the reference
+testbench, it does not.
+
+    af_m11 under the reference tb   RESULT: FAIL (10 violations)
+    distinct clause ids driven      P2, W3, W4, X4
+    W3 failures                     1
+      from gov_admitted             1   "only 0 of 4 AWs were admitted"
+      from gov_aw_timeout           0
+
+**`gov_aw_timeout`'s W3 return is still unreached.** Its sibling X4 *is* reached
+by the same mutant, so the selector is exercised and takes the other branch:
+`return (debt_now < bound_) ? "W3" : "X4"`, and at the moment af_m11's AW times
+out the debt is AT the bound, not below it.
+
+That is not a near miss, it is the substantive condition. Reaching it needs a
+defect that keeps an AW unaccepted for the site's full 4000-cycle timeout **while
+the debt is strictly below the bound at the instant of timeout** — af_m11 stalls
+AWs below the bound, but by cycle 4000 the debt has reached it, so the same
+stimulus that drives the clause lands on the other side of its own antecedent.
+
+### Why this was invisible until the branches were separated by message text
+
+Both sites emit the id `W3`. Reading the id column alone, af_m11 "drives W3" and
+both rows close. The two are distinguishable only by their message text —
+
+    gov_admitted     "...only N of M AWs were admitted -- the debt stayed below
+                      the bound..."
+    gov_aw_timeout   "AW id=N was never accepted with the downstream write debt
+                      at D, below the bound of M..."
+
+— and separating them is what turned one apparent closure into one closure and
+one open row. **This is `gov_r`'s two-A5 limit again, and this time it changed
+the answer rather than only the confidence.** On `gov_r` the ambiguity was
+recorded as a limit because it could not be resolved; here it was resolvable,
+because the two sites happen to write different sentences. That they do is luck,
+not design: nothing requires two returns of the same id to be distinguishable,
+and where they are not, this measurement cannot be made at all.
+
+    the general rule    reachability measured from printed IDS cannot separate
+                        two branches that return the same id
+    when it is benign   the branches are equivalent for scoring
+    when it is not      here -- one is reached, one is not, and the pair would
+                        have been reported closed
+
+### The discriminator is incidental, and one wording edit from gone
+
+Sharpened by AGENT-DESIGN-43a92055, and it is worth more than the row count.
+
+I separated the two W3 sites by their message text. **Nothing makes that text a
+discriminator.** It is prose written to be read by a human debugging a failure,
+and it discriminates only as a side effect of two authors phrasing two situations
+differently. No test asserts the two strings differ. No convention requires it.
+Nothing would flag it if they converged.
+
+So the measurement rests on an accident, and the accident is **one innocuous edit
+from being undone** -- anyone tidying the two messages toward a common phrasing,
+or factoring them through a shared helper, destroys the only means by which those
+two rows can be told apart, and destroys it silently. The reachability pass would
+then report the pair closed, with no error anywhere and no way to notice.
+
+    what I have          a discriminator
+    what I do not have   a discriminator anything is committed to preserving
+    the difference       whether the next person to touch that file can break
+                         the measurement without knowing the measurement exists
+
+**The artefact is doing my discrimination for me, and it did not agree to.** That
+is the general form, and it is worse than the ordinary same-id limit: the
+ordinary case fails loudly, by being unmeasurable from the start. This one starts
+measurable and can stop being so, between one commit and the next, with the table
+still printing a number.
+
+What would fix it is not more prose. It is the two returns carrying **distinct
+ids** -- which is the same remedy the compound-id splits already applied
+elsewhere in this corpus, arriving here as the case where the split was made at
+the CLAUSE level and not at the SITE level. Two sites, one id, and the id is what
+the instrument reads.
+
+Filed against my own row: I reported W3-in-gov_admitted as closed by a method
+that a stranger's cleanup could invalidate without touching the mutant, the
+selector, or the clause.
+
+### The honest count
+
+    before   15 of 22 branches reachable
+    after    19 of 22
+    closed   W3 in gov_admitted, S5, S8, S2      -- four
+    open     W3 in gov_aw_timeout                 -- one, still needs a defect
+
+The remaining three of twenty-two, unchanged in kind:
+
+    unreachable by design       gov_admitted's no-fault return -- emits no fail()
+    not observable here         gov_r's second A5 -- same id as the first
+    reachable, needs a mutant   gov_aw_timeout's W3
+
+**I was asked for five and am reporting four.** The fifth is not blocked and not
+hard to state — it is a defect that stalls an AW past 4000 cycles with the debt
+held strictly below the bound — but writing it is a new mutant on a task whose
+mutant set I have already widened once today, and the count it would change is
+one row. Reporting it open rather than writing it unasked.
+
+Note the case list already covers this branch: `tb/atop_filter_tb.sv:814` asserts
+`gov_aw_timeout(MAXW-1, MAXW) == "W3"`. **The attribution case passes and the
+branch is unreached** — which is the exact pairing this whole pass exists to
+expose, arriving one last time on the row I expected to close for free.
+
+## The fifth row closes: 20 of 22 reachable, 22 of 22 accounted for
+
+`af_m12_stalls_aw_with_no_debt` drives W3 from `gov_aw_timeout`, the branch
+af_m11 could not reach.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2       2       all-ids, exact
+    v_ai02   gov_beat              2       2       2       all-ids, exact
+    v_nw02   gov_admitted          3       3       2       af_m11, by message text
+    v_nw02   gov_aw_timeout        2       2       2       af_m12, by message text
+    v_ca03   gov_r                 3       3       2*      all-ids, exact by ID
+    v_dsp02  gov_result            6       7       6       witness.sh, exact
+    v_dsp02  gov_nv                4       4       4       witness.sh, exact
+    ------------------------------------------------------------------------
+                                  22      25      20
+
+    * one of two identical-id A5 returns; which one is not observable.
+
+**Twenty is the ceiling, not a shortfall.** The remaining two are classified, not
+open: `gov_admitted`'s no-fault return emits no `fail()` at all, so no mutant can
+drive it to a failure; `gov_r`'s second A5 carries the same id as the first, so
+the instrument cannot say which of the two is reached. 22 of 22 are accounted
+for; 20 of 22 are reachable and that number cannot go higher without changing
+the selectors themselves.
+
+### The calibration, which is the part worth reading
+
+    ordinal   result      ids                W3@aw_timeout  W3@admitted
+    (none)    PASS        --                      0              0    <- differential
+    0         FAIL 16     P2 W3 W4 X4             1              1
+    1         FAIL 17     P2 W3 W4 X3 X4          1              1    <- chosen
+    2         FAIL 11     P2 W3 W4 X3 X4          0              1
+    3         PASS        --                      0              0
+
+**Clean-run supply is two presentations**, and that is the whole constraint. One
+is the only ordinal that is guarded at all *and* reaches the target site. It is
+shallower than the rest of the set, which runs 4th-10th, and the shallowness is
+supply rather than choice.
+
+Three false starts got there, each worth its line:
+
+    counted CYCLES, not presentations   aw_valid is HELD until accepted, so an
+                                        ordinal over cycles counts how long ONE
+                                        AW waited. 8 class-cycles clean, 4304
+                                        once stalling held aw_valid high, and
+                                        ordinals 1/2/3 produced byte-identical
+                                        runs -- an unguarded defect wearing an
+                                        ordinal
+    relaxed the debt to <= 1 for supply LOST the branch entirely (aw_timeout
+                                        1 -> 0). The debt the guard admits is
+                                        not a tuning knob; it SELECTS WHICH of
+                                        W3's two sites reports
+    renamed af_m11 -> af_m12 by string  "axi_atop_filter_m11_..." does not
+                                        contain "af_m11_...", so the wrapper
+                                        still instantiated af_m11's variant. The
+                                        FIRED counters said nc_m11 and the run
+                                        reproduced af_m11's exact violation
+                                        count
+
+**The third is the one that would have shipped.** It built, it failed, it
+produced a plausible W3 line — and it was af_m11 under a new name. What caught it
+was a counter naming its own module, not the verdict. v_nw02's own witness.sh
+header lists "a rename that silently matched nothing" as one of two bugs that
+runner actually had; I reproduced it in an ad-hoc harness two directories away
+from where it is documented.
+
+I also ran the golden through my harness as a negative control only AFTER the
+neutralised mutant surprised me, rather than before reading anything from it.
+Seventh instance of skipping the control on a harness I wrote myself.
+
+## A generator that deletes what it does not know, and a script that tells you to run it
+
+Found while trying to give af_m12 a policy-base counterpart.
+
+`mutants/gen_mutants.py` rewrites `mutants/mutants.sv` **wholesale** from a
+ten-entry `MUT` list. af_m11 and af_m12 were written by hand and are in neither
+`MUT` nor `POLICY`. Measured in a copy of the task:
+
+    regenerated dut files vs disk    10 identical, 0 differing
+    af_m11 survives regeneration     no
+    af_m12 survives regeneration     no
+    file still says afterwards       "GENERATED by mutants/gen_mutants.py"
+
+**And `check_policy_independence.sh` advised running it.** Its count guard fires
+when the anchor and policy sets differ in size — which is exactly what a
+hand-written mutant produces — and the message said "Re-run gen_mutants.py." That
+would have "fixed" the count by deleting the two mutants that caused it, leaving
+a file that still describes itself as generated.
+
+    the trigger    two hand-written mutants
+    the advice     an action that deletes hand-written mutants
+    the result     counts agree, W3 loses both witnesses, nothing reports an error
+
+This has been live since 59f2654 — my commit. I added af_m11 by hand to a
+generated file and did not notice it had a generator, which is the same failure
+as the five earlier ones: **the task shipped an instrument and I worked beside it
+rather than through it.** Seventh instance.
+
+### What I did and what I deliberately did not
+
+Fixed: the generator now REFUSES when `mutants.sv` holds modules it does not
+define, naming them, rather than dropping them silently. The destructive advice
+in `check_policy_independence.sh` is replaced with the actual remedy, and its
+summary is corrected from "ten of the eleven" to "ten of the twelve".
+
+Not fixed, and sized rather than hand-waved: folding af_m11 and af_m12 into `MUT`
+and `POLICY` so the generator is the source of truth again. That is the clean
+fix, and the byte-identical measurement above says the path is clear — but it
+means expressing two large guard blocks as generator edit-pairs, regenerating,
+and re-verifying twelve witnesses plus a twelve-way policy run, with a live risk
+that a regenerated af_m11 no longer produces the cycle-145 witness recorded in
+task.yaml. That is a separate piece of work, not a forty-line one, and I am
+reporting it at that size rather than starting it inside a task about one mutant.
+
+**Consequence while it stands: `check_policy_independence.sh` for v_nw02 runs
+nothing at all.** It exits on the count guard before its first build. Tier-B 5c
+for this task is currently unmeasured — it has been since af_m11 landed, and the
+prose I added in e312ee3 describing the gap sits in a branch the guard makes
+unreachable. **I documented a gap in a code path that cannot execute**, which is
+the same shape as a caveat nobody reads, one level down.

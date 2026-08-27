@@ -147,6 +147,39 @@ HEAD = """// v_nw02 mutant set -- these MUST BE CAUGHT. Scoring only, never ship
 // under a narrow predicate on contract-level state, so exercising the feature
 // is not enough to find it. Do not edit by hand; edit the generator.
 """
+# ---------------------------------------------------------------------------
+# REFUSE TO DELETE MUTANTS THIS GENERATOR DOES NOT KNOW ABOUT.
+#
+# This line overwrites mutants.sv wholesale from MUT. Any mutant added BY HAND
+# is destroyed by it -- silently, and the file it lands in still says "GENERATED
+# by mutants/gen_mutants.py" afterwards, so nothing looks wrong.
+#
+# That is not hypothetical. af_m11 was hand-written on 2026-08-27 to give clause
+# W3 a witness, and af_m12 after it to reach W3's second reporting site. Neither
+# is in MUT. Worse, mutants/check_policy_independence.sh refuses when the anchor
+# and policy sets differ in size and ADVISES "Re-run gen_mutants.py" -- which is
+# exactly the mismatch two hand-written mutants create, and running it would
+# "fix" the count by deleting them. The advised remedy destroys the work that
+# triggered the advice.
+#
+# So: refuse, loudly, rather than silently drop. Measured before writing this --
+# regenerating reproduces all ten generated dut files byte-for-byte, so the fix
+# is to ADD the hand-written mutants to MUT, not to work around this check.
+_existing = os.path.join(HERE, "mutants.sv")
+if os.path.exists(_existing):
+    _have = set(re.findall(r"^module (af_m[a-z0-9_]+)", open(_existing, encoding="utf-8").read(), re.M))
+    _known = {"af_%s" % t for t, _c, _n, _e in MUT}
+    _orphan = sorted(_have - _known)
+    if _orphan:
+        sys.exit(
+            "REFUSING TO REGENERATE: mutants.sv contains %d mutant(s) this\n"
+            "generator does not define, and rewriting it would DELETE them:\n"
+            "  %s\n"
+            "Add them to MUT (and their counterparts to POLICY) rather than\n"
+            "removing this check. check_policy_independence.sh's advice to\n"
+            "'Re-run gen_mutants.py' on a count mismatch is what this guards."
+            % (len(_orphan), "\n  ".join(_orphan)))
+
 open(os.path.join(HERE, "mutants.sv"), "w", encoding="utf-8").write(HEAD + "\n" + "\n".join(blocks))
 print("wrote mutants.sv with %d guarded mutants" % len(blocks))
 

@@ -69,3 +69,19 @@ reference testbench vs the POLICY-DIVERGENT base and the same ten defects
 OK: every defect is caught on BOTH bases, and both clean implementations
     pass. No mutant is killed by the latitude choice.
 ```
+
+  # RE-RUN 2026-08-27, after fn_m11/fn_m12/fn_m13 were added to give S5, S8 and
+  # S2 witnesses. The transcript above is left as recorded -- it was true of a
+  # ten-mutant set and rewriting it would erase that the set changed.
+  fn_m11_minmax_both_nan_keeps_payload : FAIL [S5] op=1 mode=1 a=7fc00000 b=ff812345 : result expected 7fc00000 got 7fc00001
+  fn_m12_signalling_cmp_quiet_on_qnan : FAIL [S8] op=2 mode=1 a=80000000 b=ffd5a5a5 : NV expected 1 got 0
+  fn_m13_sgnj_raises_nv_on_snan : FAIL [S2] op=0 mode=0 a=80000000 b=ff812345 : NV expected 0 got 1
+  RULE24 negative control : PASS (golden produced no clause failure)
+  RULE24 positive control : 13 of 13 mutants produced a clause failure
+   exit=0
+
+  # And the policy-independence re-run over the widened set:
+  reference testbench vs the GOLDEN base and its thirteen defects  -- 13 FAIL as expected, golden (clean) PASS
+  reference testbench vs the POLICY-DIVERGENT base, same thirteen  -- 13 FAIL as expected, policy base (clean) PASS
+  OK: every defect is caught on BOTH bases. 28 of 28.
+   exit=0

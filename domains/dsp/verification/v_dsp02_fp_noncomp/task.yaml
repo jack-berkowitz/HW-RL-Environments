@@ -136,10 +136,30 @@ conformant_perturbations:
 
 policy_independence_5c:
   policy_independence: >
-    All ten guarded defects re-derived on the policy-divergent implementation in
-    dut2/ -- an INDEPENDENT design written from the spec, not a wrapper around
-    the anchor -- and re-run: every one caught on BOTH bases, both clean
-    implementations pass. 22 of 22.
+    All thirteen guarded defects re-derived on the policy-divergent
+    implementation in dut2/ -- an INDEPENDENT design written from the spec, not a
+    wrapper around the anchor -- and re-run: every one caught on BOTH bases, both
+    clean implementations pass. 28 of 28. (It was 22 of 22 over ten defects
+    before fn_m11/12/13 were added.)
+  output_side_three_on_the_policy_base: >
+    check_policy_independence.sh asserts only that a mutant FAILS, never which
+    clause it fails on. For the ten input-side mutants that is sufficient. For
+    fn_m11/12/13 it is NOT: those carry a guard across the pipeline, and a carry
+    that misaligned on the divergent base would still produce "FAIL as expected"
+    while breaking a NEIGHBOURING clause -- the same right-number/wrong-meaning
+    reading the witness table warns about. So the clause was measured separately
+    on the policy base, and it is the same clause AND the same operands as on the
+    golden:
+      fn_p11  FAIL [S5] op=1 mode=1 a=7fc00000 b=ff812345 : result expected 7fc00000 got 7fc00001
+      fn_p12  FAIL [S8] op=2 mode=1 a=80000000 b=ffd5a5a5 : NV expected 1 got 0
+      fn_p13  FAIL [S2] op=0 mode=0 a=80000000 b=ff812345 : NV expected 0 got 1
+    That agreement is predicted rather than lucky. The golden registers its
+    INPUTS (NumPipeRegs=1, BEFORE) and dut2 registers its OUTPUTS, but both hold
+    exactly one operation and load it on acceptance, and dut2's own header
+    records the measurement: over 3178 cycles of mixed operations with random
+    backpressure, in_ready_o differs on ZERO cycles and out_valid_o on ZERO. The
+    carry reads nothing but the handshake -- the one property the two bases were
+    measured to share.
 
     HOW THE RE-DERIVATION IS DONE. Every mutant in this task wraps an
     implementation and reads its guards from the PORTS only, so the re-derived
@@ -209,12 +229,47 @@ mutants:
      guard: "the EIGHTH minmax with a signalling NaN operand",
      defect: "no invalid flag is raised",
      witness: "FAIL [S6] op=1 mode=1 a=80000000 b=ff812345 : NV expected 1 got 0"}
+  - {id: fn_m11_minmax_both_nan_keeps_payload, violates: "S5",
+     guard: "the EIGHTH minmax with BOTH operands NaN",
+     defect: "a payload is forwarded instead of the canonical quiet NaN",
+     witness: "FAIL [S5] op=1 mode=1 a=7fc00000 b=ff812345 : result expected 7fc00000 got 7fc00001"}
+  - {id: fn_m12_signalling_cmp_quiet_on_qnan, violates: "S8",
+     guard: "the EIGHTH less-than / less-than-or-equal with a QUIET NaN operand",
+     defect: "NV is dropped for a quiet NaN -- S9's rule on the wrong opcode",
+     witness: "FAIL [S8] op=2 mode=1 a=80000000 b=ffd5a5a5 : NV expected 1 got 0"}
+  - {id: fn_m13_sgnj_raises_nv_on_snan, violates: "S2",
+     guard: "the TENTH sign-injection with a signalling NaN operand",
+     defect: "NV is raised -- sign injection raises no flags, for any operand",
+     witness: "FAIL [S2] op=0 mode=0 a=80000000 b=ff812345 : NV expected 0 got 1"}
+  output_side_three: >
+    fn_m11, fn_m12 and fn_m13 perturb an OUTPUT; the other ten perturb the
+    base's INPUTS. Their clauses cannot be broken from the inputs at all -- no
+    operand makes SGNJ raise a flag (S2 IS that), none makes minmax return a
+    non-canonical NaN (S5 IS that), and substituting the operand to drop NV on a
+    signalling compare also changes the boolean and breaks S7 rather than S8. So
+    those three carry the guard's verdict across the register on the port
+    handshake, one flag, because one stage holds one operation. A misaligned
+    carry would NOT show up as a surviving mutant -- it would fail on a
+    NEIGHBOURING clause with the kill count unchanged -- so the clause id in each
+    witness above is the alignment evidence, not decoration.
   all_have_nonequivalence_witnesses: true
+  what_discharges_nonequivalence: >
+    For the conformant perturbations, mutants/nonequiv_tb.sv, which enumerates
+    VARIANTs 1-5 and 11-16 only. For the mutants it is the rule-24 pair in
+    mutants/witness.sh: the golden PASSes and the mutant FAILs on the SAME
+    stimulus, which is a distinguishing input by construction. fn_m7 onward are
+    not in nonequiv_tb, and the field above should not be read as saying they
+    are.
   evidence_type: witness
   witness_runner: mutants/witness.sh
   reference_reachability: >
-    The reference kills all ten. A mutant it cannot reach is unverified, not
-    difficult.
+    The reference kills all thirteen. A mutant it cannot reach is unverified,
+    not difficult. Supply for the three added ordinals was MEASURED rather than
+    assumed -- by neutralising each threshold and counting accepted operations of
+    the class -- at 32, 152 and 228 respectively, against ordinals of 8, 8 and
+    10. The first probe of that supply reported 0 for all three: its counter had
+    an async reset and the reference pulses reset once, late, so it was read
+    after the clear. The numbers above come from a counter with no reset.
 
 readies_criterion:
   date: 2026-08-25

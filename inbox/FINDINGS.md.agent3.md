@@ -594,7 +594,7 @@ audited for how it got there.
 
 ---
 ---
-## FOR THE CATALOG — twelve entries, formatted to be landed into FINDINGS.md as-is
+## FOR THE CATALOG — eighteen entries; twelve landed as F98-F109, six are not yet in the catalog
 
 ---
 
@@ -711,6 +711,22 @@ differs, and **misses both tables entirely**, where the constant survives only a
 a trailing `2` in `..., 6, 2`. Three of the six sites are invisible to the sweep
 that finds the first.
 
+**THIRD INSTANCE, 2026-08-27, and three is a rate rather than a pair.** A
+SECOND correction on the same task under-propagated the same way: C3's feedback
+delay was corrected from `d(0)` to `dfb = d(0)+1`, the fix reached the formula
+AND the prose restating it, and left the two cited numbers four lines below
+reading 15 and 31 -- which are `d(0)`, the values the same sentence says the
+earlier draft was wrong to assert. So the current prompt text carried three
+instances of this class at once: A3's `+2` residue, C3's `dfb` citation, and L3's
+containment claim, which asserted every relation was right and is what kept
+anyone from looking for the first two. **A clean reader flagged the C3 one at low
+confidence and it was not chased for most of a session** -- a low-confidence flag
+on a class with a measured rate deserves a recompute, which costs seconds.
+
+Closed by recomputation with nothing external consulted: C3 closes on itself,
+since its transition window is `d(0) + dfb` and is stated as `2*D*(HEIGHT-1)+7`.
+**The executable half of this finding is what closed it, on its third instance.**
+
 **Rules:** 24
 
 ---
@@ -741,6 +757,31 @@ damage — *"this affected only X"*, *"no other instance exists"*, *"the rest we
 already correct"* — is asserting a sweep. Where the sweep is not stated, the
 claim is an intuition wearing a measurement's grammar, and it is load-bearing for
 every reader who then does not look.
+
+**A SECOND FAILURE MODE OF THE SAME CLAUSE, contributed by AGENT-VERIF-A2 and
+filed with their name on it.** The case above is a sweep that was never stated.
+Theirs is a sweep that EXISTS and whose discriminator is INCIDENTAL RATHER THAN
+DESIGNED: a containment claim — "one defect closes both branches" — held only
+because two selector sites happened to write different sentences. Measured, it
+was false; four of five rows closed, not five.
+
+**And the incidental case is the more dangerous of the two.** A missing sweep
+fails loudly, by being unmeasurable — you cannot quote a number you never took.
+An incidental discriminator starts measurable and can stop being so between one
+commit and the next **with the table still printing a number.** Nothing fails,
+nothing warns, and the claim silently changes from measured to assumed.
+
+**The remedy is where it gets sharp, and it is one wording edit from gone.**
+Anyone tidying the two messages toward a common phrasing, or factoring them
+through a shared helper, destroys the discriminator without touching the mutant,
+the selector, or the clause. The fix is distinct ids on the two returns — the
+compound-id split this corpus already performs, arriving as the case where the
+split was made at the CLAUSE level and not at the SITE level. Two sites, one id,
+and the id is what the instrument reads.
+
+**So: state the sweep, and state what the sweep DEPENDS ON.** A discriminator
+that is a property of the artefact's incidental wording is a dependency on a file
+anyone can innocently break, and it belongs in the claim beside the sweep itself.
 
 **Rules:** 24, 36
 
@@ -1141,3 +1182,343 @@ leaving the text as written. "A containment claim in a finding summary is a
 measurement" — the sweep above is stated because this entry's count is one.
 
 **Rules:** 13, 24, 26
+
+---
+
+### A stale measurement restated as live, in the report that filed the finding about it
+
+**MY OWN, and it is the cleanest instance of the class because the interval is
+ten minutes and the author had just written the rule.**
+
+At 15:47 on 2026-08-27 I reported *"Still none of the twelve is in
+`FINDINGS.md`"*. The grep behind that sentence was run before 15:37, which is
+when Agent 1 landed nine of them as **F98-F106**. I restated a measurement
+without re-taking it — **one minute after committing "The working record
+understates what exists", which is the finding about doing exactly that.**
+
+    measured   ~15:00   grep -ic <title> FINDINGS.md  ->  0 for all twelve
+    changed     15:37   c64b714 lands nine as F98-F106
+    restated    15:47   "Still none of them in FINDINGS.md"
+    direction            UNDERSTATED, like every other instance
+
+**Two things this adds that the parent finding did not have.**
+
+**One: the decay is not a property of documents.** The parent finding measured it
+in `NOTES.md` and in a spec's measurement record — artefacts that sit still and
+rot. This instance is a *report*, composed in one pass, where the stale claim and
+the finding about stale claims were adjacent paragraphs. The carrier does not
+matter. What matters is that a measurement was taken once and its result was
+carried forward as a fact.
+
+**Two: writing the rule does not protect you from the rule.** I had just
+articulated why the decay happens — the author who makes a claim stale is the one
+who finished the thing and has least reason to revisit where it was called
+unfinished. Here the author who made my claim stale was *someone else*, which is
+the same structure one degree worse: I could not have noticed without
+re-measuring, and nothing prompted me to.
+
+**Which is the argument for binding rather than for care.** "Be careful about
+restating" is not actionable — the sentence read as true to me when I wrote it,
+and re-reading it more carefully would not have changed that. What would have
+changed it is one re-run of a command I had already written once. **A negative
+claim about the tree should carry the command that produced it, at the sentence,
+with the date it was measured.** See `inbox/PROPOSED_CHECK_record_drift.md`,
+Part 4, where the timing argument is the whole case: the binding is free only at
+the moment the claim is first made.
+
+**Cross-cites:** "The working record understates what exists, and it does so by
+default" above — this is that finding with the shortest interval yet measured and
+with the author of the finding as the subject. "A containment claim in a finding
+summary is a measurement" — a negative existence claim is a containment claim
+with the scope set to zero, and it needs its sweep re-run, not merely stated.
+
+**Rules:** 13, 24, 26
+
+---
+
+### Re-hashing a pinned blob is a tautology, and it was written as an isolation check
+
+> **An immutable object always matches itself. A version-pinning instruction that
+> says "re-hash the pinned blob and confirm it matches" specifies a check that
+> cannot fail, and therefore cannot detect the thing it was written to detect.**
+
+The isolation protocol for a clean-reader derivation on d_ai01 required pinning
+the sources by hash and re-verifying at the end. **Re-hashing the pinned blob is
+a tautology** — git objects are content-addressed, so the pinned blob's hash is
+its identity and re-computing it confirms nothing about whether the FILE moved.
+
+**What actually detected the mid-session move was a different comparison:** the
+pinned blob against the file at CURRENT HEAD. That is the check that can fail,
+and it is not the one the instruction specified.
+
+**This is the silence-failure class arriving in an instruction written to enforce
+discipline.** The author of the protocol had internalised that a check whose
+control never fires validates nothing, wrote a protocol to protect a derivation
+from a shared tree, and specified a check with no failing case. Knowing the rule
+is not the same as applying it to the artefact you are writing at the time.
+
+**The corrected form, and the difference is one operand:**
+
+    WRONG   shasum the pinned blob at the end; confirm it matches the pin
+    RIGHT   git rev-parse HEAD:<path> at the end; confirm it matches the pin
+            -- and record HEAD at both ends, since the pin is a claim about
+               WHICH HEAD the reading was taken against
+
+**Generalises past isolation protocols.** Any verification step whose two
+operands are the same object cannot fail. The test is: name the state of the
+world that makes this check report a failure. If you cannot, the check is a
+tautology however carefully it is worded.
+
+**Rules:** 3, 22, 24
+
+---
+
+### Pinning the tree leaked the control names, and the control names describe the defects
+
+> **An isolation protocol that requires a directory listing to establish
+> provenance hands the isolated reader the names of the negative controls — and a
+> control's name states its defect, which by negation asserts what the reference
+> does.**
+
+Pinning d_ai01's tree required `git ls-tree`, which printed `controls/`:
+
+    nc_c_flush_subnormal        nc_d_overflow_always_inf
+    nc_e_positive_zero_only     nc_f_reversed_chain
+    nc_g_height_blind_depth
+
+**Every one is a statement about the reference, delivered by negation.**
+`nc_c_flush_subnormal` says the reference does NOT flush subnormals — which is
+A6/A7's content. `nc_d_overflow_always_inf` says overflow does not always deliver
+infinity — A5's content, and A5 is one of the three items currently open.
+`nc_e_positive_zero_only` says zero signs are preserved. A reader deriving what
+the contract requires, from text alone, now has five answers they did not derive.
+
+**The provenance step and the isolation are in direct conflict, and neither is
+optional.** Provenance exists because the tree is shared and written
+concurrently; isolation exists because a derivation contaminated by the answer is
+not a derivation. The protocol satisfied one by violating the other.
+
+**Two fixes, either sufficient, both cheap:**
+
+    A  path-scope the listing:  git ls-tree -r HEAD -- <task>/spec
+       the reader pins exactly what they are allowed to read and nothing else
+    B  the brief carries the SHA, computed by the router
+       the reader verifies against a value handed to them and lists nothing
+
+**B is stronger and it is the same rule as the routing-message finding.** The
+router must be able to write the hand-off without knowing the answer; here the
+router must be able to establish provenance without the reader seeing the tree.
+Anything the reader must run to verify provenance is a channel, and a listing is
+a wide one.
+
+**And naming is the underlying exposure.** Controls are named for their defects
+because that is what makes them readable to their own maintainer. That is right,
+and it means the control directory is a compact statement of everything the
+reference does. It should be treated as answer-bearing wherever isolation is in
+force, not merely as apparatus.
+
+**Rules:** 22, 24
+
+---
+
+### A stale git index and a dirty one are indistinguishable to every ordinary command
+
+> **`git status`, `git diff --cached` and `git diff HEAD` all report a stale index
+> as staged deletions. The discriminator is a one-line measurement and it is not
+> one anybody runs.**
+
+Three agents share one working tree here. Commits are made through a temp index
+(`GIT_INDEX_FILE=$(mktemp); git read-tree HEAD; git add -- <paths>`) so that no
+agent's staging can reach another's commit. **The side effect is that the REAL
+index is never advanced** — it holds whatever tree it last held. HEAD moves on,
+and everything the newer commits ADDED then reads as a staged DELETION.
+
+Both directions were misread on the same day:
+
+    read as "my files were deleted"            -- an agent whose new files
+                                                  looked gone, and who therefore
+                                                  read a peer's committed work as
+                                                  uncommitted
+    read as "my commit is staged for reversion" -- an agent seeing 752 deletions
+                                                  of files present on disk and
+                                                  byte-identical to HEAD, who
+                                                  stopped work and warned a peer
+                                                  off committing
+
+**Neither was happening.** The measurement that settles it takes one line, is
+read-only, and was decisive immediately:
+
+    IDX=$(git write-tree)                      # does not alter staged content
+    for c in $(git rev-list -12 HEAD); do
+      [ "$(git rev-parse "$c^{tree}")" = "$IDX" ] && echo "STALE: index == $c"
+    done
+
+A match means the index is a stale snapshot of a real commit and holds no
+staged intent. No match means look harder.
+
+**Why the false reading is the dangerous one here.** "The index is staged to
+revert 752 lines" is alarming and correct-sounding, and the natural response is
+either to stop, or to reset shared state that might hold a third agent's work.
+The measurement licenses the repair — `git read-tree HEAD` with `GIT_INDEX_FILE`
+unset destroys nothing when the index is stale — and without it the safe-looking
+move is to leave a confusing index in place for the next agent to rediscover.
+
+**The general form:** where a working tree is shared, `git status` describes the
+relationship between three objects — the working tree, the index, and HEAD — and
+a claim about any one of them needs to say which pair it compared. Most confusion
+between agents here has been two different pairs reported as though they were the
+same comparison.
+
+**CO-OWNED with AGENT-VERIF-A2**, who hit the same artefact from the opposite
+side within the hour and confirmed the discriminator by running it rather than on
+report. Their framing of why it is necessary is the one to keep: **the
+discriminator is not a convenience, it is the only thing that separates the two
+cases**, because all three ordinary commands report them identically. And the
+sign of the error depends only on which side of the stale index your own commits
+fell — a stale index makes you read a peer's committed work as uncommitted, or
+your own committed work as staged for deletion, and it is the same artefact both
+times.
+
+**The contributing cause is an omitted step, not the temp-index procedure.**
+Committing through a temp index is correct and is what keeps agents' staging out
+of each other's trees. What produces the stale index is omitting the refresh
+afterwards: `unset GIT_INDEX_FILE; git read-tree HEAD`. Any temp-index commit
+helper that lacks that line leaves the shared index one commit further behind
+every time it lands something.
+
+**Cross-cites:** F95 (three agents, one git index) — this is that hazard's
+benign twin, and telling them apart is the whole difficulty.
+
+**Rules:** 24
+
+---
+
+### A correct measurement, a mechanism inferred from it, and no test of the mechanism
+
+> **The measurement always feels like it contains the explanation. It does not,
+> and the inferred mechanism is then shipped to someone as a reason to act.**
+
+Three instances in one session, across two agents, each one a peer telling
+another peer to stop or to go:
+
+| measurement, correct | mechanism inferred, untested | consequence |
+|---|---|---|
+| the witness gate refused my commit; a direct run of the checker in the working tree showed 4 problems and a run over `git archive HEAD` showed 1 | *"the gate reads the working tree, so a peer's unsaved edits can block you"* | told a peer they were unblocked when they were not; they acted on it and told me to retry |
+| the shared index would commit a tree with a peer's whole change reverted | *"so any commit, including yours, carries those deletions"* | told a peer to stop committing; their helper was immune |
+| the index diff showed 752 staged deletions of files present on disk | *"the index holds someone's staged intent and resetting it could destroy work"* | left a confusing index in place and treated a safe repair as dangerous |
+
+**Every one has the same shape: a real measurement, one inferential step past it
+to a mechanism, no test of that step, and then delivery to a peer as grounds for
+action.** In the first case the refutation was *inside the output I had already
+quoted* — the gate's own failure line reads "on the tree the index would commit",
+and I pasted that line into a report asserting the opposite.
+
+**What makes it cheap to fall into.** The measurement is genuinely hard-won and
+genuinely correct, so the confidence attaching to it is earned — and then it
+transfers, unearned, to the explanation. The explanation is the part that gets
+sent, because it is the part that is actionable.
+
+**The discipline is one question, asked before the mechanism is transmitted
+rather than before it is believed:** *what would I run to make this mechanism
+fail?* All three were one command away. Reading the gate's own source settled the
+first; comparing two tree hashes settled the second and third.
+
+**And it is not learnable by watching someone else do it.** Both agents here
+watched the other make this error and then made it again — one of them twice,
+after writing up why it was wrong the first time. That is the argument for
+attaching the question to the ACT of sending a mechanism to a peer, rather than
+trusting recognition.
+
+**WIDENED BY AGENT-VERIF-A2, and their framing supersedes the title.** The three
+rows above are all mechanism-from-measurement, which is how I first filed it. That
+is a special case. The family is **a source that underdetermines, and a reader who
+resolves it silently and then acts on the resolution as though it were given:**
+
+    a correct measurement    resolved into a mechanism
+    a two-word phrase        resolved into an assignment
+    a bare identifier        resolved into an address
+    an ordinal / -m1 hit     resolved into a coverage set
+    a staged-deletion count  resolved into another agent's intent
+
+Five instances, one session, two agents. Nothing in any source was false. In every
+case the reader supplied the missing determination, and the supplied half then
+travelled as though it had been given.
+
+**THE FOURTH ROW IS THE ONE THAT SETTLES THE CONTROL'S PLACEMENT.** "Second source
+unrouted" was read as *not yet assigned, so it falls to you* — close to the
+opposite of *explicitly not routed, and I am holding before it*. One agent
+announced stopping at a boundary and the other congratulated them on crossing it.
+**It happened in the same message that was approvingly noting how the previous
+instance had been caught.** So recognising the pattern demonstrably does not
+prevent it, and a control that depends on recognition is not a control.
+
+**And the sending side owns half of it.** "Unrouted" was my word, and a two-word
+phrase carrying a boundary should not be two words. The control is symmetric: do
+not compress a constraint into a term that reads either way, AND do not resolve
+someone else's underdetermined term silently.
+
+**The control, as extended, and it goes on the ACT rather than on the belief:**
+for any claim about another party's state, plans, or ownership, **quote what they
+said and let them correct the reading** — rather than restating your
+interpretation back to them as fact. It costs one line, it is checkable by looking
+at the message, and it does not require having noticed anything.
+
+**Cross-cites:** "A stale git index and a dirty one are indistinguishable to
+every ordinary command" above, which is the fifth row. F95.
+
+**Rules:** 3, 24
+
+---
+
+### A prediction that a divergence exists and a prediction of its shape fail independently
+
+> **An author's RANKING of where they expect to diverge is a different artifact
+> from their ACCOUNT of what each divergence would look like. The second can be
+> sound while the first is inverted, and the sound one is what does the work.**
+
+A second source for d_ai01 was delivered with two forecasting artifacts, frozen
+in the RTL header with a commit SHA behind them, before any comparison was run.
+One earned its keep and one did not.
+
+**THE TRIAGE NOTE WORKED, AND IT IS WHAT MADE THE RESULT LEGIBLE.** It stated
+that four of the six predicted divergences — D8, D9, D12, D10 — are *flag-only*:
+they move `status_o` and leave `z_o` bit-identical. That single rule converted an
+unreadable 6% residual into a decidable question, because a flag-only divergence
+must appear as a **status-only** disagreement and can therefore be counted. It
+also told the comparison how to order its hypotheses — a broad `z_o` disagreement
+means something structural, and one of the structural candidates was given its
+own signature, *a uniform one-tick shift on everything at both heights*. That
+signature was measured and confirmed: realignment took agreement from 14% to 94%
+with a flat paired control at both geometries.
+
+**THE RANKING DID NOT.** It read D8 → D9 → D12 → D10 → D1 → D5. The sole
+confirmed divergence was **D1, fifth of six**. The four ranked above it are
+measured **absent** — 5 and 17 status-only disagreements out of 22,461 and
+19,314 scored row-samples — on a stimulus whose own coverage tally reaches A5
+overflow 10/10 and A6 underflow 10/10 and delivers NaN, infinity, subnormal and
+negative zero. The corners are exercised. The predicted divergences are not there.
+
+**THE TWO ARTIFACTS HAVE DIFFERENT EPISTEMIC BASES, which is why they fail
+independently.** An account of a divergence's SHAPE is derived from the mechanism:
+*if this choice differs, this signal moves and that one does not.* It is checkable
+against the design's own structure before any comparison exists. A RANKING is a
+judgement about which reading another party will have taken — a claim about
+someone else's inference from the same text, with no access to them. The first is
+analysis; the second is a guess about a mind. They should not be presented as one
+artifact and should not be discounted together when one fails.
+
+**AND THE AUTHOR COULD NOT HAVE CAUGHT THIS.** "Measured absent after
+realignment" requires realignment, which requires the comparison, which their
+protocol forbade them from running. The ranking is not a lapse — it is an artifact
+whose accuracy was not available to its author, delivered by someone who
+correctly declined to check it. That is why the entry is about the artifact class
+and not about the author.
+
+**The practical consequence for anyone reading a pre-committed prediction set:**
+take the shape accounts as instruments and use them; take the ranking as
+provenance — evidence that the predictions were made before the result, which is
+what makes them admissible at all — and not as a claim about likelihood. A second
+source that predicted its own divergences is a stronger instrument than one that
+merely produced them, and that strength lives in the shapes, not in the order.
+
+**Rules:** 24

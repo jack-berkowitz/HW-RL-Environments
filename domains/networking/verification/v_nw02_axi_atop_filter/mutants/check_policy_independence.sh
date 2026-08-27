@@ -42,7 +42,19 @@ n_anchor=$(grep -cE "^module af_m[0-9]+_" "$T/mutants/mutants.sv")
 n_policy=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | wc -l | tr -d ' ')
 if [ "$n_anchor" -ne "$n_policy" ]; then
   echo "  RULE24: $n_anchor defects on the anchor but $n_policy re-derivations."
-  echo "          The two halves are not the same set. Re-run gen_mutants.py."
+  echo "          The two halves are not the same set."
+  echo ""
+  echo "  DO NOT 'just re-run gen_mutants.py' -- this message used to say that,"
+  echo "  and it was destructive advice. The generator rewrites mutants.sv from"
+  echo "  its own 10-entry list, so on the mismatch it is most likely to be run"
+  echo "  against -- one caused by mutants ADDED BY HAND -- it would delete them"
+  echo "  and 'fix' the count by removing the anchor side. af_m11 and af_m12 are"
+  echo "  both in that position. The generator now REFUSES rather than dropping"
+  echo "  them; see the guard in gen_mutants.py."
+  echo ""
+  echo "  The fix is to add the missing re-derivations to POLICY (and the"
+  echo "  hand-written mutants to MUT), not to make the counts agree by"
+  echo "  subtraction."
   exit 2
 fi
 echo "reference testbench vs the POLICY-DIVERGENT base and the same $(grep -cE '^module af_m[0-9]+_' "$T/mutants/mutants.sv") defects"
@@ -67,10 +79,14 @@ if [ "$fails" -eq 0 ]; then
   echo "    killed) is established by scripts/sim_verification.sh, not here."
   echo "    Saying \"both bases\" here would claim a check this script never ran."
   echo
-  echo "    AND THE TWO SETS ARE NO LONGER THE SAME SIZE. af_m11, added to give"
-  echo "    W3 a witness, has NO policy-base counterpart: ten of the eleven"
-  echo "    golden-base mutants are covered here, not eleven. That is a real"
+  echo "    AND THE TWO SETS ARE NO LONGER THE SAME SIZE. af_m11 and af_m12,"
+  echo "    added to give clause W3 a witness at each of its TWO reporting"
+  echo "    sites, have NO policy-base counterparts: ten of the twelve"
+  echo "    golden-base mutants are covered here, not twelve. That is a real"
   echo "    gap and it is stated rather than absorbed into \"all checks pass\"."
+  echo "    NOTE this branch is currently UNREACHABLE -- the count guard above"
+  echo "    exits first. It is left in place because it is what should print"
+  echo "    once p11 and p12 exist and the counts agree again."
 else
   echo "MISMATCH in $fails case(s) -- a mutant is sensitive to the policy choice."
 fi
