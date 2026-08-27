@@ -487,3 +487,40 @@ the vacuity guard tests the stimulus, and the two failures look identical in the
 output.
 
 **Rules:** 24
+
+## Holding at a scope boundary: the report is what makes the decision recoverable
+
+Two ways to stop short of work you could do, and they are not the same act:
+
+* **Not taking work that was withheld.** Someone else drew the line. Holding it
+  costs patience and nothing else, and there is no judgement in it to be wrong
+  about.
+* **Declining work you have specified, could write, and that would close
+  something you are currently reporting as open.** That is a judgement that the
+  scope belongs to whoever owns it, and it can be wrong.
+
+Only the second needs a discipline, and the discipline is not the decision. **It
+is that the open item is reported WITH ITS REMEDY ATTACHED** — specified to the
+point where whoever owns the scope can say yes and have the work start from the
+report rather than from a re-derivation.
+
+**That is what makes declining recoverable, and it is a weaker virtue than
+restraint.** If the owner wanted it written, nothing was lost but a round trip.
+If the remedy is *not* in the report, declining silently converts a decision about
+scope into a decision about whether the thing gets done at all, and the person
+who owns the scope never learns there was a choice.
+
+**Both halves are cheap and neither substitutes for the other.** Recording an
+item as OPEN with no remedy is a note. Recording the remedy and doing the work
+anyway is a scope violation. The pair — open, specified, unbuilt, and routed to
+whoever owns it — is the only form that leaves the decision where it belongs and
+still costs the project nothing if the answer is yes.
+
+**Worked instances, both from 2026-08-27.** d_ai01's three A5/A6/tininess items,
+recorded open and unassigned with the contradiction stated and NO fix implied,
+because deciding what the text should say is a derivation act. And a peer's fifth
+mutant row, held with the defect specified to about forty lines because widening
+a mutant set a second time is their user's call — reported open with the remedy,
+not merely reported open.
+
+**Rules:** 13, 24
