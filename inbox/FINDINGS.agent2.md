@@ -8121,3 +8121,77 @@ reaches. **One mutant closes both of its branches.**
 The remaining four (S5, S8, S2) are real gaps rather than by-design cases, and
 each is one variant file. **Whether they are worth four variant files is a
 scheduling question, not a technical one**, and the number above is what it costs.
+
+## Minimising a rebuild reduces the surface; it does not remove it
+
+**Fourth instance of the rebuild pattern in one session, and the fourth time the
+missing piece was something the shipped script already knew.**
+
+    raw-record diff        counted 366 cycles the scoring TB excludes
+    ad-hoc mutant loop     printed BUILD FAIL eleven times and exited 0
+    substitution regex     required `\s+#\(`, matched nothing, built the golden
+    all-ids harness        omitted golden_renamed.sv, so every build failed --
+                           and on v_dsp02 also omitted a `head` block supplying
+                           helper functions the extracted mutant needs
+
+Having been caught three times, I stopped reimplementing and did the minimal
+thing: **took the task's own `witness.sh` and changed one grep**, `-m1` to
+all-ids, leaving every other line the task's.
+
+**That was the right move and it still broke.** `witness.sh` begins with
+
+    cd "$(dirname "$0")/.."
+
+and my copy lived in the scratchpad, so it resolved to the wrong directory and
+found no `dut/`. The one line I did not change was the one that assumed where the
+file lives.
+
+### What caught it
+
+    RULE24 negative control : FAIL -- control build failed
+    RULE24: refusing to report witnesses -- the instrument did not reproduce
+            a known answer, so anything it prints is a number, not a measurement.
+
+**The rule-24 control caught my broken copy of the script that carries it.** Not
+the golden, not the output looking wrong — the control, doing exactly what its
+header says, on a copy of itself.
+
+### The lesson is narrower than "don't rebuild"
+
+I had already drawn the obvious conclusion and acted on it. Copying the shipped
+script and changing one line **is** the minimal rebuild, and it reduced the
+surface from "reimplement the whole recipe" to "one grep and whatever the copy
+inherits". **It did not reduce it to zero**, because a script carries assumptions
+about its own location, its relative paths, and its inputs, and copying it moves
+exactly those.
+
+    reimplementing   loses everything the original knew
+    copying          keeps what it knows and breaks what it assumed about itself
+
+**So the remedy is not "minimise the rebuild" — it is "keep the control".** The
+control is what made the difference between a wrong number and a refusal, in a
+run where I had already done the careful thing.
+
+## The -m1 coincidence is the argument FOR the UNKNOWN discipline
+
+v_dsp02's all-ids union came back **identical to its `-m1` union** — every mutant
+in that task produces exactly one clause id, so the lower bound was exact.
+
+**That is the case that vindicates marking those rows UNKNOWN rather than
+unreached**, and it would be easy to read the other way.
+
+The bound was exact **and that was not knowable without running it.** Had I
+written "unreached" on the strength of `-m1`, the answer would have been right and
+the claim would have been unfounded — and on v_ca03, where the same reasoning was
+applied, it *was* wrong: `A5` is reachable and `-m1` could not see it because it
+never fires first. **Same instrument, same discipline, two tasks, and it changed
+the answer on one of them.**
+
+    a discipline that only looks justified when it changes the answer
+    is not a discipline
+
+It is a lucky guess that happened to be checked. The value of marking UNKNOWN is
+that it is applied **before** you know which of the two cases you are in, and the
+run that comes back unchanged costs the same as the run that comes back different.
+Reporting the unchanged one as a vindication rather than a waste is the part
+that keeps the practice alive.

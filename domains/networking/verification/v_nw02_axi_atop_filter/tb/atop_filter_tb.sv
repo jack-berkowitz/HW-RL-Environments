@@ -162,7 +162,13 @@ module atop_filter_tb;
   function automatic string gov_admitted(input int n_adm, input int bound_);
     if (n_adm < bound_) return "W3";   // stalled below the bound
     if (n_adm > bound_) return "W2";   // admitted past the bound
-    return "";                         // exactly the bound: no fault
+    // EXACTLY THE BOUND IS THE NO-FAULT CASE, AND THIS RETURN IS UNREACHABLE BY
+    // DESIGN. It is neither a stall below the bound nor an admission past it, so
+    // there is nothing to report and no fail() is emitted. A reachability sweep
+    // will list it as never driven by any mutant; that is correct and is not a
+    // gap. No defect can drive it TO A FAILURE because it produces none, and a
+    // mutant written to "cover" it would be covering the absence of a fault.
+    return "";
   endfunction
 
   // W3 vs X4 on a timed-out AW. W3's own text makes the debt its antecedent, so
