@@ -12,6 +12,28 @@
 // w[K] to 1.0 for EXACTLY ONE enabled tick. That injects a single 1.0 at stage
 // K, which then propagates down the remaining stages.
 //
+// THIS PROBE READS ONE TICK SHORT OF THE CONTRACT, AND ITS +2 IS CORRECT FOR
+// WHAT IT MEASURES. Added 2026-08-27, after the +2 was mistaken for a stale
+// constant and "corrected" to +3 -- which made the probe report MISMATCH against
+// the REFERENCE at every stage, uniformly one short. That change is reverted.
+//
+//   spec A3 / L2 / L3   d(k) = D*(H-1-k)+3, counted in ENABLED TICKS (A1)
+//   this probe          D*(H-1-k)+2, counted in RAW CLOCK CYCLES with
+//                       t_emerge = cyc - 1
+//
+// The scored testbench's latency floor asserts +3 and the REFERENCE PASSES it,
+// so +3 is the operative contract value and 14 must not be read off this probe
+// as the contract's number. The two instruments differ by exactly one at every
+// stage and at both geometries, which is an edge-convention offset rather than a
+// disagreement about the hardware -- but WHICH convention is right is NOT
+// resolved here, and adjusting either constant until the output turns green
+// would resolve it by fiat.
+//
+// UNRESOLVED APPARATUS QUESTION, recorded rather than closed. L3 says +3 was
+// measured "an impulse at every stage"; this is also an impulse at every stage
+// and reads +2. Two impulse measurements disagree by one and only one of them
+// has been reconciled with the enabled-tick definition.
+//
 // MEASURED MODEL, and the first one was WRONG. The initial guess was
 // delay(K) = D*(H-K); the probe returned a uniform 2-cycle shortfall at every
 // stage, which is a wrong formula rather than a wrong instrument -- the
@@ -90,6 +112,7 @@ module probe_skew_tb;
         if (z[0] != 16'h0000) t_emerge = cyc - 1;
       end
 
+      // +2, AND IT IS NOT STALE -- SEE THE OFFSET NOTE IN THE HEADER.
       expected = D * (H - 1 - K) + 2;
       $display("  K=%0d  apply@%0d  emerge@%0d  delay=%0d  expected %0d   %s",
                K, t_apply, t_emerge, t_emerge - t_apply, expected,
@@ -121,13 +144,8 @@ module probe_skew_tb;
         if (z[0] != 16'h0000) t_emerge = cyc - 1;
       end
 
-      // SUPERSEDED MODEL CORRECTED 2026-08-27. This probe's own measured model
-      // was D*(H-1)+2; L3 corrected the constant to +3 on 2026-08-26, measured
-      // two ways on two hosts. The probe kept asserting its old value and would
-      // have reported MISMATCH against a conforming design. The narrative above
-      // is left as written -- it records how the model was reached, and that
-      // history is why the correction is worth seeing.
-      expected = D * (H - 1) + 3;
+      // +2, AND IT IS NOT STALE -- SEE THE OFFSET NOTE IN THE HEADER.
+      expected = D * (H - 1) + 2;
       $display("  y  apply@%0d  emerge@%0d  delay=%0d  expected %0d   %s",
                t_apply, t_emerge, t_emerge - t_apply, expected,
                ((t_emerge - t_apply) == expected) ? "MATCH" : "*** MISMATCH ***");

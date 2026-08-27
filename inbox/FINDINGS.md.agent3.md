@@ -591,3 +591,149 @@ the probe's assertion. Historical records of the old value are left as written
 and the two dated records that described it as current are marked SUPERSEDED
 rather than rewritten — an artefact that only shows its corrected state cannot be
 audited for how it got there.
+
+---
+---
+## FOR THE CATALOG — three entries, formatted to be landed into FINDINGS.md as-is
+
+---
+
+### An audit probe that pinned its model and was never re-pinned
+
+**RETRACTED IN PART, AND THE RETRACTION IS THE FINDING.** This entry first said
+`tb/audit/probe_skew_tb.sv` carried a stale constant that would fail a conforming
+design. **It carried a correct constant for a different quantity.**
+
+    spec A3 / L2 / L3   d(k) = D*(H-1-k)+3, in ENABLED TICKS (A1)
+    probe_skew_tb       D*(H-1-k)+2, in RAW CLOCK CYCLES, t_emerge = cyc - 1
+
+I "corrected" +2 to +3 and **the probe then reported `*** MISMATCH ***` against
+the REFERENCE at every stage, uniformly one short, at both geometries.** I
+created the apparatus defect I was filing, in the opposite direction, in the act
+of filing it. Reverted; the probe agrees with the reference again, and the offset
+is now recorded in its header as an **unresolved apparatus question** rather than
+closed by choosing whichever constant turns the output green.
+
+**Why the reflex was wrong.** A stale constant in prose is fixed by writing the
+current value. An apparatus is not prose: its constant is only meaningful
+alongside its measurement convention, and changing one without the other
+converts a working instrument into one that fails correct work. **The
+documentation-decay repair applied to an apparatus IS the apparatus defect.**
+
+**The question it leaves open, which is real.** L3 records +3 as measured by "an
+impulse at every stage". This probe is also an impulse at every stage and reads
++2. Two impulse measurements disagree by exactly one, and only one of them has
+been reconciled with A1's enabled-tick definition. The scored floor asserts +3
+and the reference passes it, so +3 is operative — but 14 must not be read off
+this probe as the contract's number, and the reconciliation has not been done.
+
+**The audit, run.** 52 audit probes across 10 design tasks. Scanned for the
+signature — an `expected` model pinned to contract constants **and** a fail path,
+since a probe that only displays cannot fail correct work:
+
+    probes with a fail path AND a pinned expected model .... 2
+    both in probe_skew_tb.sv -- and NEITHER was stale; both are correct
+    for that probe's raw-cycle convention and are restored
+
+**So the audit's result is that no design-half audit probe carries a stale
+model.** The one that looked like it does not, and finding that out required
+breaking it. That is a cleaner result than the one I first filed and it is worth
+more: 52 probes, one apparatus/contract offset recorded, zero stale constants.
+
+`probe_l3_latency_tb` is the instructive contrast, and now doubly so: it names
+both constants and **asserts neither**, displaying them side by side. A probe
+that reports rather than adjudicates cannot rot into a false negative — **and it
+cannot be broken by someone correcting it, either.**
+
+**THE TEXT-SWEEP FAILURE STILL STANDS, and it is what surfaced all of this.**
+The first pass corrected the total-latency site and missed `D*(H-1-K)+2` at the
+per-stage site **in the same file**, because the sweep matched `H - 1 - k) + 2`
+and the survivor spells the stage index `K`. **A text sweep on a relation fails
+on a capitalisation.** Recomputing the derived value would have found it — and
+would then have shown that neither site needed changing, because the recomputed
+value under the probe's own convention is +2.
+
+The class rule below reproduced itself one step later, in the file being fixed,
+by the person who had just written it down. Then the fix it prompted was itself
+wrong. Both are the same underlying error: **treating a number as text.**
+
+**Rules:** 24
+
+---
+
+### A correction reaches the copy whose purpose it was argued from
+
+> **A constant that appears in more than one clause has as many copies as it has
+> purposes, and a correction argued from one purpose reaches one copy.**
+
+d_ai01's chain-latency constant was corrected from `D*(H-1)+2` to `+3` on
+2026-08-26, with the measurement recorded and a rejected-but-compliant submission
+as the motivating case. The argument was about a **latency**. It reached every
+site whose purpose is latency and no site whose purpose is anything else:
+
+    reached      L2, L3, the testbench latency floor, L3's own narrative
+    not reached  A3's formula          d(k) = D*(H-1-k)+2
+                 A3's H=8 table        30, 26, 22, 18, 14, 10, 6, 2
+                 A3's H=4 table        14, 10, 6, 2
+                 task.yaml's HEIGHT-axis rationale
+                 task.yaml's proposed capacity floor
+    NOT A SITE   probe_skew_tb's two `expected` models -- they were listed here
+                 in the first version of this finding and they do not belong.
+                 They are correct for that probe's raw-cycle convention, which
+                 is one tick off the contract's enabled-tick convention. A
+                 recompute-based sweep distinguishes them from the five real
+                 sites; a text sweep does not, and neither does a reader who
+                 already believes the constant is wrong everywhere it appears.
+
+A3's formula and its prose disagreed **four lines apart in the same clause** for
+a day, and A3 is the clause that defines the operand schedule: **a submitter
+implementing it as written builds the design L3 records the checker as having
+already rejected.**
+
+**FIVE SITES, NOT SIX.** The sixth candidate was an apparatus whose constant was
+right for its own convention, and adding it to this list — which I did, before
+running it — is the mirror of the defect this finding is about. A correction
+under-propagates to copies with a different purpose, **and over-propagates to
+things that merely look like copies.** Both are the same failure to ask what the
+number means where it sits.
+
+**THE EXECUTABLE HALF, and it is the part that makes the rule usable.** A numeric
+correction is swept by **recomputing every derived table and expression**, not by
+matching the constant's text. On this instance a text sweep for `D*(H-1)+2`
+catches L3's citation, **misses `D * (H - 1 - k) + 2`** because the spacing
+differs, and **misses both tables entirely**, where the constant survives only as
+a trailing `2` in `..., 6, 2`. Three of the six sites are invisible to the sweep
+that finds the first.
+
+**Rules:** 24
+
+---
+
+### A containment claim in a finding summary is a measurement
+
+L3's correction record says:
+
+> ONE CONSTANT WAS WRONG AND EVERY RELATION WAS RIGHT.
+
+**That was false when written.** A3's relation carried the old constant at the
+moment the sentence was committed, and went on carrying it for a day.
+
+The sentence is not merely wrong — **it is what made the survivor hard to see.**
+A reader who believes every relation is right has no reason to check the
+relations. A summary that overstates the blast radius of a fix is worse than no
+summary, because it converts an open question into a closed one at no cost and
+with no record of what was actually examined.
+
+> **A containment claim in a finding is a measurement, and needs its sweep
+> stated, or it is not made.** "One constant was wrong and every relation was
+> right" is admissible only beside the enumeration that establishes it: which
+> relations were checked, by what method, and what the method cannot see. Absent
+> that, the finding says what was fixed and stops.
+
+This generalises past the task. Every finding in this catalog that scopes its own
+damage — *"this affected only X"*, *"no other instance exists"*, *"the rest were
+already correct"* — is asserting a sweep. Where the sweep is not stated, the
+claim is an intuition wearing a measurement's grammar, and it is load-bearing for
+every reader who then does not look.
+
+**Rules:** 24, 36
