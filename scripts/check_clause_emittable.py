@@ -156,12 +156,30 @@ def ids_emittable(text):
 FAILCALL = re.compile(r'fail\(\s*"([A-Z][0-9]+[a-z]?)"')
 DECLARED = re.compile(r"reported under\s*[`*]*([A-Z][0-9]+[a-z]?)[`*]*", re.I)
 
-def declarations(text):
+def declarations(text, sv=False):
     """-> {clause id -> id it says reports it}. Keyed by the clause the marker
-       sits inside, which is the clause block it belongs to."""
+       sits inside, which is the clause block it belongs to.
+
+    THE FOURTH CONVENTION. c2636d5 fixed the stated and emittable columns for
+    design tasks and left this one markdown-only, so the block list came back
+    empty on every _iface.sv, the loop body never ran, and this returned {}.
+    Found by AGENT-VERIF-A2 against a live annotation: d_ca01's interface says
+    "are reported under M2 alone" at line 223 and this reported nothing.
+
+    THAT FAILURE HAS NO SENTINEL, which makes it worse than the one it followed.
+    A task that could not be read returns NO CONCLUSION and says so. A task whose
+    declarations could not be READ returns {} -- and {} is exactly what a task
+    with no groupings returns. The honest-artefact luck that made the *_spec.md
+    glob one command away does not hold here; nothing distinguishes "declared
+    nothing" from "could not look".
+
+    DECLARED itself needs no variant -- "reported under M2" matches the same in a
+    comment as in markdown. Only the block boundaries are convention-bound.
+    """
     out = {}
     blocks = []
-    for m in re.finditer(r"^[-*]?\s*\*\*([A-Z][0-9]+[a-z]?)\b", text, re.M):
+    _blockre = CLAUSE_SV if sv else re.compile(r"^[-*]?\s*\*\*([A-Z][0-9]+[a-z]?)\b", re.M)
+    for m in _blockre.finditer(text):
         blocks.append((m.start(), m.group(1)))
     blocks.append((len(text), None))
     for i, (pos, cid) in enumerate(blocks[:-1]):
@@ -302,7 +320,7 @@ def analyse(task_dir):
     # annotating one with "reported under X" would be a false statement.
     excl = {c for c in stated if c[0] in ("XLG" if sv else "XL")}
     decl = {}
-    for p in spec: decl.update(declarations(open(p, encoding="utf-8").read()))
+    for p in spec: decl.update(declarations(open(p, encoding="utf-8", errors="replace").read(), sv=bool(sv)))
     # A DECLARED clause is not a candidate -- its author has said where it is
     # reported -- but the declaration is CHECKED, not taken. Naming an id that
     # nothing can emit annotates the clause into a hole and is worse than
