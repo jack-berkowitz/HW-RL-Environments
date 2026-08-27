@@ -594,7 +594,7 @@ audited for how it got there.
 
 ---
 ---
-## FOR THE CATALOG — eleven entries, formatted to be landed into FINDINGS.md as-is
+## FOR THE CATALOG — twelve entries, formatted to be landed into FINDINGS.md as-is
 
 ---
 
@@ -1074,3 +1074,70 @@ sweep on a relation fails on a capitalisation, and a text sweep on an obligation
 fails on a synonym or a negation.
 
 **Rules:** 24, 36
+
+---
+
+### The working record understates what exists, and it does so by default
+
+> **MEASURED, not asserted: on a task where every deliverable was complete and
+> correct in the authoritative artefacts, NINE separate claims in the working
+> record contradicted them — and all nine erred in the same direction, saying
+> less exists than does.**
+
+d_ca01 was revisited for four items: a determinism check, a clause defect
+write-up, a design-difference refutation, and mutant non-equivalence evidence.
+**All four were already finished.** The spec, `task.yaml`, `RULES.md`,
+`FINDINGS.md` and `scripts/sim_candidate.sh` were each correct. `NOTES.md` and
+`PROPOSED_RULE.md` said otherwise in nine places:
+
+    a section describing a deleted script by filename, in the present tense
+    five headings reading FINDING (PROPOSED) for findings landed as F43-F48
+    a heading reading "PROPOSED for RULES.md -- NOT LANDED" for a landed rule
+    "Mutants -- six" for a set of seven
+    an equivalence table of six for nine artifacts carrying the evidence
+    "there is no formal non-equivalence result for these mutants" -- 70 lines
+      BELOW the section that obtained one for every mutant
+    a design difference proposed as live, refuted 460 lines further down
+    a top-of-file status row reading PPA NOT STARTED against 13 run records
+    a handoff item reading "still not landed ... not quotable" for a landed
+      exemption whose results are now quotable
+
+**The direction is the result.** Not one of the nine overstated. A working record
+decays toward *understating* what exists, because the act that makes a claim
+stale — finishing the thing — is the act whose author has the least reason to
+return to where it was last described as unfinished. Overstatement requires
+someone to write a claim that was never true; understatement requires only that
+someone succeed and move on.
+
+**Consequences, and they are not cosmetic.** A reader deciding what to work on
+next reads the record, not the authority: they will rebuild what exists, or
+report as blocked what is landed. And the record is what gets *quoted* — the
+sentence saying no formal non-equivalence result exists was still sitting under a
+heading about the tool a later instruction named, which is exactly where the next
+reader looking for that tool would arrive.
+
+**The top status block is the sharpest instance.** Its neighbouring rows —
+mutant count, conformant count — were current. The PPA row was not. **A
+maintained table goes stale one row at a time**, and being maintained is what
+makes the stale row credible.
+
+**The sweep that is mechanical, and it is worth running before the reading.**
+Every filename cited in a working record, tested for existence: 37 cited on this
+task, 2 absent, one of them a genuine defect. Every status word — NOT STARTED,
+NOT LANDED, PROPOSED, not built — enumerated and checked against its authority.
+Both are one-pass and both paid here. **What neither covers** is a claim stale in
+its content rather than in a filename, a count or a status word — those come out
+only by reading, and the reading was scoped to four items in a 1300-line file.
+
+**The remedy is a direction of travel, not a document.** When work lands in an
+authority, the sweep is over the record that *proposed* it — and the search term
+is the OLD status word, which is the only string that still matches.
+
+**Cross-cites:** "A correction reaches the normative text and not the record it
+was derived from" above — this is that finding measured on a third task, with a
+rate and a direction attached. "Marking a block SUPERSEDED does not mark the
+claims inside it" — the handling for all nine was a dated marker at the site,
+leaving the text as written. "A containment claim in a finding summary is a
+measurement" — the sweep above is stated because this entry's count is one.
+
+**Rules:** 13, 24, 26
