@@ -607,6 +607,21 @@ negative_controls:
   - {name: nc_g_height_blind_depth,  targets: "P1 HEIGHT is load-bearing",
      kind: capacity-reduced, at_HEIGHT_4: PASS, at_HEIGHT_8: FAIL,
      z_kills_at_8: 3208, status_kills_at_8: 3189, isolated: true}
+  # EXPECTED VERDICT IS A FIELD, NOT A CONVENTION. nc_h's PASS is its
+  # measurement -- it is the one entry in this table where a corrupted or
+  # missing verdict rendered as FAIL would read as CORRECT. Carried as data so a
+  # reader never has to know which way round this row goes.
+  - {name: nc_h_echo_band_only,      targets: "C3 widened window, cost of",
+     kind: cost-control, polarity: INVERTED,
+     expect_at_HEIGHT_4: PASS, expect_at_HEIGHT_8: PASS,
+     expect_before_widening: FAIL,
+     measures: "the size of the excluded band, not the presence of a check",
+     detected_pre_widening: {H4: 123, H8: 196}, detected_post_widening: 0}
+  - {name: nc_i_band_unstable,       targets: "band-freeze floor (C1/C4 in the band)",
+     kind: negative, polarity: normal,
+     expect_at_HEIGHT_4: FAIL, expect_at_HEIGHT_8: FAIL,
+     band_freeze_violations: {H4: 88, H8: 176}, z_kills: 0,
+     note: "fails the floor ALONE -- zero z mismatches, so its verdict names the floor"}
   scored_path_remeasurement:
     when: 2026-08-25
     why: >

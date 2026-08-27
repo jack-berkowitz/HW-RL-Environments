@@ -90,7 +90,27 @@ module fp16_gemm_array_tb;
   // the rarer class behind the noisier one, and the rarer one is the
   // interesting one -- here it was the only real finding.
   int unsigned errs_z, errs_st, rep_z, rep_st, n, checked;
-  int unsigned refill_left, acc_left, skipped;
+  // PER ROW, per A1. An enabled tick for row r requires reg_enable_i AND
+  // row_clk_gate_en_i[r], and C2/C3 state their windows in ENABLED TICKS -- a
+  // term A1 defines per row. These were array-wide, which counted the window in
+  // a tick the contract does not use: a row gated for G ticks inside a window
+  // saw it close G ticks early, re-opening the escape for that row. Measured as
+  // latent under the shipped stimulus (no row is gated inside any window today)
+  // and fixed anyway, because "no rows under this stimulus" is an absence
+  // measured against one stimulus -- the same reading that hid the H=4 echo.
+  int unsigned refill_left [0:`VW-1];
+  int unsigned acc_left    [0:`VW-1];
+  int unsigned skipped;
+  // Per-clause coverage, not one aggregate. An exclusion whose removals are
+  // entirely redundant with another's is doing no work and cannot be told from
+  // one that is, by any verdict.
+  int unsigned skip_c2, skip_c3, skip_c4, skip_multi;
+  logic [15:0] z_prev   [0:`VW-1];
+  bit          have_prev;
+  int unsigned band_ante, band_err;
+  bit          band_ok;
+  bit          c2_open [0:`VW-1];
+  bit          c3_open [0:`VW-1];
   int unsigned gate_left [0:`VW-1];
   bit          prev_acc;
   logic [W-1:0] prev_gate;
@@ -132,7 +152,9 @@ module fp16_gemm_array_tb;
     cov_negzero_delivered = 0;
     cov_tallied = 0;
     errs_z = 0; errs_st = 0; rep_z = 0; rep_st = 0; checked = 0;
-    refill_left = 0; acc_left = 0; skipped = 0;
+    for (int i = 0; i < W; i++) begin refill_left[i] = 0; acc_left[i] = 0; end
+    skipped = 0; skip_c2 = 0; skip_c3 = 0; skip_c4 = 0; skip_multi = 0;
+    have_prev = 1'b0; band_ante = 0; band_err = 0;
     prev_acc = 1'b0; prev_gate = {W{1'b1}};
     for (int gi = 0; gi < W; gi++) gate_left[gi] = 0;
 
@@ -192,17 +214,26 @@ module fp16_gemm_array_tb;
       @(posedge clk);
       #1;
 
-      // ---- C2 / C3 whole-array exclusion windows -----------------------------
-      scored = 1'b1;
-      if (r.flush)                 refill_left = REFILL_W;
-      else if (refill_left != 0) begin
-        scored = 1'b0;
-        if (r.reg_enable) refill_left = refill_left - 1;
-      end
-      if (r.accumulate !== prev_acc) acc_left = ACC_W;
-      else if (acc_left != 0) begin
-        scored = 1'b0;
-        if (r.reg_enable) acc_left = acc_left - 1;
+      // ---- C2 / C3 exclusion windows, PER ROW ------------------------------
+      // OPEN IS DECIDED BEFORE THE DECREMENT, which is what the whole-array
+      // version did by setting scored=0 inside the `else if (left != 0)` branch
+      // and decrementing within it. A first rework decremented first and tested
+      // after, which shortened every window by exactly one tick and re-exposed
+      // its last sample -- the second source went from 0 z mismatches to 6, all
+      // of them on the closing tick of a flush window.
+      for (int gi = 0; gi < W; gi++) begin
+        c2_open[gi] = 1'b0;
+        c3_open[gi] = 1'b0;
+        if (r.flush) refill_left[gi] = REFILL_W;
+        else if (refill_left[gi] != 0) begin
+          c2_open[gi] = 1'b1;
+          if (r.reg_enable && r.row_gate[gi]) refill_left[gi] = refill_left[gi] - 1;
+        end
+        if (r.accumulate !== prev_acc) acc_left[gi] = ACC_W;
+        else if (acc_left[gi] != 0) begin
+          c3_open[gi] = 1'b1;
+          if (r.reg_enable && r.row_gate[gi]) acc_left[gi] = acc_left[gi] - 1;
+        end
       end
       prev_acc = r.accumulate;
 
@@ -224,13 +255,55 @@ module fp16_gemm_array_tb;
       end
       prev_gate = r.row_gate;
 
+      // A row is scored only if EVERY window that could cover it has closed.
+      scored = 1'b0;
+      for (int rr = 0; rr < W; rr++) begin
+        automatic bit c2 = c2_open[rr];
+        automatic bit c3 = c3_open[rr];
+        automatic bit c4 = (gate_left[rr] != 0);
+        if (c2 || c3 || c4) begin
+          if      (int'(c2) + int'(c3) + int'(c4) > 1) skip_multi++;
+          else if (c2) skip_c2++;
+          else if (c3) skip_c3++;
+          else         skip_c4++;
+        end else scored = 1'b1;   // at least one row is live this cycle
+
+        // ---- THE UNSCORED BAND IS NOT UNCONSTRAINED -------------------------
+        // C3 makes the VALUE unspecified there. It does not suspend C1 or C4,
+        // which say when a value may move at all: a row with no enabled tick
+        // holds. Without this the band is a hole a submission can put anything
+        // in -- and the band grows linearly with HEIGHT, which is this task's
+        // scored axis, so the hole is widest exactly where the task is hardest.
+        //
+        // THE VALUE IS STILL UNCHECKED. This compares z_o only against ITS OWN
+        // previous sample, never against the reference, so nothing here pins
+        // the transient or requires a microarchitecture.
+        //
+        // NOT CHECKED, AND IT CANNOT BE: "z_o is not X". Verilator is 2-state
+        // and this file already carries that finding at the vector guard above
+        // -- a failed $readmemh leaves ZEROS, not X, and the guard that tested
+        // for X could never fire. An X check here would be the same defect.
+        if ((c2 || c3 || c4) && !r.flush && have_prev
+            && !(r.reg_enable && r.row_gate[rr])) begin
+          band_ante++;
+          if (z[rr] !== z_prev[rr]) begin
+            band_err++;
+            if (band_err <= MAX_REPORT)
+              $display("BAND-FREEZE row %0d cycle %0d: z_o moved with no enabled tick inside an unscored window (was %04h, now %04h)",
+                       rr, n, z_prev[rr], z[rr]);
+          end
+        end
+      end
+      for (int rr = 0; rr < W; rr++) z_prev[rr] = z[rr];
+      have_prev = 1'b1;
+
       if (!scored) begin
         skipped++;
       end else begin
       checked++;
       any_z = 1'b0; any_s = 1'b0;
       for (int rr = 0; rr < W; rr++) begin
-        if (gate_left[rr] == 0) begin          // this row is scored this cycle
+        if (gate_left[rr] == 0 && !c2_open[rr] && !c3_open[rr]) begin
           if (z[rr] !== r.z[rr]) any_z = 1'b1;
           // BOTH are specified while flush_i is high. C2 pins z_o at +0 in
           // every clocked row and held in a gated one, and now pins status_o
@@ -301,6 +374,13 @@ module fp16_gemm_array_tb;
     $display("");
     $display("d_ai01 H=%0d W=%0d : %0d cycles checked, %0d z mismatches, %0d status mismatches",
              H, W, checked, errs_z, errs_st);
+    $display("  FIRED band_freeze antecedent=%0d violations=%0d", band_ante, band_err);
+    // A floor whose antecedent never held is not a floor. If no row was ever
+    // inside an unscored window without an enabled tick, this observed nothing
+    // and must say so rather than pass.
+    band_ok = (band_err == 0) && (band_ante > 0);
+    $display("  COVERAGE: row-samples removed by C2=%0d C3=%0d C4=%0d overlapping=%0d",
+             skip_c2, skip_c3, skip_c4, skip_multi);
     $display("  (%0d cycles unscored: C2 flush / C3 accumulate transition windows, %0d enabled ticks;",
              skipped, REFILL_W);
     $display("   C4 gate-transition exclusion is per row and does not remove whole cycles)");
@@ -314,14 +394,25 @@ module fp16_gemm_array_tb;
     // "FAIL:" with nothing after it -- a correct verdict that cannot be acted
     // on. A one-line failure with no reason is the same defect as a metric with
     // no gate: it is read, and it says nothing.
-    if (errs_z == 0 && errs_st == 0 && lat_ok && floors_v2_ok) $display("TEST_RESULT: PASS");
+    if (errs_z == 0 && errs_st == 0 && lat_ok && floors_v2_ok && band_ok) $display("TEST_RESULT: PASS");
     else if (!floors_v2_ok)
       $display("TEST_RESULT: FAIL: V2 -- reset did not clear the array, or was never exercised on a non-zero array");
     else if (!lat_ok)
       $display("TEST_RESULT: FAIL: L3 latency floor -- measured %0d ticks at HEIGHT=%0d, expected %0d (L3 D*(H-1)+3 = %0d plus one counting offset)",
                lat_meas, H, EXP_LAT, L3_LAT);
-    else $display("TEST_RESULT: FAIL: %0d z mismatches, %0d status mismatches over %0d scored cycles (H=%0d)",
-                  errs_z, errs_st, checked, H);
+    else if (errs_z != 0 || errs_st != 0)
+      $display("TEST_RESULT: FAIL: %0d z mismatches, %0d status mismatches over %0d scored cycles (H=%0d)",
+               errs_z, errs_st, checked, H);
+    // BAND-FREEZE LAST, and deliberately. It is the least specific failure here:
+    // a design with thousands of z mismatches usually trips it too, and a first
+    // ordering put this branch above the data comparison -- so nc_b, whose
+    // defect is an extra pipe stage and 2447 z mismatches, reported "band-freeze
+    // floor" as its verdict. A new check that steals attribution from an older
+    // one is the same defect as a control that fails on the wrong clause.
+    // Reported only when it is the ONLY thing wrong, which is the case its
+    // control is built to produce.
+    else $display("TEST_RESULT: FAIL: band-freeze floor -- %0d movements with no enabled tick inside an unscored window, over %0d antecedent samples (C1/C4 hold through the band; the VALUE is unspecified, the movement is not)",
+                  band_err, band_ante);
     $finish;
   end
 

@@ -469,3 +469,60 @@ armed by a transition. **The control was being detected for a reason that had
 nothing to do with the band it was built to measure**, which is the "failed on
 the wrong clause" case one level in. Fixed by arming on the first real
 transition; the residual went to zero and the pairing became exact.
+
+---
+
+## A clause pinned beside the anchor is not a clause derived from the contract
+
+d_ai01's C2 was pinned this session to say `flush_i` does not affect `status_o`,
+with A10 governing throughout. The outcome is defensible: A10 fixes the delay at
+2 enabled ticks unconditionally, C2 speaks only of `z_o`, so A10 governs. That
+argument does not depend on the reference.
+
+**The provenance does not support it.** The actual order was:
+
+    1. enumerated status mismatches; the output printed
+       "cycle 200: expected 0842308421... got 0000000000..."
+       -- that is the reference's flush behaviour, and I saw it first
+    2. read A10 and C2 -- in a tool call that ALSO decoded and printed the
+       reference's recorded status at flush cycles 200/201/601/602
+    3. wrote the pin
+
+So the A10 derivation was constructed **after** I knew what the anchor does, and
+in the same breath as re-confirming it. I cannot claim the clause was written
+from A10's delay rather than from the anchor's behaviour.
+
+### Why this is worth more than the pin
+
+**A clause pinned to match the anchor is the same defect as an oracle edited to
+match it, one level up — and it is invisible from below.** Every subsequent
+check agrees with a clause that was written to agree with the reference, and the
+agreement is not evidence, because the reference is what the clause was fitted
+to. There is no experiment inside the task that distinguishes the two cases.
+
+AGENT-VERIF-A2's statement of it is the one to keep:
+
+> A derivation that is sound and whose provenance is contaminated is not the
+> same artefact as one that is sound. The first cannot be used to adjudicate the
+> thing it was derived beside.
+
+### The general rule
+
+> **A clause that resolves an ambiguity must be derived before the anchor's
+> behaviour in that region is read, and the derivation recorded before it is
+> compared.** Otherwise it is a transcription with a citation attached, and the
+> citation is the part that makes it hard to see.
+
+This applies to every clause pinned the same way, not only C2. The three pinned
+this session — C2's flush question, C3's window, and d_ca04's B1 — differ in
+this respect and the difference is not visible from the text:
+
+    C3's window     DERIVED. d(0) + dfb follows from the clause's own algebra;
+                    the arithmetic was written before the failures were counted
+                    and predicted them.
+    d_ca04 B1       DERIVED. The ceiling is stated in the clause; only the
+                    measurement point moved.
+    C2's flush      NOT CLEAN. Argument sound, provenance contaminated.
+
+Recorded per clause because "which of these was fitted" is exactly what a reader
+cannot recover later.
