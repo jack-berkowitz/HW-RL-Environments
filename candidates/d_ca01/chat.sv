@@ -1,8 +1,8 @@
 module nonblocking_dcache #(
-  parameter int unsigned DATA_W     = 32,
-  parameter int unsigned SETS       = 16,
-  parameter int unsigned WAYS       = 4,
-  parameter int unsigned MAX_MISSES = 8
+  parameter int unsigned DATA_W      = 32,
+  parameter int unsigned SETS        = 16,
+  parameter int unsigned WAYS        = 4,
+  parameter int unsigned MAX_MISSES  = 8
 ) (
   input  logic                     clk_i,
   input  logic                     rst_ni,
@@ -35,380 +35,276 @@ module nonblocking_dcache #(
 );
 
   localparam int unsigned BLOCK_WORDS = 4;
-  localparam int unsigned BYTE_W      = DATA_W / 8;
-  localparam int unsigned WORD_OFF_W  = $clog2(BYTE_W);
-  localparam int unsigned BLOCK_BYTES = BLOCK_WORDS * BYTE_W;
-  localparam int unsigned BLOCK_OFF_W = $clog2(BLOCK_BYTES);
+  localparam int unsigned NUM_IDS     = 16;
+  localparam int unsigned DATA_BYTES  = DATA_W / 8;
+  localparam int unsigned BYTE_OFF_W  = $clog2(DATA_BYTES);
+  localparam int unsigned WORD_IDX_W  = 2;
+  localparam int unsigned BLOCK_OFF_W = BYTE_OFF_W + WORD_IDX_W;
   localparam int unsigned SET_W       = $clog2(SETS);
+  localparam int unsigned WAY_W       = $clog2(WAYS);
   localparam int unsigned TAG_W       = 32 - BLOCK_OFF_W - SET_W;
-  localparam int unsigned WAY_IDX_W   = (WAYS > 1) ? $clog2(WAYS) : 1;
-  localparam int unsigned MISS_IDX_W  =
-      (MAX_MISSES > 1) ? $clog2(MAX_MISSES) : 1;
+  localparam logic        MAX_MISSES_LEGAL =
+    (MAX_MISSES == 2) || (MAX_MISSES == 8);
 
-  typedef enum logic [2:0] {
-    S_IDLE,
-    S_WB_REQ,
-    S_WB_DATA,
-    S_FILL_REQ,
-    S_FILL_DATA
-  } state_t;
+  localparam logic [2:0] MEM_IDLE      = 3'd0;
+  localparam logic [2:0] MEM_WB_REQ    = 3'd1;
+  localparam logic [2:0] MEM_WB_DATA   = 3'd2;
+  localparam logic [2:0] MEM_FILL_REQ  = 3'd3;
+  localparam logic [2:0] MEM_FILL_DATA = 3'd4;
 
-  logic                      line_valid_q
-      [0:SETS-1][0:WAYS-1];
-  logic                      line_dirty_q
-      [0:SETS-1][0:WAYS-1];
-  logic [TAG_W-1:0]          line_tag_q
-      [0:SETS-1][0:WAYS-1];
-  logic [DATA_W-1:0]         line_data_q
-      [0:SETS-1][0:WAYS-1][0:BLOCK_WORDS-1];
-  logic [WAY_IDX_W-1:0]      repl_q
-      [0:SETS-1];
+  // Cache arrays.
+  logic [SETS-1:0][WAYS-1:0]                         cache_valid_q;
+  logic [SETS-1:0][WAYS-1:0]                         cache_dirty_q;
+  logic [SETS-1:0][WAYS-1:0][TAG_W-1:0]             cache_tag_q;
+  logic [SETS-1:0][WAYS-1:0][BLOCK_WORDS-1:0]
+        [DATA_W-1:0]                                 cache_data_q;
+  logic [SETS-1:0][WAY_W-1:0]                       repl_way_q;
 
-  logic                      miss_valid_q
-      [0:MAX_MISSES-1];
-  logic [31:0]               miss_block_q
-      [0:MAX_MISSES-1];
-  logic [3:0]                miss_id_q
-      [0:MAX_MISSES-1];
-  logic                      miss_op_q
-      [0:MAX_MISSES-1];
-  logic [1:0]                miss_word_q
-      [0:MAX_MISSES-1];
-  logic [DATA_W-1:0]         miss_store_data_q
-      [0:MAX_MISSES-1];
-  logic [BYTE_W-1:0]         miss_store_mask_q
-      [0:MAX_MISSES-1];
+  // One request slot per architecturally unique ID. IDs are guaranteed not to
+  // be reused while in flight, so the ID itself is a natural slot index.
+  logic [NUM_IDS-1:0]                                req_active_q;
+  logic [NUM_IDS-1:0]                                req_done_q;
+  logic [NUM_IDS-1:0]                                req_op_q;
+  logic [NUM_IDS-1:0][31:0]                         req_addr_q;
+  logic [NUM_IDS-1:0][DATA_W-1:0]                   req_data_q;
+  logic [NUM_IDS-1:0][DATA_BYTES-1:0]               req_mask_q;
+  logic [NUM_IDS-1:0][NUM_IDS-1:0]                  req_dep_q;
+  logic [NUM_IDS-1:0][DATA_W-1:0]                   req_rsp_data_q;
 
-  logic [MISS_IDX_W-1:0]     miss_rr_q;
+  // Fair request scheduler.
+  logic [3:0]                                        sched_rr_q;
+  logic                                              sched_sel_valid_c;
+  logic [3:0]                                        sched_sel_id_c;
+  logic                                              sched_sel_hit_c;
+  logic [WAY_W-1:0]                                 sched_sel_way_c;
+  logic [SET_W-1:0]                                 sched_set_c;
+  logic [1:0]                                        sched_word_c;
+  logic                                              sched_complete_c;
+  logic                                              sched_start_miss_c;
 
-  state_t                    state_q;
+  // Victim selection for a newly started miss.
+  logic [WAY_W-1:0]                                 victim_way_c;
+  logic                                              victim_invalid_found_c;
 
-  logic [MISS_IDX_W-1:0]     svc_miss_idx_q;
-  logic [SET_W-1:0]          svc_set_q;
-  logic [WAY_IDX_W-1:0]      svc_way_q;
-  logic [31:0]               svc_victim_addr_q;
-  logic [1:0]                wb_beat_q;
-  logic [1:0]                fill_beat_q;
-  logic [DATA_W-1:0]         svc_load_word_q;
+  // Lower-memory state. Only the currently serviced miss owns block buffers.
+  logic [2:0]                                        mem_state_q;
+  logic [1:0]                                        mem_beat_q;
+  logic [31:0]                                       miss_line_addr_q;
+  logic [SET_W-1:0]                                 miss_set_q;
+  logic [TAG_W-1:0]                                 miss_tag_q;
+  logic [WAY_W-1:0]                                 miss_way_q;
+  logic [3:0]                                        miss_req_id_q;
+  logic [31:0]                                       wb_line_addr_q;
+  logic [BLOCK_WORDS-1:0][DATA_W-1:0]               wb_buf_q;
+  logic [BLOCK_WORDS-1:0][DATA_W-1:0]               fill_buf_q;
+  logic                                              fill_complete_c;
 
-  /*
-   * Completed responses are stored by request ID.  Because R6 guarantees
-   * that two requests with the same ID are never simultaneously in flight,
-   * each ID needs at most one completed response slot.
-   */
-  logic [15:0]               rsp_pending_valid_q;
-  logic [DATA_W-1:0]         rsp_pending_data_q [0:15];
+  // Stable response holding register.
+  logic                                              rsp_hold_valid_q;
+  logic [3:0]                                        rsp_hold_id_q;
+  logic [DATA_W-1:0]                                rsp_hold_data_q;
+  logic [3:0]                                        rsp_rr_q;
+  logic                                              rsp_pick_valid_c;
+  logic [3:0]                                        rsp_pick_id_c;
 
-  logic [3:0]                rsp_rr_q;
+  // Request acceptance helpers.
+  logic                                              store_line_conflict_c;
+  logic [NUM_IDS-1:0]                                accept_dep_c;
+  logic                                              req_fire_c;
 
-  logic                      rsp_hold_valid_q;
-  logic [3:0]                rsp_hold_id_q;
-  logic [DATA_W-1:0]         rsp_hold_data_q;
-
-  logic [31:0]               req_block_addr;
-  logic [SET_W-1:0]          req_set;
-  logic [TAG_W-1:0]          req_tag;
-  logic [1:0]                req_word;
-
-  logic                      req_hit_found;
-  logic [WAY_IDX_W-1:0]      req_hit_way;
-
-  logic                      req_pending_same_line;
-
-  logic                      free_miss_found;
-  logic [MISS_IDX_W-1:0]     free_miss_idx;
-
-  logic                      miss_pick_found;
-  logic [MISS_IDX_W-1:0]     miss_pick_idx;
-
-  logic [SET_W-1:0]          start_set;
-  logic [WAY_IDX_W-1:0]      start_way;
-  logic                      start_victim_valid;
-  logic                      start_victim_dirty;
-  logic [31:0]               start_victim_addr;
-
-  logic                      service_needs_start;
-
-  logic                      rsp_pick_found;
-  logic [3:0]                rsp_pick_idx;
-
-  function automatic logic [DATA_W-1:0] apply_mask(
-    input logic [DATA_W-1:0] old_word,
-    input logic [DATA_W-1:0] new_word,
-    input logic [BYTE_W-1:0] byte_mask
-  );
-    integer b;
-
+  function automatic logic [31:0] block_addr(input logic [31:0] addr);
     begin
-      apply_mask = old_word;
-
-      for (b = 0; b < BYTE_W; b = b + 1) begin
-        if (byte_mask[b]) begin
-          apply_mask[b*8 +: 8] =
-              new_word[b*8 +: 8];
-        end
-      end
+      block_addr = (addr >> BLOCK_OFF_W) << BLOCK_OFF_W;
     end
   endfunction
 
-  /*
-   * Address decomposition.
-   */
-  always_comb begin : p_req_decode
-    req_block_addr = {
-      req_addr_i[31:BLOCK_OFF_W],
-      {BLOCK_OFF_W{1'b0}}
-    };
-
-    req_set  =
-        req_addr_i[BLOCK_OFF_W +: SET_W];
-
-    req_tag  =
-        req_addr_i[31 -: TAG_W];
-
-    req_word =
-        req_addr_i[WORD_OFF_W +: 2];
-  end
-
-  /*
-   * Cache lookup, pending-line detection and free miss entry search.
-   *
-   * A request to a line which already has a miss outstanding is held at
-   * the input until that line completes.  This gives simple and strict
-   * ordering for requests to the same word without requiring an
-   * unbounded merge queue.
-   */
-  always_comb begin : p_req_lookup
-    integer w;
-    integer m;
-
-    req_hit_found         = 1'b0;
-    req_hit_way           = '0;
-    req_pending_same_line = 1'b0;
-
-    free_miss_found       = 1'b0;
-    free_miss_idx         = '0;
-
-    for (w = 0; w < WAYS; w = w + 1) begin
-      if ((!req_hit_found) &&
-          line_valid_q[req_set][w] &&
-          (line_tag_q[req_set][w] == req_tag)) begin
-
-        req_hit_found = 1'b1;
-        req_hit_way   = w;
-      end
+  function automatic logic [SET_W-1:0] addr_set(input logic [31:0] addr);
+    begin
+      addr_set = addr[BLOCK_OFF_W +: SET_W];
     end
+  endfunction
 
-    for (m = 0; m < MAX_MISSES; m = m + 1) begin
-      if (miss_valid_q[m] &&
-          (miss_block_q[m] == req_block_addr)) begin
-        req_pending_same_line = 1'b1;
-      end
-
-      if ((!free_miss_found) &&
-          (!miss_valid_q[m])) begin
-        free_miss_found = 1'b1;
-        free_miss_idx   = m;
-      end
+  function automatic logic [1:0] addr_word(input logic [31:0] addr);
+    begin
+      addr_word = addr[BYTE_OFF_W +: WORD_IDX_W];
     end
-  end
+  endfunction
 
-  /*
-   * Round-robin miss scheduler.
-   *
-   * Service priority rotates after every selected miss.  This matters for
-   * C3: continuously arriving requests must not be able to keep recycling
-   * low-numbered miss entries while starving older high-numbered entries.
-   */
-  always_comb begin : p_miss_pick
-    integer k;
-    integer idx;
-
-    miss_pick_found = 1'b0;
-    miss_pick_idx   = '0;
-    idx             = 0;
-
-    for (k = 0; k < MAX_MISSES; k = k + 1) begin
-      idx = miss_rr_q + k;
-
-      if (idx >= MAX_MISSES) begin
-        idx = idx - MAX_MISSES;
-      end
-
-      if ((!miss_pick_found) &&
-          miss_valid_q[idx]) begin
-        miss_pick_found = 1'b1;
-        miss_pick_idx   = idx;
-      end
+  function automatic logic [TAG_W-1:0] addr_tag(input logic [31:0] addr);
+    begin
+      addr_tag = addr[31 -: TAG_W];
     end
-  end
+  endfunction
 
-  /*
-   * Select a cache way only when a queued miss actually begins service.
-   *
-   * Delaying victim selection is important: MAX_MISSES can be larger than
-   * WAYS, and all outstanding misses are allowed to map to the same set.
-   * Reserving a way at initial miss acceptance would therefore incorrectly
-   * limit the number of misses which could be tracked.
-   *
-   * Invalid ways are preferred.  Once a set is full, a simple round-robin
-   * replacement pointer is used.
-   */
-  always_comb begin : p_victim_pick
-    integer w;
-    logic invalid_found;
-
-    start_set          = '0;
-    start_way          = '0;
-    start_victim_valid = 1'b0;
-    start_victim_dirty = 1'b0;
-    start_victim_addr  = 32'b0;
-    invalid_found      = 1'b0;
-
-    if (miss_pick_found) begin
-      start_set =
-          miss_block_q[miss_pick_idx]
-              [BLOCK_OFF_W +: SET_W];
-
-      start_way = repl_q[start_set];
-
-      for (w = 0; w < WAYS; w = w + 1) begin
-        if ((!invalid_found) &&
-            (!line_valid_q[start_set][w])) begin
-          invalid_found = 1'b1;
-          start_way     = w;
+  function automatic logic [DATA_W-1:0] merge_bytes(
+    input logic [DATA_W-1:0]      old_data,
+    input logic [DATA_W-1:0]      new_data,
+    input logic [DATA_BYTES-1:0]  byte_mask
+  );
+    integer bi;
+    logic [DATA_W-1:0] merged;
+    begin
+      merged = old_data;
+      for (bi = 0; bi < DATA_BYTES; bi = bi + 1) begin
+        if (byte_mask[bi]) begin
+          merged[bi*8 +: 8] = new_data[bi*8 +: 8];
         end
       end
+      merge_bytes = merged;
+    end
+  endfunction
 
-      start_victim_valid =
-          line_valid_q[start_set][start_way];
+  // --------------------------------------------------------------------------
+  // Fair request scheduler. One pending ID is probed per cycle. If lower
+  // memory is busy and that request misses, the round-robin pointer simply
+  // advances and another request is probed next cycle. Thus hits are found and
+  // answered underneath an arbitrarily long miss without replicating sixteen
+  // complete tag-lookup datapaths.
+  // --------------------------------------------------------------------------
+  always_comb begin : p_sched
+    integer cw;
+    integer si;
+    integer sidx;
 
-      start_victim_dirty =
-          line_dirty_q[start_set][start_way];
+    sched_sel_valid_c = 1'b0;
+    sched_sel_id_c    = 4'd0;
+    sched_sel_hit_c   = 1'b0;
+    sched_sel_way_c   = '0;
 
-      if (line_valid_q[start_set][start_way]) begin
-        start_victim_addr = {
-          line_tag_q[start_set][start_way],
-          start_set,
-          {BLOCK_OFF_W{1'b0}}
-        };
+    for (si = 0; si < NUM_IDS; si = si + 1) begin
+      sidx = (sched_rr_q + si) & 15;
+      if (!sched_sel_valid_c &&
+          req_active_q[sidx] &&
+          !req_done_q[sidx] &&
+          (req_dep_q[sidx] == '0)) begin
+        sched_sel_valid_c = 1'b1;
+        sched_sel_id_c    = sidx[3:0];
+      end
+    end
+
+    sched_set_c  = addr_set(req_addr_q[sched_sel_id_c]);
+    sched_word_c = addr_word(req_addr_q[sched_sel_id_c]);
+
+    for (cw = 0; cw < WAYS; cw = cw + 1) begin
+      if (sched_sel_valid_c && !sched_sel_hit_c &&
+          cache_valid_q[sched_set_c][cw] &&
+          (cache_tag_q[sched_set_c][cw] ==
+           addr_tag(req_addr_q[sched_sel_id_c]))) begin
+        sched_sel_hit_c = 1'b1;
+        sched_sel_way_c = cw[WAY_W-1:0];
+      end
+    end
+
+    sched_complete_c   = sched_sel_valid_c && sched_sel_hit_c;
+    sched_start_miss_c = sched_sel_valid_c && !sched_sel_hit_c &&
+                         (mem_state_q == MEM_IDLE);
+  end
+
+  // --------------------------------------------------------------------------
+  // Round-robin victim, preferring an invalid way.
+  // --------------------------------------------------------------------------
+  always_comb begin : p_victim
+    integer vw;
+
+    victim_way_c           = repl_way_q[sched_set_c];
+    victim_invalid_found_c = 1'b0;
+
+    for (vw = 0; vw < WAYS; vw = vw + 1) begin
+      if (!victim_invalid_found_c && !cache_valid_q[sched_set_c][vw]) begin
+        victim_way_c           = vw[WAY_W-1:0];
+        victim_invalid_found_c = 1'b1;
       end
     end
   end
 
-  /*
-   * Round-robin arbitration among completed responses.
-   */
+  // --------------------------------------------------------------------------
+  // Accept logic and same-word ordering dependencies.
+  // A second pending store to the same cache line is conservatively stalled;
+  // this bounds merged-store buffering to one word per pending line miss.
+  // --------------------------------------------------------------------------
+  always_comb begin : p_accept
+    integer ai;
+
+    store_line_conflict_c = 1'b0;
+    if (req_valid_i && req_op_i) begin
+      for (ai = 0; ai < NUM_IDS; ai = ai + 1) begin
+        if (req_active_q[ai] && !req_done_q[ai] && req_op_q[ai] &&
+            (block_addr(req_addr_q[ai]) == block_addr(req_addr_i))) begin
+          store_line_conflict_c = 1'b1;
+        end
+      end
+    end
+
+    req_ready_o = MAX_MISSES_LEGAL && !req_active_q[req_id_i] &&
+                  !store_line_conflict_c;
+    req_fire_c  = req_valid_i && req_ready_o;
+
+    accept_dep_c = '0;
+    for (ai = 0; ai < NUM_IDS; ai = ai + 1) begin
+      if (req_active_q[ai] && !req_done_q[ai] &&
+          (req_addr_q[ai][31:BYTE_OFF_W] == req_addr_i[31:BYTE_OFF_W]) &&
+          !(sched_complete_c && (sched_sel_id_c == ai[3:0])) &&
+          !(fill_complete_c && (miss_req_id_q == ai[3:0]))) begin
+        accept_dep_c[ai] = 1'b1;
+      end
+    end
+  end
+
+  // --------------------------------------------------------------------------
+  // Response arbitration. Once a response is presented it is held unchanged
+  // until accepted. Selection itself is independent of rsp_ready_i.
+  // --------------------------------------------------------------------------
   always_comb begin : p_rsp_pick
-    integer k;
-    integer idx;
+    integer ri;
+    integer ridx;
 
-    rsp_pick_found = 1'b0;
-    rsp_pick_idx   = 4'b0;
-    idx            = 0;
+    rsp_pick_valid_c = 1'b0;
+    rsp_pick_id_c    = 4'd0;
 
-    for (k = 0; k < 16; k = k + 1) begin
-      idx = rsp_rr_q + k;
-
-      if (idx >= 16) begin
-        idx = idx - 16;
-      end
-
-      if ((!rsp_pick_found) &&
-          rsp_pending_valid_q[idx]) begin
-        rsp_pick_found = 1'b1;
-        rsp_pick_idx   = idx;
+    for (ri = 0; ri < NUM_IDS; ri = ri + 1) begin
+      ridx = (rsp_rr_q + ri) & 15;
+      if (!rsp_pick_valid_c && req_active_q[ridx] && req_done_q[ridx] &&
+          !(rsp_hold_valid_q && (rsp_hold_id_q == ridx[3:0]))) begin
+        rsp_pick_valid_c = 1'b1;
+        rsp_pick_id_c    = ridx[3:0];
       end
     end
   end
 
-  /*
-   * Request acceptance.
-   *
-   * Hits do not require a free miss entry, so a full miss table does not
-   * block hit-under-miss.
-   *
-   * When the memory engine is idle with a queued miss, one cycle is reserved
-   * to choose and invalidate its victim.  This prevents a same-cycle cache hit
-   * from modifying the victim after the writeback decision was made.
-   */
-  always_comb begin : p_req_ready
-    service_needs_start =
-        (state_q == S_IDLE) &&
-        miss_pick_found;
+  assign rsp_valid_o = rsp_hold_valid_q;
+  assign rsp_id_o    = rsp_hold_id_q;
+  assign rsp_data_o  = rsp_hold_data_q;
 
-    req_ready_o = 1'b0;
-
-    if (rst_ni &&
-        (!service_needs_start)) begin
-
-      if (req_pending_same_line) begin
-        req_ready_o = 1'b0;
-      end
-      else if (req_hit_found) begin
-        req_ready_o = 1'b1;
-      end
-      else if (free_miss_found) begin
-        req_ready_o = 1'b1;
-      end
-    end
-  end
-
-  /*
-   * Registered/held response interface.
-   *
-   * Once valid is asserted, ID and data remain unchanged until transfer.
-   */
-  always_comb begin : p_rsp_outputs
-    rsp_valid_o = rsp_hold_valid_q;
-    rsp_id_o    = rsp_hold_id_q;
-    rsp_data_o  = rsp_hold_data_q;
-  end
-
-  /*
-   * Single-transaction memory interface.
-   */
-  always_comb begin : p_mem_outputs
+  // --------------------------------------------------------------------------
+  // Lower-memory interface. Requests and data remain stable under backpressure.
+  // --------------------------------------------------------------------------
+  always_comb begin
     mem_req_valid_o = 1'b0;
     mem_req_we_o    = 1'b0;
-    mem_req_addr_o  = 32'b0;
-
+    mem_req_addr_o  = 32'd0;
     mem_rd_ready_o  = 1'b0;
-
     mem_wr_valid_o  = 1'b0;
     mem_wr_data_o   = '0;
 
-    case (state_q)
-      S_WB_REQ: begin
+    case (mem_state_q)
+      MEM_WB_REQ: begin
         mem_req_valid_o = 1'b1;
         mem_req_we_o    = 1'b1;
-        mem_req_addr_o  = svc_victim_addr_q;
+        mem_req_addr_o  = wb_line_addr_q;
       end
 
-      S_WB_DATA: begin
+      MEM_WB_DATA: begin
         mem_wr_valid_o = 1'b1;
-
-        /*
-         * The victim way remains invalid until the writeback is complete,
-         * so its data can be streamed directly out of the cache array.
-         * No extra whole-line writeback buffer is needed.
-         */
-        mem_wr_data_o =
-            line_data_q
-                [svc_set_q]
-                [svc_way_q]
-                [wb_beat_q];
+        mem_wr_data_o  = wb_buf_q[mem_beat_q];
       end
 
-      S_FILL_REQ: begin
+      MEM_FILL_REQ: begin
         mem_req_valid_o = 1'b1;
         mem_req_we_o    = 1'b0;
-
-        mem_req_addr_o =
-            miss_block_q[svc_miss_idx_q];
+        mem_req_addr_o  = miss_line_addr_q;
       end
 
-      S_FILL_DATA: begin
+      MEM_FILL_DATA: begin
         mem_rd_ready_o = 1'b1;
       end
 
@@ -417,404 +313,250 @@ module nonblocking_dcache #(
     endcase
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : p_seq
-    integer s;
-    integer w;
-    integer m;
-    integer r;
+  assign fill_complete_c = (mem_state_q == MEM_FILL_DATA) &&
+                           mem_rd_valid_i && mem_rd_ready_o &&
+                           (mem_beat_q == 2'd3);
+
+  // MAX_MISSES is intentionally not used to size block-data storage. The 16
+  // architecturally unique IDs provide metadata capacity for every legal value
+  // of MAX_MISSES, while M3 permits only one lower-memory transaction at once.
+  // --------------------------------------------------------------------------
+  // State updates.
+  // --------------------------------------------------------------------------
+  always_ff @(posedge clk_i or negedge rst_ni) begin : p_state
+    integer qd;
+    integer mw;
 
     if (!rst_ni) begin
-      state_q           <= S_IDLE;
-      svc_miss_idx_q    <= '0;
-      svc_set_q         <= '0;
-      svc_way_q         <= '0;
-      svc_victim_addr_q <= 32'b0;
-      wb_beat_q         <= 2'b0;
-      fill_beat_q       <= 2'b0;
-      svc_load_word_q   <= '0;
+      cache_valid_q    <= '0;
+      cache_dirty_q    <= '0;
+      repl_way_q       <= '0;
 
-      miss_rr_q         <= '0;
+      req_active_q     <= '0;
+      req_done_q       <= '0;
+      req_op_q         <= '0;
+      req_addr_q       <= '0;
+      req_data_q       <= '0;
+      req_mask_q       <= '0;
+      req_dep_q        <= '0;
+      req_rsp_data_q   <= '0;
 
-      rsp_pending_valid_q <= 16'b0;
-      rsp_rr_q            <= 4'b0;
+      sched_rr_q       <= 4'd0;
 
-      rsp_hold_valid_q    <= 1'b0;
-      rsp_hold_id_q       <= 4'b0;
-      rsp_hold_data_q     <= '0;
+      mem_state_q      <= MEM_IDLE;
+      mem_beat_q       <= 2'd0;
+      miss_line_addr_q <= 32'd0;
+      miss_set_q       <= '0;
+      miss_tag_q       <= '0;
+      miss_way_q       <= '0;
+      miss_req_id_q    <= 4'd0;
+      wb_line_addr_q   <= 32'd0;
+      wb_buf_q         <= '0;
+      fill_buf_q       <= '0;
 
-      /*
-       * Only tag validity is architecturally required for the power-up
-       * condition, but clearing the associated control state as well keeps
-       * simulation deterministic.
-       */
-      for (s = 0; s < SETS; s = s + 1) begin
-        repl_q[s] <= '0;
-
-        for (w = 0; w < WAYS; w = w + 1) begin
-          line_valid_q[s][w] <= 1'b0;
-          line_dirty_q[s][w] <= 1'b0;
-          line_tag_q[s][w]   <= '0;
-        end
-      end
-
-      for (m = 0; m < MAX_MISSES; m = m + 1) begin
-        miss_valid_q[m]      <= 1'b0;
-        miss_block_q[m]      <= 32'b0;
-        miss_id_q[m]         <= 4'b0;
-        miss_op_q[m]         <= 1'b0;
-        miss_word_q[m]       <= 2'b0;
-        miss_store_data_q[m] <= '0;
-        miss_store_mask_q[m] <= '0;
-      end
-
-      for (r = 0; r < 16; r = r + 1) begin
-        rsp_pending_data_q[r] <= '0;
-      end
+      rsp_hold_valid_q <= 1'b0;
+      rsp_hold_id_q    <= 4'd0;
+      rsp_hold_data_q  <= '0;
+      rsp_rr_q         <= 4'd0;
     end
     else begin
-
-      /*
-       * ------------------------------------------------------------------
-       * Response retirement
-       * ------------------------------------------------------------------
-       */
-      if (rsp_hold_valid_q &&
-          rsp_ready_i) begin
-        rsp_hold_valid_q <= 1'b0;
+      // Probe fairness advances even when the probed request is a miss that
+      // cannot start because a lower-memory transaction is already active.
+      if (sched_sel_valid_c) begin
+        sched_rr_q <= sched_sel_id_c + 4'd1;
       end
 
-      /*
-       * If the output register is empty, or its current response is being
-       * consumed on this edge, install the next completed response.
-       */
-      if (((!rsp_hold_valid_q) ||
-           rsp_ready_i) &&
-          rsp_pick_found) begin
+      // Retire an accepted response.
+      if (rsp_hold_valid_q && rsp_ready_i) begin
+        req_active_q[rsp_hold_id_q] <= 1'b0;
+        req_done_q[rsp_hold_id_q]   <= 1'b0;
+        req_dep_q[rsp_hold_id_q]    <= '0;
+        rsp_hold_valid_q            <= 1'b0;
+      end
 
+      // Load the response holding register when empty, or refill it on the same
+      // edge that the previous response is accepted.
+      if ((!rsp_hold_valid_q || rsp_ready_i) && rsp_pick_valid_c) begin
         rsp_hold_valid_q <= 1'b1;
-
-        rsp_hold_id_q <=
-            rsp_pick_idx;
-
-        rsp_hold_data_q <=
-            rsp_pending_data_q[rsp_pick_idx];
-
-        rsp_pending_valid_q[rsp_pick_idx] <=
-            1'b0;
-
-        rsp_rr_q <=
-            rsp_pick_idx + 4'd1;
+        rsp_hold_id_q    <= rsp_pick_id_c;
+        rsp_hold_data_q  <= req_rsp_data_q[rsp_pick_id_c];
+        rsp_rr_q         <= rsp_pick_id_c + 4'd1;
       end
 
-      /*
-       * ------------------------------------------------------------------
-       * CPU request acceptance
-       * ------------------------------------------------------------------
-       */
-      if (req_valid_i &&
-          req_ready_o) begin
+      // Complete a resident hit.
+      if (sched_complete_c) begin
+        req_done_q[sched_sel_id_c] <= 1'b1;
 
-        if (req_hit_found) begin
-
-          /*
-           * A hit completes immediately into the response holding structure;
-           * it does not wait for any outstanding miss.
-           */
-          rsp_pending_valid_q[req_id_i] <=
-              1'b1;
-
-          if (req_op_i) begin
-            line_data_q
-                [req_set]
-                [req_hit_way]
-                [req_word]
-              <= apply_mask(
-                   line_data_q
-                       [req_set]
-                       [req_hit_way]
-                       [req_word],
-                   req_data_i,
-                   req_mask_i
-                 );
-
-            if (|req_mask_i) begin
-              line_dirty_q
-                  [req_set]
-                  [req_hit_way]
-                <= 1'b1;
-            end
-
-            /*
-             * STORE response data is unconstrained.
-             */
-            rsp_pending_data_q[req_id_i] <=
-                '0;
-          end
-          else begin
-            rsp_pending_data_q[req_id_i] <=
-                line_data_q
-                    [req_set]
-                    [req_hit_way]
-                    [req_word];
-          end
+        if (req_op_q[sched_sel_id_c]) begin
+          cache_data_q[sched_set_c][sched_sel_way_c][sched_word_c] <=
+            merge_bytes(
+              cache_data_q[sched_set_c][sched_sel_way_c][sched_word_c],
+              req_data_q[sched_sel_id_c],
+              req_mask_q[sched_sel_id_c]
+            );
+          cache_dirty_q[sched_set_c][sched_sel_way_c] <= 1'b1;
+          req_rsp_data_q[sched_sel_id_c] <= '0;
         end
         else begin
+          req_rsp_data_q[sched_sel_id_c] <=
+            cache_data_q[sched_set_c][sched_sel_way_c][sched_word_c];
+        end
 
-          /*
-           * A distinct-line miss consumes only metadata plus the one
-           * permitted merged-store word/mask.
-           *
-           * Victim selection is deliberately deferred until service time.
-           */
-          miss_valid_q[free_miss_idx] <=
-              1'b1;
-
-          miss_block_q[free_miss_idx] <=
-              req_block_addr;
-
-          miss_id_q[free_miss_idx] <=
-              req_id_i;
-
-          miss_op_q[free_miss_idx] <=
-              req_op_i;
-
-          miss_word_q[free_miss_idx] <=
-              req_word;
-
-          miss_store_data_q[free_miss_idx] <=
-              req_data_i;
-
-          miss_store_mask_q[free_miss_idx] <=
-              req_mask_i;
+        for (qd = 0; qd < NUM_IDS; qd = qd + 1) begin
+          req_dep_q[qd][sched_sel_id_c] <= 1'b0;
         end
       end
 
-      /*
-       * ------------------------------------------------------------------
-       * Memory service engine
-       * ------------------------------------------------------------------
-       */
-      case (state_q)
+      // Start servicing one miss. The chosen victim is invalidated immediately;
+      // if dirty, its block is first copied to the single writeback buffer.
+      if (sched_start_miss_c) begin
+        miss_line_addr_q <= block_addr(req_addr_q[sched_sel_id_c]);
+        miss_set_q       <= sched_set_c;
+        miss_tag_q       <= addr_tag(req_addr_q[sched_sel_id_c]);
+        miss_way_q       <= victim_way_c;
+        miss_req_id_q    <= sched_sel_id_c;
+        mem_beat_q       <= 2'd0;
 
-        /*
-         * Pick an outstanding miss and reserve a victim.
-         */
-        S_IDLE: begin
-          if (miss_pick_found) begin
-            svc_miss_idx_q <=
-                miss_pick_idx;
+        if (cache_valid_q[sched_set_c][victim_way_c] &&
+            cache_dirty_q[sched_set_c][victim_way_c]) begin
+          wb_line_addr_q <= {
+            cache_tag_q[sched_set_c][victim_way_c],
+            sched_set_c,
+            {BLOCK_OFF_W{1'b0}}
+          };
 
-            svc_set_q <=
-                start_set;
+          for (mw = 0; mw < BLOCK_WORDS; mw = mw + 1) begin
+            wb_buf_q[mw] <= cache_data_q[sched_set_c][victim_way_c][mw];
+          end
 
-            svc_way_q <=
-                start_way;
+          mem_state_q <= MEM_WB_REQ;
+        end
+        else begin
+          mem_state_q <= MEM_FILL_REQ;
+        end
 
-            svc_victim_addr_q <=
-                start_victim_addr;
+        cache_valid_q[sched_set_c][victim_way_c] <= 1'b0;
+        cache_dirty_q[sched_set_c][victim_way_c] <= 1'b0;
+      end
 
-            /*
-             * Rotate miss priority immediately.  The selected entry remains
-             * valid until its fill actually completes.
-             */
-            miss_rr_q <=
-                miss_pick_idx + 1'b1;
+      // Lower-memory transaction sequencing.
+      case (mem_state_q)
+        MEM_IDLE: begin
+        end
 
-            /*
-             * Once selected for replacement, the victim is no longer a
-             * resident cache hit.  Its data remains untouched so a dirty
-             * line can be streamed directly to memory.
-             */
-            line_valid_q[start_set][start_way] <=
-                1'b0;
+        MEM_WB_REQ: begin
+          if (mem_req_valid_o && mem_req_ready_i) begin
+            mem_beat_q  <= 2'd0;
+            mem_state_q <= MEM_WB_DATA;
+          end
+        end
 
-            line_dirty_q[start_set][start_way] <=
-                1'b0;
-
-            if (start_victim_valid &&
-                start_victim_dirty) begin
-              state_q <= S_WB_REQ;
+        MEM_WB_DATA: begin
+          if (mem_wr_valid_o && mem_wr_ready_i) begin
+            if (mem_beat_q == 2'd3) begin
+              mem_beat_q  <= 2'd0;
+              mem_state_q <= MEM_FILL_REQ;
             end
             else begin
-              state_q <= S_FILL_REQ;
+              mem_beat_q <= mem_beat_q + 2'd1;
             end
           end
         end
 
-        /*
-         * Dirty victim transaction request.
-         */
-        S_WB_REQ: begin
-          if (mem_req_valid_o &&
-              mem_req_ready_i) begin
-            wb_beat_q <= 2'b0;
-            state_q   <= S_WB_DATA;
+        MEM_FILL_REQ: begin
+          if (mem_req_valid_o && mem_req_ready_i) begin
+            mem_beat_q  <= 2'd0;
+            mem_state_q <= MEM_FILL_DATA;
           end
         end
 
-        /*
-         * Exactly four ascending writeback beats.
-         */
-        S_WB_DATA: begin
-          if (mem_wr_valid_o &&
-              mem_wr_ready_i) begin
+        MEM_FILL_DATA: begin
+          if (mem_rd_valid_i && mem_rd_ready_o) begin
+            fill_buf_q[mem_beat_q] <= mem_rd_data_i;
 
-            if (wb_beat_q == 2'd3) begin
-              state_q <= S_FILL_REQ;
-            end
-            else begin
-              wb_beat_q <=
-                  wb_beat_q + 2'd1;
-            end
-          end
-        end
+            if (mem_beat_q == 2'd3) begin
+              // Install the completed line in ascending-word order. The final
+              // beat is used directly because its nonblocking write to
+              // fill_buf_q is not visible until after this edge.
+              for (mw = 0; mw < BLOCK_WORDS-1; mw = mw + 1) begin
+                cache_data_q[miss_set_q][miss_way_q][mw] <= fill_buf_q[mw];
+              end
 
-        /*
-         * Fill transaction request.
-         */
-        S_FILL_REQ: begin
-          if (mem_req_valid_o &&
-              mem_req_ready_i) begin
-            fill_beat_q     <= 2'b0;
-            svc_load_word_q <= '0;
-            state_q         <= S_FILL_DATA;
-          end
-        end
+              cache_data_q[miss_set_q][miss_way_q][BLOCK_WORDS-1] <=
+                mem_rd_data_i;
 
-        /*
-         * Exactly four ascending fill beats.
-         *
-         * Beats are written directly into the invalid reserved cache way,
-         * avoiding a per-miss block buffer.
-         */
-        S_FILL_DATA: begin
-          if (mem_rd_valid_i &&
-              mem_rd_ready_o) begin
+              // The request that caused the fill completes on this edge. A
+              // store miss modifies the freshly filled word before the line is
+              // made visible as dirty; a load miss returns the requested beat.
+              if (req_op_q[miss_req_id_q]) begin
+                if (addr_word(req_addr_q[miss_req_id_q]) == 2'd3) begin
+                  cache_data_q[miss_set_q][miss_way_q][3] <=
+                    merge_bytes(
+                      mem_rd_data_i,
+                      req_data_q[miss_req_id_q],
+                      req_mask_q[miss_req_id_q]
+                    );
+                end
+                else begin
+                  cache_data_q[miss_set_q][miss_way_q]
+                              [addr_word(req_addr_q[miss_req_id_q])] <=
+                    merge_bytes(
+                      fill_buf_q[addr_word(req_addr_q[miss_req_id_q])],
+                      req_data_q[miss_req_id_q],
+                      req_mask_q[miss_req_id_q]
+                    );
+                end
 
-            /*
-             * STORE miss: merge the pending store into its addressed word as
-             * that fill word arrives.
-             */
-            if (miss_op_q[svc_miss_idx_q] &&
-                (fill_beat_q ==
-                 miss_word_q[svc_miss_idx_q])) begin
-
-              line_data_q
-                  [svc_set_q]
-                  [svc_way_q]
-                  [fill_beat_q]
-                <= apply_mask(
-                     mem_rd_data_i,
-                     miss_store_data_q[svc_miss_idx_q],
-                     miss_store_mask_q[svc_miss_idx_q]
-                   );
-            end
-            else begin
-              line_data_q
-                  [svc_set_q]
-                  [svc_way_q]
-                  [fill_beat_q]
-                <= mem_rd_data_i;
-            end
-
-            /*
-             * LOAD miss: retain only the requested word until the entire line
-             * has arrived.  The line is not made valid early.
-             */
-            if ((!miss_op_q[svc_miss_idx_q]) &&
-                (fill_beat_q ==
-                 miss_word_q[svc_miss_idx_q])) begin
-
-              svc_load_word_q <=
-                  mem_rd_data_i;
-            end
-
-            if (fill_beat_q == 2'd3) begin
-
-              /*
-               * The complete block has landed; only now expose the cache line.
-               */
-              line_tag_q
-                  [svc_set_q]
-                  [svc_way_q]
-                <= miss_block_q
-                       [svc_miss_idx_q]
-                       [31 -: TAG_W];
-
-              line_valid_q
-                  [svc_set_q]
-                  [svc_way_q]
-                <= 1'b1;
-
-              if (miss_op_q[svc_miss_idx_q] &&
-                  (|miss_store_mask_q[svc_miss_idx_q])) begin
-                line_dirty_q
-                    [svc_set_q]
-                    [svc_way_q]
-                  <= 1'b1;
+                cache_dirty_q[miss_set_q][miss_way_q] <= 1'b1;
+                req_rsp_data_q[miss_req_id_q]         <= '0;
               end
               else begin
-                line_dirty_q
-                    [svc_set_q]
-                    [svc_way_q]
-                  <= 1'b0;
+                cache_dirty_q[miss_set_q][miss_way_q] <= 1'b0;
+
+                if (addr_word(req_addr_q[miss_req_id_q]) == 2'd3) begin
+                  req_rsp_data_q[miss_req_id_q] <= mem_rd_data_i;
+                end
+                else begin
+                  req_rsp_data_q[miss_req_id_q] <=
+                    fill_buf_q[addr_word(req_addr_q[miss_req_id_q])];
+                end
               end
 
-              repl_q[svc_set_q] <=
-                  svc_way_q + 1'b1;
+              cache_tag_q[miss_set_q][miss_way_q]   <= miss_tag_q;
+              cache_valid_q[miss_set_q][miss_way_q] <= 1'b1;
+              repl_way_q[miss_set_q]                <= miss_way_q + 1'b1;
+              req_done_q[miss_req_id_q]             <= 1'b1;
 
-              /*
-               * Produce the response belonging to the original miss request.
-               */
-              rsp_pending_valid_q
-                  [miss_id_q[svc_miss_idx_q]]
-                <= 1'b1;
-
-              if (miss_op_q[svc_miss_idx_q]) begin
-                /*
-                 * STORE response data is unconstrained.
-                 */
-                rsp_pending_data_q
-                    [miss_id_q[svc_miss_idx_q]]
-                  <= '0;
-              end
-              else if (miss_word_q[svc_miss_idx_q] ==
-                       2'd3) begin
-                /*
-                 * Requested word is the final beat, so use the current input
-                 * rather than the old svc_load_word_q value.
-                 */
-                rsp_pending_data_q
-                    [miss_id_q[svc_miss_idx_q]]
-                  <= mem_rd_data_i;
-              end
-              else begin
-                rsp_pending_data_q
-                    [miss_id_q[svc_miss_idx_q]]
-                  <= svc_load_word_q;
+              for (qd = 0; qd < NUM_IDS; qd = qd + 1) begin
+                req_dep_q[qd][miss_req_id_q] <= 1'b0;
               end
 
-              /*
-               * The miss is no longer outstanding once its complete line has
-               * arrived and its response has been made ready.
-               */
-              miss_valid_q[svc_miss_idx_q] <=
-                  1'b0;
-
-              state_q <=
-                  S_IDLE;
+              mem_beat_q  <= 2'd0;
+              mem_state_q <= MEM_IDLE;
             end
             else begin
-              fill_beat_q <=
-                  fill_beat_q + 2'd1;
+              mem_beat_q <= mem_beat_q + 2'd1;
             end
           end
         end
 
         default: begin
-          state_q <= S_IDLE;
+          mem_state_q <= MEM_IDLE;
         end
       endcase
+
+      // Accept a new request after completion-column clears above. The computed
+      // dependency mask already excludes operations completing on this edge.
+      if (req_fire_c) begin
+        req_active_q[req_id_i]   <= 1'b1;
+        req_done_q[req_id_i]     <= 1'b0;
+        req_op_q[req_id_i]       <= req_op_i;
+        req_addr_q[req_id_i]     <= req_addr_i;
+        req_data_q[req_id_i]     <= req_data_i;
+        req_mask_q[req_id_i]     <= req_mask_i;
+        req_dep_q[req_id_i]      <= accept_dep_c;
+        req_rsp_data_q[req_id_i] <= '0;
+      end
     end
   end
 

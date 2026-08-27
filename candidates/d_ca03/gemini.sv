@@ -1,3 +1,12 @@
+// =============================================================================
+// sv39_mmu.sv
+//
+// A synthesizable RISC-V Sv39 memory management unit satisfying d_ca03.
+// Features a cycle-efficient parallel TLB lookup for LSU and Fetch, a 
+// dynamically multiplexed page-table walker, precise PMP checking, and 
+// complete fault tracking.
+// =============================================================================
+
 module sv39_mmu (
   input  logic        clk_i,
   input  logic        rst_ni,
@@ -50,424 +59,525 @@ module sv39_mmu (
   input  logic [7:0][53:0] pmpaddr_i
 );
 
-  // Unused output tie-offs
-  assign mem_tag_valid_o = 1'b0;
-  assign mem_kill_o = 1'b0;
-  assign lsu_exc_tval_o = lsu_vaddr_i;
-  assign fetch_exc_tval_o = fetch_vaddr_i;
-
-  // BARE mode enables
-  logic lsu_bare;
-  logic fetch_bare;
-  assign lsu_bare = !en_ld_st_translation_i;
-  assign fetch_bare = !enable_translation_i;
-
-  // TLB Storage (16 entries each, fully associative)
-  typedef struct packed {
-    logic        valid;
-    logic [1:0]  level;     // 0: 4KB, 1: 2MB, 2: 1GB
-    logic [26:0] vpn;
-    logic [15:0] asid;
-    logic        G;
-    logic [43:0] ppn;
-    logic [6:0]  pte_perms; // [6] D, [5] A, [4] U, [3] X, [2] W, [1] R
-  } tlb_entry_t;
-
-  tlb_entry_t itlb [16];
-  tlb_entry_t dtlb [16];
-  logic [3:0] itlb_alloc_ptr;
-  logic [3:0] dtlb_alloc_ptr;
-
   // ---------------------------------------------------------------------------
-  // TLB Hit & Permission Logic (Combinational)
+  // Functions
   // ---------------------------------------------------------------------------
-  logic lsu_tlb_hit;
-  logic [3:0] lsu_hit_idx;
-  tlb_entry_t lsu_hit_entry;
   
-  always_comb begin
-    lsu_tlb_hit = 1'b0;
-    lsu_hit_idx = 4'd0;
-    for (int i = 15; i >= 0; i--) begin
-      if (dtlb[i].valid && (dtlb[i].G || dtlb[i].asid == asid_i)) begin
-        logic match = 1'b0;
-        if (dtlb[i].level == 2) match = (dtlb[i].vpn[26:18] == lsu_vaddr_i[38:30]);
-        else if (dtlb[i].level == 1) match = (dtlb[i].vpn[26:9] == lsu_vaddr_i[38:21]);
-        else match = (dtlb[i].vpn == lsu_vaddr_i[38:12]);
-        
-        if (match) begin
-          lsu_tlb_hit = 1'b1;
-          lsu_hit_idx = i[3:0];
-        end
-      end
-    end
-  end
-  assign lsu_hit_entry = dtlb[lsu_hit_idx];
-
-  logic lsu_perm_fault;
-  logic [63:0] lsu_perm_cause;
-  always_comb begin
-    lsu_perm_fault = 1'b0;
-    lsu_perm_cause = 64'd0;
-    
-    logic R = lsu_hit_entry.pte_perms[1];
-    logic W = lsu_hit_entry.pte_perms[2];
-    logic X = lsu_hit_entry.pte_perms[3];
-    logic U = lsu_hit_entry.pte_perms[4];
-    logic A = lsu_hit_entry.pte_perms[5];
-    logic D = lsu_hit_entry.pte_perms[6];
-    
-    if (!A) lsu_perm_fault = 1'b1;
-    if (lsu_is_store_i && !D) lsu_perm_fault = 1'b1;
-    
-    if (ld_st_priv_lvl_i == 2'b00 && !U) lsu_perm_fault = 1'b1;
-    if (ld_st_priv_lvl_i == 2'b01 && U && !sum_i) lsu_perm_fault = 1'b1;
-    
-    if (lsu_is_store_i) begin
-      if (!W) lsu_perm_fault = 1'b1;
-    end else begin
-      if (!(R || (mxr_i && X))) lsu_perm_fault = 1'b1;
-    end
-    
-    if (lsu_perm_fault) lsu_perm_cause = lsu_is_store_i ? 64'd15 : 64'd13;
-  end
-
-  logic [55:0] lsu_tlb_pa;
-  always_comb begin
-    if (lsu_hit_entry.level == 2) lsu_tlb_pa = {lsu_hit_entry.ppn[43:18], lsu_vaddr_i[29:0]};
-    else if (lsu_hit_entry.level == 1) lsu_tlb_pa = {lsu_hit_entry.ppn[43:9], lsu_vaddr_i[20:0]};
-    else lsu_tlb_pa = {lsu_hit_entry.ppn[43:0], lsu_vaddr_i[11:0]};
-  end
-
-  // Fetch TLB Logic
-  logic fetch_tlb_hit;
-  logic [3:0] fetch_hit_idx;
-  tlb_entry_t fetch_hit_entry;
-  
-  always_comb begin
-    fetch_tlb_hit = 1'b0;
-    fetch_hit_idx = 4'd0;
-    for (int i = 15; i >= 0; i--) begin
-      if (itlb[i].valid && (itlb[i].G || itlb[i].asid == asid_i)) begin
-        logic match = 1'b0;
-        if (itlb[i].level == 2) match = (itlb[i].vpn[26:18] == fetch_vaddr_i[38:30]);
-        else if (itlb[i].level == 1) match = (itlb[i].vpn[26:9] == fetch_vaddr_i[38:21]);
-        else match = (itlb[i].vpn == fetch_vaddr_i[38:12]);
-        
-        if (match) begin
-          fetch_tlb_hit = 1'b1;
-          fetch_hit_idx = i[3:0];
-        end
-      end
-    end
-  end
-  assign fetch_hit_entry = itlb[fetch_hit_idx];
-
-  logic fetch_perm_fault;
-  always_comb begin
-    fetch_perm_fault = 1'b0;
-    logic X = fetch_hit_entry.pte_perms[3];
-    logic U = fetch_hit_entry.pte_perms[4];
-    logic A = fetch_hit_entry.pte_perms[5];
-    
-    if (!A) fetch_perm_fault = 1'b1;
-    if (priv_lvl_i == 2'b00 && !U) fetch_perm_fault = 1'b1;
-    if (priv_lvl_i == 2'b01 && U) fetch_perm_fault = 1'b1;
-    if (!X) fetch_perm_fault = 1'b1;
-  end
-
-  logic [55:0] fetch_tlb_pa;
-  always_comb begin
-    if (fetch_hit_entry.level == 2) fetch_tlb_pa = {fetch_hit_entry.ppn[43:18], fetch_vaddr_i[29:0]};
-    else if (fetch_hit_entry.level == 1) fetch_tlb_pa = {fetch_hit_entry.ppn[43:9], fetch_vaddr_i[20:0]};
-    else fetch_tlb_pa = {fetch_hit_entry.ppn[43:0], fetch_vaddr_i[11:0]};
-  end
-
-  // ---------------------------------------------------------------------------
-  // Page Table Walker & Round-Robin Arbitration
-  // ---------------------------------------------------------------------------
-  logic lsu_wants_walk;
-  logic fetch_wants_walk;
-  assign lsu_wants_walk = lsu_req_i && !lsu_bare && !lsu_tlb_hit;
-  assign fetch_wants_walk = fetch_req_i && !fetch_bare && !fetch_tlb_hit;
-
-  logic arb_last_was_lsu;
-  logic walk_start;
-  logic walk_req_is_lsu;
-  logic [38:0] walk_va;
-
-  always_comb begin
-    walk_start = 1'b0;
-    walk_req_is_lsu = 1'b0;
-    walk_va = 39'd0;
-    
-    if (arb_last_was_lsu) begin
-      if (fetch_wants_walk) begin
-        walk_start = 1'b1; walk_req_is_lsu = 1'b0; walk_va = fetch_vaddr_i[38:0];
-      end else if (lsu_wants_walk) begin
-        walk_start = 1'b1; walk_req_is_lsu = 1'b1; walk_va = lsu_vaddr_i[38:0];
-      end
-    end else begin
-      if (lsu_wants_walk) begin
-        walk_start = 1'b1; walk_req_is_lsu = 1'b1; walk_va = lsu_vaddr_i[38:0];
-      end else if (fetch_wants_walk) begin
-        walk_start = 1'b1; walk_req_is_lsu = 1'b0; walk_va = fetch_vaddr_i[38:0];
-      end
-    end
-  end
-
-  typedef enum logic [1:0] { W_IDLE, W_REQ, W_WAIT, W_EVAL } walk_state_t;
-  walk_state_t w_state;
-  logic walk_done_q;
-
-  logic [1:0] outstanding_reads;
-  always_ff @(posedge clk_i) begin
-    if (!rst_ni) outstanding_reads <= 2'd0;
-    else outstanding_reads <= outstanding_reads + (mem_req_o && mem_gnt_i) - mem_rvalid_i;
-  end
-
-  logic walker_idle;
-  assign walker_idle = (w_state == W_IDLE) && !walk_done_q && (outstanding_reads == 2'd0);
-
-  always_ff @(posedge clk_i) begin
-    if (!rst_ni) arb_last_was_lsu <= 1'b0;
-    else if (walker_idle && walk_start) arb_last_was_lsu <= walk_req_is_lsu;
-  end
-
-  logic active_is_lsu, active_is_store;
-  logic [38:0] active_va;
-  logic [1:0] walk_level;
-  logic [43:0] walk_ppn;
-
-  always_ff @(posedge clk_i) begin
-    if (!rst_ni) begin
-      active_is_lsu <= 1'b0;
-      active_va <= 39'd0;
-      active_is_store <= 1'b0;
-    end else if (walker_idle && walk_start) begin
-      active_is_lsu <= walk_req_is_lsu;
-      active_va <= walk_va;
-      active_is_store <= walk_req_is_lsu ? lsu_is_store_i : 1'b0;
-    end
-  end
-
-  logic [55:0] walk_pa;
-  always_comb begin
-    logic [8:0] vpn_part;
-    if (walk_level == 2) vpn_part = active_va[38:30];
-    else if (walk_level == 1) vpn_part = active_va[29:21];
-    else vpn_part = active_va[20:12];
-    walk_pa = {walk_ppn, vpn_part, 3'b000};
-  end
-
-  // PMP Evaluator for walk_pa (8-byte read check)
-  logic pmp_deny_combo;
-  logic pmp_allow;
-  assign pmp_deny_combo = !pmp_allow;
-
-  always_comb begin
-    logic [53:0] pa_word = walk_pa[55:2];
-    logic [54:0] p_start = {1'b0, pa_word};
-    logic [54:0] p_end   = {1'b0, pa_word} + 55'd1;
-    
-    logic [7:0] m_start = 8'd0;
-    logic [7:0] m_end = 8'd0;
-
-    for (int i = 0; i < 8; i++) begin
-      logic [53:0] prev = (i == 0) ? 54'd0 : pmpaddr_i[i-1];
-      logic [54:0] prev_ext = {1'b0, prev};
-      logic [54:0] curr_ext = {1'b0, pmpaddr_i[i]};
-      logic [1:0] A = pmpcfg_i[i][4:3];
+  // PMP byte-matching logic
+  function automatic logic [3:0] pmp_match_byte(
+      input logic [55:0] byte_addr,
+      input logic [7:0][7:0] pmpcfg,
+      input logic [7:0][53:0] pmpaddr
+  );
+      logic [55:0] prev_pmpaddr;
+      logic [55:0] cur_pmpaddr;
+      logic [1:0] mode;
+      logic [55:0] mask;
+      logic [55:0] base;
+      int i, j;
       
-      if (A == 2'b01) begin // TOR
-        m_start[i] = (p_start >= prev_ext) && (p_start < curr_ext);
-        m_end[i]   = (p_end >= prev_ext) && (p_end < curr_ext);
-      end else if (A == 2'b10) begin // NA4
-        m_start[i] = (p_start[53:0] == pmpaddr_i[i]);
-        m_end[i]   = (p_end[53:0] == pmpaddr_i[i]);
-      end else if (A == 2'b11) begin // NAPOT
-        logic [53:0] mask = pmpaddr_i[i] ^ (pmpaddr_i[i] + 54'd1);
-        logic [53:0] base = pmpaddr_i[i] & ~mask;
-        m_start[i] = ((p_start[53:0] & ~mask) == base);
-        m_end[i]   = ((p_end[53:0] & ~mask) == base);
+      for (i = 0; i < 8; i++) begin
+          mode = pmpcfg[i][4:3];
+          prev_pmpaddr = (i == 0) ? 56'b0 : {pmpaddr[i-1], 2'b00};
+          cur_pmpaddr = {pmpaddr[i], 2'b00};
+          
+          if (mode == 1) begin // TOR
+              if (byte_addr >= prev_pmpaddr && byte_addr < cur_pmpaddr) return i[3:0];
+          end else if (mode == 2) begin // NA4
+              if (byte_addr >= cur_pmpaddr && byte_addr < (cur_pmpaddr + 4)) return i[3:0];
+          end else if (mode == 3) begin // NAPOT
+              mask = ~56'h7;
+              for (j = 0; j < 53; j++) begin
+                  if (pmpaddr[i][j]) mask[j+3] = 1'b0;
+                  else break;
+              end
+              base = cur_pmpaddr & mask;
+              if ((byte_addr & mask) == base) return i[3:0];
+          end
       end
-    end
+      return 4'd8; // No match
+  endfunction
 
-    automatic logic [3:0] hit_start = 4'd8;
-    automatic logic [3:0] hit_end = 4'd8;
-    for (int i = 7; i >= 0; i--) begin
-      if (m_start[i]) hit_start = i[3:0];
-      if (m_end[i]) hit_end = i[3:0];
-    end
-    
-    if (hit_start == hit_end && hit_start < 4'd8) begin
-      pmp_allow = pmpcfg_i[hit_start[2:0]][0];
-    end else begin
-      pmp_allow = 1'b0;
-    end
+  // PTE permission checking
+  function automatic logic check_perms(
+      input logic r, w, x, u, a, d,
+      input logic is_store,
+      input logic is_fetch,
+      input logic [1:0] priv,
+      input logic sum,
+      input logic mxr
+  );
+      // User mode check
+      if (priv == 2'b00 && !u) return 0;
+      
+      // Supervisor mode check
+      if (priv == 2'b01) begin
+          if (u && !sum) return 0;
+          if (u && is_fetch) return 0;
+      end
+      
+      // Base access type checks
+      if (is_fetch) begin
+          if (!x) return 0;
+      end else if (is_store) begin
+          if (!w) return 0;
+      end else begin // load
+          if (!r && !(x && mxr)) return 0;
+      end
+      
+      // Fault on A/D unset (A5 choice)
+      if (!a) return 0;
+      if (is_store && !d) return 0;
+      
+      return 1;
+  endfunction
+
+
+  // ---------------------------------------------------------------------------
+  // TLB Storage and Lookup
+  // ---------------------------------------------------------------------------
+
+  logic [26:0] lsu_vpn;
+  logic [26:0] fetch_vpn;
+  assign lsu_vpn = lsu_vaddr_i[38:12];
+  assign fetch_vpn = fetch_vaddr_i[38:12];
+
+  // DTLB structures
+  logic [15:0] dtlb_valid;
+  logic [15:0] dtlb_is_1g;
+  logic [15:0] dtlb_is_2m;
+  logic [15:0] dtlb_entry_g;
+  logic [15:0][26:0] dtlb_vpn;
+  logic [15:0][15:0] dtlb_entry_asid;
+  logic [15:0][43:0] dtlb_entry_ppn;
+  logic [15:0] dtlb_entry_r, dtlb_entry_w, dtlb_entry_x, dtlb_entry_u, dtlb_entry_a, dtlb_entry_d;
+  logic [3:0] dtlb_rep_ptr;
+  
+  // ITLB structures
+  logic [15:0] itlb_valid;
+  logic [15:0] itlb_is_1g;
+  logic [15:0] itlb_is_2m;
+  logic [15:0] itlb_entry_g;
+  logic [15:0][26:0] itlb_vpn;
+  logic [15:0][15:0] itlb_entry_asid;
+  logic [15:0][43:0] itlb_entry_ppn;
+  logic [15:0] itlb_entry_r, itlb_entry_w, itlb_entry_x, itlb_entry_u, itlb_entry_a, itlb_entry_d;
+  logic [3:0] itlb_rep_ptr;
+
+  // TLB match evaluation (Combinational)
+  logic dtlb_hit;
+  logic [43:0] dtlb_ppn;
+  logic dtlb_r, dtlb_w, dtlb_x, dtlb_u, dtlb_a, dtlb_d, dtlb_g;
+  logic [1:0] dtlb_level;
+
+  always_comb begin
+      int i;
+      logic match_vpn;
+      logic match_asid;
+      
+      dtlb_hit = 0;
+      dtlb_ppn = 0;
+      dtlb_r = 0; dtlb_w = 0; dtlb_x = 0; dtlb_u = 0; dtlb_a = 0; dtlb_d = 0; dtlb_g = 0;
+      dtlb_level = 0;
+      
+      for (i = 0; i < 16; i++) begin
+          if (dtlb_valid[i]) begin
+              if (dtlb_is_1g[i]) match_vpn = (lsu_vpn[26:18] == dtlb_vpn[i][26:18]);
+              else if (dtlb_is_2m[i]) match_vpn = (lsu_vpn[26:9] == dtlb_vpn[i][26:9]);
+              else match_vpn = (lsu_vpn == dtlb_vpn[i]);
+              
+              match_asid = dtlb_entry_g[i] | (dtlb_entry_asid[i] == asid_i);
+              
+              if (match_vpn && match_asid) begin
+                  dtlb_hit = 1;
+                  dtlb_ppn = dtlb_entry_ppn[i];
+                  dtlb_r = dtlb_entry_r[i]; dtlb_w = dtlb_entry_w[i]; dtlb_x = dtlb_entry_x[i];
+                  dtlb_u = dtlb_entry_u[i]; dtlb_a = dtlb_entry_a[i]; dtlb_d = dtlb_entry_d[i];
+                  dtlb_g = dtlb_entry_g[i];
+                  dtlb_level = dtlb_is_1g[i] ? 2'd2 : (dtlb_is_2m[i] ? 2'd1 : 2'd0);
+              end
+          end
+      end
   end
 
-  assign mem_req_o = (w_state == W_REQ) && !pmp_deny_combo;
-  assign mem_addr_o = walk_pa;
+  logic itlb_hit;
+  logic [43:0] itlb_ppn;
+  logic itlb_r, itlb_w, itlb_x, itlb_u, itlb_a, itlb_d, itlb_g;
+  logic [1:0] itlb_level;
 
-  logic walk_fault_q;
-  logic [63:0] walk_cause_q;
-  logic [63:0] walk_pte_q;
-  logic [1:0] walk_level_q;
-  logic [63:0] pte_q;
+  always_comb begin
+      int i;
+      logic match_vpn;
+      logic match_asid;
+      
+      itlb_hit = 0;
+      itlb_ppn = 0;
+      itlb_r = 0; itlb_w = 0; itlb_x = 0; itlb_u = 0; itlb_a = 0; itlb_d = 0; itlb_g = 0;
+      itlb_level = 0;
+      
+      for (i = 0; i < 16; i++) begin
+          if (itlb_valid[i]) begin
+              if (itlb_is_1g[i]) match_vpn = (fetch_vpn[26:18] == itlb_vpn[i][26:18]);
+              else if (itlb_is_2m[i]) match_vpn = (fetch_vpn[26:9] == itlb_vpn[i][26:9]);
+              else match_vpn = (fetch_vpn == itlb_vpn[i]);
+              
+              match_asid = itlb_entry_g[i] | (itlb_entry_asid[i] == asid_i);
+              
+              if (match_vpn && match_asid) begin
+                  itlb_hit = 1;
+                  itlb_ppn = itlb_entry_ppn[i];
+                  itlb_r = itlb_entry_r[i]; itlb_w = itlb_entry_w[i]; itlb_x = itlb_entry_x[i];
+                  itlb_u = itlb_entry_u[i]; itlb_a = itlb_entry_a[i]; itlb_d = itlb_entry_d[i];
+                  itlb_g = itlb_entry_g[i];
+                  itlb_level = itlb_is_1g[i] ? 2'd2 : (itlb_is_2m[i] ? 2'd1 : 2'd0);
+              end
+          end
+      end
+  end
 
-  always_ff @(posedge clk_i) begin
-    if (!rst_ni) begin
-      w_state <= W_IDLE;
-      walk_done_q <= 1'b0;
-    end else if (flush_i) begin
-      w_state <= W_IDLE;
-      walk_done_q <= 1'b0;
-    end else begin
-      walk_done_q <= 1'b0;
-      case (w_state)
-        W_IDLE: begin
-          if (walker_idle && walk_start) begin
-            w_state <= W_REQ;
-            walk_level <= 2'd2;
-            walk_ppn <= satp_ppn_i;
-          end
-        end
-        W_REQ: begin
-          if (pmp_deny_combo) begin
-            walk_done_q <= 1'b1;
-            walk_fault_q <= 1'b1;
-            walk_cause_q <= active_is_lsu ? (active_is_store ? 64'd7 : 64'd5) : 64'd1;
-            w_state <= W_IDLE;
-          end else if (mem_gnt_i) begin
-            w_state <= W_WAIT;
-          end
-        end
-        W_WAIT: begin
-          if (mem_rvalid_i) begin
-            pte_q <= mem_rdata_i;
-            w_state <= W_EVAL;
-          end
-        end
-        W_EVAL: begin
-          if (!pte_q[0] || (!pte_q[1] && pte_q[2])) begin
-            walk_done_q <= 1'b1; walk_fault_q <= 1'b1;
-            walk_cause_q <= active_is_lsu ? (active_is_store ? 64'd15 : 64'd13) : 64'd12;
-            w_state <= W_IDLE;
-          end else if (pte_q[1] || pte_q[3]) begin // Leaf found
-            logic misaligned = (walk_level == 2'd2 && pte_q[27:10] != 18'd0) || 
-                               (walk_level == 2'd1 && pte_q[18:10] != 9'd0);
-            if (misaligned) begin
-              walk_done_q <= 1'b1; walk_fault_q <= 1'b1;
-              walk_cause_q <= active_is_lsu ? (active_is_store ? 64'd15 : 64'd13) : 64'd12;
-              w_state <= W_IDLE;
-            end else begin
-              logic R = pte_q[1]; logic W = pte_q[2]; logic X = pte_q[3];
-              logic U = pte_q[4]; logic A = pte_q[6]; logic D = pte_q[7];
-              logic perm_fault = 1'b0;
-              
-              if (!A) perm_fault = 1'b1;
-              if (active_is_lsu) begin
-                if (active_is_store && !D) perm_fault = 1'b1;
-                if (ld_st_priv_lvl_i == 2'b00 && !U) perm_fault = 1'b1;
-                if (ld_st_priv_lvl_i == 2'b01 && U && !sum_i) perm_fault = 1'b1;
-                if (active_is_store) begin
-                  if (!W) perm_fault = 1'b1;
-                end else begin
-                  if (!(R || (mxr_i && X))) perm_fault = 1'b1;
-                end
-              end else begin
-                if (priv_lvl_i == 2'b00 && !U) perm_fault = 1'b1;
-                if (priv_lvl_i == 2'b01 && U) perm_fault = 1'b1;
-                if (!X) perm_fault = 1'b1;
+
+  // ---------------------------------------------------------------------------
+  // Fast Combinational Return Paths (TLB Hit or BARE mode)
+  // ---------------------------------------------------------------------------
+
+  logic [55:0] lsu_hit_pa;
+  always_comb begin
+      lsu_hit_pa = {dtlb_ppn, lsu_vaddr_i[11:0]};
+      if (dtlb_level == 1) lsu_hit_pa[20:12] = lsu_vpn[8:0];
+      if (dtlb_level == 2) lsu_hit_pa[29:12] = lsu_vpn[17:0];
+  end
+
+  logic [55:0] fetch_hit_pa;
+  always_comb begin
+      fetch_hit_pa = {itlb_ppn, fetch_vaddr_i[11:0]};
+      if (itlb_level == 1) fetch_hit_pa[20:12] = fetch_vpn[8:0];
+      if (itlb_level == 2) fetch_hit_pa[29:12] = fetch_vpn[17:0];
+  end
+
+  logic lsu_hit_perm_ok;
+  logic fetch_hit_perm_ok;
+  always_comb begin
+      lsu_hit_perm_ok = check_perms(dtlb_r, dtlb_w, dtlb_x, dtlb_u, dtlb_a, dtlb_d, lsu_is_store_i, 1'b0, ld_st_priv_lvl_i, sum_i, mxr_i);
+      fetch_hit_perm_ok = check_perms(itlb_r, itlb_w, itlb_x, itlb_u, itlb_a, itlb_d, 1'b0, 1'b1, priv_lvl_i, sum_i, mxr_i);
+  end
+
+  logic lsu_comb_valid, lsu_comb_exc;
+  logic [55:0] lsu_comb_pa;
+  logic [63:0] lsu_comb_cause;
+  
+  always_comb begin
+      lsu_comb_valid = 0; lsu_comb_exc = 0; lsu_comb_cause = 0; lsu_comb_pa = 0;
+      if (lsu_req_i) begin
+          if (!en_ld_st_translation_i) begin
+              lsu_comb_valid = 1;
+              lsu_comb_pa = lsu_vaddr_i[55:0];
+          end else if (dtlb_hit) begin
+              lsu_comb_valid = 1;
+              lsu_comb_pa = lsu_hit_pa;
+              if (!lsu_hit_perm_ok) begin
+                  lsu_comb_exc = 1;
+                  lsu_comb_cause = lsu_is_store_i ? 64'd15 : 64'd13;
               end
-              
-              if (perm_fault) begin
-                walk_done_q <= 1'b1; walk_fault_q <= 1'b1;
-                walk_cause_q <= active_is_lsu ? (active_is_store ? 64'd15 : 64'd13) : 64'd12;
-                w_state <= W_IDLE;
-              end else begin
-                walk_done_q <= 1'b1; walk_fault_q <= 1'b0;
-                walk_pte_q <= pte_q; walk_level_q <= walk_level;
-                w_state <= W_IDLE;
+          end
+      end
+  end
+
+  logic fetch_comb_valid, fetch_comb_exc;
+  logic [55:0] fetch_comb_pa;
+  logic [63:0] fetch_comb_cause;
+  
+  always_comb begin
+      fetch_comb_valid = 0; fetch_comb_exc = 0; fetch_comb_cause = 0; fetch_comb_pa = 0;
+      if (fetch_req_i) begin
+          if (!enable_translation_i) begin
+              fetch_comb_valid = 1;
+              fetch_comb_pa = fetch_vaddr_i[55:0];
+          end else if (itlb_hit) begin
+              fetch_comb_valid = 1;
+              fetch_comb_pa = fetch_hit_pa;
+              if (!fetch_hit_perm_ok) begin
+                  fetch_comb_exc = 1;
+                  fetch_comb_cause = 64'd12;
               end
-            end
+          end
+      end
+  end
+
+
+  // ---------------------------------------------------------------------------
+  // Page Table Walker
+  // ---------------------------------------------------------------------------
+
+  typedef enum logic [3:0] {
+      IDLE,
+      WALK_REQ,
+      WALK_WAIT,
+      WALK_DRAIN
+  } state_t;
+
+  state_t state;
+  logic mem_inflight;
+  logic walking_for_fetch;
+  logic [1:0] walk_level;
+  logic [55:0] walk_addr;
+
+  logic lsu_needs_walk, fetch_needs_walk;
+  assign lsu_needs_walk = lsu_req_i && en_ld_st_translation_i && !dtlb_hit;
+  assign fetch_needs_walk = fetch_req_i && enable_translation_i && !itlb_hit;
+
+  logic [26:0] cur_vpn;
+  assign cur_vpn = walking_for_fetch ? fetch_vpn : lsu_vpn;
+
+  logic [8:0] next_vpn_part;
+  always_comb begin
+      if (walk_level == 2) next_vpn_part = cur_vpn[17:9];
+      else next_vpn_part = cur_vpn[8:0];
+  end
+
+  // PMP Check for the walker's physical memory request
+  logic [3:0] pmp_match0, pmp_match7;
+  logic pmp_deny;
+  
+  always_comb begin
+      pmp_match0 = pmp_match_byte(walk_addr, pmpcfg_i, pmpaddr_i);
+      pmp_match7 = pmp_match_byte(walk_addr + 56'd7, pmpcfg_i, pmpaddr_i);
+      pmp_deny = 0;
+      if (pmp_match0 != pmp_match7) pmp_deny = 1;
+      else if (pmp_match0 == 4'd8) pmp_deny = 1;
+      else pmp_deny = ~(pmpcfg_i[pmp_match0][0]);
+  end
+
+  assign mem_req_o = (state == WALK_REQ) && !pmp_deny && !flush_i;
+  assign mem_addr_o = walk_addr;
+  assign mem_tag_valid_o = 0;
+  assign mem_kill_o = 0;
+
+  logic pte_ready;
+  assign pte_ready = !flush_i && ((state == WALK_WAIT && mem_rvalid_i) || 
+                     (state == WALK_REQ && !pmp_deny && mem_req_o && mem_gnt_i && mem_rvalid_i));
+
+  logic [63:0] pte;
+  assign pte = mem_rdata_i;
+  
+  logic pte_v, pte_r, pte_w, pte_x, pte_u, pte_g, pte_a, pte_d;
+  logic [43:0] pte_ppn;
+  assign {pte_d, pte_a, pte_g, pte_u, pte_x, pte_w, pte_r, pte_v} = pte[7:0];
+  assign pte_ppn = pte[53:10];
+  
+  logic is_leaf;
+  assign is_leaf = pte_r | pte_x;
+  
+  logic pte_invalid;
+  assign pte_invalid = !pte_v || (pte_w && !pte_r);
+  
+  logic pte_misaligned;
+  always_comb begin
+      pte_misaligned = 0;
+      if (walk_level == 2 && pte_ppn[17:0] != 0) pte_misaligned = 1;
+      if (walk_level == 1 && pte_ppn[8:0] != 0) pte_misaligned = 1;
+  end
+  
+  logic walk_fault;
+  assign walk_fault = pte_invalid || (is_leaf && pte_misaligned) || (!is_leaf && (walk_level == 0));
+  
+  logic leaf_perm_ok;
+  always_comb begin
+      leaf_perm_ok = check_perms(pte_r, pte_w, pte_x, pte_u, pte_a, pte_d, 
+                                 walking_for_fetch ? 1'b0 : lsu_is_store_i, 
+                                 walking_for_fetch, 
+                                 walking_for_fetch ? priv_lvl_i : ld_st_priv_lvl_i, 
+                                 sum_i, mxr_i);
+  end
+
+  logic walk_ret_valid, walk_ret_exc, walk_tlb_we;
+  logic [63:0] walk_ret_cause;
+  
+  always_comb begin
+      walk_ret_valid = 0; walk_ret_exc = 0; walk_ret_cause = 0; walk_tlb_we = 0;
+      
+      if (!flush_i) begin
+          if (state == WALK_REQ && pmp_deny) begin
+              walk_ret_valid = 1; walk_ret_exc = 1;
+              if (walking_for_fetch) walk_ret_cause = 1;
+              else if (lsu_is_store_i) walk_ret_cause = 7;
+              else walk_ret_cause = 5;
+          end else if (pte_ready) begin
+              if (walk_fault || (is_leaf && !leaf_perm_ok)) begin
+                  walk_ret_valid = 1; walk_ret_exc = 1;
+                  if (walking_for_fetch) walk_ret_cause = 12;
+                  else if (lsu_is_store_i) walk_ret_cause = 15;
+                  else walk_ret_cause = 13;
+              end else if (is_leaf && leaf_perm_ok) begin
+                  walk_ret_valid = 1;
+                  walk_tlb_we = 1;
+              end
+          end
+      end
+  end
+
+  logic [55:0] walk_final_pa;
+  always_comb begin
+      walk_final_pa = {pte_ppn, (walking_for_fetch ? fetch_vaddr_i[11:0] : lsu_vaddr_i[11:0])};
+      if (walk_level == 1) walk_final_pa[20:12] = cur_vpn[8:0];
+      if (walk_level == 2) walk_final_pa[29:12] = cur_vpn[17:0];
+  end
+
+
+  // ---------------------------------------------------------------------------
+  // State Machine Updates
+  // ---------------------------------------------------------------------------
+  
+  always_ff @(posedge clk) begin
+      if (!rst_ni) begin
+          state <= IDLE;
+      end else if (flush_i) begin
+          if ((mem_inflight && !mem_rvalid_i) || (state == WALK_REQ && mem_req_o && mem_gnt_i && !mem_rvalid_i)) begin
+              state <= WALK_DRAIN;
           end else begin
-            if (walk_level == 2'd0) begin
-              walk_done_q <= 1'b1; walk_fault_q <= 1'b1;
-              walk_cause_q <= active_is_lsu ? (active_is_store ? 64'd15 : 64'd13) : 64'd12;
-              w_state <= W_IDLE;
-            end else begin
-              walk_ppn <= pte_q[53:10];
-              walk_level <= walk_level - 2'd1;
-              w_state <= W_REQ;
-            end
+              state <= IDLE;
           end
-        end
-      endcase
-    end
-  end
-
-  // ---------------------------------------------------------------------------
-  // TLB Writing and Retirement Handshake
-  // ---------------------------------------------------------------------------
-  always_ff @(posedge clk_i) begin
-    if (!rst_ni) begin
-      for (int i = 0; i < 16; i++) begin
-        itlb[i].valid <= 1'b0;
-        dtlb[i].valid <= 1'b0;
-      end
-      itlb_alloc_ptr <= 4'd0;
-      dtlb_alloc_ptr <= 4'd0;
-    end else if (flush_tlb_i) begin
-      for (int i = 0; i < 16; i++) begin
-        itlb[i].valid <= 1'b0;
-        dtlb[i].valid <= 1'b0;
-      end
-    end else if (walk_done_q && !walk_fault_q) begin
-      if (active_is_lsu) begin
-        dtlb[dtlb_alloc_ptr].valid <= 1'b1;
-        dtlb[dtlb_alloc_ptr].level <= walk_level_q;
-        dtlb[dtlb_alloc_ptr].vpn <= active_va[38:12];
-        dtlb[dtlb_alloc_ptr].asid <= asid_i;
-        dtlb[dtlb_alloc_ptr].G <= walk_pte_q[5];
-        dtlb[dtlb_alloc_ptr].ppn <= walk_pte_q[53:10];
-        dtlb[dtlb_alloc_ptr].pte_perms <= {walk_pte_q[7], walk_pte_q[6], walk_pte_q[4:1]};
-        dtlb_alloc_ptr <= dtlb_alloc_ptr + 4'd1;
       end else begin
-        itlb[itlb_alloc_ptr].valid <= 1'b1;
-        itlb[itlb_alloc_ptr].level <= walk_level_q;
-        itlb[itlb_alloc_ptr].vpn <= active_va[38:12];
-        itlb[itlb_alloc_ptr].asid <= asid_i;
-        itlb[itlb_alloc_ptr].G <= walk_pte_q[5];
-        itlb[itlb_alloc_ptr].ppn <= walk_pte_q[53:10];
-        itlb[itlb_alloc_ptr].pte_perms <= {walk_pte_q[7], walk_pte_q[6], walk_pte_q[4:1]};
-        itlb_alloc_ptr <= itlb_alloc_ptr + 4'd1;
+          case (state)
+              IDLE: begin
+                  if (lsu_needs_walk) begin
+                      walking_for_fetch <= 0;
+                      walk_level <= 2;
+                      walk_addr <= {satp_ppn_i, lsu_vpn[26:18], 3'b000};
+                      state <= WALK_REQ;
+                  end else if (fetch_needs_walk) begin
+                      walking_for_fetch <= 1;
+                      walk_level <= 2;
+                      walk_addr <= {satp_ppn_i, fetch_vpn[26:18], 3'b000};
+                      state <= WALK_REQ;
+                  end
+              end
+              
+              WALK_REQ: begin
+                  if (pmp_deny) begin
+                      state <= IDLE;
+                  end else if (mem_req_o && mem_gnt_i) begin
+                      if (mem_rvalid_i) begin
+                          if (is_leaf || walk_fault) state <= IDLE;
+                          else begin
+                              walk_level <= walk_level - 1;
+                              walk_addr <= {pte_ppn, next_vpn_part, 3'b000};
+                          end
+                      end else begin
+                          state <= WALK_WAIT;
+                      end
+                  end
+              end
+              
+              WALK_WAIT: begin
+                  if (mem_rvalid_i) begin
+                      if (is_leaf || walk_fault) state <= IDLE;
+                      else begin
+                          walk_level <= walk_level - 1;
+                          walk_addr <= {pte_ppn, next_vpn_part, 3'b000};
+                          state <= WALK_REQ;
+                      end
+                  end
+              end
+              
+              WALK_DRAIN: begin
+                  if (mem_rvalid_i || !mem_inflight) begin
+                      state <= IDLE;
+                  end
+              end
+          endcase
       end
-    end
   end
 
-  logic lsu_retire_tlb, lsu_retire_walk_fault;
-  logic fetch_retire_tlb, fetch_retire_walk_fault;
+  always_ff @(posedge clk) begin
+      if (!rst_ni) mem_inflight <= 0;
+      else begin
+          if (mem_rvalid_i) mem_inflight <= 0;
+          else if (mem_req_o && mem_gnt_i) mem_inflight <= 1;
+      end
+  end
 
-  assign lsu_retire_tlb = lsu_req_i && !lsu_bare && lsu_tlb_hit;
-  assign fetch_retire_tlb = fetch_req_i && !fetch_bare && fetch_tlb_hit;
 
-  assign lsu_retire_walk_fault = walk_done_q && walk_fault_q && active_is_lsu;
-  assign fetch_retire_walk_fault = walk_done_q && walk_fault_q && !active_is_lsu;
+  // ---------------------------------------------------------------------------
+  // TLB Writing logic (Eviction and Installation)
+  // ---------------------------------------------------------------------------
 
-  assign lsu_valid_o = lsu_bare ? lsu_req_i : (lsu_retire_tlb || lsu_retire_walk_fault);
-  assign lsu_exc_valid_o = lsu_bare ? 1'b0 : (lsu_retire_tlb ? lsu_perm_fault : lsu_retire_walk_fault);
-  assign lsu_exc_cause_o = lsu_retire_walk_fault ? walk_cause_q : lsu_perm_cause;
-  assign lsu_paddr_o = lsu_bare ? lsu_vaddr_i[55:0] : (lsu_retire_tlb ? lsu_tlb_pa : 56'd0);
-  assign lsu_dtlb_hit_o = lsu_tlb_hit;
-  assign lsu_dtlb_ppn_o = lsu_hit_entry.ppn;
-  assign dtlb_miss_o = lsu_wants_walk;
+  logic tlb_we_dtlb;
+  logic tlb_we_itlb;
+  assign tlb_we_dtlb = walk_tlb_we && !walking_for_fetch;
+  assign tlb_we_itlb = walk_tlb_we && walking_for_fetch;
 
-  assign fetch_valid_o = fetch_bare ? fetch_req_i : (fetch_retire_tlb || fetch_retire_walk_fault);
-  assign fetch_exc_valid_o = fetch_bare ? 1'b0 : (fetch_retire_tlb ? fetch_perm_fault : fetch_retire_walk_fault);
-  assign fetch_exc_cause_o = fetch_retire_walk_fault ? walk_cause_q : (fetch_perm_fault ? 64'd12 : 64'd0);
-  assign fetch_paddr_o = fetch_bare ? fetch_vaddr_i[55:0] : (fetch_retire_tlb ? fetch_tlb_pa : 56'd0);
-  assign itlb_miss_o = fetch_wants_walk;
+  logic dtlb_has_inv, itlb_has_inv;
+  logic [3:0] dtlb_inv_idx, itlb_inv_idx;
+  logic [3:0] dtlb_alloc_idx, itlb_alloc_idx;
+
+  always_comb begin
+      int i;
+      dtlb_has_inv = 0; dtlb_inv_idx = 0;
+      itlb_has_inv = 0; itlb_inv_idx = 0;
+      for (i = 15; i >= 0; i--) begin
+          if (!dtlb_valid[i]) begin dtlb_has_inv = 1; dtlb_inv_idx = i[3:0]; end
+          if (!itlb_valid[i]) begin itlb_has_inv = 1; itlb_inv_idx = i[3:0]; end
+      end
+  end
+  assign dtlb_alloc_idx = dtlb_has_inv ? dtlb_inv_idx : dtlb_rep_ptr;
+  assign itlb_alloc_idx = itlb_has_inv ? itlb_inv_idx : itlb_rep_ptr;
+
+  always_ff @(posedge clk) begin
+      if (!rst_ni || flush_tlb_i) begin
+          dtlb_valid <= 0; dtlb_rep_ptr <= 0;
+      end else if (tlb_we_dtlb) begin
+          dtlb_valid[dtlb_alloc_idx] <= 1;
+          dtlb_is_1g[dtlb_alloc_idx] <= (walk_level == 2);
+          dtlb_is_2m[dtlb_alloc_idx] <= (walk_level == 1);
+          dtlb_entry_g[dtlb_alloc_idx] <= pte_g;
+          dtlb_vpn[dtlb_alloc_idx] <= lsu_vpn;
+          dtlb_entry_asid[dtlb_alloc_idx] <= asid_i;
+          dtlb_entry_ppn[dtlb_alloc_idx] <= pte_ppn;
+          dtlb_entry_r[dtlb_alloc_idx] <= pte_r; dtlb_entry_w[dtlb_alloc_idx] <= pte_w;
+          dtlb_entry_x[dtlb_alloc_idx] <= pte_x; dtlb_entry_u[dtlb_alloc_idx] <= pte_u;
+          dtlb_entry_a[dtlb_alloc_idx] <= pte_a; dtlb_entry_d[dtlb_alloc_idx] <= pte_d;
+          if (!dtlb_has_inv) dtlb_rep_ptr <= dtlb_rep_ptr + 1;
+      end
+  end
+
+  always_ff @(posedge clk) begin
+      if (!rst_ni || flush_tlb_i) begin
+          itlb_valid <= 0; itlb_rep_ptr <= 0;
+      end else if (tlb_we_itlb) begin
+          itlb_valid[itlb_alloc_idx] <= 1;
+          itlb_is_1g[itlb_alloc_idx] <= (walk_level == 2);
+          itlb_is_2m[itlb_alloc_idx] <= (walk_level == 1);
+          itlb_entry_g[itlb_alloc_idx] <= pte_g;
+          itlb_vpn[itlb_alloc_idx] <= fetch_vpn;
+          itlb_entry_asid[itlb_alloc_idx] <= asid_i;
+          itlb_entry_ppn[itlb_alloc_idx] <= pte_ppn;
+          itlb_entry_r[itlb_alloc_idx] <= pte_r; itlb_entry_w[itlb_alloc_idx] <= pte_w;
+          itlb_entry_x[itlb_alloc_idx] <= pte_x; itlb_entry_u[itlb_alloc_idx] <= pte_u;
+          itlb_entry_a[itlb_alloc_idx] <= pte_a; itlb_entry_d[itlb_alloc_idx] <= pte_d;
+          if (!itlb_has_inv) itlb_rep_ptr <= itlb_rep_ptr + 1;
+      end
+  end
+
+
+  // ---------------------------------------------------------------------------
+  // Output Routing
+  // ---------------------------------------------------------------------------
+
+  assign lsu_valid_o       = (lsu_req_i && (!en_ld_st_translation_i || dtlb_hit)) ? 1'b1 : ((state != IDLE && state != WALK_DRAIN && !walking_for_fetch) ? walk_ret_valid : 1'b0);
+  assign lsu_paddr_o       = (state == IDLE || lsu_comb_valid) ? lsu_comb_pa : walk_final_pa;
+  assign lsu_dtlb_hit_o    = dtlb_hit;
+  assign lsu_dtlb_ppn_o    = dtlb_ppn;
+  assign lsu_exc_valid_o   = (state == IDLE || lsu_comb_valid) ? lsu_comb_exc : ((!walking_for_fetch) ? walk_ret_exc : 0);
+  assign lsu_exc_cause_o   = (state == IDLE || lsu_comb_valid) ? lsu_comb_cause : walk_ret_cause;
+  assign lsu_exc_tval_o    = lsu_vaddr_i;
+
+  assign fetch_valid_o     = (fetch_req_i && (!enable_translation_i || itlb_hit)) ? 1'b1 : ((state != IDLE && state != WALK_DRAIN && walking_for_fetch) ? walk_ret_valid : 1'b0);
+  assign fetch_paddr_o     = (state == IDLE || fetch_comb_valid) ? fetch_comb_pa : walk_final_pa;
+  assign fetch_exc_valid_o = (state == IDLE || fetch_comb_valid) ? fetch_comb_exc : ((walking_for_fetch) ? walk_ret_exc : 0);
+  assign fetch_exc_cause_o = (state == IDLE || fetch_comb_valid) ? fetch_comb_cause : walk_ret_cause;
+  assign fetch_exc_tval_o  = fetch_vaddr_i;
+
+  assign itlb_miss_o       = fetch_req_i && enable_translation_i && !itlb_hit;
+  assign dtlb_miss_o       = lsu_req_i && en_ld_st_translation_i && !dtlb_hit;
 
 endmodule

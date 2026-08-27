@@ -1,5 +1,3 @@
-`timescale 1ns/1ps
-
 module fp32_fma_ii1 (
     input  logic        clk,
     input  logic        rst_n,
@@ -20,755 +18,1350 @@ module fp32_fma_ii1 (
     output logic        flag_inexact
 );
 
-    localparam int IW  = 96;
-    localparam int TOP = 94;
+    localparam logic [31:0] CANON_QNAN = 32'h7fc00000;
 
-    typedef struct packed {
-        logic               special;
-        logic [31:0]        special_result;
-        logic               invalid;
-        logic [2:0]         rm;
-        logic               sp;
-        logic               sc;
-        logic [47:0]        prod_sig;
-        logic [23:0]        c_sig;
-        logic signed [11:0] exp_p;
-        logic signed [11:0] exp_c;
-        logic signed [11:0] top_p;
-        logic signed [11:0] top_c;
-        logic               prod_zero;
-        logic               c_zero;
-    } stage0_t;
+    /*
+     * Internal significand window.
+     *
+     * 80 bits < the contractual 96-bit maximum.  Operands which lie below
+     * the retained window are reduced to a sticky unit.  Whenever cancellation
+     * is possible, both exact operands fit in the window because the product
+     * has at most 48 significant bits and c has at most 24.
+     */
+    localparam integer ALIGN_W   = 80;
+    localparam integer ALIGN_TOP = 76;
 
-    typedef struct packed {
-        logic               special;
-        logic [31:0]        special_result;
-        logic               invalid;
-        logic [2:0]         rm;
-        logic               sr;
-        logic               exact_zero;
-        logic [95:0]        mag;
-        logic               tail;
-        logic signed [11:0] common_top;
-    } stage1_t;
 
-    typedef struct packed {
-        logic               special;
-        logic [31:0]        special_result;
-        logic               invalid;
-        logic [2:0]         rm;
-        logic               sr;
-        logic               exact_zero;
-        logic               tail_only;
-        logic               normal_path;
-        logic signed [11:0] etop;
-        logic [23:0]        q;
-        logic               guard_bit;
-        logic               lower_nonzero;
-        logic               rem_nonzero;
-    } stage2_t;
+    /*
+     * ------------------------------------------------------------------------
+     * Leading-one helpers.
+     * ------------------------------------------------------------------------
+     */
 
-    typedef struct packed {
-        logic [31:0] result;
-        logic        invalid;
-        logic        overflow;
-        logic        underflow;
-        logic        inexact;
-    } stage3_t;
-
-    stage0_t s0_q;
-    stage1_t s1_q;
-    stage2_t s2_q;
-    stage3_t s3_q;
-
-    logic s0_valid_q;
-    logic s1_valid_q;
-    logic s2_valid_q;
-    logic s3_valid_q;
-
-    logic s3_ready_c;
-    logic s2_ready_c;
-    logic s1_ready_c;
-    logic s0_ready_c;
-
-    function automatic integer msb24(input logic [23:0] v);
-        integer i;
-        begin
-            msb24 = -1;
-            for (i = 0; i < 24; i = i + 1) begin
-                if (v[i]) begin
-                    msb24 = i;
-                end
-            end
-        end
-    endfunction
-
-    function automatic integer msb48(input logic [47:0] v);
-        integer i;
-        begin
-            msb48 = -1;
-            for (i = 0; i < 48; i = i + 1) begin
-                if (v[i]) begin
-                    msb48 = i;
-                end
-            end
-        end
-    endfunction
-
-    function automatic integer msb96(input logic [95:0] v);
-        integer i;
-        begin
-            msb96 = -1;
-            for (i = 0; i < 96; i = i + 1) begin
-                if (v[i]) begin
-                    msb96 = i;
-                end
-            end
-        end
-    endfunction
-
-    function automatic logic any_low48(
-        input logic [47:0] v,
-        input integer      count
+    function automatic integer msb8(
+        input logic [7:0] v
     );
-        integer i;
         begin
-            any_low48 = 1'b0;
-            for (i = 0; i < 48; i = i + 1) begin
-                if ((i < count) && v[i]) begin
-                    any_low48 = 1'b1;
-                end
-            end
+            if      (v[7]) msb8 = 7;
+            else if (v[6]) msb8 = 6;
+            else if (v[5]) msb8 = 5;
+            else if (v[4]) msb8 = 4;
+            else if (v[3]) msb8 = 3;
+            else if (v[2]) msb8 = 2;
+            else if (v[1]) msb8 = 1;
+            else           msb8 = 0;
         end
     endfunction
 
-    function automatic logic any_low96(
-        input logic [95:0] v,
-        input integer      count
+
+    function automatic integer msb16(
+        input logic [15:0] v
     );
-        integer i;
         begin
-            any_low96 = 1'b0;
-            for (i = 0; i < 96; i = i + 1) begin
-                if ((i < count) && v[i]) begin
-                    any_low96 = 1'b1;
-                end
-            end
+            if (|v[15:8])
+                msb16 = 8 + msb8(v[15:8]);
+            else
+                msb16 = msb8(v[7:0]);
         end
     endfunction
 
-    function automatic logic [95:0] align48_to96(
-        input logic [47:0] sig,
-        input integer      base_exp,
-        input integer      common_top
-    );
-        integer sh;
-        logic [95:0] ext;
-        begin
-            ext = {48'b0, sig};
-            sh = TOP + base_exp - common_top;
 
-            if (sh >= 0) begin
-                if (sh >= 96) begin
-                    align48_to96 = 96'b0;
-                end
-                else begin
-                    align48_to96 = ext << sh;
-                end
+    function automatic integer msb24(
+        input logic [23:0] v
+    );
+        begin
+            if (|v[23:16])
+                msb24 = 16 + msb8(v[23:16]);
+            else
+                msb24 = msb16(v[15:0]);
+        end
+    endfunction
+
+
+    function automatic integer msb48(
+        input logic [47:0] v
+    );
+        begin
+            if (|v[47:32])
+                msb48 = 32 + msb16(v[47:32]);
+            else if (|v[31:16])
+                msb48 = 16 + msb16(v[31:16]);
+            else
+                msb48 = msb16(v[15:0]);
+        end
+    endfunction
+
+
+    function automatic integer msb80(
+        input logic [79:0] v
+    );
+        begin
+            if (|v[79:64])
+                msb80 = 64 + msb16(v[79:64]);
+            else if (|v[63:48])
+                msb80 = 48 + msb16(v[63:48]);
+            else if (|v[47:32])
+                msb80 = 32 + msb16(v[47:32]);
+            else if (|v[31:16])
+                msb80 = 16 + msb16(v[31:16]);
+            else
+                msb80 = msb16(v[15:0]);
+        end
+    endfunction
+
+
+    /*
+     * ------------------------------------------------------------------------
+     * Align one exact integer significand into the bounded accumulator window.
+     *
+     * Exact value represented by the source is:
+     *
+     *      mag * 2^lsb_exp
+     *
+     * Returned integer is in units of 2^base_exp.
+     *
+     * If bits fall below the 80-bit window they are compressed into bit zero.
+     * ------------------------------------------------------------------------
+     */
+
+    function automatic logic [79:0] align80(
+        input logic [47:0] mag,
+        input integer      lsb_exp,
+        input integer      base_exp
+    );
+        integer delta;
+        integer rshift;
+        logic [79:0] tmp;
+        logic [79:0] shifted;
+        logic [79:0] mask;
+        logic sticky;
+
+        begin
+            tmp     = {{32{1'b0}}, mag};
+            shifted = 80'b0;
+            mask    = 80'b0;
+            sticky  = 1'b0;
+
+            delta = lsb_exp - base_exp;
+
+            if (mag == 48'b0) begin
+                align80 = 80'b0;
+            end
+            else if (delta >= 0) begin
+                align80 = tmp << delta;
             end
             else begin
-                sh = -sh;
-                if (sh >= 96) begin
-                    align48_to96 = 96'b0;
+                rshift = -delta;
+
+                if (rshift >= 80) begin
+                    /*
+                     * Entire term lies below the retained window.
+                     */
+                    align80 = 80'd1;
                 end
                 else begin
-                    align48_to96 = ext >> sh;
+                    shifted = tmp >> rshift;
+
+                    mask =
+                        (80'd1 << rshift) -
+                        80'd1;
+
+                    sticky =
+                        |(tmp & mask);
+
+                    shifted[0] =
+                        shifted[0] |
+                        sticky;
+
+                    align80 = shifted;
                 end
             end
         end
     endfunction
 
-    function automatic logic align48_disc(
-        input logic [47:0] sig,
-        input integer      base_exp,
-        input integer      common_top
+
+    /*
+     * ------------------------------------------------------------------------
+     * Result selected after overflow.
+     * ------------------------------------------------------------------------
+     */
+
+    function automatic logic [31:0] overflow_value(
+        input logic       sign,
+        input logic [2:0] rnd
     );
-        integer sh;
+        logic to_inf;
+
         begin
-            sh = TOP + base_exp - common_top;
-            align48_disc = 1'b0;
+            to_inf = 1'b0;
 
-            if (sh < 0) begin
-                sh = -sh;
-                if (sh >= 48) begin
-                    align48_disc = |sig;
-                end
-                else begin
-                    align48_disc = any_low48(sig, sh);
-                end
-            end
+            case (rnd)
+                /*
+                 * RNE
+                 */
+                3'd0:
+                    to_inf = 1'b1;
+
+                /*
+                 * RTZ
+                 */
+                3'd1:
+                    to_inf = 1'b0;
+
+                /*
+                 * RDN:
+                 * positive -> max finite
+                 * negative -> -infinity
+                 */
+                3'd2:
+                    to_inf = sign;
+
+                /*
+                 * RUP:
+                 * positive -> +infinity
+                 * negative -> max finite magnitude
+                 */
+                3'd3:
+                    to_inf = !sign;
+
+                /*
+                 * RMM
+                 */
+                3'd4:
+                    to_inf = 1'b1;
+
+                default:
+                    to_inf = 1'b1;
+            endcase
+
+            if (to_inf)
+                overflow_value = {
+                    sign,
+                    8'hff,
+                    23'b0
+                };
+            else
+                overflow_value = {
+                    sign,
+                    8'hfe,
+                    23'h7fffff
+                };
         end
     endfunction
 
-    function automatic stage0_t make_stage0(
-        input logic [31:0] aa,
-        input logic [31:0] bb,
-        input logic [31:0] cc,
-        input logic [2:0]  rm
-    );
-        stage0_t t;
 
-        logic sa;
-        logic sb;
-        logic sc;
-        logic sp;
-        logic [7:0] ea;
-        logic [7:0] eb;
-        logic [7:0] ec;
-        logic [22:0] fa;
-        logic [22:0] fb;
-        logic [22:0] fc;
+    /*
+     * ------------------------------------------------------------------------
+     * Exact fused arithmetic + one binary32 rounding.
+     *
+     * Return layout:
+     *
+     *   [35]    invalid
+     *   [34]    overflow
+     *   [33]    underflow
+     *   [32]    inexact
+     *   [31:0]  result
+     * ------------------------------------------------------------------------
+     */
+
+    function automatic logic [35:0] fma_core(
+        input logic [31:0] fa,
+        input logic [31:0] fb,
+        input logic [31:0] fc,
+        input logic [2:0]  rnd
+    );
+
+        logic sign_a;
+        logic sign_b;
+        logic sign_c;
+        logic sign_p;
+        logic sign_r;
+
+        logic [7:0] exp_a;
+        logic [7:0] exp_b;
+        logic [7:0] exp_c;
+
+        logic [22:0] frac_a;
+        logic [22:0] frac_b;
+        logic [22:0] frac_c;
+
         logic a_nan;
         logic b_nan;
         logic c_nan;
+
         logic a_snan;
         logic b_snan;
         logic c_snan;
+
         logic a_inf;
         logic b_inf;
         logic c_inf;
+
         logic a_zero;
         logic b_zero;
-        logic invalid_mul;
-        logic product_inf;
-        logic invalid_add;
-        logic [23:0] sig_a;
-        logic [23:0] sig_b;
-        logic [23:0] sig_c;
-        logic [47:0] prod;
-        integer exp_a_i;
-        integer exp_b_i;
-        integer exp_c_i;
-        integer exp_p_i;
-        integer mp;
-        integer mc;
+        logic c_zero;
+
+        logic invalid_op;
+
+        logic [23:0] mant_a;
+        logic [23:0] mant_b;
+        logic [23:0] mant_c;
+
+        logic [47:0] prod_mant;
+
+        integer lsb_a;
+        integer lsb_b;
+        integer lsb_c;
+        integer prod_lsb;
+
+        integer prod_top;
+        integer c_top;
+        integer top_exp;
+        integer base_exp;
+
+        logic [79:0] prod_aligned;
+        logic [79:0] c_aligned;
+
+        logic signed [80:0] prod_term;
+        logic signed [80:0] c_term;
+        logic signed [80:0] exact_sum;
+
+        logic [79:0] magnitude;
+        logic [79:0] trunc_mag;
+        logic [79:0] remainder;
+        logic [79:0] half_ulp;
+        logic [79:0] rem_mask;
+
+        integer leading_bit;
+        integer exact_top_exp;
+        integer shift_amt;
+        integer unbiased_exp;
+
+        logic [24:0] rounded_sig;
+        logic [24:0] sub_sig;
+
+        logic rem_nonzero;
+        logic round_increment;
+
+        logic [7:0] out_exp;
+
+        logic [31:0] out_value;
+
+        logic fl_invalid;
+        logic fl_overflow;
+        logic fl_underflow;
+        logic fl_inexact;
 
         begin
-            t = '0;
 
-            sa = aa[31];
-            sb = bb[31];
-            sc = cc[31];
-            sp = sa ^ sb;
+            /*
+             * --------------------------------------------------------------
+             * Defaults / classification.
+             * --------------------------------------------------------------
+             */
+            sign_a = fa[31];
+            sign_b = fb[31];
+            sign_c = fc[31];
 
-            ea = aa[30:23];
-            eb = bb[30:23];
-            ec = cc[30:23];
-            fa = aa[22:0];
-            fb = bb[22:0];
-            fc = cc[22:0];
+            sign_p = sign_a ^ sign_b;
+            sign_r = 1'b0;
 
-            a_nan = (ea == 8'hff) && (fa != 23'b0);
-            b_nan = (eb == 8'hff) && (fb != 23'b0);
-            c_nan = (ec == 8'hff) && (fc != 23'b0);
+            exp_a = fa[30:23];
+            exp_b = fb[30:23];
+            exp_c = fc[30:23];
 
-            a_snan = a_nan && !fa[22];
-            b_snan = b_nan && !fb[22];
-            c_snan = c_nan && !fc[22];
+            frac_a = fa[22:0];
+            frac_b = fb[22:0];
+            frac_c = fc[22:0];
 
-            a_inf = (ea == 8'hff) && (fa == 23'b0);
-            b_inf = (eb == 8'hff) && (fb == 23'b0);
-            c_inf = (ec == 8'hff) && (fc == 23'b0);
+            a_nan =
+                (exp_a == 8'hff) &&
+                (frac_a != 23'b0);
 
-            a_zero = (ea == 8'b0) && (fa == 23'b0);
-            b_zero = (eb == 8'b0) && (fb == 23'b0);
+            b_nan =
+                (exp_b == 8'hff) &&
+                (frac_b != 23'b0);
 
-            invalid_mul = (a_inf && b_zero) || (b_inf && a_zero);
-            product_inf = (a_inf || b_inf) && !invalid_mul && !a_nan && !b_nan;
-            invalid_add = product_inf && c_inf && (sp != sc);
+            c_nan =
+                (exp_c == 8'hff) &&
+                (frac_c != 23'b0);
 
-            t.invalid = a_snan || b_snan || c_snan || invalid_mul || invalid_add;
-            t.rm = rm;
-            t.sp = sp;
-            t.sc = sc;
+            a_snan =
+                a_nan &&
+                !frac_a[22];
 
-            if (a_nan || b_nan || c_nan || invalid_mul || invalid_add) begin
-                t.special = 1'b1;
-                t.special_result = 32'h7fc00000;
+            b_snan =
+                b_nan &&
+                !frac_b[22];
+
+            c_snan =
+                c_nan &&
+                !frac_c[22];
+
+            a_inf =
+                (exp_a == 8'hff) &&
+                (frac_a == 23'b0);
+
+            b_inf =
+                (exp_b == 8'hff) &&
+                (frac_b == 23'b0);
+
+            c_inf =
+                (exp_c == 8'hff) &&
+                (frac_c == 23'b0);
+
+            a_zero =
+                (exp_a == 8'b0) &&
+                (frac_a == 23'b0);
+
+            b_zero =
+                (exp_b == 8'b0) &&
+                (frac_b == 23'b0);
+
+            c_zero =
+                (exp_c == 8'b0) &&
+                (frac_c == 23'b0);
+
+            out_value   = 32'b0;
+            fl_invalid  = 1'b0;
+            fl_overflow = 1'b0;
+            fl_underflow = 1'b0;
+            fl_inexact  = 1'b0;
+
+            mant_a = 24'b0;
+            mant_b = 24'b0;
+            mant_c = 24'b0;
+
+            prod_mant = 48'b0;
+
+            lsb_a   = 0;
+            lsb_b   = 0;
+            lsb_c   = 0;
+            prod_lsb = 0;
+
+            prod_top = -10000;
+            c_top    = -10000;
+            top_exp  = -10000;
+            base_exp = 0;
+
+            prod_aligned = 80'b0;
+            c_aligned    = 80'b0;
+
+            prod_term = 81'sd0;
+            c_term    = 81'sd0;
+            exact_sum = 81'sd0;
+
+            magnitude = 80'b0;
+            trunc_mag = 80'b0;
+            remainder = 80'b0;
+            half_ulp  = 80'b0;
+            rem_mask  = 80'b0;
+
+            leading_bit  = 0;
+            exact_top_exp = 0;
+            shift_amt    = 0;
+            unbiased_exp = 0;
+
+            rounded_sig = 25'b0;
+            sub_sig     = 25'b0;
+
+            rem_nonzero   = 1'b0;
+            round_increment = 1'b0;
+
+            out_exp = 8'b0;
+
+
+            /*
+             * --------------------------------------------------------------
+             * Invalid-operation conditions.
+             * --------------------------------------------------------------
+             */
+            invalid_op =
+                a_snan ||
+                b_snan ||
+                c_snan ||
+                (a_inf && b_zero) ||
+                (b_inf && a_zero);
+
+            /*
+             * Infinite product plus opposite-signed infinity.
+             */
+            if (
+                (a_inf || b_inf) &&
+                !a_nan &&
+                !b_nan &&
+                !a_zero &&
+                !b_zero &&
+                c_inf &&
+                (sign_p != sign_c)
+            )
+                invalid_op = 1'b1;
+
+
+            /*
+             * --------------------------------------------------------------
+             * NaN / invalid.
+             *
+             * Every NaN result is exactly 7fc00000.
+             * --------------------------------------------------------------
+             */
+            if (
+                a_nan ||
+                b_nan ||
+                c_nan ||
+                invalid_op
+            ) begin
+
+                out_value  = CANON_QNAN;
+                fl_invalid = invalid_op;
+
             end
-            else if (product_inf) begin
-                t.special = 1'b1;
-                t.special_result = {sp, 8'hff, 23'b0};
+
+
+            /*
+             * --------------------------------------------------------------
+             * Infinite product.
+             * --------------------------------------------------------------
+             */
+            else if (a_inf || b_inf) begin
+
+                out_value = {
+                    sign_p,
+                    8'hff,
+                    23'b0
+                };
+
             end
+
+
+            /*
+             * --------------------------------------------------------------
+             * Finite product + infinite c.
+             * --------------------------------------------------------------
+             */
             else if (c_inf) begin
-                t.special = 1'b1;
-                t.special_result = {sc, 8'hff, 23'b0};
+
+                out_value = {
+                    sign_c,
+                    8'hff,
+                    23'b0
+                };
+
             end
+
+
+            /*
+             * --------------------------------------------------------------
+             * Finite arithmetic.
+             *
+             * A finite binary32 number is represented exactly as
+             *
+             *   mantissa_integer * 2^lsb_exp
+             *
+             * normal:
+             *   mantissa = {1,frac}
+             *   lsb_exp  = exponent_field - 150
+             *
+             * subnormal:
+             *   mantissa = frac
+             *   lsb_exp  = -149
+             * --------------------------------------------------------------
+             */
             else begin
-                t.special = 1'b0;
 
-                if (ea == 8'b0) begin
-                    sig_a = {1'b0, fa};
-                    exp_a_i = -149;
+                if (exp_a == 8'b0) begin
+                    mant_a = {1'b0, frac_a};
+                    lsb_a  = -149;
                 end
                 else begin
-                    sig_a = {1'b1, fa};
-                    exp_a_i = ea - 150;
+                    mant_a = {1'b1, frac_a};
+                    lsb_a  = exp_a;
+                    lsb_a  = lsb_a - 150;
                 end
 
-                if (eb == 8'b0) begin
-                    sig_b = {1'b0, fb};
-                    exp_b_i = -149;
+                if (exp_b == 8'b0) begin
+                    mant_b = {1'b0, frac_b};
+                    lsb_b  = -149;
                 end
                 else begin
-                    sig_b = {1'b1, fb};
-                    exp_b_i = eb - 150;
+                    mant_b = {1'b1, frac_b};
+                    lsb_b  = exp_b;
+                    lsb_b  = lsb_b - 150;
                 end
 
-                if (ec == 8'b0) begin
-                    sig_c = {1'b0, fc};
-                    exp_c_i = -149;
+                if (exp_c == 8'b0) begin
+                    mant_c = {1'b0, frac_c};
+                    lsb_c  = -149;
                 end
                 else begin
-                    sig_c = {1'b1, fc};
-                    exp_c_i = ec - 150;
+                    mant_c = {1'b1, frac_c};
+                    lsb_c  = exp_c;
+                    lsb_c  = lsb_c - 150;
                 end
 
-                prod = sig_a * sig_b;
-                exp_p_i = exp_a_i + exp_b_i;
-                mp = msb48(prod);
-                mc = msb24(sig_c);
+                /*
+                 * Force a 48-bit multiplication result.
+                 */
+                prod_mant =
+                    {24'b0, mant_a} *
+                    {24'b0, mant_b};
 
-                t.prod_sig = prod;
-                t.c_sig = sig_c;
-                t.exp_p = exp_p_i;
-                t.exp_c = exp_c_i;
-                t.prod_zero = (mp < 0);
-                t.c_zero = (mc < 0);
+                prod_lsb =
+                    lsb_a +
+                    lsb_b;
 
-                if (mp < 0) begin
-                    t.top_p = -12'sd1024;
+
+                /*
+                 * ----------------------------------------------------------
+                 * Both exact terms are zero.
+                 * ----------------------------------------------------------
+                 */
+                if (
+                    (prod_mant == 48'b0) &&
+                    (mant_c == 24'b0)
+                ) begin
+
+                    /*
+                     * Same-sign zeros preserve their sign.
+                     *
+                     * Opposite-sign zero addition is -0 only under RDN.
+                     */
+                    if (sign_p == sign_c)
+                        sign_r = sign_p;
+                    else if (rnd == 3'd2)
+                        sign_r = 1'b1;
+                    else
+                        sign_r = 1'b0;
+
+                    out_value = {
+                        sign_r,
+                        31'b0
+                    };
+
                 end
                 else begin
-                    t.top_p = exp_p_i + mp;
-                end
 
-                if (mc < 0) begin
-                    t.top_c = -12'sd1024;
-                end
-                else begin
-                    t.top_c = exp_c_i + mc;
-                end
-            end
+                    /*
+                     * ------------------------------------------------------
+                     * Choose a common 80-bit accumulator scale.
+                     * ------------------------------------------------------
+                     */
+                    if (prod_mant != 48'b0)
+                        prod_top =
+                            prod_lsb +
+                            msb48(prod_mant);
 
-            make_stage0 = t;
-        end
-    endfunction
+                    if (mant_c != 24'b0)
+                        c_top =
+                            lsb_c +
+                            msb24(mant_c);
 
-    function automatic stage1_t make_stage1(input stage0_t x);
-        stage1_t t;
-        logic [47:0] c_sig48;
-        logic [95:0] p_al;
-        logic [95:0] c_al;
-        logic p_disc;
-        logic c_disc;
-        integer common_i;
+                    if (prod_top > c_top)
+                        top_exp = prod_top;
+                    else
+                        top_exp = c_top;
 
-        begin
-            t = '0;
-            t.special = x.special;
-            t.special_result = x.special_result;
-            t.invalid = x.invalid;
-            t.rm = x.rm;
+                    base_exp =
+                        top_exp -
+                        ALIGN_TOP;
 
-            if (x.special) begin
-                t.sr = x.special_result[31];
-            end
-            else if (x.prod_zero && x.c_zero) begin
-                t.exact_zero = 1'b1;
-                if (x.sp == x.sc) begin
-                    t.sr = x.sp;
-                end
-                else begin
-                    t.sr = (x.rm == 3'd2);
-                end
-            end
-            else begin
-                if ($signed(x.top_p) >= $signed(x.top_c)) begin
-                    common_i = $signed(x.top_p);
-                end
-                else begin
-                    common_i = $signed(x.top_c);
-                end
+                    prod_aligned =
+                        align80(
+                            prod_mant,
+                            prod_lsb,
+                            base_exp
+                        );
 
-                t.common_top = common_i;
-                c_sig48 = {24'b0, x.c_sig};
+                    c_aligned =
+                        align80(
+                            {24'b0, mant_c},
+                            lsb_c,
+                            base_exp
+                        );
 
-                p_al = align48_to96(x.prod_sig, $signed(x.exp_p), common_i);
-                c_al = align48_to96(c_sig48, $signed(x.exp_c), common_i);
-                p_disc = align48_disc(x.prod_sig, $signed(x.exp_p), common_i);
-                c_disc = align48_disc(c_sig48, $signed(x.exp_c), common_i);
+                    prod_term =
+                        $signed({
+                            1'b0,
+                            prod_aligned
+                        });
 
-                if (x.prod_zero) begin
-                    t.mag = c_al;
-                    t.tail = c_disc;
-                    t.sr = x.sc;
-                end
-                else if (x.c_zero) begin
-                    t.mag = p_al;
-                    t.tail = p_disc;
-                    t.sr = x.sp;
-                end
-                else if (x.sp == x.sc) begin
-                    t.mag = p_al + c_al;
-                    t.tail = p_disc || c_disc;
-                    t.sr = x.sp;
-                end
-                else if (p_al > c_al) begin
-                    t.mag = p_al - c_al;
-                    t.sr = x.sp;
-                    if (c_disc && !p_disc) begin
-                        t.mag = t.mag - 96'd1;
-                        t.tail = 1'b1;
+                    c_term =
+                        $signed({
+                            1'b0,
+                            c_aligned
+                        });
+
+                    if (sign_p)
+                        prod_term =
+                            -prod_term;
+
+                    if (sign_c)
+                        c_term =
+                            -c_term;
+
+                    exact_sum =
+                        prod_term +
+                        c_term;
+
+
+                    /*
+                     * ------------------------------------------------------
+                     * Exact cancellation.
+                     * ------------------------------------------------------
+                     */
+                    if (exact_sum == 81'sd0) begin
+
+                        /*
+                         * Exact cancellation of nonzero opposite-sign
+                         * quantities produces -0 under RDN and +0 otherwise.
+                         */
+                        if (rnd == 3'd2)
+                            sign_r = 1'b1;
+                        else
+                            sign_r = 1'b0;
+
+                        out_value = {
+                            sign_r,
+                            31'b0
+                        };
+
                     end
                     else begin
-                        t.tail = p_disc || c_disc;
-                    end
-                end
-                else if (c_al > p_al) begin
-                    t.mag = c_al - p_al;
-                    t.sr = x.sc;
-                    if (p_disc && !c_disc) begin
-                        t.mag = t.mag - 96'd1;
-                        t.tail = 1'b1;
-                    end
-                    else begin
-                        t.tail = p_disc || c_disc;
-                    end
-                end
-                else begin
-                    if (!p_disc && !c_disc) begin
-                        t.exact_zero = 1'b1;
-                        t.sr = (x.rm == 3'd2);
-                    end
-                    else if (p_disc && !c_disc) begin
-                        t.mag = 96'b0;
-                        t.tail = 1'b1;
-                        t.sr = x.sp;
-                    end
-                    else if (c_disc && !p_disc) begin
-                        t.mag = 96'b0;
-                        t.tail = 1'b1;
-                        t.sr = x.sc;
-                    end
-                    else begin
-                        t.mag = 96'b0;
-                        t.tail = 1'b1;
-                        t.sr = (x.rm == 3'd2);
-                    end
-                end
-            end
 
-            make_stage1 = t;
-        end
-    endfunction
+                        sign_r =
+                            exact_sum[80];
 
-    function automatic stage2_t make_stage2(input stage1_t x);
-        stage2_t t;
-        logic [95:0] trunc96;
-        integer m;
-        integer base_i;
-        integer etop_i;
-        integer sh;
+                        if (sign_r)
+                            magnitude =
+                                (~exact_sum[79:0]) +
+                                80'd1;
+                        else
+                            magnitude =
+                                exact_sum[79:0];
 
-        begin
-            t = '0;
-            t.special = x.special;
-            t.special_result = x.special_result;
-            t.invalid = x.invalid;
-            t.rm = x.rm;
-            t.sr = x.sr;
-            t.exact_zero = x.exact_zero;
+                        leading_bit =
+                            msb80(magnitude);
 
-            if (!x.special && !x.exact_zero) begin
-                m = msb96(x.mag);
+                        exact_top_exp =
+                            base_exp +
+                            leading_bit;
 
-                if (m < 0) begin
-                    t.tail_only = x.tail;
-                end
-                else begin
-                    base_i = $signed(x.common_top) - TOP;
-                    etop_i = base_i + m;
-                    t.etop = etop_i;
 
-                    if (etop_i >= -126) begin
-                        t.normal_path = 1'b1;
-                        sh = m - 23;
+                        /*
+                         * ==================================================
+                         * NORMAL RANGE
+                         * ==================================================
+                         */
+                        if (exact_top_exp >= -126) begin
 
-                        if (sh <= 0) begin
-                            if (sh == 0) begin
-                                t.q = x.mag[23:0];
+                            /*
+                             * If the exact leading exponent already exceeds
+                             * binary32's emax, overflow is unconditional.
+                             */
+                            if (exact_top_exp > 127) begin
+
+                                out_value =
+                                    overflow_value(
+                                        sign_r,
+                                        rnd
+                                    );
+
+                                fl_overflow = 1'b1;
+                                fl_inexact  = 1'b1;
+
                             end
                             else begin
-                                t.q = x.mag << (-sh);
+
+                                unbiased_exp =
+                                    exact_top_exp;
+
+                                /*
+                                 * Retain hidden bit + 23 fraction bits.
+                                 */
+                                shift_amt =
+                                    leading_bit -
+                                    23;
+
+                                trunc_mag   = 80'b0;
+                                remainder   = 80'b0;
+                                half_ulp    = 80'b0;
+                                rem_mask    = 80'b0;
+                                rem_nonzero = 1'b0;
+
+                                if (shift_amt <= 0) begin
+
+                                    trunc_mag =
+                                        magnitude <<
+                                        (-shift_amt);
+
+                                    remainder   = 80'b0;
+                                    rem_nonzero = 1'b0;
+
+                                end
+                                else if (shift_amt < 80) begin
+
+                                    trunc_mag =
+                                        magnitude >>
+                                        shift_amt;
+
+                                    rem_mask =
+                                        (80'd1 << shift_amt) -
+                                        80'd1;
+
+                                    remainder =
+                                        magnitude &
+                                        rem_mask;
+
+                                    half_ulp =
+                                        80'd1 <<
+                                        (shift_amt - 1);
+
+                                    rem_nonzero =
+                                        (remainder != 80'b0);
+
+                                end
+                                else begin
+
+                                    trunc_mag =
+                                        80'b0;
+
+                                    remainder =
+                                        magnitude;
+
+                                    rem_nonzero =
+                                        (magnitude != 80'b0);
+
+                                end
+
+                                rounded_sig =
+                                    trunc_mag[24:0];
+
+                                round_increment = 1'b0;
+
+                                if (rem_nonzero) begin
+
+                                    case (rnd)
+
+                                        /*
+                                         * RNE
+                                         */
+                                        3'd0: begin
+
+                                            if (shift_amt > 80)
+                                                round_increment = 1'b0;
+                                            else if (shift_amt == 80)
+                                                round_increment =
+                                                    (magnitude > (80'd1 << 79)) ||
+                                                    (
+                                                        (magnitude == (80'd1 << 79)) &&
+                                                        rounded_sig[0]
+                                                    );
+                                            else
+                                                round_increment =
+                                                    (remainder > half_ulp) ||
+                                                    (
+                                                        (remainder == half_ulp) &&
+                                                        rounded_sig[0]
+                                                    );
+
+                                        end
+
+
+                                        /*
+                                         * RTZ
+                                         */
+                                        3'd1:
+                                            round_increment = 1'b0;
+
+
+                                        /*
+                                         * RDN
+                                         */
+                                        3'd2:
+                                            round_increment = sign_r;
+
+
+                                        /*
+                                         * RUP
+                                         */
+                                        3'd3:
+                                            round_increment = !sign_r;
+
+
+                                        /*
+                                         * RMM
+                                         */
+                                        3'd4: begin
+
+                                            if (shift_amt > 80)
+                                                round_increment = 1'b0;
+                                            else if (shift_amt == 80)
+                                                round_increment =
+                                                    magnitude >=
+                                                    (80'd1 << 79);
+                                            else
+                                                round_increment =
+                                                    remainder >=
+                                                    half_ulp;
+
+                                        end
+
+                                        default:
+                                            round_increment = 1'b0;
+
+                                    endcase
+
+                                end
+
+                                if (round_increment)
+                                    rounded_sig =
+                                        rounded_sig +
+                                        25'd1;
+
+                                /*
+                                 * Carry from 1.111... to 10.000...
+                                 */
+                                if (rounded_sig[24]) begin
+
+                                    rounded_sig =
+                                        rounded_sig >>
+                                        1;
+
+                                    unbiased_exp =
+                                        unbiased_exp +
+                                        1;
+
+                                end
+
+
+                                /*
+                                 * Rounding itself may cross into overflow.
+                                 */
+                                if (unbiased_exp > 127) begin
+
+                                    out_value =
+                                        overflow_value(
+                                            sign_r,
+                                            rnd
+                                        );
+
+                                    fl_overflow = 1'b1;
+                                    fl_inexact  = 1'b1;
+
+                                end
+                                else begin
+
+                                    out_exp =
+                                        unbiased_exp +
+                                        127;
+
+                                    out_value = {
+                                        sign_r,
+                                        out_exp,
+                                        rounded_sig[22:0]
+                                    };
+
+                                    fl_inexact =
+                                        rem_nonzero;
+
+                                end
+
                             end
-                            t.guard_bit = 1'b0;
-                            t.lower_nonzero = x.tail;
-                            t.rem_nonzero = x.tail;
+
                         end
+
+
+                        /*
+                         * ==================================================
+                         * SUBNORMAL / ZERO RANGE
+                         * ==================================================
+                         *
+                         * Binary32 subnormal quantum is exactly 2^-149.
+                         * ==================================================
+                         */
                         else begin
-                            trunc96 = x.mag >> sh;
-                            t.q = trunc96[23:0];
 
-                            if ((sh - 1) < 96) begin
-                                t.guard_bit = x.mag[sh-1];
-                            end
+                            shift_amt =
+                                -149 -
+                                base_exp;
 
-                            if (sh <= 1) begin
-                                t.lower_nonzero = x.tail;
+                            trunc_mag   = 80'b0;
+                            remainder   = 80'b0;
+                            half_ulp    = 80'b0;
+                            rem_mask    = 80'b0;
+                            rem_nonzero = 1'b0;
+
+                            if (shift_amt <= 0) begin
+
+                                trunc_mag =
+                                    magnitude <<
+                                    (-shift_amt);
+
+                                remainder   = 80'b0;
+                                rem_nonzero = 1'b0;
+
                             end
-                            else if ((sh - 1) >= 96) begin
-                                t.lower_nonzero = (|x.mag) || x.tail;
+                            else if (shift_amt < 80) begin
+
+                                trunc_mag =
+                                    magnitude >>
+                                    shift_amt;
+
+                                rem_mask =
+                                    (80'd1 << shift_amt) -
+                                    80'd1;
+
+                                remainder =
+                                    magnitude &
+                                    rem_mask;
+
+                                half_ulp =
+                                    80'd1 <<
+                                    (shift_amt - 1);
+
+                                rem_nonzero =
+                                    (remainder != 80'b0);
+
                             end
                             else begin
-                                t.lower_nonzero = any_low96(x.mag, sh-1) || x.tail;
+
+                                trunc_mag =
+                                    80'b0;
+
+                                remainder =
+                                    magnitude;
+
+                                rem_nonzero =
+                                    (magnitude != 80'b0);
+
                             end
 
-                            t.rem_nonzero = t.guard_bit || t.lower_nonzero;
-                        end
-                    end
-                    else begin
-                        t.normal_path = 1'b0;
-                        sh = -149 - base_i;
 
-                        if (sh <= 0) begin
-                            t.q = x.mag << (-sh);
-                            t.guard_bit = 1'b0;
-                            t.lower_nonzero = x.tail;
-                            t.rem_nonzero = x.tail;
-                        end
-                        else if (sh < 96) begin
-                            trunc96 = x.mag >> sh;
-                            t.q = trunc96[23:0];
-                            t.guard_bit = x.mag[sh-1];
+                            sub_sig =
+                                trunc_mag[24:0];
 
-                            if (sh <= 1) begin
-                                t.lower_nonzero = x.tail;
+                            round_increment =
+                                1'b0;
+
+                            if (rem_nonzero) begin
+
+                                case (rnd)
+
+                                    /*
+                                     * RNE
+                                     */
+                                    3'd0: begin
+
+                                        if (shift_amt > 80)
+                                            round_increment = 1'b0;
+                                        else if (shift_amt == 80)
+                                            round_increment =
+                                                (magnitude > (80'd1 << 79)) ||
+                                                (
+                                                    (magnitude == (80'd1 << 79)) &&
+                                                    sub_sig[0]
+                                                );
+                                        else
+                                            round_increment =
+                                                (remainder > half_ulp) ||
+                                                (
+                                                    (remainder == half_ulp) &&
+                                                    sub_sig[0]
+                                                );
+
+                                    end
+
+
+                                    /*
+                                     * RTZ
+                                     */
+                                    3'd1:
+                                        round_increment = 1'b0;
+
+
+                                    /*
+                                     * RDN
+                                     */
+                                    3'd2:
+                                        round_increment =
+                                            sign_r;
+
+
+                                    /*
+                                     * RUP
+                                     */
+                                    3'd3:
+                                        round_increment =
+                                            !sign_r;
+
+
+                                    /*
+                                     * RMM
+                                     */
+                                    3'd4: begin
+
+                                        if (shift_amt > 80)
+                                            round_increment = 1'b0;
+                                        else if (shift_amt == 80)
+                                            round_increment =
+                                                magnitude >=
+                                                (80'd1 << 79);
+                                        else
+                                            round_increment =
+                                                remainder >=
+                                                half_ulp;
+
+                                    end
+
+                                    default:
+                                        round_increment = 1'b0;
+
+                                endcase
+
+                            end
+
+
+                            if (round_increment)
+                                sub_sig =
+                                    sub_sig +
+                                    25'd1;
+
+
+                            /*
+                             * Rounding a subnormal may produce exactly the
+                             * smallest normal number.
+                             *
+                             * The task explicitly says this case has NX=1
+                             * but UF=0 because the DELIVERED exponent field
+                             * is nonzero.
+                             */
+                            if (sub_sig >= 25'h0800000) begin
+
+                                out_value = {
+                                    sign_r,
+                                    8'h01,
+                                    23'b0
+                                };
+
+                                fl_inexact   = rem_nonzero;
+                                fl_underflow = 1'b0;
+
                             end
                             else begin
-                                t.lower_nonzero = any_low96(x.mag, sh-1) || x.tail;
+
+                                out_value = {
+                                    sign_r,
+                                    8'h00,
+                                    sub_sig[22:0]
+                                };
+
+                                fl_inexact =
+                                    rem_nonzero;
+
+                                /*
+                                 * Contract A6:
+                                 *
+                                 * UF iff:
+                                 *   NX == 1
+                                 *   AND delivered exponent field == 0
+                                 */
+                                fl_underflow =
+                                    rem_nonzero;
+
                             end
 
-                            t.rem_nonzero = t.guard_bit || t.lower_nonzero;
                         end
-                        else if (sh == 96) begin
-                            t.q = 24'b0;
-                            t.guard_bit = x.mag[95];
-                            t.lower_nonzero = any_low96(x.mag, 95) || x.tail;
-                            t.rem_nonzero = t.guard_bit || t.lower_nonzero;
-                        end
-                        else begin
-                            t.q = 24'b0;
-                            t.guard_bit = 1'b0;
-                            t.lower_nonzero = (|x.mag) || x.tail;
-                            t.rem_nonzero = t.lower_nonzero;
-                        end
+
                     end
+
                 end
+
             end
 
-            make_stage2 = t;
+
+            fma_core = {
+                fl_invalid,
+                fl_overflow,
+                fl_underflow,
+                fl_inexact,
+                out_value
+            };
+
         end
     endfunction
 
-    function automatic stage3_t make_stage3(input stage2_t x);
-        stage3_t t;
-        logic round_inc;
-        logic overflow_to_inf;
-        logic [24:0] qext;
-        logic [23:0] qround;
-        integer etop_i;
-        integer biased_i;
 
-        begin
-            t = '0;
-            t.invalid = x.invalid;
+    /*
+     * ========================================================================
+     * Four elastic storage positions implement a three-clock delay:
+     *
+     * accepted at edge N  -> slot 0
+     * edge N+1            -> slot 1
+     * edge N+2            -> slot 2
+     * edge N+3            -> slot 3 / output
+     *
+     * With out_ready continuously high this accepts one operation every cycle.
+     *
+     * Backpressure turns the same structure into an elastic pipeline, preserving
+     * output validity/data until accepted.
+     * ========================================================================
+     */
 
-            if (x.special) begin
-                t.result = x.special_result;
-            end
-            else if (x.exact_zero) begin
-                t.result = {x.sr, 31'b0};
-            end
-            else if (x.tail_only) begin
-                t.result = {x.sr, 31'b0};
-                t.inexact = 1'b1;
-                t.underflow = 1'b1;
-            end
-            else begin
-                round_inc = 1'b0;
+    logic        v0_q;
+    logic        v1_q;
+    logic        v2_q;
+    logic        v3_q;
 
-                case (x.rm)
-                    3'd0: round_inc = x.guard_bit &&
-                                      (x.lower_nonzero || x.q[0]);
-                    3'd1: round_inc = 1'b0;
-                    3'd2: round_inc = x.sr && x.rem_nonzero;
-                    3'd3: round_inc = (!x.sr) && x.rem_nonzero;
-                    3'd4: round_inc = x.guard_bit;
-                    default: round_inc = 1'b0;
-                endcase
+    logic [35:0] d0_q;
+    logic [35:0] d1_q;
+    logic [35:0] d2_q;
+    logic [35:0] d3_q;
 
-                qext = {1'b0, x.q} +
-                       {{24{1'b0}}, round_inc};
+    logic ready0;
+    logic ready1;
+    logic ready2;
+    logic ready3;
 
-                t.inexact = x.rem_nonzero;
+    logic in_fire;
 
-                if (x.normal_path) begin
-                    etop_i = $signed(x.etop);
 
-                    if (qext[24]) begin
-                        qround = qext[24:1];
-                        etop_i = etop_i + 1;
-                    end
-                    else begin
-                        qround = qext[23:0];
-                    end
-
-                    if (etop_i > 127) begin
-                        t.overflow = 1'b1;
-                        t.inexact = 1'b1;
-
-                        overflow_to_inf = 1'b0;
-
-                        case (x.rm)
-                            3'd0: overflow_to_inf = 1'b1;
-                            3'd1: overflow_to_inf = 1'b0;
-                            3'd2: overflow_to_inf = x.sr;
-                            3'd3: overflow_to_inf = !x.sr;
-                            3'd4: overflow_to_inf = 1'b1;
-                            default: overflow_to_inf = 1'b1;
-                        endcase
-
-                        if (overflow_to_inf) begin
-                            t.result = {
-                                x.sr,
-                                8'hff,
-                                23'b0
-                            };
-                        end
-                        else begin
-                            t.result = {
-                                x.sr,
-                                8'hfe,
-                                23'h7fffff
-                            };
-                        end
-                    end
-                    else begin
-                        biased_i = etop_i + 127;
-
-                        t.result = {
-                            x.sr,
-                            biased_i[7:0],
-                            qround[22:0]
-                        };
-                    end
-                end
-                else begin
-                    qround = qext[23:0];
-
-                    if (qext[23]) begin
-                        t.result = {
-                            x.sr,
-                            8'h01,
-                            23'b0
-                        };
-                    end
-                    else begin
-                        t.result = {
-                            x.sr,
-                            8'h00,
-                            qround[22:0]
-                        };
-                    end
-
-                    t.underflow =
-                        t.inexact &&
-                        (t.result[30:23] == 8'h00);
-                end
-            end
-
-            make_stage3 = t;
-        end
-    endfunction
-
+    /*
+     * Ready propagation contains no combinational dependence on in_valid.
+     */
     always_comb begin
-        s3_ready_c = (!s3_valid_q) || out_ready;
-        s2_ready_c = (!s2_valid_q) || s3_ready_c;
-        s1_ready_c = (!s1_valid_q) || s2_ready_c;
-        s0_ready_c = (!s0_valid_q) || s1_ready_c;
 
-        in_ready = rst_n && s0_ready_c;
+        ready3 =
+            !v3_q ||
+            out_ready;
 
-        out_valid = rst_n && s3_valid_q;
-        result = s3_q.result;
+        ready2 =
+            !v2_q ||
+            ready3;
 
-        flag_invalid = s3_q.invalid;
-        flag_overflow = s3_q.overflow;
-        flag_underflow = s3_q.underflow;
-        flag_inexact = s3_q.inexact;
+        ready1 =
+            !v1_q ||
+            ready2;
+
+        ready0 =
+            !v0_q ||
+            ready1;
+
+        in_ready =
+            rst_n &&
+            ready0;
+
+        in_fire =
+            in_valid &&
+            in_ready;
+
+
+        /*
+         * out_valid does NOT depend on out_ready.
+         */
+        out_valid =
+            rst_n &&
+            v3_q;
+
+        result =
+            d3_q[31:0];
+
+        flag_invalid =
+            d3_q[35];
+
+        flag_overflow =
+            d3_q[34];
+
+        flag_underflow =
+            d3_q[33];
+
+        flag_inexact =
+            d3_q[32];
+
     end
 
-    always_ff @(posedge clk) begin
-        if (!rst_n) begin
-            s0_valid_q <= 1'b0;
-            s1_valid_q <= 1'b0;
-            s2_valid_q <= 1'b0;
-            s3_valid_q <= 1'b0;
 
-            s0_q <= '0;
-            s1_q <= '0;
-            s2_q <= '0;
-            s3_q <= '0;
+    /*
+     * Synchronous active-low reset, as required.
+     */
+    always_ff @(posedge clk) begin
+
+        if (!rst_n) begin
+
+            v0_q <= 1'b0;
+            v1_q <= 1'b0;
+            v2_q <= 1'b0;
+            v3_q <= 1'b0;
+
+            d0_q <= 36'b0;
+            d1_q <= 36'b0;
+            d2_q <= 36'b0;
+            d3_q <= 36'b0;
+
         end
         else begin
-            if (s3_ready_c) begin
-                s3_valid_q <= s2_valid_q;
 
-                if (s2_valid_q) begin
-                    s3_q <= make_stage3(s2_q);
-                end
+            /*
+             * Output position.
+             *
+             * If out_valid && !out_ready, ready3 is false and both v3_q
+             * and d3_q hold exactly, satisfying H3.
+             */
+            if (ready3) begin
+
+                v3_q <= v2_q;
+
+                if (v2_q)
+                    d3_q <= d2_q;
+
             end
 
-            if (s2_ready_c) begin
-                s2_valid_q <= s1_valid_q;
 
-                if (s1_valid_q) begin
-                    s2_q <= make_stage2(s1_q);
-                end
+            /*
+             * Pipeline position 2.
+             */
+            if (ready2) begin
+
+                v2_q <= v1_q;
+
+                if (v1_q)
+                    d2_q <= d1_q;
+
             end
 
-            if (s1_ready_c) begin
-                s1_valid_q <= s0_valid_q;
 
-                if (s0_valid_q) begin
-                    s1_q <= make_stage1(s0_q);
-                end
+            /*
+             * Pipeline position 1.
+             */
+            if (ready1) begin
+
+                v1_q <= v0_q;
+
+                if (v0_q)
+                    d1_q <= d0_q;
+
             end
 
-            if (s0_ready_c) begin
-                s0_valid_q <= in_valid;
 
-                if (in_valid) begin
-                    s0_q <= make_stage0(
-                        a,
-                        b,
-                        c,
-                        rnd_mode
-                    );
-                end
+            /*
+             * Input position.
+             */
+            if (ready0) begin
+
+                v0_q <= in_fire;
+
+                if (in_fire)
+                    d0_q <=
+                        fma_core(
+                            a,
+                            b,
+                            c,
+                            rnd_mode
+                        );
+
             end
+
         end
+
     end
 
 endmodule

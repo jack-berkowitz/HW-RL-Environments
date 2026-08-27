@@ -1,305 +1,428 @@
 // =============================================================================
-// fp16_gemm_array.sv 
+// fp16_gemm_array.sv
+// 
+// Complete and synthesizable implementation of the FP16 MAC array. 
+// Features an exact 105-bit fixed-point FMA engine that eliminates the need for
+// alignment shifting prior to multiplication. The design adheres strictly to the
+// pipeline scheduling (operand skews, D=4 stage spacing, status_o timing) and 
+// IEEE 754-2019 binary16 formatting required by the contract.
 // =============================================================================
 
-module fma_stage (
-    input  logic        clk_i,
+module fma_stage(
+    input  logic        clk,
+    input  logic        en_pipe,
+    input  logic        en_clear,
     input  logic        rst_ni,
-    input  logic        enable_i,
     input  logic        flush_i,
-    input  logic [15:0] x_i,
-    input  logic [15:0] w_i,
+    input  logic [15:0] x,
+    input  logic [15:0] w,
     input  logic [15:0] p_in,
     input  logic [2:0]  rnd_i,
-    
     output logic [15:0] p_out,
-    output logic [15:0] res_out,
-    output logic [4:0]  status_o
+    output logic [4:0]  status_out
 );
-
     // -------------------------------------------------------------------------
-    // 1. INPUT PIPELINE REGISTER (Tick 0)
+    // Cycle 0: Unpack, Multiply, Shift, and Exact Accumulation
     // -------------------------------------------------------------------------
-    logic [15:0] reg_x, reg_w, reg_p;
-    logic [2:0]  reg_rnd;
-
-    always_ff @(posedge clk_i or negedge rst_ni) begin
+    logic sign_x; logic [4:0] exp_x; logic [9:0] frac_x;
+    assign sign_x = x[15];
+    assign exp_x  = x[14:10];
+    assign frac_x = x[9:0];
+    
+    logic sign_w; logic [4:0] exp_w; logic [9:0] frac_w;
+    assign sign_w = w[15];
+    assign exp_w  = w[14:10];
+    assign frac_w = w[9:0];
+    
+    logic sign_p; logic [4:0] exp_p; logic [9:0] frac_p;
+    assign sign_p = p_in[15];
+    assign exp_p  = p_in[14:10];
+    assign frac_p = p_in[9:0];
+    
+    logic is_zero_x; logic is_inf_x; logic is_nan_x; logic is_snan_x;
+    assign is_zero_x = (exp_x == 0) && (frac_x == 0);
+    assign is_inf_x  = (exp_x == 31) && (frac_x == 0);
+    assign is_nan_x  = (exp_x == 31) && (frac_x != 0);
+    assign is_snan_x = is_nan_x && (frac_x[9] == 0);
+    
+    logic is_zero_w; logic is_inf_w; logic is_nan_w; logic is_snan_w;
+    assign is_zero_w = (exp_w == 0) && (frac_w == 0);
+    assign is_inf_w  = (exp_w == 31) && (frac_w == 0);
+    assign is_nan_w  = (exp_w == 31) && (frac_w != 0);
+    assign is_snan_w = is_nan_w && (frac_w[9] == 0);
+    
+    logic is_zero_p; logic is_inf_p; logic is_nan_p; logic is_snan_p;
+    assign is_zero_p = (exp_p == 0) && (frac_p == 0);
+    assign is_inf_p  = (exp_p == 31) && (frac_p == 0);
+    assign is_nan_p  = (exp_p == 31) && (frac_p != 0);
+    assign is_snan_p = is_nan_p && (frac_p[9] == 0);
+    
+    logic sign_prod;
+    assign sign_prod = sign_x ^ sign_w;
+    
+    logic NV;
+    assign NV = is_snan_x | is_snan_w | is_snan_p | 
+                (is_inf_x & is_zero_w) | (is_zero_x & is_inf_w) |
+                ((is_inf_x | is_inf_w) & is_inf_p & (sign_prod != sign_p));
+                
+    logic is_nan_any;
+    assign is_nan_any = is_nan_x | is_nan_w | is_nan_p;
+    
+    logic invalid_mul;
+    assign invalid_mul = (is_inf_x & is_zero_w) | (is_zero_x & is_inf_w);
+    
+    logic is_inf_prod;
+    assign is_inf_prod = is_inf_x | is_inf_w;
+    
+    logic invalid_add;
+    assign invalid_add = is_inf_prod & is_inf_p & (sign_prod != sign_p);
+    
+    logic [10:0] sig_x;
+    assign sig_x = (exp_x == 0) ? {1'b0, frac_x} : {1'b1, frac_x};
+    
+    logic [10:0] sig_w;
+    assign sig_w = (exp_w == 0) ? {1'b0, frac_w} : {1'b1, frac_w};
+    
+    logic [21:0] sig_prod;
+    assign sig_prod = sig_x * sig_w;
+    
+    logic signed [6:0] weight_x;
+    assign weight_x = is_zero_x ? 7'd0 : ((exp_x == 0) ? -7'sd14 : {2'b0, exp_x} - 7'sd15);
+    
+    logic signed [6:0] weight_w;
+    assign weight_w = is_zero_w ? 7'd0 : ((exp_w == 0) ? -7'sd14 : {2'b0, exp_w} - 7'sd15);
+    
+    logic signed [7:0] weight_prod;
+    assign weight_prod = weight_x + weight_w;
+    
+    logic [10:0] sig_p;
+    assign sig_p = (exp_p == 0) ? {1'b0, frac_p} : {1'b1, frac_p};
+    
+    logic signed [6:0] weight_p;
+    assign weight_p = is_zero_p ? 7'd0 : ((exp_p == 0) ? -7'sd14 : {2'b0, exp_p} - 7'sd15);
+    
+    logic [7:0] shift_prod;
+    assign shift_prod = $signed(weight_prod) + 8'sd50;
+    
+    logic [7:0] shift_p;
+    assign shift_p = $signed(weight_p) + 8'sd60;
+    
+    logic [104:0] val_prod;
+    assign val_prod = (is_zero_x | is_zero_w) ? 105'b0 : ({83'b0, sig_prod} << shift_prod);
+    
+    logic [104:0] val_p;
+    assign val_p = is_zero_p ? 105'b0 : ({94'b0, sig_p} << shift_p);
+    
+    logic [105:0] val_prod_tc;
+    assign val_prod_tc = sign_prod ? -{1'b0, val_prod} : {1'b0, val_prod};
+    
+    logic [105:0] val_p_tc;
+    assign val_p_tc = sign_p ? -{1'b0, val_p} : {1'b0, val_p};
+    
+    logic [105:0] sum_106;
+    assign sum_106 = val_prod_tc + val_p_tc;
+    
+    logic sign_sum;
+    assign sign_sum = sum_106[105];
+    
+    logic [104:0] mag_sum;
+    assign mag_sum = sign_sum ? -sum_106 : sum_106;
+    
+    // -------------------------------------------------------------------------
+    // First Pipeline Register
+    // -------------------------------------------------------------------------
+    logic NV_reg;
+    logic is_nan_res_reg;
+    logic is_inf_res_reg;
+    logic sign_inf_reg;
+    logic [104:0] mag_sum_reg;
+    logic sign_sum_reg;
+    logic sign_prod_reg;
+    logic sign_p_reg;
+    logic [2:0] rnd_reg;
+    
+    always_ff @(posedge clk or negedge rst_ni) begin
         if (!rst_ni) begin
-            reg_x <= 16'd0;
-            reg_w <= 16'd0;
-            reg_p <= 16'd0;
-            reg_rnd <= 3'd0;
-        end else if (enable_i) begin
-            if (flush_i) begin
-                reg_x <= 16'd0;
-                reg_w <= 16'd0;
-                reg_p <= 16'd0;
-                reg_rnd <= 3'd0;
-            end else begin
-                reg_x <= x_i;
-                reg_w <= w_i;
-                reg_p <= p_in;
-                reg_rnd <= rnd_i;
-            end
+            NV_reg <= 1'b0;
+            is_nan_res_reg <= 1'b0;
+            is_inf_res_reg <= 1'b0;
+            sign_inf_reg <= 1'b0;
+            mag_sum_reg <= 105'b0;
+            sign_sum_reg <= 1'b0;
+            sign_prod_reg <= 1'b0;
+            sign_p_reg <= 1'b0;
+            rnd_reg <= 3'b0;
+        end else if (en_pipe) begin
+            NV_reg <= NV;
+            is_nan_res_reg <= is_nan_any | invalid_mul | invalid_add;
+            is_inf_res_reg <= is_inf_prod | is_inf_p;
+            sign_inf_reg <= is_inf_prod ? sign_prod : sign_p;
+            mag_sum_reg <= mag_sum;
+            sign_sum_reg <= sign_sum;
+            sign_prod_reg <= sign_prod;
+            sign_p_reg <= sign_p;
+            rnd_reg <= rnd_i;
         end
     end
-
-    // -------------------------------------------------------------------------
-    // 2. COMBINATIONAL EXACT FMA
-    // -------------------------------------------------------------------------
-    logic sign_x, sign_w, sign_y;
-    logic [4:0] exp_x, exp_w, exp_y;
-    logic [9:0] frac_x, frac_w, frac_y;
-
-    assign {sign_x, exp_x, frac_x} = reg_x;
-    assign {sign_w, exp_w, frac_w} = reg_w;
-    assign {sign_y, exp_y, frac_y} = reg_p;
-
-    // Decoding Exponents and Mantissas
-    logic is_zero_x = (exp_x == 0 && frac_x == 0);
-    logic is_zero_w = (exp_w == 0 && frac_w == 0);
-    logic is_zero_y = (exp_y == 0 && frac_y == 0);
-    logic is_zero_p = is_zero_x | is_zero_w;
-
-    logic is_inf_x = (exp_x == 31 && frac_x == 0);
-    logic is_inf_w = (exp_w == 31 && frac_w == 0);
-    logic is_inf_y = (exp_y == 31 && frac_y == 0);
-
-    logic is_nan_x = (exp_x == 31 && frac_x != 0);
-    logic is_nan_w = (exp_w == 31 && frac_w != 0);
-    logic is_nan_y = (exp_y == 31 && frac_y != 0);
-
-    logic is_nan_any = is_nan_x | is_nan_w | is_nan_y;
-    logic is_inf_mul_zero = (is_inf_x & is_zero_w) | (is_zero_x & is_inf_w);
     
-    logic is_inf_p = is_inf_x | is_inf_w;
-    logic sign_p = sign_x ^ sign_w;
-    logic is_inf_add_inf = is_inf_p & is_inf_y & (sign_p != sign_y);
-
-    logic invalid = is_inf_mul_zero | is_inf_add_inf;
-    logic is_nan_out = is_nan_any | invalid;
-
-    // Calculate True Exponents and fractions
-    logic signed [6:0] E_x = (exp_x == 0) ? -7'sd14 : signed'({2'b0, exp_x}) - 7'sd15;
-    logic signed [6:0] E_w = (exp_w == 0) ? -7'sd14 : signed'({2'b0, exp_w}) - 7'sd15;
-    logic signed [6:0] E_y = (exp_y == 0) ? -7'sd14 : signed'({2'b0, exp_y}) - 7'sd15;
-
-    logic [10:0] m_x = {(exp_x != 0), frac_x};
-    logic [10:0] m_w = {(exp_w != 0), frac_w};
-    logic [10:0] m_y = {(exp_y != 0), frac_y};
-
-    logic [21:0] M_p = m_x * m_w;
-    logic signed [7:0] E_p = E_x + E_w;
-
-    // Shift to align radix point such that bit 48 represents 2^0
-    logic [5:0] sh_p = 6'(E_p + 8'sd28);
-    logic [5:0] sh_y = 6'(E_y + 8'sd38);
-
-    logic [104:0] V_p = is_zero_p ? 105'd0 : (105'(M_p) << sh_p);
-    logic [104:0] V_y = is_zero_y ? 105'd0 : (105'(m_y) << sh_y);
-
-    logic signed [105:0] S_p = sign_p ? -signed'({1'b0, V_p}) : signed'({1'b0, V_p});
-    logic signed [105:0] S_y = sign_y ? -signed'({1'b0, V_y}) : signed'({1'b0, V_y});
-
-    logic signed [105:0] S_sum = S_p + S_y;
-
     // -------------------------------------------------------------------------
-    // 3. NORMALIZATION & ROUNDING
+    // Cycle 1: LZD, Formatting, Rounding, and Exceptions
     // -------------------------------------------------------------------------
-    logic sign_res;
-    logic [104:0] U;
-    
+    logic [104:0] v;
+    logic [6:0] lz;
     always_comb begin
-        if (S_sum == 0) begin
-            if (is_zero_p && is_zero_y) sign_res = (sign_p == sign_y) ? sign_p : (reg_rnd == 3'd2);
-            else sign_res = (reg_rnd == 3'd2);
-            U = 105'd0;
-        end else begin
-            sign_res = S_sum[105];
-            U = sign_res ? -S_sum : S_sum;
-        end
+        v = mag_sum_reg;
+        lz = 0;
+        // Unrolled static-bound logical tree safely synthesisable
+        if (v[104:41] == 0) begin lz = lz + 64; v = v << 64; end
+        if (v[104:73] == 0) begin lz = lz + 32; v = v << 32; end
+        if (v[104:89] == 0) begin lz = lz + 16; v = v << 16; end
+        if (v[104:97] == 0) begin lz = lz + 8;  v = v << 8;  end
+        if (v[104:101]== 0) begin lz = lz + 4;  v = v << 4;  end
+        if (v[104:103]== 0) begin lz = lz + 2;  v = v << 2;  end
+        if (v[104]    == 0) begin lz = lz + 1;  v = v << 1;  end
+        if (v[104]    == 0) begin lz = lz + 1; end
     end
-
-    // Binary search Priority Encoder for MSB (Synthesizable and Unrolled)
-    logic [127:0] U_ext;
-    logic [127:0] scan_U;
-    logic [6:0]   msb;
-
-    assign U_ext = {23'd0, U};
     
-    always_comb begin
-        scan_U = U_ext;
-        msb = 7'd0;
-        if (|scan_U[127:64]) begin msb[6] = 1'b1; scan_U = {64'd0,  scan_U[127:64]}; end
-        if (|scan_U[63:32])  begin msb[5] = 1'b1; scan_U = {96'd0,  scan_U[63:32]};  end
-        if (|scan_U[31:16])  begin msb[4] = 1'b1; scan_U = {112'd0, scan_U[31:16]};  end
-        if (|scan_U[15:8])   begin msb[3] = 1'b1; scan_U = {120'd0, scan_U[15:8]};   end
-        if (|scan_U[7:4])    begin msb[2] = 1'b1; scan_U = {124'd0, scan_U[7:4]};    end
-        if (|scan_U[3:2])    begin msb[1] = 1'b1; scan_U = {126'd0, scan_U[3:2]};    end
-        if (scan_U[1])       begin msb[0] = 1'b1; end
-    end
-
-    logic [6:0] target_msb;
-    logic [6:0] shift;
-    assign target_msb = (msb > 7'd34) ? msb : 7'd34;
-    assign shift      = target_msb - 7'd10;
-
-    logic [127:0] shifted_U;
-    logic [9:0]   frac_unrounded;
-    logic         round_bit;
-    logic [127:0] sticky_mask;
-    logic         sticky_bit;
-
-    assign shifted_U      = U_ext >> shift;
-    assign frac_unrounded = shifted_U[9:0];
-    assign round_bit      = (shift > 0) ? U_ext[shift - 1] : 1'b0;
-    assign sticky_mask    = ~( (~128'd0) << (shift > 0 ? (shift - 1) : 0) );
-    assign sticky_bit     = (U_ext & sticky_mask) != 0;
-
-    logic is_inexact = round_bit | sticky_bit;
+    logic [7:0] pos;
+    assign pos = 104 - lz;
+    
+    logic [7:0] eff_pos;
+    assign eff_pos = (pos < 56) ? 8'd56 : pos; // Cap extraction scale at the subnormal edge
+    
+    logic signed [8:0] E_eff;
+    assign E_eff = eff_pos - 70;
+    
+    logic [7:0] shift_amount;
+    assign shift_amount = eff_pos - 11;
+    
+    logic [104:0] shifted_mag;
+    assign shifted_mag = mag_sum_reg >> shift_amount;
+    
+    logic [11:0] extracted;
+    assign extracted = shifted_mag[11:0];
+    
+    logic [104:0] mask;
+    assign mask = (105'b1 << shift_amount) - 1'b1;
+    
+    logic sticky;
+    assign sticky = |(mag_sum_reg & mask);
+    
+    logic G; logic [9:0] fraction; logic hidden; logic S;
+    assign G = extracted[0];
+    assign fraction = extracted[10:1];
+    assign hidden = extracted[11];
+    assign S = sticky;
+    
     logic round_up;
     always_comb begin
-        case (reg_rnd)
-            3'd0: round_up = round_bit & (sticky_bit | frac_unrounded[0]); // RNE
-            3'd1: round_up = 1'b0;                                         // RTZ
-            3'd2: round_up =  sign_res ? is_inexact : 1'b0;                // RDN
-            3'd3: round_up = ~sign_res ? is_inexact : 1'b0;                // RUP
-            3'd4: round_up = round_bit;                                    // RMM
+        round_up = 0;
+        case (rnd_reg)
+            3'd0: round_up = G & (S | fraction[0]);
+            3'd1: round_up = 1'b0;
+            3'd2: round_up = sign_sum_reg & (G | S);
+            3'd3: round_up = (!sign_sum_reg) & (G | S);
+            3'd4: round_up = G;
             default: round_up = 1'b0;
         endcase
     end
-
-    logic [10:0] frac_rounded_ext;
-    logic        carry;
-    logic [9:0]  frac_rounded;
-    logic [6:0]  E_unrounded;
-    logic [6:0]  E_rounded;
-
-    assign frac_rounded_ext = {1'b0, frac_unrounded} + {10'd0, round_up};
-    assign carry            = frac_rounded_ext[10];
-    assign frac_rounded     = frac_rounded_ext[9:0];
     
-    assign E_unrounded = (msb >= 7'd34) ? (msb - 7'd34 + 7'd1) : 7'd0;
-    assign E_rounded   = E_unrounded + {6'd0, carry};
-
-    logic is_overflow = (E_rounded >= 7'd31);
-    logic is_tiny     = (E_rounded == 7'd0);
-
-    logic [15:0] res_next;
-    logic [4:0]  flags_next;
-
+    logic [11:0] sig_eff;
+    assign sig_eff = {hidden, fraction};
+    
+    logic [11:0] sig_rounded;
+    assign sig_rounded = sig_eff + round_up;
+    
+    logic signed [8:0] E_final;
+    logic [9:0] fraction_final;
     always_comb begin
-        if (is_nan_out) begin
-            res_next   = 16'h7E00;
-            flags_next = {invalid, 4'd0}; // NV=invalid, DZ,OF,UF,NX=0
-        end else if (is_inf_p | is_inf_y) begin
-            res_next   = {(is_inf_p ? sign_p : sign_y), 5'h1F, 10'd0};
-            flags_next = 5'd0;
-        end else if (S_sum == 0) begin
-            res_next   = {sign_res, 15'd0};
-            flags_next = 5'd0;
-        end else if (is_overflow) begin
-            logic return_inf;
-            case (reg_rnd)
-                3'd0, 3'd4: return_inf = 1'b1;
-                3'd1:       return_inf = 1'b0;
-                3'd2:       return_inf = sign_res ? 1'b1 : 1'b0;
-                3'd3:       return_inf = ~sign_res ? 1'b1 : 1'b0;
-                default:    return_inf = 1'b0;
-            endcase
-            res_next   = return_inf ? {sign_res, 5'h1F, 10'd0} : {sign_res, 5'h1E, 10'h3FF};
-            flags_next = 5'b00101; // OF=1, NX=1
+        if (sig_rounded[11]) begin
+            E_final = E_eff + 1;
+            fraction_final = 10'b0;
         end else begin
-            res_next   = {sign_res, E_rounded[4:0], frac_rounded};
-            flags_next = {3'b000, is_tiny & is_inexact, is_inexact}; // UF and NX
+            E_final = E_eff;
+            fraction_final = sig_rounded[9:0];
         end
     end
-
+    
+    logic [4:0] exp_encoded;
+    always_comb begin
+        if (E_final < -14) exp_encoded = 5'b0;
+        else if (E_final == -14 && sig_rounded[10] == 0) exp_encoded = 5'b0;
+        else exp_encoded = E_final + 15;
+    end
+    
+    logic inexact;
+    assign inexact = G | S;
+    
+    logic tiny;
+    assign tiny = (exp_encoded == 0) && (mag_sum_reg != 0);
+    
+    logic UF;
+    assign UF = tiny & inexact;
+    
+    logic OF;
+    assign OF = (E_final > 15);
+    
+    logic NX;
+    assign NX = inexact | OF;
+    
+    logic [15:0] computed_p_out;
+    logic [4:0]  computed_status;
+    logic s_zero;
+    logic [15:0] overflow_res;
+    
+    always_comb begin
+        s_zero = 1'b0;
+        overflow_res = 16'b0;
+        
+        if (is_nan_res_reg) begin
+            computed_p_out = 16'h7E00;
+            computed_status = {NV_reg, 4'b0000};
+        end else if (is_inf_res_reg) begin
+            computed_p_out = {sign_inf_reg, 5'h1F, 10'h0};
+            computed_status = 5'b0;
+        end else if (mag_sum_reg == 0) begin
+            if (sign_prod_reg == sign_p_reg) s_zero = sign_prod_reg;
+            else s_zero = (rnd_reg == 3'd2) ? 1'b1 : 1'b0;
+            computed_p_out = {s_zero, 15'b0};
+            computed_status = 5'b0;
+        end else if (OF) begin
+            case (rnd_reg)
+                3'd0: overflow_res = {sign_sum_reg, 5'h1F, 10'h0};
+                3'd1: overflow_res = {sign_sum_reg, 5'h1E, 10'h3FF};
+                3'd2: overflow_res = sign_sum_reg ? {1'b1, 5'h1F, 10'h0} : {1'b0, 5'h1E, 10'h3FF};
+                3'd3: overflow_res = sign_sum_reg ? {1'b1, 5'h1E, 10'h3FF} : {1'b0, 5'h1F, 10'h0};
+                3'd4: overflow_res = {sign_sum_reg, 5'h1F, 10'h0};
+                default: overflow_res = {sign_sum_reg, 5'h1F, 10'h0};
+            endcase
+            computed_p_out = overflow_res;
+            computed_status = {1'b0, 1'b0, 1'b1, 1'b0, 1'b1};
+        end else begin
+            computed_p_out = {sign_sum_reg, exp_encoded, fraction_final};
+            computed_status = {1'b0, 1'b0, 1'b0, UF, NX};
+        end
+    end
+    
     // -------------------------------------------------------------------------
-    // 4. PIPELINE REGISTERS (Ticks 1-4)
+    // Second Pipeline Register (Output and Exception)
     // -------------------------------------------------------------------------
-    logic [15:0] reg_res1, reg_res2, reg_res3;
-    logic [4:0]  reg_flags1, reg_flags2;
-
-    always_ff @(posedge clk_i or negedge rst_ni) begin
+    always_ff @(posedge clk or negedge rst_ni) begin
         if (!rst_ni) begin
-            reg_res1 <= 16'd0; reg_res2 <= 16'd0; reg_res3 <= 16'd0;
-            reg_flags1 <= 5'd0; reg_flags2 <= 5'd0;
-        end else if (enable_i) begin
-            if (flush_i) begin
-                reg_res1 <= 16'd0; reg_res2 <= 16'd0; reg_res3 <= 16'd0;
-                reg_flags1 <= 5'd0; reg_flags2 <= 5'd0;
-            end else begin
-                reg_res1 <= res_next;
-                reg_res2 <= reg_res1;
-                reg_res3 <= reg_res2;
-
-                reg_flags1 <= flags_next;
-                reg_flags2 <= reg_flags1;
-            end
+            status_out <= 5'b0;
+        end else if (en_pipe) begin
+            status_out <= computed_status;
         end
     end
-
-    assign status_o = reg_flags2; // Available exactly 2 edges after operand read (d(k)+2)
-    assign res_out  = reg_res2;   // Evaluated dot output for z_o
-    assign p_out    = reg_res3;   // Shifted for next FMA stage (creating D=4 interval)
-
+    
+    always_ff @(posedge clk or negedge rst_ni) begin
+        if (!rst_ni) begin
+            p_out <= 16'b0;
+        end else if (en_clear) begin
+            if (flush_i) p_out <= 16'b0;
+            else p_out <= computed_p_out;
+        end
+    end
 endmodule
 
 
-// =============================================================================
-// Top Level Matrix 
-// =============================================================================
-
 module fp16_gemm_array #(
-    parameter int WIDTH = 8,
-    parameter int HEIGHT = 8
+  parameter int unsigned HEIGHT = 8,
+  parameter int unsigned WIDTH  = 8
 ) (
-    input  logic                                      clk_i,
-    input  logic                                      rst_ni,
-    input  logic [WIDTH-1:0][HEIGHT-1:0][15:0]        x_i,
-    input  logic [HEIGHT-1:0][15:0]                   w_i,
-    input  logic [WIDTH-1:0][15:0]                    y_i,
-    
-    output logic [WIDTH-1:0][15:0]                    z_o,
-    
-    input  logic [2:0]                                rnd_i,
-    input  logic                                      accumulate_i,
-    input  logic [WIDTH-1:0]                          row_clk_gate_en_i,
-    input  logic                                      reg_enable_i,
-    input  logic                                      flush_i,
-    
-    output logic [WIDTH-1:0][HEIGHT-1:0][4:0]         status_o
+  input  logic                                     clk_i,
+  input  logic                                     rst_ni,
+  input  logic [WIDTH-1:0][HEIGHT-1:0][15:0]       x_i,
+  input  logic            [HEIGHT-1:0][15:0]       w_i,
+  input  logic [WIDTH-1:0]            [15:0]       y_i,
+  output logic [WIDTH-1:0]            [15:0]       z_o,
+  input  logic [2:0]                               rnd_i,
+  input  logic                                     accumulate_i,
+  input  logic [WIDTH-1:0]                         row_clk_gate_en_i,
+  input  logic                                     reg_enable_i,
+  input  logic                                     flush_i,
+  output logic [WIDTH-1:0][HEIGHT-1:0][4:0]        status_o
 );
 
-    genvar r, k;
-    generate
-        for (r = 0; r < WIDTH; r++) begin : row_gen
-            logic [15:0] p_chain [HEIGHT+1];
-            logic [15:0] stage_res_out [HEIGHT];
-
-            // Multiplexer handles accumulation feedback directly per Clause C3
-            // Since it connects synchronously, feedback is inherently resolved 1 tick earlier
-            assign p_chain[0] = accumulate_i ? stage_res_out[HEIGHT-1] : y_i[r];
-            assign z_o[r]     = stage_res_out[HEIGHT-1];
-            
-            // FMA Stages
-            for (k = 0; k < HEIGHT; k++) begin : stg
-                fma_stage fma_inst (
-                    .clk_i(clk_i),
-                    .rst_ni(rst_ni),
-                    .enable_i(row_clk_gate_en_i[r] & (reg_enable_i | flush_i)),
-                    .flush_i(flush_i),
-                    .x_i(x_i[r][k]),
-                    .w_i(w_i[k]),
-                    .p_in(p_chain[k]),
-                    .rnd_i(rnd_i),
-                    .p_out(p_chain[k+1]),
-                    .res_out(stage_res_out[k]),
-                    .status_o(status_o[r][k])
-                );
+    logic [WIDTH-1:0][HEIGHT-1:0][15:0] p_out;
+    logic [WIDTH-1:0][HEIGHT-1:0][4:0]  status_out;
+    
+    logic [WIDTH-1:0][HEIGHT-1:0][15:0] p_delay1;
+    logic [WIDTH-1:0][HEIGHT-1:0][15:0] p_delay2;
+    logic [WIDTH-1:0][HEIGHT-1:0][15:0] stage_p_in;
+    
+    integer r_idx, k_idx;
+    
+    // Partial-sum tracking shift-registers (spaced explicitly by 2 to hit D=4 delays)
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            for (r_idx = 0; r_idx < WIDTH; r_idx = r_idx + 1) begin
+                for (k_idx = 0; k_idx < HEIGHT; k_idx = k_idx + 1) begin
+                    p_delay1[r_idx][k_idx] <= 16'b0;
+                    p_delay2[r_idx][k_idx] <= 16'b0;
+                end
+            end
+        end else begin
+            for (r_idx = 0; r_idx < WIDTH; r_idx = r_idx + 1) begin
+                if (row_clk_gate_en_i[r_idx]) begin
+                    if (flush_i) begin
+                        for (k_idx = 0; k_idx < HEIGHT; k_idx = k_idx + 1) begin
+                            p_delay1[r_idx][k_idx] <= 16'b0;
+                            p_delay2[r_idx][k_idx] <= 16'b0;
+                        end
+                    end else if (reg_enable_i) begin
+                        for (k_idx = 0; k_idx < HEIGHT; k_idx = k_idx + 1) begin
+                            p_delay1[r_idx][k_idx] <= p_out[r_idx][k_idx];
+                            p_delay2[r_idx][k_idx] <= p_delay1[r_idx][k_idx];
+                        end
+                    end
+                end
             end
         end
-    endgenerate
+    end
+
+    // Input routing to individual stages
+    always_comb begin
+        for (int r = 0; r < WIDTH; r = r + 1) begin
+            stage_p_in[r][0] = accumulate_i ? z_o[r] : y_i[r];
+            for (int k = 1; k < HEIGHT; k = k + 1) begin
+                stage_p_in[r][k] = p_delay2[r][k-1];
+            end
+        end
+    end
+
+    // FMA stage generation
+    for (genvar r = 0; r < WIDTH; r = r + 1) begin : gen_row
+        logic row_en_pipe;
+        logic row_en_clear;
+        assign row_en_pipe  = row_clk_gate_en_i[r] & reg_enable_i;
+        assign row_en_clear = row_clk_gate_en_i[r] & (reg_enable_i | flush_i);
+        
+        for (genvar k = 0; k < HEIGHT; k = k + 1) begin : gen_stage
+            fma_stage u_fma (
+                .clk(clk_i),
+                .en_pipe(row_en_pipe),
+                .en_clear(row_en_clear),
+                .rst_ni(rst_ni),
+                .flush_i(flush_i),
+                .x(x_i[r][k]),
+                .w(w_i[k]),
+                .p_in(stage_p_in[r][k]),
+                .rnd_i(rnd_i),
+                .p_out(p_out[r][k]),
+                .status_out(status_out[r][k])
+            );
+        end
+    end
+
+    // Outputs routing
+    always_comb begin
+        for (int r = 0; r < WIDTH; r = r + 1) begin
+            z_o[r] = p_out[r][HEIGHT-1];
+            for (int k = 0; k < HEIGHT; k = k + 1) begin
+                status_o[r][k] = status_out[r][k];
+            end
+        end
+    end
 
 endmodule

@@ -43,739 +43,1626 @@ module sv39_mmu (
   input  logic [7:0][53:0] pmpaddr_i
 );
 
-  localparam int unsigned TLB_ENTRIES = 16;
+  localparam logic [63:0] CAUSE_INST_ACCESS  = 64'd1;
+  localparam logic [63:0] CAUSE_LOAD_ACCESS  = 64'd5;
+  localparam logic [63:0] CAUSE_STORE_ACCESS = 64'd7;
 
-  typedef enum logic [1:0] {
-    WALK_IDLE,
-    WALK_REQ,
-    WALK_WAIT,
-    WALK_DRAIN
-  } walk_state_t;
+  localparam logic [63:0] CAUSE_INST_PAGE  = 64'd12;
+  localparam logic [63:0] CAUSE_LOAD_PAGE  = 64'd13;
+  localparam logic [63:0] CAUSE_STORE_PAGE = 64'd15;
+
+  localparam int TLB_R = 0;
+  localparam int TLB_W = 1;
+  localparam int TLB_X = 2;
+  localparam int TLB_U = 3;
+  localparam int TLB_A = 4;
+  localparam int TLB_D = 5;
+
+  typedef enum logic [2:0] {
+    S_IDLE,
+    S_WALK_REQ,
+    S_WALK_WAIT,
+    S_WALK_HAVE,
+    S_DRAIN
+  } state_t;
+
+  state_t state_q;
 
   /*
-   * TLB entry format.  The two TLBs are deliberately separate and each has
-   * exactly sixteen fully-associative entries, as required by P2.
+   * Current page-walk request.
    */
-  logic                    itlb_valid_q [0:TLB_ENTRIES-1];
-  logic [26:0]             itlb_vpn_q   [0:TLB_ENTRIES-1];
-  logic [43:0]             itlb_ppn_q   [0:TLB_ENTRIES-1];
-  logic [1:0]              itlb_level_q [0:TLB_ENTRIES-1];
-  logic [15:0]             itlb_asid_q  [0:TLB_ENTRIES-1];
-  logic [7:0]              itlb_flags_q [0:TLB_ENTRIES-1];
+  logic        req_is_fetch_q;
+  logic        req_is_store_q;
+  logic [63:0] req_va_q;
+  logic [1:0]  req_priv_q;
+  logic        req_sum_q;
+  logic        req_mxr_q;
+  logic [15:0] req_asid_q;
+  logic [43:0] req_satp_ppn_q;
 
-  logic                    dtlb_valid_q [0:TLB_ENTRIES-1];
-  logic [26:0]             dtlb_vpn_q   [0:TLB_ENTRIES-1];
-  logic [43:0]             dtlb_ppn_q   [0:TLB_ENTRIES-1];
-  logic [1:0]              dtlb_level_q [0:TLB_ENTRIES-1];
-  logic [15:0]             dtlb_asid_q  [0:TLB_ENTRIES-1];
-  logic [7:0]              dtlb_flags_q [0:TLB_ENTRIES-1];
+  logic [1:0]  walk_level_q;
+  logic [55:0] walk_addr_q;
+  logic [63:0] pte_hold_q;
 
-  logic [3:0]              itlb_repl_q;
-  logic [3:0]              dtlb_repl_q;
+  /*
+   * DTLB: exactly 16 fully-associative entries.
+   *
+   * perm layout:
+   *   [0] R
+   *   [1] W
+   *   [2] X
+   *   [3] U
+   *   [4] A
+   *   [5] D
+   */
+  logic [15:0] dtlb_valid_q;
+  logic [26:0] dtlb_vpn_q    [0:15];
+  logic [43:0] dtlb_ppn_q    [0:15];
+  logic [15:0] dtlb_asid_q   [0:15];
+  logic        dtlb_global_q [0:15];
+  logic [1:0]  dtlb_level_q  [0:15];
+  logic [5:0]  dtlb_perm_q   [0:15];
+  logic [3:0]  dtlb_rr_q;
 
-  /* Current walk/request context. */
-  walk_state_t             walk_state_q;
-  logic                    walk_fetch_q;
-  logic                    walk_store_q;
-  logic [63:0]             walk_va_q;
-  logic [1:0]              walk_priv_q;
-  logic                    walk_sum_q;
-  logic                    walk_mxr_q;
-  logic [15:0]             walk_asid_q;
-  logic [43:0]             walk_root_ppn_q;
-  logic [1:0]              walk_level_q;
-  logic [55:0]             walk_addr_q;
+  /*
+   * ITLB: exactly 16 fully-associative entries.
+   */
+  logic [15:0] itlb_valid_q;
+  logic [26:0] itlb_vpn_q    [0:15];
+  logic [43:0] itlb_ppn_q    [0:15];
+  logic [15:0] itlb_asid_q   [0:15];
+  logic        itlb_global_q [0:15];
+  logic [1:0]  itlb_level_q  [0:15];
+  logic [5:0]  itlb_perm_q   [0:15];
+  logic [3:0]  itlb_rr_q;
 
-  /* Lookup results for the currently presented requests. */
-  logic                    itlb_hit_c;
-  logic [3:0]              itlb_hit_idx_c;
-  logic [55:0]             itlb_pa_c;
-  logic                    itlb_perm_ok_c;
+  logic        dtlb_hit_c;
+  logic [3:0]  dtlb_hit_idx_c;
+  logic [55:0] dtlb_hit_pa_c;
+  logic        dtlb_perm_ok_c;
 
-  logic                    dtlb_hit_c;
-  logic [3:0]              dtlb_hit_idx_c;
-  logic [55:0]             dtlb_pa_c;
-  logic                    dtlb_perm_ok_c;
+  logic        itlb_hit_c;
+  logic [3:0]  itlb_hit_idx_c;
+  logic [55:0] itlb_hit_pa_c;
+  logic        itlb_perm_ok_c;
 
-  /* Walker-side PTE decode. */
-  logic                    pte_v_c;
-  logic                    pte_r_c;
-  logic                    pte_w_c;
-  logic                    pte_x_c;
-  logic                    pte_u_c;
-  logic                    pte_a_c;
-  logic                    pte_d_c;
-  logic                    pte_leaf_c;
-  logic                    pte_reserved_c;
-  logic [43:0]             pte_ppn_c;
-  logic                    pte_super_misaligned_c;
-  logic                    pte_perm_ok_c;
-  logic [55:0]             pte_pa_c;
-  logic [55:0]             next_pte_addr_c;
-  logic                    walk_pmp_allow_c;
+  logic [3:0]  dtlb_victim_c;
+  logic [3:0]  itlb_victim_c;
+  logic        dtlb_invalid_found_c;
+  logic        itlb_invalid_found_c;
 
-  logic                    itlb_free_found_c;
-  logic [3:0]              itlb_install_idx_c;
-  logic                    dtlb_free_found_c;
-  logic [3:0]              dtlb_install_idx_c;
+  logic        walk_pmp_allow_c;
+  logic [63:0] pte_data_c;
 
-  function automatic logic vpn_matches(
-    input logic [26:0] stored_vpn,
-    input logic [1:0]  level,
-    input logic [63:0] va
+
+  /*
+   * --------------------------------------------------------------------------
+   * Sv39 helpers
+   * --------------------------------------------------------------------------
+   */
+
+  function automatic logic [8:0] vpn_for_level(
+    input logic [63:0] va,
+    input logic [1:0]  level
   );
     begin
       case (level)
-        2'd2: vpn_matches = (stored_vpn[26:18] == va[38:30]);
-        2'd1: vpn_matches = (stored_vpn[26:9]  == va[38:21]);
-        default: vpn_matches = (stored_vpn == va[38:12]);
+        2'd2:    vpn_for_level = va[38:30];
+        2'd1:    vpn_for_level = va[29:21];
+        default: vpn_for_level = va[20:12];
       endcase
     end
   endfunction
 
-  function automatic logic [55:0] make_paddr(
+
+  function automatic logic [55:0] make_pte_addr(
+    input logic [43:0] ppn,
+    input logic [8:0]  vpn
+  );
+    begin
+      make_pte_addr =
+          {ppn, 12'b0} +
+          {44'b0, vpn, 3'b000};
+    end
+  endfunction
+
+
+  function automatic logic [55:0] make_root_pte_addr(
+    input logic [43:0] root_ppn,
+    input logic [63:0] va
+  );
+    begin
+      make_root_pte_addr =
+          make_pte_addr(root_ppn, va[38:30]);
+    end
+  endfunction
+
+
+  /*
+   * A level-0 translation matches the entire VPN.
+   *
+   * A level-1 translation is a 2 MiB superpage, so VPN[0] is not
+   * part of the tag.
+   *
+   * A level-2 translation is a 1 GiB superpage, so VPN[1:0] are
+   * not part of the tag.
+   */
+  function automatic logic vpn_match(
+    input logic [26:0] entry_vpn,
+    input logic [26:0] req_vpn,
+    input logic [1:0]  level
+  );
+    begin
+      case (level)
+        2'd2:
+          vpn_match =
+              (entry_vpn[26:18] == req_vpn[26:18]);
+
+        2'd1:
+          vpn_match =
+              (entry_vpn[26:9] == req_vpn[26:9]);
+
+        default:
+          vpn_match =
+              (entry_vpn == req_vpn);
+      endcase
+    end
+  endfunction
+
+
+  /*
+   * Sv39 superpage alignment check.
+   */
+  function automatic logic leaf_misaligned(
+    input logic [43:0] ppn,
+    input logic [1:0]  level
+  );
+    begin
+      case (level)
+        2'd2:
+          leaf_misaligned = (ppn[17:0] != 18'b0);
+
+        2'd1:
+          leaf_misaligned = (ppn[8:0] != 9'b0);
+
+        default:
+          leaf_misaligned = 1'b0;
+      endcase
+    end
+  endfunction
+
+
+  /*
+   * Compose the final physical address.
+   *
+   * L0:
+   *   PPN comes entirely from the PTE.
+   *
+   * L1:
+   *   low nine PPN bits come from VPN[0].
+   *
+   * L2:
+   *   low eighteen PPN bits come from VPN[1:0].
+   */
+  function automatic logic [55:0] compose_pa(
     input logic [43:0] ppn,
     input logic [1:0]  level,
     input logic [63:0] va
   );
-    logic [43:0] final_ppn;
     begin
-      final_ppn = ppn;
       case (level)
-        2'd2: final_ppn[17:0] = va[29:12];
-        2'd1: final_ppn[8:0]  = va[20:12];
-        default: final_ppn = ppn;
+        2'd2:
+          compose_pa = {
+            ppn[43:18],
+            va[29:12],
+            va[11:0]
+          };
+
+        2'd1:
+          compose_pa = {
+            ppn[43:9],
+            va[20:12],
+            va[11:0]
+          };
+
+        default:
+          compose_pa = {
+            ppn,
+            va[11:0]
+          };
       endcase
-      make_paddr = {final_ppn, va[11:0]};
     end
   endfunction
 
-  function automatic logic [55:0] pte_address(
-    input logic [43:0] table_ppn,
-    input logic [63:0] va,
-    input logic [1:0]  level
+
+  function automatic logic [43:0] compose_ppn(
+    input logic [43:0] ppn,
+    input logic [1:0]  level,
+    input logic [63:0] va
   );
-    logic [8:0] vpn_sel;
-    logic [55:0] base;
-    logic [55:0] offs;
+    logic [55:0] pa;
+
     begin
-      case (level)
-        2'd2: vpn_sel = va[38:30];
-        2'd1: vpn_sel = va[29:21];
-        default: vpn_sel = va[20:12];
-      endcase
-      base = {table_ppn, 12'b0};
-      offs = {{44{1'b0}}, vpn_sel, 3'b000};
-      pte_address = base + offs;
+      pa = compose_pa(ppn, level, va);
+      compose_ppn = pa[55:12];
     end
   endfunction
 
+
+  /*
+   * Leaf permission checking.
+   */
   function automatic logic permission_ok(
-    input logic [7:0] flags,
+    input logic [5:0] perm,
     input logic       is_fetch,
     input logic       is_store,
     input logic [1:0] priv,
     input logic       sum,
     input logic       mxr
   );
-    logic r;
-    logic w;
-    logic x;
-    logic u;
-    logic a;
-    logic d;
     logic access_ok;
     logic priv_ok;
-    begin
-      r = flags[1];
-      w = flags[2];
-      x = flags[3];
-      u = flags[4];
-      a = flags[6];
-      d = flags[7];
 
+    begin
       access_ok = 1'b0;
+      priv_ok   = 1'b1;
+
+      /*
+       * Basic R/W/X permission.
+       */
       if (is_fetch) begin
-        access_ok = x;
+        access_ok = perm[TLB_X];
       end
       else if (is_store) begin
-        access_ok = w;
+        access_ok = perm[TLB_W];
       end
       else begin
-        access_ok = r || (mxr && x);
+        access_ok =
+            perm[TLB_R] |
+            (mxr & perm[TLB_X]);
       end
 
-      priv_ok = 1'b1;
+      /*
+       * Privilege/U handling.
+       *
+       * 00 = U
+       * 01 = S
+       */
       if (priv == 2'b00) begin
-        priv_ok = u;
+        priv_ok = perm[TLB_U];
       end
       else if (priv == 2'b01) begin
-        if (u) begin
-          if (is_fetch) begin
+        if (perm[TLB_U]) begin
+          /*
+           * Supervisor can never execute from a U page.
+           * SUM only affects loads/stores.
+           */
+          if (is_fetch)
             priv_ok = 1'b0;
-          end
-          else begin
+          else
             priv_ok = sum;
-          end
         end
       end
 
-      permission_ok = access_ok && priv_ok && a;
-      if (is_store) begin
-        permission_ok = permission_ok && d;
-      end
+      /*
+       * A is required for every translated access.
+       */
+      permission_ok =
+          access_ok &
+          priv_ok &
+          perm[TLB_A];
+
+      /*
+       * Store additionally requires D.
+       */
+      if (is_store)
+        permission_ok =
+            permission_ok &
+            perm[TLB_D];
     end
   endfunction
+
 
   function automatic logic [63:0] page_fault_cause(
     input logic is_fetch,
     input logic is_store
   );
     begin
-      if (is_fetch) begin
-        page_fault_cause = 64'd12;
-      end
-      else if (is_store) begin
-        page_fault_cause = 64'd15;
-      end
-      else begin
-        page_fault_cause = 64'd13;
-      end
+      if (is_fetch)
+        page_fault_cause = CAUSE_INST_PAGE;
+      else if (is_store)
+        page_fault_cause = CAUSE_STORE_PAGE;
+      else
+        page_fault_cause = CAUSE_LOAD_PAGE;
     end
   endfunction
+
 
   function automatic logic [63:0] access_fault_cause(
     input logic is_fetch,
     input logic is_store
   );
     begin
-      if (is_fetch) begin
-        access_fault_cause = 64'd1;
-      end
-      else if (is_store) begin
-        access_fault_cause = 64'd7;
-      end
-      else begin
-        access_fault_cause = 64'd5;
-      end
+      if (is_fetch)
+        access_fault_cause = CAUSE_INST_ACCESS;
+      else if (is_store)
+        access_fault_cause = CAUSE_STORE_ACCESS;
+      else
+        access_fault_cause = CAUSE_LOAD_ACCESS;
     end
   endfunction
+
 
   /*
-   * PMP check for the walker's 8-byte read.  The first PMP entry whose region
-   * overlaps the access has priority.  The whole 8-byte access must fit in the
-   * region and R must be set.  No match denies.
+   * --------------------------------------------------------------------------
+   * PMP
+   * --------------------------------------------------------------------------
+   *
+   * PMP is checked ONLY for page-table walker reads, as required by A8.
+   *
+   * The walker always performs an eight-byte read, so the complete eight-byte
+   * access must fit inside the winning PMP region.
+   *
+   * Lowest-numbered matching PMP entry wins.
+   * No matching entry means deny.
+   *
+   * Only PMP R matters because the walker only reads.
    */
-  function automatic logic pmp_read_allowed(input logic [55:0] addr);
-    integer e;
-    integer j;
-    integer ones;
-    logic matched;
-    logic stop_count;
-    logic [1:0] mode;
-    logic [56:0] access_lo;
-    logic [56:0] access_hi;
-    logic [56:0] low_bound;
-    logic [56:0] high_bound;
-    logic [56:0] prev_top;
-    logic [56:0] enc_addr;
-    logic [56:0] enc_mask;
-    logic [56:0] region_size;
+  function automatic logic pmp_read_allowed(
+    input logic [55:0] addr
+  );
+
+    integer n;
+
+    logic        matched;
+    logic        overlap;
+    logic        full_match;
+    logic [1:0]  mode;
+
+    logic [55:0] access_last;
+
+    logic [55:0] lo;
+    logic [55:0] hi_excl;
+    logic [55:0] region_last;
+
+    logic [53:0] napot_change;
+    logic [55:0] napot_mask;
+    logic [55:0] pmp_addr_bytes;
+
     begin
+      matched          = 1'b0;
       pmp_read_allowed = 1'b0;
-      matched = 1'b0;
-      access_lo = {1'b0, addr};
-      access_hi = {1'b0, addr} + 57'd8;
-      prev_top = 57'd0;
 
-      for (e = 0; e < 8; e = e + 1) begin
-        mode = pmpcfg_i[e][4:3];
-        low_bound = 57'd0;
-        high_bound = 57'd0;
-        enc_addr = {3'b000, pmpaddr_i[e]};
-        enc_mask = 57'd0;
-        region_size = 57'd0;
-        ones = 0;
-        stop_count = 1'b0;
+      access_last = addr + 56'd7;
 
-        case (mode)
-          2'b01: begin
-            low_bound = prev_top;
-            high_bound = {1'b0, pmpaddr_i[e], 2'b00};
-          end
+      for (n = 0; n < 8; n = n + 1) begin
+        if (!matched) begin
 
-          2'b10: begin
-            low_bound = {1'b0, pmpaddr_i[e], 2'b00};
-            high_bound = low_bound + 57'd4;
-          end
+          /*
+           * pmpcfg:
+           *
+           * [7]   L
+           * [6:5] reserved
+           * [4:3] A
+           * [2]   X
+           * [1]   W
+           * [0]   R
+           */
+          mode = pmpcfg_i[n][4:3];
 
-          2'b11: begin
-            for (j = 0; j < 54; j = j + 1) begin
-              if (!stop_count) begin
-                if (pmpaddr_i[e][j]) begin
-                  ones = ones + 1;
-                end
-                else begin
-                  stop_count = 1'b1;
-                end
-              end
+          overlap       = 1'b0;
+          full_match    = 1'b0;
+          lo            = 56'b0;
+          hi_excl       = 56'b0;
+          region_last   = 56'b0;
+          napot_change  = 54'b0;
+          napot_mask    = 56'b0;
+          pmp_addr_bytes = {
+            pmpaddr_i[n],
+            2'b00
+          };
+
+          case (mode)
+
+            /*
+             * TOR
+             */
+            2'b01: begin
+              if (n == 0)
+                lo = 56'b0;
+              else
+                lo = {
+                  pmpaddr_i[n-1],
+                  2'b00
+                };
+
+              hi_excl = {
+                pmpaddr_i[n],
+                2'b00
+              };
+
+              overlap =
+                  (addr < hi_excl) &&
+                  (access_last >= lo);
+
+              full_match =
+                  (addr >= lo) &&
+                  (access_last < hi_excl);
             end
 
-            if (ones >= 53) begin
-              low_bound = 57'd0;
-              high_bound = (57'd1 << 56);
-            end
-            else begin
-              if (ones != 0) begin
-                enc_mask = (57'd1 << ones) - 57'd1;
-              end
-              region_size = (57'd1 << (ones + 3));
-              low_bound = (enc_addr & (~enc_mask)) << 2;
-              high_bound = low_bound + region_size;
-            end
-          end
 
-          default: begin
-            low_bound = 57'd0;
-            high_bound = 57'd0;
-          end
-        endcase
+            /*
+             * NA4
+             *
+             * An eight-byte walker access cannot fit inside a four-byte
+             * region, but detecting overlap is still important because that
+             * matching PMP entry must deny the access.
+             */
+            2'b10: begin
+              lo      = pmp_addr_bytes;
+              hi_excl = pmp_addr_bytes + 56'd4;
 
-        if ((!matched) && (mode != 2'b00) &&
-            (access_lo < high_bound) && (access_hi > low_bound)) begin
-          matched = 1'b1;
-          if ((access_lo >= low_bound) &&
-              (access_hi <= high_bound) &&
-              pmpcfg_i[e][0]) begin
-            pmp_read_allowed = 1'b1;
-          end
-          else begin
-            pmp_read_allowed = 1'b0;
+              overlap =
+                  (addr < hi_excl) &&
+                  (access_last >= lo);
+
+              full_match =
+                  (addr >= lo) &&
+                  (access_last < hi_excl);
+            end
+
+
+            /*
+             * NAPOT
+             *
+             * If pmpaddr has N trailing ones:
+             *
+             *     pmpaddr ^ (pmpaddr + 1)
+             *
+             * produces N+1 low ones. Appending the two byte-address
+             * offset bits therefore creates the complete region mask.
+             */
+            2'b11: begin
+              napot_change =
+                  pmpaddr_i[n] ^
+                  (pmpaddr_i[n] + 54'd1);
+
+              napot_mask = {
+                napot_change,
+                2'b11
+              };
+
+              lo =
+                  pmp_addr_bytes &
+                  ~napot_mask;
+
+              region_last =
+                  lo |
+                  napot_mask;
+
+              overlap =
+                  (addr <= region_last) &&
+                  (access_last >= lo);
+
+              full_match =
+                  (addr >= lo) &&
+                  (access_last <= region_last);
+            end
+
+
+            /*
+             * OFF
+             */
+            default: begin
+              overlap    = 1'b0;
+              full_match = 1'b0;
+            end
+
+          endcase
+
+
+          if (overlap) begin
+            matched = 1'b1;
+
+            pmp_read_allowed =
+                full_match &
+                pmpcfg_i[n][0];
           end
         end
-
-        prev_top = {1'b0, pmpaddr_i[e], 2'b00};
       end
     end
   endfunction
 
-  /* Fully-associative ITLB lookup. */
-  always_comb begin : p_itlb_lookup
-    integer i;
 
-    itlb_hit_c = 1'b0;
-    itlb_hit_idx_c = 4'd0;
-    itlb_pa_c = 56'd0;
-    itlb_perm_ok_c = 1'b0;
+  /*
+   * --------------------------------------------------------------------------
+   * DTLB lookup
+   * --------------------------------------------------------------------------
+   */
 
-    for (i = 0; i < TLB_ENTRIES; i = i + 1) begin
-      if ((!itlb_hit_c) && itlb_valid_q[i] &&
-          (itlb_flags_q[i][5] || (itlb_asid_q[i] == asid_i)) &&
-          vpn_matches(itlb_vpn_q[i], itlb_level_q[i], fetch_vaddr_i)) begin
-        itlb_hit_c = 1'b1;
-        itlb_hit_idx_c = i;
-        itlb_pa_c = make_paddr(itlb_ppn_q[i], itlb_level_q[i], fetch_vaddr_i);
-        itlb_perm_ok_c = permission_ok(
-            itlb_flags_q[i], 1'b1, 1'b0, priv_lvl_i, sum_i, mxr_i);
-      end
-    end
-  end
+  always_comb begin : dtlb_lookup_comb
 
-  /* Fully-associative DTLB lookup. */
-  always_comb begin : p_dtlb_lookup
-    integer i;
+    integer j;
 
-    dtlb_hit_c = 1'b0;
+    dtlb_hit_c     = 1'b0;
     dtlb_hit_idx_c = 4'd0;
-    dtlb_pa_c = 56'd0;
-    dtlb_perm_ok_c = 1'b0;
 
-    for (i = 0; i < TLB_ENTRIES; i = i + 1) begin
-      if ((!dtlb_hit_c) && dtlb_valid_q[i] &&
-          (dtlb_flags_q[i][5] || (dtlb_asid_q[i] == asid_i)) &&
-          vpn_matches(dtlb_vpn_q[i], dtlb_level_q[i], lsu_vaddr_i)) begin
-        dtlb_hit_c = 1'b1;
-        dtlb_hit_idx_c = i;
-        dtlb_pa_c = make_paddr(dtlb_ppn_q[i], dtlb_level_q[i], lsu_vaddr_i);
-        dtlb_perm_ok_c = permission_ok(
-            dtlb_flags_q[i], 1'b0, lsu_is_store_i,
-            ld_st_priv_lvl_i, sum_i, mxr_i);
-      end
-    end
-  end
-
-  /* Prefer invalid entries, otherwise use a round-robin victim. */
-  always_comb begin : p_install_pick
-    integer i;
-
-    itlb_free_found_c = 1'b0;
-    itlb_install_idx_c = itlb_repl_q;
-    dtlb_free_found_c = 1'b0;
-    dtlb_install_idx_c = dtlb_repl_q;
-
-    for (i = 0; i < TLB_ENTRIES; i = i + 1) begin
-      if ((!itlb_free_found_c) && (!itlb_valid_q[i])) begin
-        itlb_free_found_c = 1'b1;
-        itlb_install_idx_c = i;
-      end
-      if ((!dtlb_free_found_c) && (!dtlb_valid_q[i])) begin
-        dtlb_free_found_c = 1'b1;
-        dtlb_install_idx_c = i;
-      end
-    end
-  end
-
-  /* PTE decode and current-walk derived values. */
-  always_comb begin : p_pte_decode
-    pte_v_c = mem_rdata_i[0];
-    pte_r_c = mem_rdata_i[1];
-    pte_w_c = mem_rdata_i[2];
-    pte_x_c = mem_rdata_i[3];
-    pte_u_c = mem_rdata_i[4];
-    pte_a_c = mem_rdata_i[6];
-    pte_d_c = mem_rdata_i[7];
-    pte_ppn_c = mem_rdata_i[53:10];
-    pte_leaf_c = pte_r_c || pte_x_c;
-    pte_reserved_c = pte_w_c && (!pte_r_c);
-
-    pte_super_misaligned_c = 1'b0;
-    if (walk_level_q == 2'd2) begin
-      pte_super_misaligned_c = |pte_ppn_c[17:0];
-    end
-    else if (walk_level_q == 2'd1) begin
-      pte_super_misaligned_c = |pte_ppn_c[8:0];
-    end
-
-    pte_perm_ok_c = permission_ok(
-        mem_rdata_i[7:0], walk_fetch_q, walk_store_q,
-        walk_priv_q, walk_sum_q, walk_mxr_q);
-
-    pte_pa_c = make_paddr(pte_ppn_c, walk_level_q, walk_va_q);
-
-    next_pte_addr_c = pte_address(
-        pte_ppn_c, walk_va_q, walk_level_q - 2'd1);
-
-    walk_pmp_allow_c = pmp_read_allowed(walk_addr_q);
-  end
-
-  /* Unscored reporting signals are made faithful to this implementation. */
-  always_comb begin : p_reporting
-    lsu_dtlb_hit_o = 1'b0;
-    lsu_dtlb_ppn_o = 44'd0;
-    dtlb_miss_o = 1'b0;
-    itlb_miss_o = 1'b0;
-
-    if (lsu_req_i && en_ld_st_translation_i) begin
-      lsu_dtlb_hit_o = dtlb_hit_c;
-      dtlb_miss_o = !dtlb_hit_c;
-      if (dtlb_hit_c) begin
-        lsu_dtlb_ppn_o = dtlb_pa_c[55:12];
+    for (j = 0; j < 16; j = j + 1) begin
+      if (
+          !dtlb_hit_c &&
+          !flush_tlb_i &&
+          dtlb_valid_q[j] &&
+          (
+            dtlb_global_q[j] ||
+            (dtlb_asid_q[j] == asid_i)
+          ) &&
+          vpn_match(
+            dtlb_vpn_q[j],
+            lsu_vaddr_i[38:12],
+            dtlb_level_q[j]
+          )
+      ) begin
+        dtlb_hit_c     = 1'b1;
+        dtlb_hit_idx_c = j[3:0];
       end
     end
 
-    if (fetch_req_i && enable_translation_i) begin
-      itlb_miss_o = !itlb_hit_c;
-    end
+    dtlb_hit_pa_c = compose_pa(
+      dtlb_ppn_q[dtlb_hit_idx_c],
+      dtlb_level_q[dtlb_hit_idx_c],
+      lsu_vaddr_i
+    );
+
+    dtlb_perm_ok_c = permission_ok(
+      dtlb_perm_q[dtlb_hit_idx_c],
+      1'b0,
+      lsu_is_store_i,
+      ld_st_priv_lvl_i,
+      sum_i,
+      mxr_i
+    );
+
   end
 
-  /* External memory request channel. */
-  always_comb begin : p_mem
-    mem_req_o = 1'b0;
-    mem_addr_o = walk_addr_q;
+
+  /*
+   * --------------------------------------------------------------------------
+   * ITLB lookup
+   * --------------------------------------------------------------------------
+   */
+
+  always_comb begin : itlb_lookup_comb
+
+    integer j;
+
+    itlb_hit_c     = 1'b0;
+    itlb_hit_idx_c = 4'd0;
+
+    for (j = 0; j < 16; j = j + 1) begin
+      if (
+          !itlb_hit_c &&
+          !flush_tlb_i &&
+          itlb_valid_q[j] &&
+          (
+            itlb_global_q[j] ||
+            (itlb_asid_q[j] == asid_i)
+          ) &&
+          vpn_match(
+            itlb_vpn_q[j],
+            fetch_vaddr_i[38:12],
+            itlb_level_q[j]
+          )
+      ) begin
+        itlb_hit_c     = 1'b1;
+        itlb_hit_idx_c = j[3:0];
+      end
+    end
+
+    itlb_hit_pa_c = compose_pa(
+      itlb_ppn_q[itlb_hit_idx_c],
+      itlb_level_q[itlb_hit_idx_c],
+      fetch_vaddr_i
+    );
+
+    itlb_perm_ok_c = permission_ok(
+      itlb_perm_q[itlb_hit_idx_c],
+      1'b1,
+      1'b0,
+      priv_lvl_i,
+      sum_i,
+      mxr_i
+    );
+
+  end
+
+
+  /*
+   * Prefer an invalid entry. Once full, round-robin replacement is used.
+   *
+   * This gives a true sixteen-entry usable TLB and avoids the cold-fill
+   * pathology described in the contract.
+   */
+  always_comb begin : dtlb_victim_comb
+
+    integer j;
+
+    dtlb_victim_c         = dtlb_rr_q;
+    dtlb_invalid_found_c  = 1'b0;
+
+    for (j = 0; j < 16; j = j + 1) begin
+      if (
+          !dtlb_invalid_found_c &&
+          !dtlb_valid_q[j]
+      ) begin
+        dtlb_victim_c        = j[3:0];
+        dtlb_invalid_found_c = 1'b1;
+      end
+    end
+
+  end
+
+
+  always_comb begin : itlb_victim_comb
+
+    integer j;
+
+    itlb_victim_c        = itlb_rr_q;
+    itlb_invalid_found_c = 1'b0;
+
+    for (j = 0; j < 16; j = j + 1) begin
+      if (
+          !itlb_invalid_found_c &&
+          !itlb_valid_q[j]
+      ) begin
+        itlb_victim_c        = j[3:0];
+        itlb_invalid_found_c = 1'b1;
+      end
+    end
+
+  end
+
+
+  /*
+   * --------------------------------------------------------------------------
+   * External memory interface
+   * --------------------------------------------------------------------------
+   */
+
+  always_comb begin
+
+    walk_pmp_allow_c =
+        pmp_read_allowed(walk_addr_q);
+
+    pte_data_c =
+        (state_q == S_WALK_HAVE) ?
+        pte_hold_q :
+        mem_rdata_i;
+
+    mem_req_o       = 1'b0;
+    mem_addr_o      = walk_addr_q;
+
+    /*
+     * These are explicitly unscored/unconstrained by the contract.
+     */
     mem_tag_valid_o = 1'b0;
-    mem_kill_o = 1'b0;
+    mem_kill_o      = 1'b0;
 
-    if ((walk_state_q == WALK_REQ) &&
+    /*
+     * Never allow a PMP-denied page-table read onto mem_*.
+     */
+    if (
+        (state_q == S_WALK_REQ) &&
         walk_pmp_allow_c &&
-        (!flush_i)) begin
+        !flush_i
+    )
       mem_req_o = 1'b1;
-    end
+
   end
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin : p_seq
-    integer i;
+
+  /*
+   * --------------------------------------------------------------------------
+   * Main sequential logic
+   * --------------------------------------------------------------------------
+   */
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : seq_logic
+
+    integer k;
 
     if (!rst_ni) begin
-      lsu_valid_o <= 1'b0;
-      lsu_paddr_o <= 56'd0;
-      lsu_exc_valid_o <= 1'b0;
-      lsu_exc_cause_o <= 64'd0;
-      lsu_exc_tval_o <= 64'd0;
 
-      fetch_valid_o <= 1'b0;
-      fetch_paddr_o <= 56'd0;
-      fetch_exc_valid_o <= 1'b0;
-      fetch_exc_cause_o <= 64'd0;
-      fetch_exc_tval_o <= 64'd0;
+      state_q <= S_IDLE;
 
-      walk_state_q <= WALK_IDLE;
-      walk_fetch_q <= 1'b0;
-      walk_store_q <= 1'b0;
-      walk_va_q <= 64'd0;
-      walk_priv_q <= 2'd0;
-      walk_sum_q <= 1'b0;
-      walk_mxr_q <= 1'b0;
-      walk_asid_q <= 16'd0;
-      walk_root_ppn_q <= 44'd0;
+      req_is_fetch_q  <= 1'b0;
+      req_is_store_q  <= 1'b0;
+      req_va_q        <= 64'b0;
+      req_priv_q      <= 2'b0;
+      req_sum_q       <= 1'b0;
+      req_mxr_q       <= 1'b0;
+      req_asid_q      <= 16'b0;
+      req_satp_ppn_q  <= 44'b0;
+
       walk_level_q <= 2'd2;
-      walk_addr_q <= 56'd0;
+      walk_addr_q  <= 56'b0;
+      pte_hold_q   <= 64'b0;
 
-      itlb_repl_q <= 4'd0;
-      dtlb_repl_q <= 4'd0;
+      dtlb_valid_q <= 16'b0;
+      itlb_valid_q <= 16'b0;
 
-      for (i = 0; i < TLB_ENTRIES; i = i + 1) begin
-        itlb_valid_q[i] <= 1'b0;
-        itlb_vpn_q[i] <= 27'd0;
-        itlb_ppn_q[i] <= 44'd0;
-        itlb_level_q[i] <= 2'd0;
-        itlb_asid_q[i] <= 16'd0;
-        itlb_flags_q[i] <= 8'd0;
+      dtlb_rr_q <= 4'b0;
+      itlb_rr_q <= 4'b0;
 
-        dtlb_valid_q[i] <= 1'b0;
-        dtlb_vpn_q[i] <= 27'd0;
-        dtlb_ppn_q[i] <= 44'd0;
-        dtlb_level_q[i] <= 2'd0;
-        dtlb_asid_q[i] <= 16'd0;
-        dtlb_flags_q[i] <= 8'd0;
+      lsu_valid_o        <= 1'b0;
+      lsu_paddr_o        <= 56'b0;
+      lsu_dtlb_hit_o     <= 1'b0;
+      lsu_dtlb_ppn_o     <= 44'b0;
+      lsu_exc_valid_o    <= 1'b0;
+      lsu_exc_cause_o    <= 64'b0;
+      lsu_exc_tval_o     <= 64'b0;
+
+      fetch_valid_o      <= 1'b0;
+      fetch_paddr_o      <= 56'b0;
+      fetch_exc_valid_o  <= 1'b0;
+      fetch_exc_cause_o  <= 64'b0;
+      fetch_exc_tval_o   <= 64'b0;
+
+      itlb_miss_o <= 1'b0;
+      dtlb_miss_o <= 1'b0;
+
+      for (k = 0; k < 16; k = k + 1) begin
+
+        dtlb_vpn_q[k]    <= 27'b0;
+        dtlb_ppn_q[k]    <= 44'b0;
+        dtlb_asid_q[k]   <= 16'b0;
+        dtlb_global_q[k] <= 1'b0;
+        dtlb_level_q[k]  <= 2'b0;
+        dtlb_perm_q[k]   <= 6'b0;
+
+        itlb_vpn_q[k]    <= 27'b0;
+        itlb_ppn_q[k]    <= 44'b0;
+        itlb_asid_q[k]   <= 16'b0;
+        itlb_global_q[k] <= 1'b0;
+        itlb_level_q[k]  <= 2'b0;
+        itlb_perm_q[k]   <= 6'b0;
+
       end
+
     end
     else begin
-      /* Retirement outputs are one-cycle pulses. */
-      lsu_valid_o <= 1'b0;
-      lsu_exc_valid_o <= 1'b0;
-      fetch_valid_o <= 1'b0;
-      fetch_exc_valid_o <= 1'b0;
-
-      /* A TLB flush is conservatively implemented as a full flush. */
-      if (flush_tlb_i) begin
-        for (i = 0; i < TLB_ENTRIES; i = i + 1) begin
-          itlb_valid_q[i] <= 1'b0;
-          dtlb_valid_q[i] <= 1'b0;
-        end
-        itlb_repl_q <= 4'd0;
-        dtlb_repl_q <= 4'd0;
-      end
 
       /*
-       * flush_i aborts a walk but does not drop its latched request.  If a
-       * memory request has already been granted, drain that response before
-       * restarting so an old response cannot be mistaken for the new walk.
+       * Retirement/status outputs are pulses.
        */
-      if (flush_i && (walk_state_q != WALK_IDLE)) begin
-        if ((walk_state_q == WALK_WAIT) ||
-            (walk_state_q == WALK_DRAIN)) begin
-          if (mem_rvalid_i) begin
-            walk_level_q <= 2'd2;
-            walk_addr_q <= pte_address(walk_root_ppn_q, walk_va_q, 2'd2);
-            walk_state_q <= WALK_REQ;
+      lsu_valid_o       <= 1'b0;
+      lsu_dtlb_hit_o    <= 1'b0;
+      lsu_exc_valid_o   <= 1'b0;
+
+      fetch_valid_o     <= 1'b0;
+      fetch_exc_valid_o <= 1'b0;
+
+      itlb_miss_o       <= 1'b0;
+      dtlb_miss_o       <= 1'b0;
+
+
+      /*
+       * C2 permits implementing every narrowed flush as a complete TLB flush.
+       */
+      if (flush_tlb_i) begin
+
+        dtlb_valid_q <= 16'b0;
+        itlb_valid_q <= 16'b0;
+
+        dtlb_rr_q <= 4'b0;
+        itlb_rr_q <= 4'b0;
+
+      end
+
+
+      /*
+       * ----------------------------------------------------------------------
+       * flush_i
+       * ----------------------------------------------------------------------
+       *
+       * Abort and restart the current walk.
+       *
+       * If a memory request was already granted, its response must first be
+       * drained. Otherwise a late response from the cancelled walk could be
+       * interpreted as the root PTE of the restarted walk.
+       *
+       * flush_i does NOT clear either TLB.
+       */
+      if (
+          flush_i &&
+          (state_q != S_IDLE)
+      ) begin
+
+        walk_level_q <= 2'd2;
+
+        walk_addr_q <=
+            make_root_pte_addr(
+              req_satp_ppn_q,
+              req_va_q
+            );
+
+        case (state_q)
+
+          /*
+           * Read already granted. Either its response is arriving right now,
+           * or it must be drained.
+           */
+          S_WALK_WAIT: begin
+
+            if (mem_rvalid_i)
+              state_q <= S_WALK_REQ;
+            else
+              state_q <= S_DRAIN;
+
           end
-          else begin
-            walk_state_q <= WALK_DRAIN;
+
+
+          /*
+           * A request might have been granted on this edge.
+           */
+          S_WALK_REQ: begin
+
+            if (
+                mem_gnt_i &&
+                !mem_rvalid_i
+            )
+              state_q <= S_DRAIN;
+            else
+              state_q <= S_WALK_REQ;
+
           end
-        end
-        else begin
-          walk_level_q <= 2'd2;
-          walk_addr_q <= pte_address(walk_root_ppn_q, walk_va_q, 2'd2);
-          walk_state_q <= WALK_REQ;
-        end
+
+
+          /*
+           * Already draining an old request.
+           */
+          S_DRAIN: begin
+
+            if (mem_rvalid_i)
+              state_q <= S_WALK_REQ;
+            else
+              state_q <= S_DRAIN;
+
+          end
+
+
+          /*
+           * S_WALK_HAVE has no outstanding memory operation.
+           */
+          default: begin
+            state_q <= S_WALK_REQ;
+          end
+
+        endcase
+
       end
       else begin
-        case (walk_state_q)
-          WALK_IDLE: begin
-            /* LSU gets priority if both request ports are presented together. */
-            if (lsu_req_i && (!flush_tlb_i)) begin
-              if (!en_ld_st_translation_i) begin
-                lsu_valid_o <= 1'b1;
-                lsu_paddr_o <= lsu_vaddr_i[55:0];
-                lsu_exc_valid_o <= 1'b0;
-              end
-              else if (dtlb_hit_c) begin
-                lsu_valid_o <= 1'b1;
-                lsu_exc_tval_o <= lsu_vaddr_i;
-                if (dtlb_perm_ok_c) begin
-                  lsu_paddr_o <= dtlb_pa_c;
+
+        case (state_q)
+
+          /*
+           * ==================================================================
+           * IDLE / NEW REQUEST
+           * ==================================================================
+           */
+          S_IDLE: begin
+
+            /*
+             * If both are asserted at once, LSU receives walker arbitration
+             * priority. A held fetch request will be serviced after it.
+             */
+            if (!flush_i) begin
+
+              /*
+               * --------------------------------------------------------------
+               * LSU
+               * --------------------------------------------------------------
+               */
+              if (lsu_req_i) begin
+
+                /*
+                 * Bare mode.
+                 */
+                if (!en_ld_st_translation_i) begin
+
+                  lsu_valid_o     <= 1'b1;
+                  lsu_paddr_o     <= lsu_vaddr_i[55:0];
+
                   lsu_exc_valid_o <= 1'b0;
-                end
-                else begin
-                  lsu_exc_valid_o <= 1'b1;
-                  lsu_exc_cause_o <= page_fault_cause(1'b0, lsu_is_store_i);
-                end
-              end
-              else begin
-                walk_fetch_q <= 1'b0;
-                walk_store_q <= lsu_is_store_i;
-                walk_va_q <= lsu_vaddr_i;
-                walk_priv_q <= ld_st_priv_lvl_i;
-                walk_sum_q <= sum_i;
-                walk_mxr_q <= mxr_i;
-                walk_asid_q <= asid_i;
-                walk_root_ppn_q <= satp_ppn_i;
-                walk_level_q <= 2'd2;
-                walk_addr_q <= pte_address(satp_ppn_i, lsu_vaddr_i, 2'd2);
-                walk_state_q <= WALK_REQ;
-              end
-            end
-            else if (fetch_req_i && (!flush_tlb_i)) begin
-              if (!enable_translation_i) begin
-                fetch_valid_o <= 1'b1;
-                fetch_paddr_o <= fetch_vaddr_i[55:0];
-                fetch_exc_valid_o <= 1'b0;
-              end
-              else if (itlb_hit_c) begin
-                fetch_valid_o <= 1'b1;
-                fetch_exc_tval_o <= fetch_vaddr_i;
-                if (itlb_perm_ok_c) begin
-                  fetch_paddr_o <= itlb_pa_c;
-                  fetch_exc_valid_o <= 1'b0;
-                end
-                else begin
-                  fetch_exc_valid_o <= 1'b1;
-                  fetch_exc_cause_o <= page_fault_cause(1'b1, 1'b0);
-                end
-              end
-              else begin
-                walk_fetch_q <= 1'b1;
-                walk_store_q <= 1'b0;
-                walk_va_q <= fetch_vaddr_i;
-                walk_priv_q <= priv_lvl_i;
-                walk_sum_q <= sum_i;
-                walk_mxr_q <= mxr_i;
-                walk_asid_q <= asid_i;
-                walk_root_ppn_q <= satp_ppn_i;
-                walk_level_q <= 2'd2;
-                walk_addr_q <= pte_address(satp_ppn_i, fetch_vaddr_i, 2'd2);
-                walk_state_q <= WALK_REQ;
-              end
-            end
-          end
+                  lsu_exc_cause_o <= 64'b0;
+                  lsu_exc_tval_o  <= 64'b0;
 
-          WALK_REQ: begin
-            if (!walk_pmp_allow_c) begin
-              if (walk_fetch_q) begin
-                fetch_valid_o <= 1'b1;
-                fetch_exc_valid_o <= 1'b1;
-                fetch_exc_cause_o <= access_fault_cause(1'b1, 1'b0);
-                fetch_exc_tval_o <= walk_va_q;
-              end
-              else begin
-                lsu_valid_o <= 1'b1;
-                lsu_exc_valid_o <= 1'b1;
-                lsu_exc_cause_o <= access_fault_cause(1'b0, walk_store_q);
-                lsu_exc_tval_o <= walk_va_q;
-              end
-              walk_state_q <= WALK_IDLE;
-            end
-            else if (mem_req_o && mem_gnt_i) begin
-              walk_state_q <= WALK_WAIT;
-            end
-          end
+                  lsu_dtlb_ppn_o  <= lsu_vaddr_i[55:12];
 
-          WALK_WAIT: begin
-            if (mem_rvalid_i) begin
-              if ((!pte_v_c) || pte_reserved_c) begin
-                if (walk_fetch_q) begin
-                  fetch_valid_o <= 1'b1;
-                  fetch_exc_valid_o <= 1'b1;
-                  fetch_exc_cause_o <= page_fault_cause(1'b1, 1'b0);
-                  fetch_exc_tval_o <= walk_va_q;
                 end
-                else begin
-                  lsu_valid_o <= 1'b1;
-                  lsu_exc_valid_o <= 1'b1;
-                  lsu_exc_cause_o <= page_fault_cause(1'b0, walk_store_q);
-                  lsu_exc_tval_o <= walk_va_q;
-                end
-                walk_state_q <= WALK_IDLE;
-              end
-              else if (pte_leaf_c) begin
-                if (pte_super_misaligned_c || (!pte_perm_ok_c)) begin
-                  if (walk_fetch_q) begin
-                    fetch_valid_o <= 1'b1;
-                    fetch_exc_valid_o <= 1'b1;
-                    fetch_exc_cause_o <= page_fault_cause(1'b1, 1'b0);
-                    fetch_exc_tval_o <= walk_va_q;
-                  end
-                  else begin
-                    lsu_valid_o <= 1'b1;
-                    lsu_exc_valid_o <= 1'b1;
-                    lsu_exc_cause_o <= page_fault_cause(1'b0, walk_store_q);
-                    lsu_exc_tval_o <= walk_va_q;
-                  end
-                  walk_state_q <= WALK_IDLE;
-                end
-                else begin
-                  if (walk_fetch_q) begin
-                    fetch_valid_o <= 1'b1;
-                    fetch_paddr_o <= pte_pa_c;
-                    fetch_exc_valid_o <= 1'b0;
 
-                    if (!flush_tlb_i) begin
-                      itlb_valid_q[itlb_install_idx_c] <= 1'b1;
-                      itlb_vpn_q[itlb_install_idx_c] <= walk_va_q[38:12];
-                      itlb_ppn_q[itlb_install_idx_c] <= pte_ppn_c;
-                      itlb_level_q[itlb_install_idx_c] <= walk_level_q;
-                      itlb_asid_q[itlb_install_idx_c] <= walk_asid_q;
-                      itlb_flags_q[itlb_install_idx_c] <= mem_rdata_i[7:0];
-                      itlb_repl_q <= itlb_install_idx_c + 4'd1;
-                    end
-                  end
-                  else begin
-                    lsu_valid_o <= 1'b1;
-                    lsu_paddr_o <= pte_pa_c;
+
+                /*
+                 * DTLB hit.
+                 */
+                else if (dtlb_hit_c) begin
+
+                  lsu_valid_o    <= 1'b1;
+                  lsu_dtlb_hit_o <= 1'b1;
+
+                  lsu_dtlb_ppn_o <=
+                      dtlb_hit_pa_c[55:12];
+
+                  if (dtlb_perm_ok_c) begin
+
+                    lsu_paddr_o     <= dtlb_hit_pa_c;
+
                     lsu_exc_valid_o <= 1'b0;
+                    lsu_exc_cause_o <= 64'b0;
+                    lsu_exc_tval_o  <= 64'b0;
 
-                    if (!flush_tlb_i) begin
-                      dtlb_valid_q[dtlb_install_idx_c] <= 1'b1;
-                      dtlb_vpn_q[dtlb_install_idx_c] <= walk_va_q[38:12];
-                      dtlb_ppn_q[dtlb_install_idx_c] <= pte_ppn_c;
-                      dtlb_level_q[dtlb_install_idx_c] <= walk_level_q;
-                      dtlb_asid_q[dtlb_install_idx_c] <= walk_asid_q;
-                      dtlb_flags_q[dtlb_install_idx_c] <= mem_rdata_i[7:0];
-                      dtlb_repl_q <= dtlb_install_idx_c + 4'd1;
-                    end
-                  end
-                  walk_state_q <= WALK_IDLE;
-                end
-              end
-              else begin
-                if (walk_level_q == 2'd0) begin
-                  if (walk_fetch_q) begin
-                    fetch_valid_o <= 1'b1;
-                    fetch_exc_valid_o <= 1'b1;
-                    fetch_exc_cause_o <= page_fault_cause(1'b1, 1'b0);
-                    fetch_exc_tval_o <= walk_va_q;
                   end
                   else begin
-                    lsu_valid_o <= 1'b1;
+
+                    /*
+                     * A4/A5 permission fault.
+                     *
+                     * A11 says valid and exc_valid must both be asserted.
+                     */
+                    lsu_paddr_o     <= 56'b0;
+
                     lsu_exc_valid_o <= 1'b1;
-                    lsu_exc_cause_o <= page_fault_cause(1'b0, walk_store_q);
-                    lsu_exc_tval_o <= walk_va_q;
+
+                    lsu_exc_cause_o <=
+                        page_fault_cause(
+                          1'b0,
+                          lsu_is_store_i
+                        );
+
+                    lsu_exc_tval_o <=
+                        lsu_vaddr_i;
+
                   end
-                  walk_state_q <= WALK_IDLE;
+
                 end
+
+
+                /*
+                 * DTLB miss: begin Sv39 walk.
+                 */
                 else begin
-                  walk_level_q <= walk_level_q - 2'd1;
-                  walk_addr_q <= next_pte_addr_c;
-                  walk_state_q <= WALK_REQ;
+
+                  dtlb_miss_o <= 1'b1;
+
+                  req_is_fetch_q <= 1'b0;
+                  req_is_store_q <= lsu_is_store_i;
+
+                  req_va_q   <= lsu_vaddr_i;
+                  req_priv_q <= ld_st_priv_lvl_i;
+
+                  req_sum_q  <= sum_i;
+                  req_mxr_q  <= mxr_i;
+
+                  req_asid_q     <= asid_i;
+                  req_satp_ppn_q <= satp_ppn_i;
+
+                  walk_level_q <= 2'd2;
+
+                  walk_addr_q <=
+                      make_root_pte_addr(
+                        satp_ppn_i,
+                        lsu_vaddr_i
+                      );
+
+                  state_q <= S_WALK_REQ;
+
                 end
+
               end
+
+
+              /*
+               * --------------------------------------------------------------
+               * FETCH
+               * --------------------------------------------------------------
+               */
+              else if (fetch_req_i) begin
+
+                /*
+                 * Bare mode.
+                 */
+                if (!enable_translation_i) begin
+
+                  fetch_valid_o <= 1'b1;
+                  fetch_paddr_o <= fetch_vaddr_i[55:0];
+
+                  fetch_exc_valid_o <= 1'b0;
+                  fetch_exc_cause_o <= 64'b0;
+                  fetch_exc_tval_o  <= 64'b0;
+
+                end
+
+
+                /*
+                 * ITLB hit.
+                 */
+                else if (itlb_hit_c) begin
+
+                  fetch_valid_o <= 1'b1;
+
+                  if (itlb_perm_ok_c) begin
+
+                    fetch_paddr_o <=
+                        itlb_hit_pa_c;
+
+                    fetch_exc_valid_o <= 1'b0;
+                    fetch_exc_cause_o <= 64'b0;
+                    fetch_exc_tval_o  <= 64'b0;
+
+                  end
+                  else begin
+
+                    fetch_paddr_o <= 56'b0;
+
+                    fetch_exc_valid_o <= 1'b1;
+                    fetch_exc_cause_o <= CAUSE_INST_PAGE;
+                    fetch_exc_tval_o  <= fetch_vaddr_i;
+
+                  end
+
+                end
+
+
+                /*
+                 * ITLB miss.
+                 */
+                else begin
+
+                  itlb_miss_o <= 1'b1;
+
+                  req_is_fetch_q <= 1'b1;
+                  req_is_store_q <= 1'b0;
+
+                  req_va_q   <= fetch_vaddr_i;
+                  req_priv_q <= priv_lvl_i;
+
+                  req_sum_q <= sum_i;
+                  req_mxr_q <= mxr_i;
+
+                  req_asid_q     <= asid_i;
+                  req_satp_ppn_q <= satp_ppn_i;
+
+                  walk_level_q <= 2'd2;
+
+                  walk_addr_q <=
+                      make_root_pte_addr(
+                        satp_ppn_i,
+                        fetch_vaddr_i
+                      );
+
+                  state_q <= S_WALK_REQ;
+
+                end
+
+              end
+
             end
           end
 
-          WALK_DRAIN: begin
-            if (mem_rvalid_i) begin
-              walk_level_q <= 2'd2;
-              walk_addr_q <= pte_address(walk_root_ppn_q, walk_va_q, 2'd2);
-              walk_state_q <= WALK_REQ;
+
+          /*
+           * ==================================================================
+           * ISSUE WALKER READ
+           * ==================================================================
+           */
+          S_WALK_REQ: begin
+
+            /*
+             * A8/A7:
+             *
+             * PMP is checked before the PTE is read/interpreted, therefore a
+             * denied walker read becomes an access fault and wins over any page
+             * fault the unread PTE might otherwise have caused.
+             */
+            if (!walk_pmp_allow_c) begin
+
+              state_q <= S_IDLE;
+
+              if (req_is_fetch_q) begin
+
+                fetch_valid_o <= 1'b1;
+                fetch_paddr_o <= 56'b0;
+
+                fetch_exc_valid_o <= 1'b1;
+
+                fetch_exc_cause_o <=
+                    access_fault_cause(
+                      1'b1,
+                      1'b0
+                    );
+
+                fetch_exc_tval_o <= req_va_q;
+
+              end
+              else begin
+
+                lsu_valid_o <= 1'b1;
+                lsu_paddr_o <= 56'b0;
+
+                lsu_exc_valid_o <= 1'b1;
+
+                lsu_exc_cause_o <=
+                    access_fault_cause(
+                      1'b0,
+                      req_is_store_q
+                    );
+
+                lsu_exc_tval_o <= req_va_q;
+
+              end
+
             end
+
+
+            /*
+             * Request granted.
+             */
+            else if (mem_gnt_i) begin
+
+              /*
+               * Normally rvalid follows grant. Supporting same-cycle
+               * grant+rvalid costs only this small holding state.
+               */
+              if (mem_rvalid_i) begin
+
+                pte_hold_q <= mem_rdata_i;
+                state_q    <= S_WALK_HAVE;
+
+              end
+              else begin
+
+                state_q <= S_WALK_WAIT;
+
+              end
+
+            end
+
           end
+
+
+          /*
+           * ==================================================================
+           * PTE RESPONSE
+           * ==================================================================
+           */
+          S_WALK_WAIT,
+          S_WALK_HAVE: begin
+
+            if (
+                (state_q == S_WALK_HAVE) ||
+                mem_rvalid_i
+            ) begin
+
+              /*
+               * --------------------------------------------------------------
+               * Invalid / reserved PTE
+               * --------------------------------------------------------------
+               *
+               * V=0 => invalid
+               *
+               * W=1,R=0 => reserved encoding
+               */
+              if (
+                  !pte_data_c[0] ||
+                  (
+                    pte_data_c[2] &&
+                    !pte_data_c[1]
+                  )
+              ) begin
+
+                state_q <= S_IDLE;
+
+                if (req_is_fetch_q) begin
+
+                  fetch_valid_o <= 1'b1;
+                  fetch_paddr_o <= 56'b0;
+
+                  fetch_exc_valid_o <= 1'b1;
+                  fetch_exc_cause_o <= CAUSE_INST_PAGE;
+                  fetch_exc_tval_o  <= req_va_q;
+
+                end
+                else begin
+
+                  lsu_valid_o <= 1'b1;
+                  lsu_paddr_o <= 56'b0;
+
+                  lsu_exc_valid_o <= 1'b1;
+
+                  lsu_exc_cause_o <=
+                      page_fault_cause(
+                        1'b0,
+                        req_is_store_q
+                      );
+
+                  lsu_exc_tval_o <= req_va_q;
+
+                end
+
+              end
+
+
+              /*
+               * --------------------------------------------------------------
+               * Leaf
+               * --------------------------------------------------------------
+               *
+               * R=1 or X=1 identifies a leaf.
+               */
+              else if (
+                  pte_data_c[1] ||
+                  pte_data_c[3]
+              ) begin
+
+                /*
+                 * Superpage PPN alignment.
+                 */
+                if (
+                    leaf_misaligned(
+                      pte_data_c[53:10],
+                      walk_level_q
+                    )
+                ) begin
+
+                  state_q <= S_IDLE;
+
+                  if (req_is_fetch_q) begin
+
+                    fetch_valid_o <= 1'b1;
+                    fetch_paddr_o <= 56'b0;
+
+                    fetch_exc_valid_o <= 1'b1;
+                    fetch_exc_cause_o <= CAUSE_INST_PAGE;
+                    fetch_exc_tval_o  <= req_va_q;
+
+                  end
+                  else begin
+
+                    lsu_valid_o <= 1'b1;
+                    lsu_paddr_o <= 56'b0;
+
+                    lsu_exc_valid_o <= 1'b1;
+
+                    lsu_exc_cause_o <=
+                        page_fault_cause(
+                          1'b0,
+                          req_is_store_q
+                        );
+
+                    lsu_exc_tval_o <= req_va_q;
+
+                  end
+
+                end
+                else begin
+
+                  /*
+                   * ----------------------------------------------------------
+                   * TLB installation
+                   * ----------------------------------------------------------
+                   *
+                   * Cache a leaf when A is already set.
+                   *
+                   * If the current request is a store, D must also already be
+                   * set before caching it. This prevents a D=0 store fault from
+                   * leaving a stale TLB entry that continuously faults after
+                   * software repairs the PTE.
+                   *
+                   * Other permission failures may safely cache the PTE because
+                   * R/W/X/U/SUM/MXR/privilege are checked again on every hit.
+                   */
+                  if (
+                      !flush_tlb_i &&
+                      pte_data_c[6] &&
+                      (
+                        !req_is_store_q ||
+                        pte_data_c[7]
+                      )
+                  ) begin
+
+                    /*
+                     * ITLB install.
+                     */
+                    if (req_is_fetch_q) begin
+
+                      itlb_valid_q[itlb_victim_c] <= 1'b1;
+
+                      itlb_vpn_q[itlb_victim_c] <=
+                          req_va_q[38:12];
+
+                      itlb_ppn_q[itlb_victim_c] <=
+                          pte_data_c[53:10];
+
+                      itlb_asid_q[itlb_victim_c] <=
+                          req_asid_q;
+
+                      itlb_global_q[itlb_victim_c] <=
+                          pte_data_c[5];
+
+                      itlb_level_q[itlb_victim_c] <=
+                          walk_level_q;
+
+                      itlb_perm_q[itlb_victim_c] <= {
+                        pte_data_c[7], // D
+                        pte_data_c[6], // A
+                        pte_data_c[4], // U
+                        pte_data_c[3], // X
+                        pte_data_c[2], // W
+                        pte_data_c[1]  // R
+                      };
+
+                      itlb_rr_q <=
+                          itlb_victim_c + 4'd1;
+
+                    end
+
+
+                    /*
+                     * DTLB install.
+                     */
+                    else begin
+
+                      dtlb_valid_q[dtlb_victim_c] <= 1'b1;
+
+                      dtlb_vpn_q[dtlb_victim_c] <=
+                          req_va_q[38:12];
+
+                      dtlb_ppn_q[dtlb_victim_c] <=
+                          pte_data_c[53:10];
+
+                      dtlb_asid_q[dtlb_victim_c] <=
+                          req_asid_q;
+
+                      dtlb_global_q[dtlb_victim_c] <=
+                          pte_data_c[5];
+
+                      dtlb_level_q[dtlb_victim_c] <=
+                          walk_level_q;
+
+                      dtlb_perm_q[dtlb_victim_c] <= {
+                        pte_data_c[7], // D
+                        pte_data_c[6], // A
+                        pte_data_c[4], // U
+                        pte_data_c[3], // X
+                        pte_data_c[2], // W
+                        pte_data_c[1]  // R
+                      };
+
+                      dtlb_rr_q <=
+                          dtlb_victim_c + 4'd1;
+
+                    end
+
+                  end
+
+
+                  /*
+                   * ----------------------------------------------------------
+                   * Permission/A/D check for current request
+                   * ----------------------------------------------------------
+                   */
+                  if (
+                      permission_ok(
+                        {
+                          pte_data_c[7],
+                          pte_data_c[6],
+                          pte_data_c[4],
+                          pte_data_c[3],
+                          pte_data_c[2],
+                          pte_data_c[1]
+                        },
+                        req_is_fetch_q,
+                        req_is_store_q,
+                        req_priv_q,
+                        req_sum_q,
+                        req_mxr_q
+                      )
+                  ) begin
+
+                    state_q <= S_IDLE;
+
+                    /*
+                     * Successful fetch.
+                     */
+                    if (req_is_fetch_q) begin
+
+                      fetch_valid_o <= 1'b1;
+
+                      fetch_paddr_o <=
+                          compose_pa(
+                            pte_data_c[53:10],
+                            walk_level_q,
+                            req_va_q
+                          );
+
+                      fetch_exc_valid_o <= 1'b0;
+                      fetch_exc_cause_o <= 64'b0;
+                      fetch_exc_tval_o  <= 64'b0;
+
+                    end
+
+
+                    /*
+                     * Successful LSU translation.
+                     */
+                    else begin
+
+                      lsu_valid_o <= 1'b1;
+
+                      lsu_paddr_o <=
+                          compose_pa(
+                            pte_data_c[53:10],
+                            walk_level_q,
+                            req_va_q
+                          );
+
+                      lsu_dtlb_ppn_o <=
+                          compose_ppn(
+                            pte_data_c[53:10],
+                            walk_level_q,
+                            req_va_q
+                          );
+
+                      lsu_exc_valid_o <= 1'b0;
+                      lsu_exc_cause_o <= 64'b0;
+                      lsu_exc_tval_o  <= 64'b0;
+
+                    end
+
+                  end
+
+
+                  /*
+                   * Permission / A / D page fault.
+                   */
+                  else begin
+
+                    state_q <= S_IDLE;
+
+                    if (req_is_fetch_q) begin
+
+                      fetch_valid_o <= 1'b1;
+                      fetch_paddr_o <= 56'b0;
+
+                      fetch_exc_valid_o <= 1'b1;
+                      fetch_exc_cause_o <= CAUSE_INST_PAGE;
+                      fetch_exc_tval_o  <= req_va_q;
+
+                    end
+                    else begin
+
+                      lsu_valid_o <= 1'b1;
+                      lsu_paddr_o <= 56'b0;
+
+                      lsu_exc_valid_o <= 1'b1;
+
+                      lsu_exc_cause_o <=
+                          page_fault_cause(
+                            1'b0,
+                            req_is_store_q
+                          );
+
+                      lsu_exc_tval_o <= req_va_q;
+
+                    end
+
+                  end
+
+                end
+
+              end
+
+
+              /*
+               * --------------------------------------------------------------
+               * Non-leaf PTE
+               * --------------------------------------------------------------
+               *
+               * V=1, R=0, X=0, and not the reserved W=1,R=0 case.
+               */
+              else begin
+
+                /*
+                 * If level 0 is also a pointer, the walk ran out of levels.
+                 */
+                if (walk_level_q == 2'd0) begin
+
+                  state_q <= S_IDLE;
+
+                  if (req_is_fetch_q) begin
+
+                    fetch_valid_o <= 1'b1;
+                    fetch_paddr_o <= 56'b0;
+
+                    fetch_exc_valid_o <= 1'b1;
+                    fetch_exc_cause_o <= CAUSE_INST_PAGE;
+                    fetch_exc_tval_o  <= req_va_q;
+
+                  end
+                  else begin
+
+                    lsu_valid_o <= 1'b1;
+                    lsu_paddr_o <= 56'b0;
+
+                    lsu_exc_valid_o <= 1'b1;
+
+                    lsu_exc_cause_o <=
+                        page_fault_cause(
+                          1'b0,
+                          req_is_store_q
+                        );
+
+                    lsu_exc_tval_o <= req_va_q;
+
+                  end
+
+                end
+
+
+                /*
+                 * Descend to the next page-table level.
+                 */
+                else begin
+
+                  walk_level_q <=
+                      walk_level_q - 2'd1;
+
+                  walk_addr_q <=
+                      make_pte_addr(
+                        pte_data_c[53:10],
+                        vpn_for_level(
+                          req_va_q,
+                          walk_level_q - 2'd1
+                        )
+                      );
+
+                  /*
+                   * Returning to S_WALK_REQ means PMP is checked on this new
+                   * physical PTE address before another memory request occurs.
+                   */
+                  state_q <= S_WALK_REQ;
+
+                end
+
+              end
+
+            end
+
+          end
+
+
+          /*
+           * ==================================================================
+           * DRAIN CANCELLED MEMORY RESPONSE
+           * ==================================================================
+           */
+          S_DRAIN: begin
+
+            if (mem_rvalid_i)
+              state_q <= S_WALK_REQ;
+
+          end
+
 
           default: begin
-            walk_state_q <= WALK_IDLE;
+            state_q <= S_IDLE;
           end
+
         endcase
+
       end
+
     end
+
   end
 
 endmodule

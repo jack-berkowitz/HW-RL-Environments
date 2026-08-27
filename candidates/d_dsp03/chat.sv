@@ -6,1711 +6,2511 @@ module fp_multifmt_fma #(
 
   input  logic             in_valid_i,
   output logic             in_ready_o,
+
   input  logic [1:0]       fmt_i,
   input  logic             vec_i,
+
   input  logic [WIDTH-1:0] a_i,
   input  logic [WIDTH-1:0] b_i,
   input  logic [WIDTH-1:0] c_i,
+
   input  logic [2:0]       rnd_i,
 
   output logic             out_valid_o,
   input  logic             out_ready_i,
+
   output logic [WIDTH-1:0] result_o,
   output logic [4:0]       flags_o
 );
 
+  /*
+   * ==========================================================================
+   * Small leading-one encoders
+   * ==========================================================================
+   */
 
-function automatic logic [36:0] fp32_calc(
-    input logic [31:0] aa,
-    input logic [31:0] bb,
-    input logic [31:0] cc,
-    input logic [2:0]       rm
-);
-    logic sa;
-    logic sb;
-    logic sc;
-    logic sp;
-    logic [7:0] ea;
-    logic [7:0] eb;
-    logic [7:0] ec;
-    logic [22:0] fa;
-    logic [22:0] fb;
-    logic [22:0] fc;
+  function automatic integer msb8(
+    input logic [7:0] v
+  );
+    begin
+      if      (v[7]) msb8 = 7;
+      else if (v[6]) msb8 = 6;
+      else if (v[5]) msb8 = 5;
+      else if (v[4]) msb8 = 4;
+      else if (v[3]) msb8 = 3;
+      else if (v[2]) msb8 = 2;
+      else if (v[1]) msb8 = 1;
+      else           msb8 = 0;
+    end
+  endfunction
+
+
+  function automatic integer msb16(
+    input logic [15:0] v
+  );
+    begin
+      if (|v[15:8])
+        msb16 = 8 + msb8(v[15:8]);
+      else
+        msb16 = msb8(v[7:0]);
+    end
+  endfunction
+
+
+  function automatic integer msb22(
+    input logic [21:0] v
+  );
+    begin
+      if (|v[21:16])
+        msb22 = 16 + msb8({2'b00,v[21:16]});
+      else
+        msb22 = msb16(v[15:0]);
+    end
+  endfunction
+
+
+  function automatic integer msb24(
+    input logic [23:0] v
+  );
+    begin
+      if (|v[23:16])
+        msb24 = 16 + msb8(v[23:16]);
+      else
+        msb24 = msb16(v[15:0]);
+    end
+  endfunction
+
+
+  function automatic integer msb32(
+    input logic [31:0] v
+  );
+    begin
+      if (|v[31:16])
+        msb32 = 16 + msb16(v[31:16]);
+      else
+        msb32 = msb16(v[15:0]);
+    end
+  endfunction
+
+
+  function automatic integer msb44(
+    input logic [43:0] v
+  );
+    begin
+      if (|v[43:32])
+        msb44 = 32 + msb16({4'b0000,v[43:32]});
+      else if (|v[31:16])
+        msb44 = 16 + msb16(v[31:16]);
+      else
+        msb44 = msb16(v[15:0]);
+    end
+  endfunction
+
+
+  function automatic integer msb48(
+    input logic [47:0] v
+  );
+    begin
+      if (|v[47:32])
+        msb48 = 32 + msb16(v[47:32]);
+      else if (|v[31:16])
+        msb48 = 16 + msb16(v[31:16]);
+      else
+        msb48 = msb16(v[15:0]);
+    end
+  endfunction
+
+
+  function automatic integer msb80(
+    input logic [79:0] v
+  );
+    begin
+      if (|v[79:64])
+        msb80 = 64 + msb16(v[79:64]);
+      else if (|v[63:48])
+        msb80 = 48 + msb16(v[63:48]);
+      else if (|v[47:32])
+        msb80 = 32 + msb16(v[47:32]);
+      else if (|v[31:16])
+        msb80 = 16 + msb16(v[31:16]);
+      else
+        msb80 = msb16(v[15:0]);
+    end
+  endfunction
+
+
+  /*
+   * ==========================================================================
+   * Sticky alignment helpers
+   *
+   * FP32 uses 80 bits <= 96-bit A8 ceiling.
+   * FP16 uses 44 bits = its A8 ceiling.
+   * BF16 uses 32 bits = its A8 ceiling.
+   * ==========================================================================
+   */
+
+  function automatic logic [79:0] align80(
+    input logic [47:0] mag,
+    input integer      lsb_exp,
+    input integer      base_exp
+  );
+    integer delta;
+    integer rshift;
+    logic [79:0] tmp;
+    logic [79:0] shifted;
+    logic [79:0] mask;
+    logic sticky;
+
+    begin
+      tmp     = {{32{1'b0}},mag};
+      shifted = 80'b0;
+      mask    = 80'b0;
+      sticky  = 1'b0;
+
+      delta = lsb_exp - base_exp;
+
+      if (mag == 48'b0) begin
+        align80 = 80'b0;
+      end
+      else if (delta >= 0) begin
+        align80 = tmp << delta;
+      end
+      else begin
+        rshift = -delta;
+
+        if (rshift >= 80) begin
+          align80 = 80'd1;
+        end
+        else begin
+          shifted = tmp >> rshift;
+          mask = (80'd1 << rshift) - 80'd1;
+          sticky = |(tmp & mask);
+          shifted[0] = shifted[0] | sticky;
+          align80 = shifted;
+        end
+      end
+    end
+  endfunction
+
+
+  function automatic logic [43:0] align44(
+    input logic [21:0] mag,
+    input integer      lsb_exp,
+    input integer      base_exp
+  );
+    integer delta;
+    integer rshift;
+    logic [43:0] tmp;
+    logic [43:0] shifted;
+    logic [43:0] mask;
+    logic sticky;
+
+    begin
+      tmp     = {{22{1'b0}},mag};
+      shifted = 44'b0;
+      mask    = 44'b0;
+      sticky  = 1'b0;
+
+      delta = lsb_exp - base_exp;
+
+      if (mag == 22'b0) begin
+        align44 = 44'b0;
+      end
+      else if (delta >= 0) begin
+        align44 = tmp << delta;
+      end
+      else begin
+        rshift = -delta;
+
+        if (rshift >= 44) begin
+          align44 = 44'd1;
+        end
+        else begin
+          shifted = tmp >> rshift;
+          mask = (44'd1 << rshift) - 44'd1;
+          sticky = |(tmp & mask);
+          shifted[0] = shifted[0] | sticky;
+          align44 = shifted;
+        end
+      end
+    end
+  endfunction
+
+
+  function automatic logic [31:0] align32(
+    input logic [15:0] mag,
+    input integer      lsb_exp,
+    input integer      base_exp
+  );
+    integer delta;
+    integer rshift;
+    logic [31:0] tmp;
+    logic [31:0] shifted;
+    logic [31:0] mask;
+    logic sticky;
+
+    begin
+      tmp     = {{16{1'b0}},mag};
+      shifted = 32'b0;
+      mask    = 32'b0;
+      sticky  = 1'b0;
+
+      delta = lsb_exp - base_exp;
+
+      if (mag == 16'b0) begin
+        align32 = 32'b0;
+      end
+      else if (delta >= 0) begin
+        align32 = tmp << delta;
+      end
+      else begin
+        rshift = -delta;
+
+        if (rshift >= 32) begin
+          align32 = 32'd1;
+        end
+        else begin
+          shifted = tmp >> rshift;
+          mask = (32'd1 << rshift) - 32'd1;
+          sticky = |(tmp & mask);
+          shifted[0] = shifted[0] | sticky;
+          align32 = shifted;
+        end
+      end
+    end
+  endfunction
+
+
+  /*
+   * ==========================================================================
+   * Overflow result selection
+   * ==========================================================================
+   */
+
+  function automatic logic [31:0] overflow32(
+    input logic       sign,
+    input logic [2:0] rnd
+  );
+    logic to_inf;
+
+    begin
+      to_inf = 1'b0;
+
+      case (rnd)
+        3'd0: to_inf = 1'b1;   // RNE
+        3'd1: to_inf = 1'b0;   // RTZ
+        3'd2: to_inf = sign;   // RDN
+        3'd3: to_inf = !sign;  // RUP
+        3'd4: to_inf = 1'b1;   // RMM
+        default: to_inf = 1'b1;
+      endcase
+
+      if (to_inf)
+        overflow32 = {sign,8'hff,23'b0};
+      else
+        overflow32 = {sign,8'hfe,23'h7fffff};
+    end
+  endfunction
+
+
+  function automatic logic [15:0] overflow16(
+    input logic       sign,
+    input logic [2:0] rnd
+  );
+    logic to_inf;
+
+    begin
+      to_inf = 1'b0;
+
+      case (rnd)
+        3'd0: to_inf = 1'b1;
+        3'd1: to_inf = 1'b0;
+        3'd2: to_inf = sign;
+        3'd3: to_inf = !sign;
+        3'd4: to_inf = 1'b1;
+        default: to_inf = 1'b1;
+      endcase
+
+      if (to_inf)
+        overflow16 = {sign,5'h1f,10'b0};
+      else
+        overflow16 = {sign,5'h1e,10'h3ff};
+    end
+  endfunction
+
+
+  function automatic logic [15:0] overflow_bf16(
+    input logic       sign,
+    input logic [2:0] rnd
+  );
+    logic to_inf;
+
+    begin
+      to_inf = 1'b0;
+
+      case (rnd)
+        3'd0: to_inf = 1'b1;
+        3'd1: to_inf = 1'b0;
+        3'd2: to_inf = sign;
+        3'd3: to_inf = !sign;
+        3'd4: to_inf = 1'b1;
+        default: to_inf = 1'b1;
+      endcase
+
+      if (to_inf)
+        overflow_bf16 = {sign,8'hff,7'b0};
+      else
+        overflow_bf16 = {sign,8'hfe,7'h7f};
+    end
+  endfunction
+
+
+  /*
+   * ==========================================================================
+   * FP32 FMA
+   *
+   * return = {NV,DZ,OF,UF,NX,result[31:0]}
+   * ==========================================================================
+   */
+
+  function automatic logic [36:0] fma_fp32(
+    input logic [31:0] fa,
+    input logic [31:0] fb,
+    input logic [31:0] fc,
+    input logic [2:0]  rnd
+  );
+
+    logic sign_a;
+    logic sign_b;
+    logic sign_c;
+    logic sign_p;
+    logic sign_r;
+
+    logic [7:0] exp_a;
+    logic [7:0] exp_b;
+    logic [7:0] exp_c;
+
+    logic [22:0] frac_a;
+    logic [22:0] frac_b;
+    logic [22:0] frac_c;
+
     logic a_nan;
     logic b_nan;
     logic c_nan;
+
     logic a_snan;
     logic b_snan;
     logic c_snan;
+
     logic a_inf;
     logic b_inf;
     logic c_inf;
+
     logic a_zero;
     logic b_zero;
     logic c_zero;
-    logic invalid_mul;
-    logic product_inf;
-    logic invalid_add;
-    logic nan_result;
-    logic [23:0] sig_a;
-    logic [23:0] sig_b;
-    logic [23:0] sig_c;
-    logic [47:0] prod_sig;
-    logic [95:0] p_ext;
-    logic [95:0] c_ext;
-    logic [95:0] p_al;
-    logic [95:0] c_al;
-    logic [95:0] mag;
-    logic p_disc;
-    logic c_disc;
-    logic tail;
-    logic sr;
-    logic exact_zero;
-    logic [23:0] q;
-    logic [24:0] qext;
-    logic [23:0] qround;
-    logic guard_bit;
-    logic lower_nonzero;
-    logic rem_nonzero;
-    logic round_inc;
-    logic overflow_to_inf;
-    logic [31:0] res;
-    logic [4:0] flags;
-    integer exp_a;
-    integer exp_b;
-    integer exp_c;
-    integer exp_p;
-    integer mp;
-    integer mc;
-    integer common_top;
+
+    logic invalid_op;
+
+    logic [23:0] mant_a;
+    logic [23:0] mant_b;
+    logic [23:0] mant_c;
+
+    logic [47:0] prod_mant;
+
+    integer lsb_a;
+    integer lsb_b;
+    integer lsb_c;
+    integer prod_lsb;
+
+    integer prod_top;
+    integer c_top;
+    integer top_exp;
     integer base_exp;
-    integer m;
-    integer etop;
-    integer biased;
-    integer sh;
-    integer rsh;
-    integer i;
+
+    logic [79:0] prod_aligned;
+    logic [79:0] c_aligned;
+
+    logic signed [80:0] prod_term;
+    logic signed [80:0] c_term;
+    logic signed [80:0] exact_sum;
+
+    logic [79:0] magnitude;
+    logic [79:0] trunc_mag;
+    logic [79:0] remainder;
+    logic [79:0] mask;
+    logic [79:0] half_ulp;
+
+    integer leading_bit;
+    integer exact_top_exp;
+    integer shift_amt;
+    integer unbiased_exp;
+
+    logic [24:0] rounded_sig;
+    logic [24:0] sub_sig;
+
+    logic rem_nonzero;
+    logic round_increment;
+
+    logic [7:0] out_exp;
+    logic [31:0] out_value;
+
+    logic nv;
+    logic of;
+    logic uf;
+    logic nx;
 
     begin
-        sa = aa[31];
-        sb = bb[31];
-        sc = cc[31];
-        sp = sa ^ sb;
 
-        ea = aa[30:23];
-        eb = bb[30:23];
-        ec = cc[30:23];
+      sign_a = fa[31];
+      sign_b = fb[31];
+      sign_c = fc[31];
+      sign_p = sign_a ^ sign_b;
+      sign_r = 1'b0;
 
-        fa = aa[22:0];
-        fb = bb[22:0];
-        fc = cc[22:0];
+      exp_a = fa[30:23];
+      exp_b = fb[30:23];
+      exp_c = fc[30:23];
 
-        a_nan = (ea == {8{1'b1}}) && (fa != '0);
-        b_nan = (eb == {8{1'b1}}) && (fb != '0);
-        c_nan = (ec == {8{1'b1}}) && (fc != '0);
+      frac_a = fa[22:0];
+      frac_b = fb[22:0];
+      frac_c = fc[22:0];
 
-        a_snan = a_nan && !fa[22];
-        b_snan = b_nan && !fb[22];
-        c_snan = c_nan && !fc[22];
+      a_nan = (exp_a == 8'hff) && (frac_a != 0);
+      b_nan = (exp_b == 8'hff) && (frac_b != 0);
+      c_nan = (exp_c == 8'hff) && (frac_c != 0);
 
-        a_inf = (ea == {8{1'b1}}) && (fa == '0);
-        b_inf = (eb == {8{1'b1}}) && (fb == '0);
-        c_inf = (ec == {8{1'b1}}) && (fc == '0);
+      a_snan = a_nan && !frac_a[22];
+      b_snan = b_nan && !frac_b[22];
+      c_snan = c_nan && !frac_c[22];
 
-        a_zero = (ea == '0) && (fa == '0);
-        b_zero = (eb == '0) && (fb == '0);
-        c_zero = (ec == '0) && (fc == '0);
+      a_inf = (exp_a == 8'hff) && (frac_a == 0);
+      b_inf = (exp_b == 8'hff) && (frac_b == 0);
+      c_inf = (exp_c == 8'hff) && (frac_c == 0);
 
-        invalid_mul = (a_inf && b_zero) || (b_inf && a_zero);
-        product_inf = (a_inf || b_inf) &&
-                      !a_nan && !b_nan &&
-                      !invalid_mul;
-        invalid_add = product_inf && c_inf && (sp != sc);
+      a_zero = (exp_a == 0) && (frac_a == 0);
+      b_zero = (exp_b == 0) && (frac_b == 0);
+      c_zero = (exp_c == 0) && (frac_c == 0);
 
-        nan_result = a_nan || b_nan || c_nan ||
-                     invalid_mul || invalid_add;
+      mant_a = 0;
+      mant_b = 0;
+      mant_c = 0;
 
-        flags = 5'b0;
-        flags[4] = a_snan || b_snan || c_snan ||
-                   invalid_mul || invalid_add;
-        res = '0;
+      prod_mant = 0;
 
-        if (nan_result) begin
-            res = 32'h7fc00000;
-        end
-        else if (product_inf) begin
-            res = {sp, {8{1'b1}}, {23{1'b0}}};
-        end
-        else if (c_inf) begin
-            res = {sc, {8{1'b1}}, {23{1'b0}}};
+      lsb_a = 0;
+      lsb_b = 0;
+      lsb_c = 0;
+      prod_lsb = 0;
+
+      prod_top = -10000;
+      c_top    = -10000;
+      top_exp  = -10000;
+      base_exp = 0;
+
+      prod_aligned = 0;
+      c_aligned    = 0;
+
+      prod_term = 0;
+      c_term    = 0;
+      exact_sum = 0;
+
+      magnitude = 0;
+      trunc_mag = 0;
+      remainder = 0;
+      mask      = 0;
+      half_ulp  = 0;
+
+      leading_bit  = 0;
+      exact_top_exp = 0;
+      shift_amt = 0;
+      unbiased_exp = 0;
+
+      rounded_sig = 0;
+      sub_sig     = 0;
+
+      rem_nonzero = 1'b0;
+      round_increment = 1'b0;
+
+      out_exp   = 0;
+      out_value = 0;
+
+      nv = 1'b0;
+      of = 1'b0;
+      uf = 1'b0;
+      nx = 1'b0;
+
+      invalid_op =
+          a_snan ||
+          b_snan ||
+          c_snan ||
+          (a_inf && b_zero) ||
+          (b_inf && a_zero);
+
+      if (
+          (a_inf || b_inf) &&
+          !a_nan &&
+          !b_nan &&
+          !a_zero &&
+          !b_zero &&
+          c_inf &&
+          (sign_p != sign_c)
+      )
+        invalid_op = 1'b1;
+
+
+      /*
+       * Canonical NaN.
+       *
+       * A5's invalid operations take priority even if another operand is qNaN.
+       */
+      if (a_nan || b_nan || c_nan || invalid_op) begin
+
+        out_value = 32'h7fc00000;
+        nv = invalid_op;
+
+      end
+      else if (a_inf || b_inf) begin
+
+        out_value = {sign_p,8'hff,23'b0};
+
+      end
+      else if (c_inf) begin
+
+        out_value = {sign_c,8'hff,23'b0};
+
+      end
+      else begin
+
+        if (exp_a == 0) begin
+          mant_a = {1'b0,frac_a};
+          lsb_a  = -149;
         end
         else begin
-            if (ea == '0) begin
-                sig_a = {1'b0, fa};
-                exp_a = -149;
-            end
-            else begin
-                sig_a = {1'b1, fa};
-                exp_a = $unsigned(ea) - 127 - 23;
-            end
-
-            if (eb == '0) begin
-                sig_b = {1'b0, fb};
-                exp_b = -149;
-            end
-            else begin
-                sig_b = {1'b1, fb};
-                exp_b = $unsigned(eb) - 127 - 23;
-            end
-
-            if (ec == '0) begin
-                sig_c = {1'b0, fc};
-                exp_c = -149;
-            end
-            else begin
-                sig_c = {1'b1, fc};
-                exp_c = $unsigned(ec) - 127 - 23;
-            end
-
-            prod_sig = sig_a * sig_b;
-            exp_p = exp_a + exp_b;
-
-            mp = -1;
-            for (i = 0; i < 48; i = i + 1) begin
-                if (prod_sig[i]) begin
-                    mp = i;
-                end
-            end
-
-            mc = -1;
-            for (i = 0; i < 24; i = i + 1) begin
-                if (sig_c[i]) begin
-                    mc = i;
-                end
-            end
-
-            exact_zero = 1'b0;
-            tail = 1'b0;
-            sr = 1'b0;
-            mag = '0;
-
-            if ((mp < 0) && (mc < 0)) begin
-                exact_zero = 1'b1;
-                if (sp == sc) begin
-                    sr = sp;
-                end
-                else begin
-                    sr = (rm == 3'd2);
-                end
-            end
-            else begin
-                if (mp < 0) begin
-                    common_top = exp_c + mc;
-                end
-                else if (mc < 0) begin
-                    common_top = exp_p + mp;
-                end
-                else if ((exp_p + mp) >= (exp_c + mc)) begin
-                    common_top = exp_p + mp;
-                end
-                else begin
-                    common_top = exp_c + mc;
-                end
-
-                p_ext = '0;
-                c_ext = '0;
-                p_ext[47:0] = prod_sig;
-                c_ext[23:0] = sig_c;
-
-                p_al = '0;
-                c_al = '0;
-                p_disc = 1'b0;
-                c_disc = 1'b0;
-
-                sh = 94 + exp_p - common_top;
-                if (mp >= 0) begin
-                    if (sh >= 0) begin
-                        if (sh < 96) begin
-                            p_al = p_ext << sh;
-                        end
-                    end
-                    else begin
-                        rsh = -sh;
-                        if (rsh >= 96) begin
-                            p_al = '0;
-                            p_disc = |p_ext;
-                        end
-                        else begin
-                            p_al = p_ext >> rsh;
-                            for (i = 0; i < 96; i = i + 1) begin
-                                if ((i < rsh) && p_ext[i]) begin
-                                    p_disc = 1'b1;
-                                end
-                            end
-                        end
-                    end
-                end
-
-                sh = 94 + exp_c - common_top;
-                if (mc >= 0) begin
-                    if (sh >= 0) begin
-                        if (sh < 96) begin
-                            c_al = c_ext << sh;
-                        end
-                    end
-                    else begin
-                        rsh = -sh;
-                        if (rsh >= 96) begin
-                            c_al = '0;
-                            c_disc = |c_ext;
-                        end
-                        else begin
-                            c_al = c_ext >> rsh;
-                            for (i = 0; i < 96; i = i + 1) begin
-                                if ((i < rsh) && c_ext[i]) begin
-                                    c_disc = 1'b1;
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if (sp == sc) begin
-                    mag = p_al + c_al;
-                    tail = p_disc || c_disc;
-                    sr = sp;
-                end
-                else if (p_al > c_al) begin
-                    sr = sp;
-                    if (c_disc && !p_disc) begin
-                        mag = (p_al - c_al) -
-                              {{(96-1){1'b0}}, 1'b1};
-                        tail = 1'b1;
-                    end
-                    else begin
-                        mag = p_al - c_al;
-                        tail = p_disc || c_disc;
-                    end
-                end
-                else if (c_al > p_al) begin
-                    sr = sc;
-                    if (p_disc && !c_disc) begin
-                        mag = (c_al - p_al) -
-                              {{(96-1){1'b0}}, 1'b1};
-                        tail = 1'b1;
-                    end
-                    else begin
-                        mag = c_al - p_al;
-                        tail = p_disc || c_disc;
-                    end
-                end
-                else if (!p_disc && !c_disc) begin
-                    mag = '0;
-                    tail = 1'b0;
-                    exact_zero = 1'b1;
-                    sr = (rm == 3'd2);
-                end
-                else if (p_disc && !c_disc) begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = sp;
-                end
-                else if (c_disc && !p_disc) begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = sc;
-                end
-                else begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = (rm == 3'd2);
-                end
-
-                if (!exact_zero) begin
-                    base_exp = common_top - 94;
-
-                    m = -1;
-                    for (i = 0; i < 96; i = i + 1) begin
-                        if (mag[i]) begin
-                            m = i;
-                        end
-                    end
-
-                    if (m < 0) begin
-                        rem_nonzero = tail;
-                        round_inc = 1'b0;
-                        case (rm)
-                            3'd2: round_inc = sr && rem_nonzero;
-                            3'd3: round_inc = (!sr) && rem_nonzero;
-                            default: round_inc = 1'b0;
-                        endcase
-
-                        if (round_inc) begin
-                            res = {sr, {8{1'b0}},
-                                   {(23-1){1'b0}}, 1'b1};
-                        end
-                        else begin
-                            res = {sr, {(32-1){1'b0}}};
-                        end
-
-                        flags[0] = rem_nonzero;
-                        flags[1] = rem_nonzero;
-                    end
-                    else begin
-                        etop = base_exp + m;
-                        q = '0;
-                        guard_bit = 1'b0;
-                        lower_nonzero = 1'b0;
-                        rem_nonzero = 1'b0;
-
-                        if (etop >= -126) begin
-                            sh = m - 23;
-
-                            if (sh <= 0) begin
-                                q = mag << (-sh);
-                                rem_nonzero = tail;
-                            end
-                            else begin
-                                q = mag >> sh;
-                                guard_bit = mag[sh-1];
-                                lower_nonzero = tail;
-
-                                if (sh > 1) begin
-                                    for (i = 0; i < 96; i = i + 1) begin
-                                        if ((i < (sh-1)) && mag[i]) begin
-                                            lower_nonzero = 1'b1;
-                                        end
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-
-                            round_inc = 1'b0;
-                            case (rm)
-                                3'd0: round_inc =
-                                    guard_bit &&
-                                    (lower_nonzero || q[0]);
-                                3'd1: round_inc = 1'b0;
-                                3'd2: round_inc = sr && rem_nonzero;
-                                3'd3: round_inc = (!sr) && rem_nonzero;
-                                3'd4: round_inc = guard_bit;
-                                default: round_inc = 1'b0;
-                            endcase
-
-                            qext = {1'b0, q} +
-                                   {{24{1'b0}}, round_inc};
-
-                            if (qext[24]) begin
-                                qround = qext[24:1];
-                                etop = etop + 1;
-                            end
-                            else begin
-                                qround = qext[23:0];
-                            end
-
-                            if (etop > 127) begin
-                                flags[0] = 1'b1;
-                                flags[2] = 1'b1;
-
-                                overflow_to_inf = 1'b0;
-                                case (rm)
-                                    3'd0: overflow_to_inf = 1'b1;
-                                    3'd1: overflow_to_inf = 1'b0;
-                                    3'd2: overflow_to_inf = sr;
-                                    3'd3: overflow_to_inf = !sr;
-                                    3'd4: overflow_to_inf = 1'b1;
-                                    default: overflow_to_inf = 1'b1;
-                                endcase
-
-                                if (overflow_to_inf) begin
-                                    res = {sr, {8{1'b1}},
-                                           {23{1'b0}}};
-                                end
-                                else begin
-                                    res = {sr,
-                                           {(8-1){1'b1}}, 1'b0,
-                                           {23{1'b1}}};
-                                end
-                            end
-                            else begin
-                                biased = etop + 127;
-                                res = {sr,
-                                       biased[7:0],
-                                       qround[22:0]};
-                                flags[0] = rem_nonzero;
-                            end
-                        end
-                        else begin
-                            sh = -149 - base_exp;
-
-                            if (sh <= 0) begin
-                                q = mag << (-sh);
-                                rem_nonzero = tail;
-                            end
-                            else if (sh < 96) begin
-                                q = mag >> sh;
-                                guard_bit = mag[sh-1];
-                                lower_nonzero = tail;
-
-                                if (sh > 1) begin
-                                    for (i = 0; i < 96; i = i + 1) begin
-                                        if ((i < (sh-1)) && mag[i]) begin
-                                            lower_nonzero = 1'b1;
-                                        end
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-                            else if (sh == 96) begin
-                                q = '0;
-                                guard_bit = mag[95];
-                                lower_nonzero = tail;
-
-                                for (i = 0; i < 95; i = i + 1) begin
-                                    if (mag[i]) begin
-                                        lower_nonzero = 1'b1;
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-                            else begin
-                                q = '0;
-                                guard_bit = 1'b0;
-                                lower_nonzero = (|mag) || tail;
-                                rem_nonzero = lower_nonzero;
-                            end
-
-                            round_inc = 1'b0;
-                            case (rm)
-                                3'd0: round_inc =
-                                    guard_bit &&
-                                    (lower_nonzero || q[0]);
-                                3'd1: round_inc = 1'b0;
-                                3'd2: round_inc = sr && rem_nonzero;
-                                3'd3: round_inc = (!sr) && rem_nonzero;
-                                3'd4: round_inc = guard_bit;
-                                default: round_inc = 1'b0;
-                            endcase
-
-                            qext = {1'b0, q} +
-                                   {{24{1'b0}}, round_inc};
-
-                            if (qext[23]) begin
-                                res = {sr,
-                                       {(8-1){1'b0}}, 1'b1,
-                                       {23{1'b0}}};
-                            end
-                            else begin
-                                res = {sr,
-                                       {8{1'b0}},
-                                       qext[22:0]};
-                            end
-
-                            flags[0] = rem_nonzero;
-                            flags[1] =
-                                rem_nonzero &&
-                                (res[30:23] == '0);
-                        end
-                    end
-                end
-
-                if (exact_zero) begin
-                    res = {sr, {(32-1){1'b0}}};
-                end
-            end
+          mant_a = {1'b1,frac_a};
+          lsb_a  = exp_a;
+          lsb_a  = lsb_a - 150;
         end
 
-        fp32_calc = {flags, res};
+        if (exp_b == 0) begin
+          mant_b = {1'b0,frac_b};
+          lsb_b  = -149;
+        end
+        else begin
+          mant_b = {1'b1,frac_b};
+          lsb_b  = exp_b;
+          lsb_b  = lsb_b - 150;
+        end
+
+        if (exp_c == 0) begin
+          mant_c = {1'b0,frac_c};
+          lsb_c  = -149;
+        end
+        else begin
+          mant_c = {1'b1,frac_c};
+          lsb_c  = exp_c;
+          lsb_c  = lsb_c - 150;
+        end
+
+        prod_mant =
+            {24'b0,mant_a} *
+            {24'b0,mant_b};
+
+        prod_lsb = lsb_a + lsb_b;
+
+        /*
+         * Both terms are zero.
+         */
+        if ((prod_mant == 0) && (mant_c == 0)) begin
+
+          if (sign_p == sign_c)
+            sign_r = sign_p;
+          else if (rnd == 3'd2)
+            sign_r = 1'b1;
+          else
+            sign_r = 1'b0;
+
+          out_value = {sign_r,31'b0};
+
+        end
+        else begin
+
+          if (prod_mant != 0)
+            prod_top = prod_lsb + msb48(prod_mant);
+
+          if (mant_c != 0)
+            c_top = lsb_c + msb24(mant_c);
+
+          if (prod_top > c_top)
+            top_exp = prod_top;
+          else
+            top_exp = c_top;
+
+          /*
+           * Keep the dominant bit near bit 76, leaving carry headroom.
+           */
+          base_exp = top_exp - 76;
+
+          prod_aligned =
+              align80(
+                prod_mant,
+                prod_lsb,
+                base_exp
+              );
+
+          c_aligned =
+              align80(
+                {24'b0,mant_c},
+                lsb_c,
+                base_exp
+              );
+
+          prod_term = $signed({1'b0,prod_aligned});
+          c_term    = $signed({1'b0,c_aligned});
+
+          if (sign_p)
+            prod_term = -prod_term;
+
+          if (sign_c)
+            c_term = -c_term;
+
+          exact_sum = prod_term + c_term;
+
+          if (exact_sum == 0) begin
+
+            if (rnd == 3'd2)
+              sign_r = 1'b1;
+            else
+              sign_r = 1'b0;
+
+            out_value = {sign_r,31'b0};
+
+          end
+          else begin
+
+            sign_r = exact_sum[80];
+
+            if (sign_r)
+              magnitude =
+                  (~exact_sum[79:0]) +
+                  80'd1;
+            else
+              magnitude =
+                  exact_sum[79:0];
+
+            leading_bit =
+                msb80(magnitude);
+
+            exact_top_exp =
+                base_exp +
+                leading_bit;
+
+
+            /*
+             * Normal result path.
+             */
+            if (exact_top_exp >= -126) begin
+
+              if (exact_top_exp > 127) begin
+
+                out_value = overflow32(sign_r,rnd);
+                of = 1'b1;
+                nx = 1'b1;
+
+              end
+              else begin
+
+                unbiased_exp = exact_top_exp;
+
+                shift_amt =
+                    leading_bit -
+                    23;
+
+                trunc_mag = 0;
+                remainder = 0;
+                half_ulp = 0;
+                mask = 0;
+                rem_nonzero = 1'b0;
+
+                if (shift_amt <= 0) begin
+
+                  trunc_mag =
+                      magnitude <<
+                      (-shift_amt);
+
+                end
+                else if (shift_amt < 80) begin
+
+                  trunc_mag =
+                      magnitude >>
+                      shift_amt;
+
+                  mask =
+                      (80'd1 << shift_amt) -
+                      80'd1;
+
+                  remainder =
+                      magnitude &
+                      mask;
+
+                  half_ulp =
+                      80'd1 <<
+                      (shift_amt - 1);
+
+                  rem_nonzero =
+                      (remainder != 0);
+
+                end
+                else begin
+
+                  trunc_mag = 0;
+                  remainder = magnitude;
+                  rem_nonzero = (magnitude != 0);
+
+                end
+
+                rounded_sig =
+                    trunc_mag[24:0];
+
+                round_increment = 1'b0;
+
+                if (rem_nonzero) begin
+                  case (rnd)
+
+                    3'd0: begin
+                      if (shift_amt >= 80)
+                        round_increment = 1'b0;
+                      else
+                        round_increment =
+                            (remainder > half_ulp) ||
+                            (
+                              (remainder == half_ulp) &&
+                              rounded_sig[0]
+                            );
+                    end
+
+                    3'd1:
+                      round_increment = 1'b0;
+
+                    3'd2:
+                      round_increment = sign_r;
+
+                    3'd3:
+                      round_increment = !sign_r;
+
+                    3'd4: begin
+                      if (shift_amt >= 80)
+                        round_increment = 1'b0;
+                      else
+                        round_increment =
+                            remainder >= half_ulp;
+                    end
+
+                    default:
+                      round_increment = 1'b0;
+
+                  endcase
+                end
+
+                if (round_increment)
+                  rounded_sig =
+                      rounded_sig +
+                      25'd1;
+
+                if (rounded_sig[24]) begin
+
+                  rounded_sig =
+                      rounded_sig >> 1;
+
+                  unbiased_exp =
+                      unbiased_exp +
+                      1;
+
+                end
+
+                if (unbiased_exp > 127) begin
+
+                  out_value =
+                      overflow32(
+                        sign_r,
+                        rnd
+                      );
+
+                  of = 1'b1;
+                  nx = 1'b1;
+
+                end
+                else begin
+
+                  out_exp =
+                      unbiased_exp +
+                      127;
+
+                  out_value = {
+                    sign_r,
+                    out_exp,
+                    rounded_sig[22:0]
+                  };
+
+                  nx = rem_nonzero;
+
+                end
+
+              end
+
+            end
+            else begin
+
+              /*
+               * Binary32 subnormal quantum is 2^-149.
+               */
+              shift_amt =
+                  -149 -
+                  base_exp;
+
+              trunc_mag = 0;
+              remainder = 0;
+              mask = 0;
+              half_ulp = 0;
+              rem_nonzero = 1'b0;
+
+              if (shift_amt <= 0) begin
+
+                trunc_mag =
+                    magnitude <<
+                    (-shift_amt);
+
+              end
+              else if (shift_amt < 80) begin
+
+                trunc_mag =
+                    magnitude >>
+                    shift_amt;
+
+                mask =
+                    (80'd1 << shift_amt) -
+                    80'd1;
+
+                remainder =
+                    magnitude &
+                    mask;
+
+                half_ulp =
+                    80'd1 <<
+                    (shift_amt - 1);
+
+                rem_nonzero =
+                    (remainder != 0);
+
+              end
+              else begin
+
+                trunc_mag = 0;
+                remainder = magnitude;
+                rem_nonzero = (magnitude != 0);
+
+              end
+
+              sub_sig =
+                  trunc_mag[24:0];
+
+              round_increment = 1'b0;
+
+              if (rem_nonzero) begin
+                case (rnd)
+
+                  3'd0: begin
+                    if (shift_amt >= 80)
+                      round_increment = 1'b0;
+                    else
+                      round_increment =
+                          (remainder > half_ulp) ||
+                          (
+                            (remainder == half_ulp) &&
+                            sub_sig[0]
+                          );
+                  end
+
+                  3'd1:
+                    round_increment = 1'b0;
+
+                  3'd2:
+                    round_increment = sign_r;
+
+                  3'd3:
+                    round_increment = !sign_r;
+
+                  3'd4: begin
+                    if (shift_amt >= 80)
+                      round_increment = 1'b0;
+                    else
+                      round_increment =
+                          remainder >= half_ulp;
+                  end
+
+                  default:
+                    round_increment = 1'b0;
+
+                endcase
+              end
+
+              if (round_increment)
+                sub_sig =
+                    sub_sig +
+                    25'd1;
+
+              /*
+               * Rounded upward to the smallest normal.
+               */
+              if (sub_sig >= 25'h0800000) begin
+
+                out_value = {
+                  sign_r,
+                  8'h01,
+                  23'b0
+                };
+
+                nx = rem_nonzero;
+                uf = 1'b0;
+
+              end
+              else begin
+
+                out_value = {
+                  sign_r,
+                  8'h00,
+                  sub_sig[22:0]
+                };
+
+                nx = rem_nonzero;
+
+                /*
+                 * Task-pinned A7a rule.
+                 */
+                uf = rem_nonzero;
+
+              end
+
+            end
+
+          end
+
+        end
+
+      end
+
+      fma_fp32 = {
+        nv,
+        1'b0,
+        of,
+        uf,
+        nx,
+        out_value
+      };
+
     end
-endfunction
+  endfunction
 
 
-function automatic logic [20:0] fp16_calc(
-    input logic [15:0] aa,
-    input logic [15:0] bb,
-    input logic [15:0] cc,
-    input logic [2:0]       rm
-);
-    logic sa;
-    logic sb;
-    logic sc;
-    logic sp;
-    logic [4:0] ea;
-    logic [4:0] eb;
-    logic [4:0] ec;
-    logic [9:0] fa;
-    logic [9:0] fb;
-    logic [9:0] fc;
+  /*
+   * ==========================================================================
+   * FP16 FMA
+   *
+   * return = {NV,DZ,OF,UF,NX,result[15:0]}
+   * ==========================================================================
+   */
+
+  function automatic logic [20:0] fma_fp16(
+    input logic [15:0] fa,
+    input logic [15:0] fb,
+    input logic [15:0] fc,
+    input logic [2:0]  rnd
+  );
+
+    logic sign_a;
+    logic sign_b;
+    logic sign_c;
+    logic sign_p;
+    logic sign_r;
+
+    logic [4:0] exp_a;
+    logic [4:0] exp_b;
+    logic [4:0] exp_c;
+
+    logic [9:0] frac_a;
+    logic [9:0] frac_b;
+    logic [9:0] frac_c;
+
     logic a_nan;
     logic b_nan;
     logic c_nan;
+
     logic a_snan;
     logic b_snan;
     logic c_snan;
+
     logic a_inf;
     logic b_inf;
     logic c_inf;
+
     logic a_zero;
     logic b_zero;
     logic c_zero;
-    logic invalid_mul;
-    logic product_inf;
-    logic invalid_add;
-    logic nan_result;
-    logic [10:0] sig_a;
-    logic [10:0] sig_b;
-    logic [10:0] sig_c;
-    logic [21:0] prod_sig;
-    logic [43:0] p_ext;
-    logic [43:0] c_ext;
-    logic [43:0] p_al;
-    logic [43:0] c_al;
-    logic [43:0] mag;
-    logic p_disc;
-    logic c_disc;
-    logic tail;
-    logic sr;
-    logic exact_zero;
-    logic [10:0] q;
-    logic [11:0] qext;
-    logic [10:0] qround;
-    logic guard_bit;
-    logic lower_nonzero;
-    logic rem_nonzero;
-    logic round_inc;
-    logic overflow_to_inf;
-    logic [15:0] res;
-    logic [4:0] flags;
-    integer exp_a;
-    integer exp_b;
-    integer exp_c;
-    integer exp_p;
-    integer mp;
-    integer mc;
-    integer common_top;
+
+    logic invalid_op;
+
+    logic [10:0] mant_a;
+    logic [10:0] mant_b;
+    logic [10:0] mant_c;
+
+    logic [21:0] prod_mant;
+
+    integer lsb_a;
+    integer lsb_b;
+    integer lsb_c;
+    integer prod_lsb;
+
+    integer prod_top;
+    integer c_top;
+    integer top_exp;
     integer base_exp;
-    integer m;
-    integer etop;
-    integer biased;
-    integer sh;
-    integer rsh;
-    integer i;
+
+    logic [43:0] prod_aligned;
+    logic [43:0] c_aligned;
+
+    logic signed [44:0] prod_term;
+    logic signed [44:0] c_term;
+    logic signed [44:0] exact_sum;
+
+    logic [43:0] magnitude;
+    logic [43:0] trunc_mag;
+    logic [43:0] remainder;
+    logic [43:0] mask;
+    logic [43:0] half_ulp;
+
+    integer leading_bit;
+    integer exact_top_exp;
+    integer shift_amt;
+    integer unbiased_exp;
+
+    logic [11:0] rounded_sig;
+    logic [11:0] sub_sig;
+
+    logic rem_nonzero;
+    logic round_increment;
+
+    logic [4:0] out_exp;
+    logic [15:0] out_value;
+
+    logic nv;
+    logic of;
+    logic uf;
+    logic nx;
 
     begin
-        sa = aa[15];
-        sb = bb[15];
-        sc = cc[15];
-        sp = sa ^ sb;
 
-        ea = aa[14:10];
-        eb = bb[14:10];
-        ec = cc[14:10];
+      sign_a = fa[15];
+      sign_b = fb[15];
+      sign_c = fc[15];
+      sign_p = sign_a ^ sign_b;
+      sign_r = 1'b0;
 
-        fa = aa[9:0];
-        fb = bb[9:0];
-        fc = cc[9:0];
+      exp_a = fa[14:10];
+      exp_b = fb[14:10];
+      exp_c = fc[14:10];
 
-        a_nan = (ea == {5{1'b1}}) && (fa != '0);
-        b_nan = (eb == {5{1'b1}}) && (fb != '0);
-        c_nan = (ec == {5{1'b1}}) && (fc != '0);
+      frac_a = fa[9:0];
+      frac_b = fb[9:0];
+      frac_c = fc[9:0];
 
-        a_snan = a_nan && !fa[9];
-        b_snan = b_nan && !fb[9];
-        c_snan = c_nan && !fc[9];
+      a_nan = (exp_a == 5'h1f) && (frac_a != 0);
+      b_nan = (exp_b == 5'h1f) && (frac_b != 0);
+      c_nan = (exp_c == 5'h1f) && (frac_c != 0);
 
-        a_inf = (ea == {5{1'b1}}) && (fa == '0);
-        b_inf = (eb == {5{1'b1}}) && (fb == '0);
-        c_inf = (ec == {5{1'b1}}) && (fc == '0);
+      a_snan = a_nan && !frac_a[9];
+      b_snan = b_nan && !frac_b[9];
+      c_snan = c_nan && !frac_c[9];
 
-        a_zero = (ea == '0) && (fa == '0);
-        b_zero = (eb == '0) && (fb == '0);
-        c_zero = (ec == '0) && (fc == '0);
+      a_inf = (exp_a == 5'h1f) && (frac_a == 0);
+      b_inf = (exp_b == 5'h1f) && (frac_b == 0);
+      c_inf = (exp_c == 5'h1f) && (frac_c == 0);
 
-        invalid_mul = (a_inf && b_zero) || (b_inf && a_zero);
-        product_inf = (a_inf || b_inf) &&
-                      !a_nan && !b_nan &&
-                      !invalid_mul;
-        invalid_add = product_inf && c_inf && (sp != sc);
+      a_zero = (exp_a == 0) && (frac_a == 0);
+      b_zero = (exp_b == 0) && (frac_b == 0);
+      c_zero = (exp_c == 0) && (frac_c == 0);
 
-        nan_result = a_nan || b_nan || c_nan ||
-                     invalid_mul || invalid_add;
+      mant_a = 0;
+      mant_b = 0;
+      mant_c = 0;
 
-        flags = 5'b0;
-        flags[4] = a_snan || b_snan || c_snan ||
-                   invalid_mul || invalid_add;
-        res = '0;
+      prod_mant = 0;
 
-        if (nan_result) begin
-            res = 16'h7e00;
-        end
-        else if (product_inf) begin
-            res = {sp, {5{1'b1}}, {10{1'b0}}};
-        end
-        else if (c_inf) begin
-            res = {sc, {5{1'b1}}, {10{1'b0}}};
+      lsb_a = 0;
+      lsb_b = 0;
+      lsb_c = 0;
+      prod_lsb = 0;
+
+      prod_top = -10000;
+      c_top = -10000;
+      top_exp = -10000;
+      base_exp = 0;
+
+      prod_aligned = 0;
+      c_aligned = 0;
+
+      prod_term = 0;
+      c_term = 0;
+      exact_sum = 0;
+
+      magnitude = 0;
+      trunc_mag = 0;
+      remainder = 0;
+      mask = 0;
+      half_ulp = 0;
+
+      leading_bit = 0;
+      exact_top_exp = 0;
+      shift_amt = 0;
+      unbiased_exp = 0;
+
+      rounded_sig = 0;
+      sub_sig = 0;
+
+      rem_nonzero = 1'b0;
+      round_increment = 1'b0;
+
+      out_exp = 0;
+      out_value = 0;
+
+      nv = 1'b0;
+      of = 1'b0;
+      uf = 1'b0;
+      nx = 1'b0;
+
+      invalid_op =
+          a_snan ||
+          b_snan ||
+          c_snan ||
+          (a_inf && b_zero) ||
+          (b_inf && a_zero);
+
+      if (
+          (a_inf || b_inf) &&
+          !a_nan &&
+          !b_nan &&
+          !a_zero &&
+          !b_zero &&
+          c_inf &&
+          (sign_p != sign_c)
+      )
+        invalid_op = 1'b1;
+
+
+      if (a_nan || b_nan || c_nan || invalid_op) begin
+
+        out_value = 16'h7e00;
+        nv = invalid_op;
+
+      end
+      else if (a_inf || b_inf) begin
+
+        out_value = {sign_p,5'h1f,10'b0};
+
+      end
+      else if (c_inf) begin
+
+        out_value = {sign_c,5'h1f,10'b0};
+
+      end
+      else begin
+
+        if (exp_a == 0) begin
+          mant_a = {1'b0,frac_a};
+          lsb_a = -24;
         end
         else begin
-            if (ea == '0) begin
-                sig_a = {1'b0, fa};
-                exp_a = -24;
-            end
-            else begin
-                sig_a = {1'b1, fa};
-                exp_a = $unsigned(ea) - 15 - 10;
-            end
-
-            if (eb == '0) begin
-                sig_b = {1'b0, fb};
-                exp_b = -24;
-            end
-            else begin
-                sig_b = {1'b1, fb};
-                exp_b = $unsigned(eb) - 15 - 10;
-            end
-
-            if (ec == '0) begin
-                sig_c = {1'b0, fc};
-                exp_c = -24;
-            end
-            else begin
-                sig_c = {1'b1, fc};
-                exp_c = $unsigned(ec) - 15 - 10;
-            end
-
-            prod_sig = sig_a * sig_b;
-            exp_p = exp_a + exp_b;
-
-            mp = -1;
-            for (i = 0; i < 22; i = i + 1) begin
-                if (prod_sig[i]) begin
-                    mp = i;
-                end
-            end
-
-            mc = -1;
-            for (i = 0; i < 11; i = i + 1) begin
-                if (sig_c[i]) begin
-                    mc = i;
-                end
-            end
-
-            exact_zero = 1'b0;
-            tail = 1'b0;
-            sr = 1'b0;
-            mag = '0;
-
-            if ((mp < 0) && (mc < 0)) begin
-                exact_zero = 1'b1;
-                if (sp == sc) begin
-                    sr = sp;
-                end
-                else begin
-                    sr = (rm == 3'd2);
-                end
-            end
-            else begin
-                if (mp < 0) begin
-                    common_top = exp_c + mc;
-                end
-                else if (mc < 0) begin
-                    common_top = exp_p + mp;
-                end
-                else if ((exp_p + mp) >= (exp_c + mc)) begin
-                    common_top = exp_p + mp;
-                end
-                else begin
-                    common_top = exp_c + mc;
-                end
-
-                p_ext = '0;
-                c_ext = '0;
-                p_ext[21:0] = prod_sig;
-                c_ext[10:0] = sig_c;
-
-                p_al = '0;
-                c_al = '0;
-                p_disc = 1'b0;
-                c_disc = 1'b0;
-
-                sh = 42 + exp_p - common_top;
-                if (mp >= 0) begin
-                    if (sh >= 0) begin
-                        if (sh < 44) begin
-                            p_al = p_ext << sh;
-                        end
-                    end
-                    else begin
-                        rsh = -sh;
-                        if (rsh >= 44) begin
-                            p_al = '0;
-                            p_disc = |p_ext;
-                        end
-                        else begin
-                            p_al = p_ext >> rsh;
-                            for (i = 0; i < 44; i = i + 1) begin
-                                if ((i < rsh) && p_ext[i]) begin
-                                    p_disc = 1'b1;
-                                end
-                            end
-                        end
-                    end
-                end
-
-                sh = 42 + exp_c - common_top;
-                if (mc >= 0) begin
-                    if (sh >= 0) begin
-                        if (sh < 44) begin
-                            c_al = c_ext << sh;
-                        end
-                    end
-                    else begin
-                        rsh = -sh;
-                        if (rsh >= 44) begin
-                            c_al = '0;
-                            c_disc = |c_ext;
-                        end
-                        else begin
-                            c_al = c_ext >> rsh;
-                            for (i = 0; i < 44; i = i + 1) begin
-                                if ((i < rsh) && c_ext[i]) begin
-                                    c_disc = 1'b1;
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if (sp == sc) begin
-                    mag = p_al + c_al;
-                    tail = p_disc || c_disc;
-                    sr = sp;
-                end
-                else if (p_al > c_al) begin
-                    sr = sp;
-                    if (c_disc && !p_disc) begin
-                        mag = (p_al - c_al) -
-                              {{(44-1){1'b0}}, 1'b1};
-                        tail = 1'b1;
-                    end
-                    else begin
-                        mag = p_al - c_al;
-                        tail = p_disc || c_disc;
-                    end
-                end
-                else if (c_al > p_al) begin
-                    sr = sc;
-                    if (p_disc && !c_disc) begin
-                        mag = (c_al - p_al) -
-                              {{(44-1){1'b0}}, 1'b1};
-                        tail = 1'b1;
-                    end
-                    else begin
-                        mag = c_al - p_al;
-                        tail = p_disc || c_disc;
-                    end
-                end
-                else if (!p_disc && !c_disc) begin
-                    mag = '0;
-                    tail = 1'b0;
-                    exact_zero = 1'b1;
-                    sr = (rm == 3'd2);
-                end
-                else if (p_disc && !c_disc) begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = sp;
-                end
-                else if (c_disc && !p_disc) begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = sc;
-                end
-                else begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = (rm == 3'd2);
-                end
-
-                if (!exact_zero) begin
-                    base_exp = common_top - 42;
-
-                    m = -1;
-                    for (i = 0; i < 44; i = i + 1) begin
-                        if (mag[i]) begin
-                            m = i;
-                        end
-                    end
-
-                    if (m < 0) begin
-                        rem_nonzero = tail;
-                        round_inc = 1'b0;
-                        case (rm)
-                            3'd2: round_inc = sr && rem_nonzero;
-                            3'd3: round_inc = (!sr) && rem_nonzero;
-                            default: round_inc = 1'b0;
-                        endcase
-
-                        if (round_inc) begin
-                            res = {sr, {5{1'b0}},
-                                   {(10-1){1'b0}}, 1'b1};
-                        end
-                        else begin
-                            res = {sr, {(16-1){1'b0}}};
-                        end
-
-                        flags[0] = rem_nonzero;
-                        flags[1] = rem_nonzero;
-                    end
-                    else begin
-                        etop = base_exp + m;
-                        q = '0;
-                        guard_bit = 1'b0;
-                        lower_nonzero = 1'b0;
-                        rem_nonzero = 1'b0;
-
-                        if (etop >= -14) begin
-                            sh = m - 10;
-
-                            if (sh <= 0) begin
-                                q = mag << (-sh);
-                                rem_nonzero = tail;
-                            end
-                            else begin
-                                q = mag >> sh;
-                                guard_bit = mag[sh-1];
-                                lower_nonzero = tail;
-
-                                if (sh > 1) begin
-                                    for (i = 0; i < 44; i = i + 1) begin
-                                        if ((i < (sh-1)) && mag[i]) begin
-                                            lower_nonzero = 1'b1;
-                                        end
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-
-                            round_inc = 1'b0;
-                            case (rm)
-                                3'd0: round_inc =
-                                    guard_bit &&
-                                    (lower_nonzero || q[0]);
-                                3'd1: round_inc = 1'b0;
-                                3'd2: round_inc = sr && rem_nonzero;
-                                3'd3: round_inc = (!sr) && rem_nonzero;
-                                3'd4: round_inc = guard_bit;
-                                default: round_inc = 1'b0;
-                            endcase
-
-                            qext = {1'b0, q} +
-                                   {{11{1'b0}}, round_inc};
-
-                            if (qext[11]) begin
-                                qround = qext[11:1];
-                                etop = etop + 1;
-                            end
-                            else begin
-                                qround = qext[10:0];
-                            end
-
-                            if (etop > 15) begin
-                                flags[0] = 1'b1;
-                                flags[2] = 1'b1;
-
-                                overflow_to_inf = 1'b0;
-                                case (rm)
-                                    3'd0: overflow_to_inf = 1'b1;
-                                    3'd1: overflow_to_inf = 1'b0;
-                                    3'd2: overflow_to_inf = sr;
-                                    3'd3: overflow_to_inf = !sr;
-                                    3'd4: overflow_to_inf = 1'b1;
-                                    default: overflow_to_inf = 1'b1;
-                                endcase
-
-                                if (overflow_to_inf) begin
-                                    res = {sr, {5{1'b1}},
-                                           {10{1'b0}}};
-                                end
-                                else begin
-                                    res = {sr,
-                                           {(5-1){1'b1}}, 1'b0,
-                                           {10{1'b1}}};
-                                end
-                            end
-                            else begin
-                                biased = etop + 15;
-                                res = {sr,
-                                       biased[4:0],
-                                       qround[9:0]};
-                                flags[0] = rem_nonzero;
-                            end
-                        end
-                        else begin
-                            sh = -24 - base_exp;
-
-                            if (sh <= 0) begin
-                                q = mag << (-sh);
-                                rem_nonzero = tail;
-                            end
-                            else if (sh < 44) begin
-                                q = mag >> sh;
-                                guard_bit = mag[sh-1];
-                                lower_nonzero = tail;
-
-                                if (sh > 1) begin
-                                    for (i = 0; i < 44; i = i + 1) begin
-                                        if ((i < (sh-1)) && mag[i]) begin
-                                            lower_nonzero = 1'b1;
-                                        end
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-                            else if (sh == 44) begin
-                                q = '0;
-                                guard_bit = mag[43];
-                                lower_nonzero = tail;
-
-                                for (i = 0; i < 43; i = i + 1) begin
-                                    if (mag[i]) begin
-                                        lower_nonzero = 1'b1;
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-                            else begin
-                                q = '0;
-                                guard_bit = 1'b0;
-                                lower_nonzero = (|mag) || tail;
-                                rem_nonzero = lower_nonzero;
-                            end
-
-                            round_inc = 1'b0;
-                            case (rm)
-                                3'd0: round_inc =
-                                    guard_bit &&
-                                    (lower_nonzero || q[0]);
-                                3'd1: round_inc = 1'b0;
-                                3'd2: round_inc = sr && rem_nonzero;
-                                3'd3: round_inc = (!sr) && rem_nonzero;
-                                3'd4: round_inc = guard_bit;
-                                default: round_inc = 1'b0;
-                            endcase
-
-                            qext = {1'b0, q} +
-                                   {{11{1'b0}}, round_inc};
-
-                            if (qext[10]) begin
-                                res = {sr,
-                                       {(5-1){1'b0}}, 1'b1,
-                                       {10{1'b0}}};
-                            end
-                            else begin
-                                res = {sr,
-                                       {5{1'b0}},
-                                       qext[9:0]};
-                            end
-
-                            flags[0] = rem_nonzero;
-                            flags[1] =
-                                rem_nonzero &&
-                                (res[14:10] == '0);
-                        end
-                    end
-                end
-
-                if (exact_zero) begin
-                    res = {sr, {(16-1){1'b0}}};
-                end
-            end
+          mant_a = {1'b1,frac_a};
+          lsb_a = exp_a;
+          lsb_a = lsb_a - 25;
         end
 
-        fp16_calc = {flags, res};
+        if (exp_b == 0) begin
+          mant_b = {1'b0,frac_b};
+          lsb_b = -24;
+        end
+        else begin
+          mant_b = {1'b1,frac_b};
+          lsb_b = exp_b;
+          lsb_b = lsb_b - 25;
+        end
+
+        if (exp_c == 0) begin
+          mant_c = {1'b0,frac_c};
+          lsb_c = -24;
+        end
+        else begin
+          mant_c = {1'b1,frac_c};
+          lsb_c = exp_c;
+          lsb_c = lsb_c - 25;
+        end
+
+        prod_mant =
+            {11'b0,mant_a} *
+            {11'b0,mant_b};
+
+        prod_lsb = lsb_a + lsb_b;
+
+        if ((prod_mant == 0) && (mant_c == 0)) begin
+
+          if (sign_p == sign_c)
+            sign_r = sign_p;
+          else if (rnd == 3'd2)
+            sign_r = 1'b1;
+          else
+            sign_r = 1'b0;
+
+          out_value = {sign_r,15'b0};
+
+        end
+        else begin
+
+          if (prod_mant != 0)
+            prod_top =
+                prod_lsb +
+                msb22(prod_mant);
+
+          if (mant_c != 0)
+            c_top =
+                lsb_c +
+                msb16({5'b00000,mant_c});
+
+          if (prod_top > c_top)
+            top_exp = prod_top;
+          else
+            top_exp = c_top;
+
+          base_exp =
+              top_exp -
+              40;
+
+          prod_aligned =
+              align44(
+                prod_mant,
+                prod_lsb,
+                base_exp
+              );
+
+          c_aligned =
+              align44(
+                {11'b0,mant_c},
+                lsb_c,
+                base_exp
+              );
+
+          prod_term =
+              $signed({1'b0,prod_aligned});
+
+          c_term =
+              $signed({1'b0,c_aligned});
+
+          if (sign_p)
+            prod_term = -prod_term;
+
+          if (sign_c)
+            c_term = -c_term;
+
+          exact_sum =
+              prod_term +
+              c_term;
+
+          if (exact_sum == 0) begin
+
+            if (rnd == 3'd2)
+              sign_r = 1'b1;
+            else
+              sign_r = 1'b0;
+
+            out_value = {sign_r,15'b0};
+
+          end
+          else begin
+
+            sign_r = exact_sum[44];
+
+            if (sign_r)
+              magnitude =
+                  (~exact_sum[43:0]) +
+                  44'd1;
+            else
+              magnitude =
+                  exact_sum[43:0];
+
+            leading_bit =
+                msb44(magnitude);
+
+            exact_top_exp =
+                base_exp +
+                leading_bit;
+
+
+            if (exact_top_exp >= -14) begin
+
+              if (exact_top_exp > 15) begin
+
+                out_value =
+                    overflow16(
+                      sign_r,
+                      rnd
+                    );
+
+                of = 1'b1;
+                nx = 1'b1;
+
+              end
+              else begin
+
+                unbiased_exp =
+                    exact_top_exp;
+
+                shift_amt =
+                    leading_bit -
+                    10;
+
+                trunc_mag = 0;
+                remainder = 0;
+                mask = 0;
+                half_ulp = 0;
+                rem_nonzero = 1'b0;
+
+                if (shift_amt <= 0) begin
+
+                  trunc_mag =
+                      magnitude <<
+                      (-shift_amt);
+
+                end
+                else if (shift_amt < 44) begin
+
+                  trunc_mag =
+                      magnitude >>
+                      shift_amt;
+
+                  mask =
+                      (44'd1 << shift_amt) -
+                      44'd1;
+
+                  remainder =
+                      magnitude &
+                      mask;
+
+                  half_ulp =
+                      44'd1 <<
+                      (shift_amt - 1);
+
+                  rem_nonzero =
+                      (remainder != 0);
+
+                end
+                else begin
+
+                  remainder = magnitude;
+                  rem_nonzero = (magnitude != 0);
+
+                end
+
+                rounded_sig =
+                    trunc_mag[11:0];
+
+                round_increment = 1'b0;
+
+                if (rem_nonzero) begin
+                  case (rnd)
+
+                    3'd0:
+                      if (shift_amt < 44)
+                        round_increment =
+                            (remainder > half_ulp) ||
+                            (
+                              (remainder == half_ulp) &&
+                              rounded_sig[0]
+                            );
+
+                    3'd1:
+                      round_increment = 1'b0;
+
+                    3'd2:
+                      round_increment = sign_r;
+
+                    3'd3:
+                      round_increment = !sign_r;
+
+                    3'd4:
+                      if (shift_amt < 44)
+                        round_increment =
+                            remainder >= half_ulp;
+
+                    default:
+                      round_increment = 1'b0;
+
+                  endcase
+                end
+
+                if (round_increment)
+                  rounded_sig =
+                      rounded_sig +
+                      12'd1;
+
+                if (rounded_sig[11]) begin
+
+                  rounded_sig =
+                      rounded_sig >> 1;
+
+                  unbiased_exp =
+                      unbiased_exp +
+                      1;
+
+                end
+
+                if (unbiased_exp > 15) begin
+
+                  out_value =
+                      overflow16(
+                        sign_r,
+                        rnd
+                      );
+
+                  of = 1'b1;
+                  nx = 1'b1;
+
+                end
+                else begin
+
+                  out_exp =
+                      unbiased_exp +
+                      15;
+
+                  out_value = {
+                    sign_r,
+                    out_exp,
+                    rounded_sig[9:0]
+                  };
+
+                  nx = rem_nonzero;
+
+                end
+
+              end
+
+            end
+            else begin
+
+              /*
+               * FP16 subnormal quantum = 2^-24.
+               */
+              shift_amt =
+                  -24 -
+                  base_exp;
+
+              trunc_mag = 0;
+              remainder = 0;
+              mask = 0;
+              half_ulp = 0;
+              rem_nonzero = 1'b0;
+
+              if (shift_amt <= 0) begin
+
+                trunc_mag =
+                    magnitude <<
+                    (-shift_amt);
+
+              end
+              else if (shift_amt < 44) begin
+
+                trunc_mag =
+                    magnitude >>
+                    shift_amt;
+
+                mask =
+                    (44'd1 << shift_amt) -
+                    44'd1;
+
+                remainder =
+                    magnitude &
+                    mask;
+
+                half_ulp =
+                    44'd1 <<
+                    (shift_amt - 1);
+
+                rem_nonzero =
+                    (remainder != 0);
+
+              end
+              else begin
+
+                remainder = magnitude;
+                rem_nonzero = (magnitude != 0);
+
+              end
+
+              sub_sig =
+                  trunc_mag[11:0];
+
+              round_increment = 1'b0;
+
+              if (rem_nonzero) begin
+                case (rnd)
+
+                  3'd0:
+                    if (shift_amt < 44)
+                      round_increment =
+                          (remainder > half_ulp) ||
+                          (
+                            (remainder == half_ulp) &&
+                            sub_sig[0]
+                          );
+
+                  3'd1:
+                    round_increment = 1'b0;
+
+                  3'd2:
+                    round_increment = sign_r;
+
+                  3'd3:
+                    round_increment = !sign_r;
+
+                  3'd4:
+                    if (shift_amt < 44)
+                      round_increment =
+                          remainder >= half_ulp;
+
+                  default:
+                    round_increment = 1'b0;
+
+                endcase
+              end
+
+              if (round_increment)
+                sub_sig =
+                    sub_sig +
+                    12'd1;
+
+              if (sub_sig >= 12'd1024) begin
+
+                out_value = {
+                  sign_r,
+                  5'h01,
+                  10'b0
+                };
+
+                nx = rem_nonzero;
+                uf = 1'b0;
+
+              end
+              else begin
+
+                out_value = {
+                  sign_r,
+                  5'h00,
+                  sub_sig[9:0]
+                };
+
+                nx = rem_nonzero;
+                uf = rem_nonzero;
+
+              end
+
+            end
+
+          end
+
+        end
+
+      end
+
+      fma_fp16 = {
+        nv,
+        1'b0,
+        of,
+        uf,
+        nx,
+        out_value
+      };
+
     end
-endfunction
+  endfunction
 
 
-function automatic logic [20:0] bf16_calc(
-    input logic [15:0] aa,
-    input logic [15:0] bb,
-    input logic [15:0] cc,
-    input logic [2:0]       rm
-);
-    logic sa;
-    logic sb;
-    logic sc;
-    logic sp;
-    logic [7:0] ea;
-    logic [7:0] eb;
-    logic [7:0] ec;
-    logic [6:0] fa;
-    logic [6:0] fb;
-    logic [6:0] fc;
+  /*
+   * ==========================================================================
+   * BF16 FMA
+   *
+   * BF16:
+   *   sign     1
+   *   exponent 8
+   *   fraction 7
+   *   precision p = 8
+   *
+   * return = {NV,DZ,OF,UF,NX,result[15:0]}
+   * ==========================================================================
+   */
+
+  function automatic logic [20:0] fma_bf16(
+    input logic [15:0] fa,
+    input logic [15:0] fb,
+    input logic [15:0] fc,
+    input logic [2:0]  rnd
+  );
+
+    logic sign_a;
+    logic sign_b;
+    logic sign_c;
+    logic sign_p;
+    logic sign_r;
+
+    logic [7:0] exp_a;
+    logic [7:0] exp_b;
+    logic [7:0] exp_c;
+
+    logic [6:0] frac_a;
+    logic [6:0] frac_b;
+    logic [6:0] frac_c;
+
     logic a_nan;
     logic b_nan;
     logic c_nan;
+
     logic a_snan;
     logic b_snan;
     logic c_snan;
+
     logic a_inf;
     logic b_inf;
     logic c_inf;
+
     logic a_zero;
     logic b_zero;
     logic c_zero;
-    logic invalid_mul;
-    logic product_inf;
-    logic invalid_add;
-    logic nan_result;
-    logic [7:0] sig_a;
-    logic [7:0] sig_b;
-    logic [7:0] sig_c;
-    logic [15:0] prod_sig;
-    logic [31:0] p_ext;
-    logic [31:0] c_ext;
-    logic [31:0] p_al;
-    logic [31:0] c_al;
-    logic [31:0] mag;
-    logic p_disc;
-    logic c_disc;
-    logic tail;
-    logic sr;
-    logic exact_zero;
-    logic [7:0] q;
-    logic [8:0] qext;
-    logic [7:0] qround;
-    logic guard_bit;
-    logic lower_nonzero;
-    logic rem_nonzero;
-    logic round_inc;
-    logic overflow_to_inf;
-    logic [15:0] res;
-    logic [4:0] flags;
-    integer exp_a;
-    integer exp_b;
-    integer exp_c;
-    integer exp_p;
-    integer mp;
-    integer mc;
-    integer common_top;
+
+    logic invalid_op;
+
+    logic [7:0] mant_a;
+    logic [7:0] mant_b;
+    logic [7:0] mant_c;
+
+    logic [15:0] prod_mant;
+
+    integer lsb_a;
+    integer lsb_b;
+    integer lsb_c;
+    integer prod_lsb;
+
+    integer prod_top;
+    integer c_top;
+    integer top_exp;
     integer base_exp;
-    integer m;
-    integer etop;
-    integer biased;
-    integer sh;
-    integer rsh;
-    integer i;
+
+    logic [31:0] prod_aligned;
+    logic [31:0] c_aligned;
+
+    logic signed [32:0] prod_term;
+    logic signed [32:0] c_term;
+    logic signed [32:0] exact_sum;
+
+    logic [31:0] magnitude;
+    logic [31:0] trunc_mag;
+    logic [31:0] remainder;
+    logic [31:0] mask;
+    logic [31:0] half_ulp;
+
+    integer leading_bit;
+    integer exact_top_exp;
+    integer shift_amt;
+    integer unbiased_exp;
+
+    logic [8:0] rounded_sig;
+    logic [8:0] sub_sig;
+
+    logic rem_nonzero;
+    logic round_increment;
+
+    logic [7:0] out_exp;
+    logic [15:0] out_value;
+
+    logic nv;
+    logic of;
+    logic uf;
+    logic nx;
 
     begin
-        sa = aa[15];
-        sb = bb[15];
-        sc = cc[15];
-        sp = sa ^ sb;
 
-        ea = aa[14:7];
-        eb = bb[14:7];
-        ec = cc[14:7];
+      sign_a = fa[15];
+      sign_b = fb[15];
+      sign_c = fc[15];
+      sign_p = sign_a ^ sign_b;
+      sign_r = 1'b0;
 
-        fa = aa[6:0];
-        fb = bb[6:0];
-        fc = cc[6:0];
+      exp_a = fa[14:7];
+      exp_b = fb[14:7];
+      exp_c = fc[14:7];
 
-        a_nan = (ea == {8{1'b1}}) && (fa != '0);
-        b_nan = (eb == {8{1'b1}}) && (fb != '0);
-        c_nan = (ec == {8{1'b1}}) && (fc != '0);
+      frac_a = fa[6:0];
+      frac_b = fb[6:0];
+      frac_c = fc[6:0];
 
-        a_snan = a_nan && !fa[6];
-        b_snan = b_nan && !fb[6];
-        c_snan = c_nan && !fc[6];
+      a_nan = (exp_a == 8'hff) && (frac_a != 0);
+      b_nan = (exp_b == 8'hff) && (frac_b != 0);
+      c_nan = (exp_c == 8'hff) && (frac_c != 0);
 
-        a_inf = (ea == {8{1'b1}}) && (fa == '0);
-        b_inf = (eb == {8{1'b1}}) && (fb == '0);
-        c_inf = (ec == {8{1'b1}}) && (fc == '0);
+      a_snan = a_nan && !frac_a[6];
+      b_snan = b_nan && !frac_b[6];
+      c_snan = c_nan && !frac_c[6];
 
-        a_zero = (ea == '0) && (fa == '0);
-        b_zero = (eb == '0) && (fb == '0);
-        c_zero = (ec == '0) && (fc == '0);
+      a_inf = (exp_a == 8'hff) && (frac_a == 0);
+      b_inf = (exp_b == 8'hff) && (frac_b == 0);
+      c_inf = (exp_c == 8'hff) && (frac_c == 0);
 
-        invalid_mul = (a_inf && b_zero) || (b_inf && a_zero);
-        product_inf = (a_inf || b_inf) &&
-                      !a_nan && !b_nan &&
-                      !invalid_mul;
-        invalid_add = product_inf && c_inf && (sp != sc);
+      a_zero = (exp_a == 0) && (frac_a == 0);
+      b_zero = (exp_b == 0) && (frac_b == 0);
+      c_zero = (exp_c == 0) && (frac_c == 0);
 
-        nan_result = a_nan || b_nan || c_nan ||
-                     invalid_mul || invalid_add;
+      mant_a = 0;
+      mant_b = 0;
+      mant_c = 0;
 
-        flags = 5'b0;
-        flags[4] = a_snan || b_snan || c_snan ||
-                   invalid_mul || invalid_add;
-        res = '0;
+      prod_mant = 0;
 
-        if (nan_result) begin
-            res = 16'h7fc0;
-        end
-        else if (product_inf) begin
-            res = {sp, {8{1'b1}}, {7{1'b0}}};
-        end
-        else if (c_inf) begin
-            res = {sc, {8{1'b1}}, {7{1'b0}}};
-        end
-        else begin
-            if (ea == '0) begin
-                sig_a = {1'b0, fa};
-                exp_a = -133;
-            end
-            else begin
-                sig_a = {1'b1, fa};
-                exp_a = $unsigned(ea) - 127 - 7;
-            end
+      lsb_a = 0;
+      lsb_b = 0;
+      lsb_c = 0;
+      prod_lsb = 0;
 
-            if (eb == '0) begin
-                sig_b = {1'b0, fb};
-                exp_b = -133;
-            end
-            else begin
-                sig_b = {1'b1, fb};
-                exp_b = $unsigned(eb) - 127 - 7;
-            end
+      prod_top = -10000;
+      c_top = -10000;
+      top_exp = -10000;
+      base_exp = 0;
 
-            if (ec == '0) begin
-                sig_c = {1'b0, fc};
-                exp_c = -133;
-            end
-            else begin
-                sig_c = {1'b1, fc};
-                exp_c = $unsigned(ec) - 127 - 7;
-            end
+      prod_aligned = 0;
+      c_aligned = 0;
 
-            prod_sig = sig_a * sig_b;
-            exp_p = exp_a + exp_b;
+      prod_term = 0;
+      c_term = 0;
+      exact_sum = 0;
 
-            mp = -1;
-            for (i = 0; i < 16; i = i + 1) begin
-                if (prod_sig[i]) begin
-                    mp = i;
-                end
-            end
+      magnitude = 0;
+      trunc_mag = 0;
+      remainder = 0;
+      mask = 0;
+      half_ulp = 0;
 
-            mc = -1;
-            for (i = 0; i < 8; i = i + 1) begin
-                if (sig_c[i]) begin
-                    mc = i;
-                end
-            end
+      leading_bit = 0;
+      exact_top_exp = 0;
+      shift_amt = 0;
+      unbiased_exp = 0;
 
-            exact_zero = 1'b0;
-            tail = 1'b0;
-            sr = 1'b0;
-            mag = '0;
+      rounded_sig = 0;
+      sub_sig = 0;
 
-            if ((mp < 0) && (mc < 0)) begin
-                exact_zero = 1'b1;
-                if (sp == sc) begin
-                    sr = sp;
-                end
-                else begin
-                    sr = (rm == 3'd2);
-                end
-            end
-            else begin
-                if (mp < 0) begin
-                    common_top = exp_c + mc;
-                end
-                else if (mc < 0) begin
-                    common_top = exp_p + mp;
-                end
-                else if ((exp_p + mp) >= (exp_c + mc)) begin
-                    common_top = exp_p + mp;
-                end
-                else begin
-                    common_top = exp_c + mc;
-                end
+      rem_nonzero = 1'b0;
+      round_increment = 1'b0;
 
-                p_ext = '0;
-                c_ext = '0;
-                p_ext[15:0] = prod_sig;
-                c_ext[7:0] = sig_c;
+      out_exp = 0;
+      out_value = 0;
 
-                p_al = '0;
-                c_al = '0;
-                p_disc = 1'b0;
-                c_disc = 1'b0;
+      nv = 1'b0;
+      of = 1'b0;
+      uf = 1'b0;
+      nx = 1'b0;
 
-                sh = 30 + exp_p - common_top;
-                if (mp >= 0) begin
-                    if (sh >= 0) begin
-                        if (sh < 32) begin
-                            p_al = p_ext << sh;
-                        end
-                    end
-                    else begin
-                        rsh = -sh;
-                        if (rsh >= 32) begin
-                            p_al = '0;
-                            p_disc = |p_ext;
-                        end
-                        else begin
-                            p_al = p_ext >> rsh;
-                            for (i = 0; i < 32; i = i + 1) begin
-                                if ((i < rsh) && p_ext[i]) begin
-                                    p_disc = 1'b1;
-                                end
-                            end
-                        end
-                    end
-                end
+      invalid_op =
+          a_snan ||
+          b_snan ||
+          c_snan ||
+          (a_inf && b_zero) ||
+          (b_inf && a_zero);
 
-                sh = 30 + exp_c - common_top;
-                if (mc >= 0) begin
-                    if (sh >= 0) begin
-                        if (sh < 32) begin
-                            c_al = c_ext << sh;
-                        end
-                    end
-                    else begin
-                        rsh = -sh;
-                        if (rsh >= 32) begin
-                            c_al = '0;
-                            c_disc = |c_ext;
-                        end
-                        else begin
-                            c_al = c_ext >> rsh;
-                            for (i = 0; i < 32; i = i + 1) begin
-                                if ((i < rsh) && c_ext[i]) begin
-                                    c_disc = 1'b1;
-                                end
-                            end
-                        end
-                    end
-                end
+      if (
+          (a_inf || b_inf) &&
+          !a_nan &&
+          !b_nan &&
+          !a_zero &&
+          !b_zero &&
+          c_inf &&
+          (sign_p != sign_c)
+      )
+        invalid_op = 1'b1;
 
-                if (sp == sc) begin
-                    mag = p_al + c_al;
-                    tail = p_disc || c_disc;
-                    sr = sp;
-                end
-                else if (p_al > c_al) begin
-                    sr = sp;
-                    if (c_disc && !p_disc) begin
-                        mag = (p_al - c_al) -
-                              {{(32-1){1'b0}}, 1'b1};
-                        tail = 1'b1;
-                    end
-                    else begin
-                        mag = p_al - c_al;
-                        tail = p_disc || c_disc;
-                    end
-                end
-                else if (c_al > p_al) begin
-                    sr = sc;
-                    if (p_disc && !c_disc) begin
-                        mag = (c_al - p_al) -
-                              {{(32-1){1'b0}}, 1'b1};
-                        tail = 1'b1;
-                    end
-                    else begin
-                        mag = c_al - p_al;
-                        tail = p_disc || c_disc;
-                    end
-                end
-                else if (!p_disc && !c_disc) begin
-                    mag = '0;
-                    tail = 1'b0;
-                    exact_zero = 1'b1;
-                    sr = (rm == 3'd2);
-                end
-                else if (p_disc && !c_disc) begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = sp;
-                end
-                else if (c_disc && !p_disc) begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = sc;
-                end
-                else begin
-                    mag = '0;
-                    tail = 1'b1;
-                    sr = (rm == 3'd2);
-                end
 
-                if (!exact_zero) begin
-                    base_exp = common_top - 30;
+      if (a_nan || b_nan || c_nan || invalid_op) begin
 
-                    m = -1;
-                    for (i = 0; i < 32; i = i + 1) begin
-                        if (mag[i]) begin
-                            m = i;
-                        end
-                    end
+        out_value = 16'h7fc0;
+        nv = invalid_op;
 
-                    if (m < 0) begin
-                        rem_nonzero = tail;
-                        round_inc = 1'b0;
-                        case (rm)
-                            3'd2: round_inc = sr && rem_nonzero;
-                            3'd3: round_inc = (!sr) && rem_nonzero;
-                            default: round_inc = 1'b0;
-                        endcase
+      end
+      else if (a_inf || b_inf) begin
 
-                        if (round_inc) begin
-                            res = {sr, {8{1'b0}},
-                                   {(7-1){1'b0}}, 1'b1};
-                        end
-                        else begin
-                            res = {sr, {(16-1){1'b0}}};
-                        end
+        out_value = {sign_p,8'hff,7'b0};
 
-                        flags[0] = rem_nonzero;
-                        flags[1] = rem_nonzero;
-                    end
-                    else begin
-                        etop = base_exp + m;
-                        q = '0;
-                        guard_bit = 1'b0;
-                        lower_nonzero = 1'b0;
-                        rem_nonzero = 1'b0;
+      end
+      else if (c_inf) begin
 
-                        if (etop >= -126) begin
-                            sh = m - 7;
+        out_value = {sign_c,8'hff,7'b0};
 
-                            if (sh <= 0) begin
-                                q = mag << (-sh);
-                                rem_nonzero = tail;
-                            end
-                            else begin
-                                q = mag >> sh;
-                                guard_bit = mag[sh-1];
-                                lower_nonzero = tail;
+      end
+      else begin
 
-                                if (sh > 1) begin
-                                    for (i = 0; i < 32; i = i + 1) begin
-                                        if ((i < (sh-1)) && mag[i]) begin
-                                            lower_nonzero = 1'b1;
-                                        end
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-
-                            round_inc = 1'b0;
-                            case (rm)
-                                3'd0: round_inc =
-                                    guard_bit &&
-                                    (lower_nonzero || q[0]);
-                                3'd1: round_inc = 1'b0;
-                                3'd2: round_inc = sr && rem_nonzero;
-                                3'd3: round_inc = (!sr) && rem_nonzero;
-                                3'd4: round_inc = guard_bit;
-                                default: round_inc = 1'b0;
-                            endcase
-
-                            qext = {1'b0, q} +
-                                   {{8{1'b0}}, round_inc};
-
-                            if (qext[8]) begin
-                                qround = qext[8:1];
-                                etop = etop + 1;
-                            end
-                            else begin
-                                qround = qext[7:0];
-                            end
-
-                            if (etop > 127) begin
-                                flags[0] = 1'b1;
-                                flags[2] = 1'b1;
-
-                                overflow_to_inf = 1'b0;
-                                case (rm)
-                                    3'd0: overflow_to_inf = 1'b1;
-                                    3'd1: overflow_to_inf = 1'b0;
-                                    3'd2: overflow_to_inf = sr;
-                                    3'd3: overflow_to_inf = !sr;
-                                    3'd4: overflow_to_inf = 1'b1;
-                                    default: overflow_to_inf = 1'b1;
-                                endcase
-
-                                if (overflow_to_inf) begin
-                                    res = {sr, {8{1'b1}},
-                                           {7{1'b0}}};
-                                end
-                                else begin
-                                    res = {sr,
-                                           {(8-1){1'b1}}, 1'b0,
-                                           {7{1'b1}}};
-                                end
-                            end
-                            else begin
-                                biased = etop + 127;
-                                res = {sr,
-                                       biased[7:0],
-                                       qround[6:0]};
-                                flags[0] = rem_nonzero;
-                            end
-                        end
-                        else begin
-                            sh = -133 - base_exp;
-
-                            if (sh <= 0) begin
-                                q = mag << (-sh);
-                                rem_nonzero = tail;
-                            end
-                            else if (sh < 32) begin
-                                q = mag >> sh;
-                                guard_bit = mag[sh-1];
-                                lower_nonzero = tail;
-
-                                if (sh > 1) begin
-                                    for (i = 0; i < 32; i = i + 1) begin
-                                        if ((i < (sh-1)) && mag[i]) begin
-                                            lower_nonzero = 1'b1;
-                                        end
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-                            else if (sh == 32) begin
-                                q = '0;
-                                guard_bit = mag[31];
-                                lower_nonzero = tail;
-
-                                for (i = 0; i < 31; i = i + 1) begin
-                                    if (mag[i]) begin
-                                        lower_nonzero = 1'b1;
-                                    end
-                                end
-
-                                rem_nonzero =
-                                    guard_bit || lower_nonzero;
-                            end
-                            else begin
-                                q = '0;
-                                guard_bit = 1'b0;
-                                lower_nonzero = (|mag) || tail;
-                                rem_nonzero = lower_nonzero;
-                            end
-
-                            round_inc = 1'b0;
-                            case (rm)
-                                3'd0: round_inc =
-                                    guard_bit &&
-                                    (lower_nonzero || q[0]);
-                                3'd1: round_inc = 1'b0;
-                                3'd2: round_inc = sr && rem_nonzero;
-                                3'd3: round_inc = (!sr) && rem_nonzero;
-                                3'd4: round_inc = guard_bit;
-                                default: round_inc = 1'b0;
-                            endcase
-
-                            qext = {1'b0, q} +
-                                   {{8{1'b0}}, round_inc};
-
-                            if (qext[7]) begin
-                                res = {sr,
-                                       {(8-1){1'b0}}, 1'b1,
-                                       {7{1'b0}}};
-                            end
-                            else begin
-                                res = {sr,
-                                       {8{1'b0}},
-                                       qext[6:0]};
-                            end
-
-                            flags[0] = rem_nonzero;
-                            flags[1] =
-                                rem_nonzero &&
-                                (res[14:7] == '0);
-                        end
-                    end
-                end
-
-                if (exact_zero) begin
-                    res = {sr, {(16-1){1'b0}}};
-                end
-            end
-        end
-
-        bf16_calc = {flags, res};
-    end
-endfunction
-
-    logic             busy_q;
-    logic [1:0]       fmt_q;
-    logic             vec_q;
-    logic [2:0]       rnd_q;
-    logic [WIDTH-1:0] a_q;
-    logic [WIDTH-1:0] b_q;
-    logic [WIDTH-1:0] c_q;
-    logic [2:0]       lane_q;
-    logic [2:0]       lane_count_q;
-    logic [WIDTH-1:0] accum_result_q;
-    logic [4:0]       accum_flags_q;
-
-    logic             out_valid_q;
-    logic [WIDTH-1:0] out_result_q;
-    logic [4:0]       out_flags_q;
-
-    logic [31:0] lane_a32_c;
-    logic [31:0] lane_b32_c;
-    logic [31:0] lane_c32_c;
-    logic [15:0] lane_a16_c;
-    logic [15:0] lane_b16_c;
-    logic [15:0] lane_c16_c;
-
-    logic [36:0] calc32_c;
-    logic [20:0] calc16_c;
-    logic [20:0] calcb16_c;
-
-    logic [WIDTH-1:0] accum_next_c;
-    logic [4:0]       flags_next_c;
-    logic [31:0]      selected_result32_c;
-    logic [15:0]      selected_result16_c;
-    logic [4:0]       selected_flags_c;
-
-    always_comb begin
-        lane_a32_c = a_q >> (lane_q * 32);
-        lane_b32_c = b_q >> (lane_q * 32);
-        lane_c32_c = c_q >> (lane_q * 32);
-
-        lane_a16_c = a_q >> (lane_q * 16);
-        lane_b16_c = b_q >> (lane_q * 16);
-        lane_c16_c = c_q >> (lane_q * 16);
-
-        calc32_c = fp32_calc(
-            lane_a32_c,
-            lane_b32_c,
-            lane_c32_c,
-            rnd_q
-        );
-
-        calc16_c = fp16_calc(
-            lane_a16_c,
-            lane_b16_c,
-            lane_c16_c,
-            rnd_q
-        );
-
-        calcb16_c = bf16_calc(
-            lane_a16_c,
-            lane_b16_c,
-            lane_c16_c,
-            rnd_q
-        );
-
-        selected_result32_c = calc32_c[31:0];
-        selected_result16_c = calc16_c[15:0];
-        selected_flags_c = calc32_c[36:32];
-
-        if (fmt_q == 2'd1) begin
-            selected_result16_c = calc16_c[15:0];
-            selected_flags_c = calc16_c[20:16];
-        end
-        else if (fmt_q == 2'd2) begin
-            selected_result16_c = calcb16_c[15:0];
-            selected_flags_c = calcb16_c[20:16];
-        end
-
-        accum_next_c = accum_result_q;
-        flags_next_c = accum_flags_q | selected_flags_c;
-
-        if (fmt_q == 2'd0) begin
-            accum_next_c[(lane_q * 32) +: 32] =
-                selected_result32_c;
+        if (exp_a == 0) begin
+          mant_a = {1'b0,frac_a};
+          lsb_a = -133;
         end
         else begin
-            accum_next_c[(lane_q * 16) +: 16] =
-                selected_result16_c;
+          mant_a = {1'b1,frac_a};
+          lsb_a = exp_a;
+          lsb_a = lsb_a - 134;
         end
-    end
 
-    always_comb begin
-        in_ready_o = rst_ni && !busy_q && !out_valid_q;
-
-        out_valid_o = rst_ni && out_valid_q;
-        result_o = out_result_q;
-        flags_o = out_flags_q;
-    end
-
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-        if (!rst_ni) begin
-            busy_q <= 1'b0;
-            fmt_q <= 2'b0;
-            vec_q <= 1'b0;
-            rnd_q <= 3'b0;
-            a_q <= '0;
-            b_q <= '0;
-            c_q <= '0;
-            lane_q <= 3'b0;
-            lane_count_q <= 3'd1;
-            accum_result_q <= '1;
-            accum_flags_q <= 5'b0;
-
-            out_valid_q <= 1'b0;
-            out_result_q <= '0;
-            out_flags_q <= 5'b0;
+        if (exp_b == 0) begin
+          mant_b = {1'b0,frac_b};
+          lsb_b = -133;
         end
         else begin
-            if (out_valid_q && out_ready_i) begin
-                out_valid_q <= 1'b0;
-            end
+          mant_b = {1'b1,frac_b};
+          lsb_b = exp_b;
+          lsb_b = lsb_b - 134;
+        end
 
-            if (!busy_q && !out_valid_q) begin
-                if (in_valid_i) begin
-                    busy_q <= 1'b1;
-                    fmt_q <= fmt_i;
-                    vec_q <= vec_i;
-                    rnd_q <= rnd_i;
-                    a_q <= a_i;
-                    b_q <= b_i;
-                    c_q <= c_i;
-                    lane_q <= 3'd0;
-                    accum_result_q <= '1;
-                    accum_flags_q <= 5'b0;
+        if (exp_c == 0) begin
+          mant_c = {1'b0,frac_c};
+          lsb_c = -133;
+        end
+        else begin
+          mant_c = {1'b1,frac_c};
+          lsb_c = exp_c;
+          lsb_c = lsb_c - 134;
+        end
 
-                    if (!vec_i) begin
-                        lane_count_q <= 3'd1;
-                    end
-                    else if (fmt_i == 2'd0) begin
-                        lane_count_q <= WIDTH / 32;
-                    end
-                    else begin
-                        lane_count_q <= WIDTH / 16;
-                    end
+        prod_mant =
+            {8'b0,mant_a} *
+            {8'b0,mant_b};
+
+        prod_lsb = lsb_a + lsb_b;
+
+        if ((prod_mant == 0) && (mant_c == 0)) begin
+
+          if (sign_p == sign_c)
+            sign_r = sign_p;
+          else if (rnd == 3'd2)
+            sign_r = 1'b1;
+          else
+            sign_r = 1'b0;
+
+          out_value = {sign_r,15'b0};
+
+        end
+        else begin
+
+          if (prod_mant != 0)
+            prod_top =
+                prod_lsb +
+                msb16(prod_mant);
+
+          if (mant_c != 0)
+            c_top =
+                lsb_c +
+                msb8(mant_c);
+
+          if (prod_top > c_top)
+            top_exp = prod_top;
+          else
+            top_exp = c_top;
+
+          base_exp =
+              top_exp -
+              28;
+
+          prod_aligned =
+              align32(
+                prod_mant,
+                prod_lsb,
+                base_exp
+              );
+
+          c_aligned =
+              align32(
+                {8'b0,mant_c},
+                lsb_c,
+                base_exp
+              );
+
+          prod_term =
+              $signed({1'b0,prod_aligned});
+
+          c_term =
+              $signed({1'b0,c_aligned});
+
+          if (sign_p)
+            prod_term = -prod_term;
+
+          if (sign_c)
+            c_term = -c_term;
+
+          exact_sum =
+              prod_term +
+              c_term;
+
+          if (exact_sum == 0) begin
+
+            if (rnd == 3'd2)
+              sign_r = 1'b1;
+            else
+              sign_r = 1'b0;
+
+            out_value = {sign_r,15'b0};
+
+          end
+          else begin
+
+            sign_r = exact_sum[32];
+
+            if (sign_r)
+              magnitude =
+                  (~exact_sum[31:0]) +
+                  32'd1;
+            else
+              magnitude =
+                  exact_sum[31:0];
+
+            leading_bit =
+                msb32(magnitude);
+
+            exact_top_exp =
+                base_exp +
+                leading_bit;
+
+
+            if (exact_top_exp >= -126) begin
+
+              if (exact_top_exp > 127) begin
+
+                out_value =
+                    overflow_bf16(
+                      sign_r,
+                      rnd
+                    );
+
+                of = 1'b1;
+                nx = 1'b1;
+
+              end
+              else begin
+
+                unbiased_exp =
+                    exact_top_exp;
+
+                shift_amt =
+                    leading_bit -
+                    7;
+
+                trunc_mag = 0;
+                remainder = 0;
+                mask = 0;
+                half_ulp = 0;
+                rem_nonzero = 1'b0;
+
+                if (shift_amt <= 0) begin
+
+                  trunc_mag =
+                      magnitude <<
+                      (-shift_amt);
+
                 end
-            end
-            else if (busy_q) begin
-                accum_result_q <= accum_next_c;
-                accum_flags_q <= flags_next_c;
+                else if (shift_amt < 32) begin
 
-                if ((lane_q + 3'd1) >= lane_count_q) begin
-                    busy_q <= 1'b0;
-                    out_valid_q <= 1'b1;
-                    out_result_q <= accum_next_c;
-                    out_flags_q <= flags_next_c;
+                  trunc_mag =
+                      magnitude >>
+                      shift_amt;
+
+                  mask =
+                      (32'd1 << shift_amt) -
+                      32'd1;
+
+                  remainder =
+                      magnitude &
+                      mask;
+
+                  half_ulp =
+                      32'd1 <<
+                      (shift_amt - 1);
+
+                  rem_nonzero =
+                      (remainder != 0);
+
                 end
                 else begin
-                    lane_q <= lane_q + 3'd1;
+
+                  remainder = magnitude;
+                  rem_nonzero = (magnitude != 0);
+
                 end
+
+                rounded_sig =
+                    trunc_mag[8:0];
+
+                round_increment = 1'b0;
+
+                if (rem_nonzero) begin
+                  case (rnd)
+
+                    3'd0:
+                      if (shift_amt < 32)
+                        round_increment =
+                            (remainder > half_ulp) ||
+                            (
+                              (remainder == half_ulp) &&
+                              rounded_sig[0]
+                            );
+
+                    3'd1:
+                      round_increment = 1'b0;
+
+                    3'd2:
+                      round_increment = sign_r;
+
+                    3'd3:
+                      round_increment = !sign_r;
+
+                    3'd4:
+                      if (shift_amt < 32)
+                        round_increment =
+                            remainder >= half_ulp;
+
+                    default:
+                      round_increment = 1'b0;
+
+                  endcase
+                end
+
+                if (round_increment)
+                  rounded_sig =
+                      rounded_sig +
+                      9'd1;
+
+                if (rounded_sig[8]) begin
+
+                  rounded_sig =
+                      rounded_sig >> 1;
+
+                  unbiased_exp =
+                      unbiased_exp +
+                      1;
+
+                end
+
+                if (unbiased_exp > 127) begin
+
+                  out_value =
+                      overflow_bf16(
+                        sign_r,
+                        rnd
+                      );
+
+                  of = 1'b1;
+                  nx = 1'b1;
+
+                end
+                else begin
+
+                  out_exp =
+                      unbiased_exp +
+                      127;
+
+                  out_value = {
+                    sign_r,
+                    out_exp,
+                    rounded_sig[6:0]
+                  };
+
+                  nx = rem_nonzero;
+
+                end
+
+              end
+
             end
+            else begin
+
+              /*
+               * BF16 subnormal quantum = 2^-133.
+               */
+              shift_amt =
+                  -133 -
+                  base_exp;
+
+              trunc_mag = 0;
+              remainder = 0;
+              mask = 0;
+              half_ulp = 0;
+              rem_nonzero = 1'b0;
+
+              if (shift_amt <= 0) begin
+
+                trunc_mag =
+                    magnitude <<
+                    (-shift_amt);
+
+              end
+              else if (shift_amt < 32) begin
+
+                trunc_mag =
+                    magnitude >>
+                    shift_amt;
+
+                mask =
+                    (32'd1 << shift_amt) -
+                    32'd1;
+
+                remainder =
+                    magnitude &
+                    mask;
+
+                half_ulp =
+                    32'd1 <<
+                    (shift_amt - 1);
+
+                rem_nonzero =
+                    (remainder != 0);
+
+              end
+              else begin
+
+                remainder = magnitude;
+                rem_nonzero = (magnitude != 0);
+
+              end
+
+              sub_sig =
+                  trunc_mag[8:0];
+
+              round_increment = 1'b0;
+
+              if (rem_nonzero) begin
+                case (rnd)
+
+                  3'd0:
+                    if (shift_amt < 32)
+                      round_increment =
+                          (remainder > half_ulp) ||
+                          (
+                            (remainder == half_ulp) &&
+                            sub_sig[0]
+                          );
+
+                  3'd1:
+                    round_increment = 1'b0;
+
+                  3'd2:
+                    round_increment = sign_r;
+
+                  3'd3:
+                    round_increment = !sign_r;
+
+                  3'd4:
+                    if (shift_amt < 32)
+                      round_increment =
+                          remainder >= half_ulp;
+
+                  default:
+                    round_increment = 1'b0;
+
+                endcase
+              end
+
+              if (round_increment)
+                sub_sig =
+                    sub_sig +
+                    9'd1;
+
+              if (sub_sig >= 9'd128) begin
+
+                out_value = {
+                  sign_r,
+                  8'h01,
+                  7'b0
+                };
+
+                nx = rem_nonzero;
+                uf = 1'b0;
+
+              end
+              else begin
+
+                out_value = {
+                  sign_r,
+                  8'h00,
+                  sub_sig[6:0]
+                };
+
+                nx = rem_nonzero;
+                uf = rem_nonzero;
+
+              end
+
+            end
+
+          end
+
         end
+
+      end
+
+      fma_bf16 = {
+        nv,
+        1'b0,
+        of,
+        uf,
+        nx,
+        out_value
+      };
+
     end
+  endfunction
+
+
+  /*
+   * ==========================================================================
+   * Physical lane FMA results
+   *
+   * Loop/generate bounds are compile-time constants as required by T5.
+   * ==========================================================================
+   */
+
+  logic [36:0] fp32_lane [0:(WIDTH/32)-1];
+  logic [20:0] fp16_lane [0:(WIDTH/16)-1];
+  logic [20:0] bf16_lane [0:(WIDTH/16)-1];
+
+  genvar g32;
+  genvar g16;
+
+  generate
+
+    for (g32 = 0; g32 < WIDTH/32; g32 = g32 + 1) begin : GEN_FP32
+
+      assign fp32_lane[g32] =
+          fma_fp32(
+            a_i[g32*32 +: 32],
+            b_i[g32*32 +: 32],
+            c_i[g32*32 +: 32],
+            rnd_i
+          );
+
+    end
+
+
+    for (g16 = 0; g16 < WIDTH/16; g16 = g16 + 1) begin : GEN_FP16_BF16
+
+      assign fp16_lane[g16] =
+          fma_fp16(
+            a_i[g16*16 +: 16],
+            b_i[g16*16 +: 16],
+            c_i[g16*16 +: 16],
+            rnd_i
+          );
+
+      assign bf16_lane[g16] =
+          fma_bf16(
+            a_i[g16*16 +: 16],
+            b_i[g16*16 +: 16],
+            c_i[g16*16 +: 16],
+            rnd_i
+          );
+
+    end
+
+  endgenerate
+
+
+  /*
+   * ==========================================================================
+   * Lane packing
+   * ==========================================================================
+   */
+
+  logic [WIDTH-1:0] result_calc;
+  logic [4:0]       flags_calc;
+
+  always_comb begin : lane_pack
+    integer k;
+
+    /*
+     * V3: bits above active scalar lanes are ones.
+     */
+    result_calc = '1;
+    flags_calc  = 5'b00000;
+
+    case (fmt_i)
+
+      /*
+       * FP32
+       */
+      2'd0: begin
+
+        for (k = 0; k < WIDTH/32; k = k + 1) begin
+
+          if (vec_i || (k == 0)) begin
+
+            result_calc[k*32 +: 32] =
+                fp32_lane[k][31:0];
+
+            flags_calc =
+                flags_calc |
+                fp32_lane[k][36:32];
+
+          end
+
+        end
+
+      end
+
+
+      /*
+       * FP16
+       */
+      2'd1: begin
+
+        for (k = 0; k < WIDTH/16; k = k + 1) begin
+
+          if (vec_i || (k == 0)) begin
+
+            result_calc[k*16 +: 16] =
+                fp16_lane[k][15:0];
+
+            flags_calc =
+                flags_calc |
+                fp16_lane[k][20:16];
+
+          end
+
+        end
+
+      end
+
+
+      /*
+       * BF16
+       */
+      2'd2: begin
+
+        for (k = 0; k < WIDTH/16; k = k + 1) begin
+
+          if (vec_i || (k == 0)) begin
+
+            result_calc[k*16 +: 16] =
+                bf16_lane[k][15:0];
+
+            flags_calc =
+                flags_calc |
+                bf16_lane[k][20:16];
+
+          end
+
+        end
+
+      end
+
+
+      default: begin
+
+        result_calc = '1;
+        flags_calc  = 5'b00000;
+
+      end
+
+    endcase
+
+  end
+
+
+  /*
+   * ==========================================================================
+   * One-entry elastic output stage
+   *
+   * Latency and throughput are deliberately left free by L2/L3, so this keeps
+   * the implementation small while preserving all required handshake behavior.
+   *
+   * in_ready_o:
+   *   depends on output occupancy / out_ready_i
+   *   does NOT depend on in_valid_i.
+   *
+   * out_valid_o:
+   *   is registered
+   *   does NOT depend combinationally on out_ready_i.
+   * ==========================================================================
+   */
+
+  logic             out_valid_q;
+  logic [WIDTH-1:0] result_q;
+  logic [4:0]       flags_q;
+
+  logic accept_in;
+
+  always_comb begin
+
+    in_ready_o =
+        rst_ni &&
+        (
+          !out_valid_q ||
+          out_ready_i
+        );
+
+    accept_in =
+        in_valid_i &&
+        in_ready_o;
+
+    out_valid_o =
+        rst_ni &&
+        out_valid_q;
+
+    result_o =
+        result_q;
+
+    flags_o =
+        flags_q;
+
+  end
+
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+
+    if (!rst_ni) begin
+
+      out_valid_q <= 1'b0;
+      result_q    <= '1;
+      flags_q     <= 5'b00000;
+
+    end
+    else begin
+
+      if (
+          out_valid_q &&
+          out_ready_i
+      )
+        out_valid_q <= 1'b0;
+
+
+      /*
+       * A new accepted operation may replace a result consumed on the same
+       * edge, allowing one result per cycle when the sink stays ready.
+       */
+      if (accept_in) begin
+
+        out_valid_q <= 1'b1;
+        result_q    <= result_calc;
+        flags_q     <= flags_calc;
+
+      end
+
+    end
+
+  end
 
 endmodule
