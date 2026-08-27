@@ -737,3 +737,47 @@ claim is an intuition wearing a measurement's grammar, and it is load-bearing fo
 every reader who then does not look.
 
 **Rules:** 24, 36
+
+---
+
+### An unsigned comparison inverted a probe's verdict while its own numbers said the opposite
+
+**APPARATUS. Same family as F64, and it belongs beside it in the catalog.**
+
+d_ai01's refill-duration probe printed `*** OUTSIDE the named window ***` while
+the numbers on the same line — 13 at HEIGHT=4, 29 at HEIGHT=8 — are **inside**
+the window (15, 31). `WIN` was declared `int unsigned`, so comparing the
+never-diverged sentinel `-1` against it promoted to unsigned, and a result
+meaning "no divergence found" read as a violation.
+
+**Caught only because the numbers were read rather than the verdict.** The
+verdict line and the data it summarised were on the same line and disagreed, and
+the verdict was the more prominent of the two.
+
+    printed   *** OUTSIDE the named window ***
+    printed   13 (H=4), 29 (H=8)
+    window    15, 31
+    truth     inside, i.e. never diverged, i.e. the clean result
+
+**Why this is apparatus and not a typo.** The bug is in the instrument's
+*verdict computation*, not in its measurement — every number it produced was
+correct. An instrument whose numbers are right and whose conclusion is inverted
+is worse than one that is simply wrong, because its output survives a numeric
+sanity check: a reader spot-checking the values finds them consistent with the
+run and is reassured by exactly the part that was never in question.
+
+**The general form, and it is why the F64 family keeps recurring:**
+
+> **A verdict is a derived value and inherits every type rule of its
+> operands.** `int unsigned` is not a documentation choice; a sentinel compared
+> against it is a different expression than the same sentinel compared against
+> `int`. Sentinels and width/signedness are the two halves of the same defect —
+> a sentinel only works if the comparison that reads it preserves its sign.
+
+**Sentinel-specific corollary:** `-1` as "not found" requires the comparison to
+be signed, and nothing in the declaration of the *other* operand announces that
+it will not be. Prefer a separate `found` bit to a sentinel wherever the
+comparison crosses a type boundary — a boolean has no promotion rule to get
+wrong.
+
+**Rules:** 24
