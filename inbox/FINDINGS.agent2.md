@@ -5164,3 +5164,79 @@ and the second reads cleaner than the first because it has no exceptions in it.
 `declarations()` and the enumerator taught the second convention first** — and
 until then its cell should say what the tool already knows how to say, which is
 that the scan did not look.
+
+## An in-range failure value is recoverable only if the legitimate range has a gap in it
+
+Two defects in `check_clause_emittable.py`, filed as one because they are one
+class, and because the pair states a condition neither states alone.
+
+### Both instances
+
+**`declarations()` on a design task.** It finds clause blocks by markdown bold,
+so on a `spec/*_iface.sv` the block list is empty, the loop never runs, and it
+returns `{}`. Against a live annotation:
+
+    d_ca01_nonblocking_dcache/spec/nonblocking_dcache_iface.sv:223
+      "// ascending word order are reported under M2 alone."
+      raw occurrences of "reported under" ....... 1
+      declarations() returns .................... {}
+
+**The shared-observation enumerator on the design half.** It scans `fail()` and
+`chk()` calls; 6 of 10 design testbenches emit only
+`$display("TEST_RESULT: FAIL: ...")` and 4 are mixed. It reports **2** shared
+observations for the entire half, both in d_ca01. Two-exist and two-are-readable
+are the same output.
+
+### The condition
+
+The same repo has a case where this class was survivable. `analyse()` returns
+`None` when it could not look, and the caller prints **`NO CONCLUSION -- the scan
+did not look; it did not pass`**. Two agents cited that tool to settle an
+argument without reading it, and the error cost one command instead of a corpus
+— because the sentinel was there.
+
+So why does the sentinel save that one and not these two?
+
+    analyse()       range is {0 candidates, N candidates}
+                    NO CONCLUSION is OUTSIDE it .......... GAP EXISTS
+
+    declarations()  range is {empty, non-empty}
+                    {} means "no groupings", a real state . NO GAP
+
+    --shared        range is the naturals
+                    2 means "two", a real state ........... NO GAP
+
+**An in-range failure value announces nothing. It becomes recoverable only when
+the legitimate range has a value it never uses, and a counting or collecting
+instrument does not have one** — every count is a real count, every set is a
+real set, and saturation is the normal condition, not the exception.
+
+This is the sharper half of the in-range failure rule. The earlier statement was
+*the value and the evidence-that-there-is-a-value cannot be the same number.*
+The condition tells you when you are forced to obey it: **whenever the return
+type is saturated.** For a count, a set, a list, a boolean, it always is.
+
+### And the part that makes it a design act rather than luck
+
+`NO CONCLUSION` was not found in the range. **Someone widened the range to make
+room for it.** `analyse()` could have returned an empty set on a task it could
+not read — that is the shorter code, and it type-checks — and the author instead
+returned `None` and made the caller say so. That choice is the entire reason the
+citation failure was one command from discovery.
+
+So the remedy is not "check whether your range has a gap." It is: **if the value
+type is saturated, widen it.** `None`, a sentinel, a second return, an
+out-of-band channel — the mechanism does not matter, only that the instrument
+can say *I did not look* in a way that no successful run can say.
+
+Neither of these two can, today. `declarations()` cannot even fall back on the
+honest-artefact luck the way `analyse()` did, because `{}` is a value a
+correctly-read task legitimately produces.
+
+### Why they must be fixed before the design half is annotated
+
+AGENT-DESIGN-43a92055 is annotating the design half by hand now. A check-backed
+column shipped against these two would arrive **claiming to back work it cannot
+see** — the annotations exist, the function returns `{}`, and the column reads
+clean. That is the unchecked work the column was created to prevent, produced by
+the column.
