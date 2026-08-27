@@ -508,9 +508,35 @@ run_one() {
       # UNOPT and UNOPTFLAT cover the shapes it does name that way.
       NLOOP=$(printf '%s\n' "$cerr" | grep -cE 'UNOPTFLAT|ALWCOMBORDER|%Warning-UNOPT\b')
       if [ "${NLOOP:-0}" -gt 0 ]; then
+        # TO STDERR, BECAUSE run_one's STDOUT IS ITS RETURN VALUE. This function
+        # echoes "<pass> <total>|<firstfail>" and the caller parses it. A summary
+        # line printed here lands in that string: with the LOOPSEEN abort removed,
+        # the very first LOOP-flagged run put a FILENAME where the caller expected
+        # a pass count -- `line 936: [: miss_handler_arb_ref.sv: integer expression
+        # expected`. The bug was unreachable for as long as the subshell died two
+        # lines below, so fixing that one exposed this one.
+        #
+        # The caller already reports it, from the file: see the COMBINATIONAL LOOP
+        # line built beside comb_loop_configs. This stays as per-config detail for
+        # a human watching, on the stream that is not load-bearing.
         printf '%-26s %-9s %s\n' "$name" "LOOP" \
-          "combinational-loop warning x$NLOOP in cfg '${cfg:-default}' (UNOPTFLAT/ALWCOMBORDER) -- verdicts from this run are settle-order artefacts, not design results"
-        LOOPSEEN=$((LOOPSEEN+1))
+          "combinational-loop warning x$NLOOP in cfg '${cfg:-default}' (UNOPTFLAT/ALWCOMBORDER) -- verdicts from this run are settle-order artefacts, not design results" >&2
+        # THE INCREMENT THAT USED TO BE HERE KILLED THE DETECTOR IT FED.
+        # `LOOPSEEN=$((LOOPSEEN+1))` sat on this line. LOOPSEEN is unset in this
+        # scope -- it is assigned only in the CALLER, from the file below -- and
+        # under `set -u` (line 32) an unset name in arithmetic aborts the subshell.
+        # Verified on bash 3.2.57: the shape prints, then dies "unbound variable".
+        #
+        # So run_one exited HERE the moment a loop warning appeared, and the write
+        # at `_unoptflat` further down never executed. comb_loop_configs could only
+        # ever be 0: measured 52 records carrying the field, all 52 zero. That was
+        # never "no combinational loops in the corpus", it was a detector dying
+        # before it recorded. Any reading of that field as evidence of absence was
+        # reading a constant.
+        #
+        # The comment immediately below already prescribed the fix: stats go to
+        # files beside the subshell for the caller to total. This line was a
+        # leftover from before that design. Found by the design session.
       fi
       # run_one executes inside a command substitution -- a SUBSHELL -- so a
       # variable set here is invisible to the caller. The same reason the raw
