@@ -1,9 +1,8 @@
 """Isolated generation through subscription-authenticated provider CLIs.
 
-This transport consumes included Codex or Claude Code quota rather than API
-credits.  Each request runs in a new empty directory with account and project
-customizations disabled.  The canonical prompt is passed through stdin so it
-does not appear in the process list.
+This transport consumes included Codex, Claude Code, or Gemini CLI quota rather
+than API credits.  Each request runs in a new empty directory.  The canonical
+prompt is passed through stdin so it does not appear in the process list.
 """
 
 from __future__ import annotations
@@ -31,6 +30,17 @@ _BILLED_ENV = {
         "CLAUDE_CODE_USE_VERTEX",
         "CLAUDE_CODE_USE_FOUNDRY",
     ),
+    "google": (
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_GENAI_USE_VERTEXAI",
+        "GOOGLE_GEMINI_BASE_URL",
+        "GOOGLE_VERTEX_BASE_URL",
+        "GEMINI_MODEL",
+        "GEMINI_CLI_SYSTEM_DEFAULTS_PATH",
+        "GEMINI_CLI_SYSTEM_SETTINGS_PATH",
+    ),
 }
 
 
@@ -53,6 +63,29 @@ def _executable(name: str) -> str:
     return path
 
 
+def _gemini_settings_path(environment: dict[str, str]) -> Path:
+    root = Path(environment.get("GEMINI_CLI_HOME") or Path.home()).expanduser()
+    return root / ".gemini" / "settings.json"
+
+
+def _gemini_auth_type(environment: dict[str, str]) -> str | None:
+    path = _gemini_settings_path(environment)
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ProviderError(
+            f"could not read Gemini CLI settings at {path}: {exc}"
+        ) from exc
+    nested = settings.get("security") or {}
+    auth = (nested.get("auth") or {}) if isinstance(nested, dict) else {}
+    selected = auth.get("selectedType") if isinstance(auth, dict) else None
+    if not selected:
+        selected = settings.get("selectedAuthType")  # Pre-schema-migration releases.
+    return str(selected) if selected else None
+
+
 def ensure_subscription_auth(provider: str) -> None:
     """Refuse to run unless the CLI can confirm subscription authentication."""
     environment = subscription_environment(provider)
@@ -60,6 +93,15 @@ def ensure_subscription_auth(provider: str) -> None:
         command = [_executable("codex"), "login", "status"]
     elif provider == "anthropic":
         command = [_executable("claude"), "auth", "status"]
+    elif provider == "google":
+        _executable("gemini")
+        if _gemini_auth_type(environment) != "oauth-personal":
+            raise ProviderError(
+                "Gemini CLI is not configured for Google-account OAuth; unset "
+                "Gemini/Google API and Vertex variables, run `gemini`, and choose "
+                "Sign in with Google"
+            )
+        return
     else:
         raise ProviderError(f"unsupported provider: {provider}")
 
@@ -150,6 +192,21 @@ def _claude_command(executable: str, model_id: str, mcp_path: Path) -> list[str]
     ]
 
 
+def _gemini_command(executable: str, model_id: str) -> list[str]:
+    return [
+        executable,
+        "--model",
+        model_id,
+        "--output-format",
+        "json",
+        "--skip-trust",
+        "--approval-mode",
+        "default",
+        "--prompt",
+        "",
+    ]
+
+
 def _usage(data: dict) -> tuple[int | None, int | None]:
     usage = data.get("usage") or {}
     input_tokens = usage.get("input_tokens")
@@ -200,6 +257,65 @@ def _codex_reported_model(stderr: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _gemini_reported_models(data: dict) -> list[str]:
+    stats = data.get("stats") or {}
+    models = (stats.get("models") or {}) if isinstance(stats, dict) else {}
+    if not isinstance(models, dict):
+        return []
+    return [model for model in models if isinstance(model, str)]
+
+
+def _gemini_matching_model(requested: str, reported: list[str]) -> str | None:
+    if not reported:
+        return requested
+    if requested == "auto":
+        return reported[0]
+    if requested == "pro":
+        return next((model for model in reported if "-pro" in model), None)
+    if requested == "flash-lite":
+        return next((model for model in reported if "flash-lite" in model), None)
+    if requested == "flash":
+        return next(
+            (
+                model for model in reported
+                if "-flash" in model and "flash-lite" not in model
+            ),
+            None,
+        )
+    return next(
+        (
+            model for model in reported
+            if _requested_model_was_used(requested, [model])
+        ),
+        None,
+    )
+
+
+def _gemini_usage(data: dict) -> tuple[int | None, int | None]:
+    stats = data.get("stats") or {}
+    models = (stats.get("models") or {}) if isinstance(stats, dict) else {}
+    if not isinstance(models, dict):
+        return None, None
+    prompt = 0
+    output = 0
+    found = False
+    for row in models.values():
+        tokens = row.get("tokens") or {} if isinstance(row, dict) else {}
+        if not isinstance(tokens, dict):
+            continue
+        prompt_tokens = tokens.get("prompt")
+        candidate_tokens = tokens.get("candidates")
+        thought_tokens = tokens.get("thoughts") or 0
+        if isinstance(prompt_tokens, int) and isinstance(candidate_tokens, int):
+            prompt += prompt_tokens
+            if isinstance(thought_tokens, int):
+                output += candidate_tokens + thought_tokens
+            else:
+                output += candidate_tokens
+            found = True
+    return (prompt, output) if found else (None, None)
+
+
 def _complete_once(
     prompt: str,
     model: DirectModel,
@@ -208,7 +324,7 @@ def _complete_once(
     timeout_s: int = 1800,
 ) -> Generation:
     """Run one fresh, non-persistent subscription CLI invocation."""
-    del max_output_tokens  # Neither subscription CLI exposes a hard output-token cap.
+    del max_output_tokens  # These subscription CLIs expose no hard output-token cap.
     started = time.monotonic()
     environment = subscription_environment(model.provider)
 
@@ -217,13 +333,29 @@ def _complete_once(
         output_path = workdir / "last-message.txt"
         mcp_path = workdir / "mcp.json"
         mcp_path.write_text('{"mcpServers":{}}\n', encoding="utf-8")
+        if model.provider == "google":
+            system_settings_path = workdir / "gemini-system-settings.json"
+            system_settings_path.write_text(
+                json.dumps({
+                    "security": {"auth": {"enforcedType": "oauth-personal"}},
+                    "advanced": {"ignoreLocalEnv": True},
+                }),
+                encoding="utf-8",
+            )
+            environment["GEMINI_CLI_SYSTEM_SETTINGS_PATH"] = str(
+                system_settings_path
+            )
 
         if model.provider == "openai":
             command = _codex_command(
                 _executable("codex"), model.model_id, workdir, output_path
             )
         elif model.provider == "anthropic":
-            command = _claude_command(_executable("claude"), model.model_id, mcp_path)
+            command = _claude_command(
+                _executable("claude"), model.model_id, mcp_path
+            )
+        elif model.provider == "google":
+            command = _gemini_command(_executable("gemini"), model.model_id)
         else:
             raise ProviderError(f"unsupported provider: {model.provider}")
 
@@ -313,6 +445,76 @@ def _complete_once(
                 raw=raw,
             )
 
+        if model.provider == "google":
+            try:
+                data = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                return Generation(
+                    provider=model.provider,
+                    requested_model=model.model_id,
+                    resolved_model=None,
+                    text="",
+                    latency_s=elapsed,
+                    error="Gemini returned invalid JSON",
+                    raw=raw,
+                )
+            if data.get("error"):
+                error = data["error"]
+                detail = (
+                    error.get("message") if isinstance(error, dict) else str(error)
+                )
+                return Generation(
+                    provider=model.provider,
+                    requested_model=model.model_id,
+                    resolved_model=None,
+                    text="",
+                    latency_s=elapsed,
+                    error=f"Gemini error: {detail}",
+                    raw=data,
+                )
+            text = data.get("response")
+            if not isinstance(text, str):
+                text = data.get("result")
+            if not isinstance(text, str):
+                return Generation(
+                    provider=model.provider,
+                    requested_model=model.model_id,
+                    resolved_model=None,
+                    text="",
+                    latency_s=elapsed,
+                    error="Gemini JSON did not contain a text response",
+                    raw=data,
+                )
+            reported_models = _gemini_reported_models(data)
+            resolved_model = _gemini_matching_model(
+                model.model_id, reported_models
+            )
+            if reported_models and resolved_model is None:
+                return Generation(
+                    provider=model.provider,
+                    requested_model=model.model_id,
+                    resolved_model=None,
+                    text="",
+                    latency_s=elapsed,
+                    error=(
+                        "Gemini did not use the selected model; reported "
+                        + ", ".join(reported_models)
+                    ),
+                    raw=data,
+                )
+            input_tokens, output_tokens = _gemini_usage(data)
+            return Generation(
+                provider=model.provider,
+                requested_model=model.model_id,
+                resolved_model=resolved_model,
+                text=text,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                latency_s=elapsed,
+                finish_reason="stop",
+                raw=data,
+            )
+
         try:
             data = json.loads(result.stdout)
         except json.JSONDecodeError:
@@ -391,7 +593,10 @@ def complete(
         error = (generation.error or "").lower()
         retryable = any(
             marker in error
-            for marker in (" 429", " 529", "overloaded", "timed out", "timeout")
+            for marker in (
+                " 429", " 529", "overloaded", "resource_exhausted",
+                "rate limit", "timed out", "timeout",
+            )
         )
         if not retryable or attempt == max_retries:
             return generation

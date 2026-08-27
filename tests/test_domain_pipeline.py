@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from runner import direct_providers
-from runner.direct_models import BY_LABEL
+from runner.direct_models import BY_LABEL, resolve_model
 from runner.direct_providers import Generation
 from runner.domain_tasks import DomainTask, discover_tasks
 from runner import domain_sweep
@@ -88,21 +88,38 @@ class SubscriptionTransportTests(unittest.TestCase):
         self.assertEqual(command[command.index("--system-prompt") + 1], "")
         self.assertEqual(command[command.index("--fallback-model") + 1], "")
 
+    def test_gemini_command_is_headless_and_keeps_prompt_out_of_argv(self):
+        command = subscription_providers._gemini_command("/bin/gemini", "pro")
+        self.assertEqual(command[command.index("--prompt") + 1], "")
+        self.assertEqual(command[command.index("--output-format") + 1], "json")
+        self.assertEqual(command[command.index("--model") + 1], "pro")
+        self.assertIn("--skip-trust", command)
+
     @mock.patch.dict(
         os.environ,
         {
             "OPENAI_API_KEY": "billed-openai",
             "ANTHROPIC_API_KEY": "billed-anthropic",
+            "GEMINI_API_KEY": "billed-gemini",
+            "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/billed-google.json",
+            "GOOGLE_CLOUD_PROJECT": "oauth-workspace-project",
             "KEEP_ME": "yes",
         },
     )
     def test_subscription_child_environment_removes_api_keys(self):
         openai_env = subscription_providers.subscription_environment("openai")
         anthropic_env = subscription_providers.subscription_environment("anthropic")
+        google_env = subscription_providers.subscription_environment("google")
         self.assertNotIn("OPENAI_API_KEY", openai_env)
         self.assertNotIn("ANTHROPIC_API_KEY", anthropic_env)
+        self.assertNotIn("GEMINI_API_KEY", google_env)
+        self.assertNotIn("GOOGLE_APPLICATION_CREDENTIALS", google_env)
+        self.assertEqual(
+            google_env["GOOGLE_CLOUD_PROJECT"], "oauth-workspace-project"
+        )
         self.assertEqual(openai_env["KEEP_ME"], "yes")
         self.assertEqual(anthropic_env["KEEP_ME"], "yes")
+        self.assertEqual(google_env["KEEP_ME"], "yes")
 
     @mock.patch("runner.subscription_providers.shutil.which", return_value="/bin/codex")
     @mock.patch("runner.subscription_providers.subprocess.run")
@@ -145,6 +162,58 @@ class SubscriptionTransportTests(unittest.TestCase):
         with self.assertRaises(subscription_providers.ProviderError):
             subscription_providers.ensure_subscription_auth("anthropic")
 
+    @mock.patch("runner.subscription_providers.shutil.which", return_value="/bin/gemini")
+    def test_gemini_auth_requires_google_account_oauth(self, _which):
+        with tempfile.TemporaryDirectory() as temporary:
+            config_dir = Path(temporary) / ".gemini"
+            config_dir.mkdir()
+            settings = config_dir / "settings.json"
+            settings.write_text(json.dumps({
+                "security": {"auth": {"selectedType": "oauth-personal"}},
+            }))
+            with mock.patch.dict(
+                os.environ, {"GEMINI_CLI_HOME": temporary}, clear=False
+            ):
+                subscription_providers.ensure_subscription_auth("google")
+
+            settings.write_text(json.dumps({
+                "security": {"auth": {"selectedType": "gemini-api-key"}},
+            }))
+            with mock.patch.dict(
+                os.environ, {"GEMINI_CLI_HOME": temporary}, clear=False
+            ):
+                with self.assertRaises(subscription_providers.ProviderError):
+                    subscription_providers.ensure_subscription_auth("google")
+
+    @mock.patch("runner.subscription_providers.shutil.which", return_value="/bin/gemini")
+    @mock.patch("runner.subscription_providers.subprocess.run")
+    def test_gemini_json_response_is_normalized(self, run, _which):
+        run.return_value = mock.Mock(
+            returncode=0,
+            stdout=json.dumps({
+                "response": "module x; endmodule",
+                "stats": {"models": {
+                    "gemini-3.1-pro-preview": {
+                        "tokens": {
+                            "prompt": 100,
+                            "candidates": 20,
+                            "thoughts": 30,
+                        },
+                    },
+                }},
+            }),
+            stderr="",
+        )
+        result = subscription_providers._complete_once(
+            "canonical prompt", BY_LABEL["gemini-pro"]
+        )
+        self.assertEqual(result.text, "module x; endmodule")
+        self.assertEqual(result.resolved_model, "gemini-3.1-pro-preview")
+        self.assertEqual((result.input_tokens, result.output_tokens), (100, 50))
+        self.assertEqual(run.call_args.kwargs["input"], "canonical prompt")
+        child_env = run.call_args.kwargs["env"]
+        self.assertIn("GEMINI_CLI_SYSTEM_SETTINGS_PATH", child_env)
+
     def test_claude_selected_model_is_verified_from_reported_usage(self):
         self.assertTrue(subscription_providers._requested_model_was_used(
             "claude-opus-5", ["claude-opus-5-20260724"]
@@ -185,6 +254,12 @@ class SubscriptionTransportTests(unittest.TestCase):
         )
         self.assertEqual(result.text, "ok")
         self.assertEqual(once.call_count, 2)
+
+    def test_google_model_alias_and_explicit_id_resolve(self):
+        self.assertEqual(BY_LABEL["gemini-pro"].model_id, "pro")
+        explicit = resolve_model("google:gemini-3.1-pro-preview")
+        self.assertEqual(explicit.provider, "google")
+        self.assertEqual(explicit.model_id, "gemini-3.1-pro-preview")
 
     @mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "not-recorded"})
     @mock.patch("runner.direct_providers._post_json")

@@ -249,6 +249,25 @@ def _record_generation(run_dir: Path, job: Job, generation: Generation) -> Path:
         "generation": generation.to_dict(include_raw=True),
     }
     if job.transport != "api":
+        provider_isolation = {
+            "anthropic": {
+                "account_or_project_customizations": False,
+                "tools": False,
+                "system": "empty replacement",
+            },
+            "openai": {
+                "account_or_project_customizations": False,
+                "tools": "Codex built-ins",
+                "system": "Codex built-in",
+            },
+            "google": {
+                "account_or_project_customizations": (
+                    "dedicated GEMINI_CLI_HOME recommended"
+                ),
+                "tools": "Gemini headless defaults in an empty workspace",
+                "system": "Gemini CLI default",
+            },
+        }[job.model.provider]
         record["request"]["transport"] = job.transport
         record["request"]["isolation"] = {
             "user_messages": 1,
@@ -256,9 +275,7 @@ def _record_generation(run_dir: Path, job: Job, generation: Generation) -> Path:
             "fresh_process": True,
             "empty_temporary_directory": True,
             "session_persistence": False,
-            "account_or_project_customizations": False,
-            "tools": False if job.model.provider == "anthropic" else "Codex built-ins",
-            "system": "empty replacement" if job.model.provider == "anthropic" else "Codex built-in",
+            **provider_isolation,
         }
     _atomic_json(path, record)
     return path
@@ -397,9 +414,17 @@ def _split_csv(value: str) -> list[str]:
 def _print_models() -> None:
     print(f"{'label':18s} {'provider':10s} {'model id':24s} {'$/Min':>8s} {'$/Mout':>8s}")
     for model in MODELS:
+        input_price = (
+            f"{model.input_usd_per_mtok:8.2f}"
+            if model.input_usd_per_mtok is not None else f"{'n/a':>8s}"
+        )
+        output_price = (
+            f"{model.output_usd_per_mtok:8.2f}"
+            if model.output_usd_per_mtok is not None else f"{'n/a':>8s}"
+        )
         print(
             f"{model.label:18s} {model.provider:10s} {model.model_id:24s} "
-            f"{model.input_usd_per_mtok:8.2f} {model.output_usd_per_mtok:8.2f}"
+            f"{input_price} {output_price}"
         )
 
 
@@ -410,7 +435,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--models", default="", help="labels or provider:model-id values")
     parser.add_argument(
         "--transport", choices=("api", "subscription"), default="api",
-        help="direct paid API (default) or included Codex/Claude Code quota",
+        help="direct paid API (default) or included Codex/Claude/Gemini quota",
     )
     parser.add_argument("-k", "--samples", type=int, default=1)
     parser.add_argument("--api-workers", type=int, default=1)
@@ -447,6 +472,12 @@ def main(argv: list[str] | None = None) -> int:
         models = resolve_models(_split_csv(args.models))
     except (TaskDiscoveryError, ValueError) as exc:
         parser.error(str(exc))
+
+    if args.transport == "api" and any(model.provider == "google" for model in models):
+        parser.error(
+            "Google models currently require --transport subscription; "
+            "direct Gemini API billing is not implemented"
+        )
 
     jobs = [
         Job(task, model, sample, args.transport)

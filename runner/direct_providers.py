@@ -77,10 +77,15 @@ def anthropic_payload(prompt: str, model: DirectModel, max_output_tokens: int) -
 
 
 def api_key(provider: str) -> str:
-    env_name = {
-        "openai": "OPENAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-    }[provider]
+    try:
+        env_name = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+        }[provider]
+    except KeyError as exc:
+        raise ProviderError(
+            f"direct API transport does not support provider {provider!r}"
+        ) from exc
     key = os.environ.get(env_name)
     if not key:
         raise ProviderError(

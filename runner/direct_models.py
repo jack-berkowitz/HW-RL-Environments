@@ -1,7 +1,7 @@
 """Provider-native model registry for the domain benchmark pipeline.
 
-Unlike ``runner.models``, these are IDs accepted directly by OpenAI and
-Anthropic.  Prices are estimates used for the local spend guard; provider
+Unlike ``runner.models``, these are IDs or CLI aliases accepted directly by a
+provider.  Prices are estimates used for the local spend guard; provider
 billing remains authoritative.  Keep the source URL and checked date beside a
 price change so a historical sweep can explain the estimate it displayed.
 """
@@ -60,6 +60,10 @@ MODELS: tuple[DirectModel, ...] = (
         "2026-08-23",
         "lower-cost Claude 5 tier",
     ),
+    DirectModel(
+        "gemini-pro", "google", "pro", 40_000,
+        note="Gemini CLI pro alias; Google-account subscription transport only",
+    ),
 )
 
 BY_LABEL = {model.label: model for model in MODELS}
@@ -79,9 +83,10 @@ def resolve_model(name: str) -> DirectModel:
     provider, model_id = name.split(":", 1)
     provider = provider.strip().lower()
     model_id = model_id.strip()
-    if provider not in {"openai", "anthropic"} or not model_id:
+    if provider not in {"openai", "anthropic", "google"} or not model_id:
         raise ValueError(
-            f"invalid model {name!r}; expected openai:<id> or anthropic:<id>"
+            f"invalid model {name!r}; expected openai:<id>, anthropic:<id>, "
+            "or google:<id>"
         )
     known = BY_PROVIDER_ID.get((provider, model_id))
     if known:
