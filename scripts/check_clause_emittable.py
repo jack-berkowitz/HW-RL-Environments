@@ -472,12 +472,23 @@ def main(argv):
                                    "no fail()/chk() and no $display TEST_RESULT"))
                 continue
             if rows or msgs:
-                print("  " + os.path.basename(d.rstrip("/")))
+                full = os.path.basename(d.rstrip("/"))
+                # EVERY ROW CARRIES ITS TASK, because a row that is attributable
+                # only by the heading above it is attributable only to whoever
+                # does not filter. AGENT-VERIF-A2 swept this output with a
+                # verification-only grep, which dropped the d_ headings, and two
+                # d_nw01 rows landed under v_dsp02 -- ids that task does not
+                # state, in a commit I had just pushed. They caught it as their
+                # own scope and reported it rather than filing it. The next
+                # person may not, so the shape is removed instead of documented.
+                short = re.match(r"[dv]_[a-z]+[0-9]+", full)
+                short = short.group(0) if short else full
+                print("  " + full)
                 for ids, txt in msgs:
-                    print("      msg   %-16s %s" % (" + ".join(ids), txt))
+                    print("    %-8s msg   %-16s %s" % (short, " + ".join(ids), txt))
                     n += 1
                 for depth, ids in rows:
-                    print("      chain %s" % " + ".join(ids))
+                    print("    %-8s chain %s" % (short, " + ".join(ids)))
                     n += 1
         for name, why in unreadable:
             print("  %-32s  NO CONCLUSION -- %s." % (name, why))
