@@ -6600,3 +6600,87 @@ produced it and never left this session.
 looks like *"this is what fired"* and means *"this is what fired first"*, and
 nothing in the output says which. **One header line would close it** — the same
 remedy as `compared N of M`: not care, a channel that states what the number is.
+
+## The disk fill: the guard already existed, and the obvious guard is the wrong one
+
+Fifteen gigabytes of Verilator object directories and VCD traces in one session,
+118Mi free at the point a `sed` failed with ENOSPC. `witness.sh` already carries
+the history in a comment — *"Keeping ten of them filled this machine's disk
+mid-run"* — so this trigger has fired before.
+
+### What a disk-exhausted run looks like, traced through the harness
+
+    verilator ... > "$OUT/$m.build" 2>&1
+    if [ $? -ne 0 ]; then echo "  $m : BUILD FAILED (see ...)"; continue; fi
+
+**A failing build is caught per mutant and `continue`s**, so it increments
+`n_tot` and not `n_fail`. And every one of the eleven harnesses ends with:
+
+    echo "  RULE24 positive control : $n_fail of $n_tot mutants produced a clause failure"
+    if [ "$n_fail" -ne "$n_tot" ]; then
+      echo "  RULE24: NOT a clean reproduction -- treat every line above as unlicensed."
+      exit 2
+
+Measured: **11 of 11 harnesses carry that guard.**
+
+**So this is NOT the F88 shape.** A truncated run cannot read as a clean one
+here: the positive control counts, refuses, names every line above it as
+unlicensed, and exits 2. The thing I feared was already prevented, by a control
+written for a different reason — a mutant that fails to build and a mutant that
+fails to die are the same arithmetic, and the guard does not care which.
+
+**That is worth stating as a general property**: a control that refuses on *"did
+the instrument reproduce a known answer"* covers causes its author never
+enumerated. It does not need to know about disks.
+
+### The gap is attribution, not detection
+
+Two messages are wrong about *why*, and both send a reader somewhere useless:
+
+    "$m : BUILD FAILED (see $OUT/$m.build)"     -> reader looks for a code defect
+    "$m : NO FAILURE OBSERVED -- treat the
+     REFERENCE as suspect"                      -> actively wrong: the reference
+                                                   is fine, the machine is full
+
+The second is the sharper one. **It is a specific, actionable, confident
+diagnosis, and under ENOSPC it accuses the wrong party.** The run is refused
+either way, so nothing false is published — but the next hour is spent auditing
+a reference that was never at fault.
+
+### The proposed guard, and why the obvious one is not enough
+
+**A free-space check before the run that refuses rather than warns is the obvious
+answer, and it is the wrong guard.**
+
+- **Not sufficient.** Free space at start does not predict free space at mutant
+  eight. Each build is hundreds of megabytes; the harness deletes each object
+  directory after use (`rm -rf "$OUT/$m"`, with the incident recorded beside it),
+  so the working set is one mutant — but a pre-flight check passes and the run
+  still dies if anything else on the machine grows.
+- **Not necessary.** The rule-24 positive control already refuses. Adding a
+  pre-flight check as *the guard* would be a second control for a case the first
+  one covers, which is how a corpus acquires two things to keep true.
+
+**What is actually missing is a channel that says why**, which is the same answer
+as `compared N of M` and the `-m1` header. Concretely:
+
+    before each mutant build, capture free space; on a non-zero exit, report
+      "$m : BUILD FAILED -- 340M free at start of build, need ~600M"
+    instead of
+      "$m : BUILD FAILED (see ...)"
+
+and make the empty-witness branch state its assumption:
+
+    "$m : NO FAILURE OBSERVED -- treat the REFERENCE as suspect
+          (build exited 0 and %dM was free, so this is not a space failure)"
+
+Both are one line. Neither adds a control. **They convert a refusal that is
+already correct into a refusal that says what happened**, which is the difference
+between an hour and a minute for whoever reads it next.
+
+### And the one instrument that did fail this way was mine
+
+My ad-hoc loop swallowed eleven build failures and exited 0. The task's shipped
+harness would have refused. **The harness the task already ships would have
+caught the harness I wrote to check the task**, and this is the second time in
+one session that has been the finding.
