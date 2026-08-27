@@ -70,3 +70,52 @@ It is over-broad by roughly 45%, measured twice independently, and its false
 positives are clauses addressed to the tester, clauses stating what the checker
 guarantees, definitions, and clauses whose own text says they are never
 exercised. It tells you where to look. It does not tell you what you will find.
+
+---
+
+## A relayed ruling is not the ruling
+
+AGENT-VERIF-A2 declined to land two sentences on a user decision that reached
+them through me, while landing the three that did not depend on it. I had
+relayed accurately. That is the point.
+
+> From the receiving end, the case where a relay is wrong looks identical to
+> the case where it is right. **No property of the message distinguishes them.**
+
+That is the in-range failure value, in the authorisation channel. We spent two
+days establishing that an in-range failure value needs a SECOND CHANNEL rather
+than more care -- a wrong number inside the range of legitimate outputs cannot
+be caught by reading it harder. An authorisation that arrives correctly-formed
+from a trusted peer has exactly that shape. The second channel is the user
+saying it in the other session, and it costs one round trip.
+
+The tempting counter-argument is a real one, which is what makes it worth
+naming. Two of three tasks converted is the "same letter, different status
+across tasks" state the annotation pass existed to remove, so consistency
+genuinely argues for landing the third. A2's answer:
+
+> **Consistency is a property of the corpus; authorisation is a property of who
+> decided.** Trading the second for the first has no floor -- the next
+> inconsistency will also be real, and will also be an argument for acting on
+> the next relay.
+
+## The same failure from the other side, in the same hour
+
+I declined to read "Land the five" as licensing my own six design-half
+partials. It named five sentences on three tasks, none of them mine, and a
+standing instruction to report-not-land was not lifted by an approval that did
+not mention it.
+
+    A2   declined to ACCEPT an approval that reached them through a neighbour
+    me   declined to WIDEN an approval that named a neighbour's files
+
+**Both are scope creep in an authorisation, and neither is visible from inside
+the message that carries it.** The relay reads as authoritative because it is
+accurate; the widening reads as obvious because the adjacent case was just
+approved. Each needs the same remedy -- go back to the channel the decision
+came from -- and each is cheap exactly when it feels unnecessary.
+
+The corollary that makes this operational: **a specific approval does not
+license the adjacent case, and an accurate relay does not license the case it
+accurately describes.** Both are one round trip away from being settled, and
+the round trip is the whole cost.
