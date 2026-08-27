@@ -1,0 +1,14 @@
+{
+  "build_error": "TOOLFAIL exit 1 -- all 7 diagnostic(s) are slang internal errors, not statements about the design; first: sanitised_gemini.sv:83:24: error: internal error: evaluation does not resolve to a constant in design initialization -- host/tool failure, NOT a verdict",
+  "build_status": "slang_tool_error",
+  "git_sha": "25b47c68d26252d73b69c7931fd436cec31b15ff-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "candidates/d_ai01/gemini.sv",
+  "submission_sha256_16": "e63b1bcd045dd00a",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "8ec0b4fd8769d737",
+  "timestamp_utc": "2026-08-26T22:07:08Z"
+}
