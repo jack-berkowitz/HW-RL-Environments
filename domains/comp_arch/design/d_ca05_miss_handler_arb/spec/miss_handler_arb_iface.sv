@@ -221,8 +221,23 @@ endmodule
 //     one, and after it retires. Both (a) and (b) are separate checks.
 // T4. THE FLUSH WALK (F4): array request and write counts, the address sequence,
 //     and the vldrty pattern.
-// T5. FLUSH ACKNOWLEDGEMENT (F5, F7, F8): the genuine flush, the AMO-induced
-//     flush, and the two asserted together. The third is the discriminating one.
+// T5. FLUSH ACKNOWLEDGEMENT (F5, F7, F8) AND THE AMO-INDUCED WALK (F6): the
+//     genuine flush, the AMO-induced flush, and the two asserted together. The
+//     third is the discriminating one for acknowledgement.
+//
+//     F6 IS CHECKED ON THE ARRAY PORT, NOT ON THE ACKNOWLEDGEMENT, and it has
+//     to be. "The AMO-induced flush acknowledges zero times" is what F7
+//     requires AND what a design that never flushed at all produces -- the same
+//     value for conformance and for the violation. So the walk is counted where
+//     F4 says a flush's cost is paid: at least one full walk of 512 array
+//     requests and 256 writes, with vldrty asserted for all ways, during the
+//     AMO sequence.
+//
+//     A FLOOR RATHER THAN AN EQUALITY. The reference performs TWO full walks
+//     here (1024 requests, 512 writes) and nothing in this contract explains
+//     the second, so requiring it would pin an unexplained implementation
+//     detail. F6 asks that the atomic flush first; one complete walk is that.
+//     The measured count is reported as a METRIC.
 // T6. ATOMIC ORDERING (F9): a miss raised in the same cycle as the atomic.
 // T7. THE ATOP HANDSHAKE (A7): the testbench's memory returns B and R for an
 //     atomic write. A design that waits only for B does not complete and is

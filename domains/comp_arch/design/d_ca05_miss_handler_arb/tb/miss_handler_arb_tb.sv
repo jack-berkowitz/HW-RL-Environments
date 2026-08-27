@@ -46,6 +46,7 @@ module miss_handler_arb_tb;
   );
 
   int unsigned errs = 0;
+  int unsigned n_amo_walk;
   int unsigned n_arb, n_arb_ctl, n_mshr, n_walk, n_ack_real, n_ack_amo,
                n_ack_corner, n_order, n_atop, n_reset;
 
@@ -232,13 +233,36 @@ module miss_handler_arb_tb;
     quiesce("after T4");
 
     // ================= T5 -- THE AMO-INDUCED FLUSH DOES NOT ACK =================
-    a0 = acks;
+    a0 = acks; wreq = 0; wwr = 0; wvld = '0; watching = 1;
     @(negedge clk);
     amo_req_i.req = 1'b1; amo_req_i.amo_op = AMO_ADD; amo_req_i.size = 2'b11;
     amo_req_i.operand_a = 64'h0000_0000_8000_0040; amo_req_i.operand_b = 64'd7;
     amo_retire("T5 amo flush", 60000);
     settle("T5 amo flush", 20000);
+    watching = 0;
+    $display("MEASURE: amo-induced walk wreq=%0d wwr=%0d wvld=%02h", wreq, wwr, wvld);
     expect_eq("T5 amo-induced flush acks", acks - a0, 0);
+
+    // ---- F6: the atomic must FLUSH FIRST, and the flush is observable -------
+    // "amo-induced flush acks == 0" above is satisfied by a design that never
+    // flushes at all -- zero is the conforming answer AND the answer a design
+    // that skipped the walk gives. An in-range failure value, so it needs a
+    // second channel: the array port, which is where F4 says a flush's cost is
+    // paid.
+    //
+    // A FLOOR, NOT AN EQUALITY, and deliberately. The reference performs TWO
+    // full walks here (1024 requests, 512 writes -- exactly twice the genuine
+    // flush of F4) and nothing in the contract explains the second. Pinning
+    // 1024 would encode that unexplained factor into the requirement and fail a
+    // design that flushes once, which is all F6 asks for. The floor is one
+    // complete walk; the actual count is reported as a METRIC so the 2x stays
+    // visible rather than being quietly frozen in.
+    if (wreq < 512 || wwr < 256)
+        fail($sformatf("F6: the atomic did not flush first -- %0d array requests and %0d writes during the AMO sequence, and one full walk is %0d/%0d",
+                       wreq, wwr, 512, 256));
+    if (wvld !== 8'hFF)
+        fail($sformatf("F6: the AMO-induced walk did not assert vldrty for all ways (got %02h, expected ff)", wvld));
+    n_amo_walk = 1;
     expect_eq("T7 atomic completed (ATOP)", (amo_acks > 0) ? 1 : 0, 1);
     n_ack_amo = 1; n_atop = 1;
     quiesce("after T5b");
@@ -313,6 +337,7 @@ module miss_handler_arb_tb;
     if (!n_walk)       fail("FLOOR: the flush walk never observed");
     if (!n_ack_real)   fail("FLOOR: the genuine-flush acknowledgement never checked");
     if (!n_ack_amo)    fail("FLOOR: the AMO-induced flush never checked");
+    if (!n_amo_walk)   fail("FLOOR: F6 -- the AMO-induced flush WALK never observed on the array port");
     if (!n_ack_corner) fail("FLOOR: the flush+amo corner never checked -- F8 is the task");
     if (!n_order)      fail("FLOOR: atomic ordering never exercised");
     if (!n_atop)       fail("FLOOR: no atomic ever completed");
