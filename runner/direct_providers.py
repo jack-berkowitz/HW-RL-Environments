@@ -20,6 +20,13 @@ from .direct_models import DirectModel
 
 OPENAI_URL = "https://api.openai.com/v1/responses"
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+# Google's OpenAI-COMPATIBLE surface, which is chat/completions -- NOT the
+# Responses API that OPENAI_URL points at. The two are different request and
+# response shapes, so google gets its own payload builder and parser below
+# rather than reusing openai_payload(). Reusing it would send `input` and
+# `max_output_tokens` to an endpoint that wants `messages` and `max_tokens`.
+GOOGLE_URL = ("https://generativelanguage.googleapis.com/v1beta/openai/"
+              "chat/completions")
 RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504}
 
 
@@ -76,11 +83,21 @@ def anthropic_payload(prompt: str, model: DirectModel, max_output_tokens: int) -
     }
 
 
+def google_payload(prompt: str, model: DirectModel, max_output_tokens: int) -> dict:
+    """chat/completions shape, which Google's OpenAI-compat surface expects."""
+    return {
+        "model": model.model_id,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_output_tokens,
+    }
+
+
 def api_key(provider: str) -> str:
     try:
         env_name = {
             "openai": "OPENAI_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
+            "google": "GEMINI_API_KEY",
         }[provider]
     except KeyError as exc:
         raise ProviderError(
@@ -132,7 +149,29 @@ def _anthropic_text(data: dict) -> str:
         if block.get("type") == "text" and isinstance(block.get("text"), str)
     )
 
+def _google_text(data: dict) -> str:
+    parts: list[str] = []
+    for choice in data.get("choices") or []:
+        message = choice.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            # some compat responses return content as a list of typed parts
+            for block in content:
+                text = block.get("text") if isinstance(block, dict) else None
+                if isinstance(text, str):
+                    parts.append(text)
+    return "".join(parts)
+
+
 def _finish_reason(provider: str, data: dict) -> str | None:
+    if provider == "google":
+        for choice in data.get("choices") or []:
+            reason = choice.get("finish_reason")
+            if reason:
+                return reason
+        return None
     if provider == "anthropic":
         return data.get("stop_reason")
     status = data.get("status")
@@ -168,6 +207,10 @@ def complete(
             "x-api-key": api_key(model.provider),
             "anthropic-version": "2023-06-01",
         }
+    elif model.provider == "google":
+        url = GOOGLE_URL
+        payload = google_payload(prompt, model, ceiling)
+        headers = {"Authorization": f"Bearer {api_key(model.provider)}"}
     else:
         raise ProviderError(f"unsupported provider: {model.provider}")
 
@@ -222,7 +265,14 @@ def complete(
         )
 
     usage = data.get("usage") or {}
-    if model.provider == "openai":
+    if model.provider == "google":
+        # chat/completions reports prompt_tokens/completion_tokens; the Responses
+        # API reports input_tokens/output_tokens. Reading the wrong pair yields
+        # None and a silently absent cost rather than an error.
+        input_tokens = usage.get("prompt_tokens")
+        output_tokens = usage.get("completion_tokens")
+        text = _google_text(data)
+    elif model.provider == "openai":
         input_tokens = usage.get("input_tokens")
         output_tokens = usage.get("output_tokens")
         text = _openai_text(data)

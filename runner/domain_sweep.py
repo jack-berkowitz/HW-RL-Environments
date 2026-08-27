@@ -473,10 +473,27 @@ def main(argv: list[str] | None = None) -> int:
     except (TaskDiscoveryError, ValueError) as exc:
         parser.error(str(exc))
 
-    if args.transport == "api" and any(model.provider == "google" for model in models):
+    # DIRECT GEMINI IS NOW IMPLEMENTED AS TRANSPORT, BUT NOT AS BILLING, and those
+    # are separate halves of what the old guard here refused. runner/direct_providers
+    # gained a google arm (OpenAI-compatible surface, GEMINI_API_KEY); what it did
+    # NOT gain is per-token rates, because I do not have Google's and will not
+    # invent them -- a fabricated rate produces a total that looks measured.
+    #
+    # That matters here specifically. The manifest sums
+    # `(entry.get("estimated_cost_usd") or 0.0)`, so a rate-less model charges
+    # ZERO to SpendGuard: --max-spend would read as enforced and never trip, which
+    # is a spend limit that silently does not apply to one provider. Absent is not
+    # zero, and at the money layer that is worth refusing over.
+    #
+    # So the transport is allowed and the UNPRICED combination is refused, rather
+    # than the provider being refused outright.
+    _unpriced = [m for m in models
+                 if args.transport == "api" and (m.input_usd_per_mtok is None or m.output_usd_per_mtok is None)]
+    if _unpriced and not args.no_spend_limit:
         parser.error(
-            "Google models currently require --transport subscription; "
-            "direct Gemini API billing is not implemented"
+            "no per-token rates for " + ", ".join(sorted(m.label for m in _unpriced))
+            + "; their cost cannot be estimated, so --max-spend would not see them. "
+              "Re-run with --no-spend-limit to accept an untracked spend, or add rates."
         )
 
     jobs = [

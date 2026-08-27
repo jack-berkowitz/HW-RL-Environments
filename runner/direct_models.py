@@ -64,6 +64,24 @@ MODELS: tuple[DirectModel, ...] = (
         "gemini-pro", "google", "pro", 40_000,
         note="Gemini CLI pro alias; Google-account subscription transport only",
     ),
+    # DIRECT-API GEMINI. The entry above carries the CLI ALIAS "pro", which is not
+    # an API model name -- sending it to generativelanguage.googleapis.com 404s.
+    # It was reachable only through the subscription transport, and Google has
+    # since withdrawn the oauth-personal auth that transport requires from
+    # individual accounts ("This client is no longer supported for Gemini Code
+    # Assist for individuals"), so the alias entry is currently unroutable by
+    # either path. This entry is the one the API key can reach.
+    #
+    # NO PRICE FIELDS, DELIBERATELY. The others carry measured per-Mtok rates; I
+    # do not have Gemini's and will not invent them. Absent means no cost is
+    # computed for these generations, which is honest; a fabricated rate would
+    # produce a total that looks measured.
+    DirectModel(
+        "gemini-3.1-pro", "google", "gemini-3.1-pro-preview", 40_000,
+        note="direct API via the OpenAI-compatible surface; needs GEMINI_API_KEY. "
+             "gemini-2.5-pro 404s for new users -- Google's own error names this "
+             "as the replacement, so the id is theirs rather than a guess.",
+    ),
 )
 
 BY_LABEL = {model.label: model for model in MODELS}
