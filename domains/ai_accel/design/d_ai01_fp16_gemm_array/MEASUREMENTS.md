@@ -571,6 +571,36 @@ were read rather than the verdict. Same family as F64.
 
 ## 15. The flush-status residual: CLOSED as a second-source defect, no clause change
 
+> **SUPERSEDED 2026-08-27. NOT REWRITTEN — the text below stands as written so the
+> reasoning can be audited.**
+>
+> **Why the reasoning fails.** It rules out *clearing* and then treats *advancing*
+> as the remainder, without establishing that the text says the arithmetic keeps
+> running during flush. That is an argument from silence: "A10 says nothing about
+> flush" licenses neither reading over the other.
+>
+> **And it identifies the hole and stops rather than reporting it.** It concludes
+> that reproducing the reference exactly "would mean modelling the reference's
+> per-stage internal registers, which is the thing this contract deliberately does
+> not do" — which is precisely C2's own stated reason for excluding the window
+> after flush_i FALLS. That reasoning is symmetric in the edge. Meeting it on the
+> RISING side and filing the result as an accepted residual, rather than as a
+> contract hole of the same shape one edge over, is the error.
+>
+> **And its factual claim is now measured false.** It says the reference
+> "evidently keeps ADVANCING its status pipeline through the flush."
+> `tb/audit/probe_flush_status_tb.sv`, under an alternating stimulus that a
+> constant field could not have discriminated, measures the opposite at both
+> geometries: with flush LOW, status_o[r][0] toggles `00101/00000` in step with
+> the stimulus; with flush HIGH it is frozen at `00101` for the whole assertion.
+> **The reference HOLDS.** Probe (ii) additionally shows stage 0 differing between
+> flush and no-flush runs — 56 samples — so the flush reaches status_o[r][0],
+> which this section's argument assumes it does not.
+>
+> Superseding entry: `probe_flush_status_tb` results, and the C2 rewrite that
+> follows from them.
+
+
 The only surviving status divergence sat at exactly the flush cycles -- 200/201,
 430/431, 601/602, 1403/1404, 2205/2206, 2606/2607 and nowhere else. The reference
 keeps reporting each stage's in-flight flags through a flush; the second source
@@ -642,7 +672,26 @@ probes do not generate.
 more adjudication rounds.** Repeating the existing probes cannot resolve it --
 see section 16 for why running more of the same probes is not more evidence.
 
-**The prior, stated honestly.** Four of four previous second-source residuals on
+**The prior, WEAKENED 2026-08-27, and the section stays OPEN.** This is a note on
+the prior, not a new conclusion.
+>
+> The "four of four" count below is built partly on section 15, which has since
+> been SUPERSEDED: its central claim about the reference is measured false, and
+> the residual it closed as a second-source defect is now a live contract
+> question. One of the four is therefore not a resolved second-source defect.
+>
+> The count is also built on a second source that has since been DISQUALIFIED for
+> contamination — its flush behaviour was re-derived by a reader who had already
+> seen the reference's flush values, and it is not currently usable as an
+> independent instrument. A prior assembled from an instrument later found
+> unreliable inherits that unreliability; it does not survive as a frequency.
+>
+> **What this does NOT do:** it does not make a task defect likely. It removes
+> the grounds for calling a second-source defect likely. Section 17 was already
+> OPEN and remains exactly as open as it was — the prior that made one answer
+> look probable is what has weakened, not the evidence for either answer.
+
+**The prior as originally stated.** Four of four previous second-source residuals on
 this task resolved as defects in the second source, not in the task: a truncated
 self-determined product, a missing output pipeline stage, a status pipeline one
 stage short, and a feedback tap one tick early. Every one was an off-by-one or a
