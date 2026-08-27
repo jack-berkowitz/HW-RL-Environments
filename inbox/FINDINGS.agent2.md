@@ -6866,3 +6866,74 @@ build.
 
 The fix is not care. **Extract the anchor from the file, never from a rendering
 of it**, which is one `repr()` call and was available both times.
+
+## The F1(a) control lands, and both of my earlier explanations for its failure were wrong
+
+    CONTROL  RESULT: FAIL (8 failures)   ids: F1 only
+             FIRED nc_f1_answers_in_reset.force 8
+    GOLDEN   RESULT: PASS
+
+`negctl/f1_answers_in_reset.sv`. F1(a) is now checked **and controlled**.
+
+### The first wrong explanation: I blamed D5's semantics
+
+I filed that both earlier versions tripped D5 because *"a valid raised while its
+ready is low and then released is a withdrawal, which is exactly what D5
+forbids."*
+
+**False, and checkable in the file I had already read.** D5's tracker is
+
+    always @(posedge clk) if (!rst_n) begin
+      for (int c = 0; c < 5; c++) pv[c] <= 1'b0;
+    end else begin ... pv[c] <= v[c] && !r[c]; ...
+
+`pv` is cleared while `rst_n` is low and set only in the else branch, so **a
+valid confined to the reset window cannot set it.** D5 was structurally incapable
+of seeing my perturbation, and I attributed twelve failures to it anyway.
+
+### The real cause: copying a control brings its perturbation
+
+Both versions were built by copying `d5_withdraws_ar.sv` and renaming the module.
+That file carries its own perturbation —
+
+    wire drop = (cnt >= 2'd1) && g_m_arvalid && !m_arready;
+    assign m_arvalid = g_m_arvalid & ~drop;
+
+— and I never removed it. **Every D5 failure was d5's control doing its job**, on
+channel 4, which is `m_arvalid`, which my override never touched. The channel
+number was in every failure line.
+
+`d5_withdraws_ar.sv`'s own header records the same trap one step earlier: it was
+built from `iw_c3` and inherited bindings that do not exist in this task.
+**Twice in one file, from two different sources, and the second time by someone
+who had just read the first warning.**
+
+### The third version passed, and the FIRED counter is the only reason I know why
+
+Gating the force on `!s_rready` gave:
+
+    RESULT: PASS
+    FIRED nc_f1_answers_in_reset.force 0
+
+`s_rready` is `!stall_sr` off an LFSR that resets to a value holding it **high**,
+so the gate was never true. **A control that passes is not evidence the clause
+holds; it is evidence the control never ran** — d5's header again, and this time
+the counter was the only thing separating the two.
+
+The verdict line said PASS and the FIRED line said 0, and **nothing about the
+verdict distinguished a design that satisfies F1(a) from a control that never
+perturbed anything.** That is the whole argument for `check_fired` in one run.
+
+### What actually landed
+
+    assign s_rvalid = force_r ? 1'b1 : g_s_rvalid;
+    wire   force_r  = !rst_ni;
+
+Unconditional, because there was never a reason to gate it: nothing in the
+testbench's model records a transfer inside the reset window — every model block
+is gated `if (rst_n && ...)`, which is the same gate that made F1(a) necessary in
+the first place.
+
+**Three versions, three explanations, and the first two were confident and
+wrong.** The one that settled it was not more care: it was removing the borrowed
+perturbation and letting the counter say whether anything happened.
