@@ -8506,3 +8506,74 @@ index" is right but underspecified. The gate reads the tree the index would
 COMMIT. So a green gate IS evidence about that tree, and is silent about the
 working tree and about staleness. Three objects — working tree, index tree,
 committed tree — and today every one of us conflated at least two.
+
+## The five closed four: one defect did NOT close both W3 branches
+
+The plan was that af_m11 closes W3 in both selectors, since "the two selectors
+report the same clause from different sites". Measured against the reference
+testbench, it does not.
+
+    af_m11 under the reference tb   RESULT: FAIL (10 violations)
+    distinct clause ids driven      P2, W3, W4, X4
+    W3 failures                     1
+      from gov_admitted             1   "only 0 of 4 AWs were admitted"
+      from gov_aw_timeout           0
+
+**`gov_aw_timeout`'s W3 return is still unreached.** Its sibling X4 *is* reached
+by the same mutant, so the selector is exercised and takes the other branch:
+`return (debt_now < bound_) ? "W3" : "X4"`, and at the moment af_m11's AW times
+out the debt is AT the bound, not below it.
+
+That is not a near miss, it is the substantive condition. Reaching it needs a
+defect that keeps an AW unaccepted for the site's full 4000-cycle timeout **while
+the debt is strictly below the bound at the instant of timeout** — af_m11 stalls
+AWs below the bound, but by cycle 4000 the debt has reached it, so the same
+stimulus that drives the clause lands on the other side of its own antecedent.
+
+### Why this was invisible until the branches were separated by message text
+
+Both sites emit the id `W3`. Reading the id column alone, af_m11 "drives W3" and
+both rows close. The two are distinguishable only by their message text —
+
+    gov_admitted     "...only N of M AWs were admitted -- the debt stayed below
+                      the bound..."
+    gov_aw_timeout   "AW id=N was never accepted with the downstream write debt
+                      at D, below the bound of M..."
+
+— and separating them is what turned one apparent closure into one closure and
+one open row. **This is `gov_r`'s two-A5 limit again, and this time it changed
+the answer rather than only the confidence.** On `gov_r` the ambiguity was
+recorded as a limit because it could not be resolved; here it was resolvable,
+because the two sites happen to write different sentences. That they do is luck,
+not design: nothing requires two returns of the same id to be distinguishable,
+and where they are not, this measurement cannot be made at all.
+
+    the general rule    reachability measured from printed IDS cannot separate
+                        two branches that return the same id
+    when it is benign   the branches are equivalent for scoring
+    when it is not      here -- one is reached, one is not, and the pair would
+                        have been reported closed
+
+### The honest count
+
+    before   15 of 22 branches reachable
+    after    19 of 22
+    closed   W3 in gov_admitted, S5, S8, S2      -- four
+    open     W3 in gov_aw_timeout                 -- one, still needs a defect
+
+The remaining three of twenty-two, unchanged in kind:
+
+    unreachable by design       gov_admitted's no-fault return -- emits no fail()
+    not observable here         gov_r's second A5 -- same id as the first
+    reachable, needs a mutant   gov_aw_timeout's W3
+
+**I was asked for five and am reporting four.** The fifth is not blocked and not
+hard to state — it is a defect that stalls an AW past 4000 cycles with the debt
+held strictly below the bound — but writing it is a new mutant on a task whose
+mutant set I have already widened once today, and the count it would change is
+one row. Reporting it open rather than writing it unasked.
+
+Note the case list already covers this branch: `tb/atop_filter_tb.sv:814` asserts
+`gov_aw_timeout(MAXW-1, MAXW) == "W3"`. **The attribution case passes and the
+branch is unreached** — which is the exact pairing this whole pass exists to
+expose, arriving one last time on the row I expected to close for free.
