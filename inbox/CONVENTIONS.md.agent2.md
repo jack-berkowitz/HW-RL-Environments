@@ -467,3 +467,63 @@ rediscover all of it, in a context where the failures look like results.
 
 **The cost of rebuilding is not the build. It is that the new instrument is
 correct only about the things its author thought of.**
+
+<!-- author: agent2 -->
+
+## An attribution case and a mutant establish different halves, and the case is the half that looks complete
+
+**For anyone building attribution cases.** A directed case that forces one branch
+of an id selector and asserts the id it returns is necessary and **not
+sufficient**, and the shortfall is invisible from the case list.
+
+    the CASE      says the branch returns the right id
+    the MUTANT    says the branch is reachable from a real failure
+
+**Neither covers the other.** A case calls the selector directly, with the state
+constructed — that is what makes every branch reachable, including ones no
+stimulus drives, and it is exactly why the case cannot say whether the design can
+ever get there. A mutant reaches the selector through the design and therefore
+proves reachability, and it exercises only the branches its defect happens to
+drive.
+
+    case passes, no mutant reaches it   the branch is correct and dead, or
+                                        correct and only reachable by a defect
+                                        nobody has written
+    mutant reaches it, no case          the branch fires under a real failure and
+                                        nothing says the id it carries is right
+
+### Why the case is the dangerous half
+
+**A full case list looks complete.** Every branch has an entry, every entry
+passes, and the count is the count of branches. Nothing in it is missing, and it
+still does not establish that any of those branches is reachable from a design
+defect.
+
+The corpus already has the instance: v_dsp02's `gov_nv` has four branches, all
+four have cases, and exactly one — `S6` — is driven by a shipped mutant
+(`fn_m10_minmax_snan_not_invalid`). The other three are correct by construction
+and unreached, and **only running the mutants said so.**
+
+That is the same shape as three other pairings already recorded here, and it is
+worth naming as the pattern rather than the fourth instance:
+
+    FIRED counter  / verdict         "the control never ran" vs "the design passed"
+    differential   / FIRED counter   "something else caused it" vs "nothing ran"
+    clause id      / failing control "wrong clause" vs "no failure"
+    attribution
+      case         / mutant          "wrong id" vs "unreachable branch"
+
+**In each pair the cheaper instrument is the one that looks conclusive.** Report
+both halves, and where the second is absent say so rather than letting the first
+stand for it.
+
+### And count selectors, not repairs
+
+A repair that replaces a compound id with a **fixed** one produces nothing a case
+can test — there is no branch, and whether the id is right is settled by reading
+the clause. Measured on this half: **six of eleven tasks have no id-selecting
+construct at all**, and an estimate built from repaired sites came out
+substantially wrong in composition. The survey that gives the real population is
+one regex per file: a function returning a clause id, a variable assigned more
+than one id and passed to the failure helper, or a ternary between two id
+literals.

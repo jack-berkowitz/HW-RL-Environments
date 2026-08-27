@@ -7727,3 +7727,65 @@ cases themselves cannot establish, because they call the selector directly rathe
 than reaching it through the design. The case says the branch returns the right
 id; the mutant says the branch is reachable from a real failure. Neither covers
 the other, which is the same pairing as the FIRED counter and the differential.
+
+## C2 was less determinate than I said, and the sentence I leaned on presupposes its conclusion
+
+A clean reader has since derived C2 from the text alone and reports **three
+readings, not one.** My disqualified derivation reported that C2 *"does not merely
+LICENSE the advancing reading, it STATES it"*. That claim is now contradicted by
+someone who read the clause without knowing what the reference does, which is the
+only position from which the claim could be checked.
+
+**The disqualification already stands and this is separate from it.** My
+conclusion may still be right. What is wrong is my characterisation of how firmly
+the text supports it.
+
+### What I leaned on, and why it was weaker than it read
+
+    "flush_i DOES NOT AFFECT status_o. This clause zeroes the inter-stage
+     registers, and that is a statement about z_o. A10 governs status_o
+     throughout, including while flush_i is asserted."
+
+I treated that as the clause settling the question. It is a **gloss** — a sentence
+about what the clause means, appended to the clause — and it **presupposes its own
+conclusion**: "A10 governs throughout" is the advancing reading stated as a
+premise, not derived from anything in A10 or in C2's operative text.
+
+A gloss that asserts the answer is not the same as operative text that entails it,
+and **from inside a derivation that agrees with the gloss the two are
+indistinguishable** — which is precisely why a reader who did not already know the
+answer could see three readings where I saw one.
+
+### And the part I did not notice at all
+
+**The addend question is not determined by the text.** My derivation asserted that
+during flush each stage computes `a*b + 0`, because C2 zeroes the inter-stage
+registers and the zeroed register is the addend. That is a reading. The clause
+does not say what the FMA's addend is during flush — it says the registers are
+forced to zero, which is a statement about what they hold, not about what is
+sampled. I stated it as following from C2 and it does not.
+
+**I recorded a bound on my derivation and it was the wrong bound.** I wrote that
+the inference was short *because the text is explicit*, so the independence bought
+less than it would on an ambiguous clause. The text was not explicit; the
+inference was short because I accepted a gloss. **The caveat I wrote made the work
+sound more solid than it was** — it conceded the least damaging thing, which is
+what a caveat written by the person who did the work tends to do.
+
+### What this changes
+
+    the disqualification         unchanged -- I knew the reference's answer
+    the derivation as artefact   stands, and is now one of at least three
+                                 readings rather than the reading
+    "C2 states it"               withdrawn
+    the addend assumption        withdrawn as derived; it is a reading
+    the cycle-201 residual       unchanged, and more interesting: a residue at
+                                 the second cycle of a pulse, under a clause
+                                 whose operative text does not determine what is
+                                 sampled during the pulse, is a question about
+                                 C2 rather than about anyone's implementation
+
+Not editing the artefact — the header correction stands as filed and this is
+recorded here instead. **The C2 re-derivation and the second-source replacement
+are not mine**, and this entry is a report about my own work rather than an input
+to either.
