@@ -758,6 +758,31 @@ already correct"* — is asserting a sweep. Where the sweep is not stated, the
 claim is an intuition wearing a measurement's grammar, and it is load-bearing for
 every reader who then does not look.
 
+**A SECOND FAILURE MODE OF THE SAME CLAUSE, contributed by AGENT-VERIF-A2 and
+filed with their name on it.** The case above is a sweep that was never stated.
+Theirs is a sweep that EXISTS and whose discriminator is INCIDENTAL RATHER THAN
+DESIGNED: a containment claim — "one defect closes both branches" — held only
+because two selector sites happened to write different sentences. Measured, it
+was false; four of five rows closed, not five.
+
+**And the incidental case is the more dangerous of the two.** A missing sweep
+fails loudly, by being unmeasurable — you cannot quote a number you never took.
+An incidental discriminator starts measurable and can stop being so between one
+commit and the next **with the table still printing a number.** Nothing fails,
+nothing warns, and the claim silently changes from measured to assumed.
+
+**The remedy is where it gets sharp, and it is one wording edit from gone.**
+Anyone tidying the two messages toward a common phrasing, or factoring them
+through a shared helper, destroys the discriminator without touching the mutant,
+the selector, or the clause. The fix is distinct ids on the two returns — the
+compound-id split this corpus already performs, arriving as the case where the
+split was made at the CLAUSE level and not at the SITE level. Two sites, one id,
+and the id is what the instrument reads.
+
+**So: state the sweep, and state what the sweep DEPENDS ON.** A discriminator
+that is a property of the artefact's incidental wording is a dependency on a file
+anyone can innocently break, and it belongs in the claim beside the sweep itself.
+
 **Rules:** 24, 36
 
 ---
