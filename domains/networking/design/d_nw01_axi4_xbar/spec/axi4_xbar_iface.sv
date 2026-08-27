@@ -285,8 +285,22 @@
 //       is VISIBLE. Under Verilator it is not.
 //   T3. THE MODULE MUST BE NAMED `axi4_xbar` with the exact port list below,
 //       including port names.
-//   T4. ONE SELF-CONTAINED FILE. No package, no include, no reference to
-//       anything outside itself.
+//   T4. ONE SELF-CONTAINED FILE, PLUS THE SUPPLIED PACKAGE. Submit exactly one
+//       file containing only `module axi4_xbar`. It MUST open with
+//       `import axi4_xbar_pkg::*;`: the port list below is written in that
+//       package's types and cannot be expressed without them. The package
+//       ships with this task, is part of the problem statement, and is
+//       compiled for you -- do not paste it into your file and do not
+//       redeclare its types. Beyond that one import: no other package, no
+//       include, no reference to anything outside itself, and nothing declared
+//       outside the module.
+//
+//       THIS CLAUSE USED TO FORBID THE IMPORT IT NOW REQUIRES. It read "No
+//       package, no include", while the module immediately below it opened
+//       with `import axi4_xbar_pkg::*;` and the port list was written in
+//       package types. Every submission disobeyed T4 as written, because the
+//       alternative was not matching the port list. A normative clause that
+//       every correct answer must break is a defect in the clause.
 // -----------------------------------------------------------------------------
 // G. GRADING -- how a submission is judged, and against what
 // -----------------------------------------------------------------------------

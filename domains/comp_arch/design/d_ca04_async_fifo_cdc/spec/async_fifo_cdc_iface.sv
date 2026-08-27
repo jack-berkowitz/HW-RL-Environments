@@ -51,16 +51,23 @@
 // -----------------------------------------------------------------------------
 // WHAT THE FIFO MUST DO
 // -----------------------------------------------------------------------------
-//   B1. NOT CHECKED BY THE TESTBENCH, and it cannot be from where the checker
-//       stands. `B1` appears ZERO times in tb/. Occupancy is tracked but is
-//       marked COVERAGE ONLY, never an assertion, and the tb states the reason:
-//       sampled on `wr_clk` it sees a stale `rd_idx` and OVERSTATES occupancy,
-//       so a bound asserted on it would fail conforming designs.
+//   B1. CHECKED, AT REST. The capacity phase stops the reader, offers writes
+//       until the design has refused for 64 consecutive cycles, and counts what
+//       it accepted. With nothing draining, that count IS the design's total
+//       storage, and it is compared against the ceiling below.
 //
-//       So this is a stated requirement with no enforcement: a design carrying
-//       eight extra beats is non-conforming and passes. Recorded here rather
-//       than left to be discovered. It is not grouped under another id -- there
-//       is no id. (d_nw03's B1 IS enforced; the same letter is not the same
+//       IT WAS NOT ALWAYS CHECKED, and the reason given is worth keeping
+//       because the reason was correct -- about a different number. Occupancy
+//       sampled on `wr_clk` while both sides run sees a stale `rd_idx` and
+//       OVERSTATES, so a bound asserted on it would fail conforming designs.
+//       That is true of the running occupancy estimate, which is COVERAGE ONLY
+//       and must stay that way. It is NOT true of the at-rest count: with the
+//       reader stopped and the writer refused, the synchroniser has converged
+//       and the read pointer has not moved from where it started. The
+//       testbench carries two occupancy numbers; the objection was written
+//       about the live one and applied to both.
+//
+//       (d_nw03's B1 is also enforced; the same letter is still not the same
 //       status across tasks.)
 //
 //       STORAGE BEYOND THE FIFO IS BOUNDED. The FIFO holds 2**LOG_DEPTH
