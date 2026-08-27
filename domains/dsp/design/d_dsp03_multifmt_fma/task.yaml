@@ -10,7 +10,7 @@ catalog: TASK_CATALOG.md
 # this. A fixer that took first-match-wins overwrote one of those on
 # 2026-08-26 and made the file assert that a past measurement used today's
 # text; restored from git, and this field exists so the two are distinct.
-task_text_hash: 30388a1122282bf0
+task_text_hash: 1952c56cdca33f36
 procedure: TIER-B
 
 catalog_divergence: >

@@ -10,7 +10,7 @@ catalog: TASK_CATALOG.md
 # this. A fixer that took first-match-wins overwrote one of those on
 # 2026-08-26 and made the file assert that a past measurement used today's
 # text; restored from git, and this field exists so the two are distinct.
-task_text_hash: fb7df2ef5b33b15e
+task_text_hash: a3dfc6d107b61503
 
 # CLASS A, not B. The catalog listed this as Class B, which was stale from when
 # the task was planned around a locally-written Python model. What it actually

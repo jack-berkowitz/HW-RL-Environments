@@ -5,7 +5,7 @@ domain: comp_arch
 type: design
 catalog: TASK_CATALOG.md
 procedure: TIER-B
-task_text_hash: 47d2f6fabbfc5af6
+task_text_hash: a964f64835fc4379
 
 catalog_divergence: >
   The catalog row d_ca03 reads `mmu_sv39_full`: "Integrated MMU: PTW, TLB, ASID
