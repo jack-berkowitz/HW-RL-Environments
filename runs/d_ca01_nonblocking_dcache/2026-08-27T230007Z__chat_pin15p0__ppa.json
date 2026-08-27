@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=nonblocking_dcache; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=15000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0; override.CLK_PERIOD_NS=15.0; note.abc_runtime_target_ps=15000;",
+  "build_config_hash": "65554084754eca08",
+  "clk_period_ns": "15.0",
+  "correctness_gate": "passed:2026-08-27T164143Z__chat__sim.json",
+  "design_area_um2": "984788",
+  "git_sha": "18828f371f4c98fcb8e3d5f9e44dc5c737526b7d-dirty",
+  "kind": "ppa",
+  "label": "chat_pin15p0",
+  "orfs_nickname": "d_ca01_cand_chat_pin15p0",
+  "pdk": "sky130hd",
+  "power_w": "1.86e+00",
+  "status": "completed",
+  "submission": "candidates/d_ca01/chat.sv",
+  "submission_sha256_16": "e42faed5e475feb2",
+  "synth_area_um2": "760411.795199",
+  "task": "d_ca01_nonblocking_dcache",
+  "timestamp_utc": "2026-08-27T23:00:07Z",
+  "wns_ns": "-0.049118"
+}
