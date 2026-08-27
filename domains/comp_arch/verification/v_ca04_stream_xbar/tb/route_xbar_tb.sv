@@ -54,6 +54,36 @@ module route_xbar_tb;
 
   // ---------------- the model ----------------
   logic [DW-1:0] pair_q [N_IN][N_OUT][$];   // accepted, bound for that output, in order
+
+  // ---- the delivery selector, EXTRACTED so it can be tested ------------------
+  // This decision used to be inline in the checker, and an inline decision can
+  // only be exercised by driving the whole design into the state it decides on.
+  // Attribution is a property of the TESTBENCH -- which name a path reports
+  // under -- and no mutation of the design can move it, so the mutant set cannot
+  // reach this at all. Naming the selector is what makes it callable with the
+  // state constructed, which is the only way the branch that no stimulus reaches
+  // gets a case.
+  //
+  // REFACTORING FOR TESTABILITY IS EXPECTED HERE, NOT A SMELL. Every inline id
+  // choice in this corpus has the same property: it is correct by construction
+  // and measured by nothing until it has a name. Extracting it is the first step
+  // of writing its attribution cases, and it will recur on every selector that
+  // was written as an if/else in a checker.
+  function automatic int bound_output_for(input int s, input int j, input logic [DW-1:0] d);
+    for (int jo = 0; jo < N_OUT; jo++)
+      if (jo != j)
+        for (int q = 0; q < pair_q[s][jo].size(); q++)
+          if (pair_q[s][jo][q] === d) return jo;
+    return -1;
+  endfunction
+
+  // R1 vs R6, and the two are not the same kind of fault. R1 is a beat accepted
+  // bound for one output and delivered on another. R6 is a beat nothing ever
+  // accepted -- neither a routing fault nor a delivery-count fault, because both
+  // presuppose acceptance and a fabricated beat satisfies them vacuously.
+  function automatic string gov_delivery(input int s, input int j, input logic [DW-1:0] d);
+    return (bound_output_for(s, j, d) >= 0) ? "R1" : "R6";
+  endfunction
   bit            seen [logic [DW-1:0]];      // every beat ever delivered
   int            n_acc = 0, n_del = 0;
   bit            checking = 1'b0;
@@ -132,12 +162,8 @@ module route_xbar_tb;
             // The DUPLICATE case cannot reach this branch: seen.exists(d) catches
             // it eight lines above and already reports under R4's own id. So this
             // site was never R1/R4 -- it is R1 plus a third state.
-            automatic int bound_for = -1;
-            for (int jo = 0; jo < N_OUT; jo++)
-              if (jo != j && bound_for < 0)
-                for (int q = 0; q < pair_q[s][jo].size(); q++)
-                  if (pair_q[s][jo][q] === d) begin bound_for = jo; break; end
-            if (bound_for >= 0)
+            automatic int bound_for = bound_output_for(s, j, d);
+            if (gov_delivery(s, j, d) == "R1")
               fail("R1", $sformatf("cycle %0d: output %0d delivered payload %08x from input %0d, which was accepted bound for output %0d -- R1 says a beat accepted while in_sel_i names j is delivered on j and on no other",
                                    cyc, j, d, s, bound_for));
             else
@@ -392,6 +418,60 @@ module route_xbar_tb;
     if (!cov_reset_mid)         fail("COVERAGE", "reset was never asserted mid-stream");
     for (int j = 0; j < N_OUT; j++)
       if (!cov_all_outputs[j])  fail("COVERAGE", $sformatf("output %0d was never selected", j));
+    // ---- ATTRIBUTION CASES: does the SELECTOR return the id it should? ------
+    // gov_delivery is a pure function of pair_q, so each branch is a direct call
+    // with the state constructed. The mutant set cannot reach these: a mutant
+    // changes what the DESIGN does, and which NAME a path reports under is a
+    // property of this file.
+    //
+    // ONE CASE PER RETURN, not per id. gov_delivery has two returns and they are
+    // two ids, so here the counts coincide -- v_ca03's gov_r has three returns
+    // and two of them are A5, where they do not. The unit that has to be covered
+    // is the one that can change independently.
+    begin
+      automatic int n_attrib = 0, n_bad = 0;
+      automatic logic [DW-1:0] probe = 32'hA5A5_0001;
+      for (int a = 0; a < N_IN; a++)
+        for (int b = 0; b < N_OUT; b++) pair_q[a][b].delete();
+
+      // R6 -- nothing anywhere accepted this beat.
+      n_attrib++;
+      if (gov_delivery(0, 1, probe) != "R6") begin
+        n_bad++; $display("ATTRIB FAIL gov_delivery: unaccepted beat returned %s, expected R6", gov_delivery(0,1,probe));
+      end else $display("ATTRIB ok gov_delivery R6 -- a beat nothing ever accepted");
+
+      // R1 -- accepted from input 0 bound for output 2, delivered on output 1.
+      pair_q[0][2].push_back(probe);
+      n_attrib++;
+      if (gov_delivery(0, 1, probe) != "R1") begin
+        n_bad++; $display("ATTRIB FAIL gov_delivery: misrouted beat returned %s, expected R1", gov_delivery(0,1,probe));
+      end else $display("ATTRIB ok gov_delivery R1 -- accepted for another output");
+
+      // and the OUTPUT it names, because the message carries it and a wrong one
+      // sends the reader to the wrong channel. Not an id, still an attribution.
+      n_attrib++;
+      if (bound_output_for(0, 1, probe) != 2) begin
+        n_bad++; $display("ATTRIB FAIL bound_output_for: returned %0d, expected 2", bound_output_for(0,1,probe));
+      end else $display("ATTRIB ok bound_output_for -- names the output it was bound for");
+
+      // the SAME output must not count: a beat outstanding for j is not misrouted
+      // to j. This is the boundary of the `jo != j` guard, and without a case the
+      // guard could be dropped and every branch above would still pass.
+      for (int a = 0; a < N_IN; a++)
+        for (int b = 0; b < N_OUT; b++) pair_q[a][b].delete();
+      pair_q[0][1].push_back(probe);
+      n_attrib++;
+      if (gov_delivery(0, 1, probe) != "R6") begin
+        n_bad++; $display("ATTRIB FAIL gov_delivery: same-output beat returned %s, expected R6", gov_delivery(0,1,probe));
+      end else $display("ATTRIB ok gov_delivery R6 -- outstanding for THIS output is not a misroute");
+
+      for (int a = 0; a < N_IN; a++)
+        for (int b = 0; b < N_OUT; b++) pair_q[a][b].delete();
+      $display("FIRED v_ca04.attrib_cases %0d", n_attrib);
+      if (n_bad != 0)
+        fail("ATTRIB", $sformatf("%0d attribution case(s) returned the wrong clause id", n_bad));
+    end
+
     // ---- FIRED: did the artefacts that must fire, fire? ---------------------
     // Every counter here GATES A FLOOR. The floor already refuses on zero, so
     // these lines add one thing the floor cannot: they distinguish a floor that

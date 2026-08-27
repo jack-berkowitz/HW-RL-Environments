@@ -146,6 +146,31 @@ module atop_filter_tb;
   int er_id [$]; int er_resp [$]; bit er_last [$]; int er_due [$]; bit er_made [$]; int er_user [$];
   int fr_id [$], fr_addr [$], fr_len [$], fr_sb [$];   // expected forwarded AR
   int debt = 0, peak_debt = 0;
+
+  // ---- the two write-bound selectors, EXTRACTED so they can be tested --------
+  // Both were inline if/else in a checker, which means the only way to exercise
+  // the branch not taken is to drive the design into the state it decides on --
+  // and attribution is a property of THIS FILE, so no mutant can reach it.
+  // Naming them is what makes each branch callable with the state constructed.
+  // Refactoring for testability is expected on every inline id choice in this
+  // corpus, not a smell: until it has a name it is correct by construction and
+  // measured by nothing.
+
+  // W2 vs W3 on the admission sweep. W3 is "the bound alone does not stall a
+  // non-atomic AW while the debt is below it"; W2 is the bound itself. The
+  // DIRECTION is the whole distinction and the equality test used to hide it.
+  function automatic string gov_admitted(input int n_adm, input int bound_);
+    if (n_adm < bound_) return "W3";   // stalled below the bound
+    if (n_adm > bound_) return "W2";   // admitted past the bound
+    return "";                         // exactly the bound: no fault
+  endfunction
+
+  // W3 vs X4 on a timed-out AW. W3's own text makes the debt its antecedent, so
+  // the debt at the failing moment is what separates "the bound did not license
+  // this stall" from "it did, and the liveness bound applies".
+  function automatic string gov_aw_timeout(input int debt_now, input int bound_);
+    return (debt_now < bound_) ? "W3" : "X4";
+  endfunction
   int n_maw = 0, n_mwlast = 0;
   // COVERAGE COUNTERS -- these count STIMULUS, never DUT responses. A counter
   // the DUT can suppress lets a faulty design fail the floor instead of the
@@ -465,7 +490,7 @@ module atop_filter_tb;
     // The timeout here is 4000 cycles against X4's 64, so the two are separable
     // on duration as well; the debt is the sharper test and is read directly.
     if (!ok) begin
-      if (debt < MAXW)
+      if (gov_aw_timeout(debt, MAXW) == "W3")
         fail("W3", $sformatf("AW id=%0d was never accepted with the downstream write debt at %0d, below the bound of %0d (cycle %0d)",
                              id, debt, MAXW, cyc));
       else
@@ -637,10 +662,10 @@ module atop_filter_tb;
       //                    which ALSO has its own dedicated site (`debt > MAXW`),
       //                    so this half is a second route to a clause already
       //                    covered rather than a clause's only route.
-      if (admitted < MAXW)
+      if (gov_admitted(admitted, MAXW) == "W3")
         fail("W3", $sformatf("with no W burst completed downstream, only %0d of %0d AWs were admitted -- the debt stayed below the bound and W3 says the bound alone does not stall a non-atomic AW",
                              admitted, MAXW));
-      else if (admitted > MAXW)
+      else if (gov_admitted(admitted, MAXW) == "W2")
         fail("W2", $sformatf("with no W burst completed downstream, %0d AWs were admitted; the bound is %0d",
                              admitted, MAXW));
       // No B has been returned yet (BLAG=20 from each AW, and none has been
@@ -750,6 +775,50 @@ module atop_filter_tb;
       fail("COVERAGE", $sformatf("downstream backpressure was driven only %0d time(s) -- X3's master-side channels cannot be judged without it, and that half is the harness's to provide", cov_bp_driven));
     if (sb_ctr < 8 || sb_ar < 8)
       fail("COVERAGE", $sformatf("only %0d write and %0d read sideband patterns driven -- P1 and P3 are pass-through clauses and a field held constant cannot show a design that ignores it", sb_ctr, sb_ar));
+    // ---- ATTRIBUTION CASES ---------------------------------------------------
+    // Both selectors are pure functions of the values passed, so each branch is a
+    // direct call. The mutant set cannot reach any of this: which NAME a path
+    // reports under is a property of this file, and a mutant only moves the design.
+    begin
+      automatic int n_attrib = 0, n_bad = 0;
+
+      // gov_admitted: THREE returns, and only two are ids. The third -- exactly
+      // the bound -- is "no fault", and without a case for it the equality path
+      // could return either id and both branches above would still pass. This is
+      // the same shape as v_ca03's gov_r, where three returns carry two ids.
+      n_attrib++;
+      if (gov_admitted(MAXW - 1, MAXW) != "W3") begin
+        n_bad++; $display("ATTRIB FAIL gov_admitted: below the bound returned %s, expected W3", gov_admitted(MAXW-1, MAXW));
+      end else $display("ATTRIB ok gov_admitted W3 -- stalled below the bound");
+
+      n_attrib++;
+      if (gov_admitted(MAXW + 1, MAXW) != "W2") begin
+        n_bad++; $display("ATTRIB FAIL gov_admitted: past the bound returned %s, expected W2", gov_admitted(MAXW+1, MAXW));
+      end else $display("ATTRIB ok gov_admitted W2 -- admitted past the bound");
+
+      n_attrib++;
+      if (gov_admitted(MAXW, MAXW) != "") begin
+        n_bad++; $display("ATTRIB FAIL gov_admitted: exactly the bound returned %s, expected no fault", gov_admitted(MAXW, MAXW));
+      end else $display("ATTRIB ok gov_admitted -- exactly the bound is not a fault");
+
+      // gov_aw_timeout: two returns, two ids, and the boundary is AT the bound.
+      // A case list with "below" and "well above" passes an off-by-one that a
+      // case at the boundary catches.
+      n_attrib++;
+      if (gov_aw_timeout(MAXW - 1, MAXW) != "W3") begin
+        n_bad++; $display("ATTRIB FAIL gov_aw_timeout: debt below the bound returned %s, expected W3", gov_aw_timeout(MAXW-1, MAXW));
+      end else $display("ATTRIB ok gov_aw_timeout W3 -- the bound does not license the stall");
+
+      n_attrib++;
+      if (gov_aw_timeout(MAXW, MAXW) != "X4") begin
+        n_bad++; $display("ATTRIB FAIL gov_aw_timeout: debt AT the bound returned %s, expected X4", gov_aw_timeout(MAXW, MAXW));
+      end else $display("ATTRIB ok gov_aw_timeout X4 -- at the bound, so liveness applies");
+
+      $display("FIRED v_nw02.attrib_cases %0d", n_attrib);
+      if (n_bad != 0)
+        fail("ATTRIB", $sformatf("%0d attribution case(s) returned the wrong clause id", n_bad));
+    end
+
     // ---- FIRED: did the artefacts that must fire, fire? ---------------------
     // Every counter here GATES A FLOOR. The floor already refuses on zero, so
     // these lines add one thing the floor cannot: they distinguish a floor that

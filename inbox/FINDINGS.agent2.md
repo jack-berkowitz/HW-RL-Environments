@@ -7310,3 +7310,60 @@ two instruments that *do* apply, so being refused is not a dead end.
 **Seventeen defect-injected controls have the golden as their counterfactual and
 pass by construction.** That is the scope limit, and it is a property of what a
 control *is*, not of how carefully it was written.
+
+## Attribution cases: three tasks in, the scoped total is running 50% low
+
+    v_ca03  gov_r                      scoped 2   written 3
+    v_ca04  gov_delivery + bound_out    scoped 2   written 4
+    v_nw02  gov_admitted + gov_timeout  scoped 4   written 5
+    ------------------------------------------------------------
+                                        scoped 8   written 12
+
+Goldens PASS on all three; v_ca04's witness re-run after the refactor is
+**10 of 10** with the rule-24 positive control clean.
+
+### Why every one came in over
+
+The scoped number counted **ids**. The cases have to cover **returns and
+boundaries**, and those are consistently more:
+
+    v_ca03  gov_r          3 returns, 2 ids -- two returns are A5 for different
+                           reasons, so a per-id list covers one and reads complete
+    v_ca04  gov_delivery   2 returns, 2 ids -- but `bound_output_for` names the
+                           OUTPUT in the message, and a wrong one sends the reader
+                           to the wrong channel. Not an id; still an attribution.
+                           Plus the `jo != j` guard: a beat outstanding for THIS
+                           output is not a misroute, and without that case the
+                           guard could be deleted and every other case still pass
+    v_nw02  gov_admitted   3 returns, 2 ids -- the third is "exactly the bound,
+                           no fault", and without a case the equality path could
+                           return either id undetected
+            gov_aw_timeout 2 returns, and the boundary is AT the bound: a list
+                           with "below" and "well above" passes an off-by-one
+
+**Three of the four extras are boundary cases, and the fourth is a field in the
+message rather than a clause id.** Neither kind appears in a count of ids, which
+is why the estimate was low in the same direction every time.
+
+### Refactoring for testability, stated in each file
+
+All three selectors were **inline `if/else` in a checker**. An inline decision can
+only be exercised by driving the design into the state it decides on — and
+attribution is a property of the testbench, so **no mutant can reach it at all.**
+Naming the selector is what makes the branch callable with the state constructed.
+
+Recorded at each site rather than in a convention, because that is where someone
+will be when they wonder why a checker calls a function to decide something it
+could decide inline:
+
+> Refactoring for testability is expected on every inline id choice in this
+> corpus, not a smell: until it has a name it is correct by construction and
+> measured by nothing.
+
+### Where the total stands
+
+Eight tasks have selectors; three are done. **The scoped 23 is a floor and the
+run rate says the true figure is nearer 34.** I will report the measured total
+when the selectors are all read, and not before — the estimate has now been wrong
+three times in the same direction, which is a fact about how it was made rather
+than about any of the tasks.
