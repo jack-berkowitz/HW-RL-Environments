@@ -51,7 +51,19 @@
 // -----------------------------------------------------------------------------
 // WHAT THE FIFO MUST DO
 // -----------------------------------------------------------------------------
-//   B1. STORAGE BEYOND THE FIFO IS BOUNDED. The FIFO holds 2**LOG_DEPTH
+//   B1. NOT CHECKED BY THE TESTBENCH, and it cannot be from where the checker
+//       stands. `B1` appears ZERO times in tb/. Occupancy is tracked but is
+//       marked COVERAGE ONLY, never an assertion, and the tb states the reason:
+//       sampled on `wr_clk` it sees a stale `rd_idx` and OVERSTATES occupancy,
+//       so a bound asserted on it would fail conforming designs.
+//
+//       So this is a stated requirement with no enforcement: a design carrying
+//       eight extra beats is non-conforming and passes. Recorded here rather
+//       than left to be discovered. It is not grouped under another id -- there
+//       is no id. (d_nw03's B1 IS enforced; the same letter is not the same
+//       status across tasks.)
+//
+//       STORAGE BEYOND THE FIFO IS BOUNDED. The FIFO holds 2**LOG_DEPTH
 //       entries. A design may add **at most 4 further beats of storage in
 //       total** across both clock domains -- pipeline or output registers on
 //       the read side, input registration on the write side. Storage beyond
@@ -91,7 +103,13 @@
 //       on the strength of a pointer value that is still in flight through the
 //       synchronisers -- that is the classic false-empty/false-full bug and it
 //       only appears at particular clock ratios.
-//   C6. CORRECT AT ANY RATIO. All of the above hold for arbitrary, unrelated
+//   C6. NOT A SEPARATE CHECK -- IT IS THE CONDITION THE OTHERS RUN UNDER. There
+//       is no C6 message and there should not be one: the clock-ratio phases are
+//       the axis along which every other check is repeated, so a design that is
+//       correct only at one ratio fails whichever clause it actually breaks, at
+//       the ratio that breaks it. Stated so C6 is not read as unchecked.
+//
+//       CORRECT AT ANY RATIO. All of the above hold for arbitrary, unrelated
 //       `wr_clk` and `rd_clk` frequencies and phases. The checker exercises
 //       fast-write/slow-read, slow-write/fast-read, near-equal-but-drifting,
 //       and integer ratios in both directions.
@@ -120,7 +138,13 @@
 //
 //   R1. THE TWO RESETS ARE ASSERTED SIMULTANEOUSLY. This is a power-on reset:
 //       both domains go into reset together. You may rely on that.
-//   R2. DE-ASSERTION IS PER-DOMAIN AND NOT SIMULTANEOUS. `wr_rst_n` is released
+//   R2. REPORTED UNDER R4/R5. A design that mishandles staggered release
+//       surfaces as R4 -- wr_ready did not assert within 16 wr_clk cycles of
+//       reset release -- or as R5, rd_valid asserted while rd_rst_n was still
+//       low. R2 states the condition; R4/R5 is where failing to tolerate it is
+//       reported.
+//
+//       DE-ASSERTION IS PER-DOMAIN AND NOT SIMULTANEOUS. `wr_rst_n` is released
 //       synchronously to `wr_clk` and `rd_rst_n` synchronously to `rd_clk`, so
 //       one side can leave reset several cycles before the other. Your design
 //       must tolerate that: the side that comes out first must not emit or
