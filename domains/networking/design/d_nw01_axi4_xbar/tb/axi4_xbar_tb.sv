@@ -216,7 +216,7 @@ module axi4_xbar_tb
     // drain, addressing chosen by the sequencer. The randomised generator and
     // every scoreboard check are gated off while tmode != 0, so the preamble
     // cannot perturb the phase that does the data checking.
-    bit [1:0]           tmode = 2'd0;
+    bit [2:0]           tmode = 3'd0;   // 0 scored, 1 capacity, 2 R ceiling, 3 W ceiling, 4 H1 probe
     bit                 cap_drain;
     logic [NUM_MST-1:0] cap_en;
     int                 cap_tgt      [0:NUM_MST-1];
@@ -241,11 +241,32 @@ module axi4_xbar_tb
         end
     end
 
+    // ---- D3: the sideband fields, as a pure function of the address --------
+    // D3 says qos, cache, prot and region are carried through UNMODIFIED. The
+    // fields appeared ZERO times in this testbench, so a crossbar that dropped
+    // or rewrote them passed. They were also driven at 0, which is the one
+    // value a dropping design reproduces for free.
+    //
+    // Keying them to the ADDRESS is what makes the check need no bookkeeping:
+    // the address is carried through by D1, so the slave can recompute what the
+    // master must have sent without correlating anything. Same idiom as
+    // expected_beat, which the data checks already use.
+    //
+    // Each is OR-ed with a non-zero constant so the expected value is NEVER
+    // zero. Without that, a design that ties the field to 0 would match
+    // whenever the address bits happened to be 0 and the check would pass
+    // intermittently on exactly the design it exists to catch.
+    function automatic logic [3:0] sb_qos   (input addr_t a); return a[7:4]   | 4'h1; endfunction
+    function automatic logic [3:0] sb_cache (input addr_t a); return a[11:8]  | 4'h2; endfunction
+    function automatic logic [2:0] sb_prot  (input addr_t a); return a[14:12] | 3'h1; endfunction
+    function automatic logic [3:0] sb_region(input addr_t a); return a[19:16] | 4'h4; endfunction
+
     // ---- traffic generation ------------------------------------------------
     int  txn_sent [0:NUM_MST-1];
     int  outstanding_r [0:NUM_MST-1];
     int  outstanding_w [0:NUM_MST-1];
     logic [NUM_MST-1:0] ar_hold, aw_hold;
+    logic [NUM_MST-1:0] h1_arv = '0, h1_awv = '0, h1_wv = '0;   // H1 probe drives
     slv_id_t nxt_id  [0:NUM_MST-1];
     addr_t   nxt_addr[0:NUM_MST-1];
     int      nxt_len [0:NUM_MST-1];
@@ -275,6 +296,10 @@ module axi4_xbar_tb
             mst_req[m].ar.len   = 8'd0;
             mst_req[m].ar.size  = 3'd3;
             mst_req[m].ar.burst = BURST_INCR;
+            mst_req[m].ar.qos    = sb_qos   (mst_req[m].ar.addr);
+            mst_req[m].ar.cache  = sb_cache (mst_req[m].ar.addr);
+            mst_req[m].ar.prot   = sb_prot  (mst_req[m].ar.addr);
+            mst_req[m].ar.region = sb_region(mst_req[m].ar.addr);
             // tmode 3 -- the W half of C3's ceiling. Same idea, opposite
             // direction: W beats flow master->slave, so the pressure comes
             // from the master pushing while the SLAVE refuses w_ready. Every
@@ -287,7 +312,45 @@ module axi4_xbar_tb
                 mst_req[m].aw.len   = 8'd0;
                 mst_req[m].aw.size  = 3'd3;
                 mst_req[m].aw.burst = BURST_INCR;
+                mst_req[m].aw.qos    = sb_qos   (mst_req[m].aw.addr);
+                mst_req[m].aw.cache  = sb_cache (mst_req[m].aw.addr);
+                mst_req[m].aw.prot   = sb_prot  (mst_req[m].aw.addr);
+                mst_req[m].aw.region = sb_region(mst_req[m].aw.addr);
                 mst_req[m].w_valid  = cap_en[m];
+                mst_req[m].w.data   = '0;
+                mst_req[m].w.strb   = '1;
+                mst_req[m].w.last   = 1'b1;
+            end
+            // tmode 4 -- H1's in-cycle probe. The master's valids come from
+            // regs the checker pokes BETWEEN clock edges, so a ready that
+            // moves with them is combinational and one that does not is
+            // registered. Nothing is ever accepted: each poke is withdrawn
+            // before the next posedge.
+            if (tmode == 3'd4) begin
+                mst_req[m]          = '0;
+                mst_req[m].r_ready  = 1'b1;
+                mst_req[m].b_ready  = 1'b1;
+                mst_req[m].ar_valid = h1_arv[m];
+                mst_req[m].ar.id    = slv_id_t'(0);
+                mst_req[m].ar.addr  = addr_t'(32'h40);
+                mst_req[m].ar.len   = 8'd0;
+                mst_req[m].ar.size  = 3'd3;
+                mst_req[m].ar.burst = BURST_INCR;
+                mst_req[m].ar.qos    = sb_qos   (mst_req[m].ar.addr);
+                mst_req[m].ar.cache  = sb_cache (mst_req[m].ar.addr);
+                mst_req[m].ar.prot   = sb_prot  (mst_req[m].ar.addr);
+                mst_req[m].ar.region = sb_region(mst_req[m].ar.addr);
+                mst_req[m].aw_valid = h1_awv[m];
+                mst_req[m].aw.id    = slv_id_t'(0);
+                mst_req[m].aw.addr  = addr_t'(32'h40);
+                mst_req[m].aw.len   = 8'd0;
+                mst_req[m].aw.size  = 3'd3;
+                mst_req[m].aw.burst = BURST_INCR;
+                mst_req[m].aw.qos    = sb_qos   (mst_req[m].aw.addr);
+                mst_req[m].aw.cache  = sb_cache (mst_req[m].aw.addr);
+                mst_req[m].aw.prot   = sb_prot  (mst_req[m].aw.addr);
+                mst_req[m].aw.region = sb_region(mst_req[m].aw.addr);
+                mst_req[m].w_valid  = h1_wv[m];
                 mst_req[m].w.data   = '0;
                 mst_req[m].w.strb   = '1;
                 mst_req[m].w.last   = 1'b1;
@@ -302,16 +365,130 @@ module axi4_xbar_tb
             mst_req[m].ar.len   = 8'(nxt_len[m]);
             mst_req[m].ar.size  = 3'd3;
             mst_req[m].ar.burst = BURST_INCR;
+            mst_req[m].ar.qos    = sb_qos   (nxt_addr[m]);
+            mst_req[m].ar.cache  = sb_cache (nxt_addr[m]);
+            mst_req[m].ar.prot   = sb_prot  (nxt_addr[m]);
+            mst_req[m].ar.region = sb_region(nxt_addr[m]);
             mst_req[m].aw_valid = aw_hold[m];
             mst_req[m].aw.id    = nxt_id[m];
             mst_req[m].aw.addr  = nxt_addr[m];
             mst_req[m].aw.len   = 8'(nxt_len[m]);
             mst_req[m].aw.size  = 3'd3;
             mst_req[m].aw.burst = BURST_INCR;
+            mst_req[m].aw.qos    = sb_qos   (nxt_addr[m]);
+            mst_req[m].aw.cache  = sb_cache (nxt_addr[m]);
+            mst_req[m].aw.prot   = sb_prot  (nxt_addr[m]);
+            mst_req[m].aw.region = sb_region(nxt_addr[m]);
             mst_req[m].w_valid  = (w_left[m] > 0);
             mst_req[m].w.data   = expected_beat(w_addr[m], 0);
             mst_req[m].w.strb   = '1;
             mst_req[m].w.last   = (w_left[m] == 1);
+        end
+    end
+
+    // ---- D3: recompute the sideband at the slave and compare ---------------
+    // No correlation needed: the address arrives unmodified (D1), so what the
+    // master must have sent is a function of what the slave sees.
+    int d3_ar_seen = 0, d3_aw_seen = 0;
+    always_ff @(posedge clk) begin
+        if (rst_n) begin
+            for (int s = 0; s < NUM_SLV; s++) begin
+                if (slv_req[s].ar_valid && slv_resp[s].ar_ready) begin
+                    d3_ar_seen <= d3_ar_seen + 1;
+                    if (slv_req[s].ar.qos    !== sb_qos   (slv_req[s].ar.addr) ||
+                        slv_req[s].ar.cache  !== sb_cache (slv_req[s].ar.addr) ||
+                        slv_req[s].ar.prot   !== sb_prot  (slv_req[s].ar.addr) ||
+                        slv_req[s].ar.region !== sb_region(slv_req[s].ar.addr))
+                        note_fail($sformatf(
+                            "D3: AR sideband modified in transit to slave %0d (addr %0h): qos %0h/%0h cache %0h/%0h prot %0h/%0h region %0h/%0h (got/expected)",
+                            s, slv_req[s].ar.addr,
+                            slv_req[s].ar.qos,    sb_qos   (slv_req[s].ar.addr),
+                            slv_req[s].ar.cache,  sb_cache (slv_req[s].ar.addr),
+                            slv_req[s].ar.prot,   sb_prot  (slv_req[s].ar.addr),
+                            slv_req[s].ar.region, sb_region(slv_req[s].ar.addr)));
+                end
+                if (slv_req[s].aw_valid && slv_resp[s].aw_ready) begin
+                    d3_aw_seen <= d3_aw_seen + 1;
+                    if (slv_req[s].aw.qos    !== sb_qos   (slv_req[s].aw.addr) ||
+                        slv_req[s].aw.cache  !== sb_cache (slv_req[s].aw.addr) ||
+                        slv_req[s].aw.prot   !== sb_prot  (slv_req[s].aw.addr) ||
+                        slv_req[s].aw.region !== sb_region(slv_req[s].aw.addr))
+                        note_fail($sformatf(
+                            "D3: AW sideband modified in transit to slave %0d (addr %0h): qos %0h/%0h cache %0h/%0h prot %0h/%0h region %0h/%0h (got/expected)",
+                            s, slv_req[s].aw.addr,
+                            slv_req[s].aw.qos,    sb_qos   (slv_req[s].aw.addr),
+                            slv_req[s].aw.cache,  sb_cache (slv_req[s].aw.addr),
+                            slv_req[s].aw.prot,   sb_prot  (slv_req[s].aw.addr),
+                            slv_req[s].aw.region, sb_region(slv_req[s].aw.addr)));
+                end
+            end
+        end
+    end
+
+    // ---- H3: an output holding valid with ready low must hold both ---------
+    // "A crossbar output" is every valid the DUT drives: R and B toward the
+    // masters, AW, AR and W toward the slaves. The antecedent is counted
+    // separately for each, because a stability check whose antecedent never
+    // held is indistinguishable from one that passed.
+    bit rst_q = 1'b0;
+    always_ff @(posedge clk) rst_q <= rst_n;
+
+    int h3_ante_r = 0, h3_ante_b = 0, h3_ante_aw = 0, h3_ante_ar = 0, h3_ante_w = 0;
+
+    slv_r_t  q_r  [0:NUM_MST-1];   logic [NUM_MST-1:0] q_rv, q_rr;
+    slv_b_t  q_b  [0:NUM_MST-1];   logic [NUM_MST-1:0] q_bv, q_br;
+    mst_aw_t q_aw [0:NUM_SLV-1];   logic [NUM_SLV-1:0] q_awv, q_awr;
+    mst_ar_t q_ar [0:NUM_SLV-1];   logic [NUM_SLV-1:0] q_arv, q_arr;
+    w_t      q_w  [0:NUM_SLV-1];   logic [NUM_SLV-1:0] q_wv,  q_wr;
+
+    always_ff @(posedge clk) begin
+        for (int m = 0; m < NUM_MST; m++) begin
+            if (rst_n && rst_q) begin
+                if (q_rv[m] && !q_rr[m]) begin
+                    h3_ante_r <= h3_ante_r + 1;
+                    if (!mst_resp[m].r_valid)
+                        note_fail($sformatf("H3: master %0d R valid withdrawn with r_ready low", m));
+                    else if (mst_resp[m].r !== q_r[m])
+                        note_fail($sformatf("H3: master %0d R payload changed while stalled", m));
+                end
+                if (q_bv[m] && !q_br[m]) begin
+                    h3_ante_b <= h3_ante_b + 1;
+                    if (!mst_resp[m].b_valid)
+                        note_fail($sformatf("H3: master %0d B valid withdrawn with b_ready low", m));
+                    else if (mst_resp[m].b !== q_b[m])
+                        note_fail($sformatf("H3: master %0d B payload changed while stalled", m));
+                end
+            end
+            q_rv[m] <= mst_resp[m].r_valid; q_rr[m] <= mst_req[m].r_ready; q_r[m] <= mst_resp[m].r;
+            q_bv[m] <= mst_resp[m].b_valid; q_br[m] <= mst_req[m].b_ready; q_b[m] <= mst_resp[m].b;
+        end
+        for (int s = 0; s < NUM_SLV; s++) begin
+            if (rst_n && rst_q) begin
+                if (q_awv[s] && !q_awr[s]) begin
+                    h3_ante_aw <= h3_ante_aw + 1;
+                    if (!slv_req[s].aw_valid)
+                        note_fail($sformatf("H3: slave %0d AW valid withdrawn with aw_ready low", s));
+                    else if (slv_req[s].aw !== q_aw[s])
+                        note_fail($sformatf("H3: slave %0d AW payload changed while stalled", s));
+                end
+                if (q_arv[s] && !q_arr[s]) begin
+                    h3_ante_ar <= h3_ante_ar + 1;
+                    if (!slv_req[s].ar_valid)
+                        note_fail($sformatf("H3: slave %0d AR valid withdrawn with ar_ready low", s));
+                    else if (slv_req[s].ar !== q_ar[s])
+                        note_fail($sformatf("H3: slave %0d AR payload changed while stalled", s));
+                end
+                if (q_wv[s] && !q_wr[s]) begin
+                    h3_ante_w <= h3_ante_w + 1;
+                    if (!slv_req[s].w_valid)
+                        note_fail($sformatf("H3: slave %0d W valid withdrawn with w_ready low", s));
+                    else if (slv_req[s].w !== q_w[s])
+                        note_fail($sformatf("H3: slave %0d W payload changed while stalled", s));
+                end
+            end
+            q_awv[s] <= slv_req[s].aw_valid; q_awr[s] <= slv_resp[s].aw_ready; q_aw[s] <= slv_req[s].aw;
+            q_arv[s] <= slv_req[s].ar_valid; q_arr[s] <= slv_resp[s].ar_ready; q_ar[s] <= slv_req[s].ar;
+            q_wv[s]  <= slv_req[s].w_valid;  q_wr[s]  <= slv_resp[s].w_ready;  q_w[s]  <= slv_req[s].w;
         end
     end
 
@@ -780,6 +957,72 @@ module axi4_xbar_tb
         end
         repeat (200) @(posedge clk);
 
+        // ---- H1: no *_ready may depend combinationally on its own *_valid --
+        // H1's only appearance in this testbench was inside a COMMENT
+        // describing the rule. The probe is d_ca04's: toggle the valid BETWEEN
+        // clock edges and require the ready not to move. A combinational path
+        // shows up immediately; a registered one cannot.
+        //
+        // Each poke is withdrawn before the next posedge, so nothing is ever
+        // accepted and no transaction is left half-issued.
+        phase = "H1";
+        begin
+            logic rb, ra;
+            cap_en = '0; cap_drain = 1'b0;
+            h1_arv = '0; h1_awv = '0; h1_wv = '0;
+            rst_n = 1'b0;
+            tmode = 3'd4;
+            repeat (10) @(posedge clk);
+            rst_n = 1'b1;
+            repeat (4) @(posedge clk);
+
+            // --- AR ---
+            @(posedge clk); #2;
+            h1_arv = '0; #1; rb = mst_resp[0].ar_ready;
+            h1_arv = '1; #1; ra = mst_resp[0].ar_ready;
+            h1_arv = '0;
+            checks++;
+            // THE VACUITY GUARD. If ar_ready is low both ways the crossbar
+            // could not have moved either way, and "it did not move" is not
+            // evidence of anything.
+            if (rb !== 1'b1 && ra !== 1'b1)
+                note_fail("H1 AR probe was vacuous -- ar_ready was low with valid both low and high, so it could not move");
+            else if (ra !== rb)
+                note_fail("H1: ar_ready moved combinationally with ar_valid");
+
+            // --- AW ---
+            @(posedge clk); #2;
+            h1_awv = '0; #1; rb = mst_resp[0].aw_ready;
+            h1_awv = '1; #1; ra = mst_resp[0].aw_ready;
+            h1_awv = '0;
+            checks++;
+            if (rb !== 1'b1 && ra !== 1'b1)
+                note_fail("H1 AW probe was vacuous -- aw_ready was low with valid both low and high, so it could not move");
+            else if (ra !== rb)
+                note_fail("H1: aw_ready moved combinationally with aw_valid");
+
+            // --- W. Needs an AW actually accepted first, or w_ready is low
+            //     for a reason that has nothing to do with w_valid.
+            h1_awv = '1;
+            repeat (4) @(posedge clk);
+            h1_awv = '0;
+            @(posedge clk); #2;
+            h1_wv = '0; #1; rb = mst_resp[0].w_ready;
+            h1_wv = '1; #1; ra = mst_resp[0].w_ready;
+            h1_wv = '0;
+            checks++;
+            if (rb !== 1'b1 && ra !== 1'b1)
+                note_fail("H1 W probe was vacuous -- w_ready was low with valid both low and high, so it could not move");
+            else if (ra !== rb)
+                note_fail("H1: w_ready moved combinationally with w_valid");
+
+            cap_en = '0;
+            rst_n = 1'b0;
+            tmode = 3'd0;
+            repeat (10) @(posedge clk);
+            rst_n = 1'b1;
+        end
+
         // ---- C3: the R storage ceiling, measured at rest ------------------
         // Masters offer reads and accept nothing (cap_drain=0 holds every
         // r_ready and b_ready low); slaves answer every AR. Every R beat the
@@ -897,6 +1140,29 @@ module axi4_xbar_tb
 
         phase = "final";
         $display("METRIC: checks=%0d", checks);
+
+        // ---- D3 and H3: what the new checks actually observed --------------
+        $display("FIRED d_nw01.d3_ar %0d", d3_ar_seen);
+        $display("FIRED d_nw01.d3_aw %0d", d3_aw_seen);
+        $display("FIRED d_nw01.h3_r %0d",  h3_ante_r);
+        $display("FIRED d_nw01.h3_b %0d",  h3_ante_b);
+        $display("FIRED d_nw01.h3_aw %0d", h3_ante_aw);
+        $display("FIRED d_nw01.h3_ar %0d", h3_ante_ar);
+        $display("FIRED d_nw01.h3_w %0d",  h3_ante_w);
+        checks++;
+        if (d3_ar_seen == 0 || d3_aw_seen == 0)
+            note_fail($sformatf(
+                "D3 observed nothing -- %0d AR and %0d AW reached a slave, so the sideband was never compared",
+                d3_ar_seen, d3_aw_seen));
+        // PER CHANNEL, not in aggregate. All five fire in the thousands on the
+        // reference, so a zero anywhere means that channel's stability went
+        // untested -- and an aggregate guard would hide it behind the other four.
+        checks++;
+        if (h3_ante_r == 0 || h3_ante_b == 0 || h3_ante_aw == 0 ||
+            h3_ante_ar == 0 || h3_ante_w == 0)
+            note_fail($sformatf(
+                "H3 has an untested channel -- antecedent counts r=%0d b=%0d aw=%0d ar=%0d w=%0d; a zero means no output on that channel ever held valid with ready low",
+                h3_ante_r, h3_ante_b, h3_ante_aw, h3_ante_ar, h3_ante_w));
         // ---- PPA-adjacent axes. Throughput is the P in PPA and was being
         // treated as diagnostic output; it is reported here as a first-class
         // axis alongside area and power. Still ungated -- no flat threshold

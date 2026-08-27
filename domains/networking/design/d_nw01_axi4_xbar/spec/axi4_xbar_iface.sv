@@ -74,9 +74,12 @@
 //       len+1 R beats with the last carrying `last`.
 //       *** A dropped unmapped transaction is a deadlock, because the master
 //       waits forever for a response that is never coming. ***
-//   D3. NOT CHECKED BY THE TESTBENCH. `qos`, `cache`, `prot` and `region`
-//       appear ZERO times in tb/, so "carried through unmodified" is stated and
-//       unobserved. A crossbar that drops or rewrites them passes.
+//   D3. CHECKED. The four fields are driven as a non-zero function of the
+//       ADDRESS and recomputed at the slave, so nothing has to be correlated:
+//       the address arrives unmodified by D1, so what the master must have
+//       sent follows from what the slave sees. Non-zero deliberately -- a
+//       design that ties these fields to 0 matches a checker that also drives
+//       0, which is the one value the violation reproduces for free.
 //
 //       Decode is on the address only. QoS, cache, prot and region are carried
 //       through unmodified and never affect routing.
@@ -140,19 +143,23 @@
 // HANDSHAKE
 // -----------------------------------------------------------------------------
 //   Standard AXI4 valid/ready on all five channels of all ports.
-//   H1. NOT CHECKED BY THE TESTBENCH. Its only appearance in tb/ is inside a
-//       COMMENT -- "the H1-style rule that a ready must not depend on its own
-//       valid" -- describing the rule rather than testing it. d_ca01 and d_nw03
-//       both carry a live in-cycle check for their equivalent clause; this task
-//       does not.
+//   H1. CHECKED, in cycle. The checker toggles a master's valid BETWEEN clock
+//       edges and requires the corresponding ready not to move: a
+//       combinational path shows up immediately, a registered one cannot.
+//       Probed on AW, AR and W. Each probe carries a vacuity guard, because a
+//       ready that is low whatever the valid does could not have moved either
+//       way and "it did not move" would prove nothing.
 //
 //       No *_ready may depend combinationally on the corresponding *_valid.
 //   H2. Once a master asserts a valid it holds the channel payload stable until
 //       ready. The checker honours this.
-//   H3. NOT CHECKED BY THE TESTBENCH. There is no withdraw or payload-stability
-//       check on the crossbar outputs at all -- zero matches for withdrew,
-//       stable, or a dropped valid. d_ca01 reports this under R1 and d_nw03
-//       under R1; here nothing observes it.
+//   H3. CHECKED on every output the design drives: R and B toward the masters,
+//       AW, AR and W toward the slaves. Whenever a valid was high with its
+//       ready low, the next cycle must still show that valid high and the same
+//       payload. The antecedent is counted PER CHANNEL and a zero on any one
+//       of the five fails -- a stability check whose antecedent never held is
+//       indistinguishable from one that passed, and an aggregate count would
+//       hide an untested channel behind the other four.
 //
 //       A crossbar output holding valid with ready low must keep valid high and
 //       the payload stable.
@@ -189,12 +196,17 @@
 //       refuses a second ID fails here. O2 grants you the right to RETURN
 //       different IDs out of order; it does not grant the right to REFUSE them.
 //
-//   C3. NOT CHECKED BY THE TESTBENCH. `C3` appears ZERO times in tb/. This is a
-//       resource CEILING, and the pattern is now measured rather than suspected:
-//       capacity FLOORS get controls, capacity CEILINGS get written and
-//       forgotten. d_ca01's C4 and d_ca04's B1 are the same shape. A design
-//       holding sixteen beats per port is NON-CONFORMING by the sentence below
-//       and passes. It needs a CONTROL, not an annotation.
+//   C3. CHECKED, AT REST, IN BOTH DIRECTIONS. A ceiling is violated by doing
+//       MORE, so ordinary stimulus never reveals it -- an over-buffering design
+//       looks identical on every phase that measures throughput, ordering or
+//       latency. It is visible only at rest. Two phases: masters refuse
+//       r_ready while the slaves keep answering, then the slaves refuse
+//       w_ready while the masters keep pushing. Every beat the crossbar
+//       accepts is one it cannot deliver, so what it swallows before it stops
+//       IS its internal storage. Both phases carry a pressurisation witness,
+//       because holding zero is the correct answer for a design that
+//       backpressures instead of buffering and is also what a phase that
+//       offered nothing would report.
 //
 //       RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
 //       and 4 W beats per master port** in flight inside the crossbar. Storage
