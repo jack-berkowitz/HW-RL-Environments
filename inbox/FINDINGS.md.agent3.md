@@ -248,9 +248,22 @@ row-set at `tick - dfb`, with two exact matches including the silence.
 **Three independent implementations produced identical values at all six scored
 samples and all differed from the reference** — two solicited submissions and
 this task's own second source, which was written from the spec with `ref/` never
-opened. That is what made it a contract question rather than a model result:
-two independent designs cannot agree bit-for-bit on a wrong value, and three
-cannot at all.
+opened.
+
+**WHAT THAT LICENSES, STATED NARROWLY.** An earlier version of this entry said
+two independent designs cannot agree bit-for-bit on a wrong value and three
+cannot at all. That is wrong, and it is the v_ca07 lesson inverted. **Three
+readers of the same underspecified clause agree BECAUSE they share the clause.**
+Convergence is what a shared upstream cause produces; it is not evidence against
+the one thing they all differ from. The agreement is a signal to look upstream,
+which is how it was used here, and nothing more.
+
+The licensed claim is **"the text does not specify z_o through the transient."**
+It is NOT "the reference was the outlier." The strong version would license
+treating reference-versus-field disagreement as evidence against the reference
+elsewhere, and that precedent does not belong in this record — a field that
+agrees with itself against the anchor is equally consistent with the field
+sharing a misreading the anchor does not.
 
 ### Why the observed counts looked geometry-dependent and were not
 
@@ -304,3 +317,155 @@ still unspecified -- but it also cannot be used as evidence that it is not.**
 Re-deriving the second source's flush behaviour FROM THE PINNED CLAUSE is
 outstanding, and it has to be a re-derivation rather than an adjustment until it
 agrees. An oracle edited until it matches the reference has stopped being one.
+
+---
+
+## Two tick bases in one harness, and the window enforced in the wrong one
+
+**Instance of Rule 26** — *"name the window in whatever tick the contract
+already counts in"*. Counting basis is a harness property; here the harness
+holds two of them and the clause holds one.
+
+    A1          an enabled tick FOR ROW r requires reg_enable_i AND
+                row_clk_gate_en_i[r], and "all timing below is counted in
+                enabled ticks of the row in question"
+    rig, C4     decrements on  r.reg_enable && r.row_gate[gi]      per-row
+    rig, C2/C3  decrements on  r.reg_enable                        array-wide
+
+`ACC_W = 2*D*(HEIGHT-1)+7` was **derived in A1's per-row basis** — `d(0)` and
+`dfb` are both row latencies — and is **enforced in the array-wide basis**. For
+a row gated for `G` enabled ticks inside an accumulate window, the window closes
+after `ACC_W` array ticks while that row has advanced only `ACC_W - G` of its
+own. Its echo needs `ACC_W` of its own, so **the escape re-opens by exactly `G`
+ticks, per row.**
+
+### Measured under current stimulus: it is latent, not active
+
+Across every accumulate transition at both heights, **no row has `row_gate` low
+inside any ACC_W window.** Zero rows, zero ticks. The defect is real and is not
+currently reachable, which is the most easily-lost state to record — it will
+become reachable the moment stimulus puts a gate transition near an accumulate
+transition, and nothing in the rig would announce that.
+
+### Recommendation, not implemented
+
+**Make the C2/C3 windows per-row, as C4 already is.** Two reasons, and the
+second is the load-bearing one:
+
+1. It is what A1 says, and C3 states its window in "ENABLED TICKS" — a term A1
+   defines per-row. The rig is not implementing the clause as written.
+2. **It needs no clause change and no hash move.** C3 already says enabled
+   ticks; only the rig is in the wrong basis. That makes it strictly cheaper
+   than the alternative, which would be to restate C3's window in array ticks
+   and thereby put a harness convenience into the contract.
+
+The whole-array basis is defensible ONLY as an approximation valid while no row
+is gated during a window, which is today's stimulus and is not a property
+anything enforces. Stated so it is not mistaken for a design decision.
+
+---
+
+## An exclusion window can be masked by an overlapping window from a different clause
+
+d_ai01's C3 window ended at `d(0)` and the accumulate echo began at `dfb`.
+**`dfb - d(0) = 1` at every HEIGHT** — the escape is one tick wide and is
+geometry-independent, since both terms carry the same `D*(HEIGHT-1)`.
+
+Observed scored z mismatches were **0 at HEIGHT=4 and 34 at HEIGHT=8**, which
+reads as a height-scaled effect and is not one. At HEIGHT=4 the echo escaped C3
+exactly as at HEIGHT=8, and then landed inside an overlapping **C2 flush
+window**: a flush pulsed at cycles 1804-1805 and its 15-tick exclusion covered
+1806-1820, which is precisely where the echo arrived.
+
+**The defect was fully present at both heights and invisible at one of them by
+stimulus coincidence.**
+
+### The general form
+
+An exclusion window declared by clause X can be **masked by an exclusion window
+declared by clause Y**, so a defect in X's window produces no failures at all.
+The masking is a property of the STIMULUS, not of either clause — move the flush
+a few cycles and the same rig, the same design and the same defect start
+failing. Nothing in the rig or in either clause records that one window is
+sitting inside another.
+
+The consequence for how exposure is read:
+
+> **A count of failures is not a measurement of exposure.**
+
+Zero failures is consistent with "the window is correct", with "the window is
+wrong and the stimulus does not reach it", and with "the window is wrong and a
+different clause's window is covering for it". Those are three different states
+and the failure count is identical in all three — the same shape as ANONYMOUS
+versus UNCHECKED, arriving in the exclusion machinery.
+
+### The rule this attaches
+
+> **Overlapping exclusion windows are REPORTED AS A COVERAGE MAP, never
+> inferred from failure counts.** A rig that excludes on more than one clause
+> emits, per exclusion, how many samples it removed and how many of those were
+> already removed by another exclusion. An exclusion whose removals are entirely
+> redundant with another's is not doing any work, and cannot be distinguished
+> from one that is, by any verdict.
+
+d_ai01 today prints a single aggregate — *"243 cycles unscored: C2 flush / C3
+accumulate transition windows"* — which sums two clauses into one number and is
+exactly the shape that hid this. It is not split by clause and does not report
+overlap.
+
+---
+
+## Rule 24 for a WIDENED window needs a control inside the new band
+
+`nc_a..nc_g` fail by 80 to 3033 z mismatches spread across the whole run.
+**Every one of them would be caught by a window of any width**, so their firing
+says nothing about what C3's new band covers. Rule 24 was not satisfied for the
+widening by the set already shipped, and re-running that set after the change
+would have looked like evidence.
+
+`nc_h_echo_band_only` corrupts `z_o` **only** inside the newly excluded band —
+enabled ticks `d(0)+1` through `d(0)+dfb` after a change of `accumulate_i` —
+and is bit-for-bit the reference outside it:
+
+    window            H=4                H=8
+    pre-widening      FAIL, 123 z        FAIL, 196 z     DETECTED
+    post-widening     PASS               PASS            NOT DETECTED
+
+**Its PASS is the measurement**, which inverts the reading every other control
+in that directory takes, and the file says so in its header before anything
+else.
+
+### What the widening bought and what it cost
+
+    window length     H=4  15 -> 31      H=8  31 -> 63       doubled
+    scored cycles     H=4  3157 -> 3034  H=8  2937 -> 2741
+    lost              123 cycles (3.6% of 3400)  196 cycles (5.8% of 3400)
+
+Two numbers already in the record gestured at this and neither was called out
+at the time: `nc_g` moved 2752 -> 2557 z rows and the control ceiling moved
+3156 -> 3033. Both are the same 123/196 cycles leaving the scored region.
+
+**Bought:** the echo is specified-or-excluded rather than scored, and three
+independent implementations that disagreed with the reference on six samples now
+agree everywhere `z_o` is scored.
+
+**Cost:** a band of `dfb` enabled ticks after every accumulate transition is now
+blind, and `nc_h_echo_band_only` is the proof that it is blind rather than an
+assurance that it is empty. Anything a submission does only in that band is
+undetectable, and the band grows linearly with HEIGHT — which is d_ai01's
+scored axis, so the hole is larger exactly where the task is hardest.
+
+That cost is the argument for pinning the transient rather than excluding it.
+Pinning was refused for a stated reason (it requires a microarchitecture in the
+contract), so the cost stands as the price of that refusal and is recorded here
+rather than left implicit in a scored-cycle count nobody diffs.
+
+### And the control needed the same discipline it exists to enforce
+
+Its first version was detected AFTER the widening too — 16 residual mismatches
+at HEIGHT=4 and 32 at HEIGHT=8. Cause: the tick counter free-ran from reset, so
+it entered the band during initial startup, where C3's window had never been
+armed by a transition. **The control was being detected for a reason that had
+nothing to do with the band it was built to measure**, which is the "failed on
+the wrong clause" case one level in. Fixed by arming on the first real
+transition; the residual went to zero and the pairing became exact.
