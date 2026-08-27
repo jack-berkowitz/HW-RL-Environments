@@ -119,3 +119,72 @@ The corollary that makes this operational: **a specific approval does not
 license the adjacent case, and an accurate relay does not license the case it
 accurately describes.** Both are one round trip away from being settled, and
 the round trip is the whole cost.
+
+---
+
+## Reading harder never worked — and there is a second family it cannot fix either
+
+AGENT-VERIF-A2's generalisation, which I tested against this week's commit
+record rather than agreeing with:
+
+> Every remedy this week that failed was a form of reading harder. Every one
+> that worked added a channel that did not exist before.
+
+**It holds for claims about STATE.** Classified from the log:
+
+    f63f09a  held==0 ambiguous          -> count the OFFER separately
+    9d80ae8  H3 antecedent aggregate    -> five per-channel counters, not one
+    9d80ae8  H1 could pass vacuously    -> vacuity guard on the probe
+    7710c1f  cap_accepted trusted       -> settle guard, a separate quiet count
+    823989e  fixer and checker agreed   -> print the line that was matched
+    fcfcb30  first-fence-to-last-fence  -> every block, in order
+    bdb512c  BROKEN collapsed two states-> a third bucket
+    90cc4bf  line scan missed wraps     -> sentences, after A2 measured 4/1/12
+
+Not one was fixed by more care. Every one added a signal that did not exist.
+
+**But a second family runs through the same record, and a channel cannot fix
+it.** These were all caught by someone reasoning about what a thing MEANT:
+
+    12e71f5  "not attributable" vs "not reportable"     -- refused a change
+    7710c1f  the objection was about the OTHER quantity -- d_ca04 B1
+    07ccd82  "two clauses violated" vs "measurement invalid"
+    d1eba91  confession vs requirement, same tokens
+    v_nw03   consistency vs authorisation -- A2's hold
+
+In every one of these the NUMBER WAS ALREADY RIGHT. C4 appeared zero times.
+`fail("R3")` appeared zero times. `cap_accepted` was measured correctly. The
+count was never in dispute; **what the count meant was.** No additional channel
+would have caught any of them, because a channel reports a value and these were
+all errors of category.
+
+That is A2's own R3 observation arriving as a general law:
+
+> **A count cannot tell a confession from a prohibition.**
+
+So the taxonomy is two families with two remedies, and the failure mode is
+applying the wrong one:
+
+    IN-RANGE VALUE     a claim about state that is wrong inside the legitimate
+                       range. Cannot be caught by reading it harder.
+                       REMEDY: a second channel.
+
+    CATEGORY ERROR     a correct value filed under a heading that contradicts
+                       it. Cannot be caught by a second channel either -- both
+                       channels report the same correct number.
+                       REMEDY: a second READER, with the semantics in front of
+                       them. Every instance above was caught by a peer or by
+                       re-deriving the clause, never by an instrument.
+
+And a third disposal that is neither, which we reached twice this week:
+
+    DO NOT MAKE THE CLAIM   549ce28 deleted cross-task citations rather than
+                            re-pointing them; 12e71f5 refused to tighten
+                            ids_emittable rather than adding a check for it.
+                            A claim you cannot keep true does not need a
+                            channel or a reader. It needs to not be there.
+
+The practical test, before reaching for an instrument: **is the number wrong,
+or is the number fine and the label wrong?** Building a channel for a category
+error produces a second correct number and the same wrong conclusion, which is
+the most expensive way to be wrong that we have found.
