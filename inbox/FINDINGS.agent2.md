@@ -8283,3 +8283,78 @@ worse state. It is an argument that **the comparability key is narrower than
 comparability**, and a scoring change that leaves the key untouched is invisible
 to anyone reconciling records later. Reported, not fixed: `task_text_hash` is not
 mine.
+
+## A guard written for an input-side defect silently misaims an output-side one
+
+Ten of v_dsp02's eleven existing mutants perturb the golden's **inputs**: fn_m10
+quiets a signalling NaN on `operand_a_i` and gates that on `operand_a_i`. Guard
+and perturbation sit on the same side of the pipeline, so they name the same
+operation **by construction**, and the pattern never has to say so.
+
+Three of the five clauses I was closing cannot be driven from the inputs at all:
+
+    S5   minmax, both operands NaN -> canonical qNaN     no input makes minmax
+                                                         return a NON-canonical
+                                                         NaN; the output is
+                                                         canonical for every
+                                                         NaN input pair
+    S8   FLT/FLE raise NV on a NaN of EITHER kind        replacing the qNaN with
+                                                         a number drops NV, but
+                                                         also changes the
+                                                         BOOLEAN -- that trips
+                                                         S7, a different clause
+    S2   SGNJ raises NO flags, for any operand           no input makes SGNJ
+                                                         raise a flag; that IS
+                                                         the clause
+
+So all three perturb an **output**. And the golden is `NumPipeRegs=1,
+PipeConfig=BEFORE` — bound in the DUT header as a scored configuration, chosen
+precisely so "the handshake contract has no state to be wrong about" would not be
+true. The operands are registered before the arithmetic, so `result_o` belongs to
+an operation **accepted earlier**, and under a stalling handshake not even a
+fixed number of cycles earlier.
+
+**Gating an output on `operand_a_i` therefore corrupts whichever operation
+happened to be at the output when the guard's operation was at the input.** I
+wrote all three that way first, following the shipped pattern.
+
+### The failure mode is a right number with a wrong meaning
+
+A misaligned guard does **not** produce a mutant that survives. It produces a
+mutant that fails on a *neighbouring* clause. The kill count is identical, the
+rule-24 positive control is satisfied, and the witness line is well-formed. Only
+the **id** is wrong.
+
+That matters here more than it usually would, because the entire purpose of these
+five mutants is to drive **specific previously-undriven clauses**. A misaligned
+fn_m11 would have reported S3 or S4 — both already witnessed by fn_m2 and fn_m3 —
+and the row I was closing would still be open while the table said it was shut.
+
+    the instrument that catches it   the clause id on the witness line
+    what that id normally means      which clause fired FIRST, not the only one
+    what it ALSO means here          whether the guard is aligned to its own
+                                     operation
+
+The id is doing double duty for output-side mutants, and I have said so at the
+site rather than only here. Same shape as `-m1` coinciding with the true answer
+and as the commit message that claimed an edit that never landed: **the number
+was never wrong, the sentence attached to it was.**
+
+### The transferable part
+
+The guard is now loaded on acceptance and carried across the register on the port
+handshake alone — one flag, because one stage holds one operation — so nothing
+inside the golden is read and the guard still restates against any
+implementation.
+
+But the point is not the flag. It is that **a template encodes an assumption its
+instances do not restate.** fn_m10's pattern is correct for every defect its
+author wrote and unsafe for three of the five I was asked to add, and there is
+nothing in the pattern that says which kind it is safe for. Following it
+mechanically — the normally-correct instinct, and the one the house style
+rewards — is what produced the misaim.
+
+**Proposed, as a one-line rule for CONVENTIONS.md:** a mutant whose perturbation
+is on an output must state, at the guard, how the guard reaches that output's
+operation; if the answer is "the DUT is combinational" that is a sentence worth
+writing, because it stops being true when someone sets `NumPipeRegs`.

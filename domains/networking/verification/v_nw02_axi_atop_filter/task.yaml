@@ -179,6 +179,10 @@ mutants:
      guard: "the burst is exactly two beats",
      defect: "it receives three beats; every other length is exact",
      witness: "cycle 92, slave R: golden last=1 / mutant last=0, same id and resp"}
+  - {id: af_m11_stalls_aw_below_bound, violates: "W3",
+     guard: "the fifth non-atomic write presented while the debt is BELOW its bound",
+     defect: "aw is stalled although the bound has not been reached",
+     witness: "cycle 145, s_awready (the write-admission bound)"}
   depth: >
     None falls to a single atomic through an idle filter. Reaching them needs
     burst lengths driven to specific values rather than left at one; a second
@@ -193,7 +197,7 @@ mutants:
   witness_runner: mutants/witness.sh
   generator: mutants/gen_mutants.py
   reference_reachability: >
-    The reference testbench kills all ten. That is the binding constraint on how
+    The reference testbench kills all eleven. That is the binding constraint on how
     far a guard can be narrowed: a mutant the reference does not reach is not
     difficult, it is unverified, and it would be scored against submissions on
     evidence the task itself cannot produce.
