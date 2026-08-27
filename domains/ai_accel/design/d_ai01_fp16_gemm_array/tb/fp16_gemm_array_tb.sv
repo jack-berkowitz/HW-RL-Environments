@@ -53,6 +53,13 @@ module fp16_gemm_array_tb;
   // All three are the same defect shape: the contract specifies steady states
   // and does not model the in-flight pipeline, so transitions are not scored.
   localparam int unsigned REFILL_W = 4*(H-1) + 3;
+  // C3's window is TWO depths, not one. Under accumulate_i a row delivers its
+  // dot product PLUS z_o(t - dfb); the first term settles after d(0) enabled
+  // ticks and the second reaches back into the transient for a further dfb.
+  // d(0) = 4*(H-1)+3, dfb = 4*(H-1)+4, so the window is their sum. The old
+  // value ended at tick d(0) and the echo began at tick dfb = d(0)+1, escaping
+  // by exactly one tick at both legal HEIGHTs.
+  localparam int unsigned ACC_W    = 2*4*(H-1) + 7;
 
   logic clk = 1'b0, rst_n = 1'b0;
   always #5 clk = ~clk;
@@ -192,7 +199,7 @@ module fp16_gemm_array_tb;
         scored = 1'b0;
         if (r.reg_enable) refill_left = refill_left - 1;
       end
-      if (r.accumulate !== prev_acc) acc_left = REFILL_W;
+      if (r.accumulate !== prev_acc) acc_left = ACC_W;
       else if (acc_left != 0) begin
         scored = 1'b0;
         if (r.reg_enable) acc_left = acc_left - 1;

@@ -301,9 +301,36 @@
 //     accumulate_i changes, in either direction, partial sums seeded with y_i
 //     are still travelling down the chain, and this contract does not model them
 //     -- it describes what a row delivers, not the pipeline that delivers it.
-//     The values on z_o and status_o during the first D*(HEIGHT-1)+3 ENABLED
-//     TICKS after any change of accumulate_i -- 31 at HEIGHT=8, 15 at HEIGHT=4 --
-//     are therefore UNSPECIFIED and excluded from scoring.
+//     The values on z_o and status_o during the first
+//
+//         d(0) + dfb  =  2*D*(HEIGHT-1) + 7   ENABLED TICKS
+//
+//     after any change of accumulate_i -- 63 at HEIGHT=8, 31 at HEIGHT=4 -- are
+//     therefore UNSPECIFIED and excluded from scoring.
+//
+//     WHY THE WINDOW IS TWO DEPTHS AND NOT ONE, because an earlier draft said
+//     d(0) alone and that was wrong by exactly the length of the feedback path.
+//     Under accumulate_i the row delivers z_o(t) = its dot product at t PLUS
+//     z_o(t - dfb). The first term is settled once the chain has drained, after
+//     d(0) enabled ticks. THE SECOND TERM IS NOT: for t in the dfb ticks that
+//     follow, z_o(t - dfb) still reaches back into the unspecified transient, so
+//     z_o(t) inherits it. An unspecified value on a feedback path is not
+//     unspecified once; it is unspecified again one dfb later.
+//
+//     MEASURED, and this is why the number changed. The transient at HEIGHT=8
+//     diverged on enabled ticks 1,2,4,5,6 -- and reappeared on ticks 33,34,36,
+//     37,38, one dfb later, with the SILENCE at tick 3 reappearing as silence
+//     at tick 35. Three independent implementations -- two solicited
+//     submissions and this task's own second source, none of which had read
+//     ref/ -- produced identical values at all six scored samples and all
+//     differed from the reference there. The old window ended at tick 31 and
+//     the echo began at tick 32: it escaped by exactly one tick, at BOTH
+//     legal HEIGHTs, since dfb - d(0) = 1 independently of geometry.
+//
+//     STATED AS THE FORMULA RATHER THAN AS TWO NUMBERS. The earlier text gave
+//     "31 at HEIGHT=8, 15 at HEIGHT=4" and a reader had no way to check them or
+//     to extend them to a geometry not listed. The window is derived, not
+//     chosen, and the derivation is the two lines above.
 //
 //     Measured: two implementations agreeing exactly on dfb, and agreeing
 //     cycle-for-cycle when accumulate_i is toggled against a CONSTANT operand

@@ -223,3 +223,84 @@ computation could not have given me at any point in the sequence.
 **Concurrency made it visible and is not the cause.** A single agent editing two
 files and computing between them produces the identical defect. The peer's edit
 only shortened the window from minutes to seconds.
+
+---
+
+## An unspecified value on a feedback path is unspecified again, one lap later
+
+d_ai01's C3 excluded `d(0) = D*(HEIGHT-1)+3` enabled ticks after any change of
+`accumulate_i`. The accumulate output is `z_o(t) = dot(t) + z_o(t - dfb)` with
+`dfb = D*(HEIGHT-1)+4`. The first term settles at `d(0)`. **The second does
+not:** for the next `dfb` ticks, `z_o(t - dfb)` still reaches back into the
+transient the window just excluded, so the excluded values come back out.
+
+The window ended at tick `d(0)`. The echo began at tick `dfb`. **It escaped by
+exactly one tick, and `dfb - d(0) = 1` independently of HEIGHT** — so the defect
+was geometry-independent even though the observed counts were not.
+
+    transient (unscored)   tick  1  2 [3=0] 4  5  6   then clean
+    echo      (scored)     tick 33 34 [35=0] 36 37 38   then clean
+                           35 - 3 = 32 = dfb
+
+Per-row: at every scored tick the diverging row-set was a SUBSET of the
+row-set at `tick - dfb`, with two exact matches including the silence.
+
+**Three independent implementations produced identical values at all six scored
+samples and all differed from the reference** — two solicited submissions and
+this task's own second source, which was written from the spec with `ref/` never
+opened. That is what made it a contract question rather than a model result:
+two independent designs cannot agree bit-for-bit on a wrong value, and three
+cannot at all.
+
+### Why the observed counts looked geometry-dependent and were not
+
+Scored z mismatches were 0 at HEIGHT=4 and 34 at HEIGHT=8, which reads as a
+height-scaled effect. It is not. At HEIGHT=4 the echo escaped C3 exactly as at
+HEIGHT=8 and then landed inside an overlapping **C2 flush window** — a flush
+pulsed at cycles 1804-1805, and its 15-tick exclusion covered 1806-1820, which
+is where the echo arrived. **The defect was fully present at both heights and
+invisible at one of them by stimulus coincidence.** A count of failures is not a
+measurement of exposure.
+
+### The fix is derived, not fitted
+
+`z_o(t)` is specified only once `t - dfb` is past the transient, so the window
+is `d(0) + dfb = 2*D*(HEIGHT-1) + 7`. Stated as that formula rather than as the
+two magic numbers the clause used to carry, because a reader could not check
+"31 at HEIGHT=8, 15 at HEIGHT=4" and could not extend them to a geometry not
+listed.
+
+**Widening an exclusion until failures disappear is how a rig stops
+discriminating**, so the window was derived first and the failures checked
+after. Every negative control still fails at both heights with margins of 80 to
+3033 z mismatches.
+
+### PINNING WAS PREFERRED AND WAS INFEASIBLE, and the reason is C3's own
+
+Pinning `z_o` through the transient means stating what the chain delivers while
+partial sums seeded with the pre-transition `y_i` are still travelling, which is
+a function of how many registers sit between stages. C3 already refuses that and
+the refusal is right: *"Modelling it instead would put a pipeline structure into
+the contract and hand every submission a required microarchitecture, which is
+the freedom this task exists to measure."* The other form of pinning -- mandating
+a defined transient, such as discarding in-flight partial sums on the toggle --
+replaces the behaviour rather than describing it, and would make the reference
+itself non-conforming.
+
+### THE SECOND HALF IS NOT FIXED AND IS NOT THE SAME DEFECT
+
+After the C3 fix, `z_o` agrees everywhere scored for all three implementations.
+The second source still disagrees with the reference on `status_o`: 46 rows at
+HEIGHT=4, 55 at HEIGHT=8, and **every single one of them is a `flush_i` HIGH
+cycle -- 46 of 46 and 55 of 55.**
+
+That is the question C2 was pinned for in the same session, and the pin resolves
+it in the reference's favour via A10. The second source was written before the
+pin, from text that permitted more than one reading, and implements a third
+reading distinct from both the reference's and the two submissions'. **Its
+disagreement is therefore expected and is not evidence that the scored region is
+still unspecified -- but it also cannot be used as evidence that it is not.**
+
+Re-deriving the second source's flush behaviour FROM THE PINNED CLAUSE is
+outstanding, and it has to be a re-derivation rather than an adjustment until it
+agrees. An oracle edited until it matches the reference has stopped being one.
