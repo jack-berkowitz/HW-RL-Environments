@@ -508,6 +508,22 @@ def main(argv):
     print("  The candidate column is OVER-BROAD -- measured 45% false positives "
           "on a hand-worked\n  sample. It is not a work list. The REFUSED lines "
           "below are the exact result.")
+    # AND IT IS ALSO NARROW, IN A WAY THAT MUST NOT BE "FIXED" BY TIGHTENING
+    # emittable. A clause named only inside a compound string -- d_ca01's R5
+    # appears solely in "R3/R5: a LOAD returned the wrong value", never alone --
+    # counts as emittable, and that is CORRECT: it is reported, jointly. Ten such
+    # ids exist corpus-wide, seven on the design half, found by
+    # AGENT-DESIGN-43a92055 and AGENT-VERIF-A2.
+    #
+    # Dropping compound substrings from emittable would move all ten into the
+    # candidate column, which asserts "stated and cannot be reported at all" --
+    # false for every one of them. The real property, that their failure is not
+    # separately ATTRIBUTABLE, is what --shared reports, and it reports all ten.
+    # That is the division this tool was built on: the note above about v_ca06's
+    # D6/D7 says the candidate column cannot contain a grouping by construction.
+    print("  Read it WITH --shared. A clause named only inside a compound "
+          "(\"R3/R5: ...\") is\n  emittable and correctly so; that its failure is "
+          "not separately attributable is\n  what --shared reports, not this column.")
     for name, c, under in broken:
         print(f"REFUSED: {name}: {c} says it is reported under {under}, and no "
               f"fail() can emit {under}.")
