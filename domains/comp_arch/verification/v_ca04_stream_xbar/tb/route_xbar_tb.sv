@@ -120,9 +120,38 @@ module route_xbar_tb;
           // ---- R1, R2, R5: right output, unaltered, in order for the pair ----
           if (s >= N_IN)
             fail("R2", $sformatf("cycle %0d: output %0d delivered payload %08x, which names no input", cyc, j, d));
-          else if (pair_q[s][j].size() == 0)
-            fail("R1/R4", $sformatf("cycle %0d: output %0d delivered payload %08x from input %0d, which was never accepted bound for this output. Either it was routed to the wrong output, or it was delivered ahead of -- or more times than -- it was accepted.",
-                                 cyc, j, d, s));
+          else if (pair_q[s][j].size() == 0) begin
+            // WAS fail("R1/R4", ...) -- ONE COMPOUND ID FOR TWO DIFFERENT FACTS.
+            // "R1/R4" is not a clause, so the verdict named a token no clause
+            // matches and a reader could not route it. The two causes ARE
+            // distinguishable from state already in scope: pair_q is indexed by
+            // (source, destination), so every queue for source s is visible here.
+            //   found outstanding for another output -> accepted bound for j',
+            //     delivered on j. That is R1 and nothing else.
+            //   found nowhere -> a beat was delivered that nothing ever accepted.
+            // The DUPLICATE case cannot reach this branch: seen.exists(d) catches
+            // it eight lines above and already reports under R4's own id. So this
+            // site was never R1/R4 -- it is R1 plus a third state.
+            automatic int bound_for = -1;
+            for (int jo = 0; jo < N_OUT; jo++)
+              if (jo != j && bound_for < 0)
+                for (int q = 0; q < pair_q[s][jo].size(); q++)
+                  if (pair_q[s][jo][q] === d) begin bound_for = jo; break; end
+            if (bound_for >= 0)
+              fail("R1", $sformatf("cycle %0d: output %0d delivered payload %08x from input %0d, which was accepted bound for output %0d -- R1 says a beat accepted while in_sel_i names j is delivered on j and on no other",
+                                   cyc, j, d, s, bound_for));
+            else
+              // NO CLAUSE NAMES THIS STATE. The beat was never accepted on any
+              // input for any output, so it is neither a routing fault (R1) nor
+              // a delivery-count fault (R4) -- the design produced a beat out of
+              // nothing. Reported under an explicit non-clause marker rather than
+              // borrowed from R1, because attributing it to R1 would credit a
+              // submission that checks routing with catching fabrication.
+              // PENDING: this needs a clause of its own or a spec statement that
+              // it is deliberately unclaimed. Not decided here.
+              fail("UNCLAIMED", $sformatf("cycle %0d: output %0d delivered payload %08x naming input %0d, which was never accepted on any input for any output (cycle %0d)",
+                                   cyc, j, d, s, cyc));
+          end
           else if (pair_q[s][j][0] !== d) begin
             // Is this beat further down the queue? If so the beats ahead of it
             // were never delivered -- that is loss, not reordering, and naming

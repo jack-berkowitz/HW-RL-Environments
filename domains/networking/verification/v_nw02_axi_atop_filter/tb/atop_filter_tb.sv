@@ -450,7 +450,23 @@ module atop_filter_tb;
   task automatic issue_aw(input int id, input int addr, input int len, input logic [5:0] atop);
     bit ok;
     try_aw(id, addr, len, atop, 4000, ok);
-    if (!ok) fail("W3/X4", $sformatf("AW id=%0d was never accepted (cycle %0d)", id, cyc));
+    // WAS fail("W3/X4", ...) -- one compound id for two clauses that `debt`
+    // separates at the failing moment. W3's own text makes the debt its
+    // antecedent: "while the debt is strictly below MAX_WRITE_TXNS, this bound
+    // alone does not stall a non-atomic AW". So:
+    //   debt <  MAXW  the bound does not license the stall            -> W3
+    //   debt == MAXW  the bound licenses it, and failing to accept is
+    //                 a liveness fault against the 64-cycle bound     -> X4
+    // The timeout here is 4000 cycles against X4's 64, so the two are separable
+    // on duration as well; the debt is the sharper test and is read directly.
+    if (!ok) begin
+      if (debt < MAXW)
+        fail("W3", $sformatf("AW id=%0d was never accepted with the downstream write debt at %0d, below the bound of %0d (cycle %0d)",
+                             id, debt, MAXW, cyc));
+      else
+        fail("X4", $sformatf("AW id=%0d was never accepted; the debt sat at the bound of %0d and never fell far enough to admit it within %0d cycles (cycle %0d)",
+                             id, MAXW, 4000, cyc));
+    end
   endtask
 
   // Sends a W burst. `filtered` says whether these beats belong to a filtered
@@ -576,9 +592,23 @@ module atop_filter_tb;
         try_aw(i, 32'h2000 + i*16, 0, 6'b000000, 40, ok);
         if (ok) admitted++;
       end
-      if (admitted != MAXW)
-        fail("W2/W3", $sformatf("with no W burst completed downstream, %0d AWs were admitted; the bound is %0d",
-                                admitted, MAXW));
+      // WAS fail("W2/W3", ...) ON `admitted != MAXW` -- one compound id, and the
+      // equality test was the only thing hiding which clause was violated. The
+      // DIRECTION separates them, and the value is already computed:
+      //   admitted < MAXW  an AW was stalled while the debt was below the bound.
+      //                    W3 says this bound alone does not stall a non-atomic
+      //                    AW, so this is W3 and this is W3's only structural
+      //                    check -- there is no other site that can catch it.
+      //   admitted > MAXW  more AWs admitted than the bound allows. That is W2,
+      //                    which ALSO has its own dedicated site (`debt > MAXW`),
+      //                    so this half is a second route to a clause already
+      //                    covered rather than a clause's only route.
+      if (admitted < MAXW)
+        fail("W3", $sformatf("with no W burst completed downstream, only %0d of %0d AWs were admitted -- the debt stayed below the bound and W3 says the bound alone does not stall a non-atomic AW",
+                             admitted, MAXW));
+      else if (admitted > MAXW)
+        fail("W2", $sformatf("with no W burst completed downstream, %0d AWs were admitted; the bound is %0d",
+                             admitted, MAXW));
       // No B has been returned yet (BLAG=20 from each AW, and none has been
       // acknowledged upstream). Complete ONE W burst and require a slot to free.
       send_w(1, 1'b0);

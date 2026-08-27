@@ -5490,3 +5490,82 @@ which of those the task takes is the owner's call and not this pass's.
 I am reporting it rather than annotating it as a grouping, because annotating it
 would assert that one clause owns the observation when what is true is that the
 testbench threw away the state that tells them apart.
+
+## The three splits land, and my own census had an implicit scope
+
+Split the three distinguishable sites, then verified each against the mutant set
+rather than against a passing golden — a golden that still passes proves the
+split did not break it, not that the new branches can fire.
+
+### v_ca04 R1/R4 -> R1 plus an unclaimed state, both exercised
+
+    xb_m9_misroute_under_full_collision    R1
+    xb_m8_duplicate_on_stall_release       R4  UNCLAIMED
+
+**10 of 10 mutants still caught, golden still PASS.** m9 now reports
+
+    FAIL R1: cycle 1: output 1 delivered payload 00000000 from input 0,
+             which was accepted bound for output 0
+
+— previously `R1/R4`, a token no clause matches.
+
+**And the third state is real, not hypothetical.** m8 produces both:
+
+    FAIL UNCLAIMED: cycle 141: output 0 delivered payload 0000002e naming
+                    input 0, which was never accepted on any input for any output
+    FAIL R4:        cycle 142: output 0 delivered payload 0000002e a second time
+
+The mutant emits a beat *before* it was accepted, then again. The second is a
+genuine R4. **The first is a fabrication no clause names**, and until now it was
+reported as `R1/R4` — a compound crediting a routing check with catching it.
+
+*Recommendation, not a decision:* **give it a clause.** An explicit statement that
+it is unclaimed would be honest but wrong here — the state is caught by a mutant
+in the shipped set, so a submission that misses it is currently scored as if
+nothing happened. "Deliberately unclaimed" is the right answer for a state no
+stimulus reaches; this one has a witness.
+
+### v_nw02 W2/W3 and W3/X4 split; X4 exercised, W3 not
+
+    af_m2_debt_frees_on_b_when_deep     W2  X4  F4  F5  P3  ...
+    af_m3_rresp_class_on_bit4_multibeat X4  ...
+    af_m1_admits_fifth_once_full_has_aged  W2
+
+10 of 10 caught, golden PASS. **X4 fires. W3 does not fire on any mutant** — no
+mutant in the set stalls an AW while the debt is below the bound. So the W3 half
+of both splits is correct by construction and **unexercised**, which is the state
+this whole week has been about, and I am recording it rather than reporting the
+split as verified.
+
+### F4/F5 stays compound, deliberately
+
+Left unsplit. The two differ by whether the id was ever owed, and `er_id.delete(k)`
+discards that at payoff. **Splittable at a cost — one retained array — not
+indistinguishable.** `af_m10_extra_rbeat_on_two_beat_burst` fires `F4` and then
+`F4/F5` on the following cycle, which is consistent with the compound being F4 in
+practice, and consistency is not evidence: that is one mutant, and the F5 case has
+no witness either way.
+
+### And the census that produced "3" had an implicit scope
+
+I reported eight compound sites and three unattributable clauses. Both numbers
+came from a scan of `fail("LITERAL"` — **direct calls only.** v_nw02 routes five
+more through a wrapper:
+
+    expect_quiet("F3/F4", ...)   expect_quiet("W1/W4", ...)
+    expect_quiet("P3/F4", ...)   expect_quiet("F3/F4/X3", ...)
+    expect_quiet("F2/F3/F5", ...)  expect_quiet("P1/P2/P4", ...)
+
+Corrected census: **13 compound call sites, not 8**, including two three-way
+compounds. Re-measured with every helper whose first argument is a clause string
+— eleven tasks declare between one and three such helpers — and after the three
+splits:
+
+    clauses no verdict can be routed to: 1
+    v_nw02 W1, emitted only inside expect_quiet("W1/W4", ...)
+
+**So "3" was wrong in both directions.** Two of the three are now fixed; F5 was
+never lost once the wrapper path is counted; and **W1 was invisible to the scan
+that produced the number.** A scan restricted to direct `fail()` calls cannot
+report that a wrapper exists — the same implicit-scope shape as the column-0
+anchors, in the measurement I ran to correct a measurement.
