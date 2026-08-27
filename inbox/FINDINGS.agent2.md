@@ -6120,3 +6120,93 @@ displacement**, because total displacement leaves nothing behind to share.
 That is the week's shape once more, in the detector built for the week's shape:
 `--shared` measures what it says it measures, and I read its output as *the
 groupings*, which is a different claim.
+
+## F1 and H3 verified: one is the same shape as S8, the other is three different states
+
+I filed F1 and H3 as *"the same shape as S8, unverified, listed as candidates."*
+Verifying them says one is and one is not, which is the answer to why they were
+listed as candidates rather than results.
+
+### v_dsp02 H3 — the same shape as S8, confirmed
+
+*"`out_ready_i` may be low on any cycle, for arbitrarily many consecutive cycles.
+No result shall be lost, duplicated or reordered as a result."*
+
+    fail("H3") sites .................... 0
+    backpressure driven ................. yes, held 3+k cycles per burst
+    and FLOORED ......................... fail("FLOOR") if cov_stall < 20
+
+Absorbed entirely by **H2**, whose own text carries the ordering half —
+*"results are delivered in the order the operations were accepted"* — and whose
+sites carry the other two:
+
+    "a result was delivered with no operation outstanding (result=%h)"   duplication
+    "%0d results never arrived"                                          loss
+
+**Total displacement, stimulus present and floored, undeclared.** Same as S8.
+
+### v_ca03 F1 — not one shape but three
+
+*"`rst_ni` is synchronous and active low. While it is low the design shall be
+returned to an idle state: no request is accepted and no response is presented.
+After release the table is empty... and no transaction outstanding before reset
+shall produce a response afterwards."*
+
+    fail("F1") sites .................... 0
+    rst_n driven low after time zero .... 0
+
+Three obligations, three different reasons for the zero:
+
+    while low, nothing accepted or        NOT CHECKED. Every DUT checker in the
+    presented                             file is gated `if (rst_n && ...)`, so
+                                          the reset window is excluded from
+                                          observation by construction. The three
+                                          `!rst_n` blocks clear MODEL state and
+                                          look at nothing.
+
+    after release the table is empty      OBSERVED UNDER A3, incidentally. A3 has
+                                          7 sites and would fire on a design that
+                                          came up non-empty -- but only because
+                                          every run begins post-reset, so the
+                                          coverage is a property of where the run
+                                          starts, not of a check aimed at F1.
+
+    no pre-reset transaction produces     UNEXERCISABLE. `rst_n` is never driven
+    a post-reset response                 low after time zero, so nothing is ever
+                                          outstanding across a reset edge.
+
+### The sister tasks settle that the third one is a gap, not a convention
+
+**v_dsp02 exercises the identical obligation deliberately**, and checks it:
+
+    // -- E: reset with an operation in flight (S15)
+    issue(OP_CLASS, ...); repeat (2) @(posedge clk);
+    @(negedge clk) rst_n = 1'b0; cov_reset++;
+    ...
+    if (out_valid !== 1'b0) fail("S15", "out_valid_o high on the first cycle
+                                         after reset release");
+    ... fail("S15", "model still holds an expectation after reset");
+
+v_nw03 also asserts reset mid-run and counts it (`cov_resets`). So of the three
+tasks carrying a reset clause of this shape, **two exercise it and one does not**,
+and the one that does not is the one whose clause has no site.
+
+**Caught a wrong number of my own on the way to that.** My first sweep counted
+`rst_n` assignments and reported v_nw03 at zero mid-run resets. v_nw03's signal
+is `rst`, active high — `rst = 1'b1` at line 354 is an assertion, not a release.
+The count was zero because the *name* did not match, which is the column-0 shape
+in a signal identifier. It was checked before it was repeated, which is the only
+reason it is a footnote instead of a claim.
+
+### What separates the two results
+
+Both clauses have zero sites. The difference is what the zero means, and **no
+count distinguishes them**:
+
+    H3   zero because another clause does the whole job     -> declare the grouping
+    F1   zero because one half is unobserved, one is
+         incidental, and one has no stimulus at all         -> three different fixes
+
+**S8, H3 and F1 are indistinguishable in the emittable column** and need three
+different remedies. That column is a count, and this is the fourth time this week
+a count has been read as a diagnosis.
