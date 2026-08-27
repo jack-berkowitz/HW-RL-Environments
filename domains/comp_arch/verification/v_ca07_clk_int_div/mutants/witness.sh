@@ -73,8 +73,8 @@ b=re.sub(r'\bclk_ratio_div(\s+i_g)', r'clk_ratio_div_golden\1', b)   # inner FIR
 b=b.replace('module $MM (', 'module clk_ratio_div (', 1)
 open('$OUT/$MM.sv','w').write(b)"
   w=$(build_run "$MM" $OTHER "$OUT/golden_renamed.sv" "$OUT/$MM.sv")
-  if [ "$w" = "__BUILD_FAIL__" ]; then echo "  $MM : BUILD FAILED"
-  elif [ -z "$w" ]; then echo "  $MM : NO FAILURE OBSERVED -- treat the REFERENCE as suspect"
+  if [ "$w" = "__BUILD_FAIL__" ]; then echo "  $MM : BUILD FAILED -- $(df -m "$OUT" | awk 'NR==2{print $4}')M free on the build volume (a mutant build needs ~600M)"
+  elif [ -z "$w" ]; then echo "  $MM : NO FAILURE OBSERVED -- the build exited 0 and $(df -m "$OUT" | awk 'NR==2{print $4}')M remains free on the build volume, so this is not a space failure; treat the REFERENCE as suspect"
   else echo "  $MM : $w"; n_fail=$((n_fail+1)); fi
 done
 

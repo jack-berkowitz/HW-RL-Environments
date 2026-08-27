@@ -6684,3 +6684,89 @@ My ad-hoc loop swallowed eleven build failures and exited 0. The task's shipped
 harness would have refused. **The harness the task already ships would have
 caught the harness I wrote to check the task**, and this is the second time in
 one session that has been the finding.
+
+## A control that refuses on "did the instrument reproduce a known answer" covers causes its author never enumerated
+
+**The strongest argument available for reproduction-style controls over
+cause-specific ones, and it arrived by accident.**
+
+Every one of the eleven `witness.sh` harnesses ends with:
+
+    echo "  RULE24 positive control : $n_fail of $n_tot mutants produced a clause failure"
+    if [ "$n_fail" -ne "$n_tot" ]; then
+      echo "  RULE24: NOT a clean reproduction -- treat every line above as unlicensed."
+      exit 2
+
+That control was written to catch two specific bugs, both recorded in the file:
+a rename using `\b` in BSD `sed` that matched nothing, and a grep that did not
+match the testbench's failure format. **Both made a real failure look like
+silence.**
+
+It also catches a full disk, which nobody wrote it for.
+
+### Why it does, and the sentence that generalises
+
+A mutant whose build fails increments `n_tot` and not `n_fail`. A mutant that
+builds and does not die increments `n_tot` and not `n_fail`. **A mutant that
+fails to build and a mutant that fails to die are the same arithmetic**, and the
+control does not care which — it asks only whether the instrument reproduced a
+known answer, and refuses when it did not.
+
+    cause-specific control    knows about disks, and is silent on the next cause
+    reproduction control      knows about ONE thing -- the answer it must
+                              reproduce -- and refuses on every cause that
+                              perturbs it, named or not
+
+**A cause-specific guard covers the causes you enumerated. A reproduction guard
+covers the ones you did not.** That is the whole of the argument, and it is why
+adding a pre-flight free-space check would have been a second control for a case
+already covered — a guard aimed at the one cause we had just met, which is the
+weakest possible reason to choose a guard.
+
+### The corollary for anyone choosing between them
+
+If you can state a **known answer the instrument must reproduce**, build the
+control on that and stop. You do not need to predict the failure modes; the
+control is complete against every cause that moves the answer.
+
+If you cannot — if there is no known answer, only a plausible one — then
+cause-specific checks are all you have, and each one you write is a bet on
+having thought of the right cause. **Notice which situation you are in before
+choosing, because the reproduction control looks more expensive up front and is
+the only one whose coverage grows without editing it.**
+
+## Attribution failing after the verdict is already right: the second instance
+
+Landed the two message fixes, 18 edits across 11 harnesses. The second one is the
+interesting half.
+
+    was  "$m : NO FAILURE OBSERVED -- treat the REFERENCE as suspect"
+    now  "$m : NO FAILURE OBSERVED -- the build exited 0 and NNNNM remains free
+          on the build volume, so this is not a space failure; treat the
+          REFERENCE as suspect"
+
+    was  "$m : BUILD FAILED (see $OUT/$m.build)"
+    now  "$m : BUILD FAILED -- NNNNM free on the build volume (a mutant build
+          needs ~600M); see $OUT/$m.build"
+
+**The refusal was already correct. The attribution was not.** Under ENOSPC the
+run is refused either way, so nothing false is published — and a reader is sent
+to audit a reference that was never at fault, by a message that is specific,
+confident and actionable.
+
+**This is the second instance of attribution failing after the verdict is
+already right**, and the first was a defect this corpus shipped:
+
+    scored zero for a defect   the verdict "this submission failed" was correct;
+    we shipped                 the clause it was attributed to was not
+    NO FAILURE OBSERVED        the verdict "this run is not a clean reproduction"
+                               is correct; the party it accuses is not
+
+Same shape, different layer. In both, **every gate passes and the number is
+right, and the failure is entirely in what the display says the number is
+about.** No control catches it, because there is nothing wrong for a control to
+find — the run refused, the score was zero, both correct.
+
+The remedy is the same in both: **state the assumption the attribution rests
+on.** Not care, and not another control — a sentence at the point of display
+saying what would have to be true for the accusation to be the right one.

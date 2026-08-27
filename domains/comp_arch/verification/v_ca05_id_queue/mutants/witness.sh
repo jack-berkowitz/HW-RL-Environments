@@ -60,9 +60,9 @@ PY
   verilator --binary --timing -j 4 -Wno-fatal --top-module ${TOP}_tb -o run --Mdir "$OUT/$m" \
     +incdir+"$REPO/refs/common_cells/include" $OTHER "$OUT/golden_renamed.sv" "$OUT/$m.sv" \
     tb/tag_tracker_spec_tb.sv > "$OUT/$m.build" 2>&1
-  if [ $? -ne 0 ]; then echo "  $m : BUILD FAILED (see $OUT/$m.build)"; continue; fi
+  if [ $? -ne 0 ]; then echo "  $m : BUILD FAILED -- $(df -m "$OUT" | awk 'NR==2{print $4}')M free on the build volume (a mutant build needs ~600M); see $OUT/$m.build"; continue; fi
   w=$(timeout 300 "$OUT/$m/run" 2>&1 | grep -m1 -E "^\[?FAIL")
-  if [ -z "$w" ]; then echo "  $m : NO FAILURE OBSERVED -- treat the REFERENCE as suspect"
+  if [ -z "$w" ]; then echo "  $m : NO FAILURE OBSERVED -- the build exited 0 and $(df -m "$OUT" | awk 'NR==2{print $4}')M remains free on the build volume, so this is not a space failure; treat the REFERENCE as suspect"
   else echo "  $m : $w"; n_fail=$((n_fail+1)); fi
   # A Verilator object directory per mutant is hundreds of megabytes on the
   # larger designs. Keeping ten of them filled this machine's disk mid-run.

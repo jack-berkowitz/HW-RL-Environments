@@ -42,7 +42,7 @@ for m in $MUTS; do
   verilator --binary --timing -j 4 -Wno-fatal --top-module nonequiv_tb \
     -DMUT_MOD="$m" +incdir+dut/include -o run --Mdir "$OUT/$m" \
     dut/*.sv mutants/mutants.sv mutants/nonequiv_tb.sv > "$OUT/$m.build" 2>&1
-  if [ $? -ne 0 ]; then echo "  $m : BUILD FAILED (see $OUT/$m.build)"; continue; fi
+  if [ $? -ne 0 ]; then echo "  $m : BUILD FAILED -- $(df -m "$OUT" | awk 'NR==2{print $4}')M free on the build volume (a mutant build needs ~600M); see $OUT/$m.build"; continue; fi
   wl=$(timeout 300 "$OUT/$m/run" 2>&1 | grep "^WITNESS")
   echo "$wl" | sed 's/^WITNESS /  /'
   case "$wl" in *"NO DIFFERENCE OBSERVED"*) ;; *) n_fail=$((n_fail+1)) ;; esac
