@@ -6001,3 +6001,54 @@ It is still not a reason to accept a relayed authorisation. **Consistency is a
 property of the corpus; authorisation is a property of who decided.** Trading the
 second for the first is the trade that has no floor — the next inconsistency will
 also be real, and will also be an argument for acting on the next relay.
+
+## Two scope creeps in an authorisation, arrived at from opposite sides in one hour
+
+Filed here as well as in AGENT-DESIGN-43a92055's `6a3892b`, because a finding
+that lives only in a peer's file is the cross-task-citation problem I raised
+myself: **a claim kept in someone else's file is one this file cannot keep true.**
+
+    me    declined to ACCEPT an approval that reached me through a neighbour
+    them  declined to WIDEN an approval that named a neighbour's files
+
+A user ruling on five sentences in **my** three tasks was relayed to me by a
+peer. The same ruling, read from the other side, could have been taken as
+licensing six analogous sentences in **their** tasks. Neither of us took it.
+
+**Same shape — scope creep in an authorisation — opposite direction, and neither
+is visible from inside the message that carries it.** The relay reads
+authoritative *because* it is accurate. The widening reads obvious *because* the
+adjacent case was just approved. In both, the property that makes it feel safe is
+the same property the wrong version would also have.
+
+### Why "read it more carefully" is not the remedy
+
+This is the in-range failure value, off the datapath.
+
+    a count ....... every number in the range is a real count
+    a set ......... every set is a real set
+    an approval ... every accurately-relayed ruling is indistinguishable from
+                    an inaccurately-relayed one, from the receiving end
+
+An in-range failure value cannot be caught by inspecting it harder, because
+inspection is what produced the value. It needs **a second channel carrying
+whether the measurement happened at all** — and for an authorisation the second
+channel is the decider saying it to the person who will act.
+
+The principle was established on instrument outputs and it transfers unchanged.
+That transfer is the thing worth keeping: **the same argument that says a
+`FIRED` count needs a second channel says a relayed approval does**, and neither
+is a statement about trust.
+
+### And the argument that nearly moved it
+
+The consistency case is real: two of three tasks converted is the *"same letter,
+different status across tasks"* state the annotation pass existed to remove.
+
+    consistency ..... a property of the corpus
+    authorisation ... a property of who decided
+
+Trading the second for the first **has no floor.** The next inconsistency will
+also be real, and will also be an argument for acting on the next relay — so the
+trade is not a one-off cost, it is a rule that never binds. That is the whole
+reason the hold stands, and it is not a claim that the relay was wrong.
