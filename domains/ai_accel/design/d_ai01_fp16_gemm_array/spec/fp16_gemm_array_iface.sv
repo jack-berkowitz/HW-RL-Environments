@@ -74,9 +74,19 @@
 //     about which clause it is.
 //
 //     This is stated because the alternative reading -- that clauses with no id
-//     in the failure output are unchecked -- is wrong here and RIGHT on d_nw01,
-//     where C3, D3, H1 and H3 genuinely have no check at all. The two states
-//     look the same from a grep and differ entirely in what they mean.
+//     in the failure output are unchecked -- is wrong here. ANONYMOUS and
+//     UNCHECKED look identical from a grep and mean opposite things: an
+//     anonymous check refuses a wrong design without naming the clause, an
+//     unchecked clause refuses nothing at all. Both states exist across this
+//     corpus. Which one applies is a fact about a particular task, established
+//     by reading its checker, and is never inferred from the shape of a
+//     failure message.
+//
+//     STATED WITHOUT NAMING ANOTHER TASK, deliberately. This paragraph used to
+//     cite a specific task's four unchecked clauses as the contrasting case.
+//     Checks were written for all four, and the sentence went false here --
+//     in a file nobody was editing at the time. A claim about another task's
+//     checker is a claim this task cannot keep true.
 //
 // A1. ENABLED TICK. For row r, an enabled tick is a rising edge of clk_i at
 //     which both reg_enable_i and row_clk_gate_en_i[r] are high. All timing

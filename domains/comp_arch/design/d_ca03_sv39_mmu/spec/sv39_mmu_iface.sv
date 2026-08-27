@@ -68,8 +68,18 @@
 //     so the silence is specific rather than a property of the rig.
 //
 //     Stated because the alternative reading, that a clause absent from failure
-//     output is unchecked, is WRONG here and RIGHT on d_nw01, where C3, D3, H1
-//     and H3 have no check at all. The two states look identical from a grep.
+//     output is unchecked, is WRONG here. ANONYMOUS and UNCHECKED look
+//     identical from a grep and mean opposite things: an anonymous check
+//     refuses a wrong design without naming the clause, an unchecked clause
+//     refuses nothing at all. Which one applies is a fact about a particular
+//     task, established by reading its checker, never inferred from the shape
+//     of a failure message.
+//
+//     STATED WITHOUT NAMING ANOTHER TASK, deliberately. This paragraph used to
+//     cite a specific task's unchecked clauses as the contrasting case; checks
+//     were written for them and the sentence went false here, in a file nobody
+//     was editing. A claim about another task's checker is a claim this task
+//     cannot keep true.
 //
 // A1. THE WALK. With translation enabled, a request for virtual address va is
 //     resolved by descending the table from the root at satp_ppn_i:
