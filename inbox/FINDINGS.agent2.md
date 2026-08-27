@@ -7990,3 +7990,63 @@ pass turns from an observation about one branch into a property of the clause.
 **And the shape holds across every selector: the case list is uniformly complete
 and the reachability is uniformly not.** 25 of 25 against 13 of 22, from two
 instruments neither of which can produce the other's answer.
+
+## The all-ids harness works, and it moves two rows — the lower bound was hiding a reachable branch
+
+Asked not to count anything unreached on a `-m1` lower bound before getting an
+all-ids answer. The harness now works on v_ca03, and **the correction it produces
+is the reason the instruction was right.**
+
+### What was wrong with the harness, and it was one missing file
+
+    verilator ... $OTHER "$OUT/golden_renamed.sv" "$OUT/$m.sv" "$TB"
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+The mutants **instantiate the golden** under a renamed module, and `witness.sh`
+builds `golden_renamed.sv` for exactly that. My ad-hoc version excluded the golden
+and never supplied the rename, so every build failed. **Fourth instance of the
+rebuild pattern**, and the missing piece was again something the shipped script
+already knew.
+
+### v_ca03, now exact
+
+    iw_m1  A3         iw_m5  A1              iw_m9   C2 D4
+    iw_m2  A3 A5      iw_m6  C2 D4 E1        iw_m10  D5
+    iw_m3  A4         iw_m7  E1              iw_m11  E1
+    iw_m4  A3 A5      iw_m8  E1
+    union: A1 A3 A4 A5 C2 D4 D5 E1
+
+**`A5` is reachable** — `iw_m2` and `iw_m4` both drive it. The `-m1` row said
+`gov_r` was 1 of 3; it is **2 of 3 by id**, and A5 was invisible only because it
+never fired first.
+
+### And a limit the reachability instrument has that the case list does not
+
+`gov_r` has **three returns and two ids** — `A5` twice, for different reasons.
+Reachability is measured from printed ids, so **the two A5 returns cannot be
+separated by it at all.** One of them is reached; which one is not observable
+from outside.
+
+    the case list      distinguishes branches that share an id
+    the reachability   distinguishes branches a real failure can drive
+    neither            does both
+
+That is a third edge on the same pairing, and it arrived from the instrument
+rather than from reasoning about it: **I could not have said which A5 return
+fires without a case, and I could not have said either fires without the
+mutants.**
+
+### v_dsp02 stays on a lower bound, and the reason is worth recording
+
+My all-ids harness fails on v_dsp02 for a different reason: its `witness.sh`
+prepends a `head` block supplying helper functions like `f_sub`, and the extracted
+mutant does not compile without it. **Six of ten mutants failed to build in my
+version and ten of ten build in the shipped one.**
+
+So rather than reimplement a fifth time, I took **the task's own `witness.sh` and
+changed one grep** — `-m1` to all-ids — leaving every other line the task's.
+Running; the result decides whether S5, S8 and S2 are unreached or merely
+never-first.
+
+**Until it lands those three are UNKNOWN, not unreached.** The distinction is the
+one this corpus has spent a week on and it applies to my own table.
