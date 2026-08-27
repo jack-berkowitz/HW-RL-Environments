@@ -6998,3 +6998,53 @@ alone would have been misleading — four passing because nothing perturbed, two
 failing on the wrong clause. `check_fired`'s counter separated the first kind and
 the clause id separated the second. **Neither was care, and neither was the
 verdict.**
+
+## The gate item was already fixed, and my grep reproduced the false positive its author had measured and rejected
+
+Asked to route the `check_tb_module` red to Agent 1 as its own item. **Checked
+before sending, and it does not need sending.**
+
+    check_tb_module.py   rc=0
+      TERMINAL -- declared, not missing:
+        v_dsp01_fp_cast_multi: no task.yaml -- REJECTED.md
+        d_dsp01_fp_divsqrt_srt: no task.yaml -- NOTES.md declares WITHDRAWN
+      22 name(s) checked, all resolve; 2 terminal task(s) declared.
+
+`scripts/_terminal_state.py` now exists, shared between `check_tb_module.py` and
+`check_pin.py`. Both dropped tasks are read as **declared, not missing**, the
+third bucket rather than a marker registry — which is what I proposed and what
+its author independently arrived at, crediting the same reasoning.
+
+### And the part that indicts my own scan
+
+Before checking, I ran a grep for `WITHDRAWN|REJECTED` across every task's
+`NOTES.md`. It returned **eight** tasks. Six of them — v_ai02, d_ca01, d_ca04,
+v_ca04, d_dsp02, d_dsp03 — are **live tasks whose notes discuss** withdrawal:
+a withdrawn mutant, a withdrawn clause, a decision not to withdraw.
+
+The tool's own header records that measurement and rejects the loose marker for
+exactly that reason:
+
+> Six NOTES.md files in this corpus contain the word "withdrawn" ... and only the
+> last is withdrawn; the rest discuss it. A grep for the word would have exempted
+> five LIVE tasks from a check, which is a worse failure than the one being fixed.
+
+So the marker must sit in the **first heading line**, where a task states what it
+is rather than discusses it. **I reproduced the false positive its author had
+already measured and designed against, in the scan I ran to describe the
+problem** — and the only reason it cost nothing is that I checked the tool before
+writing the message.
+
+### What generalises
+
+*"Ask the instrument, not the peer"* was the rule from the d_ai01 retraction.
+This is the same rule with the tense moved again: **ask the instrument before
+reporting a defect, because the defect may have been fixed since you last
+looked.** Reporting a stale defect is the mirror of accepting a stale claim —
+same cost to whoever receives it, and the same one command prevents both.
+
+The distinction the tool encodes is worth keeping on its own: **a task that
+states what it is, versus a task that discusses what it might be.** A word can
+appear in both and means opposite things, and the position of the word — first
+heading line or body prose — is what separates them. That is a marker rule doing
+work a keyword cannot.
