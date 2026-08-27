@@ -929,9 +929,25 @@ for cand in "${CANDS[@]}"; do
       "$([ "${LOOPSEEN:-0}" -gt 0 ] && echo "  *** COMBINATIONAL LOOP warning in ${LOOPSEEN} config(s) ***")"
   fi
   tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
+  # THE EXPECTED VERDICT TRAVELS WITH THE RECORD, read from the task's own
+  # task.yaml rather than inferred from the name. Controls are expected to FAIL,
+  # so a reader applies that rule and moves on -- and d_ai01's nc_h_echo_band_only
+  # is INVERTED: it corrupts z_o only inside C3's widened exclusion band, so it is
+  # expected to PASS, and that PASS is the measurement of the band's size.
+  #
+  # It is therefore the one row where losing the verdict does not look wrong.
+  # Every other control reads as a false pass and gets noticed; this one reads as
+  # an ordinary failing control and does not. Requested by the design session,
+  # who put the declaration in task.yaml so it could be read instead of assumed.
+  #
+  # Absent stays absent: a submission the task declares nothing about records no
+  # expected_verdict at all, rather than defaulting to FAIL and inventing a
+  # declaration the task never made.
+  ev="$(python3 "$REPO/scripts/_expected_verdict.py" "$TASK_DIR" "$(basename "$cand" .sv)" 2>/dev/null | head -1)"
   if ! rec="$(python3 "$REPO/scripts/write_run_record.py" "$TASK_NAME" "$cand" sim \
         "$(basename "$cand" .sv)" \
         "task_text_hash=$tt" \
+        ${ev:+"expected_verdict=$ev"} \
         "simulator=$SIM" "simulator_version=$VERILATOR_VERSION" \
         "compile_warnings=${WARNTOTAL:-0}" \
         "compile_warning_classes=${WARNCLASSES:-}" \
