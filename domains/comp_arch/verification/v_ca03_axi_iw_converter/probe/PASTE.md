@@ -132,6 +132,11 @@ be outstanding on the read side at any time, and at most `MAX_UNIQ_IDS` on the
 write side.
 *Authority: task intent — this bound is the property under test.*
 
+*Exceeding the bound forces a master-identifier collision, so a violation is **reported under D1**. A submission that checks
+  D1 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
+
+
 **A3 — the boundary, and it is the point of this design.** When
 `MAX_UNIQ_IDS` distinct slave identifiers are already outstanding, an address
 request carrying an identifier **not among them** shall **not** be accepted —
@@ -171,6 +176,11 @@ request with that identifier shall not be accepted until one of them completes.
 return in the order in which their address requests were accepted.
 *Authority: AMBA AXI4 — transactions with the same ID must complete in order.*
 
+*An out-of-order response carries the data of another transaction, so a violation is **reported under E1**. A submission that checks
+  E1 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
+
+
 **B2 — no ordering between identifiers.** The relative order of responses
 carrying **different** slave identifiers is **not specified** and shall not be
 checked.
@@ -185,11 +195,21 @@ follow address order.*
 
 ---
 
+*Misordered or interleaved write beats carry the wrong payload, so a violation is **reported under E1**. A submission that checks
+  E1 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
+---
+
 ## 3. Identifier restoration
 
 **C1.** Every response beat presented on the slave port shall carry the slave
 identifier of the transaction that produced it.
 *Authority: AMBA AXI4 — a response carries the identifier of its transaction.*
+
+*A wrongly restored identifier appears as a beat for an id with none outstanding, so a violation is **reported under C2**. A submission that checks
+  C2 is credited with this clause; recorded here so the grouping is visible
+  rather than discovered from a failure message.*
+
 
 **C2.** Every response beat presented on the slave port shall correspond to a
 transaction that is outstanding at that moment. A response for which no

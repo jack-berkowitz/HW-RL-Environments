@@ -5569,3 +5569,66 @@ never lost once the wrapper path is counted; and **W1 was invisible to the scan
 that produced the number.** A scan restricted to direct `fail()` calls cannot
 report that a wrapper exists — the same implicit-scope shape as the column-0
 anchors, in the measurement I ran to correct a measurement.
+
+## Every compound reporting id is gone, and the annotation was invisible to the only audience it names
+
+### The compound sweep, finished
+
+    v_nw02  expect_quiet     one id for four obligations, six compound labels
+    v_nw02  F1/F2 -> F1      F2 is about W BEATS and cannot be violated by an AW
+    v_nw02  P3/X4 -> X4      RESP_DEADLINE is declared `= 64; // clause X4`
+    v_ca03  A3/A5 -> gov_r() the reason was computed and discarded
+    v_nw01  Q1/X3 -> X3      the deadline is HIT_MAX, which is X3's own bound
+    v_nw01  fail("F") x3     F is not a clause here; the spec states A, C, L, Q, X
+
+    clauses across the eleven that no verdict can be routed to:  0
+
+`expect_quiet` is the instructive one. It checks **four** distinct obligations in
+four branches with four messages, and labelled all of them with the *phase's*
+clause set. Three of the four owners follow from the obligation kind alone —
+R beats owed is F4, an AW not forwarded is P1, a W not forwarded is P2 — and only
+the B owner varies, because a filtered write's B is manufactured by the unit (F3)
+and a forwarded write's B is returned from the master port (P4). The remainder of
+each old compound (F2, F5, X3, W1, W4, P3) named what the phase exercised.
+**Naming is not owning**, inside a real check this time rather than a floor.
+
+Verification, and the distinction matters: **only v_ca04's `R1/R4` and v_nw02's
+`W2/W3` and `W3/X4` changed control flow**, and those three were run against the
+full mutant sets (10 of 10 each, goldens PASS). Everything else changed a *label*
+over a byte-identical condition, and the goldens passing is the whole of what
+that needs.
+
+One consequence worth recording: v_nw02's `af_m3` used to print ten distinct ids
+and now prints three. The compounds were **inflating which clauses a mutant
+appeared to exercise** — one failure naming three clauses reads as three clauses
+tested.
+
+### And the annotations were in the wrong file, all ten of them
+
+    task                      spec   probe/PASTE.md
+    v_ca03_axi_iw_converter      4        0
+    v_ca05_id_queue              4        0
+    v_ca06_axi_dw_downsizer      2        0
+    d_ca01_nonblocking_dcache    1        1     <- AGENT-DESIGN-43a92055's
+
+`probe/PASTE.md` is what a submitter is given. My annotation says, in its own
+words, *"recorded here so it is visible rather than discovered from a failure
+message"* — and it was **invisible to the only audience that would otherwise
+discover it from a failure message.** Three tasks, ten declarations, none of them
+where they were for. The design half had it right from the first one.
+
+Both files feed `task_text_hash`, so they were also *disagreeing* while being
+hashed together. Fixed: 10 in the spec, 10 in PASTE.md, every one inside its own
+clause block, verified by re-deriving the pairs from both files independently.
+
+Two defects found by checking that, rather than by writing it:
+
+* **The first insertion put v_ca05's R13 annotation after the `### Status`
+  heading.** My block-boundary logic knew about clauses and not about headings,
+  so the last clause of a section absorbed the next one. Reverted and redone with
+  headings as boundaries. *The same one-line scope error as the column-0 anchors:
+  the pattern described most of the structure, and the case it missed was the
+  last one in every section.*
+* **R13's text said "the authority line above says so"** — and PASTE.md strips
+  `*Authority:*` lines. The sentence was true in the file I wrote it in and
+  dangling in the file it was for. Reworded to stand alone.

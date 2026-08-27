@@ -35,6 +35,12 @@ across tags: any distribution summing to `SLOTS` shall be accepted, including
 order they were inserted.
 *Authority: task intent.*
 
+*R8 requires that `pop_data_o` carry **the oldest entry for that tag**, which is
+this clause restated as an output requirement, so a violation of R2 is
+**reported under R8**. A submission that checks R8 is credited with this clause;
+that is deliberate and recorded here so it is visible rather than discovered
+from a failure message.*
+
 **R3 — no cross-tag ordering.** Order between entries of *different* tags is
 **not specified** and shall not be checked.
 *Authority: rule 12 — a design may store entries in any structure it likes; only
@@ -72,10 +78,24 @@ with `pop_data_valid_o` high, the entry is removed. When `pop_en_i` is low, the
 entry is inspected and **not** removed.
 *Authority: task intent — peek and pop are distinct operations.*
 
+*An entry wrongly removed by a peek, or wrongly kept by a pop, is observable
+only on the NEXT pop of that tag — as a `pop_data_valid_o` or `pop_data_o` that
+disagrees with the store — so a violation of this clause is **reported under
+R8**. A submission that checks R8 is credited with this clause; that is
+deliberate and recorded here so it is visible rather than discovered from a
+failure message.*
+
 **R10.** A pop of a tag with no entries shall complete with `pop_data_valid_o`
 low. It is not an error. `pop_data_o` is then **unconstrained** and shall not be
 checked.
 *Authority: rule 12 — no value is more correct than another for an absent entry.*
+
+*This clause's whole checkable content is the `pop_data_valid_o` half — the
+`pop_data_o` half is unconstrained by the sentence above and is checked by
+nothing, deliberately — and that half is exactly what R8 states for the absent
+case, so a violation of R10 is **reported under R8**. A submission that checks
+R8 is credited with this clause; that is deliberate and recorded here so it is
+visible rather than discovered from a failure message.*
 
 ---
 
@@ -98,6 +118,12 @@ the store holds at least one entry whose payload satisfies
 **R13.** A mask of all zeros matches every stored entry, so `match_hit_o[k]`
 shall be high whenever the store is non-empty.
 *Authority: follows from R12 as written.*
+
+*The all-zero mask is one input to R12's if-and-only-if, not a separate rule:
+R13 follows from R12 as written, so a violation of R13 is a violation of R12
+on that input and is **reported under R12**. A submission that checks R12 is
+credited with this clause; that is deliberate and recorded here so it is visible
+rather than discovered from a failure message.*
 
 ---
 

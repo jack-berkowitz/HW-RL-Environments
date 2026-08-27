@@ -121,6 +121,23 @@ module id_width_conv_tb;
     return 1'b1;
   endfunction
 
+  // WHICH CLAUSE GOVERNS THIS id RIGHT NOW. may_accept_r already computes the
+  // reason -- the two comments above ARE the reason -- and then discards it, so
+  // both call sites reported under "A3/A5", a token no clause matches. The
+  // reason is returned here instead.
+  //
+  // Both directions are covered by the same clause, because A3 states the
+  // boundary in BOTH directions in its own text: "at MAX_UNIQ_IDS - 1 distinct
+  // identifiers a new one MUST BE ACCEPTED, at MAX_UNIQ_IDS it must not." So a
+  // wrongly-refused new id is A3 for the same reason a wrongly-accepted one is.
+  // A5 governs the per-identifier depth, and A3 says explicitly that a request
+  // carrying an identifier already outstanding "is not blocked by this clause".
+  function automatic string gov_r(input int unsigned id);
+    if (live_r[id] >= MAX_TXN)   return "A5";   // at depth for this id
+    if (live_r[id] == 0)         return "A3";   // a NEW id: the table boundary
+    return "A5";                                // outstanding and below depth
+  endfunction
+
   int unsigned n_ar=0, n_mar=0, n_r=0, n_rbeat=0, n_aw=0, n_b=0;
   int unsigned cov_longburst=0, cov_wfull=0, cov_mixed_w=0, cov_boundary_long=0;
   int unsigned n_rbeat_exp=0, n_aw_issued=0;
@@ -499,9 +516,9 @@ module id_width_conv_tb;
       automatic bit expect_ok = may_accept_r(id);
       offer_ar(id, expect_ok ? 40 : 20, acc, took);
       if (expect_ok && !acc)
-        fail("A3/A5", $sformatf("id %0d refused though the contract permits it", id));
+        fail(gov_r(id), $sformatf("id %0d refused though the contract permits it", id));
       if (!expect_ok && acc)
-        fail("A3/A5", $sformatf("id %0d accepted though the contract forbids it", id));
+        fail(gov_r(id), $sformatf("id %0d accepted though the contract forbids it", id));
       if ($urandom_range(0,2) == 0) drain($urandom_range(4, 20));
     end
     drain(200);

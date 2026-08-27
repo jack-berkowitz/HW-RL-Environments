@@ -101,8 +101,12 @@ module arp_engine_tb;
       txbuf.push_back(m_pd);
       if (m_pl) begin
         automatic frame_t f;
+        // WAS fail("F", ...). There is no clause F in this spec -- it states
+        // A, C, L, Q and X. Q2 requires "an ARP request frame" to be
+        // transmitted, and a 28-byte payload is what makes a frame an ARP one,
+        // so a wrong length is Q2 and not a nameless category.
         if (txbuf.size() != 28)
-          fail("F", $sformatf("cycle %0d: a transmitted ARP payload was %0d bytes, not 28",
+          fail("Q2", $sformatf("cycle %0d: a transmitted ARP payload was %0d bytes, not 28",
                               cyc, txbuf.size()));
         else begin
           f.dest_mac = pend_dm; f.src_mac = pend_sm; f.eth_type = pend_et; f.at = pend_at;
@@ -202,7 +206,12 @@ module arp_engine_tb;
     start_lookup(ip);
     await_response(HIT_MAX + 8, got, err, mac, took);
     cov_hits++;
-    if (!got) fail("Q1/X3", $sformatf("%s: no response within %0d cycles", what, HIT_MAX + 8));
+    // WAS "Q1/X3", a token no clause matches. The deadline here is HIT_MAX+8 and
+    // HIT_MAX is X3's own bound: "one that hits the cache is answered within 32
+    // cycles of acceptance". A miss is therefore a LIVENESS fault (X3), not a
+    // wrong answer -- Q1 governs the CONTENT of the answer and is checked in the
+    // else-branch below, under its own id.
+    if (!got) fail("X3", $sformatf("%s: no response within %0d cycles", what, HIT_MAX + 8));
     else begin
       if (err) fail("Q1", $sformatf("%s: answered with an error, but the address is cached", what));
       else if (mac !== known[ip])
@@ -218,7 +227,8 @@ module arp_engine_tb;
 
   // Checks one transmitted ARP request against Q2 and Q3.
   task automatic check_request(input frame_t f, input logic [31:0] want_tpa, input string what);
-    if (f.eth_type !== 16'h0806) fail("F", $sformatf("%s: eth_type %04x, expected 0806", what, f.eth_type));
+    // WAS fail("F", ...) -- see above; Q2 owns the frame's ARP-ness.
+    if (f.eth_type !== 16'h0806) fail("Q2", $sformatf("%s: eth_type %04x, expected 0806", what, f.eth_type));
     if (f.oper !== 16'd1)   fail("Q2", $sformatf("%s: operation %0d, expected 1 (request)", what, f.oper));
     if (f.dest_mac !== BCAST) fail("Q2", $sformatf("%s: sent to %012x, expected the broadcast address", what, f.dest_mac));
     if (f.sha !== LMAC)     fail("Q2", $sformatf("%s: SHA %012x, expected local_mac_i", what, f.sha));
@@ -228,7 +238,7 @@ module arp_engine_tb;
       fail("Q3", $sformatf("%s: asked for %08x, expected %08x -- an address inside the subnet is asked for directly, one outside it via the gateway",
                            what, f.tpa, want_tpa));
     if (f.htype !== 16'h0001 || f.ptype !== 16'h0800 || f.hlen !== 8'd6 || f.plen !== 8'd4)
-      fail("F", $sformatf("%s: fixed header fields are htype=%04x ptype=%04x hlen=%0d plen=%0d",
+      fail("Q2", $sformatf("%s: fixed header fields are htype=%04x ptype=%04x hlen=%0d plen=%0d",
                           what, f.htype, f.ptype, f.hlen, f.plen));
   endtask
 
