@@ -30,6 +30,13 @@ positive-only or negative-only check.
   af_m9_b_okay_on_first_atomic: first difference at cycle 12 -- slave B: golden valid=1 id=2 resp=10 / mutant valid=1 id=2 resp=00
   af_m10_extra_rbeat_on_two_beat_burst: first difference at cycle 92 -- slave R: golden valid=1 id=9 resp=10 last=1 / mutant valid=1 id=9 resp=10 last=0
   RULE24 positive control : 10 of 10 mutants reported a difference
+
+  # RE-RUN 2026-08-27, after af_m11_stalls_aw_below_bound was added to give W3 a
+  # witness. The transcript above is left as recorded -- it was true of a
+  # ten-mutant set and rewriting it would erase that the set changed.
+  af_m11_stalls_aw_below_bound: first difference at cycle 145 -- s_awready (the write-admission bound)
+  RULE24 negative control : PASS (golden vs golden: no difference)
+  RULE24 positive control : 11 of 11 mutants reported a difference
    exit=0
 ```
 

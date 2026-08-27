@@ -442,3 +442,48 @@ badly.
 
 Not measured on this half yet. Recorded so the estimate is made the right way
 when it is.
+
+## A probe that discriminates on WHEN needs both controls, not one
+
+A probe answering "does X happen" needs one control: show it firing on a case
+where X is known to happen, so that a silence means something. A probe answering
+**"on which edge does X happen"** needs two, because it has two distinct ways to
+produce a confident wrong answer and they are not each other's opposite:
+
+  * an instrument BLIND to the event reports "never", which reads as a finding
+    about the design rather than about the instrument;
+  * an instrument that reports the event EVERYWHERE returns edge 1 for anything,
+    which is the most plausible-looking answer it could give and the hardest to
+    doubt.
+
+One control catches one of these. The same control cannot catch both: a control
+that must fire proves the instrument is not blind and says nothing about false
+positives, and a control that must stay silent proves the reverse.
+
+**The pattern, as run on d_ai01's `probe_flush_stall_edge_tb`:**
+
+    ARM E   the effect MUST occur      -> a reported edge, or the instrument is blind
+    ARM G   the effect MUST NOT occur  -> silence, or the instrument sees phantoms
+    ARM S   the regime under test      -> read ONLY if E fired and G stayed silent
+    ARM Q   the same regime entered a different way
+
+The gate is printed before the result and the result is withheld when the gate
+fails, rather than printed with a caveat. A reading that is only valid
+conditionally should not be on the screen next to the condition.
+
+**ARM Q is not a third control, it is a second experiment.** Where the regime is
+entered by changing two inputs on one edge, a simultaneity artefact and a rule
+are indistinguishable. Entering the same regime the other way round — establish
+one input, then move the other — separates them. Cheap, and it is the difference
+between "flush outranks the stall" and "flush outranks a stall that arrives at
+the same instant".
+
+**AND THE VACUITY GUARD, which is not optional and is not a control.** A probe
+measuring when a value becomes 0 must assert that the value was NOT 0 before the
+assertion, per arm. Otherwise "cleared on edge 1" is what the probe prints when
+nothing was ever loaded — the exact defect recorded at d_ai01's own vector guard,
+where an X test passed a run with no vectors. The controls test the instrument;
+the vacuity guard tests the stimulus, and the two failures look identical in the
+output.
+
+**Rules:** 24

@@ -292,24 +292,88 @@ Everything normative is in the interface below.
 //     gated row held 0x4800. An earlier draft of C2 said flush clears "every
 //     row", which the reference would have quietly decided differently.
 //
+//     THE FORCE IS SIMULTANEOUS ACROSS THE CHAIN, and paragraph 1 depends on it.
+//     z_o is p[H-1], the LAST register in the chain. Were the zeros to march down
+//     one stage per tick, z_o could not read +0 until HEIGHT-1 ticks into an
+//     assertion, and "for as long as it is asserted" would be false at both legal
+//     HEIGHTs. So every inter-stage register takes zero on the same edge. This is
+//     stated because it is what "forces the inter-stage registers to zero" has to
+//     MEAN for the sentence above it to hold -- NOT because any width is derived
+//     from it. NO SCORING WINDOW DEPENDS ON THIS PARAGRAPH, and none should be
+//     reintroduced from it.
+//
+//     MEASURED 2026-08-27, AND IT WAS REASONING WHEN IT WAS WRITTEN.
+//     tb/audit/probe_flush_stall_edge_tb.sv: z_o reads 0x0000 on the FIRST edge
+//     of the assertion at both legal HEIGHTs, uniform across every clocked row,
+//     and with reg_enable_i low as well as high. Zeros marching one stage per
+//     tick would have shown it at edge 3 for HEIGHT=4 and edge 7 for HEIGHT=8.
+//     THE PREMISE IS NOW MEASURED RATHER THAN ARGUED, AND THAT MAKES THE
+//     PARAGRAPH MORE DANGEROUS, NOT LESS: a measured simultaneity reads as a
+//     stronger invitation to rebuild the deleted 3-tick window than an argued
+//     one did. It is not one. NOTHING IS SCORED FROM THIS PARAGRAPH.
+//
 //     flush_i DOES take precedence over reg_enable_i: with reg_enable_i low and
 //     flush_i high, every clocked row clears. Also measured.
 //
-//     flush_i DOES NOT AFFECT status_o. This clause zeroes the inter-stage
-//     registers, and that is a statement about z_o. A10 governs status_o
-//     throughout, including while flush_i is asserted: status_o[r][k](t) still
-//     reports the operation whose operands were sampled 2 enabled ticks
-//     earlier. Flags are not cleared, and z_o reading +0 does not imply
-//     status_o reading zero.
+//     flush_i SUSPENDS status_o, AND THAT IS A CHANGE OF BEHAVIOUR RATHER THAN AN
+//     ABSENCE OF ONE. On the FIRST enabled tick at which flush_i is high, status_o
+//     updates normally and A10 gives its value: the operation whose operands were
+//     sampled 2 enabled ticks earlier. From the SECOND enabled tick of the
+//     assertion onward status_o does not update at all. Numbering the enabled
+//     ticks of the assertion 1, 2, 3, ...
 //
-//     STATED BECAUSE THE WORDS PERMITTED BOTH READINGS AND TWO SUBMISSIONS TOOK
-//     THE OTHER ONE. An earlier draft of this clause said only that flush zeroes
-//     the registers so z_o reads +0, and said nothing about the flags. Two
-//     independently solicited designs both cleared status_o during assertion
-//     against a reference that does not, and they were not wrong to -- the text
-//     did not say. This is A10's own defect one clause over, and A10's verdict
-//     applies to it: both readings were legal, and the clause was wrong to
-//     permit both.
+//       status_o[r][k](1) = the value A10 gives for that tick
+//       status_o[r][k](t) = status_o[r][k](t-1)        for every t >= 2
+//
+//     This holds for EVERY k, STAGE 0 INCLUDED, and for every row whose clock is
+//     enabled. A10 does NOT govern status_o through an assertion: this clause
+//     suspends it, and it resumes when flush_i falls. The suspension is uniform --
+//     it is not a per-stage effect and does not depend on k, on accumulate_i, or
+//     on which operands a stage would have read.
+//
+//     FLAGS ARE NOT CLEARED, and z_o reading +0 does not imply status_o reading
+//     zero. The frozen value is whatever the chain last reported and is in general
+//     nonzero: a stage overflowing when flush rises freezes holding OF and NX.
+//
+//     MEASURED, ON THE STIMULUS THAT MAKES THE TWO READINGS VISIBLE -- an operand
+//     field alternating each tick between an overflowing pair and a tiny-but-exact
+//     one. With flush_i low, status_o[r][0] tracks the alternation:
+//     00101 / 00000 / 00101 / 00000. With flush_i high it reads 00101 on every
+//     tick of the assertion. Across WIDTH=8 rows and 8 flush ticks the two runs
+//     differ on 56 of 64 stage-0 samples: every row, every tick from the second
+//     onward, and none on the first -- which is also how the first tick is known
+//     to update, since a suspension starting one edge earlier would have frozen
+//     the other phase of the alternation. Both geometries.
+//
+//     A CONSTANT OPERAND FIELD SHOWS NOTHING HERE. Holding and advancing predict
+//     the same constant under a constant field, and two earlier probes agreed with
+//     each other on exactly that account while neither could see the difference.
+//
+//     STATED BECAUSE THE WORDS PERMITTED ADVANCING AND EVERY EARLIER READER TOOK
+//     IT. An earlier draft said only that flush zeroes the registers so z_o reads
+//     +0, and said nothing about the flags; two independently solicited designs
+//     cleared status_o during assertion. The draft that replaced it ruled out
+//     CLEARING -- correctly -- and then treated ADVANCING as what remained, without
+//     establishing that the arithmetic runs at all during an assertion. This clause
+//     never said that it does, and it does not. Ruling out one of three readings
+//     leaves two. A WINNER HAS BEEN CHOSEN HERE RATHER THAN DERIVED: holding and
+//     advancing were both legal against the earlier text, and this clause picks
+//     holding because that is what the reference does. That is A10's own verdict
+//     applied one clause over -- both readings were legal, and the clause was wrong
+//     to permit both.
+//
+//     NOTHING IS EXCLUDED FROM SCORING DURING AN ASSERTION. status_o is fully
+//     determined at every tick by the two lines above, and z_o reads +0 throughout,
+//     so there is no interval here this contract cannot specify. An earlier draft
+//     proposed a 3-enabled-tick exclusion at the RISING edge, to cover which side
+//     of the register forcing the first flushed sample fell on. THAT WINDOW IS
+//     DELETED AND SHOULD NOT BE REINTRODUCED: under holding no sample is reported
+//     during the assertion, so the question it covered is not merely unspecified,
+//     it is UNOBSERVABLE. The addend a stage would have read at a flushed edge is
+//     deliberately unconstrained and cannot be seen through either output.
+//     The REFILL window below, on the FALLING edge, is unaffected and still
+//     applies; it now covers two distinct things -- the chain refilling and
+//     status_o resuming -- and should not be narrowed to either one.
 //
 //     THE REFILL WINDOW IS NOT SCORED. On deassertion the chain refills from the
 //     operand field then in force. The values delivered on z_o and status_o
@@ -412,22 +476,48 @@ Everything normative is in the interface below.
 //     time-varying field the released row diverges for one pipeline depth,
 //     starting on the first tick after release.
 //
-//   C5. AN UNSPECIFIED VALUE IS STILL A DEFINED VALUE. Within the interval where
-//       C3 leaves z_o's value unspecified, z_o shall nonetheless carry a defined
-//       16-bit value at every cycle: no X, no Z, no undriven bits.
+//   C5. AN UNSPECIFIED VALUE IS STILL A DEFINED VALUE. Wherever this contract
+//       excludes a value from scoring, the excluded signal shall nonetheless
+//       carry a defined value at every cycle of that interval: no X, no Z, no
+//       undriven bits. This binds z_o and status_o alike, and binds each only
+//       over the intervals in which that particular signal is excluded.
 //
-//       C3 SUSPENDS THE COMPARISON, NOT THE WELLFORMEDNESS. It excludes z_o's
-//       value from being compared against the reference. It does not suspend C1
-//       or C4, which govern when z_o may change, and it does not license an
-//       undriven or floating output. The value carried during the interval is
-//       not constrained and is not compared.
+//       THE INTERVALS, ENUMERATED, because an open quantifier over clauses that
+//       do not exist yet is a claim this clause cannot keep true:
+//         * C2 refill window      -- z_o and status_o. D*(HEIGHT-1)+3 ticks.
+//         * C3 transition window  -- z_o and status_o. 2*D*(HEIGHT-1)+7 ticks.
+//         * C4 post-release window-- z_o[r] and status_o[r][*], PER ROW.
+//                                    D*(HEIGHT-1)+3 ticks.
 //
-//       WHY THIS EXISTS. The interval is 2*D*(HEIGHT-1)+7 enabled ticks after
-//       every change of accumulate_i -- 63 at HEIGHT=8, 5.8% of scored samples --
-//       and it GROWS LINEARLY WITH HEIGHT, which is this task's scored axis. So
-//       the unscored region is widest exactly where the task is hardest. Without
-//       this clause a submission may put an unstable or undriven bus there and
-//       pass everything.
+//       C2's ASSERTION interval is deliberately ABSENT from this list. status_o
+//       holds while flush_i is high and z_o reads +0, so the interval is fully
+//       specified: nothing in it is excluded, and nothing in it needs this clause.
+//       Its absence is a decision, not an omission.
+//
+//       ANY CLAUSE THAT ADDS AN EXCLUSION ADDS ITSELF TO THIS LIST. C5 was
+//       written for C3's interval alone and silently missed C2's and C4's, both
+//       of which predated it -- so the per-interval form demonstrably does not
+//       propagate on its own, and this enumeration is a maintenance obligation
+//       rather than a description. It is checkable: every site in this file that
+//       EXCLUDES something from scoring appears above, and every clause named
+//       above appears in G1's delegation. THE TEST IS ON WHAT A SENTENCE DOES,
+//       NOT ON THE WORDS IT CONTAINS. A sentence stating that nothing is
+//       excluded is not an exclusion site; neither is this one, which only names
+//       the words. The rule was written as a text match and a neighbouring
+//       clause began failing it by using the same words to say the opposite.
+//
+//       AN EXCLUSION SUSPENDS THE COMPARISON, NOT THE WELLFORMEDNESS. It
+//       excludes the value from being compared against the reference. It does
+//       not suspend C1 or C4, which govern when a value may change, and it does
+//       not license an undriven or floating output. The value carried during the
+//       interval is not constrained and is not compared.
+//
+//       WHY THIS EXISTS. The C3 interval is 2*D*(HEIGHT-1)+7 enabled ticks
+//       after every change of accumulate_i -- 63 at HEIGHT=8, 5.8% of scored
+//       samples -- and it GROWS LINEARLY WITH HEIGHT, which is this task's
+//       scored axis. So the unscored region is widest exactly where the task is
+//       hardest. Without this clause a submission may put an unstable or
+//       undriven bus there and pass everything.
 //
 //       THE TWO HALVES HAVE DIFFERENT ENFORCEMENT, and that is stated rather
 //       than left to be discovered:

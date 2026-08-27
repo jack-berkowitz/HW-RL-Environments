@@ -72,6 +72,56 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
     ( cd "$d" && python3 scripts/check_witness_sync.py 2>&1 )
     if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ witness_sync"; fi
   fi
+  # THREE LOAD-BEARING CHECKERS WERE IN NO INVOCATION PATH AT ALL, and that is one
+  # missing convention rather than three oversights. check_paste_sync guards the
+  # prompt against its spec, check_pin guards a stated pin against its own sweep,
+  # and check_unread_fields finds fields written and consulted by nothing. Each was
+  # run only when somebody remembered.
+  #
+  # THE COST IS MEASURED, NOT HYPOTHETICAL. check_unread_fields' own header already
+  # named configs_no_verdict as its CONCRETE BITE -- it had FOUND the field and
+  # nothing acted on the finding. Eight days later that field still had no reader
+  # and the table rendered "16 built, 0 build failures, 4 no verdict" as 0/16 FAIL.
+  # Then I added expected_verdict with no reader in the same week I wrote the
+  # detector, and the detector did not object because nobody ran it.
+  #
+  # An unwired checker is not a weaker gate. It is a record of a defect nobody
+  # read -- the same shape as an unread field, one level up.
+  # EACH EXIT CODE MEANS SOMETHING DIFFERENT AND THE GATE HAS TO HONOUR THAT.
+  # My first wiring failed the gate on any non-zero, which made it fail on
+  # INFORMATIONAL output -- check_unread_fields' own header calls its result "a
+  # CANDIDATE LIST, NOT A VERDICT", and check_pin returns 2 for NO CONCLUSION,
+  # which is a task whose sweep has not run rather than a task with a wrong pin.
+  # A gate that blocks a commit on either is the "cries wolf and gets bypassed"
+  # failure this file warns about three comments up, built in the same edit.
+  #
+  #   check_paste_sync   non-zero = the prompt disagrees with its spec   -> FAIL
+  #   check_pin          1 = stated pin contradicts the sweep            -> FAIL
+  #                      2 = NO CONCLUSION, no sweep to check against    -> report
+  #   check_unread_fields  always report, never fail; a field being unread
+  #                        is a candidate for a human, not a violation
+  if [ -f "$d/scripts/check_paste_sync.py" ]; then
+    ( cd "$d" && python3 scripts/check_paste_sync.py 2>&1 )
+    if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ paste_sync"; fi
+  fi
+  if [ -f "$d/scripts/check_pin.py" ]; then
+    ( cd "$d" && python3 scripts/check_pin.py 2>&1 )
+    _pinrc=$?
+    if [ $_pinrc -eq 1 ]; then rc=1; echo "__FAILED__ pin"; fi
+  fi
+  # check_unread_fields IS DELIBERATELY NOT HERE, and the reason is this gate's
+  # own design. It prints nothing on success -- report_failure is the only path
+  # that emits the body -- so a REPORT-ONLY checker wired here is swallowed in
+  # exactly the case where it has something to say. It would run on every commit
+  # and be invisible on every passing one, which is worse than not running it: it
+  # would look wired.
+  #
+  # It belongs in an audit path with the slow checks, not in a commit gate. That
+  # path does not exist yet and this comment is the record that it is owed --
+  # which is the finding itself, one level up: a checker outside any invocation
+  # path is a defect waiting to be rediscovered, and writing "it should be wired"
+  # into a comment is how it stays that way. Named here so the next reader sees
+  # the gap rather than assuming the list above is complete.
   # APPEND-ONLY DOCUMENTS MUST NOT LOSE A HEADING, and this is the only place a
   # check of that kind can be anchored correctly.
   #

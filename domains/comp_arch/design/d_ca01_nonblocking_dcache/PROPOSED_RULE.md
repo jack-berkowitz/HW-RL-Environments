@@ -1,5 +1,10 @@
 # PROPOSED for RULES.md — NOT LANDED. Agent 3 does not edit RULES.md.
 
+> **LANDED. Rule 21 is in `RULES.md` at line 347; marked 2026-08-27.** The
+> heading above is stale and says the opposite of the truth to anyone who opens
+> this file. Kept as written: this is the proposal text, and `RULES.md` is the
+> authority for what the rule now says — the two differ slightly in wording.
+
 Text ready to paste. Numbered 21 on the assumption nothing else is pending.
 
 ---

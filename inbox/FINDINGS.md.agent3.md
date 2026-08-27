@@ -594,7 +594,7 @@ audited for how it got there.
 
 ---
 ---
-## FOR THE CATALOG — three entries, formatted to be landed into FINDINGS.md as-is
+## FOR THE CATALOG — twelve entries, formatted to be landed into FINDINGS.md as-is
 
 ---
 
@@ -620,12 +620,15 @@ alongside its measurement convention, and changing one without the other
 converts a working instrument into one that fails correct work. **The
 documentation-decay repair applied to an apparatus IS the apparatus defect.**
 
-**The question it leaves open, which is real.** L3 records +3 as measured by "an
-impulse at every stage". This probe is also an impulse at every stage and reads
-+2. Two impulse measurements disagree by exactly one, and only one of them has
-been reconciled with A1's enabled-tick definition. The scored floor asserts +3
-and the reference passes it, so +3 is operative — but 14 must not be read off
-this probe as the contract's number, and the reconciliation has not been done.
+**The question it left open is now CLOSED, 2026-08-27, and the closing is its own
+entry below — "A measurement applied in one unit and recorded in another".** L3
+records +3 from "an impulse at every stage"; this probe is also an impulse at
+every stage and reads +2. They are not two measurements disagreeing by one. They
+are ONE quantity counted on two clocks: MEASUREMENTS Sec 3 states, at the point
+of measurement, that the impulse is applied for one ENABLED TICK and the
+emergence is recorded against a FREE-RUNNING ABSOLUTE CYCLE COUNTER, while Sec 12
+and A3/L2/L3 state the delay in enabled ticks. Both constants are correct in
+their own unit. `+2` stays; 14 is still not the contract's number.
 
 **The audit, run.** 52 audit probes across 10 design tasks. Scanned for the
 signature — an `expected` model pinned to contract constants **and** a fail path,
@@ -656,6 +659,9 @@ value under the probe's own convention is +2.
 The class rule below reproduced itself one step later, in the file being fixed,
 by the person who had just written it down. Then the fix it prompted was itself
 wrong. Both are the same underlying error: **treating a number as text.**
+
+**Cross-cites:** "A measurement applied in one unit and recorded in another"
+below — same family, and it is what closed this entry's open question.
 
 **Rules:** 24
 
@@ -781,3 +787,357 @@ comparison crosses a type boundary — a boolean has no promotion rule to get
 wrong.
 
 **Rules:** 24
+
+---
+
+### A measurement applied in one unit and recorded in another
+
+> **A measurement applied in one unit and recorded in another produces a constant
+> correct in neither. Stating the mixing where the measurement is taken does not
+> propagate it to the sites that consume the number.**
+
+d_ai01's per-stage operand-to-output delay was recorded twice and the two records
+differ by exactly one:
+
+    spec A3 / L2 / L3, MEASUREMENTS Sec 12   D*(H-1-k)+3, ENABLED TICKS (A1)
+    tb/audit/probe_skew_tb.sv                D*(H-1-k)+2, RAW CLOCK CYCLES
+
+That looked for a day like two impulse measurements disagreeing, and it was
+carried as an open discrepancy in the entry above. It is not a disagreement.
+MEASUREMENTS Sec 3 says, in the two sentences that describe the method, that the
+impulse is **applied for one enabled tick** and the emergence cycle is **recorded
+against a free-running absolute cycle counter**. One quantity, two clocks, offset
+by the probe's own `t_emerge = cyc - 1`. Both constants are right in their own
+unit and neither is stale.
+
+**The defect is not the mixing — it is that the mixing was documented only where
+it happened.** Sec 3 states both units plainly and does not flag them as
+different; every later site that consumed the number took it as a bare integer.
+A convention stated at the point of measurement and not attached to the value
+travels nowhere, because the value travels and the sentence does not.
+
+**Why this is the same family as the apparatus-constant entry above.** There the
+lesson was that an apparatus constant is meaningful only alongside its
+measurement convention, and that "correcting" one without the other breaks a
+working instrument. Here is the other end of the same rope: the convention *was*
+recorded, and the number still arrived at four consuming sites without it. The
+pair is the finding — **a constant and its convention are one object, and every
+mechanism that moves the constant must move the convention or refuse to move.**
+
+**Executable form.** A measured constant is written with its unit at the value,
+not in the surrounding prose: `d(k) = D*(H-1-k)+3 enabled ticks`. Where two units
+are in play in one document, a site stating one of them names the other and its
+offset. Both are one-line obligations and both would have prevented this.
+
+**Cross-cites:** "An audit probe that pinned its model and was never re-pinned"
+above.
+
+**Rules:** 24
+
+---
+
+### A clause stating a global effect where the mechanism is per-instance gated
+
+> **A clause that describes an effect on "every X" is asserting a quantifier over
+> the mechanism, not over the outcome. Where the mechanism is gated per instance,
+> the quantifier is false and the clause reads as true because the usual
+> configuration has every gate on.**
+
+d_ai01's C2 said flush "forces every inter-stage register of every row to zero".
+The row registers are clocked by the gated `row_clk`; a row with its clock gate
+off receives no edge and is untouched. Measured (MEASUREMENTS Sec 7): with one
+row gated off and flush asserted, the clocked row went to `0x0000` and the gated
+row held `0x4800`. **The clause was corrected before this catalog entry existed**
+and C2 p1 now carries the qualifier explicitly, together with the statement that
+flush is not an exception to C4.
+
+**The instructive part is where the universal SURVIVED.** The clause was fixed;
+the *measurement narrative that fixed it* was not. MEASUREMENTS Sec 6, written
+before Sec 7 existed, still read "while `flush_i` is asserted every inter-stage
+register reads zero" — an unqualified universal, two sections above the
+measurement that refutes it, never amended when the clause was. A correction
+propagated to the normative text and not to the record it was derived from.
+
+**The general form, and it is a cheap check.** For every clause quantifying over
+instances of a resource, ask what CLOCKS or ENABLES that resource. If the answer
+is a per-instance gate, the quantifier is over ungated instances and the clause
+must say so. The default configuration — all gates on — makes the false universal
+indistinguishable from the true restricted one in every ordinary run.
+
+**Cross-cites:** "A correction reaches the copy whose purpose it was argued from"
+above — this is the same under-propagation with the direction reversed: there the
+fix reached the clause's copies with one purpose and not the others; here it
+reached the clause and not the measurement it came from.
+
+**Rules:** 24, 26
+
+---
+
+### Marking a block SUPERSEDED does not mark the claims inside it
+
+> **A supersession header is navigation. A reader who arrives by grep, by line
+> number, or by a link into the middle of a document never sees it, and reads
+> every sentence in the block as live.**
+
+d_ai01's MEASUREMENTS Sec 15 was marked `SUPERSEDED` at its header, with the
+reasons stated, including that one of its factual claims had been **measured
+false**. The claim itself — "the reference ... evidently keeps ADVANCING its
+status pipeline through the flush" — sat 43 lines further down, unmarked, in
+ordinary declarative prose. A search of the file for `advanc` lands on that
+sentence and not on the header.
+
+**This is not hypothetical in this document.** The search spec written for this
+same file records that a clean reader was contaminated by a **table-of-contents
+heading** carrying a verdict on the question they were deriving, before any body
+text was read. Headings are read as content when they should be navigation; block
+headers are read as navigation when they should be content. Both failures are the
+same mistake about where a reader's attention actually enters a document.
+
+**The rule.** When a block is superseded, mark the **specific sentences whose
+truth changed**, at those sentences, dated, with what falsifies them — and leave
+the text otherwise as written, because an artefact that only shows its corrected
+state cannot be audited for how it got there. The header stays; it is not
+sufficient on its own.
+
+**The check is mechanical.** In a block marked SUPERSEDED / RETRACTED / CLOSED,
+every sentence stating a fact about the world in the present tense is a candidate
+for its own marker. If there are none, the header was doing nothing and the block
+was reasoning rather than assertion.
+
+**Rules:** 24, 26
+
+---
+
+### An isolation protocol silent about VERSION is half-specified
+
+> **Naming which files a clean reader may read pins the SCOPE of an isolation.
+> It does not pin the ARTEFACT. In a shared tree written concurrently, the same
+> protocol executed twice reads different text and produces derivations that
+> cannot be compared.**
+
+d_ai01's C2 derivations were run under a protocol specifying exactly what a clean
+reader could read — `spec/`, `probe/PASTE.md`, greps of RULES/CONVENTIONS — and
+explicitly what they could not. The protocol was complete about the file set and
+silent about the version. **A prior reader watched the contract file change under
+them mid-session.** The tree is shared with two peer agents who commit to it
+while a derivation is in progress.
+
+**Two things break, and they are different.** The derivation may straddle a write
+and rest on text that never existed as a whole. And a second derivation run for
+independent confirmation is not a replication if the artefact moved between them
+— it is a different experiment reported as the same one, which is worse than no
+replication because it is counted.
+
+**The fix is three lines and belongs in the protocol, not in the reader's
+judgement:** record `git rev-parse HEAD`, `git status --porcelain -- <path>` and
+`shasum <file>` before reading; re-run the shasum at the end; report both. If
+they differ, the read straddled a write — redo it, do not reconcile it.
+
+**The general form.** Any isolation, quarantine or blind-review protocol that
+names sources must also name the version of each source and require the reader to
+verify it did not move. "Read only X" and "read only X as of SHA" are different
+instructions, and only the second is reproducible.
+
+**Rules:** 22, 24
+
+---
+
+### An open question stated in one section and not carried into the reasoning of another
+
+> **A document that enumerates its open questions in one place and reasons in
+> another can contradict itself without any single sentence being wrong. The
+> enumeration stays true; the reasoning quietly assumes it away.**
+
+d_ai01's C2 derivation listed, under "Q1 — unique?", **three** surviving readings
+of what `status_o` does during a flush: two marching readings and R-C, holding.
+Four paragraphs earlier, D6 concluded "STAGE 0 IS FULLY DETERMINED throughout the
+assertion", reasoning entirely about which operand stage 0 reads — an argument
+that only discriminates between the two marching readings. Under R-C, stage 0
+holds like every other stage and the exemption does not exist.
+
+The document never denied R-C. It listed it, and then reasoned as though the
+question were which of R-A and R-B held.
+
+**What it cost.** D6's stage-0 exemption became the `k >= 1` scoping of a
+proposed C5 enumeration and of a 3-enabled-tick exclusion window. A probe
+(`probe_flush_status_tb`) later returned R-C, and both the scoping and the window
+were deleted rather than rewritten. **The defect was visible in the document
+before any measurement was taken** — the enumeration and the reasoning were four
+paragraphs apart and disagreed.
+
+**Mechanically checkable, which is why it is worth a catalog entry.** For every
+question a document lists as OPEN with N surviving answers, every later
+conclusion in that document must either hold under all N or name the ones it
+excludes and why. A conclusion that holds under a strict subset, stated
+unconditionally, is the defect — and finding it needs no domain knowledge, only
+the enumeration and the conclusions in the same file.
+
+**Not a duplicate of "a containment claim needs its sweep stated".** That one is
+about a claim whose scope is unmeasured. This one is about a claim whose scope is
+measured, written down in the same document, and then not consulted.
+
+**Rules:** 24, 36
+
+---
+
+### A correction reaches the normative text and not the record it was derived from
+
+> **A correction reaches the normative text and not the record the text was
+> derived from. The record then reads as a live claim to anyone arriving by
+> search, and quoting it propagates the dead version forward.**
+
+Two instances in one file, found within an hour of each other, pointing the same
+way.
+
+**One.** d_ai01's C2 was corrected in commit `0477595` to say flush clears every
+row *whose clock is enabled*, and MEASUREMENTS Sec 7 was written in the same
+commit to record why — quoting the dead draft in the past tense: *"C2 said flush
+forces every inter-stage register of every row to zero"*. A later reader
+searching the file for that string landed on the quotation and reported it as a
+live defect in current clause text. **The string appears zero times in the spec.**
+The correction was complete; the record of it was indistinguishable from the
+thing it corrected, to a reader who arrived at the line rather than at the
+paragraph.
+
+**Two.** The same file's Sec 6, written *before* the measurement that produced
+Sec 7, still said "while `flush_i` is asserted every inter-stage register reads
+zero" — the unqualified universal, two sections above its own refutation, never
+amended when the clause was. That one was live and had been for as long as the
+clause was wrong plus everything since.
+
+**The two failure modes are opposite and the cause is one.** A quotation of a
+dead claim reads as live; a superseded claim in a narrative reads as live. Both
+happen because the correction is applied where the *rule* lives and the *record*
+is left as an append-only history that nobody re-reads as a whole.
+
+**Handling, and it is not "delete the record".** Records are append-only for good
+reason — an artefact that only shows its corrected state cannot be audited for
+how it got there. The obligation is to MARK, at the sentence: a quotation of
+superseded text is marked as a quotation, and a superseded assertion is marked
+with the date and what falsifies it. Both cost one line and both are invisible to
+a reader who does not need them.
+
+**The sweep this implies.** When a clause is corrected, the sweep is not only
+over other copies of the clause — it is over every document that *quotes,
+restates or reasons from* the old text. Those sites do not match a search for the
+new wording, only for the old, which is exactly the search nobody runs after a
+fix.
+
+**Cross-cites:** "Marking a block SUPERSEDED does not mark the claims inside it"
+above — both are about a reader arriving at a LINE rather than at a document, and
+the fix in both is a marker at the sentence rather than at the container. Also
+"A correction reaches the copy whose purpose it was argued from", which is the
+same under-propagation confined to the normative text.
+
+**Rules:** 24, 26
+
+---
+
+### A maintenance obligation stated as a grep is only as good as the grep
+
+> **A clause that makes itself checkable by naming a string has delegated its
+> correctness to a text match, and a neighbouring clause can break it by using
+> the same words to say the opposite thing.**
+
+d_ai01's C5 enumerates every interval this contract excludes from scoring, and
+states the obligation as a test: *"every site in this file matching 'excluded
+from scoring' appears above"*. That was true when written. It **began failing in
+the same commit that landed it**, because the C2 rewrite beside it contains the
+sentence `NOTHING IS EXCLUDED FROM SCORING DURING AN ASSERTION` — a negation,
+matching the string exactly, asserting the reverse. C5's own self-reference
+matched too. Three of five matches were not exclusion sites.
+
+**The failure is not the wording, it is the delegation.** A grep tests
+CONTAINMENT of words. A maintenance obligation is about what a sentence DOES.
+Those coincide only while no neighbouring text discusses the same subject, which
+is the one condition a clause cannot rely on: the neighbours of a clause about
+exclusions are clauses about exclusions.
+
+**Narrowed 2026-08-27** to test what a sentence does rather than the words it
+contains, with the negation and the self-reference named as non-sites. **And the
+narrowing has a cost that should be stated rather than discovered:** the test is
+no longer executable by a grep. It now needs a reader who can tell an exclusion
+from a statement about exclusions. "Checkable" moved from *mechanical* to
+*checkable by someone who reads it*, which is weaker and is what the honest
+version of the clause claims.
+
+**The general form.** When a document makes itself self-checking, state whether
+the check is MECHANICAL or requires judgement, and never let a mechanical check
+be phrased over a string that ordinary discussion of the subject would also
+produce. A mechanical check on vocabulary is a check on the absence of neighbours.
+
+**Cross-cites:** "A containment claim in a finding summary is a measurement"
+above — that entry requires a sweep to be stated; this one is what happens when
+the sweep IS stated and the sweep is the wrong instrument. Also the text-sweep
+half of "A correction reaches the copy whose purpose it was argued from": a text
+sweep on a relation fails on a capitalisation, and a text sweep on an obligation
+fails on a synonym or a negation.
+
+**Rules:** 24, 36
+
+---
+
+### The working record understates what exists, and it does so by default
+
+> **MEASURED, not asserted: on a task where every deliverable was complete and
+> correct in the authoritative artefacts, NINE separate claims in the working
+> record contradicted them — and all nine erred in the same direction, saying
+> less exists than does.**
+
+d_ca01 was revisited for four items: a determinism check, a clause defect
+write-up, a design-difference refutation, and mutant non-equivalence evidence.
+**All four were already finished.** The spec, `task.yaml`, `RULES.md`,
+`FINDINGS.md` and `scripts/sim_candidate.sh` were each correct. `NOTES.md` and
+`PROPOSED_RULE.md` said otherwise in nine places:
+
+    a section describing a deleted script by filename, in the present tense
+    five headings reading FINDING (PROPOSED) for findings landed as F43-F48
+    a heading reading "PROPOSED for RULES.md -- NOT LANDED" for a landed rule
+    "Mutants -- six" for a set of seven
+    an equivalence table of six for nine artifacts carrying the evidence
+    "there is no formal non-equivalence result for these mutants" -- 70 lines
+      BELOW the section that obtained one for every mutant
+    a design difference proposed as live, refuted 460 lines further down
+    a top-of-file status row reading PPA NOT STARTED against 13 run records
+    a handoff item reading "still not landed ... not quotable" for a landed
+      exemption whose results are now quotable
+
+**The direction is the result.** Not one of the nine overstated. A working record
+decays toward *understating* what exists, because the act that makes a claim
+stale — finishing the thing — is the act whose author has the least reason to
+return to where it was last described as unfinished. Overstatement requires
+someone to write a claim that was never true; understatement requires only that
+someone succeed and move on.
+
+**Consequences, and they are not cosmetic.** A reader deciding what to work on
+next reads the record, not the authority: they will rebuild what exists, or
+report as blocked what is landed. And the record is what gets *quoted* — the
+sentence saying no formal non-equivalence result exists was still sitting under a
+heading about the tool a later instruction named, which is exactly where the next
+reader looking for that tool would arrive.
+
+**The top status block is the sharpest instance.** Its neighbouring rows —
+mutant count, conformant count — were current. The PPA row was not. **A
+maintained table goes stale one row at a time**, and being maintained is what
+makes the stale row credible.
+
+**The sweep that is mechanical, and it is worth running before the reading.**
+Every filename cited in a working record, tested for existence: 37 cited on this
+task, 2 absent, one of them a genuine defect. Every status word — NOT STARTED,
+NOT LANDED, PROPOSED, not built — enumerated and checked against its authority.
+Both are one-pass and both paid here. **What neither covers** is a claim stale in
+its content rather than in a filename, a count or a status word — those come out
+only by reading, and the reading was scoped to four items in a 1300-line file.
+
+**The remedy is a direction of travel, not a document.** When work lands in an
+authority, the sweep is over the record that *proposed* it — and the search term
+is the OLD status word, which is the only string that still matches.
+
+**Cross-cites:** "A correction reaches the normative text and not the record it
+was derived from" above — this is that finding measured on a third task, with a
+rate and a direction attached. "Marking a block SUPERSEDED does not mark the
+claims inside it" — the handling for all nine was a dated marker at the site,
+leaving the text as written. "A containment claim in a finding summary is a
+measurement" — the sweep above is stated because this entry's count is one.
+
+**Rules:** 13, 24, 26

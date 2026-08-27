@@ -79,6 +79,18 @@ evaluates `1.0*0 + addend` and the chain is a delay line; then w[K] is raised to
 1.0 for exactly one enabled tick and the emergence cycle on z is recorded
 against a free-running absolute cycle counter.
 
+> **THE MIXED CONVENTION IS RIGHT HERE, AND IT RESOLVES THE +2/+3 DISCREPANCY.
+> 2026-08-27.** The impulse is APPLIED in enabled ticks and the emergence is
+> RECORDED in absolute clock cycles. Sec 12's delay, and A3/L2/L3's `d(k)`, are
+> stated in enabled ticks (A1). So `probe_skew_tb`'s `D*(H-1-k)+2` and the
+> contract's `D*(H-1-k)+3` are **not two measurements disagreeing by one** — they
+> are one quantity counted on two clocks, offset by the probe's own
+> `t_emerge = cyc - 1`. Both are correct in their own unit. The mixing was stated
+> at the point of measurement, in these two sentences, and never propagated to
+> the sites that consumed the number — which is how it survived as an open
+> discrepancy. The open item is closed; `probe_skew_tb`'s `+2` stays, and 14 is
+> still not the contract's number.
+
 **The first model was wrong and the probe said so.** The initial guess
 `delay(K) = D*(H-K)` produced a uniform 2-cycle shortfall at every stage. The
 stage-to-stage spacing came back as exactly 4, which is origin-independent and
@@ -277,7 +289,17 @@ settled z=0x4800
 ```
 
 So: while `flush_i` is asserted every inter-stage register reads zero and z_o is
-+0. On deassertion the chain refills from the operand field then in force,
++0.
+
+> **QUALIFIED 2026-08-27, left as written.** That "every" is false as a universal
+> over ROWS. It means every inter-stage register *of a clock-enabled row*: Sec 7
+> below measures a gated row holding `0x4800` straight through an assertion,
+> because the row registers are clocked by the gated `row_clk` and a row with its
+> gate off receives no edge. This sentence predates Sec 7 and was never amended
+> when Sec 7 corrected the clause. **C2 p1 already carries the qualifier** — the
+> live false universal was here, in the measurement narrative, not in the clause.
+
+On deassertion the chain refills from the operand field then in force,
 passing through a transient before settling. The earlier reading was a sampling
 error, not an anchor behaviour.
 
@@ -474,6 +496,10 @@ drive OF on ticks   0-3,  8-11, 16-19
 reference status    1-5, 10-13, 18-21
 ```
 
+> **Unit note, 2026-08-27.** This delay is in ENABLED TICKS (A1). `probe_skew_tb`
+> reports the same physical quantity in RAW CLOCK CYCLES and is therefore one
+> lower; see the note in Sec 3. Neither is stale.
+
 Steady state: **delay 2 enabled ticks, uniform across k, one operation latched,
 consecutive operations never ORed**, and NOT aligned with the z_o the operation
 contributes to. A single-tick impulse from a quiescent chain reports delay 1 and
@@ -615,7 +641,21 @@ Removing the clear took the status residual from 12 to 10 at HEIGHT=4 and 15 to
 13 at HEIGHT=8, and removed the 430/431 cycles entirely. It did NOT remove the
 rest: holding the pipeline through flush is closer than zeroing it but still not
 what the reference does, which evidently keeps ADVANCING its status pipeline
-through the flush. Reproducing that exactly would mean modelling the reference's
+through the flush.
+
+> **THAT SENTENCE IS FALSE. MEASURED FALSE 2026-08-27, marked here rather than
+> only at the section header.** `tb/audit/probe_flush_status_tb.sv`, alternating
+> stimulus, both geometries: with flush LOW `status_o[r][0]` toggles
+> `00101 / 00000` in step with the operand field; with flush HIGH it is frozen at
+> `00101` for the whole assertion. **The reference HOLDS.** Holding is not
+> "closer than zeroing" — it is exactly what the reference does, and this
+> sentence asserts the opposite. Landed into spec C2 on 2026-08-27 as
+> "flush_i SUSPENDS status_o". Left as written so the reasoning can be audited.
+>
+> Marked at the sentence because the block header at the top of this section is
+> not visible to a reader who arrives here by grep or by line number.
+
+Reproducing that exactly would mean modelling the reference's
 per-stage internal registers, which is the thing this contract deliberately does
 not do. The remaining flush-cycle status divergence is therefore left in place
 and stated, not chased.
@@ -699,3 +739,46 @@ width/signedness slip invisible to at least one probe that had been trusted. On
 that record the likely reading is a fifth second-source defect rather than a
 task problem, and it is recorded that way -- but it is recorded as OPEN, because
 "likely" is not a measurement.
+
+## 18. The reg_enable regime: on which edge flush clears z_o. 2026-08-27
+
+`tb/audit/probe_flush_stall_edge_tb.sv`. Sec 7 recorded that flush outranks the
+stall — `0x0000` in every clocked row with `reg_enable_i` low — and recorded no
+**edge**. A1 makes an enabled tick require `reg_enable_i` high, so in this regime
+no enabled tick passes and A10's timebase does not advance, yet z_o clears. That
+gap was named in the search spec for this file and had never been measured.
+
+Four arms, two of them Rule 24 controls, because a probe that discriminates on
+**when** a value appears is fooled equally by an instrument that never sees a
+clear and by one that reports clears everywhere.
+
+| arm | `reg_enable` | `flush` | gates | expected | H=4 | H=8 |
+|---|---|---|---|---|---|---|
+| E control | 1 | 1 | on | MUST clear | edge **1** | edge **1** |
+| G control | 1 | 1 | **off** | MUST NOT clear | never (8 edges) | never (8 edges) |
+| S regime | **0** | 1 | on | — | edge **1** | edge **1** |
+| Q regime | **0**, stall established first | 1 | on | — | edge **1** | edge **1** |
+
+Settled `0x4400` (H=4) / `0x4800` (H=8), vacuity guard OK on every arm — a clear
+is only observable from a nonzero start. Uniform across all 8 rows in every arm.
+
+**`reg_enable_i` does not affect the clearing at all — not whether, and not
+when.** z_o reads `0x0000` on the FIRST edge of the assertion in both the stalled
+and the unstalled case, and entering the regime as an established stall rather
+than as a simultaneous change of two inputs makes no difference either. The
+asymmetry A1 predicts is real for status_o's timebase and absent for z_o's
+clearing.
+
+**AND IT MEASURES C2's SIMULTANEITY PARAGRAPH, which was argued rather than
+measured when it landed.** z_o is `p[H-1]`, the last register in the chain. Were
+the zeros to march down one stage per tick, z_o could not read `0x0000` until
+edge `H-1` — 3 at H=4, 7 at H=8. It reads it on edge 1 at both. The paragraph
+inserted into C2 on 2026-08-27 says the force is simultaneous across the chain
+and says it is stated because that is what "forces the inter-stage registers to
+zero" has to mean; it is now also what the reference does. **No scoring window
+depends on that paragraph and none should be reintroduced from it** — this
+measurement does not change that.
+
+**What this does not settle**, stated so silence is not read as completeness: it
+measures the reference. It does not establish what the contract should say, and
+no clause was written from it.

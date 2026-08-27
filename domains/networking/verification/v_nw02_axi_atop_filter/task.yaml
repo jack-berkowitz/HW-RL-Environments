@@ -118,7 +118,9 @@ conformant_perturbations:
 
     THE SPLIT MATTERS. mutants/check_policy_independence.sh covers the POLICY
     BASE ONLY -- eleven checks, not twenty-two. The golden-base half (golden
-    PASS, ten mutants killed) comes from scripts/sim_verification.sh. Both
+    PASS, ELEVEN mutants killed -- af_m11 was added to give W3 a witness, and
+    the count here is stated rather than left as "all" so it goes stale loudly)
+    comes from scripts/sim_verification.sh. Both
     halves hold, but by two instruments; this file used to say "caught on BOTH
     bases" over a script that never checked one of them.
 

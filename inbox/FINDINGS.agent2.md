@@ -7789,3 +7789,497 @@ Not editing the artefact — the header correction stands as filed and this is
 recorded here instead. **The C2 re-derivation and the second-source replacement
 are not mine**, and this entry is a report about my own work rather than an input
 to either.
+
+## Census, second pass: 86 text-evidenced, 445 not recoverable, and git cannot separate them
+
+The first pass counted clauses whose text quotes an observation of the anchor and
+called 86 a floor. **The floor is the less interesting half.** Asked to say how
+the unrecoverable ones were handled, and the honest answer is that they dominate.
+
+    non-G clauses examined ............................ 531
+      text-evidenced CONTAMINATED ..................... 86    (16%)
+      text-evidenced CLEAN ............................  0
+      PROVENANCE NOT RECOVERABLE FROM THE ARTEFACT .... 445   (84%)
+
+**Zero clauses can be shown clean from their own text.** The 86 are those whose
+text quotes a measurement — *"Measured: with one row gated off and flush asserted,
+the clocked row went to 0x0000"* — and that is a positive record of contamination.
+There is no corresponding positive record of independence. A clause that was
+derived blind and a clause that was written with the anchor open **produce the
+same silence.**
+
+### Git was the obvious second channel and it gives nothing
+
+    22 of 22 tasks   spec text edited AFTER an observable artefact existed
+     0 of 22 tasks   spec begun before any observable artefact existed
+
+    16 of 22   spec and artefacts landed in ONE commit -- no ordering at all
+     6 of 22   landed separately, and in all six the ARTEFACTS CAME FIRST
+
+**Where they land together, git is not evidence of contamination — it is absence
+of evidence either way**, and reporting it as the first would be the error this
+corpus keeps finding. Where they land separately the ordering is legible and
+points the same way in all six.
+
+So the second channel does not separate the 445. It says every task's spec was
+written in a tree where the anchor was already present, which is weaker than
+"contaminated" and much weaker than "clean". **The population that cannot be
+adjudicated is 445, not 445-minus-whatever-git-recovers.**
+
+### C2 is the instance and it is inside the counted 86
+
+C2's text says *"Measured, and this clause was wrong before it was measured"*, so
+the census catches it. **That is the good case**: the author recorded the
+observation, the marker is in the text, and the clause is classifiable.
+
+What the census does **not** catch is the part that mattered — that the *ordering*
+was contaminated, the reference's flush behaviour read before A10 was opened and
+the derivation constructed afterward. **That fact reached me in a message and
+exists in no artefact.** The clause records that it was measured; it does not
+record that the measurement preceded the reasoning, and those are different
+claims with different consequences.
+
+**So even inside the 86, the census establishes less than it appears to.** It
+finds clauses written with the anchor in view. It cannot find clauses whose
+*conclusion* was taken from the anchor and dressed afterward, which is the failure
+mode C2 actually had.
+
+### What the number means, stated narrowly
+
+    86 clauses    cannot be cited as independent support for the behaviour they
+                  describe. Positively established from their own text.
+    445 clauses   unknown. Not "probably clean" and not "probably contaminated" --
+                  unknown, in a corpus where every spec was written beside its
+                  anchor.
+    0 clauses     positively established as independently derived.
+
+**The provenance finding's weight comes from the third line.** If 86 of 531 were
+contaminated and the rest were known clean, the remedy would be re-derive 86. What
+the corpus has instead is no mechanism that ever recorded independence, so there
+is nothing to re-derive *against*.
+
+## Reachability, per selector: 25 cases, 8 branches shown reachable, and the gap is the point
+
+The pairing applied. **A case list is not complete until its branches are shown
+reachable from a shipped mutant**, and reporting the case count alone is reporting
+the half that looks finished.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2      2        all-ids per mutant
+    v_ai02   gov_beat              2       2      2        all-ids per mutant
+    v_nw02   gov_admitted          3       3      1        all-ids per mutant
+    v_nw02   gov_aw_timeout        2       2      1        all-ids per mutant
+    v_ca03   gov_r                 3       3      1        witness -m1, LOWER BOUND
+    v_dsp02  gov_nv                4       4      1        witness -m1, LOWER BOUND
+    v_dsp02  gov_result            6       7      ?        pending
+    v_ca04   bound_output_for      -       2      via R1   names an output, not an id
+    ------------------------------------------------------------------------
+                                  22      25      8+       of 22 branches
+
+**Eight of twenty-two branches are shown reachable from a shipped mutant.** Every
+one of the twenty-five cases passes. The two numbers are not measuring the same
+thing and only one of them was ever going to be small.
+
+### What is unreached, and it is not noise
+
+    v_nw02  gov_admitted   W3, and the "exactly the bound, no fault" return
+    v_nw02  gov_aw_timeout W3
+    v_ca03  gov_r          A5, both returns
+    v_dsp02 gov_nv         S8, S9, S2
+
+**W3 is unreached in both of its selectors.** That is the clause I split two
+compounds to give a routable verdict to, and no mutant in either shipped set
+drives it. The split is correct by construction and has never fired — which was
+already recorded, and the reachability pass turns it from an observation about
+one branch into a property of the clause: **W3 has no witness anywhere in this
+corpus.**
+
+`gov_nv`'s S8/S9 pair is the sharper case for the pairing. Both have cases, both
+pass, they differ **only on the mode**, and neither is reachable. A reader of the
+case list sees four branches covered and four passes.
+
+### Two methods, and the weaker one is marked per row
+
+    all-ids per mutant   every clause id printed by every mutant. Exact.
+    witness -m1          the FIRST failure per mutant. A LOWER BOUND: a branch
+                         that only ever fires second is invisible to it.
+
+v_ca03 and v_dsp02 are on the lower bound because my all-ids harness failed on
+both — v_ca03's mutants wrap the golden differently and the rename produced a
+duplicate module. **I did not iterate on the ad-hoc harness a fourth time**; the
+shipped `witness.sh` answers a weaker question and the weakness is stated per row
+rather than folded into the total.
+
+**So `8` is itself a floor**, and two rows of it are floors for a second reason.
+The honest total is *at least eight of twenty-two*, with three rows exact and
+three approximate — which is worth more than a single number that hides which is
+which.
+
+### And the case count was never the finding
+
+Twenty-five cases, twenty-five passes, and it establishes that **every branch
+returns the id its author intended.** That is worth having and it is not what
+anyone reading "25/25" would take from it. The complementary number says
+**fourteen of twenty-two branches have never been reached by a real failure**, and
+neither instrument can produce the other's answer.
+
+### Correction to the table above: v_dsp02's two rows, now measured
+
+The `v_dsp02` rows were filed from a **tail-only view** of the witness output and
+both were wrong. The full first-failure set is `S1 S3 S4 S6 S7 S9 S12`:
+
+    v_dsp02  gov_result   6 branches, 7 cases   5 reachable   S5 unreached
+    v_dsp02  gov_nv       4 branches, 4 cases   2 reachable   S8, S2 unreached
+
+`gov_nv` was filed as **1 reachable** on the strength of having seen `S6` in the
+last two lines of a run. `S9` is reachable too. **I read a tail as a set** — the
+same error as reading a `-m1` line as coverage, one layer up: not the instrument's
+scope this time but the size of the window I looked at.
+
+Corrected totals, with v_ca03 still pending:
+
+    branches ....................... 22
+    cases .......................... 25, all passing
+    shown reachable ................ 13+  (was reported 8+)
+
+**S5 is the interesting single unreached branch.** It is `gov_result`'s
+both-operands-NaN arm, and it has a case that passes. `S4` — exactly one operand
+NaN — is reachable in both orders. So the mutant set drives the asymmetric NaN
+cases and not the symmetric one, which is a fact about the mutant set worth
+recording beside the clause rather than a defect in either.
+
+And `S8`/`S2` remain unreached where `S9`/`S6` are, which keeps the sharper point
+intact: **the S8/S9 pair differs only on the mode, both have passing cases, and
+only one of the two is driven by anything.**
+
+### Final table: 22 branches, 25 cases all passing, 13 shown reachable
+
+`v_ca03`'s first-failure set is `A1 A3 A4 D4 D5 E1`, so `gov_r` is 1 of 3 — `A3`
+reachable, both `A5` returns not.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2      2        all-ids, exact
+    v_ai02   gov_beat              2       2      2        all-ids, exact
+    v_nw02   gov_admitted          3       3      1        all-ids, exact
+    v_nw02   gov_aw_timeout        2       2      1        all-ids, exact
+    v_ca03   gov_r                 3       3      1        witness -m1, lower bound
+    v_dsp02  gov_result            6       7      5        witness -m1, lower bound
+    v_dsp02  gov_nv                4       4      2        witness -m1, lower bound
+    v_ca04   bound_output_for      -       2      via R1   not a clause id
+    ------------------------------------------------------------------------
+                                  22      25     13
+
+**Every case passes. Nine of twenty-two branches have never been reached by a
+real failure**, and three of the eight rows are lower bounds because `-m1` reports
+only the first failure per mutant.
+
+The unreached set:
+
+    v_nw02  W3            in BOTH selectors -- the clause has no witness anywhere
+    v_nw02  gov_admitted  the "exactly the bound, no fault" return
+    v_ca03  A5            both returns
+    v_dsp02 S5            both operands NaN, where one-operand-NaN is reachable
+                          in both orders
+    v_dsp02 S8, S2        where S9 and S6 are reachable
+
+**W3 is the one that matters.** It is the clause two compound-id splits were made
+to give a routable verdict to, and nothing in either shipped mutant set drives it.
+The repair is correct by construction and has never fired — which the reachability
+pass turns from an observation about one branch into a property of the clause.
+
+**And the shape holds across every selector: the case list is uniformly complete
+and the reachability is uniformly not.** 25 of 25 against 13 of 22, from two
+instruments neither of which can produce the other's answer.
+
+## The all-ids harness works, and it moves two rows — the lower bound was hiding a reachable branch
+
+Asked not to count anything unreached on a `-m1` lower bound before getting an
+all-ids answer. The harness now works on v_ca03, and **the correction it produces
+is the reason the instruction was right.**
+
+### What was wrong with the harness, and it was one missing file
+
+    verilator ... $OTHER "$OUT/golden_renamed.sv" "$OUT/$m.sv" "$TB"
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+The mutants **instantiate the golden** under a renamed module, and `witness.sh`
+builds `golden_renamed.sv` for exactly that. My ad-hoc version excluded the golden
+and never supplied the rename, so every build failed. **Fourth instance of the
+rebuild pattern**, and the missing piece was again something the shipped script
+already knew.
+
+### v_ca03, now exact
+
+    iw_m1  A3         iw_m5  A1              iw_m9   C2 D4
+    iw_m2  A3 A5      iw_m6  C2 D4 E1        iw_m10  D5
+    iw_m3  A4         iw_m7  E1              iw_m11  E1
+    iw_m4  A3 A5      iw_m8  E1
+    union: A1 A3 A4 A5 C2 D4 D5 E1
+
+**`A5` is reachable** — `iw_m2` and `iw_m4` both drive it. The `-m1` row said
+`gov_r` was 1 of 3; it is **2 of 3 by id**, and A5 was invisible only because it
+never fired first.
+
+### And a limit the reachability instrument has that the case list does not
+
+`gov_r` has **three returns and two ids** — `A5` twice, for different reasons.
+Reachability is measured from printed ids, so **the two A5 returns cannot be
+separated by it at all.** One of them is reached; which one is not observable
+from outside.
+
+    the case list      distinguishes branches that share an id
+    the reachability   distinguishes branches a real failure can drive
+    neither            does both
+
+That is a third edge on the same pairing, and it arrived from the instrument
+rather than from reasoning about it: **I could not have said which A5 return
+fires without a case, and I could not have said either fires without the
+mutants.**
+
+### v_dsp02 stays on a lower bound, and the reason is worth recording
+
+My all-ids harness fails on v_dsp02 for a different reason: its `witness.sh`
+prepends a `head` block supplying helper functions like `f_sub`, and the extracted
+mutant does not compile without it. **Six of ten mutants failed to build in my
+version and ten of ten build in the shipped one.**
+
+So rather than reimplement a fifth time, I took **the task's own `witness.sh` and
+changed one grep** — `-m1` to all-ids — leaving every other line the task's.
+Running; the result decides whether S5, S8 and S2 are unreached or merely
+never-first.
+
+**Until it lands those three are UNKNOWN, not unreached.** The distinction is the
+one this corpus has spent a week on and it applies to my own table.
+
+## Reachability, now exact on every row: 15 of 22 branches, and each of the 7 classified
+
+The patched shipped harness ran clean — **rule-24 negative PASS, positive 10 of
+10** — and v_dsp02's all-ids union is `S1 S3 S4 S6 S7 S9 S12`, **identical to the
+`-m1` union.** Every mutant in that task produces exactly one id, so `-m1`
+coincided with the true answer rather than bounding it. **That was not knowable
+without running it**, which is the whole reason the rows were marked UNKNOWN.
+
+    task     selector          branches  cases  reachable  method
+    v_ca04   gov_delivery          2       2       2       all-ids, exact
+    v_ai02   gov_beat              2       2       2       all-ids, exact
+    v_nw02   gov_admitted          3       3       1       all-ids, exact
+    v_nw02   gov_aw_timeout        2       2       1       all-ids, exact
+    v_ca03   gov_r                 3       3       2*      all-ids, exact by ID
+    v_dsp02  gov_result            6       7       5       all-ids, exact
+    v_dsp02  gov_nv                4       4       2       all-ids, exact
+    ------------------------------------------------------------------------
+                                  22      25      15
+
+    * by id. gov_r has three returns and two ids -- A5 twice -- and reachability
+      is measured from printed ids, so ONE of the two A5 returns is reached and
+      which one is not observable from outside.
+
+### The seven, each resolved
+
+**UNREACHABLE BY DESIGN — 1.** `gov_admitted`'s empty return, taken when
+`admitted == MAXW`. **That is the no-fault case**: exactly the bound is neither a
+stall below it nor an admission past it, and the selector returns `""` so no
+`fail()` is emitted. **No mutant can drive it to a failure because it produces
+none.** It is not a gap and should not read as one — to be stated at the site.
+
+**NOT OBSERVABLE BY THIS INSTRUMENT — 1.** `gov_r`'s second `A5` return. Both
+returns carry the same id, so the mutants prove one is reached and cannot say
+which. **The case list already distinguishes them**; the reachability measurement
+structurally cannot. Needs no mutant — needs the limit stated.
+
+**REACHABLE, NEEDS A MUTANT — 5.**
+
+    W3   in gov_aw_timeout   a design that stalls a non-atomic AW while the debt
+    W3   in gov_admitted     is strictly below MAX_WRITE_TXNS. One defect reaches
+                             BOTH branches -- the two selectors report the same
+                             clause from different sites.
+    S5   gov_result          minmax with BOTH operands NaN. S4 (exactly one NaN)
+                             is reachable in both orders, so the set drives the
+                             asymmetric case and not the symmetric one.
+    S8   gov_nv              compare in QUIET mode raising NV. fn_m4
+                             (feq_is_signalling) drives S9, the signalling half;
+                             the mirror is unwritten.
+    S2   gov_nv              NV on an operation that is neither minmax nor
+                             compare.
+
+### The cost, measured rather than estimated
+
+    base variant                  448 lines
+    af_m1's variant               394 lines
+    diff base -> af_m1            100 changed lines
+
+Each mutant is a **separate variant module** in `dut/`, not an edit to a shared
+file, following the set's guarded shape: *defect := wrong_behaviour AND
+rare_predicate*. So five mutants is five variant files of that order, plus five
+wrapper entries in `mutants.sv`.
+
+**W3 is the one worth writing regardless of the other four**, because it is the
+clause two compound-id splits were made to give a routable verdict to and nothing
+in the corpus drives it — the repair currently routes to something no failure
+reaches. **One mutant closes both of its branches.**
+
+The remaining four (S5, S8, S2) are real gaps rather than by-design cases, and
+each is one variant file. **Whether they are worth four variant files is a
+scheduling question, not a technical one**, and the number above is what it costs.
+
+## Minimising a rebuild reduces the surface; it does not remove it
+
+**Fourth instance of the rebuild pattern in one session, and the fourth time the
+missing piece was something the shipped script already knew.**
+
+    raw-record diff        counted 366 cycles the scoring TB excludes
+    ad-hoc mutant loop     printed BUILD FAIL eleven times and exited 0
+    substitution regex     required `\s+#\(`, matched nothing, built the golden
+    all-ids harness        omitted golden_renamed.sv, so every build failed --
+                           and on v_dsp02 also omitted a `head` block supplying
+                           helper functions the extracted mutant needs
+
+Having been caught three times, I stopped reimplementing and did the minimal
+thing: **took the task's own `witness.sh` and changed one grep**, `-m1` to
+all-ids, leaving every other line the task's.
+
+**That was the right move and it still broke.** `witness.sh` begins with
+
+    cd "$(dirname "$0")/.."
+
+and my copy lived in the scratchpad, so it resolved to the wrong directory and
+found no `dut/`. The one line I did not change was the one that assumed where the
+file lives.
+
+### What caught it
+
+    RULE24 negative control : FAIL -- control build failed
+    RULE24: refusing to report witnesses -- the instrument did not reproduce
+            a known answer, so anything it prints is a number, not a measurement.
+
+**The rule-24 control caught my broken copy of the script that carries it.** Not
+the golden, not the output looking wrong — the control, doing exactly what its
+header says, on a copy of itself.
+
+### The lesson is narrower than "don't rebuild"
+
+I had already drawn the obvious conclusion and acted on it. Copying the shipped
+script and changing one line **is** the minimal rebuild, and it reduced the
+surface from "reimplement the whole recipe" to "one grep and whatever the copy
+inherits". **It did not reduce it to zero**, because a script carries assumptions
+about its own location, its relative paths, and its inputs, and copying it moves
+exactly those.
+
+    reimplementing   loses everything the original knew
+    copying          keeps what it knows and breaks what it assumed about itself
+
+**So the remedy is not "minimise the rebuild" — it is "keep the control".** The
+control is what made the difference between a wrong number and a refusal, in a
+run where I had already done the careful thing.
+
+## The -m1 coincidence is the argument FOR the UNKNOWN discipline
+
+v_dsp02's all-ids union came back **identical to its `-m1` union** — every mutant
+in that task produces exactly one clause id, so the lower bound was exact.
+
+**That is the case that vindicates marking those rows UNKNOWN rather than
+unreached**, and it would be easy to read the other way.
+
+The bound was exact **and that was not knowable without running it.** Had I
+written "unreached" on the strength of `-m1`, the answer would have been right and
+the claim would have been unfounded — and on v_ca03, where the same reasoning was
+applied, it *was* wrong: `A5` is reachable and `-m1` could not see it because it
+never fires first. **Same instrument, same discipline, two tasks, and it changed
+the answer on one of them.**
+
+    a discipline that only looks justified when it changes the answer
+    is not a discipline
+
+It is a lucky guess that happened to be checked. The value of marking UNKNOWN is
+that it is applied **before** you know which of the two cases you are in, and the
+run that comes back unchanged costs the same as the run that comes back different.
+Reporting the unchanged one as a vindication rather than a waste is the part
+that keeps the practice alive.
+
+## The W3 mutant: a guard bounded from two sides, and the two sides are not the same direction
+
+W3 had no witness anywhere in the corpus. `af_m11_stalls_aw_below_bound` gives it
+one — a design that stalls a non-atomic AW while the downstream write debt is
+strictly below the bound, which is what W3 forbids in those words.
+
+Four guards were written before one held, each rejected on a measurement rather
+than on judgement.
+
+    guard 1  debt at bound-1 for 8 CONSECUTIVE cycles
+             stall_applied 0. The debt is at bound-1 for NINE cycles in the whole
+             reference run and never eight in a row.
+    guard 2  counter incremented on ACCEPTANCE
+             stall_applied 184 with the counter reading 0. Stalling drives
+             aw_ready low, so the guard's own effect suppressed its trigger.
+    guard 3  count the class, threshold 8
+             fires under the reference testbench, invisible to the witness.
+    guard 4  threshold 4
+             both.
+
+**Guard 2 is the one worth carrying.** A guard whose own effect suppresses its
+trigger cannot be reasoned about from its threshold at all — the counter said
+zero in a run where the defect fired 184 times. And the same coupling inflates
+the class count in the other direction: **18 class-cycles when the stall never
+fires, 272 when it does**, because the class condition includes `aw_valid` and
+stalling keeps the AW offered. A threshold read off the second number is
+unreachable.
+
+### The two-sided bound, measured
+
+    threshold 3   witness: difference     reference: 17 violations, 5 ids
+    threshold 4   witness: difference     reference: 10 violations, 4 ids
+    threshold 5   witness: NO DIFFERENCE  reference: 11 violations, 5 ids
+    threshold 6   witness: NO DIFFERENCE  reference: 11 violations, 5 ids
+
+    reference testbench   18 class-cycles available -- long, random
+    nonequiv_tb            5 class-cycles available -- short, directed, and it
+                           FILLS THE WRITE BUDGET on purpose, after which the
+                           class is false by construction
+
+**A mutant the equivalence witness cannot distinguish is not licensable under
+rule 16, however clearly the reference testbench catches it.** So the witness is
+the binding constraint and it is the tighter one, which is the opposite of the
+intuition that the long random stimulus reaches more.
+
+**And raising the threshold past four loses the witness while making the
+reference failure broader.** "Tighter guard" and "narrower defect" are not the
+same direction here, so a value chosen on either axis alone is wrong. That is now
+recorded in the mutant beside the threshold rather than in this file.
+
+### What it cost, against what I quoted
+
+I priced this at ~100 changed lines against a 448-line variant. **The file is
+that size and the cost was not in the lines** — it was four guards, six builds
+and a threshold sweep, all of it to find a value that two stimuli both reach.
+**The estimate measured the artefact and the work was in the calibration**, which
+is a different quantity and the one that mattered.
+
+And a correction to the other four: v_dsp02's mutants are **~50-line
+self-contained wrappers inside `mutants.sv`** that perturb the golden's inputs,
+with no new file in `dut/`. I quoted all five off v_nw02's variant model. S5, S8
+and S2 are roughly half the artefact — though on this evidence the calibration,
+not the artefact, is what will decide them.
+
+## Adding a mutant changes the score surface without moving task_text_hash
+
+    task_text_hash covers   spec/*_iface.sv, spec/*_spec.md, probe/PASTE.md
+    it does not cover       mutants/mutants.sv, dut/, conformant/, negctl/
+
+`sim_verification.sh` enumerates mutants by prefix straight out of
+`mutants/mutants.sv`, so **`af_m11` is picked up automatically and every future
+submission is scored against eleven mutants where the existing records were
+scored against ten.**
+
+    v_nw02 run records ................ 48
+    of those at the current hash ...... 12, all scored against 10 mutants
+
+**Two runs carrying the same `task_text_hash` can have been scored against
+different mutant sets**, and nothing in the record distinguishes them. The hash
+answers *"was this the same question?"* and is silent on *"was it marked the same
+way?"*
+
+That is not an argument against adding the mutant — W3 having no witness is the
+worse state. It is an argument that **the comparability key is narrower than
+comparability**, and a scoring change that leaves the key untouched is invisible
+to anyone reconciling records later. Reported, not fixed: `task_text_hash` is not
+mine.

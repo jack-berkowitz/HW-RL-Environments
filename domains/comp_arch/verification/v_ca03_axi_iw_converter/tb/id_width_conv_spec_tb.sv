@@ -186,6 +186,14 @@ module id_width_conv_tb;
   // wrongly-refused new id is A3 for the same reason a wrongly-accepted one is.
   // A5 governs the per-identifier depth, and A3 says explicitly that a request
   // carrying an identifier already outstanding "is not blocked by this clause".
+  // THREE RETURNS, TWO IDS, AND ONE INSTRUMENT CANNOT SEPARATE THEM. Two of the
+  // returns are A5 for different reasons -- at the per-identifier depth, and
+  // outstanding below it. A reachability sweep reads the clause id a mutant
+  // PRINTS, so it can show that A5 is driven (iw_m2 and iw_m4 do) and cannot show
+  // WHICH of the two returns produced it. The attribution cases below can: they
+  // call this function with the state constructed, so each return has its own
+  // case. The two measurements answer different questions and neither substitutes
+  // for the other -- do not read "A5 reachable" as either return being covered.
   function automatic string gov_r(input int unsigned id);
     if (live_r[id] >= MAX_TXN)   return "A5";   // at depth for this id
     if (live_r[id] == 0)         return "A3";   // a NEW id: the table boundary

@@ -12,7 +12,7 @@
 | `tb/nonblocking_dcache_alt_ref.sv` | second source — **probe, not a deliverable.** Does not pass; see below |
 | `probe/PASTE.md` | paste-ready solicitation prompt |
 | `candidates/d_ca01/` | created, empty |
-| **PPA** | **NOT STARTED — Agent 1** |
+| **PPA** | ~~**NOT STARTED — Agent 1**~~ **STALE 2026-08-27: STARTED AND RUNNING.** `runs/d_ca01_nonblocking_dcache/` holds **13** PPA records, the newest three from 2026-08-27 at the pinned 15.0 ns — reference plus two candidates. The rows above it were kept current and this one was not. |
 
 ### Handoff to Agent 1 — three things that will cost a build if missed
 
@@ -248,6 +248,10 @@ honest measure of what the skeleton currently checks.
 
 ## FINDING (PROPOSED — slug `anchor-outside-drift-detection`)
 
+> **LANDED as `F43` in FINDINGS.md; marked 2026-08-27. The word PROPOSED in
+> the heading above is stale.** Kept as written — this is the working copy the
+> catalog entry was drawn from, and it is longer than what landed.
+
 **Rules: 10**
 
 **The drift control for this task cannot see drift on 6 350 lines.**
@@ -294,6 +298,10 @@ than a hand-listed set, so the covered set cannot drift from what is compiled.
 ---
 
 ## FINDING (PROPOSED — slug `tb-observation-that-fakes-a-dead-dut`)
+
+> **LANDED as `F44` in FINDINGS.md; marked 2026-08-27. The word PROPOSED in
+> the heading above is stale.** Kept as written — this is the working copy the
+> catalog entry was drawn from, and it is longer than what landed.
 
 **Rules: 3**
 
@@ -537,6 +545,13 @@ between the skeleton and the checker, measured rather than asserted.
 
 ### Determinism check — BUILT, RUNS, AND IS NOT VALIDATED
 
+> **SUPERSEDED 2026-08-27 by "Determinism check — WITHDRAWN" below. NOT
+> REWRITTEN.** This section describes `tb/audit/determinism_check.sh` in the
+> present tense and **that file was deleted in `7575a41`.** The check is retired,
+> not carried. Marked here rather than only at the later section, because a
+> reader arriving at this heading by search sees a built, running check and a
+> filename, and nothing on this screen says otherwise.
+
 `tb/audit/determinism_check.sh`. Two builds, same seed; build B enables an inert
 observer process that reads signals and drives nothing.
 
@@ -603,6 +618,10 @@ harness may be protected by the contract rather than by anything I built.
 
 ## FINDING (PROPOSED — slug `latitude-the-interface-cannot-express`)
 
+> **LANDED as `F45` in FINDINGS.md; marked 2026-08-27. The word PROPOSED in
+> the heading above is stale.** Kept as written — this is the working copy the
+> catalog entry was drawn from, and it is longer than what landed.
+
 **Rules: 12**
 
 **A spec can advertise latitude its own port map cannot carry, and reading the
@@ -664,6 +683,17 @@ with an extra step; measuring it is what refuted it.
 **Kept as a failed claim, per the convention, and replaced openly rather than
 quietly:**
 
+> **D3′ IS ALSO DEAD, 2026-08-27 marker on a 2026-08-19 refutation.** The
+> paragraph below proposes it as a second-source difference. `c03` was then built
+> to that licence and **failed C2**: under strict in-order retirement a hit
+> accepted behind an outstanding miss is blocked, and C2 requires it to be
+> ANSWERED. R4 was narrowed, the artifact was promoted to `mutants/m06`, and
+> `task.yaml` records "Second-source difference D3' is dead with it. D3'' (early
+> fill forwarding)". See "c03 — R4 and C2 could not both be satisfied" — **460
+> lines further down this file**, which is why this marker is here. Left as
+> written: a refuted claim replaced openly is the convention, and D3 was refuted
+> the same way one paragraph above.
+
 **D3′ — strictly in-order responses.** The second source retires responses in
 issue order; R4 explicitly leaves order free and the anchor demonstrably
 reorders (`reorderings=1` in the probe, and again in the soak). Witness: the
@@ -673,6 +703,11 @@ completion buffer, which is the real trade that makes it a design choice.
 ---
 
 ## Mutants — six, each a wrapper around the unmodified anchor
+
+> **THE COUNT IS SEVEN as of 2026-08-19; marked 2026-08-27.** `m06_responses_in_order`
+> joined the set when `c03` proved not conformant, and it is the CLEANLY ISOLATED
+> C2 mutant that m05 is not. The table below predates it and is otherwise
+> unchanged. `task.yaml`'s `mutants.set` is the authoritative list.
 
 | mutant | target clause | configs passed | first failure | isolation |
 |---|---|---|---|---|
@@ -737,6 +772,12 @@ by C2 after the change, and the reference is unaffected.
 have surfaced from reading the phase.
 
 ### Bounded equivalence checking — RESOLVED. All six proven non-equivalent.
+
+> **NINE ARTIFACTS NOW CARRY `bmc_cex`, not six; marked 2026-08-27.** The table
+> below predates `m06` (cex depth 34) and the two conformant designs `c01` and
+> `c02` (both cex depth 34, recorded in `task.yaml` and in "Conformant set"
+> below). Nothing in the table is wrong; it is incomplete, and a reader counting
+> rows here undercounts the evidence by three.
 
 `eqy` itself still refuses this design, so the decomposition was changed rather
 than retried: a **validity-qualified miter** driven by `sby` in `bmc` mode. A
@@ -812,6 +853,15 @@ can be labelled as supported.
 | `chparam` to shrink the design first | `Module is used with parameters but is not parametric` — `read_slang` had already elaborated |
 | parameters at read time, `memory_map`, `opt -full`, depth 4 | **timed out at 10 minutes** |
 
+> **THAT SENTENCE IS FALSE AS OF 2026-08-19; marked 2026-08-27 at the sentence
+> rather than only at the section.** Every mutant now carries `bmc_cex` — a
+> bounded counterexample from a validity-qualified miter driven by `sby` in `bmc`
+> mode, which IS a formal non-equivalence result. See "Bounded equivalence
+> checking — RESOLVED" **above**, and `task.yaml`'s `mutants.set`. What remains
+> true is the narrower claim this sentence is embedded in: **`eqy` is not the
+> instrument and cannot be**, for the three measured reasons in `mutants/ec/README.md`.
+> The caveat the last line attaches to the kill counts no longer applies.
+
 So there is **no formal non-equivalence result** for these mutants. What exists
 is a simulation witness per mutant: each fails a named clause at a named
 configuration with a concrete stimulus. Under the diff-rate retraction that is
@@ -823,6 +873,10 @@ memories is separate work and is not attempted here.
 ---
 
 ## FINDING (PROPOSED — slug `no-smt-backend-behind-sby-and-eqy`)
+
+> **LANDED as `F47` in FINDINGS.md; marked 2026-08-27. The word PROPOSED in
+> the heading above is stale.** Kept as written — this is the working copy the
+> catalog entry was drawn from, and it is longer than what landed.
 
 **Rules: 3**
 
@@ -867,6 +921,10 @@ control caught it.
 ---
 
 ## FINDING (PROPOSED — slug `a-stated-position-that-was-never-written-down`)
+
+> **LANDED as `F48` in FINDINGS.md; marked 2026-08-27. The word PROPOSED in
+> the heading above is stale.** Kept as written — this is the working copy the
+> catalog entry was drawn from, and it is longer than what landed.
 
 **Rules: 13**
 
@@ -1110,8 +1168,13 @@ applied to the instruction that asked for it.
   identically under one header.
 - **`regression.sh` presence check**: assert every mutant in a `task.yaml` has an
   `evidence:` field. Without it the rule is prose.
-- **`mutants/*` slang exemption**: still not landed; kill counts remain
-  `--no-slang` and not quotable.
+- ~~**`mutants/*` slang exemption**: still not landed; kill counts remain
+  `--no-slang` and not quotable.~~
+  > **LANDED; marked 2026-08-27.** `scripts/sim_candidate.sh` no longer
+  > enumerates directories — the exemption is now stated as the property
+  > *"anything inside the task directory is shipped by the task, and a
+  > submission never is"*, which covers `mutants/`, `conformant/`, `controls/`
+  > and `ref/` at once. The kill counts are gated and quotable.
 
 ## Conformant set — and the third one found a spec defect
 
@@ -1300,3 +1363,51 @@ Reference shim, then the real testbench (coverage floors, liveness monitor,
 C1/C2/C3), 5–7 mutants wrapping the anchor including a CAPABILITY-class one,
 the conformant set enumerated clause by clause, and the second source with its
 three differences **named in writing before any of it is written**, failures kept.
+
+---
+
+## 2026-08-27 pass — all four items were already done, and the record said otherwise in nine places
+
+Asked for: the vacuous determinism check resolved or retired, the L4 defect
+write-up, D3 writeback ordering, and mutants with `eqy` non-equivalence
+confirmation. **Every one is complete in the authoritative artefacts.** Nothing
+was built this pass. What was found is that the working record contradicts them.
+
+| item | state in the authority | what the record said |
+|---|---|---|
+| determinism check | retired; `task.yaml: determinism_check: WITHDRAWN`, script deleted in `7575a41`, tb header states it | a section above the withdrawal describing the script in the present tense, by filename |
+| L4 defect | **landed as F45** in `FINDINGS.md`, with L6 | header still reads `FINDING (PROPOSED — slug ...)` |
+| D3 | refuted; the anchor already fetches first and writes the victim back after | correct — and its replacement **D3′ was refuted too**, 460 lines further down, with nothing at the proposal |
+| mutants / `eqy` | **seven mutants and two conformant designs, all `bmc_cex`**, in `task.yaml` | "Mutants — six"; an EC table of six; and, 70 lines below the resolution, *"there is no formal non-equivalence result for these mutants"* |
+
+**On `eqy` specifically, because the instruction named it.** `eqy` is not the
+instrument and cannot be: there is no SMT solver in `openroad/orfs`, so `smtbmc`
+cannot run on any design (F47). The non-equivalence results were obtained with a
+validity-qualified miter driven by `sby` in `bmc` mode on `abc bmc3`. Substituting
+the instrument is recorded rather than done silently — the confirmation exists,
+and it did not come from the tool the instruction named.
+
+**Nine stale sites, marked and not rewritten.** Five sections, five `PROPOSED`
+headers (all five landed: F43, F44, F45, F47, F48), `PROPOSED_RULE.md`'s
+NOT-LANDED heading (Rule 21 is in `RULES.md`), the top status block's PPA row
+(13 run records, three from today), and the `mutants/*` slang exemption item
+(landed, as a property rather than a directory list).
+
+**THE SWEEP, STATED, because a containment claim is a measurement.** Filenames:
+every backticked path in this file was tested for existence — **37 cited, 2 not
+found**, one being the withdrawn script and the other being `bsg_cache/bsg_cache.v`,
+which is F43's own point and not a defect here. Status words: `NOT STARTED`,
+`NOT LANDED`, `not built`, `PROPOSED`, `not started` were enumerated and each
+checked against its authority. **What the sweep does NOT cover:** claims that are
+stale in their *content* rather than in a filename, a count or a status word.
+Those were found by reading, only along the four items asked about, and this file
+is 1300 lines. There are almost certainly more.
+
+**And that is the finding.** Every one of the nine was correct when written and
+was superseded by work that landed correctly somewhere else. The normative
+artefacts — `spec/`, `task.yaml`, `RULES.md`, `FINDINGS.md`, `sim_candidate.sh` —
+are all right. **Only the record lies, and it lies in the direction of
+understating what exists.** Nine for nine is not a slip; it is what an
+append-only working record does by default, and the top status block going stale
+one row at a time while its neighbours stayed current is the sharpest version of
+it.
