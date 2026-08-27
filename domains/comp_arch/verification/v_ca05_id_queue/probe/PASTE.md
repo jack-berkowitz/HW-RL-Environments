@@ -91,8 +91,9 @@ that is deliberate and recorded here so it is visible rather than discovered
 from a failure message.*
 
 
-**R3 — no cross-tag ordering.** Order between entries of *different* tags is
-**not specified** and shall not be checked.
+**R3 — no cross-tag ordering.** **NOT SPECIFIED — A TESTBENCH THAT CHECKS
+THIS REJECTS CORRECT HARDWARE.** Order between entries of *different* tags is
+free.
 
 ### Push
 

@@ -41,8 +41,9 @@ this clause restated as an output requirement, so a violation of R2 is
 that is deliberate and recorded here so it is visible rather than discovered
 from a failure message.*
 
-**R3 — no cross-tag ordering.** Order between entries of *different* tags is
-**not specified** and shall not be checked.
+**R3 — no cross-tag ordering.** **NOT SPECIFIED — A TESTBENCH THAT CHECKS
+THIS REJECTS CORRECT HARDWARE.** Order between entries of *different* tags is
+free.
 *Authority: rule 12 — a design may store entries in any structure it likes; only
 per-tag order is a contract term.*
 
@@ -147,7 +148,8 @@ map's `rst_ni`.*
 
 ## 7. Named latitude (rule 12)
 
-The following are **explicitly out of scope** and shall not be checked:
+The following are **explicitly out of scope. NOT SPECIFIED — A TESTBENCH THAT
+CHECKS ANY OF THEM REJECTS CORRECT HARDWARE.**
 
 1. **Arbitration policy** between push, pop and search in one cycle.
 2. **Cross-tag ordering** (R3).

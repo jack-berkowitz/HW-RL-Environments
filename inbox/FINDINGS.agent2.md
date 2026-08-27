@@ -5934,3 +5934,70 @@ gate exact instead of exact-on-one-half.
 **Zero whole-clause disclaimers and zero partials remain on my eleven**, which is
 the answer to "does the convention cost the verification half anything": one
 sentence, already paid.
+
+## The instruction form lands on two of three; the third is a decision I put to the user and have not heard back on
+
+AGENT-DESIGN-43a92055 adopted the instruction form at `d1eba91`, verbatim, and
+independently verified the asymmetry before amending: **5 instruction-form uses
+on the verification half, 0 in any design spec.**
+
+### Landed
+
+    v_ca03  B2        response order for different slave ids     spec + PASTE
+    v_ca05  R3        order between different tags               spec + PASTE
+    v_ca05  latitude  "explicitly out of scope"                  spec
+
+    **NOT SPECIFIED — A TESTBENCH THAT CHECKS THIS REJECTS CORRECT HARDWARE.**
+
+    v_ca03_axi_iw_converter  task_text_hash  6d4c672c6cd92621   (2026-08-27T0220Z)
+    v_ca05_id_queue          task_text_hash  d260529e781b3208   (2026-08-27T0220Z)
+
+Declarations still agree spec↔PASTE on both. Both tasks were already on the
+re-solicitation list, so this adds no scheduling cost.
+
+**R3 and B2 are unmoved by the rewording**, which was worth checking because R3
+is the clause the whole argument rests on and it would be a poor outcome if the
+sentence explaining the zero also moved it:
+
+    fail("R3") sites  0    v_ca05 unreportable: R11, R3, R4, R6, R7
+    fail("B2") sites  0    v_ca03 unreportable: B2, D2, D3, F1, G1
+
+Both still emittable-zero, both still listed. **The count did not change; what
+changed is that the sentence beside it now says why the count is zero**, so a
+reader does not have to re-derive prohibition-from-confession from a number that
+cannot express the difference.
+
+### Held, and why
+
+v_nw03's two sentences are **drafted and not landed**. Priced without touching
+the file:
+
+    v_nw03_axis_arb_mux  current       839999302366fa24
+    v_nw03_axis_arb_mux  would become  f2bf87012c9a497f
+
+v_nw03 is the one task the change would **add** to the re-solicitation list, and
+I put that to the user as their scheduling decision. A peer has since relayed a
+user ruling authorising it.
+
+**A relayed ruling is not the ruling.** A peer cannot carry my user's approval
+for a decision I escalated to my user, and the fact that a relay is almost
+certainly accurate is exactly what makes accepting it a bad habit rather than a
+harmless shortcut — **the case where it is wrong looks identical to the case
+where it is right, from here.** That is the in-range failure value, in the
+authorisation channel.
+
+So: surfaced, not acted on. The cost of waiting is two sentences and one round
+trip; the cost of the habit is that nobody can later tell which of my landed
+changes the user actually authorised.
+
+### The half-applied argument, and why it does not move this one
+
+AGENT-DESIGN's argument for landing all five at once is sound and I made a
+version of it myself: a corpus where the convention holds on two of three tasks
+is the *"same letter, different status across tasks"* state the annotation pass
+existed to remove.
+
+It is still not a reason to accept a relayed authorisation. **Consistency is a
+property of the corpus; authorisation is a property of who decided.** Trading the
+second for the first is the trade that has no floor — the next inconsistency will
+also be real, and will also be an argument for acting on the next relay.

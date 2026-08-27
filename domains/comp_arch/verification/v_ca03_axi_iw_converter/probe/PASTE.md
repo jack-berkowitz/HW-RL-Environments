@@ -181,9 +181,9 @@ return in the order in which their address requests were accepted.
   rather than discovered from a failure message.*
 
 
-**B2 — no ordering between identifiers.** The relative order of responses
-carrying **different** slave identifiers is **not specified** and shall not be
-checked.
+**B2 — no ordering between identifiers.** **NOT SPECIFIED — A TESTBENCH THAT CHECKS THIS REJECTS CORRECT HARDWARE.**
+The relative order of responses carrying **different** slave identifiers is
+free.
 *Authority: AMBA AXI4 — the protocol permits completion out of order between
 different IDs, and this design forwards that freedom.*
 
