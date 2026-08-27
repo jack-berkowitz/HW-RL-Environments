@@ -6937,3 +6937,64 @@ the first place.
 **Three versions, three explanations, and the first two were confident and
 wrong.** The one that settled it was not more care: it was removing the borrowed
 perturbation and letting the counter say whether anything happened.
+
+## F1(c) gets a control, and it took three versions for the third time today
+
+    GOLDEN          RESULT: PASS
+    F1(a) control   FAIL (8 failures)  ids: F1 only  force 8
+    F1(c) control   FAIL (1 failure)   ids: F1 only  force 2
+
+`negctl/f1_answers_across_reset.sv`. **Both halves of F1 that have checks now have
+controls that die on F1 alone.**
+
+    FAIL [F1] write response for slave id 3 arrived 1 cycle(s) after reset
+              release; it was outstanding before the reset and F1 requires it
+              discarded
+
+### It was not controlled before, and the demonstration was not a control
+
+F1(c)'s checker had only ever been shown to fire **by accident**: the testbench's
+own responder was not cleared on reset, so it kept answering and the design
+forwarded it. That demonstrates the checker works. **It is not a control, because
+the cause was a defect in the harness rather than a design violating the
+clause** — and a control has to be a design that breaks the rule, or it does not
+establish that the rule is what is being tested.
+
+### Three versions again, and the counter caught two of them
+
+    v1  arm on `!rst_ni && g_s_bvalid`      force 0    RESULT: PASS
+    v2  arm ahead of the edge, pulse once   force 1    FAIL [D5], not F1
+    v3  arm ahead, HOLD until s_bready      force 2    FAIL [F1] alone
+
+**v1** armed on the reset edge and latched nothing: the design's reset is
+synchronous, so `s_bvalid` is already low by the cycle `!rst_ni` is sampled. The
+verdict said PASS and only `FIRED ... force 0` distinguished a passing design
+from a control that never ran. **Second time today the counter was the only
+difference between those two.**
+
+**v2** pulsed the forced offer for one cycle and produced a **D5** failure and no
+F1 one. Two reasons, and both matter: D5 forbids withdrawing a valid without a
+handshake, and the slave-side checker only evaluates on `s_bvalid && s_bready`,
+so a pulse that missed ready **was a withdrawal the checker never got to read**.
+
+**v3** holds the offer until its ready is seen. That is also the more faithful
+control: F1(c) is about a response **delivered** across a reset, not one merely
+offered.
+
+### The trap the control had to avoid, and why it is stated in the file
+
+There are two resets in the run. If the wrapper armed on the initial one, the
+forced response would arrive when `surv_win == 0`, F1(c)'s branch would not be
+taken, and **it would land on C2** — a control dying on the wrong clause, which
+is exactly the confusion the precedence at the site exists to prevent. `seen_b`
+is false before the first release, so the wrapper is transparent there. The
+reason is written in the control rather than in this file, because that is where
+someone will be standing when they change it.
+
+### Tally for the day
+
+Three controls attempted, **nine versions**, and in six of them the verdict line
+alone would have been misleading — four passing because nothing perturbed, two
+failing on the wrong clause. `check_fired`'s counter separated the first kind and
+the clause id separated the second. **Neither was care, and neither was the
+verdict.**
