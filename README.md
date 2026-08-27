@@ -408,6 +408,106 @@ bash scripts/regression.sh
 bash scripts/sim_verification.sh domains/comp_arch/verification/v_ca05_id_queue candidates/v_ca05/chat.sv chat
 ```
 
+### Automated model submissions
+
+`runner.domain_sweep` replaces the manual prompt/chat/copy loop for every task
+that has a canonical `probe/PASTE.md` and a registering `task.yaml`. It sends
+that prompt to a selected model, extracts the submitted module, and dispatches
+to the existing design or verification grader. Prompt-only directories retained
+for withdrawn tasks, such as `d_dsp01`, are deliberately skipped.
+
+To use included ChatGPT, Claude, or Gemini subscription quota instead of paying
+for API tokens, authenticate the provider CLIs and select the subscription
+transport:
+
+```bash
+codex login
+claude auth login
+python3 -m runner.domain_sweep --transport subscription \
+  --tasks d_nw03 --models gpt-5.6-luna --smoke
+```
+
+Each subscription request runs as a fresh, non-persistent process in an empty
+temporary directory, and the prompt is passed through stdin. Subscription
+artifacts include `subscription` in their filenames and manifests. Codex and
+Claude project/account customizations are disabled. Gemini runs headlessly in
+the empty workspace; use the dedicated CLI home below so unrelated Gemini
+extensions and user instructions are not loaded. The runner strips API-key and
+Vertex environment variables and requires Google-account OAuth for Gemini.
+Included quota is limited, so a sweep can stop until the provider's usage
+window resets.
+
+#### Gemini account setup for a collaborator
+
+Gemini support uses the official Gemini CLI's `pro` model alias. On the
+collaborator's computer, install the CLI, create a dedicated Gemini CLI home
+outside this repository, and sign in interactively with the Google account that
+owns the Gemini subscription:
+
+```bash
+npm install -g @google/gemini-cli@latest
+export GEMINI_CLI_HOME="$HOME/.hwrl-gemini"
+gemini
+```
+
+Choose **Sign in with Google** in the browser flow. Keep
+`GEMINI_CLI_HOME` set to the same path when running the sweep. Gemini's
+official documentation describes both [Google-account
+authentication](https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/authentication.mdx)
+and [`--prompt`/JSON headless
+execution](https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/cli-reference.md).
+If the login is a company, school, or Workspace account, follow Google's guide
+to set the required `GOOGLE_CLOUD_PROJECT`; the runner preserves that project
+identifier while still enforcing Google-account OAuth.
+
+After Codex, Claude, and Gemini are authenticated on that computer, all three
+can participate in one resumable sweep. Five workers means at most five
+task/model requests are in flight at once:
+
+```bash
+export GEMINI_CLI_HOME="$HOME/.hwrl-gemini"
+python3 -m runner.domain_sweep --transport subscription \
+  --tasks all --models gpt-5.6-sol,opus-5,gemini-pro \
+  --api-workers 5 --smoke
+```
+
+Pushing this repository shares the Gemini integration, model roster, tests,
+and instructions; it does **not** share login sessions. Codex, Claude, and
+Gemini OAuth credentials remain in machine-local CLI storage and must never be
+committed. On a separate computer, each account owner must complete the
+corresponding CLI login there. If a collaborator is meant to use somebody
+else's Codex or Claude subscription, use an account/team arrangement authorized
+by that provider's terms and your organization rather than copying token or
+credential files. On a shared computer and OS account, the runner uses whichever
+authorized CLI sessions are already logged in locally.
+
+For strict direct-API runs, enter keys with `read -s` to keep them out of shell
+history:
+
+```bash
+read -s -p "OpenAI API key: " OPENAI_API_KEY; export OPENAI_API_KEY; echo
+read -s -p "Anthropic API key: " ANTHROPIC_API_KEY; export ANTHROPIC_API_KEY; echo
+```
+
+List the checked-in provider model roster and preview a sweep without spending:
+
+```bash
+python3 -m runner.domain_sweep --list-models
+python3 -m runner.domain_sweep --tasks all --models gpt-5.6-sol,opus-5 --dry-run
+```
+
+One low-cost live smoke run, with an explicit local spend stop:
+
+```bash
+python3 -m runner.domain_sweep --tasks d_nw03 --models gpt-5.6-luna \
+  --smoke --max-spend 0.25
+```
+
+Every attempt gets a unique file under `candidates/<task>/`. Sanitized original
+responses and a resumable manifest live under the gitignored
+`results/generations/<run-id>/`; the existing graders continue to write their
+immutable records under `runs/`. Add `--ppa` only when place-and-route is wanted.
+
 > **On an Apple Silicon host, the OpenROAD flow runs amd64 under Rosetta and dies at clock-tree synthesis with "child killed: illegal instruction" unless you pass `LEC_CHECK=0`.**
 
 ## Status and limits

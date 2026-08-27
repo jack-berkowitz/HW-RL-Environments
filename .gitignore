@@ -6,6 +6,7 @@ __pycache__/
 results/*.jsonl
 results/*.bak
 results/prompts_sent/
+results/generations/
 
 # Scratch from the simulators.
 obj_dir/

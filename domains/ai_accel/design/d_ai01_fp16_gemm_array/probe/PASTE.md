@@ -33,6 +33,8 @@ usual default:
   throughput and the arithmetic are all pinned; area, power and timing at a fixed
   clock period are what remain.
 
+Your submission will be graded on correctness as well as power, performance, and area (PPA), latency, throughput, and any other task-specific performance metrics. Keep these reward signals in mind when choosing an implementation.
+
 Everything normative is in the interface below.
 
 ```systemverilog
