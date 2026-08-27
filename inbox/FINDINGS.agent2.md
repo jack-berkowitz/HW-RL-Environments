@@ -7789,3 +7789,71 @@ Not editing the artefact — the header correction stands as filed and this is
 recorded here instead. **The C2 re-derivation and the second-source replacement
 are not mine**, and this entry is a report about my own work rather than an input
 to either.
+
+## Census, second pass: 86 text-evidenced, 445 not recoverable, and git cannot separate them
+
+The first pass counted clauses whose text quotes an observation of the anchor and
+called 86 a floor. **The floor is the less interesting half.** Asked to say how
+the unrecoverable ones were handled, and the honest answer is that they dominate.
+
+    non-G clauses examined ............................ 531
+      text-evidenced CONTAMINATED ..................... 86    (16%)
+      text-evidenced CLEAN ............................  0
+      PROVENANCE NOT RECOVERABLE FROM THE ARTEFACT .... 445   (84%)
+
+**Zero clauses can be shown clean from their own text.** The 86 are those whose
+text quotes a measurement — *"Measured: with one row gated off and flush asserted,
+the clocked row went to 0x0000"* — and that is a positive record of contamination.
+There is no corresponding positive record of independence. A clause that was
+derived blind and a clause that was written with the anchor open **produce the
+same silence.**
+
+### Git was the obvious second channel and it gives nothing
+
+    22 of 22 tasks   spec text edited AFTER an observable artefact existed
+     0 of 22 tasks   spec begun before any observable artefact existed
+
+    16 of 22   spec and artefacts landed in ONE commit -- no ordering at all
+     6 of 22   landed separately, and in all six the ARTEFACTS CAME FIRST
+
+**Where they land together, git is not evidence of contamination — it is absence
+of evidence either way**, and reporting it as the first would be the error this
+corpus keeps finding. Where they land separately the ordering is legible and
+points the same way in all six.
+
+So the second channel does not separate the 445. It says every task's spec was
+written in a tree where the anchor was already present, which is weaker than
+"contaminated" and much weaker than "clean". **The population that cannot be
+adjudicated is 445, not 445-minus-whatever-git-recovers.**
+
+### C2 is the instance and it is inside the counted 86
+
+C2's text says *"Measured, and this clause was wrong before it was measured"*, so
+the census catches it. **That is the good case**: the author recorded the
+observation, the marker is in the text, and the clause is classifiable.
+
+What the census does **not** catch is the part that mattered — that the *ordering*
+was contaminated, the reference's flush behaviour read before A10 was opened and
+the derivation constructed afterward. **That fact reached me in a message and
+exists in no artefact.** The clause records that it was measured; it does not
+record that the measurement preceded the reasoning, and those are different
+claims with different consequences.
+
+**So even inside the 86, the census establishes less than it appears to.** It
+finds clauses written with the anchor in view. It cannot find clauses whose
+*conclusion* was taken from the anchor and dressed afterward, which is the failure
+mode C2 actually had.
+
+### What the number means, stated narrowly
+
+    86 clauses    cannot be cited as independent support for the behaviour they
+                  describe. Positively established from their own text.
+    445 clauses   unknown. Not "probably clean" and not "probably contaminated" --
+                  unknown, in a corpus where every spec was written beside its
+                  anchor.
+    0 clauses     positively established as independently derived.
+
+**The provenance finding's weight comes from the third line.** If 86 of 531 were
+contaminated and the rest were known clean, the remedy would be re-derive 86. What
+the corpus has instead is no mechanism that ever recorded independence, so there
+is nothing to re-derive *against*.
