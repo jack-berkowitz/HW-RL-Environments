@@ -92,10 +92,40 @@ may still be unenforced. d_nw01 H2 is exactly that shape.
 them.** d_dsp02 H1 surfaced because it had zero mentions; a clause mentioned
 once in a comment would not have.
 
-## A task no instrument here can assess
+## RETRACTED: "a task no instrument here can assess"
 
-d_ai01's checker reports through bare `$display` with no fail helper -- 43 sites,
-no `note_fail`, no `chk`, no `fail`. Clause attribution cannot be measured on it
-by `check_clause_emittable`, by `--shared`, or by this sweep, because all three
-key on a call whose argument carries the id. Not a defect found; a task where
-the question cannot currently be asked.
+**This section claimed d_ai01 was outside the reach of every instrument. It is
+false and it is retracted.** Kept rather than deleted because how it was
+produced is the point.
+
+    claimed   43 $display sites, no fail helper, therefore unassessable
+    actual    5 TEST_RESULT: FAIL sites. 43 was every $display in the file,
+              most of them METRIC and coverage output, not failure reports.
+
+    claimed   check_clause_emittable cannot assess it
+    actual    it does, and had already: 35 stated, 11 emittable, printed in
+              the same table I was reading when I wrote the claim
+
+Two of d_ai01's five failure sites name their clause -- `TEST_RESULT: FAIL: L3
+latency floor` and `TEST_RESULT: FAIL: V2 -- reset did not clear the array` --
+which is exactly what d_ai01's own spec already says about itself: *"TWO CLAUSES
+IN THIS TASK DO NAME THEMSELVES."*
+
+**HOW IT HAPPENED.** I grepped for a fail-helper DEFINITION, found none, and
+concluded the instruments could not read the task. The instrument does not need
+a helper; it reads failure message strings however they are emitted. I had the
+tool's own output for d_ai01 on screen and drew the conclusion from a cruder
+observation instead.
+
+That is the defect this file is about, committed inside this file: **a count of
+a vocabulary is a measurement of the vocabulary, not of the thing the vocabulary
+is usually used for.** `$display` count is not failure-site count is not
+attribution.
+
+**WHAT SURVIVES.** d_ai01 has no fail helper, so of five failure sites two name
+a clause and three do not. That is the ANONYMOUS state, already annotated on
+this task, and it is a much smaller claim than the one retracted.
+
+**WHAT DOES NOT.** There is no task outside the reach of every instrument. That
+was the headline AGENT-VERIF-A2 was told to elevate above the H1 fix, and it was
+wrong when I wrote it.
