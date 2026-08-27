@@ -115,7 +115,7 @@
 //     the question to the reference. Let
 //
 //       D     = 4                          per-stage delay, in enabled ticks
-//       d(k)  = D * (H - 1 - k) + 2        stage-k operand delay
+//       d(k)  = D * (H - 1 - k) + 3        stage-k operand delay
 //
 //     Then the value delivered on z_o[r] at enabled tick t is the chain of A2
 //     evaluated with each stage's operands taken from ITS OWN earlier tick:
@@ -128,8 +128,20 @@
 //     newest, d(H-1) = 3. Successive stages are exactly D apart. The bias y_i
 //     is sampled with stage 0's delay, d(0) -- measured, not assumed.
 //
-//     For H=8: d = 30, 26, 22, 18, 14, 10, 6, 2 for k = 0 .. 7.
-//     For H=4: d = 14, 10, 6, 2.
+//     For H=8: d = 31, 27, 23, 19, 15, 11, 7, 3 for k = 0 .. 7.
+//     For H=4: d = 15, 11, 7, 3.
+//
+//     THE FORMULA AND BOTH TABLES CARRIED +2 UNTIL 2026-08-27, while the
+//     sentence immediately above them said d(0) = D*(H-1)+3 and d(H-1) = 3, and
+//     L2 and L3 both said +3. L3 has recorded since 2026-08-26 that +2 "WAS LOW
+//     BY ONE" and that a testbench requiring 15 rejected a submission delivering
+//     the 14 the old constant implied. The correction reached the prose and did
+//     not reach the relation it was a correction to -- so A3 as written told a
+//     submitter to build the design L3 says the checker already rejects.
+//
+//     L3 also claims "ONE CONSTANT WAS WRONG AND EVERY RELATION WAS RIGHT."
+//     That was false while this line said +2: the relation carried the old
+//     constant. It is true now.
 //
 //     A consequence worth stating plainly: to compute one coherent dot product
 //     the operand pairs must be presented STAGGERED, stage 0 first and each

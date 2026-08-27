@@ -367,7 +367,10 @@ scored_configuration:
     what_was_built: >
       A latency floor in tb/fp16_gemm_array_tb.sv. It measures total latency with a
       directed impulse at stage 0 and asserts L3's D*(H-1)+2 -- 14 enabled ticks at
-      HEIGHT=4, 30 at HEIGHT=8 -- so the value is DERIVED FROM H and a design
+      HEIGHT=4, 30 at HEIGHT=8 --
+      [SUPERSEDED 2026-08-26: the constant is D*(H-1)+3, 15 and 31. The floor in
+      the testbench was corrected then; this record describes what was built on
+      2026-08-25 and is left as written.] so the value is DERIVED FROM H and a design
       carrying a CONSTANT latency satisfies at most one of the two legal
       geometries.
     validated_by_firing_it: >
@@ -465,7 +468,8 @@ scored_configuration:
       settle before building, not after.
     cheaper_alternative_to_weigh_first: >
       A capacity FLOOR at the scored geometry may cover the same ground: assert
-      that the design's observed latency at HEIGHT=4 is D*(H-1)+2 = 14 and that it
+      that the design's observed latency at HEIGHT=4 is D*(H-1)+2 = 14
+      [SUPERSEDED: +3 = 15] and that it
       is DERIVED rather than constant, by comparing the two geometries' measured
       latencies within one run. That is rule 36's shape -- a firing count rather
       than a control -- and it needs no new plausible-design argument.
@@ -513,7 +517,7 @@ scored_configuration:
     a lone element. The geometry decision rests on the measured number.
   why_HEIGHT_is_the_parameterised_axis: >
     HEIGHT changes the OBSERVABLE SCHEDULE -- it sets both the chain latency
-    D*(H-1)+2 and the per-stage operand skew of spec A3 -- so a design that
+    D*(H-1)+3 and the per-stage operand skew of spec A3 -- so a design that
     hardcodes one depth cannot pass at the other. WIDTH is pure replication and
     would not discriminate.
   discrimination_evidence:
@@ -869,7 +873,7 @@ difficulty_assessment: >
   values on overflow and ten on underflow, which is what A5 and A6 tabulate.
   .
   On top of that the dataflow is contractual. Stage k consumes its operands
-  D*(H-1-k)+2 enabled ticks before the result appears, so a coherent dot product
+  D*(H-1-k)+3 enabled ticks before the result appears, so a coherent dot product
   requires the operand pairs to be presented STAGGERED, and a design with the
   right arithmetic and the wrong skew fails on ordinary vectors -- nc_b kills
   2784 of 3400 while changing no delivered value at all.

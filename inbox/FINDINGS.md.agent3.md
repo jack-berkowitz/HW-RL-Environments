@@ -526,3 +526,68 @@ this respect and the difference is not visible from the text:
 
 Recorded per clause because "which of these was fitted" is exactly what a reader
 cannot recover later.
+
+---
+
+## A correction that reaches the prose and not the relation
+
+d_ai01's L3 recorded on 2026-08-26 that the chain latency constant was
+`D*(H-1)+2` and **"WAS LOW BY ONE"** — a design delivering the 14 the old
+constant implied was rejected by a testbench requiring 15, and the testbench was
+right. L2 was updated to `d(k) = D*(H-1-k)+3`. The testbench was updated.
+
+**A3's formula and both its tables still said `+2`, for a further day.**
+
+    A3 formula   d(k) = D * (H - 1 - k) + 2
+    A3 tables    H=8: 30, 26, 22, 18, 14, 10, 6, 2      H=4: 14, 10, 6, 2
+    A3 prose     "Stage 0 consumes the OLDEST operands, d(0) = D*(H-1)+3,
+                  and stage H-1 the newest, d(H-1) = 3."
+
+The prose and the formula are **four lines apart in the same clause** and
+disagree at both endpoints.
+
+### What that cost, and it is not cosmetic
+
+**A submitter implementing A3 as written builds the design L3 says the checker
+already rejects.** The clause that defines the operand schedule told them to
+build the thing another clause records as having been failed, correctly, by the
+rig they were about to be scored by.
+
+### And it falsifies the correction's own summary
+
+L3 says:
+
+> ONE CONSTANT WAS WRONG AND EVERY RELATION WAS RIGHT.
+
+That was false while A3's formula said `+2` — **the relation carried the old
+constant**. The sentence asserting that the damage was contained was itself the
+thing that made the surviving instance hard to see: a reader who believed it had
+no reason to check the relations.
+
+### The class, which is why this is not a typo
+
+A correction is applied where the argument for it was made. The argument was made
+about a LATENCY, so it reached L3, L2, and the latency floor in the testbench. It
+did not reach the SCHEDULE clause, which states the same quantity as a formula
+for a different purpose. Nothing links them, and nothing was going to.
+
+    reached      L2, L3, the testbench floor, and L3's own narrative
+    not reached  A3's formula, A3's two tables,
+                 task.yaml's HEIGHT-axis rationale,
+                 task.yaml's proposed capacity floor,
+                 tb/audit/probe_skew_tb.sv's asserted `expected`
+
+**Five surviving sites, in four files, one of which was a live assertion** —
+`probe_skew_tb` would have reported MISMATCH against a conforming design.
+
+> **A constant that appears in more than one clause has as many copies as it has
+> purposes, and a correction argued from one purpose reaches one copy.** The
+> sweep after a constant changes is not optional and is not "grep for the number"
+> — it is grep for the RELATION, in every file, including records that merely
+> describe the rig.
+
+Fixed 2026-08-27: the formula, both tables, the two live task.yaml claims, and
+the probe's assertion. Historical records of the old value are left as written
+and the two dated records that described it as current are marked SUPERSEDED
+rather than rewritten — an artefact that only shows its corrected state cannot be
+audited for how it got there.

@@ -382,6 +382,31 @@ enumerated what they had read **of the repo** — testbench format strings, a
 Anything that survives this needs the hand-off itself recorded as an input to the
 derivation, with the same standing as a file that was opened.
 
+### Their half, which is real and which I initially tried to absorb
+
+I first wrote that A2 "took the blame for my message." They declined that:
+
+> A routing message is a source and I did not treat it as one. Both halves are
+> real and neither cancels the other.
+
+That is the right accounting and mine was tidier than the facts. Recorded because
+the tidier version is the one that would have survived — a single-cause story is
+easier to file and easier to read, and it drops the half that generalises.
+
+**And their artefact is sharper than mine.** Their pre-commitment header had a
+line for "what I was told", and they filled it with a list of FILES:
+
+> The line existed and I filled it with the wrong category.
+
+That is worse than a missing field, and it is the reusable part:
+
+> **A missing field is a gap. A field present and filled with the wrong KIND of
+> thing reads as complete to every reader including its author.**
+
+Nothing prompts a second look at a question that has an answer in it. The
+disclosure was accurate, complete on its own terms, and useless for the thing it
+existed to catch.
+
 ---
 
 ## Attribution cases: count SELECTORS, not repairs

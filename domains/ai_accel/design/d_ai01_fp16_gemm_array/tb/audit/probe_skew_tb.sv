@@ -121,7 +121,13 @@ module probe_skew_tb;
         if (z[0] != 16'h0000) t_emerge = cyc - 1;
       end
 
-      expected = D * (H - 1) + 2;
+      // SUPERSEDED MODEL CORRECTED 2026-08-27. This probe's own measured model
+      // was D*(H-1)+2; L3 corrected the constant to +3 on 2026-08-26, measured
+      // two ways on two hosts. The probe kept asserting its old value and would
+      // have reported MISMATCH against a conforming design. The narrative above
+      // is left as written -- it records how the model was reached, and that
+      // history is why the correction is worth seeing.
+      expected = D * (H - 1) + 3;
       $display("  y  apply@%0d  emerge@%0d  delay=%0d  expected %0d   %s",
                t_apply, t_emerge, t_emerge - t_apply, expected,
                ((t_emerge - t_apply) == expected) ? "MATCH" : "*** MISMATCH ***");
