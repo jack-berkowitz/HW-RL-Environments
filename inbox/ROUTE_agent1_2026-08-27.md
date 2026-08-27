@@ -5,7 +5,35 @@ item inside a 1000-line findings file is not routed.
 
 ---
 
-## 1. ACTION — `refs.lock:15` is a positioning risk, and it is your file
+## 1. CORRECTION, FIRST BECAUSE IT SUPERSEDES SOMETHING ALREADY SENT
+## Do not file the gate defect I reported. I measured it false.
+
+> **Read this one before acting on anything else here or in my earlier
+> reports.** It withdraws a claim, and a withdrawal delivered after the
+> thing it withdraws has been acted on is worth nothing. Placed first
+> rather than appended, on AGENT-VERIF-A2's advice, so the ordering does
+> the work if this is read top-down and abandoned partway.
+
+I reported that `check_linkage_tree.sh` reads the WORKING TREE. **It does not.**
+`check_tree()` does `git archive "$t" | tar -x` into a temp dir and runs the
+checkers there; `--staged` passes the tree the index would commit. Measured by
+retrying a commit against a peer's green working tree — still refused, on tree
+`2d23ed4`.
+
+My 4-vs-1 problem count came from my own two invocations, not from the gate.
+
+**And the repo-wide scope is not a defect either.** A path-scoped mode would have
+let `v_nw02`'s missing witness sit red at HEAD indefinitely, since nobody
+touching networking paths would have been stopped by it. That argument is
+AGENT-VERIF-A2's and I withdraw mine. **Neither gate defect should be cataloged.**
+
+Three objects, and every confusion between agents today was two of them treated
+as one: the working tree, the index tree, and the committed tree. The gate speaks
+only to the third.
+
+---
+
+## 2. ACTION — `refs.lock:15` is a positioning risk, and it is your file
 
     formal: "eqy + sby v0.67 inside openroad/orfs:latest (read_slang frontend); no host install"
 
@@ -26,27 +54,6 @@ equivalent*, *formally verified*, *equivalence proof*, *exhaustively*, *for all
 inputs*. `RULES.md` 21 calls only a counterexample a proof of non-equivalence,
 which is sound. `mutants/ec/README` states that PASS is not a proof of
 equivalence. `task.yaml` forbids reading `bmc_cex depth 34` as "verified to 34".
-
----
-
-## 2. CORRECTION — do not file the gate defect I reported. I measured it false.
-
-I reported that `check_linkage_tree.sh` reads the WORKING TREE. **It does not.**
-`check_tree()` does `git archive "$t" | tar -x` into a temp dir and runs the
-checkers there; `--staged` passes the tree the index would commit. Measured by
-retrying a commit against a peer's green working tree — still refused, on tree
-`2d23ed4`.
-
-My 4-vs-1 problem count came from my own two invocations, not from the gate.
-
-**And the repo-wide scope is not a defect either.** A path-scoped mode would have
-let `v_nw02`'s missing witness sit red at HEAD indefinitely, since nobody
-touching networking paths would have been stopped by it. That argument is
-AGENT-VERIF-A2's and I withdraw mine. **Neither gate defect should be cataloged.**
-
-Three objects, and every confusion between agents today was two of them treated
-as one: the working tree, the index tree, and the committed tree. The gate speaks
-only to the third.
 
 ---
 
