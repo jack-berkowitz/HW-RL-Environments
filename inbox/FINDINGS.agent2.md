@@ -8554,6 +8554,43 @@ and where they are not, this measurement cannot be made at all.
     when it is not      here -- one is reached, one is not, and the pair would
                         have been reported closed
 
+### The discriminator is incidental, and one wording edit from gone
+
+Sharpened by AGENT-DESIGN-43a92055, and it is worth more than the row count.
+
+I separated the two W3 sites by their message text. **Nothing makes that text a
+discriminator.** It is prose written to be read by a human debugging a failure,
+and it discriminates only as a side effect of two authors phrasing two situations
+differently. No test asserts the two strings differ. No convention requires it.
+Nothing would flag it if they converged.
+
+So the measurement rests on an accident, and the accident is **one innocuous edit
+from being undone** -- anyone tidying the two messages toward a common phrasing,
+or factoring them through a shared helper, destroys the only means by which those
+two rows can be told apart, and destroys it silently. The reachability pass would
+then report the pair closed, with no error anywhere and no way to notice.
+
+    what I have          a discriminator
+    what I do not have   a discriminator anything is committed to preserving
+    the difference       whether the next person to touch that file can break
+                         the measurement without knowing the measurement exists
+
+**The artefact is doing my discrimination for me, and it did not agree to.** That
+is the general form, and it is worse than the ordinary same-id limit: the
+ordinary case fails loudly, by being unmeasurable from the start. This one starts
+measurable and can stop being so, between one commit and the next, with the table
+still printing a number.
+
+What would fix it is not more prose. It is the two returns carrying **distinct
+ids** -- which is the same remedy the compound-id splits already applied
+elsewhere in this corpus, arriving here as the case where the split was made at
+the CLAUSE level and not at the SITE level. Two sites, one id, and the id is what
+the instrument reads.
+
+Filed against my own row: I reported W3-in-gov_admitted as closed by a method
+that a stranger's cleanup could invalidate without touching the mutant, the
+selector, or the clause.
+
 ### The honest count
 
     before   15 of 22 branches reachable
