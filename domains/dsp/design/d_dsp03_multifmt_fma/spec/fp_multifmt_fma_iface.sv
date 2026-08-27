@@ -274,6 +274,20 @@
 //       AUTHORITY: stated task intent -- there is no tag on this interface, so
 //       order is the only thing associating a result with its operation.
 //
+//       CHECKED, BUT ITS FAILURE NAMES NO CLAUSE. The result comparison walks
+//       the vector set in order against an expected-value queue, so a reordered
+//       result is compared against the wrong vector and fails as
+//       "vec %0d fmt=%0d ... result %h expected %h" -- a message carrying no
+//       clause id at all. A design that reorders cannot pass.
+//
+//       STATED BECAUSE TOTAL ABSORPTION LEAVES NOTHING BEHIND. H2 is neither
+//       grouped under another id nor unenforced, and those are the two states a
+//       reader would otherwise choose between. A clause reported under ANOTHER
+//       id can be found by looking for two ids in one message; this one has no
+//       site of its own to find, so nothing short of reading the comparison
+//       would reveal it. (d_dsp02's H4 is the same mechanism and carries the
+//       same note.)
+//
 //   C1. FORWARD PROGRESS. Every accepted operation eventually produces a
 //       result, and with `out_ready_i` held high the unit eventually accepts
 //       another. A unit that wedges is not merely slow.

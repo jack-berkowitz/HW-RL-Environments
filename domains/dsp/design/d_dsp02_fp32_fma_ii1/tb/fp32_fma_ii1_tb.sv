@@ -30,6 +30,10 @@ module fp32_fma_ii1_tb #(
     always #5 clk = ~clk;
 
     logic        in_valid, in_ready, out_valid, out_ready;
+    // H1's in-cycle probe. in_valid is otherwise combinational from issue_idx,
+    // so the probe takes it over rather than racing it.
+    bit          h1_probe = 1'b0;
+    logic        h1_inv   = 1'b0;
     logic [31:0] a, b, c, result;
     logic [2:0]  rnd_mode;
     logic        flag_invalid, flag_overflow, flag_underflow, flag_inexact;
@@ -175,7 +179,8 @@ module fp32_fma_ii1_tb #(
     end
 
     always_comb begin
-        in_valid = (issue_idx < n_vec) && (phase != "init");
+        in_valid = h1_probe ? h1_inv
+                            : ((issue_idx < n_vec) && (phase != "init"));
         a        = v_a  (vec[issue_idx]);
         b        = v_b  (vec[issue_idx]);
         c        = v_c  (vec[issue_idx]);
@@ -408,6 +413,35 @@ module fp32_fma_ii1_tb #(
         end
         if (retire_idx < n_vec)
             note_fail($sformatf("only %0d of %0d vectors retired (liveness)", retire_idx, n_vec));
+
+        // ---- H1: in_ready must not depend combinationally on in_valid -----
+        // H1 appeared ZERO times in this checker and nothing else could catch
+        // it: a design with in_ready = f(in_valid) still transfers exactly when
+        // both are high, so every data, latency and II=1 check passes unchanged.
+        // Ported from d_nw01, where the same clause had the same gap.
+        //
+        // Toggle in_valid BETWEEN clock edges and require in_ready not to move.
+        // Nothing is ever accepted: the pulse is withdrawn well before the next
+        // posedge, so no transfer can occur and no operand is consumed.
+        phase = "H1";
+        begin
+            logic rb, ra;
+            h1_probe = 1'b1; h1_inv = 1'b0;
+            @(posedge clk); #2;
+            h1_inv = 1'b0; #1; rb = in_ready;
+            h1_inv = 1'b1; #1; ra = in_ready;
+            h1_inv = 1'b0;
+            checks++;
+            // THE VACUITY GUARD. If in_ready is low whatever in_valid does, it
+            // could not have moved either way, and "it did not move" is not
+            // evidence of anything.
+            if (rb !== 1'b1 && ra !== 1'b1)
+                note_fail("H1 probe was vacuous -- in_ready was low with in_valid both low and high, so it could not move");
+            else if (ra !== rb)
+                note_fail("H1: in_ready moved combinationally with in_valid");
+            h1_probe = 1'b0;
+            @(posedge clk);
+        end
 
         phase = "final";
 

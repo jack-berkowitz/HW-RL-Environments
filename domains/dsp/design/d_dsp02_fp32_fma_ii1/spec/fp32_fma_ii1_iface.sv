@@ -300,6 +300,17 @@
 //       makes unlimited spending conforming.
 //
 //   H1. `in_ready` MUST NOT depend combinationally on `in_valid`.
+//       CHECKED, in cycle. The checker toggles `in_valid` BETWEEN clock edges
+//       and requires `in_ready` not to move: a combinational path shows up
+//       immediately, a registered one cannot. The probe carries a vacuity
+//       guard, because an `in_ready` that is low whatever `in_valid` does could
+//       not have moved either way and would prove nothing. Nothing is accepted
+//       during the probe -- the pulse is withdrawn before the next posedge.
+//
+//       IT WAS ENFORCED BY NOTHING UNTIL THIS PROBE EXISTED, and no other check
+//       could have caught it: a transfer still happens exactly when both
+//       signals are high, so every vector, flag, latency and II=1 result is
+//       unchanged by the violation.
 //   H1b. REPORTED UNDER H3. The check that observes this -- "out_valid dropped
 //       while the result was unaccepted (H3)", and result or flags changing
 //       under backpressure -- is the same comparison that observes H3, and H3
