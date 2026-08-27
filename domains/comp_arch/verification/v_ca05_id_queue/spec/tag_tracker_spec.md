@@ -86,14 +86,15 @@ deliberate and recorded here so it is visible rather than discovered from a
 failure message.*
 
 **R10.** A pop of a tag with no entries shall complete with `pop_data_valid_o`
-low. It is not an error. `pop_data_o` is then **unconstrained** and shall not be
-checked.
+low. It is not an error. **`pop_data_o` IS FREE when `pop_data_valid_o` is
+low** — any value it carries satisfies this clause, so no expectation is placed
+on it.
 *Authority: rule 12 — no value is more correct than another for an absent entry.*
 
 *This clause's whole checkable content is the `pop_data_valid_o` half — the
-`pop_data_o` half is unconstrained by the sentence above and is checked by
-nothing, deliberately — and that half is exactly what R8 states for the absent
-case, so a violation of R10 is **reported under R8**. A submission that checks
+`pop_data_o` half is free, per the sentence above — and that half is exactly
+what R8 states for the absent case, so a violation of R10 is
+**reported under R8**. A submission that checks
 R8 is credited with this clause; that is deliberate and recorded here so it is
 visible rather than discovered from a failure message.*
 

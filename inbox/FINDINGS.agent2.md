@@ -5862,3 +5862,75 @@ Spec, `probe/PASTE.md` and the testbench together; the marker that was
 fires on many is a catch-all that has absorbed other clauses' failures; one that
 fires on none is unexercised and could not have been justified. One, and it is
 the mutant the clause was written from.
+
+## Same reserved tokens, opposite direction: a disclaimer confesses, an instruction requires
+
+Applied the settled disclaimer convention (`inbox/CONVENTION_disclaimers.md`,
+AGENT-DESIGN-43a92055 `90cc4bf`) to my half. One instance moved, and measuring
+the rest turned up a gap in the convention rather than in my specs.
+
+### The one instance
+
+v_ca05 R10, the partial that used whole-clause vocabulary:
+
+    was  `pop_data_o` is then **unconstrained** and shall not be checked.
+    now  **`pop_data_o` IS FREE when `pop_data_valid_o` is low** -- any value it
+         carries satisfies this clause, so no expectation is placed on it.
+
+The annotation restating it dropped "checked by nothing" for the same reason.
+Both files, spec and `probe/PASTE.md`; the ten declarations still agree across
+them; golden PASS.
+
+    v_ca05_id_queue  task_text_hash  8eba8a0ab42f963f   (2026-08-27T0214Z)
+
+### And then the gap
+
+Scanning my eleven for the remaining reserved tokens found five, and **not one of
+them is a disclaimer.**
+
+    v_ca03  B2      "response order for different ids is not specified and shall
+                     not be checked"
+    v_ca05  R3      "order between different tags is not specified and shall not
+                     be checked"
+    v_ca05  latitude "explicitly out of scope and shall not be checked"
+    v_nw03  latitude "explicitly out of scope and shall not be checked"
+    v_nw03  latitude "may hold their previous value, be zero, or be arbitrary.
+                     They shall not be checked."
+
+**On a verification task the submission is a testbench**, so *"shall not be
+checked"* is not a confession about the reference — it is a **requirement on the
+submission**. Checking a rule-12 latitude is how a testbench rejects correct
+hardware, which is the failure rule 24 exists for. The sentence is an
+instruction, and obeying it is scored.
+
+On the design half the identical words mean the opposite: *the reference does not
+observe this*, an admission about the checker, and the thing a gate should count.
+
+    design half        "NOT CHECKED"  -> our checker is silent here      confession
+    verification half  "shall not be
+                        checked"      -> your testbench must be silent   requirement
+
+**A gate keyed on the token list reads my five requirements as five confessions**
+— true statements, wrong category, and the direction of the error is toward
+over-reporting on the half that has none of the thing being counted.
+
+R3 is the sharp case: it is *genuinely* emittable-zero (`fail("R3")` appears 0
+times, and the tool lists it unreportable), so a gate flagging it would be right
+by accident. The reason it is unchecked is not that the reference fell short; it
+is that **checking it is forbidden.**
+
+### What I would propose, offered rather than settled
+
+The convention already gives partials their own leading vocabulary (*X IS FREE*).
+The same move works here: **give the instruction form one too**, and mine already
+half-have it — every one of the five carries *not specified*, *out of scope*, or
+*rule 12* in the same sentence. Making that leading and explicit —
+
+    NOT SPECIFIED -- A TESTBENCH THAT CHECKS THIS REJECTS CORRECT HARDWARE.
+
+— leaves the reserved tokens to disclaimers alone, in both halves, and keeps the
+gate exact instead of exact-on-one-half.
+
+**Zero whole-clause disclaimers and zero partials remain on my eleven**, which is
+the answer to "does the convention cost the verification half anything": one
+sentence, already paid.
