@@ -82,6 +82,19 @@ module stream_realign_tb;
     return hi | lo;
   endfunction
 
+  // ---- the beat-mismatch id selector, EXTRACTED so it can be tested --------
+  // Was an inline ternary in the fail() argument. Which NAME a mismatch
+  // reports under is a property of this file, so no mutant reaches it;
+  // naming the selector is what makes each branch callable directly.
+  // Refactoring for testability is expected on every inline id choice here.
+  //
+  // R2 governs a REALIGNED beat -- one joined from two input beats -- and P1
+  // a pass-through beat. The distinction is the realign flag of the beat that
+  // mismatched, and nothing else.
+  function automatic string gov_beat(input bit realigned);
+    return realigned ? "R2" : "P1";
+  endfunction
+
   // ---- accept side, then deliver side, in ONE ordered block --------------
   // With no register on the output path a beat can be accepted and delivered in
   // the same cycle, and two separate always blocks would leave it to chance
@@ -130,7 +143,7 @@ module stream_realign_tb;
         // check is confined to the mode where the contract is definite.
         automatic logic [3:0]  wstrb = 4'hF;
         if (line_data_valid && qdata !== want)
-          fail(b.realign ? "R2" : "P1",
+          fail(gov_beat(b.realign),
                $sformatf("cycle %0d: output beat is %08x, expected %08x -- input %08x joined with the held beat %08x at rotation %0d",
                          cyc, qdata, want, b.data, m_held, m_rot));
         if (b.realign && qstrb !== wstrb)
@@ -419,6 +432,17 @@ module stream_realign_tb;
     if (!cov_passthrough_after) fail("COVERAGE", "pass-through was never exercised AFTER realigning");
     for (int i = 0; i < 5; i++)
       if (!cov_rot[i]) fail("COVERAGE", $sformatf("rotation %0d was never driven", i));
+    // ---- ATTRIBUTION CASES ---------------------------------------------------
+    begin
+      automatic int n_attrib = 0, n_bad = 0;
+      n_attrib++; if (gov_beat(1'b1) != "R2") begin n_bad++; $display("ATTRIB FAIL gov_beat realigned -> %s, expected R2", gov_beat(1'b1)); end
+                  else $display("ATTRIB ok gov_beat R2 -- a realigned beat");
+      n_attrib++; if (gov_beat(1'b0) != "P1") begin n_bad++; $display("ATTRIB FAIL gov_beat pass-through -> %s, expected P1", gov_beat(1'b0)); end
+                  else $display("ATTRIB ok gov_beat P1 -- a pass-through beat");
+      $display("FIRED v_ai02.attrib_cases %0d", n_attrib);
+      if (n_bad != 0) fail("ATTRIB", $sformatf("%0d attribution case(s) returned the wrong clause id", n_bad));
+    end
+
     // ---- FIRED: did the artefacts that must fire, fire? ---------------------
     // Every counter here GATES A FLOOR. The floor already refuses on zero, so
     // these lines add one thing the floor cannot: they distinguish a floor that

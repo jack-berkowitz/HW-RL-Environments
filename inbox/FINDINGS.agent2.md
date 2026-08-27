@@ -7665,3 +7665,65 @@ one that bites, because it is exactly the situation a second source exists for.
 
 **Sixteen percent, floor, and concentrated in six tasks.** What it means is the
 user's to decide.
+
+## Attribution cases complete: 25 across five tasks, and six tasks have no selector at all
+
+    v_ca03  gov_r                          3
+    v_ca04  gov_delivery, bound_output_for 4
+    v_nw02  gov_admitted, gov_aw_timeout   5
+    v_dsp02 gov_result, gov_nv            11
+    v_ai02  gov_beat                       2
+    ---------------------------------------------
+                                          25
+
+Goldens PASS on all five. v_ca04 **10 of 10** and v_dsp02 **10 of 10** on the
+witness harnesses after the refactors; v_ca03 **11 of 11** earlier.
+
+### The surprise: six of eleven have nothing to test
+
+    v_ca05  v_ca06  v_ca07  v_nw01  v_nw03  v_nw04     no id-selecting construct
+
+**And that revises the scoped total downward, not upward** — the opposite of what
+the first three tasks suggested. I reported the estimate was "running 50% low"
+and would land near 34. It landed at 25, and the estimate was wrong in
+*composition* rather than in size.
+
+**The 23 counted sites that had carried a compound id.** But repairing a compound
+yields a *testable selector* only where the branch varies at runtime. Six of the
+repairs were **fixed-id relabels** — `fail("F", ...)` → `fail("Q2", ...)`,
+`"P3/X4"` → `"X4"`, `"F1/F2"` → `"F1"` — and a fixed id has no branch to cover.
+Whether it is the right id is settled by **reading the clause**, which is not
+something a case can do.
+
+    count SELECTORS, not repairs.
+
+Those are different populations and I conflated them for three tasks before the
+survey made it visible. The survey is one regex over each testbench: a function
+returning a clause id, a variable assigned more than one id then passed to
+`fail`, or a ternary between two id literals.
+
+### What the eleven in v_dsp02 bought
+
+`gov_result` has **four case arms and six reachable returns** — `OP_MINMAX` alone
+carries three, chosen on how many operands are NaN. A list written per
+*operation* has four entries, reads as complete, and leaves two of the three NaN
+branches untested.
+
+Both `S4` branches are covered separately — `a` NaN with `b` finite, and the
+reverse — because the `||` is not symmetric by accident and a case list that
+tests one is testing the operator's shape rather than the clause's.
+
+`gov_nv`'s `S8`/`S9` pair differs **only on the mode**, not the operation. A case
+per operation covers one of them.
+
+### And one of them has a witness
+
+    fn_m10_minmax_snan_not_invalid : FAIL [S6] op=1 mode=1 a=80000000
+                                     b=ff812345 : NV expected 1 got 0
+
+`S6` is `gov_nv`'s `OP_MINMAX` branch. **A shipped mutant drives the extracted
+selector and it attributes correctly** — which is the one thing the attribution
+cases themselves cannot establish, because they call the selector directly rather
+than reaching it through the design. The case says the branch returns the right
+id; the mutant says the branch is reachable from a real failure. Neither covers
+the other, which is the same pairing as the FIRED counter and the differential.

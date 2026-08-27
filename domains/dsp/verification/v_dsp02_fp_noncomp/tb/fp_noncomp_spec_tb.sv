@@ -153,6 +153,31 @@ module fp_noncomp_tb;
     logic [1:0]  op;  logic [2:0] mode;
     logic [31:0] a;   logic [31:0] b;
   } exp_t;
+
+  // ---- the two id selectors, EXTRACTED so they can be tested -----------------
+  // Both were inline in the checker: one a `unique case` assigning `cl`, one a
+  // nested ternary in the fail() argument. Inline, the only way to exercise a
+  // branch is to drive the design into the state it decides on -- and which NAME
+  // a failure reports under is a property of this file, so no mutant reaches it.
+  // Naming them is what makes each branch callable with the state constructed.
+  // Expected on every inline id choice in this corpus, not a smell.
+  function automatic string gov_result(input exp_t e);
+    unique case (e.op)
+      OP_SGNJ:   return "S1";
+      OP_MINMAX: return (is_nan(e.a) && is_nan(e.b)) ? "S5" :
+                        ((is_nan(e.a) || is_nan(e.b)) ? "S4" : "S3");
+      OP_CMP:    return "S7";
+      default:   return "S12";
+    endcase
+  endfunction
+
+  // S8 and S9 differ only in whether the comparison is signalling, so the NV
+  // clause depends on the MODE and not just the operation.
+  function automatic string gov_nv(input exp_t e);
+    return (e.op == OP_MINMAX) ? "S6"
+         : ((e.op == OP_CMP)   ? ((e.mode == 3'd2) ? "S9" : "S8")
+                               : "S2");
+  endfunction
   exp_t exp_q [$];
   logic [31:0] discarded_tag [$];      // ops accepted before a reset (S15)
 
@@ -179,14 +204,7 @@ module fp_noncomp_tb;
         automatic exp_t e = exp_q.pop_front();
         n_checked = n_checked + 1;
         if (e.chk_res && result !== e.res) begin
-          automatic string cl;
-          unique case (e.op)
-            OP_SGNJ:   cl = "S1";
-            OP_MINMAX: cl = (is_nan(e.a) && is_nan(e.b)) ? "S5" :
-                            ((is_nan(e.a) || is_nan(e.b)) ? "S4" : "S3");
-            OP_CMP:    cl = "S7";
-            default:   cl = "S12";
-          endcase
+          automatic string cl = gov_result(e);
           fail(cl, $sformatf("op=%0d mode=%0d a=%h b=%h : result expected %h got %h",
                              e.op, e.mode, e.a, e.b, e.res, result));
         end
@@ -198,8 +216,7 @@ module fp_noncomp_tb;
         if (status[4] !== e.st[4])
           // S8 and S9 differ only in whether the comparison is signalling, so
           // the NV clause depends on the MODE, not just the operation.
-          fail(e.op == OP_MINMAX ? "S6" :
-               (e.op == OP_CMP ? (e.mode == 3'd2 ? "S9" : "S8") : "S2"),
+          fail(gov_nv(e),
                $sformatf("op=%0d mode=%0d a=%h b=%h : NV expected %b got %b",
                          e.op, e.mode, e.a, e.b, e.st[4], status[4]));
       end
@@ -384,6 +401,58 @@ module fp_noncomp_tb;
     $display("METRIC: ops_checked %0d", n_checked);
     $display("METRIC: cov snan=%0d qnan=%0d zeropair=%0d noncanon=%0d stalls=%0d",
              cov_snan, cov_qnan, cov_zero_pair, cov_noncanon_nan, cov_stall);
+    // ---- ATTRIBUTION CASES: does the SELECTOR return the id it should? ------
+    // One case PER BRANCH. gov_result has six reachable returns behind four case
+    // arms -- OP_MINMAX alone carries three, chosen on how many operands are NaN
+    // -- and a list written per OPERATION would have four entries and read as
+    // complete while two of the three NaN branches went untested.
+    begin
+      automatic exp_t p; automatic int n_attrib = 0, n_bad = 0;
+      automatic logic [31:0] NAN = 32'h7FC0_0000, ONE = 32'h3F80_0000;
+      p = '0;
+
+      // gov_result -- six branches.
+      p.op = OP_SGNJ;   p.a = ONE; p.b = ONE;
+      n_attrib++; if (gov_result(p) != "S1")  begin n_bad++; $display("ATTRIB FAIL gov_result SGNJ -> %s, expected S1", gov_result(p)); end
+                  else $display("ATTRIB ok gov_result S1  -- sign-injection");
+      p.op = OP_MINMAX; p.a = NAN; p.b = NAN;
+      n_attrib++; if (gov_result(p) != "S5")  begin n_bad++; $display("ATTRIB FAIL gov_result MINMAX both-NaN -> %s, expected S5", gov_result(p)); end
+                  else $display("ATTRIB ok gov_result S5  -- minmax, BOTH operands NaN");
+      p.a = NAN; p.b = ONE;
+      n_attrib++; if (gov_result(p) != "S4")  begin n_bad++; $display("ATTRIB FAIL gov_result MINMAX one-NaN -> %s, expected S4", gov_result(p)); end
+                  else $display("ATTRIB ok gov_result S4  -- minmax, exactly ONE operand NaN");
+      p.a = ONE; p.b = NAN;   // the OTHER one -- the || is not symmetric by accident
+      n_attrib++; if (gov_result(p) != "S4")  begin n_bad++; $display("ATTRIB FAIL gov_result MINMAX b-NaN -> %s, expected S4", gov_result(p)); end
+                  else $display("ATTRIB ok gov_result S4  -- minmax, the other operand NaN");
+      p.a = ONE; p.b = ONE;
+      n_attrib++; if (gov_result(p) != "S3")  begin n_bad++; $display("ATTRIB FAIL gov_result MINMAX no-NaN -> %s, expected S3", gov_result(p)); end
+                  else $display("ATTRIB ok gov_result S3  -- minmax, neither operand NaN");
+      p.op = OP_CMP;
+      n_attrib++; if (gov_result(p) != "S7")  begin n_bad++; $display("ATTRIB FAIL gov_result CMP -> %s, expected S7", gov_result(p)); end
+                  else $display("ATTRIB ok gov_result S7  -- compare");
+      p.op = OP_CLASS;
+      n_attrib++; if (gov_result(p) != "S12") begin n_bad++; $display("ATTRIB FAIL gov_result CLASS -> %s, expected S12", gov_result(p)); end
+                  else $display("ATTRIB ok gov_result S12 -- the default arm");
+
+      // gov_nv -- four branches, and the CMP pair differs only on the MODE.
+      p.op = OP_MINMAX;
+      n_attrib++; if (gov_nv(p) != "S6") begin n_bad++; $display("ATTRIB FAIL gov_nv MINMAX -> %s, expected S6", gov_nv(p)); end
+                  else $display("ATTRIB ok gov_nv S6  -- minmax NV");
+      p.op = OP_CMP; p.mode = 3'd2;
+      n_attrib++; if (gov_nv(p) != "S9") begin n_bad++; $display("ATTRIB FAIL gov_nv CMP mode=2 -> %s, expected S9", gov_nv(p)); end
+                  else $display("ATTRIB ok gov_nv S9  -- compare, SIGNALLING mode");
+      p.mode = 3'd0;
+      n_attrib++; if (gov_nv(p) != "S8") begin n_bad++; $display("ATTRIB FAIL gov_nv CMP mode=0 -> %s, expected S8", gov_nv(p)); end
+                  else $display("ATTRIB ok gov_nv S8  -- compare, quiet mode");
+      p.op = OP_SGNJ;
+      n_attrib++; if (gov_nv(p) != "S2") begin n_bad++; $display("ATTRIB FAIL gov_nv SGNJ -> %s, expected S2", gov_nv(p)); end
+                  else $display("ATTRIB ok gov_nv S2  -- neither minmax nor compare");
+
+      $display("FIRED v_dsp02.attrib_cases %0d", n_attrib);
+      if (n_bad != 0)
+        fail("ATTRIB", $sformatf("%0d attribution case(s) returned the wrong clause id", n_bad));
+    end
+
     // ---- FIRED: did the artefacts that must fire, fire? ---------------------
     // Every counter here GATES A FLOOR. The floor already refuses on zero, so
     // these lines add one thing the floor cannot: they distinguish a floor that
