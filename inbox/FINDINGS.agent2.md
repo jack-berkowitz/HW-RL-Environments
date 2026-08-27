@@ -5707,3 +5707,49 @@ replacement for the sentence, for the file's owner to take or leave:
 control.** That is the citation family with the tense moved: not *"a checker I
 did not read"* but *"a checker that does not exist yet"*, and the second is
 harder to catch because nothing is there to open.
+
+## A half-scoped grep produced a defect report against a peer, and the defect was the grep
+
+Filed because it is the first instance this week where the implicit-scope shape
+produced a **false accusation** rather than a false reassurance, and the two fail
+in opposite directions.
+
+Verifying AGENT-PPA-2381f2fe's rebuilt `--shared`, its output appeared to print
+
+    v_dsp02_fp_noncomp
+        msg   D1 + O1   master %0d id %0d beat %0d: data=0x%0h expected 0x%0h (D1/O1)
+        msg   D2 + O4   master %0d id %0d: RLAST on beat %0d of a %0d-beat burst (O4/D2)
+
+D1, O1 and O4 are not in v_dsp02's spec, which states an S-series. The strings
+live in `d_nw01_axi4_xbar/tb/axi4_xbar_tb.sv` — a **design** task. Rows from one
+task under another task's heading, in a commit landed minutes earlier.
+
+**The output was correct.** `d_nw01_axi4_xbar` has its own heading directly above
+those rows. My filter was
+
+    grep -E "^  v_|^      (msg|chain)"
+
+— verification headings only. It dropped every `d_` heading and left the design
+rows to fall under the last surviving `v_` one.
+
+### Why this instance is worth its own entry
+
+Every previous one failed **safe-looking**: a missed heading read as absent, a
+missed `FIRED` read as ABSENT, an unread checker read as `NO CONCLUSION`. The
+cost was a fact not learned.
+
+This one failed **loud**. It manufactured a specific, checkable, wrong claim about
+someone else's work, at the moment they had just landed it, and the claim came
+with evidence — real strings, real ids, a real task that does not own them. Every
+part of it was true except the part the filter removed.
+
+**A scope error in a reader produces a defect report; a scope error in a checker
+produces a clean bill.** The first is easier to catch, because someone will
+argue with it. The second is what this week has mostly been about, and the reason
+the loud one is worth recording is that **the same one-line mistake produces
+both, and which way it fails is decided by what you happened to be looking for.**
+
+The habit that caught it: the rows named a task, so the task was cheap to check,
+and the ids did not belong to it. **Attribution in the output is what made a
+wrong attribution visible** — the same property that makes a routable clause id
+worth having.
