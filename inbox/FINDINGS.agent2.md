@@ -8195,3 +8195,91 @@ that it is applied **before** you know which of the two cases you are in, and th
 run that comes back unchanged costs the same as the run that comes back different.
 Reporting the unchanged one as a vindication rather than a waste is the part
 that keeps the practice alive.
+
+## The W3 mutant: a guard bounded from two sides, and the two sides are not the same direction
+
+W3 had no witness anywhere in the corpus. `af_m11_stalls_aw_below_bound` gives it
+one — a design that stalls a non-atomic AW while the downstream write debt is
+strictly below the bound, which is what W3 forbids in those words.
+
+Four guards were written before one held, each rejected on a measurement rather
+than on judgement.
+
+    guard 1  debt at bound-1 for 8 CONSECUTIVE cycles
+             stall_applied 0. The debt is at bound-1 for NINE cycles in the whole
+             reference run and never eight in a row.
+    guard 2  counter incremented on ACCEPTANCE
+             stall_applied 184 with the counter reading 0. Stalling drives
+             aw_ready low, so the guard's own effect suppressed its trigger.
+    guard 3  count the class, threshold 8
+             fires under the reference testbench, invisible to the witness.
+    guard 4  threshold 4
+             both.
+
+**Guard 2 is the one worth carrying.** A guard whose own effect suppresses its
+trigger cannot be reasoned about from its threshold at all — the counter said
+zero in a run where the defect fired 184 times. And the same coupling inflates
+the class count in the other direction: **18 class-cycles when the stall never
+fires, 272 when it does**, because the class condition includes `aw_valid` and
+stalling keeps the AW offered. A threshold read off the second number is
+unreachable.
+
+### The two-sided bound, measured
+
+    threshold 3   witness: difference     reference: 17 violations, 5 ids
+    threshold 4   witness: difference     reference: 10 violations, 4 ids
+    threshold 5   witness: NO DIFFERENCE  reference: 11 violations, 5 ids
+    threshold 6   witness: NO DIFFERENCE  reference: 11 violations, 5 ids
+
+    reference testbench   18 class-cycles available -- long, random
+    nonequiv_tb            5 class-cycles available -- short, directed, and it
+                           FILLS THE WRITE BUDGET on purpose, after which the
+                           class is false by construction
+
+**A mutant the equivalence witness cannot distinguish is not licensable under
+rule 16, however clearly the reference testbench catches it.** So the witness is
+the binding constraint and it is the tighter one, which is the opposite of the
+intuition that the long random stimulus reaches more.
+
+**And raising the threshold past four loses the witness while making the
+reference failure broader.** "Tighter guard" and "narrower defect" are not the
+same direction here, so a value chosen on either axis alone is wrong. That is now
+recorded in the mutant beside the threshold rather than in this file.
+
+### What it cost, against what I quoted
+
+I priced this at ~100 changed lines against a 448-line variant. **The file is
+that size and the cost was not in the lines** — it was four guards, six builds
+and a threshold sweep, all of it to find a value that two stimuli both reach.
+**The estimate measured the artefact and the work was in the calibration**, which
+is a different quantity and the one that mattered.
+
+And a correction to the other four: v_dsp02's mutants are **~50-line
+self-contained wrappers inside `mutants.sv`** that perturb the golden's inputs,
+with no new file in `dut/`. I quoted all five off v_nw02's variant model. S5, S8
+and S2 are roughly half the artefact — though on this evidence the calibration,
+not the artefact, is what will decide them.
+
+## Adding a mutant changes the score surface without moving task_text_hash
+
+    task_text_hash covers   spec/*_iface.sv, spec/*_spec.md, probe/PASTE.md
+    it does not cover       mutants/mutants.sv, dut/, conformant/, negctl/
+
+`sim_verification.sh` enumerates mutants by prefix straight out of
+`mutants/mutants.sv`, so **`af_m11` is picked up automatically and every future
+submission is scored against eleven mutants where the existing records were
+scored against ten.**
+
+    v_nw02 run records ................ 48
+    of those at the current hash ...... 12, all scored against 10 mutants
+
+**Two runs carrying the same `task_text_hash` can have been scored against
+different mutant sets**, and nothing in the record distinguishes them. The hash
+answers *"was this the same question?"* and is silent on *"was it marked the same
+way?"*
+
+That is not an argument against adding the mutant — W3 having no witness is the
+worse state. It is an argument that **the comparability key is narrower than
+comparability**, and a scoring change that leaves the key untouched is invisible
+to anyone reconciling records later. Reported, not fixed: `task_text_hash` is not
+mine.
