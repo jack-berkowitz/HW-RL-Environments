@@ -368,10 +368,18 @@
 //     registered value when the multiplexer selects it, so it is one register
 //     deeper into the past than an operand presented at the same edge.
 //
-//     Measured at both geometries -- 15 at H=4 and 31 at H=8 -- after an earlier
+//     Measured at both geometries -- 16 at H=4 and 32 at H=8 -- after an earlier
 //     draft of this clause asserted d(0) and was wrong by exactly one tick in
 //     both. A contract that said "the row's own z_o" without pinning WHICH z_o
 //     would have left the reference to decide it.
+//
+//     THE CITED NUMBERS WERE THE WRONG ONES UNTIL 2026-08-27 -- they read 15 and
+//     31, which are d(0), the very values the sentence says the earlier draft was
+//     wrong to assert. The formula and the prose above carried the correction and
+//     these two instances did not. Recomputed rather than re-read: this clause
+//     closes on itself, since the transition window below is d(0) + dfb =
+//     2*D*(HEIGHT-1)+7, so 15 + dfb = 31 at HEIGHT=4 forces dfb = 16 with nothing
+//     external consulted.
 //
 //     TRANSITIONS ARE NOT SCORED. The rule above is a STEADY-STATE rule. When
 //     accumulate_i changes, in either direction, partial sums seeded with y_i

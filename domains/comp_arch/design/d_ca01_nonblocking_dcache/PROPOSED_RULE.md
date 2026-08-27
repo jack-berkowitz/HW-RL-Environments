@@ -44,6 +44,12 @@ Text ready to paste. Numbered 21 on the assumption nothing else is pending.
 | task | current evidence | action |
 |---|---|---|
 | `d_ca01` | `bmc_cex` on all six, depths recorded | none |
+
+> **THE COUNT IS NINE; marked 2026-08-27.** Seven mutants and two conformant
+> designs carry `bmc_cex` with a recorded depth — `task.yaml`'s `mutants.set`
+> and `conformant` are the authority. "All six" was true when written and is
+> the tenth stale site found on this task, all ten understating.
+
 | `d_dsp02` | `witness: "vector N"` on all six | already compliant — `witness` is an accepted type |
 | `d_ca04` | not recorded in a machine-readable field | needs a field, not new work |
 

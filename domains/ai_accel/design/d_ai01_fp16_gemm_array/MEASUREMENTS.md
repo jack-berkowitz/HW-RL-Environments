@@ -782,3 +782,58 @@ measurement does not change that.
 **What this does not settle**, stated so silence is not read as completeness: it
 measures the reference. It does not establish what the contract should say, and
 no clause was written from it.
+
+## 19. CF-4 closed, and three items recorded OPEN and UNASSIGNED. 2026-08-27
+
+### CF-4 — C3's dfb citation, CLOSED
+
+C3 gives `dfb = D*(H-1) + 4 = d(0) + 1`, and says so again in prose: *"at
+HEIGHT=8 the feedback carries 32 enabled ticks and at HEIGHT=4 it carries 16."*
+Four lines later it cited **"15 at H=4 and 31 at H=8"** as the measured values.
+**15 and 31 are d(0)** — the very values the same sentence says an earlier draft
+was wrong to assert. The correction reached the formula and the prose and not the
+two cited instances.
+
+**Closed by recomputation, with nothing external consulted, because the clause
+closes on itself.** Its transition window below is `d(0) + dfb = 2*D*(HEIGHT-1)+7`
+= 31 at HEIGHT=4, so `15 + dfb = 31` forces `dfb = 16`; and 32 at HEIGHT=8 by the
+same step. Corrected to 16 and 32, with the history stated at the site.
+
+**THE SWEEP, RECOMPUTE-BASED, because a text sweep on a relation fails on a
+capitalisation and that is how the first residue of this class survived.** Every
+derived number in the spec recomputed from its own formula at both geometries:
+
+| site | formula | recomputed | in file |
+|---|---|---|---|
+| A3 `d(k)` table, H=8 | `D*(H-1-k)+3` | 31, 27, 23, 19, 15, 11, 7, 3 | ok |
+| A3 `d(k)` table, H=4 | `D*(H-1-k)+3` | 15, 11, 7, 3 | ok |
+| C2 refill window | `D*(H-1)+3` | 15 / 31 | ok |
+| C3 feedback `dfb` | `D*(H-1)+4` | 16 / 32 | **was 15 / 31 — fixed** |
+| C3 transition window | `2*D*(H-1)+7` | 31 / 63 | ok |
+| L3 total latency | `D*(H-1)+3` | 15 / 31 | ok |
+
+Two further sites quote `31 at HEIGHT=8, 15 at HEIGHT=4` and are **correct as
+quotations** — C3's "the earlier text gave" and L3's own statement of `d(0)`.
+CF-4 was the only surviving stale instance.
+
+### THREE ITEMS, OPEN AND UNASSIGNED
+
+Raised by a second-source session. **Each needs a decision about what the text
+should say, which is a derivation act, and the owner of this record is
+disqualified from those here.** Recorded so they are not lost; routed separately.
+Not defects-with-a-fix, and no fix is implied by the wording below.
+
+1. **A6 is both "in full" and "the representative case".** It says the delivered
+   value is *"set out here in full, in both directions, for every rounding mode"*
+   and then says *"Taking the representative case of an exact result of magnitude
+   2^-25"*. The table covers one magnitude. Under the literal reading of "in
+   full" this contradicts A4. OPEN.
+
+2. **A5's overflow threshold is mode-dependent, and the readings diverge on the
+   OF flag for an exact result of 65530.** Whether OF is raised there is not
+   settled by the text. OPEN.
+
+3. **Tininess detection is never named.** Which of the two IEEE 754 tininess
+   determinations applies — before or after rounding — is not stated, the
+   distinction is reachable at this precision, and the flags differ between them.
+   OPEN.
