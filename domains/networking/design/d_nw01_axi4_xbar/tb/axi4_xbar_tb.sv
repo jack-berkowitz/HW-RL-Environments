@@ -151,12 +151,61 @@ module axi4_xbar_tb
         bp_r[m] = (bp_lfsr[m][1:0] != 2'b00);
         bp_b[m] = (bp_lfsr[m][5:4] != 2'b00);
     end
-    int bp_r_stalls, bp_b_stalls;
+    // NOT cleared by rst_n. These are cumulative COVERAGE bookkeeping, not DUT
+    // state: they record that the scored phases exercised L3 at all. A phase
+    // that resets mid-run would otherwise silently retire an existing coverage
+    // floor -- which is exactly what the first version of the ceiling phase did,
+    // putting the reference at "2 coverage holes".
+    int bp_r_stalls = 0, bp_b_stalls = 0;
     always_ff @(posedge clk) begin
-        if (!rst_n) begin bp_r_stalls <= 0; bp_b_stalls <= 0; end
-        else if (tmode == 0) for (int m = 0; m < NUM_MST; m++) begin
+        if (tmode == 0) for (int m = 0; m < NUM_MST; m++) begin
             if (mst_resp[m].r_valid && !mst_req[m].r_ready) bp_r_stalls <= bp_r_stalls + 1;
             if (mst_resp[m].b_valid && !mst_req[m].b_ready) bp_b_stalls <= bp_b_stalls + 1;
+        end
+    end
+
+    // ---- C3's ceiling instrument ------------------------------------------
+    // C3 bounds R storage INSIDE the crossbar at 4 beats per master port.
+    // A ceiling is violated by doing MORE, so ordinary stimulus never reveals
+    // it: a design that over-buffers looks identical on every scored phase.
+    // It is only visible AT REST -- stall every master, let the slaves keep
+    // answering, and count what the crossbar swallows before it stops.
+    // Each counted beat left a slave and did not reach a master, so it is
+    // held in the crossbar by definition.
+    bit c3_arm = 1'b0;
+    int c3_held = 0;
+    // ...and the witness that the phase actually PRESSURISED the crossbar.
+    // held==0 is the correct answer for a crossbar that backpressures instead
+    // of buffering -- the vendored reference scores exactly 0 -- but it is
+    // also what a phase that offered nothing would report. The two are
+    // indistinguishable from the count alone, so the offer is counted
+    // separately and zero offers FAILS rather than passes.
+    int c3_offered = 0;
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin c3_held <= 0; c3_offered <= 0; end
+        else if (c3_arm) begin
+            int n, o; n = 0; o = 0;
+            for (int s = 0; s < NUM_SLV; s++) begin
+                if (slv_resp[s].r_valid && slv_req[s].r_ready) n++;
+                if (slv_resp[s].r_valid) o++;
+            end
+            c3_held    <= c3_held + n;
+            c3_offered <= c3_offered + o;
+        end
+    end
+
+    bit c3w_arm = 1'b0;
+    int c3w_held = 0, c3w_offered = 0;
+    always_ff @(posedge clk) begin
+        if (!rst_n) begin c3w_held <= 0; c3w_offered <= 0; end
+        else if (c3w_arm) begin
+            int n, o; n = 0; o = 0;
+            for (int m = 0; m < NUM_MST; m++) begin
+                if (mst_req[m].w_valid && mst_resp[m].w_ready) n++;
+                if (mst_req[m].w_valid) o++;
+            end
+            c3w_held    <= c3w_held + n;
+            c3w_offered <= c3w_offered + o;
         end
     end
 
@@ -226,6 +275,23 @@ module axi4_xbar_tb
             mst_req[m].ar.len   = 8'd0;
             mst_req[m].ar.size  = 3'd3;
             mst_req[m].ar.burst = BURST_INCR;
+            // tmode 3 -- the W half of C3's ceiling. Same idea, opposite
+            // direction: W beats flow master->slave, so the pressure comes
+            // from the master pushing while the SLAVE refuses w_ready. Every
+            // beat the crossbar takes is one it cannot deliver.
+            if (tmode == 2'd3) begin
+                mst_req[m].ar_valid = 1'b0;
+                mst_req[m].aw_valid = cap_en[m];
+                mst_req[m].aw.id    = slv_id_t'(0);
+                mst_req[m].aw.addr  = addr_t'(cap_tgt[m] * 32'h0001_0000 + 32'h40);
+                mst_req[m].aw.len   = 8'd0;
+                mst_req[m].aw.size  = 3'd3;
+                mst_req[m].aw.burst = BURST_INCR;
+                mst_req[m].w_valid  = cap_en[m];
+                mst_req[m].w.data   = '0;
+                mst_req[m].w.strb   = '1;
+                mst_req[m].w.last   = 1'b1;
+            end
         end else begin
             mst_req[m]          = '0;
             mst_req[m].r_ready  = bp_r[m];
@@ -294,8 +360,9 @@ module axi4_xbar_tb
             slv_resp[s].ar_ready = (tmode == 2'd1) ? 1'b1
                                    : (tmode == 2'd2) ? ((pq_tl[s] - pq_hd[s]) < PQD)
                                    : (s_rbeats[s] == 0);
-            slv_resp[s].aw_ready = (s_wbeats[s] == 0) && !s_bpend[s];
-            slv_resp[s].w_ready  = (s_wbeats[s] > 0);
+            slv_resp[s].aw_ready = (tmode == 2'd3) ? 1'b1
+                                   : ((s_wbeats[s] == 0) && !s_bpend[s]);
+            slv_resp[s].w_ready  = (tmode == 2'd3) ? cap_drain : (s_wbeats[s] > 0);
             slv_resp[s].r_valid  = (tmode == 2'd1) ? 1'b0
                                    : (tmode == 2'd2) ? (pq_tl[s] != pq_hd[s])
                                    : ((s_rbeats[s] != 0) && (s_rdelay[s] == 0));
@@ -305,7 +372,7 @@ module axi4_xbar_tb
                                    : expected_beat(s_raddr[s], s_rn[s] - s_rbeats[s]);
             slv_resp[s].r.resp   = RESP_OKAY;
             slv_resp[s].r.last   = (tmode == 2'd2) ? 1'b1 : (s_rbeats[s] == 1);
-            slv_resp[s].b_valid  = s_bpend[s];
+            slv_resp[s].b_valid  = (tmode == 2'd3) ? 1'b0 : s_bpend[s];
             slv_resp[s].b.id     = s_wid[s];
             slv_resp[s].b.resp   = RESP_OKAY;
         end
@@ -328,7 +395,7 @@ module axi4_xbar_tb
                     s_rdelay[s] <= (tmode == 0) ? RATE : 0;
                 end
                 // writes
-                if (slv_req[s].aw_valid && slv_resp[s].aw_ready) begin
+                if (slv_req[s].aw_valid && slv_resp[s].aw_ready && tmode != 2'd3) begin
                     s_wbeats[s] <= int'(slv_req[s].aw.len) + 1;
                     s_wid[s]    <= slv_req[s].aw.id;
                     s_w_inflight[s] <= int'(slv_req[s].aw.id);
@@ -712,6 +779,121 @@ module axi4_xbar_tb
             @(posedge clk); guard++;
         end
         repeat (200) @(posedge clk);
+
+        // ---- C3: the R storage ceiling, measured at rest ------------------
+        // Masters offer reads and accept nothing (cap_drain=0 holds every
+        // r_ready and b_ready low); slaves answer every AR. Every R beat the
+        // crossbar accepts is one it cannot deliver, so it comes to rest
+        // holding exactly its internal R storage.
+        phase = "r-ceiling";
+        begin
+            int c3_idle, c3_guard, c3_prev, c3_allow;
+            // RESET INTO AND OUT OF THIS PHASE. Both ceiling phases end with
+            // valids deliberately held un-accepted, and simply switching tmode
+            // withdraws them -- which the vendored rr_arb_tree catches as
+            // "disallowed to deassert unserved request signals" at i_r_mux.
+            // Reset is the one protocol-legal exit. It is free here only
+            // because the L3 coverage counters above no longer clear on it.
+            // CHANGE MODE INSIDE RESET, never outside it. Releasing reset in
+            // tmode 0 leaves a window where the scored driver's stale ar_hold
+            // and nxt_id -- testbench regs, not cleared by rst_n -- issue real
+            // reads; switching to tmode 2 then withdraws the R responses they
+            // earned, and rr_arb_tree catches it at i_r_mux.
+            cap_en = '0; cap_drain = 1'b0;
+            rst_n = 1'b0;
+            tmode = 2'd2;
+            repeat (10) @(posedge clk);
+            rst_n = 1'b1;
+            repeat (4) @(posedge clk);
+            for (int m = 0; m < NUM_MST; m++) cap_tgt[m] = m % NUM_SLV;
+            cap_en = '1;
+            c3_arm = 1'b1;
+
+            c3_idle = 0; c3_guard = 0; c3_prev = -1;
+            while (c3_idle < 64 && c3_guard < 20000) begin
+                @(posedge clk);
+                c3_guard++;
+                if (c3_held == c3_prev) c3_idle++;
+                else begin c3_idle = 0; c3_prev = c3_held; end
+            end
+            c3_arm = 1'b0; cap_en = '0;
+
+            c3_allow = 4 * NUM_MST;
+            $display("METRIC: r_beats_held_at_rest=%0d (C3 allowance %0d = 4 per master port, offered %0d)",
+                     c3_held, c3_allow, c3_offered);
+
+            // Rule 36 applied to a ceiling: if no slave ever offered an R beat
+            // the crossbar was never pressurised, and held==0 measures nothing.
+            checks++;
+            if (c3_offered == 0)
+                note_fail("C3: the R ceiling phase never pressurised the crossbar -- no slave offered an R beat, so the held count measures nothing");
+
+            // The settle guard. Without it a design that never stops accepting
+            // would run the loop out and report whatever it had reached, and a
+            // count taken before rest is not a ceiling measurement at all.
+            checks++;
+            if (c3_guard >= 20000)
+                note_fail("C3: the R ceiling phase never came to rest -- the crossbar was still accepting R beats with every master stalled");
+            else begin
+                checks++;
+                if (c3_held > c3_allow)
+                    note_fail($sformatf("C3: crossbar held %0d R beats with every master stalled; the ceiling is %0d (4 per master port)",
+                                        c3_held, c3_allow));
+            end
+
+            cap_en = '0;
+            rst_n = 1'b0;
+            tmode = 2'd0; cap_drain = 1'b0;
+            repeat (10) @(posedge clk);
+            rst_n = 1'b1;
+        end
+
+        // ---- C3: the W storage ceiling, same method, other direction -------
+        phase = "w-ceiling";
+        begin
+            int w_idle, w_guard, w_prev, w_allow;
+            cap_en = '0; cap_drain = 1'b0;
+            for (int m = 0; m < NUM_MST; m++) cap_tgt[m] = m % NUM_SLV;
+            rst_n = 1'b0;
+            tmode = 2'd3;
+            repeat (10) @(posedge clk);
+            rst_n = 1'b1;
+            repeat (4) @(posedge clk);
+            cap_en = '1;
+            c3w_arm = 1'b1;
+
+            w_idle = 0; w_guard = 0; w_prev = -1;
+            while (w_idle < 64 && w_guard < 20000) begin
+                @(posedge clk);
+                w_guard++;
+                if (c3w_held == w_prev) w_idle++;
+                else begin w_idle = 0; w_prev = c3w_held; end
+            end
+            c3w_arm = 1'b0;
+            w_allow = 4 * NUM_MST;
+            $display("METRIC: w_beats_held_at_rest=%0d (C3 allowance %0d = 4 per master port, offered %0d)",
+                     c3w_held, w_allow, c3w_offered);
+
+            checks++;
+            if (c3w_offered == 0)
+                note_fail("C3: the W ceiling phase never pressurised the crossbar -- no master offered a W beat, so the held count measures nothing");
+
+            checks++;
+            if (w_guard >= 20000)
+                note_fail("C3: the W ceiling phase never came to rest -- the crossbar was still accepting W beats with every slave refusing w_ready");
+            else begin
+                checks++;
+                if (c3w_held > w_allow)
+                    note_fail($sformatf("C3: crossbar held %0d W beats with every slave refusing w_ready; the ceiling is %0d (4 per master port)",
+                                        c3w_held, w_allow));
+            end
+
+            cap_en = '0;
+            rst_n = 1'b0;
+            tmode = 2'd0; cap_drain = 1'b0;
+            repeat (10) @(posedge clk);
+            rst_n = 1'b1;
+        end
 
         phase = "final";
         $display("METRIC: checks=%0d", checks);

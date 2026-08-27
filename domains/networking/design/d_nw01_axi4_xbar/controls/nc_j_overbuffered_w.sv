@@ -1,68 +1,46 @@
 // ============================================================================
-// nc_i_overbuffered_r -- d_nw01 CAPABILITY-EXCEEDED CONTROL. Never shipped.
+// nc_j_overbuffered_w -- d_nw01 CAPABILITY-EXCEEDED CONTROL. Never shipped.
 // ============================================================================
-// C3 says a design may hold AT MOST 4 R beats and 4 W beats per master port in
-// flight inside the crossbar, and that "storage beyond that is NON-CONFORMING,
-// not a design choice." This holds SIXTEEN TIMES the R allowance.
+// The W-channel twin of nc_i_overbuffered_r, and it exists for a reason nc_i
+// does not cover: C3 bounds "4 R beats AND 4 W beats per master port", and a
+// ceiling check written for only one of those directions leaves the other half
+// of the clause enforced by nothing while LOOKING enforced from the results.
+// That is the same defect the clause itself was written against, one level up.
 //
-// WHY C3 EXISTS, in its own words: without a ceiling, buffering is an unpriced
-// axis, and "one did exactly that -- a 256-entry per-master read buffer,
-// 2 x 256 x ~40 bits of flip-flops, which is 14x the reference's total area on
-// a design that is otherwise correct on every axis. It was not a bad answer to
-// this specification. It was an answer this specification failed to constrain."
-// That is F62, and it happened on THIS TASK. C3 is the clause written to stop
-// it from happening again.
+// C3, in full: a design may hold AT MOST 4 R beats and 4 W beats per master
+// port in flight inside the crossbar, and "storage beyond that is
+// NON-CONFORMING, not a design choice." This holds SIXTEEN TIMES the W
+// allowance.
 //
 // THE PERTURBATION. The vendored reference verbatim, renamed, with a 64-deep
-// FIFO interposed on each master's R channel. Ports are full width, every
-// transaction is routed, ordered and returned to the master that issued it, and
-// per-ID order is preserved because a FIFO cannot reorder. THE ONLY THING WRONG
-// WITH IT IS THAT IT HOLDS 64 R BEATS PER MASTER WHERE C3 PERMITS 4.
+// FIFO interposed on each master's W channel. The direction is the mirror of
+// nc_i's: R beats flow slave->master, so nc_i buffers what comes BACK; W beats
+// flow master->slave, so this buffers what goes IN. The wrapper answers
+// w_ready itself and feeds the inner crossbar from the queue. Every beat is
+// delivered, in order, to the slave the address decodes to -- W beats cannot
+// even be reordered, since AXI4 has no WID and the queue is per master.
+// THE ONLY THING WRONG WITH IT IS THAT IT HOLDS 64 W BEATS PER MASTER WHERE
+// C3 PERMITS 4.
 //
-// PREDICTION, stated before running.
-//   THIS COMMENT ONCE NAMED THE SCORING TESTBENCH BY FILENAME and that made
-//   check_transport.py REJECT the whole control before it ever simulated -- the
-//   scanner matches the token in a COMMENT exactly as it would in code. So this
-//   control had never run through the scored path at all, and the verdict
-//   recorded for it came from a hand run. Named without the token now.
+// PREDICTION, stated before running. Unlike nc_i -- which was written to prove
+// a gap and correctly predicted a PASS -- this one is written to validate a
+// check that now exists, so the prediction is the opposite:
 //
-//   BOTH configurations SHOULD PASS. Grepping the scoring testbench for an
-//   occupancy or beats-held counter finds nothing: the only C3-adjacent text is
-//   a comment inside C1's FLOOR explaining pipeline-depth tolerance. If that
-//   reading is right, C3 is a clause the contract states and the harness does
-//   not enforce -- and the submission that motivated it would pass today.
+//   BOTH configurations SHOULD FAIL, in phase w-ceiling, naming C3, with a
+//   held count far above the allowance of 4*NUM_MST.
 //
-//   IF IT FAILS, my reading is wrong and C3 is enforced by something I did not
-//   recognise, most likely indirectly through a latency or liveness consequence
-//   of the deeper queue. That is the better outcome.
+//   IF IT PASSES, the W ceiling check does not actually observe W storage and
+//   the clause is still half-unenforced. A check that cannot refuse this is
+//   not a check, and that is the whole reason the control is run.
 //
-// POLARITY: NO CROSSOVER, the same as d_nw03's nc_h. C3's ceiling is a CONSTANT,
-// not a parameter, so 64 exceeds it at every configuration and the expected
-// verdict is the same at both. The two configurations are run to show the result
-// is not a configuration artefact.
+// NAMING: this comment does not name the scoring testbench by filename.
+// check_transport.py matches the token in a COMMENT exactly as it would in
+// code, and nc_i spent its whole first life rejected before it ever simulated
+// for precisely that reason.
 //
-// ---------------------------------------------------------------------------
-// POSTSCRIPT, 2026-08-26. THE PREDICTION ABOVE IS NOW FALSE, AND IT WAS RIGHT
-// WHEN IT WAS WRITTEN. Read in that order or the file reads as a contradiction.
-//
-// It predicted PASS at both configurations, and it passed, and that PASS was
-// the evidence that C3 was a stated clause the harness did not enforce. The
-// clause is now enforced: the scoring testbench has a ceiling phase that stalls
-// every master, lets the slaves keep answering, and counts what the crossbar
-// swallows. This control now FAILS 0/16, naming C3, holding 128 R beats against
-// an allowance of 4 per master port.
-//
-// So the verdict flipped BY CONSTRUCTION, not by discovery. Nothing about this
-// file changed; the check it was built to prove missing now exists, and this
-// control is what validated it. Its job changed from evidence-of-a-gap to
-// regression-control for the check that closed the gap.
-//
-// Its W-channel twin, nc_j_overbuffered_w, was written at the same time and for
-// a reason worth stating: C3 bounds R beats AND W beats, and a ceiling check
-// covering only R would have left half the clause unenforced while looking
-// enforced from the results -- the same defect this control was built to expose,
-// one level up.
-// ---------------------------------------------------------------------------
+// POLARITY: NO CROSSOVER, the same as nc_i. C3's ceiling is a CONSTANT, not a
+// parameter, so 64 exceeds it at every configuration.
+// ============================================================================
 // ============================================================================
 `timescale 1ns/1ps
 
@@ -96,7 +74,7 @@
 `include "axi/typedef.svh"
 `timescale 1ns/1ps
 
-module axi4_xbar_ovbuf_inner
+module axi4_xbar_ovbufw_inner
   import axi4_xbar_pkg::*;
 #(
     parameter int NUM_MST   = 2,
@@ -284,9 +262,8 @@ module axi4_xbar_ovbuf_inner
 
 endmodule
 
-
 // ---------------------------------------------------------------------------
-// The wrapper: reference behaviour, C3-violating storage.
+// The wrapper: reference behaviour, C3-violating W storage.
 // ---------------------------------------------------------------------------
 module axi4_xbar
   import axi4_xbar_pkg::*;
@@ -309,24 +286,26 @@ module axi4_xbar
     slv_req_t  [NUM_MST-1:0] inner_req;
     slv_resp_t [NUM_MST-1:0] inner_resp;
 
-    slv_r_t q_mem  [NUM_MST][DEEP];
-    int     q_wr   [NUM_MST];
-    int     q_rd   [NUM_MST];
-    int     q_cnt  [NUM_MST];
+    w_t q_mem [NUM_MST][DEEP];
+    int q_wr  [NUM_MST];
+    int q_rd  [NUM_MST];
+    int q_cnt [NUM_MST];
 
-    // the inner crossbar sees a ready that reflects the deep queue, not the master
+    // The master's W beats land in the deep queue, not in the crossbar: this
+    // wrapper answers w_ready itself, and the inner crossbar is offered beats
+    // out of the queue instead.
     always_comb begin
         for (int m = 0; m < NUM_MST; m++) begin
             inner_req[m]         = mst_req[m];
-            inner_req[m].r_ready = (q_cnt[m] < DEEP);
+            inner_req[m].w_valid = (q_cnt[m] != 0);
+            inner_req[m].w       = q_mem[m][q_rd[m]];
         end
     end
 
     always_comb begin
         for (int m = 0; m < NUM_MST; m++) begin
             mst_resp[m]         = inner_resp[m];
-            mst_resp[m].r_valid = (q_cnt[m] != 0);
-            mst_resp[m].r       = q_mem[m][q_rd[m]];
+            mst_resp[m].w_ready = (q_cnt[m] < DEEP);
         end
     end
 
@@ -337,10 +316,10 @@ module axi4_xbar
             end
         end else begin
             for (int m = 0; m < NUM_MST; m++) begin
-                automatic logic push = inner_resp[m].r_valid && (q_cnt[m] < DEEP);
-                automatic logic pop  = (q_cnt[m] != 0) && mst_req[m].r_ready;
+                automatic logic push = mst_req[m].w_valid && (q_cnt[m] < DEEP);
+                automatic logic pop  = (q_cnt[m] != 0) && inner_resp[m].w_ready;
                 if (push) begin
-                    q_mem[m][q_wr[m]] <= inner_resp[m].r;
+                    q_mem[m][q_wr[m]] <= mst_req[m].w;
                     q_wr[m] <= (q_wr[m] + 1) % DEEP;
                 end
                 if (pop) q_rd[m] <= (q_rd[m] + 1) % DEEP;
@@ -354,20 +333,17 @@ module axi4_xbar
     end
 
     // ---------------------------------------------------------------------
-    // LIVENESS INSTRUMENT. A CONTROL THAT PASSES MAY BE INERT.
+    // LIVENESS INSTRUMENT. A CONTROL'S VERDICT ONLY TELLS YOU IT DID NOT BREAK
+    // THE HARNESS -- it does not tell you it exercised the capability its name
+    // claims. nc_i carries the same instrument for the same reason, after
+    // AGENT-VERIF-A2's two v_ca06 perturbations whose R channel had never been
+    // slow because a double drive left the gate connected to nothing.
     //
-    // This is the only control in the design set that never fails anywhere, and
-    // its entire claim is "I hold 64 R beats per master and C3 does not catch
-    // me". If the queue never actually exceeds C3's ceiling of 4, it passes for
-    // the same reason a CONFORMING design passes, and the conclusion drawn from
-    // it -- that C3 is unenforced -- rests on nothing.
-    //
-    // A control's verdict tells you it did not break the harness. It does not
-    // tell you it exercised the capability its name claims. So the capability is
-    // measured here rather than assumed: peak occupancy, per master, printed.
-    // (AGENT-VERIF-A2's warning, from two v_ca06 perturbations whose R channel
-    // had never been slow because a double drive left the gate connected to
-    // nothing. Both passed every run for as long as they existed.)
+    // Here it matters in the other direction too: this control is expected to
+    // FAIL, and a failure for the WRONG reason -- a protocol violation the
+    // queue introduced, say -- would look like a validated check while proving
+    // nothing. Peak occupancy says the queue really did exceed the ceiling.
+    // ---------------------------------------------------------------------
     int q_peak [NUM_MST];
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -380,16 +356,15 @@ module axi4_xbar
     final begin
         automatic int worst = 0;
         for (int m = 0; m < NUM_MST; m++) if (q_peak[m] > worst) worst = q_peak[m];
-        $display("METRIC: nc_i peak_r_occupancy=%0d over %0d masters (C3 ceiling is 4, DEEP=%0d)",
+        $display("METRIC: nc_j peak_w_occupancy=%0d over %0d masters (C3 ceiling is 4, DEEP=%0d)",
                  worst, NUM_MST, DEEP);
         if (worst <= 4)
-            $display("  NC_I IS INERT: it never held more than C3 permits, so its PASS is not evidence that C3 is unenforced.");
+            $display("  NC_J IS INERT: it never held more than C3 permits, so its verdict is not evidence about C3.");
         else
-            $display("  NC_I IS LIVE: it held %0d beats against C3's ceiling of 4 and still passed.",
-                     worst);
+            $display("  NC_J IS LIVE: it held %0d W beats against C3's ceiling of 4.", worst);
     end
 
-    axi4_xbar_ovbuf_inner #(
+    axi4_xbar_ovbufw_inner #(
         .NUM_MST(NUM_MST), .NUM_SLV(NUM_SLV),
         .MAX_TRANS(MAX_TRANS)
     ) u_inner (
