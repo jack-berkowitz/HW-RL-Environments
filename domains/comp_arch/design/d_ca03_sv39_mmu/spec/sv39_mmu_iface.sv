@@ -54,6 +54,23 @@
 // -----------------------------------------------------------------------------
 // A -- TRANSLATION
 // -----------------------------------------------------------------------------
+// A1-A11, C1, C3, C4 AND F1-F3 ARE CHECKED ANONYMOUSLY. Every translation
+//     clause below is observed by ONE per-step comparison whose failure reads
+//
+//         "step %0d %s va=%016x: expected valid=%0b pa=%014x exc=%0b cause=%0d"
+//
+//     and carries NO CLAUSE ID. A wrong physical address, a wrong fault cause
+//     and a wrong valid all surface identically, so a failure names the step
+//     rather than the clause. They are neither grouped under another clause nor
+//     unchecked; they are checked without attribution.
+//
+//     FIVE CLAUSES IN THIS TASK DO NAME THEMSELVES -- A5, T4, T9, T10 and V2 --
+//     so the silence is specific rather than a property of the rig.
+//
+//     Stated because the alternative reading, that a clause absent from failure
+//     output is unchecked, is WRONG here and RIGHT on d_nw01, where C3, D3, H1
+//     and H3 have no check at all. The two states look identical from a grep.
+//
 // A1. THE WALK. With translation enabled, a request for virtual address va is
 //     resolved by descending the table from the root at satp_ppn_i:
 //       a = satp_ppn_i << 12

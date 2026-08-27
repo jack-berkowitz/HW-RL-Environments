@@ -56,6 +56,28 @@
 // -----------------------------------------------------------------------------
 // A -- ARITHMETIC
 // -----------------------------------------------------------------------------
+// A1-A10, C1, F2 AND F3 ARE CHECKED ANONYMOUSLY, AND THAT IS ONE MESSAGE FOR ALL
+//     OF THEM. Every clause in this section is observed by a single comparison
+//     of z_o and status_o against the reference, whose failure reads
+//
+//         "%0d z mismatches, %0d status mismatches over %0d scored cycles"
+//
+//     and carries NO CLAUSE ID. A failure tells you a cycle disagreed, not which
+//     clause it disagreed with -- the operand skew of A3, the rounding of A4,
+//     the subnormal exactness of A7 and the flag timing of A10 all surface
+//     identically. They are neither grouped under another clause nor unchecked;
+//     they are checked without attribution.
+//
+//     TWO CLAUSES IN THIS TASK DO NAME THEMSELVES, so the absence is specific
+//     rather than a property of the rig: L3 prints "L3 latency floor" and V2
+//     prints "V2 -- reset did not clear the array". Everything else is silent
+//     about which clause it is.
+//
+//     This is stated because the alternative reading -- that clauses with no id
+//     in the failure output are unchecked -- is wrong here and RIGHT on d_nw01,
+//     where C3, D3, H1 and H3 genuinely have no check at all. The two states
+//     look the same from a grep and differ entirely in what they mean.
+//
 // A1. ENABLED TICK. For row r, an enabled tick is a rising edge of clk_i at
 //     which both reg_enable_i and row_clk_gate_en_i[r] are high. All timing
 //     below is counted in enabled ticks of the row in question, not in raw

@@ -54,6 +54,14 @@ exact port list below. No package, no include, nothing outside the file.
 // -----------------------------------------------------------------------------
 // ARITHMETIC -- normative
 // -----------------------------------------------------------------------------
+//   A1-A9 ARE CHECKED ANONYMOUSLY. Every arithmetic clause below is observed by
+//       the same two comparisons -- result against the reference, and flags
+//       against the reference -- and NEITHER MESSAGE CARRIES A CLAUSE ID. So a
+//       failure tells you a vector disagreed, not which clause it disagreed
+//       with. That is a property of this rig, not of the clauses, and it is
+//       stated here so the absence of A-ids in failure output is not read as the
+//       A-clauses being unchecked.
+//
 //   A1. RESULT = round( a*b + c ), where the product a*b is NOT rounded before
 //       the addition. There is exactly ONE rounding, applied to the exact
 //       product-sum.
@@ -318,7 +326,12 @@ exact port list below. No package, no include, nothing outside the file.
 //       makes unlimited spending conforming.
 //
 //   H1. `in_ready` MUST NOT depend combinationally on `in_valid`.
-//   H1b. `out_valid` MUST NOT depend combinationally on `out_ready`. The
+//   H1b. REPORTED UNDER H3. The check that observes this -- "out_valid dropped
+//       while the result was unaccepted (H3)", and result or flags changing
+//       under backpressure -- is the same comparison that observes H3, and H3
+//       carries its own never-exercised guard.
+//
+//       `out_valid` MUST NOT depend combinationally on `out_ready`. The
 //       consumer may hold `out_ready` low indefinitely, and a design that waits
 //       for it before asserting `out_valid` deadlocks against a consumer that
 //       waits for `out_valid` before asserting `out_ready`.
@@ -335,14 +348,24 @@ exact port list below. No package, no include, nothing outside the file.
 //       operands stable, until accepted. The checker honours this.
 //   H3. When `out_valid` is high and `out_ready` is low, `out_valid` must
 //       remain high and the result and flags must remain stable.
-//   H4. Results are returned IN ORDER. This is not a reordering unit.
+//   H4. CHECKED, BUT ITS FAILURE NAMES NO CLAUSE. The result comparison walks
+//       the vector set in order, so a reordered result is compared against the
+//       wrong vector and fails as "vector %0d: ... result %08h, reference says
+//       %08h" -- a message carrying no clause id at all. It is neither grouped
+//       under another clause nor unchecked; it is checked anonymously.
+//
+//       Results are returned IN ORDER. This is not a reordering unit.
 //
 // -----------------------------------------------------------------------------
 // RESET
 // -----------------------------------------------------------------------------
 //   R1. `rst_n` is ACTIVE-LOW and SYNCHRONOUS.
 //   R2. While `rst_n` is low, `out_valid` is 0.
-//   R3. Reset discards work in flight; no result from before reset may appear
+//   R3. REPORTED UNDER R2. A result surviving a reset surfaces as "out_valid
+//       asserted while rst_n low (R2)". R3 states the requirement; R2 is where
+//       breaking it is reported.
+//
+//       Reset discards work in flight; no result from before reset may appear
 //       afterwards.
 // -----------------------------------------------------------------------------
 // TOOL REQUIREMENTS -- stated, because a submission cannot pass what it is not told

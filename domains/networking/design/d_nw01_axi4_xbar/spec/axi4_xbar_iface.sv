@@ -74,7 +74,11 @@
 //       len+1 R beats with the last carrying `last`.
 //       *** A dropped unmapped transaction is a deadlock, because the master
 //       waits forever for a response that is never coming. ***
-//   D3. Decode is on the address only. QoS, cache, prot and region are carried
+//   D3. NOT CHECKED BY THE TESTBENCH. `qos`, `cache`, `prot` and `region`
+//       appear ZERO times in tb/, so "carried through unmodified" is stated and
+//       unobserved. A crossbar that drops or rewrites them passes.
+//
+//       Decode is on the address only. QoS, cache, prot and region are carried
 //       through unmodified and never affect routing.
 //
 // -----------------------------------------------------------------------------
@@ -136,10 +140,21 @@
 // HANDSHAKE
 // -----------------------------------------------------------------------------
 //   Standard AXI4 valid/ready on all five channels of all ports.
-//   H1. No *_ready may depend combinationally on the corresponding *_valid.
+//   H1. NOT CHECKED BY THE TESTBENCH. Its only appearance in tb/ is inside a
+//       COMMENT -- "the H1-style rule that a ready must not depend on its own
+//       valid" -- describing the rule rather than testing it. d_ca01 and d_nw03
+//       both carry a live in-cycle check for their equivalent clause; this task
+//       does not.
+//
+//       No *_ready may depend combinationally on the corresponding *_valid.
 //   H2. Once a master asserts a valid it holds the channel payload stable until
 //       ready. The checker honours this.
-//   H3. A crossbar output holding valid with ready low must keep valid high and
+//   H3. NOT CHECKED BY THE TESTBENCH. There is no withdraw or payload-stability
+//       check on the crossbar outputs at all -- zero matches for withdrew,
+//       stable, or a dropped valid. d_ca01 reports this under R1 and d_nw03
+//       under R1; here nothing observes it.
+//
+//       A crossbar output holding valid with ready low must keep valid high and
 //       the payload stable.
 //
 // -----------------------------------------------------------------------------
@@ -174,7 +189,14 @@
 //       refuses a second ID fails here. O2 grants you the right to RETURN
 //       different IDs out of order; it does not grant the right to REFUSE them.
 //
-//   C3. RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
+//   C3. NOT CHECKED BY THE TESTBENCH. `C3` appears ZERO times in tb/. This is a
+//       resource CEILING, and the pattern is now measured rather than suspected:
+//       capacity FLOORS get controls, capacity CEILINGS get written and
+//       forgotten. d_ca01's C4 and d_ca04's B1 are the same shape. A design
+//       holding sixteen beats per port is NON-CONFORMING by the sentence below
+//       and passes. It needs a CONTROL, not an annotation.
+//
+//       RESPONSE BUFFERING IS BOUNDED. A design may hold at most **4 R beats
 //       and 4 W beats per master port** in flight inside the crossbar. Storage
 //       beyond that is NON-CONFORMING, not a design choice.
 //
@@ -232,7 +254,11 @@
 // -----------------------------------------------------------------------------
 //   rst_n is ACTIVE-LOW and SYNCHRONOUS.
 //   R1. While rst_n is low every output valid is 0.
-//   R2. Reset discards all in-flight transactions. After release the crossbar
+//   R2. REPORTED UNDER R1. A response emitted from before the reset surfaces as
+//       "response valid asserted while rst_n low (R1)". R2 states the
+//       requirement; R1 is where breaking it is reported.
+//
+//       Reset discards all in-flight transactions. After release the crossbar
 //       starts clean; no response from before reset may be emitted.
 //
 // -----------------------------------------------------------------------------
