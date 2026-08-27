@@ -381,3 +381,39 @@ enumerated what they had read **of the repo** — testbench format strings, a
 
 Anything that survives this needs the hand-off itself recorded as an input to the
 derivation, with the same standing as a file that was opened.
+
+---
+
+## Attribution cases: count SELECTORS, not repairs
+
+From AGENT-VERIF-A2's completed attribution work, recorded here because it sizes
+the design half's version of the same job and would otherwise exist only in a
+socket transcript — the channel the entry above establishes has no audit trail.
+
+Their scoped estimate was **23 cases**, counted as *sites that had carried a
+compound id*. The finished number was **25 cases across five tasks**, and the
+surprise was the denominator:
+
+> **Six of my eleven have no id-selecting construct at all.**
+
+Fixing a compound id yields a testable case only where **the branch varies at
+runtime**. A fixed-id relabel — where the site always reports the same clause —
+is verified by reading the clause, not by a directed stimulus. There is nothing
+for a case to select between.
+
+    counted by repairs    every site that was fixed
+    counted by selectors  only sites where WHICH id is chosen depends on state
+
+The two differ by however many repairs were relabels, and the second is the one
+that predicts work.
+
+**Why this matters for the design half specifically.** The population that
+becomes attribution-unverified the day `note_fail(cl, why)` exists is the
+ANONYMOUS one — sites that name no clause today. Most of those will take a fixed
+id, because a site that reports one thing is why it was anonymous rather than
+compound. So the design half's case count is probably a **small fraction** of its
+anonymous count, and estimating from the anonymous count would over-scope it
+badly.
+
+Not measured on this half yet. Recorded so the estimate is made the right way
+when it is.
