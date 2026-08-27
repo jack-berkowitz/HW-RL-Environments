@@ -1,0 +1,29 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "",
+  "compile_warnings": "0",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "25b47c68d26252d73b69c7931fd436cec31b15ff-dirty",
+  "kind": "sim",
+  "label": "sdp_requant_ref",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "domains/ai_accel/design/d_ai04_sdp_requant/ref/sdp_requant_ref.sv",
+  "submission_sha256_16": "fb967bfcb50761c4",
+  "task": "d_ai04_sdp_requant",
+  "task_text_hash": "bcf0d0df4071c9ea",
+  "timestamp_utc": "2026-08-26T22:50:02Z"
+}
