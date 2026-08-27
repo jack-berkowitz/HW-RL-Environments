@@ -133,3 +133,86 @@ And when a count is used to justify a decision rather than to describe a state,
 **say what would change it.** *"Zero of 758 carry a clause id"* is a fact about
 today; *"and any run written after clause ids are plumbed would"* is what tells
 the next reader whether to re-take it.
+
+<!-- author: agent2 -->
+
+## A wrong value inside the range of legitimate outputs cannot be caught by reading it harder
+
+**The most general result of the week, stated on its own because it is not about
+any of the things it was found in.**
+
+Some failures announce themselves: a crash, a timeout, `None` where a number was
+expected, a value outside what the thing can legitimately produce. Those need no
+convention — they arrive labelled.
+
+The failures that cost this corpus its time were all the other kind. **The wrong
+answer was a value the instrument legitimately produces**, so nothing about it
+looked wrong, and every attempt to catch it by inspecting it more carefully
+failed — because inspection is what produced the value.
+
+    a count ......... every number in range is a real count
+    a set ........... {} is what a correctly-read empty case returns
+    a clean scan .... "no compound ids found" is what a clean corpus looks like
+    an approval ..... an accurately-relayed ruling and an inaccurate one are
+                      identical from the receiving end
+
+### The evidence, both directions
+
+Every remedy that failed this week was **a form of reading harder**:
+
+    care with the regex anchors ......... four more anchors, same defect
+    care with the census ................ 8 sites; the true number was 13
+    care with the sweep ................. 41 sites, line-based; six wrapped
+                                          instances it could not see
+    care with a cited checker ........... the citation was the error, and
+                                          re-reading the citation could not
+                                          show that
+
+Every remedy that worked **added a channel that did not exist before**:
+
+    check_fired ......... reports WHETHER an artefact fired, beside the count
+    NO CONCLUSION ....... a value outside the legitimate range, put there
+                          deliberately so "did not look" cannot read as "clean"
+    --selftest .......... asserts the widest legal input is accepted AND the
+                          first illegal one refused
+    compared N of M ..... says how many files it actually opened
+    a build marker ...... required before "no warnings" may be reported, so an
+                          empty log cannot pass
+    the decider .......... saying it to the person who will act
+
+### The rule
+
+**If the value type is saturated — every value it can return is a value a
+correct run also returns — widen it before writing the check.**
+
+`None`, a sentinel, a second return value, an out-of-band marker: the mechanism
+does not matter. What matters is that the instrument can say *I did not look* in
+a way no successful run can say. A count, a set, a list and a boolean are all
+saturated by default, which is most of what anyone writes.
+
+The corollary is the part people skip: **an in-range failure value is recoverable
+only if the legitimate range has a value it never uses.** That is not something
+you find by checking; it is something someone put there on purpose, and if nobody
+did, no amount of care recovers it.
+
+### It is not a statement about instruments
+
+The last instance of the week was **an authorisation**, not a measurement: a user
+ruling relayed by a peer. It has the identical shape — from the receiving end a
+correct relay and an incorrect one are indistinguishable, and no property of the
+message separates them — and the identical remedy: a second channel, the decider
+speaking to the person who will act.
+
+**It transferred unmodified.** That is the strongest evidence available that the
+rule is about the shape of the failure and not about the domain, so apply it to
+anything that returns a value someone will act on: a count, a verdict, a
+schedule, a permission.
+
+### And what it costs
+
+One round trip, usually. The trade that is always available and always wrong is
+**consistency for authorisation** — landing something because leaving it
+half-applied is untidy. Consistency is a property of the corpus; authorisation is
+a property of who decided. **Trading the second for the first has no floor**: the
+next inconsistency will also be real, and will also be an argument for skipping
+the next confirmation.
