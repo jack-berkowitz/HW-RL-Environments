@@ -155,7 +155,12 @@ checks them. Everything else is normative.
 //       contract and is stated so that stability is a contract term rather than
 //       an assumption.
 //
-//   R1b. `rsp_valid_o` MUST NOT depend combinationally on `rsp_ready_i`. The
+//   R1b. REPORTED UNDER R1. The check that observes this -- rsp_valid dropped
+//       while the response was unaccepted, and rsp_id/rsp_data changing under
+//       backpressure -- carries its id in TRAILING PARENTHESES rather than as a
+//       prefix, so it is easy to miss when grepping for the clause.
+//
+//       `rsp_valid_o` MUST NOT depend combinationally on `rsp_ready_i`. The
 //       consumer may hold `rsp_ready_i` low indefinitely, and a design that
 //       waits for it before asserting `rsp_valid_o` deadlocks against a consumer
 //       that waits for `rsp_valid_o` before asserting `rsp_ready_i`.
@@ -176,7 +181,12 @@ checks them. Everything else is normative.
 //       R1's firing count to zero at all sixteen configurations.
 //       AUTHORITY: stated task intent.
 //
-//   R2. OPERATIONS. `req_op_i` is 1'b0 for LOAD, 1'b1 for STORE.
+//   R2. REPORTED UNDER R3/R5. A wrong LOAD value or a STORE that wrote the
+//       wrong bytes surfaces as the scoreboard's value comparison, which prints
+//       "R3/R5: a LOAD returned the wrong value for its id". R2 defines the
+//       operations; R3/R5 is where a violation of them is reported.
+//
+//       OPERATIONS. `req_op_i` is 1'b0 for LOAD, 1'b1 for STORE.
 //       LOAD returns the addressed word. STORE writes the bytes of
 //       `req_data_i` selected by `req_mask_i`; bytes whose mask bit is 0 are
 //       left unchanged.
@@ -306,12 +316,24 @@ checks them. Everything else is normative.
 //       non-blocking, and without it the parameter in C1 is the only thing
 //       separating this from a blocking cache with a queue in front.
 //
-//   C3. FORWARD PROGRESS. With requests continuously offered and memory always
+//   C3. REPORTED UNDER R3/C2, one half each. "Every accepted request is
+//       eventually answered" is the accepted-versus-answered count and fails as
+//       R3. "No id is starved while others are being served" is the acceptance
+//       check and fails as C2. There is no C3 message.
+//
+//       FORWARD PROGRESS. With requests continuously offered and memory always
 //       eventually responding, every accepted request is eventually answered,
 //       and no id is starved while others are being served.
 //       AUTHORITY: stated task intent.
 //
-//   C4. BLOCK-DATA BUFFERING IS BOUNDED. Outside the tag and data arrays, a
+//   C4. NOT CHECKED BY THE TESTBENCH, and that is recorded here rather than
+//       left to be discovered. `C4` appears ZERO times in tb/, and no check
+//       observes how much block data a design holds. This clause is a stated
+//       requirement with no enforcement: a submission that buffers four lines
+//       instead of two is non-conforming and passes. It is not grouped under
+//       another id -- there is no id.
+//
+//       BLOCK-DATA BUFFERING IS BOUNDED. Outside the tag and data arrays, a
 //       design may hold at most TWO cache lines of block data at any time --
 //       one for the fill in flight and one for the writeback in flight -- plus,
 //       per pending miss, at most ONE WORD of merged store data and its byte

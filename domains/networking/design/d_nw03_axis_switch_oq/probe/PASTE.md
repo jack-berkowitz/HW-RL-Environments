@@ -213,7 +213,7 @@ is normative.
 //       frames to a ready output.
 //       AUTHORITY: stated task intent.
 //
-//   C3. REPORTED UNDER R3 AND C2, one half each. "Every accepted frame is
+//   C3. REPORTED UNDER R3/C2, one half each. "Every accepted frame is
 //       eventually delivered" is the accepted-versus-delivered count, which
 //       fails as R3. "No input goes unserved while others are being served" is
 //       the starvation check, which fails as C2. There is no C3 message.
