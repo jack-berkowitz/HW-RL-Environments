@@ -741,6 +741,34 @@ def main():
                 corr = (f"**{sim.get('configs_passed')}/{sim.get('configs_total')} pass**"
                         if sim.get("all_passed")
                         else f"{sim.get('configs_passed')}/{sim.get('configs_total')} FAIL")
+                # A CONFIG THAT PRODUCED NO VERDICT IS NOT A CONFIG THAT FAILED, and the
+                # record has said so all along -- configs_no_verdict is written by
+                # write_run_record and, until now, read by nothing. 7 records carry a
+                # non-zero value, the newest from 2026-08-27, so this is live rather than
+                # historical. Rolling it into the FAIL count makes a run that could not be
+                # scored indistinguishable from one that was scored and lost.
+                _nv = sim.get("configs_no_verdict")
+                try:
+                    _nv = int(_nv)
+                except (TypeError, ValueError):
+                    _nv = 0
+                if _nv:
+                    corr += f" ({_nv} no verdict)"
+                # THE EXPECTED VERDICT, WHERE THE TASK DECLARES ONE. Controls are expected
+                # to FAIL and a reader applies that rule, which is correct for every control
+                # in the corpus except an INVERTED one -- d_ai01's nc_h_echo_band_only is
+                # expected to PASS, and that PASS is the measurement. It is the single row
+                # where a lost verdict reads as an ordinary failing control rather than as
+                # something wrong.
+                #
+                # 0d11eaa put expected_verdict into the record and gave it no reader, which
+                # is F91: a field nothing reads cannot be wrong, and that is not the same as
+                # being right. This is the reader.
+                _ev = sim.get("expected_verdict")
+                if _ev:
+                    _got = "PASS" if sim.get("all_passed") else "FAIL"
+                    corr += (f" — as declared ({_ev})" if _got == _ev
+                             else f" — **DECLARED {_ev}, GOT {_got}**")
 
             area = power = fmx = "—"
             unavail = PPA_UNAVAILABLE.get(key)
