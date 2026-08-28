@@ -8806,3 +8806,120 @@ against files that were never regenerated.
 Regenerating into a `mktemp -d` copy rather than the real tree is what made that
 a non-event. **The reassuring reading and the failure arrived in the same
 output**, three lines apart, and the "IDENTICAL" lines were the more prominent.
+
+## A false universal is worse than a loud refusal, and this is the third occurrence
+
+Two tasks, the same missing-policy-counterpart defect, opposite failure modes.
+
+    v_nw02   count guard present   exited 2 before its first build. Produced
+                                   NOTHING and CLAIMED nothing.
+    v_ca03   no guard at all       ran to completion over TEN of ELEVEN and
+                                   printed "OK: every defect is caught on BOTH
+                                   bases, and both clean implementations pass."
+
+**v_ca03's is the worse one, and the ordering is not close.** A refusal is
+recoverable by anyone who reads the exit code — the information is present, just
+in a channel people skip. A false universal is recoverable only by someone who
+**re-derives the set**: they must independently enumerate the anchor mutants,
+enumerate the policy files, and notice the difference. Nothing in the output
+prompts that. Every row read "as expected", the clean controls passed, the exit
+code was 0, and the summary said "every".
+
+    the refusal      withholds a claim         cost: a reader who skips exit codes
+    the universal    asserts a false one       cost: a reader must reconstruct the
+                                               set to discover it is false
+    what they share  a short set is invisible in the output of a globbing runner
+
+`task.yaml` compounded it: **"22 of 22"** — a real number, correctly counted, over
+two differently sized halves. Eleven mutants on the golden base and ten on the
+policy base is twenty-two checks, so the arithmetic was right and the sentence it
+supported was wrong. **The `-m1` shape again: a right number under a claim it does
+not license.**
+
+### Third occurrence of the class
+
+    v_ca07   recorded in v_nw02's generator comment -- a stale file left in
+             policy/ turned "a reported 22/22 into a real 21/22"
+    v_nw02   af_m11 added by hand, no counterpart; guard caught it LOUDLY and
+             the check then produced nothing for the life of that mutant
+    v_ca03   iw_m11 added, no counterpart, NO guard; graded 10 of 11 and printed
+             a universal
+
+Three tasks, one root: **a runner that enumerates by globbing a directory cannot
+distinguish a short set from a complete one.** v_nw02's own script says exactly
+this in a comment — and v_ca03, one domain over, had no guard at all.
+
+### The fix, and why a count guard was not enough to copy
+
+`mutants/policy/iw_p11_decerr_normalised_to_slverr_from_second.sv` now exists and
+the halves match. The guard added compares **ids as a set**, not counts:
+
+    missing counterpart   named: "anchor only (no policy re-derivation): iw_11_..."
+    a SWAP at 11 vs 11    named in BOTH directions -- a count guard PASSES this,
+                          since it sees only a shortfall, never a substitution
+    placement             before any build, so a mismatch costs one second rather
+                          than eleven compiles
+
+Both controls were run in place and both fired. The count form that all five
+existing guards use would have caught the first case and missed the second.
+
+## A predictor that is right by accident is a third outcome in a sweep
+
+My static sweep flagged v_ca03. It flagged it **for the wrong reason**: the test
+for "does this task have a guard" was a grep that matched *prose containing the
+words* `n_anchor`/`n_policy`, and v_ca03's script mentions counts only in an echo
+line. So the predictor reported **"would refuse (loud)"** when the truth was
+*"completes and lies"* — the opposite, and the worse of the two.
+
+    the sweep found      the right task
+    for the reason       that it had a guard which would fire
+    the truth            it had no guard at all
+    so the prediction    was inverted, and inverted toward the reassuring side
+
+**Right answer, wrong mechanism, and the mechanism is what generalises.** On any
+task where the prose and the guard disagreed the other way — a real guard with no
+prose, or prose absent where a guard exists — the same predictor returns a clean
+bill for a broken check. It found v_ca03 by luck of correlation, and correlation
+that holds on one sample is not a sweep.
+
+    outcomes in a sweep   TRUE POSITIVE   flagged, and for the stated reason
+                          FALSE POSITIVE  flagged, nothing there
+                          RIGHT BY LUCK   flagged, something there, NOT the
+                                          stated reason -- and it looks exactly
+                                          like a true positive in the output
+
+The third is the dangerous one, because acting on it confirms the predictor. Had
+I "fixed" v_ca03's count guard on the strength of that flag, the fix would have
+been wrong (there was nothing to fix) and the sweep would have been credited with
+a hit. What separated them was **running the script**, which took one command and
+disagreed with the prediction immediately.
+
+Same rule as the last two days, arriving from the sweep side: a static predictor
+licenses a claim about the text it matched, never about the behaviour that text is
+supposed to indicate.
+
+### Two record defects found in v_ca03's policy directory, not fixed
+
+Both are documentation, neither affects scoring, and both are recorded at the
+site in the new `iw_p11` header rather than only here.
+
+**Every policy file claims a provenance it does not have.** All ten open with
+`// GENERATED by mutants/gen_mutants.py -- do not edit by hand.` and
+`gen_mutants.py` contains **no policy-generation code at all** — grepping it for
+"policy" returns nothing. They were produced by something that no longer exists,
+and the banner tells the next person not to hand-edit files that only hand-editing
+can now maintain. `iw_p11` says it is hand-written for that reason; claiming the
+banner would have propagated the falsehood.
+
+**Every policy file's descriptive header names `iw_m1`.** `iw_p8_bresp_wrong_when_full.sv`
+opens by describing `iw_m1_blocks_one_early_on_long_bursts`, and so does every
+other one. The behaviour is correct — p8 and p10 differ by eleven lines, each
+carrying its own defect — so this is a labelling defect only. I checked it was
+not a shared catalogue header before claiming it: the files mention one or two
+distinct `iw_m` names, not ten.
+
+Noting the method, because it nearly went the other way: I first read this off a
+`grep -m1`, which returns the first match and would report `iw_m1` for a file
+containing all ten. **The same first-match-as-set error this corpus already has a
+finding about**, caught this time only because the earlier finding made it
+familiar.
