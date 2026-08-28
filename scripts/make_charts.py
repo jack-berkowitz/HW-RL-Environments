@@ -397,13 +397,35 @@ def design_rows():
         if not dirs:
             continue
         task = os.path.basename(dirs[0])
+        # SELECT BY THE FIELD, NOT BY THE FILENAME. This globbed
+        # `*_fx{pin}__ppa.json` and split the label on "_fx", so it could only see
+        # records written under the OLD label convention. When the pinned-period
+        # work renamed those to `_pin19p25`, the glob stopped matching and the
+        # charts silently kept rendering August records -- d_dsp02/claude at
+        # 1.05x from area 63,197 while the current record says 61,305 and 1.02x.
+        # Regenerating could not fix it; the SVGs came back byte-identical while
+        # report_table, which selects on clk_period_ns and timestamp, had moved.
+        #
+        # AND IT FAILED CLOSED THE WRONG WAY. A task with only `pin`-named records
+        # produced no bar and rendered "no result", which is indistinguishable
+        # from a task never built -- absence reading as a measurement, the same
+        # in-range failure value as configs_no_verdict.
+        #
+        # Identify-by-filename, found at four-plus sites in this repo. The period
+        # is a FIELD in every record; matching it against the pin removes the
+        # label convention from the decision entirely.
         best = {}
-        for f in glob.glob(os.path.join(REPO, "runs", task, f"*_fx{pin}__ppa.json")):
+        for f in glob.glob(os.path.join(REPO, "runs", task, "*__ppa.json")):
             try:
                 r = json.load(open(f))
             except Exception:
                 continue
-            who = r.get("label", "").split("_fx")[0]
+            try:
+                if abs(float(r.get("clk_period_ns")) - float(pin)) > 1e-9:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            who = re.split(r"_(?:fx|pin)", str(r.get("label", "")))[0]
             if who not in best or r.get("timestamp_utc", "") > best[who].get("timestamp_utc", ""):
                 best[who] = r
         ref = best.get("reference")
