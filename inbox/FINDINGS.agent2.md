@@ -9323,3 +9323,72 @@ about a golden at a moment. When the golden or the clause moves, every stored
 verdict about it silently changes truth value, and nothing in the record
 re-evaluates. The `task_text_hash` on each record is what makes this recoverable
 at all — it is the only field that says which question was being answered.
+
+## Correcting a task cannot re-grade a submission already scored against it
+
+NOT-FOR-CATALOG *as a factual statement only — proposed for the catalog, same
+marker gap as the entry above.*
+
+Measured across all seven tasks in the 2026-08-27 batch, from the batch commit to
+HEAD:
+
+    task      scoring inputs changed   any file changed
+    v_ca03            0                      16
+    v_ca04            0                       1
+    v_ca05            0                       1
+    v_ca06            0                       1
+    v_ca07            0                       1
+    v_dsp02           0                       1
+    v_nw03            0                       1
+
+Scoring inputs are `dut/`, `conformant/` and `mutants/mutants.sv`. **Not one
+moved.** Sixteen files changed on v_ca03 and none of them was an input to grading
+a submission.
+
+**A submission's score is a function of its own testbench crossed with the golden,
+the conformant variants and the mutant set. The spec text is not in that product,
+and neither is the reference testbench.** So correcting F1 changed what a future
+submission is *asked*, and could not change what a past one *scored* — the
+grading harness never reads the clause, it runs the submission against artefacts
+the clause describes.
+
+    what the fix changed     the question, for anyone who answers it next
+    what it could not change the grade of anyone who already answered
+    why                      the grade never depended on the question's wording,
+                             only on the hardware the wording was wrong about
+
+### And the choice of remedy is where the fairness went
+
+Two options were on the table and they are not symmetric in this respect:
+
+    narrow F1        changes spec + PASTE + reference tb. Scoring inputs: NONE.
+                     Past verdicts: unchanged. Chosen.
+    gate ready       changes the golden and dut2. Scoring inputs: BOTH.
+                     v_ca03/chat and v_ca03/claude would have become VALID.
+
+I recommended narrowing, on the grounds that it matches both implementations and
+avoids re-measuring every mutant witness against a changed base. Those grounds
+still hold. **But it is the option that leaves two submissions recorded as
+invalid for detecting a real defect**, and that consequence follows from the
+remedy rather than from the evidence. It should be stated by whoever recommends
+such a remedy, and I did not state it at the time — I presented the two options
+as an engineering trade and did not say that one of them exonerated the two
+submissions and the other did not.
+
+**Nothing in the annotation recovers it.** The record will still read INVALID with
+fault detection suppressed at 11 of 11. An annotation explains the number; it does
+not replace it, and every downstream consumer that reads the field rather than the
+note sees a failure.
+
+### What the work did change, since "no score moved" is not "nothing happened"
+
+    v_ca03    a real defect fixed for every future submission, and the F1(a)
+              stimulus gap closed so the same class cannot hide again
+    v_nw02    5c went from producing NOTHING to 13 of 13
+    v_ca03    policy half went from 10 of 11 to 11 of 11, and stopped claiming
+              "every defect"
+    all 11    one set-comparison guard, so a short set refuses instead of passing
+
+All of that changes what the NEXT batch measures. None of it changes this one, and
+those are different kinds of value that a summary line reporting "scores
+unchanged" would flatten into one.
