@@ -33,7 +33,7 @@ capability, and nothing here establishes those weights.
 | `chat` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
 | `claude` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
 | `gemini` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
-| `sdp_requant_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `bcf0d0df4071c9ea`; the task text is now `203bc8a580aa44d4` |
+| **reference** | **1/1 pass** | 179,943 | 230.0 | 44.4 | — | — | — | — | — |  |
 - **init interval** — clocks between accepts
 - **latency** — clocks from accept to result
 
@@ -79,9 +79,9 @@ capability, and nothing here establishes those weights.
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | area | power | notes |
 |---|---|---|---|---|---|---|---|---|
 | `chat` | **1/1 pass** | — | — | — | — | — | — |  |
-| `claude` | 0/1 FAIL | — | — | — | — | — | — | **1 configuration(s) simulated with a combinational loop** — Verilator chose a settle order for a cycle the design does not resolve, so these verdicts are artefacts of that choice rather than results |
+| `claude` | 0/1 FAIL | — | — | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands |
 | `gemini` | 0/1 FAIL | — | — | — | — | — | — |  |
-| **reference** | **1/1 pass** | — | — | — | — | — | — | **1 configuration(s) simulated with a combinational loop** — Verilator chose a settle order for a cycle the design does not resolve, so these verdicts are artefacts of that choice rather than results |
+| **reference** | **1/1 pass** | — | — | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands |
 
 ## d_dsp02 — FP32 fused multiply-add
 
@@ -108,6 +108,11 @@ capability, and nothing here establishes those weights.
 | `claude` | **2/2 pass** | 226,664 | 134.0 | not swept | 0 | 0 | 427 | 531 um2 per unit of throughput_ops_per_1000cyc, 1.28x the reference per unit |
 | **reference** | **2/2 pass** | 177,557 | 91.1 | 21.3 | 0 | 0 | 427 | 416 um2 per unit of throughput_ops_per_1000cyc |
 | `gemini` | 0/2 FAIL | — | — | — | 1 | 14 | 460 |  |
+| `m_a2_rmm_aliases_rne` | 0/2 FAIL | — | — | — | 0 | 0 | 427 |  |
+| `m_a5_no_nv_on_invalid` | 0/2 FAIL | — | — | — | 0 | 0 | 427 |  |
+| `m_a6_negative_zero_lost` | 0/2 FAIL | — | — | — | 0 | 0 | 427 |  |
+| `m_f1_bf16_decoded_as_fp16` | 0/2 FAIL | — | — | — | 0 | 0 | 427 |  |
+| `m_v3_upper_bits_zero` | 1/2 FAIL | — | — | — | 0 | 0 | 427 |  |
 | `nc_d_band_unbounded_tininess` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
 
 ## d_nw01 — AXI4 crossbar
@@ -206,7 +211,7 @@ prompt is a different question and is not listed.
 
 ## v_ca03 — AXI ID-width converter
 
-Rows below answer task text `18b1288587d371a8` (spec + the prompt the
+Rows below answer task text `aa1fdb52d0b8482b` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
@@ -214,10 +219,10 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
-| `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Claude Opus 5` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Gemini 3.1 Pro` | **no** | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
 | `id_width_conv_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `fa23813e5874ef92` |
+| `chat` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
+| `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
+| `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
 
 ## v_ca04 — stream crossbar
 

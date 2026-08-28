@@ -798,12 +798,34 @@ def main():
                     _cl = int(_cl)
                 except (TypeError, ValueError):
                     _cl = 0
-                if _cl:
-                    notes.append(f"**{_cl} configuration(s) simulated with a "
-                                 f"combinational loop** — Verilator chose a "
-                                 f"settle order for a cycle the design does not "
-                                 f"resolve, so these verdicts are artefacts of "
-                                 f"that choice rather than results")
+                # CORRECTED. This first said the verdicts were "artefacts of
+                # that choice rather than results", which conflated UNOPTFLAT
+                # with a convergence failure. Verilator reports UNOPTFLAT when a
+                # signal has a circular combinational path and it must ITERATE
+                # to settle; it still reaches the fixed point, which is the
+                # value any correct simulator reaches. The unscorable case is
+                # the model failing to converge, which is a different message
+                # and is now counted separately as nonconverged_configs.
+                #
+                # Measured on d_ca05/claude: 4 UNOPTFLAT warnings, ZERO
+                # convergence failures. Its 0/1 is a real result -- "p0 grants:
+                # got 30, the anchor gives 20" is an arbitration difference --
+                # and withholding it would have discarded a correct measurement.
+                _nc = sim.get("nonconverged_configs")
+                try:
+                    _nc = int(_nc)
+                except (TypeError, ValueError):
+                    _nc = 0
+                if _nc:
+                    notes.append(f"**{_nc} configuration(s) DID NOT CONVERGE** — "
+                                 f"the model never reached a fixed point, so no "
+                                 f"verdict from those configurations is scorable "
+                                 f"(rule 23)")
+                elif _cl:
+                    notes.append(f"{_cl} configuration(s) carried a combinational-"
+                                 f"loop warning; Verilator iterated to a fixed "
+                                 f"point and every configuration converged, so "
+                                 f"the verdict stands")
                 _nv = sim.get("configs_no_verdict")
                 try:
                     _nv = int(_nv)
