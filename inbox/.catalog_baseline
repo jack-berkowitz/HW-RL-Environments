@@ -1,0 +1,287 @@
+# Undisposed inbox entries at baseline time. Entries here REPORT; anything new FAILS.
+# Clear one by adding `LANDED: F<n>` or `NOT-FOR-CATALOG` to it, then re-running with --update-baseline.
+91b1fadd1023  CONTROL_ENUMERATION.contract.md  Discovery — declared, not globbed
+bf6f377ee4a1  CONTROL_ENUMERATION.contract.md  Not landed
+f09329ed2d28  CONTROL_ENUMERATION.contract.md  Settled
+0483c33e2cc2  CONTROL_ENUMERATION.contract.md  The problem, stated as counts
+0eea653bf216  CONTROL_ENUMERATION.contract.md  What a control is, for this contract
+7bc0f1a0e4ed  CONTROL_ENUMERATION.contract.md  What it does NOT do
+673875efbb13  CONTROL_ENUMERATION.contract.md  What the runner asserts, per kind
+5bfb695ceb12  CONVENTIONS.md.agent2.md  "A case list that fails when the scope narrows" means state the scope, not accept more
+a9ad38ff7ca4  CONVENTIONS.md.agent2.md  A caveat written by the person who did the work concedes the least damaging thing
+e264f44c02d8  CONVENTIONS.md.agent2.md  A check that refuses looks exactly like a check that passes
+ab2242c22edd  CONVENTIONS.md.agent2.md  A wrong value inside the range of legitimate outputs cannot be caught by reading it harder
+801196eef8d6  CONVENTIONS.md.agent2.md  An attribution case and a mutant establish different halves, and the case is the half that looks
+64d5892e0640  CONVENTIONS.md.agent2.md  Before building a measurement, check whether the task already ships one
+b0fa2cb4f2da  CONVENTIONS.md.agent2.md  Choose the discriminator, or you cannot check what it hides
+1feecabc6c98  CONVENTIONS.md.agent2.md  Cite what you shipped
+785c61753cd4  CONVENTIONS.md.agent2.md  Classify a message before sending it to an address you cannot verify
+cd8c1ae3a9c1  CONVENTIONS.md.agent2.md  Documentation behind a guard is not preserved, it is unmaintained
+6ff20b43838b  CONVENTIONS.md.agent2.md  Per branch, not per site — and three instruments with a stated limit
+56c0509f5b39  CONVENTIONS.md.agent2.md  Re-derivation protocol: disqualify on an act, write before you run, pre-commit the disagreement
+35f20b59e91a  CONVENTIONS.md.agent2.md  Stamp a corpus count with when it was taken
+ef479c5a55c3  CONVENTIONS.md.agent2.md  Verify a transformation with a probe written before it, and transform a copy
+d2fa560bc636  CONVENTIONS.md.agent3.md  A lesson carried across cases without re-deriving it is worse than no lesson
+4731d791dc3a  CONVENTIONS.md.agent3.md  A probe that discriminates on WHEN needs both controls, not one
+b02025688813  CONVENTIONS.md.agent3.md  A relayed ruling is not the ruling
+d2705a16360e  CONVENTIONS.md.agent3.md  A routing message for isolation work is inside the isolation boundary
+b7c9f79aa6dd  CONVENTIONS.md.agent3.md  And the one that is worth more than either check
+5d3dd0a88524  CONVENTIONS.md.agent3.md  And the reason the two sweeps differed
+5515d730d425  CONVENTIONS.md.agent3.md  Attribution cases: count SELECTORS, not repairs
+4d6db9641554  CONVENTIONS.md.agent3.md  Clause status is per task, traced, never pattern-matched
+f25d6b9f2a6c  CONVENTIONS.md.agent3.md  Disable the perturbation and require the control to PASS
+2cf46db11dca  CONVENTIONS.md.agent3.md  Holding at a scope boundary: the report is what makes the decision recoverable
+0a958aa9bc7b  CONVENTIONS.md.agent3.md  Reading harder never worked — and there is a second family it cannot fix either
+b2d0cfea2fff  CONVENTIONS.md.agent3.md  The same failure from the other side, in the same hour
+f1666125d40d  CONVENTIONS.md.agent3.md  The variant: a measurement you took and did not connect
+2d04157e3570  CONVENTIONS.md.agent3.md  When a peer reports something is unmeasurable, ask the instrument, not the peer
+3b45109e5a7a  CONVENTIONS.md.agent3.md  Which harness facts a clean reader may consult
+b8cf312e8fd3  CONVENTION_disclaimers.md  1. "never gated" is NOT a reserved token — it is a SCORING statement
+cfe91b9ddff4  CONVENTION_disclaimers.md  2. A fourth form: PARTIAL CONFESSION
+99afaf4861c4  CONVENTION_disclaimers.md  3. RATIONALE is exempt and must be written to stay exempt
+f5bd23ecd4b2  CONVENTION_disclaimers.md  A note on why both halves wrapped
+18a3dac98fb2  CONVENTION_disclaimers.md  Do not make claims about another task's checker
+937d3d775604  CONVENTION_disclaimers.md  Instances
+964212363fc6  CONVENTION_disclaimers.md  THE TOKENS MEAN OPPOSITE THINGS ACROSS THE TWO HALVES
+9b8f8497bd13  CONVENTION_disclaimers.md  The permitted residue
+b1a3276a8a3a  CONVENTION_disclaimers.md  The scanner must see SENTENCES, not lines
+6c362da03392  CONVENTION_disclaimers.md  The three forms
+1664e700337e  CONVENTION_disclaimers.md  Why a convention rather than a checker
+374c951795b5  FINDINGS.agent2.md  "22 of 22": a correct number under a false claim, and no arithmetic check would catch it
+586d634b3d97  FINDINGS.agent2.md  "Takes a string first" and "reports under it" are different properties
+cba3b7dccad7  FINDINGS.agent2.md  A check that refuses looks exactly like a check that passes
+75e5505172d9  FINDINGS.agent2.md  A clause with no site at all: the grouping the shared-observation enumerator cannot see
+053ebeae81f5  FINDINGS.agent2.md  A control that refuses on "did the instrument reproduce a known answer" covers causes its author
+3da50f80bf83  FINDINGS.agent2.md  A derivation that is sound and whose provenance is contaminated is not the same artefact as one 
+8404a94e20b6  FINDINGS.agent2.md  A false universal is worse than a loud refusal, and this is the third occurrence
+3e97fca04bff  FINDINGS.agent2.md  A floor names the clauses it protects, and naming is not grouping
+e536e754f1b5  FINDINGS.agent2.md  A generator that deletes what it does not know, and a script that tells you to run it
+842da50b43be  FINDINGS.agent2.md  A green witness gate is not evidence of a clean index
+3a6e54002e3c  FINDINGS.agent2.md  A guard written for an input-side defect silently misaims an output-side one
+43639d945993  FINDINGS.agent2.md  A half-scoped grep produced a defect report against a peer, and the defect was the grep
+6a26a0a4e9cc  FINDINGS.agent2.md  A predictor that is right by accident is a third outcome in a sweep
+14e5aa1bce67  FINDINGS.agent2.md  A scan restricted to direct calls cannot report that a wrapper exists
+ef4cafb17d8f  FINDINGS.agent2.md  A5 on v_ca06 — built, measured, NOT LANDED, and the reason is a finding
+c7453fdfeb70  FINDINGS.agent2.md  Adding a mutant changes the score surface without moving task_text_hash
+12f64f85a52f  FINDINGS.agent2.md  An in-range failure value is recoverable only if the legitimate range has a gap in it
+cf853a52d59b  FINDINGS.agent2.md  Attribution cases complete: 25 across five tasks, and six tasks have no selector at all
+2d0f12a07164  FINDINGS.agent2.md  Attribution cases: three tasks in, the scoped total is running 50% low
+b52295a18e0d  FINDINGS.agent2.md  Attribution failing after the verdict is already right: the second instance
+50f6a9fc6d20  FINDINGS.agent2.md  Audit closed: v_nw01 holds, and three relabels are correct-by-construction and unexercised
+460abf04caca  FINDINGS.agent2.md  Audit: what I put in front of the user this week that rested on report rather than measurement
+d1ffd81e58f0  FINDINGS.agent2.md  C2 was less determinate than I said, and the sentence I leaned on presupposes its conclusion
+82f6ba0933d4  FINDINGS.agent2.md  Candidate — "conservative is safe" is a reflex calibrated for lower bounds, and it silently prod
+6a6e3abb6256  FINDINGS.agent2.md  Candidate — a check that fires on the right input for the wrong reason, and the one instrument t
+d54fb80b3e23  FINDINGS.agent2.md  Candidate — a clause with a stated measurement and no instrument, and the same half-integer that
+dcef722251e1  FINDINGS.agent2.md  Candidate — a control whose two arms produce identical observables measures nothing, and reports
+16ef96a8f3c0  FINDINGS.agent2.md  Candidate — a correction has to be addressed to the artefact, not to its author
+61a2dcca4715  FINDINGS.agent2.md  Candidate — a coverage floor that counts ATTEMPTS cannot see a suppressed antecedent
+f27c8f59bc90  FINDINGS.agent2.md  Candidate — a frozen input conceals the state of every check downstream of it
+719f3846a671  FINDINGS.agent2.md  Candidate — a generator that writes into a directory a runner enumerates must own that directory
+4d6bfa805faa  FINDINGS.agent2.md  Candidate — a measurement of a mutable artefact is a measurement of a TIME, and I reported one a
+2000a28c64a5  FINDINGS.agent2.md  Candidate — a status label is not evidence, and a second agent citing it is not a second opinion
+dddf39f0f344  FINDINGS.agent2.md  Candidate — a ternary between two string literals is prohibited in any line a measurement is rea
+59b87ed8c29c  FINDINGS.agent2.md  Candidate — controls that exist, are recorded as passing, and that no runner runs
+c3ac1991bd1b  FINDINGS.agent2.md  Candidate — stimulus that spends the one cycle it needed, and a survivor blamed on the guard twi
+82f891fd0dda  FINDINGS.agent2.md  Candidate — the control passed and did not suppress, and passing was not the finding
+e2021b1879ea  FINDINGS.agent2.md  Candidate — two instruments sharing a conversion are one instrument, and a mechanism that explai
+2fa12990b59a  FINDINGS.agent2.md  Census, second pass: 86 text-evidenced, 445 not recoverable, and git cannot separate them
+f7bf342bcf56  FINDINGS.agent2.md  Census: 86 clauses across both halves were pinned by someone who had already seen the reference 
+20b51e8ffe27  FINDINGS.agent2.md  Contamination travels in the routing message, and a label saying "do not use this" does not unco
+bf3c33dcc074  FINDINGS.agent2.md  Detection, and why nothing else finds it
+9ddbcebe5727  FINDINGS.agent2.md  Emittability across the eleven — the triage, and a worked sample
+7621961485c7  FINDINGS.agent2.md  Every compound reporting id is gone, and the annotation was invisible to the only audience it na
+3b7ab102ba78  FINDINGS.agent2.md  F1 and H3 verified: one is the same shape as S8, the other is three different states
+bbfbaf590992  FINDINGS.agent2.md  F1(a) and F1(c) built: the golden failed first, and it was the testbench
+91c30b6f6cf2  FINDINGS.agent2.md  F1(c) gets a control, and it took three versions for the third time today
+9f2dad51c118  FINDINGS.agent2.md  FINDING — 24 sites in six tasks commit on one side of a handshake, and a broken instrument is wh
+0671910e6eb8  FINDINGS.agent2.md  FINDING — F91 inverted: an instrument with no consumer. Measured, and it is fifteen
+afdc249caaf8  FINDINGS.agent2.md  FINDING — I ran my own guard, it REFUSED, and I committed anyway. In the commit that landed it.
+405a10057bde  FINDINGS.agent2.md  FINDING — I reported a category, it was accepted, and it was the instrument. A category inferred
+08a5ccf60a15  FINDINGS.agent2.md  FINDING — `task_text_hash` is a cache with no coherence check: 2 of 21 tasks record the right va
+72fbdecc43ef  FINDINGS.agent2.md  FINDING — a check whose scope is implicit cannot report a scope miss
+4f84855ecb3b  FINDINGS.agent2.md  FINDING — a checker whose existence is cited as a control is not a control until you know what i
+0c4b82721bfe  FINDINGS.agent2.md  FINDING — a clause can be false about the reference and pass every run, when the stimulus that w
+dde998e475f0  FINDINGS.agent2.md  FINDING — a clean row is read once; a failing row is read twice
+f8e50eea65d2  FINDINGS.agent2.md  FINDING — a comment stating the correct condition beside code that checks the wrong one, 24 time
+16fcbfe0896a  FINDINGS.agent2.md  FINDING — a condition count is the right instrument and the wrong gate
+b3b70ee06292  FINDINGS.agent2.md  FINDING — a conformant artefact that PASSES tells you it did not break the testbench
+fb4f0712b97e  FINDINGS.agent2.md  FINDING — a control that passes is not evidence the clause holds; it is evidence the control did
+19ea08317753  FINDINGS.agent2.md  FINDING — a field nothing reads cannot be wrong in a way anything notices
+992388830056  FINDINGS.agent2.md  FINDING — a floor over stimulus answers "did the harness try"; a floor over the condition answer
+ac7158f67eae  FINDINGS.agent2.md  FINDING — a magnitude justified on one axis and applied on another is not justified
+0f6045714f88  FINDINGS.agent2.md  FINDING — a name is not an address: identity by ownership set
+7e5f857007d7  FINDINGS.agent2.md  FINDING — a pattern-matched correction to a pattern-matched defect keeps missing variants
+e11cdca07ad0  FINDINGS.agent2.md  FINDING — a verification anchored to the wrong baseline verifies nothing
+ad66f08a6fce  FINDINGS.agent2.md  FINDING — an input that changes only during initialisation is not a varied input, and no variati
+63ef3f290395  FINDINGS.agent2.md  FINDING — an intention nothing records cannot go stale in a way anything catches
+74b9fc07b10b  FINDINGS.agent2.md  FINDING — every passing run of that testbench printed a FAIL line, and the verdicts were right o
+a2fc60653a4a  FINDINGS.agent2.md  FINDING — every regex I landed this week was anchored at column 0, and each was correct only bec
+10e335457f54  FINDINGS.agent2.md  FINDING — gating a DUT-visible valid is unsound as a perturbation: it makes the testbench and th
+fdcaab268153  FINDINGS.agent2.md  FINDING — grouped AND unexercised at once, and a one-sentence remedy for the whole grouping fami
+4065479d8414  FINDINGS.agent2.md  FINDING — my own tool reported a clean build on a log from a build that never happened
+e1083e9b3e93  FINDINGS.agent2.md  FINDING — port and expectation as one symbol: a check that cannot disagree
+e8fc51c2c421  FINDINGS.agent2.md  FINDING — the check and the thing that disabled it were written together, in one helper, and nei
+0335262f4b72  FINDINGS.agent2.md  FINDING — the drain discriminator needs a range, not a multiplier
+408eac7c05a9  FINDINGS.agent2.md  FINDING — the drain rule is a window, not a number, and the ceiling came from a fact kept for th
+598f98c552f3  FINDINGS.agent2.md  FINDING — the emittability prediction is refuted as a predictor: 3 of 6, which is chance
+f446eeb35695  FINDINGS.agent2.md  FINDING — the missing handshake-stability clause: four tasks, both territories
+32ef46aa6c0c  FINDINGS.agent2.md  FINDING — the remedy is not better guards. It is that a guard does not record why it is correct
+13c2c29b72a3  FINDINGS.agent2.md  FINDING — the same instrument gave the right answer on one task and 26 wrong failures on another
+cc112067b064  FINDINGS.agent2.md  FINDING — the seventh instance: the artefact was DESTROYED, and the file GREW
+f9e6949d05d0  FINDINGS.agent2.md  FINDING — the sharper form: an instrument whose failure value is INSIDE its legitimate output ra
+92c3db103774  FINDINGS.agent2.md  FINDING — three varieties of the corpus doing the work, and none is visible from the output
+477434ca8112  FINDINGS.agent2.md  FINDING — writing a rule down does not install it
+d8fd431963dd  FINDINGS.agent2.md  I accepted a claim that a measurement in my own transcript refuted
+5b854a9cd9fa  FINDINGS.agent2.md  I sent a peer an untested mechanism, one message after they retracted one
+27d540d39e50  FINDINGS.agent2.md  Identity-by-name, where the prefix carried the whole distinction
+10bc4f1263e8  FINDINGS.agent2.md  Method note — a build that reads a file while you are editing it is neither before nor after
+c985539ad879  FINDINGS.agent2.md  Minimising a rebuild reduces the surface; it does not remove it
+611881494dfd  FINDINGS.agent2.md  PRACTICE — go and find the case that would kill your own hypothesis, in the file you own and cou
+bad8c1e85a7e  FINDINGS.agent2.md  Pricing the check-backed column: two halves, and they are not the same item
+6096e7387db5  FINDINGS.agent2.md  R6 landed on v_ca04_stream_xbar
+d96a47c27fab  FINDINGS.agent2.md  Reachability, now exact on every row: 15 of 22 branches, and each of the 7 classified
+81cf56804241  FINDINGS.agent2.md  Reachability, per selector: 25 cases, 8 branches shown reachable, and the gap is the point
+fb75ea6075b3  FINDINGS.agent2.md  SCOPING — the timing-axis sweep, costed before building
+e6231de463a2  FINDINGS.agent2.md  Same reserved tokens, opposite direction: a disclaimer confesses, an instruction requires
+a05e6ed88663  FINDINGS.agent2.md  THE STATE OF THE APPARATUS, written down while it is true
+eb666616568b  FINDINGS.agent2.md  The -m1 coincidence is the argument FOR the UNKNOWN discipline
+406ec241762b  FINDINGS.agent2.md  The F1(a) control lands, and both of my earlier explanations for its failure were wrong
+7d33ccf04f2a  FINDINGS.agent2.md  The W3 mutant: a guard bounded from two sides, and the two sides are not the same direction
+152d64b6d2d1  FINDINGS.agent2.md  The `--allow-drop` hole, closed, and it was theirs to spot
+adb32a804961  FINDINGS.agent2.md  The all-ids harness works, and it moves two rows — the lower bound was hiding a reachable branch
+ff6cb8e4ad4f  FINDINGS.agent2.md  The annotation's stated purpose is ahead of the apparatus, and the text should say so
+4b1247b837c5  FINDINGS.agent2.md  The applicability test is in the instrument, not in a document
+509d125ad7b5  FINDINGS.agent2.md  The compound-id scan of the results records was vacuous, and that is the finding
+8cc620e727b2  FINDINGS.agent2.md  The differential is stronger than the FIRED counter, and it would have caught what the counter c
+b62b72c2888a  FINDINGS.agent2.md  The differential swept across my half: its scope is narrower than the control set, and neutralis
+9e977c5b8f47  FINDINGS.agent2.md  The disk fill: the guard already existed, and the obvious guard is the wrong one
+91fc2d7f68e2  FINDINGS.agent2.md  The fifth row closes: 20 of 22 reachable, 22 of 22 accounted for
+deab1edfb185  FINDINGS.agent2.md  The fifth state does not mirror onto the verification half, and the reason is how many parties a
+7616432a6de7  FINDINGS.agent2.md  The first attribution cases land
+dee1f70a0bfe  FINDINGS.agent2.md  The five closed four: one defect did NOT close both W3 branches
+e60a533a1f10  FINDINGS.agent2.md  The fix is not the same as the fix for a missing instrument
+3951450d5998  FINDINGS.agent2.md  The fix reproduced the defect it was fixing, with the sign flipped
+de05bb7b9848  FINDINGS.agent2.md  The gate item was already fixed, and my grep reproduced the false positive its author had measur
+b818cb48522e  FINDINGS.agent2.md  The grouping remedy, applied to two tasks and made checkable
+0336d78b4ae9  FINDINGS.agent2.md  The instruction form lands on two of three; the third is a decision I put to the user and have n
+d4ab7970dc94  FINDINGS.agent2.md  The mechanism
+3acd28b4017f  FINDINGS.agent2.md  The reset mechanism: my prediction falsified, and the falsification is the result
+15f48b858bec  FINDINGS.agent2.md  The reset predictor: both versions falsified, and the three instances are three different failur
+1204aeac63f2  FINDINGS.agent2.md  The substitution matched nothing, and only an impossible result caught it
+db5c532f1a82  FINDINGS.agent2.md  The three splits land, and my own census had an implicit scope
+a2e11abffa38  FINDINGS.agent2.md  The three unattributable sites: can the check tell which clause was violated?
+105fb987b526  FINDINGS.agent2.md  The zsh word-split, fourth instance, and this time it produced a stale run
+2814a2089523  FINDINGS.agent2.md  Triage of the 25: a third are not groupings, four are declared in the wrong file, and three clau
+6030d2681253  FINDINGS.agent2.md  Two scope creeps in an authorisation, arrived at from opposite sides in one hour
+22f92a29b433  FINDINGS.agent2.md  Units: 46/55 and 10/10 are not the same measurement
+e33560a9e76c  FINDINGS.agent2.md  Why it is inflation and not a gap
+ef1c92efd95d  FINDINGS.agent2.md  Working the remaining nine — predictions registered BEFORE measuring
+32dc9e51ddac  FINDINGS.agent2.md  Zeroing is not neutralising, and it produced a false positive on the instrument's second use
+7bd02e4fb168  FINDINGS.agent2.md  `exclusive_as_of` buys legibility, not enforcement — and that should be recorded on my own claim
+d03075e7ab88  FINDINGS.agent2.md  d_ai01 flush re-derivation: mismatches halved, and the residue is a question about C2
+0d8b0a268d77  FINDINGS.agent2.md  v_ca03 F1 sized; v_dsp02 H3 declared; the attribution-mutant hole scoped; and the -m1 sweep
+75c26549df46  FINDINGS.agent2.md  v_ca05 — the task both instruments were blind to, and what was under it
+2b2c937b9d4c  FINDINGS.md.agent3.md  A clause pinned beside the anchor is not a clause derived from the contract
+62800955ee0c  FINDINGS.md.agent3.md  A correction that reaches the prose and not the relation
+d81484612339  FINDINGS.md.agent3.md  A documented reason for not doing something is not evidence the reason applies
+a031d9131696  FINDINGS.md.agent3.md  A hash computed before a peer's edit and reported after it
+6faef9918ee0  FINDINGS.md.agent3.md  ANONYMOUS and UNCHECKED are indistinguishable from failure output and mean opposite things
+57a3aee43a96  FINDINGS.md.agent3.md  An exclusion window can be masked by an overlapping window from a different clause
+fb1d2bd13154  FINDINGS.md.agent3.md  An unspecified value on a feedback path is unspecified again, one lap later
+425cd135e4d0  FINDINGS.md.agent3.md  Capacity FLOORS get controls; capacity CEILINGS get written and forgotten
+2b81ed4d18eb  FINDINGS.md.agent3.md  FOR THE CATALOG — eighteen entries; twelve landed as F98-F109, six are not yet in the catalog
+0b8906ef755e  FINDINGS.md.agent3.md  Rule 24 for a WIDENED window needs a control inside the new band
+151eb8f26fd9  FINDINGS.md.agent3.md  Two tick bases in one harness, and the window enforced in the wrong one
+2203ae7f2d86  FINDING_instrument_blindness.md  RETRACTED: "a task no instrument here can assess"
+acfc6576a67e  FINDING_instrument_blindness.md  THE SWEEP'S ERROR DIRECTION IS UNDER-REPORTING, and it took four attempts
+a1f8b39f3998  FINDING_instrument_blindness.md  The gap
+7c16299f59c9  FINDING_instrument_blindness.md  The population, swept across all eleven
+706d9ee12de1  FINDING_instrument_blindness.md  What it found on the design half
+0beb0721510e  FINDING_total_displacement_design.md  1. d_dsp02 H1 — UNENFORCED. A violating submission passes.
+ba53fb55c9d0  FINDING_total_displacement_design.md  2. d_dsp03 H2 — COVERED COMPLETELY, DECLARED NOWHERE.
+7f5609ce6404  FINDING_total_displacement_design.md  Everything else resolved
+c02b6481f2c6  FINDING_total_displacement_design.md  The design half's fifth state: A HARNESS GUARANTEE
+3da19f97bf0c  FINDING_total_displacement_design.md  Why the existing instruments cannot find these
+9849767b5352  FOR_SCRIPTS_AND_TABLE.md  1. `v_ca05_id_queue` must not appear in a "none frozen" column
+77725abc7daa  FOR_SCRIPTS_AND_TABLE.md  2. Leniency sweep of `scripts/` — read-only, requested by Jack
+f1b305d48726  FOR_SCRIPTS_AND_TABLE.md  3. For the record
+53de313affa0  PROPOSED_CHECK_record_drift.md  DIRECTION IS PART OF THE REPORT, not a footnote
+4991c89e184b  PROPOSED_CHECK_record_drift.md  PART 1 — EXISTENCE. Run on d_ca01; cheap.
+fca607fdcd47  PROPOSED_CHECK_record_drift.md  PART 2 — STATUS TOKEN vs AUTHORITY. Run on d_ca01; cheap.
+269e550354e1  PROPOSED_CHECK_record_drift.md  PART 3 — THE IDENTIFIER DISPOSITION INDEX. Not built. This is the new part.
+24ebb7c074d9  PROPOSED_CHECK_record_drift.md  PART 4 — BOUND NEGATIVES. Needs authoring discipline, and only for the residue.
+0917a99bd000  PROPOSED_CHECK_record_drift.md  The question this has to answer
+a1e5913e4853  PROPOSED_CHECK_record_drift.md  WHAT NONE OF THE FOUR CATCHES, stated so the coverage claim is not read as total
+67a64ea44289  QUESTION_d_ca01_C4.md  The question
+9232e58badeb  QUESTION_d_ca01_C4.md  Why only one thing is left to decide
+e3ce1405c75c  ROUTE_agent1_2026-08-27.md  1. CORRECTION, FIRST BECAUSE IT SUPERSEDES SOMETHING ALREADY SENT
+f808a7ad27b5  ROUTE_agent1_2026-08-27.md  2. ACTION — `refs.lock:15` is a positioning risk, and it is your file
+8ef80b842ac7  ROUTE_agent1_2026-08-27.md  3. FOR BUILDING — the identifier disposition index, `inbox/PROPOSED_CHECK_record_drift.md`
+f1de96caddcc  ROUTE_agent1_2026-08-27.md  4. ONE MORE, SMALL — `FINDINGS.md` F49's `d_ca04` row is resolved
+6d92eff78b2a  ROUTE_agent1_2026-08-27.md  Also waiting, unchanged
+f5800eac579b  ROUTE_agent1_2026-08-27.md  Do not file the gate defect I reported. I measured it false.
+acd7aec82440  TASK_CATALOG.md.agent2.md  Block 1 — replacement row, v_ca06
+d84c9fc4d416  TASK_CATALOG.md.agent2.md  Owner's note
+afd180c09fe1  TASK_CATALOG.md.agent3-dsp01.md  Block — d_dsp01 row correction
+15b3c262f439  TASK_CATALOG.md.agent3-dsp01.md  Owner's note
+a6a5a18ee673  TASK_CATALOG.md.agent3.md  Block 1 — replacement row 114, d_ca03
+2369c43b4ff3  TASK_CATALOG.md.agent3.md  Block 2 — replacement row 131, d_ai01
+114cdbad90ed  TASK_CATALOG.md.agent3.md  Block 3 — audit of the six design rows
+b25c70a01e55  TASK_CATALOG.md.agent3.md  Block 4 — cross-cutting, not catalog content
+630d219fcf81  TASK_CATALOG.md.agent3.md  Owner's note on this staging
+39eee34f3f39  TIMING_RERUN_PLAN.md  A THIRD failure category the definition did not have
+4e54287c05c2  TIMING_RERUN_PLAN.md  And it overturns the "third failure category" I reported
+9af5d0b2c903  TIMING_RERUN_PLAN.md  Both escalations dissolved
+fb6a276223f1  TIMING_RERUN_PLAN.md  Escalation 1 — `v_nw02` P3
+46b30a75094c  TIMING_RERUN_PLAN.md  Escalation 2 — `v_nw01` Q6, and the magnitude is my error
+4d7941748fde  TIMING_RERUN_PLAN.md  Measurable — the beat advance is identifiable
+7c8df7cf6c37  TIMING_RERUN_PLAN.md  NOT measurable on this axis — and not to be approximated
+aac4b4d656f1  TIMING_RERUN_PLAN.md  Not measurable — five, and that is a result
+03bc3bb9950c  TIMING_RERUN_PLAN.md  Results
+f632d2e52a1e  TIMING_RERUN_PLAN.md  Scope
+f52fbce5ca4e  TIMING_RERUN_PLAN.md  Showing the perturbation is live — `FIRED`, on the instrument itself
+c877311fd0a8  TIMING_RERUN_PLAN.md  Standing results
+519fcb81b810  TIMING_RERUN_PLAN.md  Stopping rule
+6f1967bbbe71  TIMING_RERUN_PLAN.md  The drain discriminator worked exactly as specified
+2af17aa348a9  TIMING_RERUN_PLAN.md  The mechanism is unsound, and that is the real result
+d7870af563e8  TIMING_RERUN_PLAN.md  The mechanism was rebuilt twice, not once
+ed5eeb60159e  TIMING_RERUN_PLAN.md  The rule the magnitudes come from
+b12476d3fc5c  TIMING_RERUN_PLAN.md  The standing result
+bd49cf8b6d87  TIMING_RERUN_PLAN.md  The table
+ad1e5dc29bb3  TIMING_RERUN_PLAN.md  What I would do next, for a decision rather than on my own
+64fc2d7c6119  TIMING_RERUN_PLAN.md  What a failure looks like, defined before any result
+87ef51b69488  TIMING_RERUN_PLAN.md  What this does and does not establish
+9d0e05659308  TIMING_RERUN_PLAN.md  What v3 actually tests, and it is not the axis in the table above
+1756f4b9df72  TIMING_RERUN_PLAN.md  What was measured
+1b69a7c6fe99  UNASSIGNED_d_ai01_D1_sampling_convention.md  The full divergence pair
+3fa0aef6839f  UNASSIGNED_d_ai01_D1_sampling_convention.md  What a fixer must not assume
+6a907aad53f1  UNASSIGNED_d_ai01_D1_sampling_convention.md  What it fails to determine
+7858401bc752  UNASSIGNED_d_ai01_D1_sampling_convention.md  What the measurement settles, and what it does not
+34e7db015c24  UNASSIGNED_d_ai01_D1_sampling_convention.md  What the text says
+0e1a32ee5a8b  UNASSIGNED_d_ai01_D1_sampling_convention.md  Why you are reading this rather than fixing something
+40d917017700  d_ai01_COMPARISON_TRIAGE.md  0. Three checks before you run anything
+feb480ed7e95  d_ai01_COMPARISON_TRIAGE.md  1. Apply the exclusion windows before classifying anything
+3976d6f4346f  d_ai01_COMPARISON_TRIAGE.md  2. Triage by the SHAPE of the disagreement, in this order
+254479d558e2  d_ai01_COMPARISON_TRIAGE.md  3. What not to do
+bdfdeb3d2a64  d_ai01_COMPARISON_TRIAGE.md  4. How to rank what you find
+e4fe5549f3cf  d_ai01_T5_CHECK.md  1. What to run
+9bf2ea448177  d_ai01_T5_CHECK.md  2. What counts as a pass
+55b8d0c96173  d_ai01_T5_CHECK.md  3. What each failure means
+1c7a96f70d97  d_ai01_T5_CHECK.md  4. Constraint on any repair
+5b2c967cbceb  d_ai01_T5_CHECK.md  5. Already done, for completeness
+a140b2340839  d_ai01_TEXT_DEFECTS.md  0. First, a note on the class — CF‑4 strengthens it
+e8bf6d5478b1  d_ai01_TEXT_DEFECTS.md  1. A6 is both "in full" and "the representative case"
+23bf211c9ff8  d_ai01_TEXT_DEFECTS.md  2. A5 names "the binary16 overflow threshold" as one number; it is not one number
+6bbd603f94d6  d_ai01_TEXT_DEFECTS.md  3. Tininess detection is never named, is reachable, and moves a flag
+51fbeb55ae31  d_ai01_second_source_REPORT.md  0. THE TEXT MOVED UNDER THE DERIVATION — read this first
+79dde0dcdedd  d_ai01_second_source_REPORT.md  1. Pinning
+12e6daefe023  d_ai01_second_source_REPORT.md  2. Decision list
+052d17ec8aff  d_ai01_second_source_REPORT.md  3. Findings about the text
+4c56c479e298  d_ai01_second_source_REPORT.md  4. Strength statement — stated before any comparison happens
+cef252d1eaf7  d_ai01_second_source_REPORT.md  5. What was run — and what was not
+aefbd627cb0b  d_ai01_second_source_REPORT.md  6. Contamination status
+e04efd51a10b  d_ai01_second_source_REPORT.md  7. Freeze — the predictions predate any comparison
+bbd9f043d199  d_ca04_B1_text.proposed.md  Also stale, same file
+eef6d767ebc8  d_ca04_B1_text.proposed.md  Margin, so the ceiling is not pinned to the reference
+ff4e798336d8  d_ca04_B1_text.proposed.md  Replace lines 54–64 of `spec/async_fifo_cdc_iface.sv`
