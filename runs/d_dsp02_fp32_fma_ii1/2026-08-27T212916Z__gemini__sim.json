@@ -1,0 +1,14 @@
+{
+  "build_error": "TOOLFAIL slang rejected this and verilator --lint-only accepts the same bytes; an uncorroborated rejection is not a verdict -- 1 error(s); first: sanitised_gemini.sv:317:51: error: cannot select range of [75:52] from 'logic[74:0]' [-Wrange-oob]",
+  "build_status": "slang_tool_error",
+  "git_sha": "b3e6a145ef5ea7338cf13f6f2ef3a5f48b583868-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "candidates/d_dsp02/gemini.sv",
+  "submission_sha256_16": "5b3d814adff3afd1",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "fd4d334195354cfa",
+  "timestamp_utc": "2026-08-27T21:29:16Z"
+}

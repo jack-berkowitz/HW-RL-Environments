@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=axis_switch_oq; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=4250; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0; override.CLK_PERIOD_NS=4.25; note.abc_runtime_target_ps=4250;",
+  "build_config_hash": "c4159e8f0a80fcbd",
+  "clk_period_ns": "4.25",
+  "correctness_gate": "passed:2026-08-27T213309Z__chat__sim.json",
+  "design_area_um2": "19541",
+  "git_sha": "88eddf3c4ccbdb838d6b588fcb7db22b71a5e2f8-dirty",
+  "kind": "ppa",
+  "label": "chat_pin4p25",
+  "orfs_nickname": "d_nw03_cand_chat_pin4p25",
+  "pdk": "sky130hd",
+  "power_w": "2.12e-02",
+  "status": "completed",
+  "submission": "candidates/d_nw03/chat.sv",
+  "submission_sha256_16": "011ae746ec800f10",
+  "synth_area_um2": "8231.644800",
+  "task": "d_nw03_axis_switch_oq",
+  "timestamp_utc": "2026-08-28T02:14:42Z",
+  "wns_ns": "-0.184265"
+}

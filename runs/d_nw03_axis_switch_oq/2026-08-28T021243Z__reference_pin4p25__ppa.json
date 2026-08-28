@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=axis_switch_oq; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=4250; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0; override.CLK_PERIOD_NS=4.25; note.abc_runtime_target_ps=4250;",
+  "build_config_hash": "c4159e8f0a80fcbd",
+  "clk_period_ns": "4.25",
+  "correctness_gate": "passed:2026-08-26T015950Z__axis_switch_oq_ref__sim.json 8/8 configs",
+  "design_area_um2": "26340",
+  "git_sha": "48e954f47d02d67e724b575b6616367ec3a528cf-dirty",
+  "kind": "ppa",
+  "label": "reference_pin4p25",
+  "orfs_nickname": "d_nw03_axis_switch_oq",
+  "pdk": "sky130hd",
+  "power_w": "1.02e-02",
+  "status": "completed",
+  "submission": "domains/networking/design/d_nw03_axis_switch_oq/ref/axis_switch_oq_ref.sv",
+  "submission_sha256_16": "fe8041fbf21e7238",
+  "synth_area_um2": "18410.156800",
+  "task": "d_nw03_axis_switch_oq",
+  "timestamp_utc": "2026-08-28T02:12:43Z",
+  "wns_ns": "0.337431"
+}
