@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=sdp_requant; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=33750; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=40.0; override.CLK_PERIOD_NS=33.75; note.abc_runtime_target_ps=33750;",
+  "build_config_hash": "83088234b2c846ea",
+  "clk_period_ns": "33.75",
+  "correctness_gate": "passed:2026-08-26T225002Z__sdp_requant_ref__sim.json 1/1 configs",
+  "design_area_um2": "179943",
+  "git_sha": "e0c1f1ad4605aab9f0dcb32ef08da59f5dde49b4-dirty",
+  "kind": "ppa",
+  "label": "reference_pin33p75",
+  "orfs_nickname": "d_ai04_sdp_requant",
+  "pdk": "sky130hd",
+  "power_w": "2.30e-01",
+  "status": "completed",
+  "submission": "domains/ai_accel/design/d_ai04_sdp_requant/ref/sdp_requant_ref.sv",
+  "submission_sha256_16": "fb967bfcb50761c4",
+  "synth_area_um2": "150508.099200",
+  "task": "d_ai04_sdp_requant",
+  "timestamp_utc": "2026-08-28T19:40:34Z",
+  "wns_ns": "1.91211"
+}
