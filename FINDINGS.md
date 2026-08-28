@@ -7047,3 +7047,16 @@ whether they are the same. When the question is "did this change anything",
 compare what was measured, not what was concluded about it.
 
 **Rules:** 17, 20, 24
+
+### The sweep that should have found more, and did not
+
+"Has any other anchor moved since the results depending on it were produced" now
+has a mechanical answer, because the closure capture supplies the file list.
+Of the **143 anchors the ten tasks actually consume, exactly one has more than a
+single commit**: `cdc_fifo_gray.sv`. Every other file's entire history is the
+2026-08-14 vendoring. The exposure is confined to d_ca04 and is now measured.
+
+Worth stating because the sweep was queued expecting a population. A clean
+negative here is only meaningful because the denominator is measured rather than
+guessed — the same question against the hand-maintained list would have swept 47
+files, 31 of which no task reads, and missed 127 that they do.

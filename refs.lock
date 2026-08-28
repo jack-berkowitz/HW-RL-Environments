@@ -341,54 +341,155 @@ conversion_rule: "3 or fewer -> convert and continue. 4 -> CVA6 was the wrong an
 # Verify:  python3 scripts/check_refs_hashes.py
 # 47 hashed, 22 named in the manifest and absent from disk.
 file_hashes:
-  refs/axi/src/axi_atop_filter.sv: {sha256: 65556ca9b151496e7e67f625d173e4a40b9de34a82bd877b6182099f539ab9b1, bytes: 16566}
-  refs/axi/src/axi_burst_splitter.sv: {sha256: 658a192648b7845af6526794d0e8d9c9031252ee09c5e20d7caf33f585387d4f, bytes: 3497}
-  refs/axi/src/axi_demux.sv: {sha256: 3c165a36d2efd88e0714d2e20dcea9375c0e211b0091252e6b082b884b9fd23b, bytes: 11100}
-  refs/axi/src/axi_id_remap.sv: {sha256: 299d6e889e54dd1d872e649608d66569f5c1bfc2d422903f985b75d4a4974a15, bytes: 32119}
-  refs/axi/src/axi_lite_xbar.sv: {sha256: 3ffa30755647a1a7aa3923e4ab03cd31d237934e3dc1a0a537c63e95aad8cb9e, bytes: 13778}
-  refs/axi/src/axi_pkg.sv: {sha256: 244bd5cb3c5bc58d786f2ed2f5eeefd910c4fe03a175f4a2888c6a2ea1c430dc, bytes: 26577}
-  refs/basejump_stl/bsg_misc/bsg_defines.sv: {sha256: fdda4920183dbfdd6ed11b80baae53cb33295239b9069ff5b0fea3d61abe4281, bytes: 9569}
-  refs/common_cells/src/cdc_fifo_gray.sv: {sha256: 1592390f962a957869ecb55e93e3ebfa2dfec61070ea2b7a60624cd42aa40835, bytes: 10760}
-  refs/common_cells/src/cf_math_pkg.sv: {sha256: bbf0614771ceb9526356bb8e5234787324ef215884bc11b4aa27e91fc3cc8910, bytes: 2993}
-  refs/common_cells/src/id_queue.sv: {sha256: 103c09c4ef9861f8274ceed40436ed89884eb993067b0bb587b9fcf19bdc69fb, bytes: 18061}
-  refs/common_cells/src/rr_arb_tree.sv: {sha256: f72bc188ea8253230a722bfb6436ab31b6e41c26020fa4ba4eebd93025984f7e, bytes: 14558}
-  refs/common_cells/src/spill_register.sv: {sha256: 97bf85128f538c54c749896b8eee5fcfe4b27c16845d2a17990979a63b09f2ec, bytes: 1381}
-  refs/cva6/core/ariane_regfile_ff.sv: {sha256: e8b86693adf85bcdbfb40b650698fc38f675d840213be55eff1468bff273e95f, bytes: 3129}
-  refs/cva6/core/frontend/bht.sv: {sha256: a80924695e868d5ae1d96874af8a3accd82d14b522d1fef1c39cc059744879e0, bytes: 13971}
-  refs/cva6/core/frontend/btb.sv: {sha256: 6848d908494a9686389aba7ac02b30ec36bb8a2b4bee90dfd0590772305d6e69, bytes: 8034}
-  refs/cva6/core/frontend/ras.sv: {sha256: 27d447b38c9ac3b8523c15c2e20545f0992b3361633f1897e23acff169bd8cf4, bytes: 2402}
-  refs/cva6/core/include/ariane_pkg.sv: {sha256: f492b1dda7044c4d202df1a1e4609a53fbecc94ad3f08b5d6d9a150b4569d2d7, bytes: 25022}
-  refs/cva6/core/include/instr_tracer_pkg.sv: {sha256: 3f34a7641475f7ee7cbbebe5a1aaae61917518328cb425551c43e0bec05b195a, bytes: 12276}
-  refs/cva6/core/load_store_unit.sv: {sha256: ce091f34f60e489a79d335548355e7d69e7dcd3982f8ece835ce9df2baf72a78, bytes: 34214}
-  refs/cva6/core/scoreboard.sv: {sha256: dd816cdefd64817737e11ed79dbf91ce0d9d7361c08806a5f7f4883468791022, bytes: 15379}
-  refs/cva6/core/serdiv.sv: {sha256: 7b4d4b0be7512ec025fd3f4cec4e140e2f4466115237dd244fabc6b2095425f6, bytes: 8836}
-  refs/cva6/core/store_buffer.sv: {sha256: 523de0930e91e54e7a69e1301eca34d8aeb6ef368b523054be66d7b80205b946, bytes: 15127}
-  refs/cvfpu/src/fpnew_cast_multi.sv: {sha256: 2298be638b66e8fb9072124938063925ce0b494a0f309ab709c188ea3aadbd91, bytes: 67022}
-  refs/cvfpu/src/fpnew_divsqrt_multi.sv: {sha256: ed20094356b40cf2af76e913cc7aa9535ebbbc59b0e70822bf54efe609c8895c, bytes: 17554}
-  refs/cvfpu/src/fpnew_fma.sv: {sha256: f46700037a6f9efe9b74855d3d21ebaeaf42f5dd522b9e812bbc56ad7193ec71, bytes: 35746}
-  refs/cvfpu/src/fpnew_pkg.sv: {sha256: a3e8b15beb8d4b841fad7499ed403fbebf93fe2518d529fe190033cdcb21ed3c, bytes: 29530}
-  refs/hwpe-stream/rtl/basic/hwpe_stream_merge.sv: {sha256: 9a35e6ca7915ee4833b42f9189d5a6d6ad7bca86a42c49e062e86cfa6f649c31, bytes: 3334}
-  refs/hwpe-stream/rtl/basic/hwpe_stream_split.sv: {sha256: e9de2c4287064447502fadcde7fb8d2f0a7a25f266db2abfad2df5366da5e65f, bytes: 3458}
-  refs/hwpe-stream/rtl/fifo/hwpe_stream_fifo_earlystall.sv: {sha256: a21f361d3c794b4c5864be7fa4cadf187e75b8ad020fedad28cba2598c267cfc, bytes: 9751}
-  refs/hwpe-stream/rtl/hwpe_stream_interfaces.sv: {sha256: b6b0516c3c0f4efd2c7ced09feb4e5bea1c98c74d0c52540b7a7ff238e35e7a2, bytes: 4571}
-  refs/hwpe-stream/rtl/hwpe_stream_package.sv: {sha256: c2f7b0efcb60cd4dbeeb31552578588b15a941bd886c0501e38f68d8680e91f4, bytes: 4738}
-  refs/idma/src/idma_pkg.sv: {sha256: 298b53b5c12edaa3f4ef5cb6b297bcb20c55fd2eace2c4143e11726f039d67d6, bytes: 3177}
-  refs/ne16/rtl/ne16_package.sv: {sha256: 9aa14987f8c9f515a597606d35e2345d4abcc34f1f0f5f9b206b3f06c3cca811, bytes: 21395}
-  refs/redmule/rtl/redmule_ctrl.sv: {sha256: 2cbc888c4c762e5609c6dd3b51a9e8e81b78d211e5f1520a7aa805872ad31296, bytes: 7495}
-  refs/redmule/rtl/redmule_pkg.sv: {sha256: 454f594b41b2429536c33cf1a87cb94cebe577a2544e9c1c679188af020be67a, bytes: 7485}
-  refs/redmule/rtl/redmule_scheduler.sv: {sha256: 45e0917f26b87b524340f3ea9cc304ed96a7727085585f1baad52c5542d134db, bytes: 34372}
-  refs/verilog-axis/rtl/arbiter.v: {sha256: d54d337db4812f927b2e9b5788dfa39f9bd578ad01b7846c5fa7f2610b0923fa, bytes: 4993}
-  refs/verilog-axis/rtl/axis_adapter.v: {sha256: 42e8a1289d4aa2dfd90785c983d3f5790c9c4a2cb957cfd42ea1d39435032c67, bytes: 12811}
-  refs/verilog-axis/rtl/axis_arb_mux.v: {sha256: bee8d11f32f7fb1c5afdd6cdad872cd7de9dc94bcb4787f9aa119f2ebbc489a6, bytes: 11633}
-  refs/verilog-ethernet/rtl/arp.v: {sha256: 41e2301695fdfc1cc93252041107574a0ed040ba92c99d57dce73317804f4698, bytes: 17937}
-  refs/verilog-ethernet/rtl/arp_cache.v: {sha256: d8b573a7582c08f67f90aba9316d98e5b0e0c5bbcbcd7a6935d6537e3f4aa2f8, bytes: 6952}
-  refs/verilog-ethernet/rtl/arp_eth_rx.v: {sha256: 4113e03df063b91d64be4da8e455ba45d8251cecc8e66ec75cec93c518443bee, bytes: 11674}
-  refs/verilog-ethernet/rtl/arp_eth_tx.v: {sha256: 88be298ea8f236900416ebd3295aa2fa86a8785acc2b8edca87278afc2338f86, bytes: 13497}
-  refs/verilog-ethernet/rtl/lfsr.v: {sha256: 5502c8203b0dfc7246c1a2de93e60c199ded3c1d7840b106350d714f72a9a079, bytes: 16327}
-  refs/verilog-ethernet/rtl/mac_ctrl_rx.v: {sha256: b5c0eda334c078518adb5fb7db324ae966ebddba0031bc91cedd32b831137fb1, bytes: 16385}
-  refs/verilog-ethernet/rtl/mac_ctrl_tx.v: {sha256: 48202a9a8f4b4e9688a4a0eac9dfe7492825be9f1f54a77590008db851b391c1, bytes: 14920}
-  refs/verilog-ethernet/rtl/mac_pause_ctrl_tx.v: {sha256: c5de52ceae4cf7c048262132191b1e4c366deca15d931e4703f6a05eff789c5a, bytes: 11667}
-
+  # GENERATED by scripts/gen_refs_lock.py from a Verilator --MMD
+  # capture. Do not hand-edit: an entry added by hand is a claim
+  # nobody measured, which is how this block came to guard 16 of the
+  # 143 files the tasks actually read. Trailing comment names the
+  # tasks whose closure contains the file.
+  # 143 files, captured across 18 tops in 10 tasks.
+  refs/axi/include/axi/assign.svh: {sha256: 8d6aa6ecc736515db75bb691e377b64753310c442e107757b99caabdf043b6cd, bytes: 45647}   # d_nw01
+  refs/axi/include/axi/typedef.svh: {sha256: 63f095042c9183f977e95307df14ce0baa06b71121491a380af289f8b309482c, bytes: 14574}   # d_nw01
+  refs/axi/src/axi_atop_filter.sv: {sha256: 65556ca9b151496e7e67f625d173e4a40b9de34a82bd877b6182099f539ab9b1, bytes: 16566}   # d_nw01
+  refs/axi/src/axi_cut.sv: {sha256: b1e8e3c8480d9b2b2f5e15c81e40278a98d227e50f6003e68f2d86a98171f9aa, bytes: 9624}   # d_nw01
+  refs/axi/src/axi_demux.sv: {sha256: 3c165a36d2efd88e0714d2e20dcea9375c0e211b0091252e6b082b884b9fd23b, bytes: 11100}   # d_nw01
+  refs/axi/src/axi_demux_id_counters.sv: {sha256: fb1f48bf188a28e693f7fd977f1bc52c60234f21874bc9c02b75ccd0ed01945a, bytes: 5252}   # d_nw01
+  refs/axi/src/axi_demux_simple.sv: {sha256: 6aa93c6c442db7b52f2daa9be0b4cfc5a79dc835abfd6ab65355950ed07558c2, bytes: 22181}   # d_nw01
+  refs/axi/src/axi_err_slv.sv: {sha256: 904a47ccd9151e35971e5ea9d1ab2a386585addec4b8613185aca5b579fb4062, bytes: 8507}   # d_nw01
+  refs/axi/src/axi_id_prepend.sv: {sha256: 190b2f3fd55ab509dc25d4495694c3f5c4e91cbed8b79727b5543ef017a3348e, bytes: 8634}   # d_nw01
+  refs/axi/src/axi_multicut.sv: {sha256: 2dd21cd472c3c448a35814b8614ad68eb7c8ab7a00ed89935371a2f5de5bec68, bytes: 8070}   # d_nw01
+  refs/axi/src/axi_mux.sv: {sha256: a8c330c2efe8d758071b0c183fa7d2385171d85c2f81cc9734b7f83ab07b27ba, bytes: 25033}   # d_nw01
+  refs/axi/src/axi_pkg.sv: {sha256: 244bd5cb3c5bc58d786f2ed2f5eeefd910c4fe03a175f4a2888c6a2ea1c430dc, bytes: 26577}   # d_ca05,d_nw01
+  refs/axi/src/axi_xbar.sv: {sha256: 222aba262630924335e5ce0a0a905f0192aa4e7dacac90b2f8627f7c2cc1b6f7, bytes: 12028}   # d_nw01
+  refs/axi/src/axi_xbar_unmuxed.sv: {sha256: 6449bcb0366e3e89af3a72471051e5a231fa4d0b05e0e59bd095a33c3487f510, bytes: 16217}   # d_nw01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking.sv: {sha256: 1b9d9c3c798cc4e851e88e2153defb4f168b2443c9cbef8f6751bfed8f13c12d, bytes: 16369}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking.svh: {sha256: b11569e4e88bb5f0576d6cff92045852b2369457b49d3638923937dbdb1dcc22, bytes: 7460}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_data_mem.sv: {sha256: 449581993b06d520e286c0a8825330c0cb00f4666b9d738eab7741a5f64a89fb, bytes: 5207}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_decode.sv: {sha256: af80dafc2982512504a72862bca219ab91ff18d593044fc0dc3bdeb07b259c59, bytes: 1705}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_dma.sv: {sha256: 1facafe95ba1217fa91746d7fc3923b5bd75bbd21796e682980584f709055541, bytes: 8913}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_mhu.sv: {sha256: 0abc231c30233d381017b77278b1747fdb6fbdcc622d5f8a15dcdcc78a34afa9, bytes: 27300}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_miss_fifo.sv: {sha256: 9c0329c3c14f56c45559647f20b5502c297a697752ecdf0972038da10bdceb76, bytes: 8037}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_pkg.sv: {sha256: bc46e83f5316f81bfab6f98483e40f91b8d8b4efd9b95d7524d78add9b1fa71e, bytes: 2843}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_stat_mem.sv: {sha256: 11649d22c7559494d657af795f7aa4cba17fbe75c383de95bfbc0c0b9ccaa704, bytes: 3980}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_tag_mem.sv: {sha256: ab83ea84b755528225f720464dec014c25c442a64f35c0dfb0b3280785f21a0b, bytes: 5317}   # d_ca01
+  refs/basejump_stl/bsg_cache/bsg_cache_non_blocking_tl_stage.sv: {sha256: 25f6e1fabb2b02b6753717a61d803ceb25f656c294f05dfd5bc8b3bf2ac83689, bytes: 14562}   # d_ca01
+  refs/basejump_stl/bsg_dataflow/bsg_fifo_1r1w_small.sv: {sha256: 092a13fec7717ce378c20e51784cf5cea3cc3c30b89f870da550690f862f385c, bytes: 1986}   # d_ca01
+  refs/basejump_stl/bsg_dataflow/bsg_fifo_1r1w_small_hardened.sv: {sha256: e3a9dfd225de6faa766b1263737b7b9de79ca96401bae478f4c0d187cc7f41ab, bytes: 4897}   # d_ca01
+  refs/basejump_stl/bsg_dataflow/bsg_fifo_1r1w_small_unhardened.sv: {sha256: 9b80dd3776fde67cfeaf02c1ed61eae449d33560388e1a475396a4ba75b9c5d1, bytes: 3024}   # d_ca01
+  refs/basejump_stl/bsg_dataflow/bsg_fifo_tracker.sv: {sha256: fe0d58ef6c38cbc76f626d0d3093a8789bd2dd54a09afb7c05f9083b649ce6ec, bytes: 2677}   # d_ca01
+  refs/basejump_stl/bsg_dataflow/bsg_two_fifo.sv: {sha256: fdd69f8798742775b6aa46259812c6c26c8c5d740aa9a46f516c4b07ae486cb5, bytes: 4468}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1r1w.sv: {sha256: 8c1b36effb9f1e2c2d1eba82e0412e45ec48ac2defe5563bd090e9cf56cc7019, bytes: 1821}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1r1w_sync.sv: {sha256: 4b746d8cd2cc31dcfca239da8993919feb1ff4493a76f091a78ea5328f5bb708, bytes: 3365}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1r1w_sync_synth.sv: {sha256: 423132b956383e4fd928fa8e5a7536c2b0dd6dbf22165e50e6b88457d9b1f0d3, bytes: 3498}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1r1w_synth.sv: {sha256: c07a724c4d907e09fc549f229c1b8664882cb6e1604f312d75ce2463cde28d65, bytes: 1326}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1rw_sync.sv: {sha256: bbbf0eceeff9dd118f9df74a4925b109781a1bfa98fa837bd8754fc7ea405aa1, bytes: 1848}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1rw_sync_mask_write_bit.sv: {sha256: 8a12023bdddb58a535e76335afcc3c03d61b2cf5bdfc3ceb7733633be8841463, bytes: 1725}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1rw_sync_mask_write_bit_synth.sv: {sha256: c0aa3aaf066edcbeb62044ad276ff9c2986a64a1537db94645cd217985dece77, bytes: 2946}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1rw_sync_mask_write_byte.sv: {sha256: ea95e4270760ff9aecfc45cf21747a93271f5ac844ea9cfdc980aa224ed1cd6b, bytes: 1813}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1rw_sync_mask_write_byte_synth.sv: {sha256: b69cb2b025b5f083d66aceec690023e420d08f7b4041439d1a90e88131c5124c, bytes: 1831}   # d_ca01
+  refs/basejump_stl/bsg_mem/bsg_mem_1rw_sync_synth.sv: {sha256: 92b78b3b06ddecee7dd3f28c6c979fbe5a0c47d22a629ade7ec888c110927639, bytes: 2403}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_circular_ptr.sv: {sha256: e0a3705749543514b4ac898ad3aeed96bb9a78ec3f7354deb38ed3d9a90225dc, bytes: 2698}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_clkgate_optional.sv: {sha256: ccacfd114da3aac40cbf73627b26cda23a2763ebc12a7627181d535b0f440911, bytes: 1132}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_counter_clear_up.sv: {sha256: e1d18a02d60b07830890ec4d471b9b77221391daa28c9b48b1b681540b51d1c0, bytes: 1691}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_decode.sv: {sha256: 2cbfe961049b7004fe15db3c0aafa4bf0a8748608182c2f12c7dbd5a38f856d1, bytes: 465}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_decode_with_v.sv: {sha256: 4c28eb22d5add4d8e9fb07b600f18d7c54ed9480d31ad8ce1e6092d899274c3a, bytes: 431}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_defines.sv: {sha256: fdda4920183dbfdd6ed11b80baae53cb33295239b9069ff5b0fea3d61abe4281, bytes: 9569}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_dff.sv: {sha256: cf74ee1bc526b24a1f7e43c9fea566be0be3c2c377e0251bfd008f81df042685, bytes: 382}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_dff_en.sv: {sha256: 6afb19dc2da52eee8bc4b6188bfffcf0ec56d01974617a12755be5d842e5ddc7, bytes: 572}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_dff_en_bypass.sv: {sha256: 01e5fbaf38dc9c896c2a9febb077491193c4f1b37a8894970eaace6f3af79aa5, bytes: 624}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_dff_reset.sv: {sha256: 2706d0890b56f84185c23664bd056a4d885f32ec487441b64a2155650c95aae8, bytes: 471}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_dff_reset_en.sv: {sha256: 6ebc7b8a09b4f220869db7c0f81deb06b39e4fe17100c5a03185feadda653921, bytes: 622}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_dff_reset_set_clear.sv: {sha256: b548746f08897987e0e59b2feaa1b2b3cce7fc30157b2b3176d4a30c4e39ff36, bytes: 776}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_dlatch.sv: {sha256: b088ab2d94191e69ec6808ec1ffca15976fea1211d958fa96d0b968bbe9082b9, bytes: 598}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_encode_one_hot.sv: {sha256: 104e9721ee049127d747ac58b444f8069dfb0baba99e1bfdc3bb6856c1d7f9d1, bytes: 3424}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_expand_bitmask.sv: {sha256: 85758864347b4e3f049893bc484fdf6983d6fe4a2e8b3c0760c7e10df2acac70, bytes: 853}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_lru_pseudo_tree_backup.sv: {sha256: 8ae324a5e02cb86600f5db87572ea8afb5608c29ece75b324a324c7e94f812fc, bytes: 2447}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_lru_pseudo_tree_decode.sv: {sha256: 61fc1142eaa381ab69a5902f4219d2c88e13f09d00c36232434425f4b0b73af2, bytes: 1425}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_lru_pseudo_tree_encode.sv: {sha256: 6bb9688940f090318537dff5931e3ea803ed87b8e9ebd13995d5b4c22daf912e, bytes: 1679}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_mux.sv: {sha256: 6892a86cc3e4ef161a9c826765f159e7262beca27b9ac1a561f06b4f8c3f0b52, bytes: 731}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_mux_bitwise.sv: {sha256: e13cbaedf7b7f600724df68d0520034261f4da8efbebfaa9ac0f50ee39325e33, bytes: 518}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_mux_segmented.sv: {sha256: cf20342dd3b66fecbe9b1a4d1d2d1c2fe58d3522c4eaed2241d852089dbee574, bytes: 800}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_priority_encode.sv: {sha256: f9d6e31e5b2fe8df9a5d430250ad09e9cc47cecc3faf9b57f00828bf2ed416f3, bytes: 1177}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_priority_encode_one_hot_out.sv: {sha256: 5c61edc768dd97835c85973a072b6a0aa15be929a541ed288b1cd65854591094, bytes: 1299}   # d_ca01
+  refs/basejump_stl/bsg_misc/bsg_scan.sv: {sha256: 1d298ca1db19c0e1ce3f3d5b36f25b7860088e347e43ed9ba716497b4750e1cb, bytes: 3607}   # d_ca01
+  refs/common_cells/include/common_cells/assertions.svh: {sha256: d39c7afa893656e235b0019233c1bcf12491cd421639791c827cc53236bd4841, bytes: 10990}   # d_ai01,d_ca03,d_ca04,d_ca05,d_dsp01,d_dsp02,d_dsp03,d_nw01
+  refs/common_cells/include/common_cells/registers.svh: {sha256: 532dfd1723d2936421b921235abdafcc8ca407990224992ca13575fdb620053a, bytes: 12202}   # d_ai01,d_ca04,d_dsp01,d_dsp02,d_dsp03,d_nw01
+  refs/common_cells/src/addr_decode.sv: {sha256: 4d124ff240e5dd38cd3d4f73fc26754041e7105d4599eb581e6bed4bdc1cc34a, bytes: 4907}   # d_nw01
+  refs/common_cells/src/addr_decode_dync.sv: {sha256: 8360f958a1a81c54e96dfbb9e5d3392c9c475b1b7a9ebb1e0c2dbbbbf8ec0b29, bytes: 8562}   # d_nw01
+  refs/common_cells/src/binary_to_gray.sv: {sha256: 99e8a0bac473921d7e2c0f5e248f88705e3f44f9aeaa4d637cecf5fbf2a4d511, bytes: 904}   # d_ca04
+  refs/common_cells/src/cdc_fifo_gray.sv: {sha256: 428f6b52d4c470f7904975f8be1170e7391eec502faea598e8c5cde5b1a8c494, bytes: 10844}   # d_ca04
+  refs/common_cells/src/cf_math_pkg.sv: {sha256: bbf0614771ceb9526356bb8e5234787324ef215884bc11b4aa27e91fc3cc8910, bytes: 2993}   # d_ai01,d_ca03,d_ca04,d_dsp01,d_dsp02,d_dsp03,d_nw01
+  refs/common_cells/src/counter.sv: {sha256: b7a9b5fc11ce4def51133f27ec0470a18ae7c8c6b1161f21c948ae848b693f58, bytes: 1584}   # d_nw01
+  refs/common_cells/src/delta_counter.sv: {sha256: 95e28f8eaca7d5524081d51f2ea8b43a14bc8a5837dcf8f65080c09b85943636, bytes: 2925}   # d_nw01
+  refs/common_cells/src/fifo_v3.sv: {sha256: 861ea44cbd3129731b77977da36fb0dac1a1350d7df664a1b4310423e7d272bc, bytes: 6308}   # d_nw01
+  refs/common_cells/src/gray_to_binary.sv: {sha256: e8cc57b3e6a6accb91a5f204d0f71a95ec7383f9975c727b70fa49fa6bc72470, bytes: 943}   # d_ca04
+  refs/common_cells/src/lfsr.sv: {sha256: 7d60db373881f6335bf20705503b67fdd5a720187a239135b927eea5edcf9a28, bytes: 12411}   # d_ca03
+  refs/common_cells/src/lfsr_8bit.sv: {sha256: f72213c4f4fa09dad37e159e5eac3417f464b9d965c06ea3f2484a7cca538830, bytes: 1954}   # d_ca05
+  refs/common_cells/src/lzc.sv: {sha256: f31989be4369ea7c4809c0c3d61df28581e9ac7666005fde6e476a975d1acd07, bytes: 4380}   # d_ai01,d_ca03,d_dsp01,d_dsp02,d_dsp03,d_nw01
+  refs/common_cells/src/rr_arb_tree.sv: {sha256: f72bc188ea8253230a722bfb6436ab31b6e41c26020fa4ba4eebd93025984f7e, bytes: 14558}   # d_nw01
+  refs/common_cells/src/spill_register.sv: {sha256: 97bf85128f538c54c749896b8eee5fcfe4b27c16845d2a17990979a63b09f2ec, bytes: 1381}   # d_ca04,d_nw01
+  refs/common_cells/src/spill_register_flushable.sv: {sha256: 3285eb2e557f6377de88df91751b0bccdad07b16be9d926314a52a23e964f02c, bytes: 3605}   # d_ca04,d_nw01
+  refs/common_cells/src/stream_register.sv: {sha256: 2e0e5b6d09ce4ade0881938ee042dcbc78438638fa2592338a374f88a3c27304, bytes: 1763}   # d_nw01
+  refs/common_cells/src/sync.sv: {sha256: cc7605468d124b0af0d4b2d17323ade1f4093bc96999fab037b9dacac5fe5956, bytes: 1269}   # d_ca04
+  refs/cva6/core/cache_subsystem/axi_adapter.sv: {sha256: 58e6a85435b4b4ea1090fee3067cd26f6cfaec1389e58d17dc7e823c69043389, bytes: 18909}   # d_ca05
+  refs/cva6/core/cache_subsystem/miss_handler.sv: {sha256: 941a51abdab9c350a73d769267bc68815c70f4351a9171bc28235069a17e3e7b, bytes: 30351}   # d_ca05
+  refs/cva6/core/cva6_mmu/cva6_mmu.sv: {sha256: 5913fbcbbc5b8a792c242c673b3d75763084331c2b65581defc69df405995f76, bytes: 32803}   # d_ca03
+  refs/cva6/core/cva6_mmu/cva6_ptw.sv: {sha256: c115c4831d536df78e1ae7651385b898e0445c3eacaee7bb220a660bd3068fdf, bytes: 29801}   # d_ca03
+  refs/cva6/core/cva6_mmu/cva6_shared_tlb.sv: {sha256: 3ac49fb19105e711fe25a83a730657a23df1ddde1a30b4d2e75212140adb73a4, bytes: 34740}   # d_ca03
+  refs/cva6/core/cva6_mmu/cva6_tlb.sv: {sha256: 2390206bffb5d5b40193a8482ab71b849347866c08e716c3b4dd9c39da2ffe52, bytes: 26768}   # d_ca03
+  refs/cva6/core/include/ariane_pkg.sv: {sha256: f492b1dda7044c4d202df1a1e4609a53fbecc94ad3f08b5d6d9a150b4569d2d7, bytes: 25022}   # d_ca03,d_ca05
+  refs/cva6/core/include/build_config_pkg.sv: {sha256: b91c9cd6cae23c623381a19168713fd962449227b290a1bc1968613ea8830f16, bytes: 10274}   # d_ca03,d_ca05
+  refs/cva6/core/include/config_pkg.sv: {sha256: 0238237ebfa805b3166b0cfb51fc70ca0d5044d2800c2bdec2961f3a9aa67f47, bytes: 18747}   # d_ca03,d_ca05
+  refs/cva6/core/include/cv64a6_imafdc_sv39_config_pkg.sv: {sha256: 85cffba1039a851188e10938556872a856e132103a83ecca002a3e2fba7b8c35, bytes: 6928}   # d_ca03,d_ca05
+  refs/cva6/core/include/riscv_pkg.sv: {sha256: ec71960e88f869f4045a1b5293cc87197e979fb2d4e5623ea4fcc1f9de6068cb, bytes: 38434}   # d_ca03,d_ca05
+  refs/cva6/core/include/std_cache_pkg.sv: {sha256: a0e01186dfdb63a059fbc7ffcc7bde10322f337c39c05bd0a17ad67995ba668f, bytes: 1944}   # d_ca05
+  refs/cva6/core/pmp/src/pmp.sv: {sha256: 9c2dce5d4bd2390a617882c282080dbf191c54f016b36b5e719672382c15c7b6, bytes: 2827}   # d_ca03
+  refs/cva6/core/pmp/src/pmp_entry.sv: {sha256: 28d5044ccc095cfd676a966020b4913bf8a74c8bb5e02f4ca2af801273a88a65, bytes: 3968}   # d_ca03
+  refs/cvfpu/src/fpnew_cast_multi.sv: {sha256: 2298be638b66e8fb9072124938063925ce0b494a0f309ab709c188ea3aadbd91, bytes: 67022}   # d_dsp03
+  refs/cvfpu/src/fpnew_classifier.sv: {sha256: f60c930f3d306b3b22507e24cf3c78ffbc40ab02623b1226c92a136dc365734b, bytes: 3826}   # d_ai01,d_dsp02,d_dsp03
+  refs/cvfpu/src/fpnew_divsqrt_multi.sv: {sha256: ed20094356b40cf2af76e913cc7aa9535ebbbc59b0e70822bf54efe609c8895c, bytes: 17554}   # d_dsp01,d_dsp03
+  refs/cvfpu/src/fpnew_divsqrt_th_32.sv: {sha256: 28564034d9a8fc1caabad704f2db5602ec055625799fac15d468a53220565b5e, bytes: 23115}   # d_dsp03
+  refs/cvfpu/src/fpnew_divsqrt_th_64_multi.sv: {sha256: 5436effe873707cc0ecaf60de9b5476f3739df7d8549adaabee2fbc7aab1535d, bytes: 23003}   # d_dsp03
+  refs/cvfpu/src/fpnew_fma.sv: {sha256: f46700037a6f9efe9b74855d3d21ebaeaf42f5dd522b9e812bbc56ad7193ec71, bytes: 35746}   # d_dsp02
+  refs/cvfpu/src/fpnew_fma_multi.sv: {sha256: e996b50147a8bf286c814704f11be34b090efc7d211cb6513d0e6c9dc1820bb8, bytes: 73946}   # d_dsp03
+  refs/cvfpu/src/fpnew_mxdotp_multi.sv: {sha256: eb87e32149e8d3b58880456cd2f7842f1057ce4d49173b1a0528657ef36ce251, bytes: 61447}   # d_dsp03
+  refs/cvfpu/src/fpnew_mxdotp_multi_wrapper.sv: {sha256: de6635ba2144c2a1d0ad77361fc6ae7ed8fed6e19016188023a9d3dbee6f908b, bytes: 10015}   # d_dsp03
+  refs/cvfpu/src/fpnew_opgroup_multifmt_slice.sv: {sha256: 117679db526b771466107ed92055f2e01329d0afe214c9c82e7bd2a10961114d, bytes: 38733}   # d_dsp03
+  refs/cvfpu/src/fpnew_pace_fma_multi.sv: {sha256: a19a9756a35905bbcff6a5651f99268bfee4f67387391d7d4fa00f263ea6796c, bytes: 17128}   # d_dsp03
+  refs/cvfpu/src/fpnew_pkg.sv: {sha256: a3e8b15beb8d4b841fad7499ed403fbebf93fe2518d529fe190033cdcb21ed3c, bytes: 29530}   # d_ai01,d_dsp01,d_dsp02,d_dsp03
+  refs/cvfpu/src/fpnew_rounding.sv: {sha256: b7ca1dcbe08ccd4eb0da15c4d514f1c23cc35be98d0363e832d518ebf4b3c543, bytes: 5341}   # d_ai01,d_dsp02,d_dsp03
+  refs/cvfpu/src/fpnew_sdotp_multi.sv: {sha256: c862b471d05d983335e7d65ade3bbdef9ef792f5ef491d0fd501252777b037d5, bytes: 127818}   # d_dsp03
+  refs/cvfpu/src/fpnew_sdotp_multi_wrapper.sv: {sha256: c09d1339701ae7d004e357b8d2a3416c9b4d2c31ca11c00b0f54d1681dd7675f, bytes: 8684}   # d_dsp03
+  refs/cvfpu/src/lfsr_sr.sv: {sha256: 1c5838704de774cbaae271cc12d1036c246e4cd2d7a3ac60a6de2fd7da3c1287, bytes: 13155}   # d_ai01,d_dsp02,d_dsp03
+  refs/cvfpu/src/mxdotp/fpnew_mxdotp_multi_pkg.sv: {sha256: f244a1fbe6d925cfcc92835dc6496d34af45b5d049cb049d5fff3e414e54fc3e, bytes: 6690}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_bound_select.sv: {sha256: e23cd1199fe260f69ee47e4d898374615c4afc7e06a59af9b669fe68de9a1543, bytes: 1317}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_cast.sv: {sha256: 68b2fa8f10ef89029c4d3a3d79eaf6976b6a5a845066d904d0fba6e476e26ad9, bytes: 3057}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_cmp.sv: {sha256: f50945b64d466bc6f52e173252056eea07fc82b29213546a873a39ee10ff383f, bytes: 5939}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_coeff_select.sv: {sha256: fa920bfa4a6480e48cddf1fa3f87863b2efe8eee620aff0ec52ffe0aeb6e746c, bytes: 1540}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_decast.sv: {sha256: 40a5a5c7098b0f06c3e17186329050253f68113d4ccb1e0eb8fea50a669db931, bytes: 2812}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_frexp.sv: {sha256: 0a37552fff1a60573e1a6b8b3a2555c4809337966507c5c4e331a1b498afa0a5, bytes: 5778}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_ldexp.sv: {sha256: 08b9d4dc997456ec85fc3dec909093ee2591a85de2ec417f1ed8d951f09c0f92, bytes: 4166}   # d_dsp03
+  refs/cvfpu/src/pace/fpnew_pace_partition.sv: {sha256: ae0933e8dff92640fccefb2b1c62f2f1544f6e28ac4c928e9dc2526b64ec3a5a, bytes: 8537}   # d_dsp03
+  refs/fpu_div_sqrt_mvp/hdl/control_mvp.sv: {sha256: 728111abd5a87e9f11e773dfbbb9ab8c7020b3423c896b569a55b865428fc216, bytes: 156580}   # d_dsp01
+  refs/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv: {sha256: 14814817e16137d2ac1d4f0960dd47d7ce9b3bc289e02d4e041ac4c1da93c08f, bytes: 3630}   # d_dsp01
+  refs/fpu_div_sqrt_mvp/hdl/div_sqrt_top_mvp.sv: {sha256: 2abf0597d491fa7efc108d47dee6ea824017ac52e6361fda1aaeee50a3690367, bytes: 8195}   # d_dsp01
+  refs/fpu_div_sqrt_mvp/hdl/iteration_div_sqrt_mvp.sv: {sha256: 3cbdd9c9cf821570611729691956c40a5e3307feca4004cd3aa5f757e034a742, bytes: 3228}   # d_dsp01
+  refs/fpu_div_sqrt_mvp/hdl/norm_div_sqrt_mvp.sv: {sha256: e1647b866b4528256a7382e39e7c7054833ecdfc83c064c602b8f809c267bc4b, bytes: 20048}   # d_dsp01
+  refs/fpu_div_sqrt_mvp/hdl/nrbd_nrsc_mvp.sv: {sha256: 2e405102c7704302823b9f44a51fecac89662ce0224cc902745f4f047ab08ef2, bytes: 6421}   # d_dsp01
+  refs/fpu_div_sqrt_mvp/hdl/preprocess_mvp.sv: {sha256: 923b6f553151d4a803fe4450e8c439ea20059e9937f173c0207eeadfbcae9bab, bytes: 16292}   # d_dsp01
+  refs/hci/rtl/common/hci_package.sv: {sha256: 15b735c27e33246c6dc7a4248ffba9541b5109759d9c918e09ba66ec36172d69, bytes: 3699}   # d_ai01
+  refs/hwpe-stream/rtl/hwpe_stream_package.sv: {sha256: c2f7b0efcb60cd4dbeeb31552578588b15a941bd886c0501e38f68d8680e91f4, bytes: 4738}   # d_ai01
+  refs/redmule/rtl/redmule_ce.sv: {sha256: 3110d611cf0b2716517cf793037d21ec7079353027393bfe9ae6db4f01267417, bytes: 22217}   # d_ai01
+  refs/redmule/rtl/redmule_engine.sv: {sha256: 79b526ae5e67071d4f52b8ae49e47c16823f0a75f90ce59a6eff206fd63fff16, bytes: 6902}   # d_ai01
+  refs/redmule/rtl/redmule_fma.sv: {sha256: cb20c6c7516a0d35fb8b5c2fac34f1959b54f9733434c7faa1b3ede3fa8553bc, bytes: 34915}   # d_ai01
+  refs/redmule/rtl/redmule_noncomp.sv: {sha256: 432d393cdfa26c402fcbac9c18983cd6caf8733b1cb0d3e61b864050c7dd5966, bytes: 18209}   # d_ai01
+  refs/redmule/rtl/redmule_pkg.sv: {sha256: 454f594b41b2429536c33cf1a87cb94cebe577a2544e9c1c679188af020be67a, bytes: 7485}   # d_ai01
+  refs/redmule/rtl/redmule_row.sv: {sha256: c473632932e324dfae9881e7c0c6da7a46f04b09af792f441e21f432b25a6f87, bytes: 6117}   # d_ai01
+  refs/tech_cells_generic/src/deprecated/cluster_clk_cells.sv: {sha256: 0bf54e372850c1af22264711d311d943718dc4c8d918e47cc98e9a8d07461d44, bytes: 1872}   # d_ai01
+  refs/tech_cells_generic/src/rtl/tc_clk.sv: {sha256: 93e9747504fa1da6473560341febbfae6c5e917768633a84fc9ef12299293207, bytes: 3318}   # d_ai01
+  refs/verilog-axis/rtl/arbiter.v: {sha256: d54d337db4812f927b2e9b5788dfa39f9bd578ad01b7846c5fa7f2610b0923fa, bytes: 4993}   # d_nw03
+  refs/verilog-axis/rtl/axis_register.v: {sha256: 599fde2d6c2d806643bbffb7c444297e69a71871f962d4b741ec1914342e0d39, bytes: 10298}   # d_nw03
+  refs/verilog-axis/rtl/axis_switch.v: {sha256: ccfe5eb62d5fead748bca36f22a0012599af46d2ec486c1bb091308234510e6f, bytes: 16739}   # d_nw03
+  refs/verilog-axis/rtl/priority_encoder.v: {sha256: df28220d95b47df349a72803a9751aad331eb8e1435416e8686d00572a974dd5, bytes: 3253}   # d_nw03
 # NAMED IN THE MANIFEST, ABSENT ON DISK -- recorded, not skipped:
 #   refs/axi/include/axi/typedef.sv
 #   refs/basejump_stl/bsg_cache/bsg_cache.v

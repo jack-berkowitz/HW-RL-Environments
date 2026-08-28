@@ -111,6 +111,17 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   #                          2 = baseline stale, entries vanished       -> report
   #   The 285-entry backlog is carried in inbox/.catalog_baseline and REPORTS.
   #   Failing on it would be the cries-wolf failure warned about above.
+  #   check_refs_hashes  non-zero = a vendored anchor no longer matches the
+  #                      hash recorded for it -> FAIL. Wireable only now that
+  #                      the lock is GENERATED from measured closures: against
+  #                      the hand-maintained list it guarded 16 of 143 consumed
+  #                      files while watching 31 nothing reads, so a green run
+  #                      meant almost nothing and a red one was as likely to be
+  #                      an unconsumed file as an oracle.
+  if [ -f "$d/scripts/check_refs_hashes.py" ]; then
+    ( cd "$d" && python3 scripts/check_refs_hashes.py 2>&1 )
+    if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ refs_hashes"; fi
+  fi
   if [ -f "$d/scripts/check_inbox_cataloged.py" ]; then
     ( cd "$d" && python3 scripts/check_inbox_cataloged.py 2>&1 )
     _inbrc=$?
