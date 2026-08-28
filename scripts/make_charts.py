@@ -340,19 +340,56 @@ def alt_texts():
               + " ".join(f"{t.split('_')[0]}_{t.split('_')[1]}: "
                          + "; ".join(v) + "."
                          for t, v in sorted(by.items())))
-    return funnel, faults
+    # THE DESIGN CHART ALTS WERE NOT IN THIS FUNCTION, and drifted for the
+    # same reason the tables did. Only funnel and verification_faults were
+    # generated, so after the pinned-period rename the area alt still read
+    # "chat 1.80x, claude 1.05x" -- describing bars the chart no longer draws,
+    # for the one class of reader who cannot see that it doesn't.
+    def _bar_phrase(m, ratio, note):
+        return f"{m} {ratio:.2f}x" if ratio else f"{m} {note}"
+
+    drows = design_rows()
+    area = ("Design area relative to each task's reference, at its pinned "
+            "clock. " + " ".join(
+                f"{lab} at {pin} ns, reference {ref_a:,.0f} um2: "
+                + ", ".join(_bar_phrase(*b) for b in bars) + "."
+                for _t, lab, pin, ref_a, bars, _pb in drows))
+    power = ("Total power relative to each task's reference, at its pinned "
+             "clock. " + " ".join(
+                 f"{lab}: " + ", ".join(_bar_phrase(*b) for b in pbars) + "."
+                 for _t, lab, _pin, _ra, _bars, pbars in drows))
+    crows = capability_rows()
+    cparts = []
+    for _t, lab, _pin, keys, bars in crows:
+        shown = [b for b in bars if b[1]]
+        if not shown:
+            continue
+        if len(keys) > 1:
+            cparts.append(f"{lab}, range over {len(keys)} declared metrics: "
+                          + ", ".join(f"{b[0]} {b[1]:.2f}x to {b[2]:.2f}x"
+                                      for b in shown) + ".")
+        else:
+            cparts.append(f"{lab} per {keys[0]}: "
+                          + ", ".join(f"{b[0]} {b[1]:.2f}x" for b in shown) + ".")
+    cap = ("Area per unit of capability, relative to each task's reference. "
+           "Where a task declares several capability metrics the bar spans "
+           "best to worst. " + " ".join(cparts))
+    return funnel, faults, area, power, cap
 
 
 def sync_readme_alt():
-    """Rewrite the two <img alt="..."> strings in README.md from the data."""
+    """Rewrite EVERY generated <img alt="..."> string in README.md from data."""
     path = os.path.join(REPO, "README.md")
     if not os.path.isfile(path):
         return False
     src = open(path, encoding="utf-8").read()
-    funnel, faults = alt_texts()
+    funnel, faults, area, power, cap = alt_texts()
     out = src
     for asset, alt in (("funnel_light.svg", funnel),
-                       ("verification_faults_light.svg", faults)):
+                       ("verification_faults_light.svg", faults),
+                       ("design_area_light.svg", area),
+                       ("design_power_light.svg", power),
+                       ("design_capability_light.svg", cap)):
         pat = re.compile(r'(<img alt=")([^"]*)("\s+src="docs/assets/'
                          + re.escape(asset) + r'")')
         esc_alt = alt.replace("&", "&amp;").replace('"', "&quot;")
@@ -625,15 +662,39 @@ def capability_rows():
         keys = _capability_metrics(dirs[0])
         if not keys:
             continue
+        # SAME TWO DEFECTS AS design_rows, and the pairing made them worse.
+        # The filename glob pinned the AREA numerator to old `_fx` records
+        # while _metric_value read CURRENT sim records for the denominator, so
+        # this chart divided an August area by an August-28 capability and
+        # reported the quotient as a measurement. d_nw01's declared range read
+        # 2.59x-3.40x built that way; on matched records it is 1.19x-6.79x.
+        #
+        # And there was no timing gate here at all. design_rows drops a
+        # submission that missed its pin (rule 22); this one did not, so
+        # d_ca01's `chat` drew a 0.67x capability bar while its area and power
+        # were withheld two charts above for missing timing by 49 ps. A number
+        # withheld on one axis cannot be published on another derived from it.
         best = {}
-        for f in glob.glob(os.path.join(REPO, "runs", task, f"*_fx{pin}__ppa.json")):
+        for f in glob.glob(os.path.join(REPO, "runs", task, "*__ppa.json")):
             try:
                 r = json.load(open(f))
             except Exception:
                 continue
-            w = r.get("label", "").split("_fx")[0]
+            try:
+                if abs(float(r.get("clk_period_ns")) - float(pin)) > 1e-9:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            w = re.split(r"_(?:fx|pin)", str(r.get("label", "")))[0]
             if w not in best or r.get("timestamp_utc", "") > best[w].get("timestamp_utc", ""):
                 best[w] = r
+        # RULE 22, applied here as it already was to area and power.
+        for _w in [k for k in best if k != "reference"]:
+            try:
+                if float(best[_w].get("wns_ns")) < 0:
+                    del best[_w]
+            except (TypeError, ValueError):
+                pass
         ref = best.get("reference")
         ref_lbl = None
         for cand in glob.glob(os.path.join(dirs[0], "ref", "*.sv")):
