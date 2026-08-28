@@ -66,8 +66,34 @@ def resolve(value, sdc_path):
         return value.strip()
     cmd = m.group(1).replace("$(SDC_FILE)", sdc_path).replace("$$", "$")
     try:
+        # SCRUBBED ENVIRONMENT, AND THIS IS THE WHOLE POINT OF THE FUNCTION.
+        #
+        # The ABC line resolves through `awk -v ovr="$CLK_PERIOD_NS"`, and this
+        # subprocess used to inherit os.environ -- so an ambient CLK_PERIOD_NS
+        # in the caller's shell silently changed the hashed ABC value. The same
+        # config on the same tree produced FIVE digests depending on how it was
+        # invoked:
+        #
+        #   bare                                2f89284f39d710f0
+        #   argv CLK_PERIOD_NS=33.75            96503a82fa98cba7
+        #   env  CLK_PERIOD_NS=33.75            9300170b2259b46d   <- the leak
+        #   argv ABC_CLOCK_PERIOD_IN_PS=33750   e40b04a45a822b34
+        #   stored in the record                e3b4cfd4d327671f
+        #
+        # Found when the PC agent could not reproduce values I quoted. Neither
+        # host was wrong: I had an env var set and it did not. A rule-17
+        # comparability check whose answer depends on the caller's shell cannot
+        # settle whether two builds are comparable, which is its only job.
+        #
+        # ARGV STAYS A LIVE CHANNEL and should: an override passed on the
+        # command line is recorded as an `override.` field, so it is visible in
+        # the record. The env channel was invisible. Same family as the earlier
+        # "9.0" vs "9.0000" fix in this file -- two callers meaning one thing
+        # and hashing differently -- except this one needed no second caller.
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+               "LC_ALL": "C", "LANG": "C"}
         out = subprocess.run(["bash", "-c", cmd], capture_output=True,
-                             text=True, timeout=10)
+                             text=True, timeout=10, env=env)
         return out.stdout.strip() or "<empty>"
     except (OSError, subprocess.SubprocessError):
         return "<unresolvable>"
