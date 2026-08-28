@@ -6999,3 +6999,51 @@ generator refuses and leaves `refs.lock` untouched. This is a checker whose
 correct behaviour is to block the tool that would silence it.
 
 **Rules:** 17, 20, 24
+
+## F111. The moved anchor changed nine of eighteen configurations, and not the scored one
+
+`refs/common_cells/src/cdc_fifo_gray.sv` was edited in `c0a5a47` (2026-08-19
+09:17, author jack-berkowitz) to add `.SYNC_STAGES ( SYNC_STAGES )` to its two
+sub-instantiations, deliberately — an `UPSTREAM_v2` note landed in the same
+commit — while `refs.lock` was never updated. d_ca04's oracle moved under it.
+Three things were measured before anything was re-recorded, because once the
+hashes agree the distinction stops being recoverable from the record.
+
+**Which verdicts ran against which version.** d_ca04 has sim records on both
+sides: eleven before the edit and every current one after. The hardcoding probe
+`p3_ignores_sync_stages.sv` scored 9/18 on 2026-08-19T06:02Z, ten hours *before*
+the edit — so the finding that established d_ca04's SYNC_STAGES discrimination
+was itself produced against the pre-edit anchor.
+
+**The hash cannot tell the versions apart.** `build_config_hash` covers ten
+`config.mk` keys, the SDC periods and explicit overrides. It reads no vendored
+source and no `VERILOG_FILES` content, so both versions of the anchor produce an
+identical digest. Rule 17 comparability is blind to the oracle by construction:
+it answers "same build configuration", not "same hardware".
+
+**The passthrough is inert at `SYNC_STAGES=2` and live at `3`.** Measured, not
+inferred, by running the reference against both anchor versions in an isolated
+worktree and diffing metrics rather than pass/fail:
+
+    SYNC_STAGES=2 configs: 9, differing: 0
+    SYNC_STAGES=3 configs: 9, differing: 9
+    min crossing latency, pre-edit 3 -> post-edit 4
+
+Both sub-modules default `SYNC_STAGES = 2`, so before the edit the parent's
+value never reached them. **d_ca04's scored point is `SYNC_STAGES=2`, so no
+scored number moved.**
+
+### Pass/fail was the wrong instrument and nearly gave the wrong answer
+
+The reference passes 18/18 under *both* anchors, and the mutant scores 9/18
+under both with an identical failure message. Read at that resolution the edit
+looks inert everywhere, and the honest report would have been "no observable
+difference". The difference is in the metric VALUES, which pass/fail discards —
+a one-cycle latency change that every gate in the apparatus tolerates.
+
+A verdict is a threshold applied to a measurement. Comparing verdicts to decide
+whether two builds differ asks whether they fall on the same side of a line, not
+whether they are the same. When the question is "did this change anything",
+compare what was measured, not what was concluded about it.
+
+**Rules:** 17, 20, 24
