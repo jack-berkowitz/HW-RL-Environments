@@ -9089,6 +9089,9 @@ result, gemini rejecting a result it considered unexpected. Two independent
 readings of one silence, disagreeing about which way the obligation runs, is
 better evidence of ambiguity than either failure alone.
 
+**v_ca03 is RESOLVED — see the entry below this one; the golden does violate
+F1 and my probe here was the thing at fault.** (Original text kept:)
+
 **v_ca03 is UNRESOLVED, and my own measurement contradicts the submissions.**
 Both report AW/AR handshakes during reset. Probing the golden directly with valid
 held low:
@@ -9123,3 +9126,85 @@ submissions killed 11/11 and 10/10 mutants while requiring behaviour their spec
 forbids in bold. **Fault detection and contract fidelity are not merely different
 metrics — here they are anti-correlated**, because the same over-strict assertion
 that rejects the golden also catches every mutant that perturbs that signal.
+
+## RESOLVED: v_ca03's golden violates F1, and the reference's F1 check cannot fire
+
+NOT-FOR-CATALOG — this resolves the v_ca03 half of the concentration entry above
+and supersedes its "unresolved" verdict. The catalog entry should be written from
+this one, by whoever adjudicates the remedy, since the remedy is a scoring
+decision and not mine.
+
+**My earlier probe was wrong and produced the contradiction.** I measured the
+golden's ready lines with `valid` held LOW — that tests whether ready is parked
+high with nothing offered, which is not what F1 governs and not what the
+submissions checked. Offered a request throughout reset, the golden does this:
+
+    cyc 1 rst_n=0: awready=1 arready=1 wready=1
+    cyc 2 rst_n=0: awready=1 arready=1 wready=1
+    cyc 3 rst_n=0: awready=1 arready=1 wready=1
+    HANDSHAKES DURING RESET over 5 cycles: AW=5 AR=5 W=5
+
+F1: *"While it is low the design shall be returned to an idle state: **no request
+is accepted** and no response is presented."* Fifteen requests were accepted.
+**The golden violates F1 as written, and both submissions were right to say so.**
+
+### It is not one implementation's quirk
+
+`dut2/id_width_conv_alt.sv` — the INDEPENDENT second implementation, written from
+the spec rather than wrapped around the anchor — does the same:
+
+    DUT2 HANDSHAKES DURING RESET over 5 cycles: AW=5 AR=5 W=5
+
+Two implementations, written by different routes, both accept during reset. What
+they share is not a bug but an assumption: that a conforming master does not
+assert `valid` before reset release, so gating `ready` is unnecessary. That
+assumption is AXI convention and it is **nowhere in the spec**.
+
+### And the task could never have found this itself
+
+The reference's F1(a) block checks the right thing — `s_arvalid && s_arready`,
+etc. Instrumented, under its own stimulus:
+
+    F1PROBE reset_cycles=8 aw_offered=0 ar_offered=0 w_offered=0
+
+**Eight cycles in reset, zero requests offered.** All three handshake halves of
+F1(a) are unreachable by construction; only the two response halves (`s_rvalid`,
+`s_bvalid`) can fire. The tb even says so at the F1(c) site — *"Nothing is offered
+during the window"* — as a deliberate choice made for a different reason.
+
+    the check exists          and is correctly written
+    the stimulus reaches it   never, on any of 8 reset cycles
+    so the golden's violation was invisible to the instrument built to catch it
+
+This is the vacuous-check class again, and the sharpest instance yet: not a
+control that passes trivially, but **a correctly-written check for a clause the
+golden actually violates, kept silent by stimulus that never exercises it.**
+
+### What this does to the batch verdict
+
+Two submissions were labelled **REJECTS CORRECT HARDWARE** for detecting a real
+violation of a stated clause. The hardware is not correct with respect to F1. The
+validity gate is doing exactly what it was built to do and its premise — that the
+golden is correct — is false on this clause, so the gate converts a true positive
+into a disqualification.
+
+    v_ca03 chat     11/11 mutants, rejected as invalid, RIGHT about F1
+    v_ca03 claude   11/11 mutants, rejected as invalid, RIGHT about F1
+
+### The remedy is a scoring decision and I am not taking it
+
+Two options, and they are not equivalent:
+
+    narrow F1        say what it means -- that no RESPONSE is presented, and that
+                     a design need not gate ready because a conforming master
+                     does not offer during reset. Matches both implementations and
+                     the reference's own source-comment reasoning. Changes spec
+                     text, so it moves task_text_hash and breaks comparability
+                     with every record already scored against the current text.
+    gate ready       make both DUTs honour F1 literally. Leaves the text alone,
+                     changes the golden and dut2, and every mutant's witness would
+                     need re-measuring against a changed base.
+
+Either way **the F1(a) stimulus gap must be closed**, or the next golden to
+violate F1 will be just as invisible. That part is unambiguous and is mine to fix
+once the direction is chosen.
