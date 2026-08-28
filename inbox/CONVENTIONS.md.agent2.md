@@ -646,3 +646,87 @@ can innocently break. Where the dependency is incidental, either make it explici
 split this corpus already performs, arriving as the case where the split was made
 at the CLAUSE level and not at the SITE level — or report the measurement as
 resting on an accident.
+
+<!-- author: agent2 -->
+## A check that refuses looks exactly like a check that passes
+
+v_nw02's Tier-B 5c script exited 2 on a count guard, before its first build,
+producing no verification at all. `task.yaml` said *"11 of 11 ... every one of the
+ten is caught on it."* Both states were live for the whole life of a mutant, and
+**the only thing separating them was an exit code nobody read.**
+
+    a check that PASSED    exit 0, N builds, N results
+    a check that REFUSED   exit 2, 0 builds, 0 results
+    what a reader sees     a claim in task.yaml, identical in both cases
+
+This is the `-m1` family with the number taken out. The earlier cases were a
+right number under a wrong sentence — a first-hit id read as a coverage set, a
+commit message describing an edit that never landed. **This is no number at all
+under a sentence that named one**, which is strictly harder to catch, because
+there is no figure to check against anything.
+
+**So: a claim citing a check must cite what the check PRINTED on a run, not what
+it is expected to print.** Record the count the instrument emitted. A count that
+came from a run goes stale loudly when the run changes; a count that came from
+the author's expectation cannot go stale at all, because nothing is generating it.
+
+And where a check can refuse rather than fail — a guard, a precondition, a
+missing input — **treat refusal as a distinct outcome and record it as such.** It
+is not a pass, and it does not look like a failure.
+
+<!-- author: agent2 -->
+## Documentation behind a guard is not preserved, it is unmaintained
+
+The same script carried an honest description of its own gap, placed **below the
+count guard** that made the gap fire. The guard exited first, so the text could
+never print. A gap documented in a code path that the gap itself made
+unreachable.
+
+The sharper half arrived on the fix. That text described itself as *"what should
+print once p11 and p12 exist and the counts agree again"* — so the moment the
+counts agreed, it printed, **announcing a gap that had just been closed.** It was
+wrong for exactly as long as it was readable, which was no time at all until it
+was suddenly wrong out loud.
+
+**General form: nothing can contradict text that nothing can reach.** Comments at
+least sit beside code someone edits, and drift gets caught when the neighbour
+changes. Text behind a guard has no neighbour and no reader, so it ages with none
+of the signals that normally catch staleness — and it is released into visibility
+by precisely the change that invalidates it, because the condition that unblocks
+it is usually the condition it was describing as absent.
+
+    parking text for later     is not preservation
+    the failure mode           it becomes reachable and wrong in the same commit
+    the practical rule         put the description where it is READ -- the README,
+                               task.yaml, the finding -- and put in the branch only
+                               what is true WHEN THAT BRANCH RUNS
+
+<!-- author: agent2 -->
+## Verify a transformation with a probe written before it, and transform a copy
+
+Two practices, both from folding hand-written mutants into their generator, where
+the risk was that a generator-expressed guard is not the hand-written one.
+
+**Write the probe BEFORE the change and re-run it UNMODIFIED after.** Output was
+byte-identical, and that is usable evidence only because the script could not
+have been shaped by knowing what changed. A check authored afterwards is written
+by someone who already knows which fields moved, and it will tend to compare the
+ones that did not. The probe is cheap; its ordering is the whole of its value.
+
+**Apply the transformation to a `mktemp -d` copy first, not to the tree.** On the
+run that mattered the generator died with a `NameError` — two constants inserted
+after the list that referenced them — and wrote nothing. The same output then
+reported:
+
+    ten pre-existing dut files : identical
+    af_m11 ... : IDENTICAL
+    af_m12 ... : IDENTICAL
+
+**Vacuous, every line of it**, since nothing had been regenerated; the files were
+compared against themselves. The reassuring reading and the failure that made it
+meaningless were three lines apart, and the reassuring one was longer, later, and
+formatted as a result.
+
+The copy is what made that a non-event rather than a recovery. **State it as the
+practice, not as the thing that saved you** — a transformation you have not yet
+verified belongs somewhere you are not obliged to trust it.

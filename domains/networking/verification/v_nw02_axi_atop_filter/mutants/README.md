@@ -143,8 +143,25 @@ past the exit code — this one exited 2, and nothing was watching the exit code
 
 ### Regeneration was verified not to move anything
 
-The risk was that a generator-expressed guard is not the hand-written one. Probed
-before and after with the same script:
+The risk was that a generator-expressed guard is not the hand-written one — in
+particular that af_m11 would stop producing the cycle-145 witness `task.yaml`
+records.
+
+**The probe was written BEFORE the change and re-run UNMODIFIED afterwards, and
+that ordering is why its result is usable.** A check authored after a change is
+written by someone who already knows which fields moved, and will tend to compare
+the ones that did not; this one could not have been shaped that way. It lives at
+`scratchpad/probe_nw02.sh` and prints the two reference-testbench runs read *by
+W3 site* — both sites emit the id `W3`, so the id alone cannot separate them —
+followed by all twelve non-equivalence witnesses.
+
+**The regeneration was also applied to a `mktemp -d` copy before the real tree.**
+That caught a `NameError` in the generator that wrote nothing at all, on a run
+whose output still said "ten pre-existing dut files identical, m11/m12
+IDENTICAL" — vacuous, since the files had been compared against themselves. The
+reassuring lines and the failure that emptied them were three lines apart.
+
+Probed before and after with the same script:
 
     ten pre-existing dut files      byte-identical
     af_m11 / af_m12 dut files       differ by exactly the shared HELPERS block,
