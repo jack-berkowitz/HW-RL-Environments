@@ -9079,6 +9079,9 @@ requiring the error to persist onto a beat whose own group was clean. **Both
 submissions did the one thing the spec names, warns about, and forbids.** Nothing
 is missing from the text.
 
+**v_dsp02 is NOT a text gap — see the CORRECTION entry below; the text is
+explicit and the submissions checked a named latitude.** (Original text kept:)
+
 **v_dsp02 looks like a TEXT GAP.** H2 says only: *"A result is delivered on a
 rising clock edge where `out_valid_o && out_ready_i`, and results are delivered in
 the order the operations were accepted."* It fixes delivery and ordering and is
@@ -9208,3 +9211,101 @@ Two options, and they are not equivalent:
 Either way **the F1(a) stimulus gap must be closed**, or the next golden to
 violate F1 will be just as invisible. That part is unambiguous and is mine to fix
 once the direction is chosen.
+
+## CORRECTION: v_dsp02's H2 is not a text gap, and only one of the three tasks was at fault
+
+NOT-FOR-CATALOG — supersedes the "probable text gap" verdict on v_dsp02 in the
+concentration entry. The catalog entry, when written, should carry this version.
+
+I called H2 silent on the correspondence between operations accepted and results
+delivered, from two failure strings. **Both halves of that were wrong.**
+
+**The correspondence is stated.** H3's note says it and routes it: *"a lost or
+duplicated result is a mismatch between what was accepted and what arrived. So a
+violation of this clause is reported under H2."* Not silent — stated, with the
+reporting id named.
+
+**And what the two submissions actually got wrong is a named latitude.** Each
+produced exactly ONE H2 failure, not a stream:
+
+    chat     "accepted operations did not all produce results"
+    gemini   "Unexpected result delivered"
+
+Two end-of-run accounting complaints, in opposite directions. Measured on the
+golden under the reference's own stimulus:
+
+    H2PROBE accepted=3718 delivered=3717 difference=1
+
+**One operation in the pipe when the run stopped.** The unit is one register stage
+deep, and the spec's latitude 1 reads: *"**Latency** between an operation being
+accepted and its result appearing. Unconstrained, and it may vary"* — under a
+heading that says the testbench **shall not check** the items beneath it. A
+testbench concluding "not all accepted produced results" because it chose to stop
+is checking latency. That is the forbidden thing, named, in a numbered list.
+
+The reference exercises exactly this region — H3's note requires backpressure and
+a floor refuses a run with fewer than 20 stall cycles — and passes, so the golden
+is not losing results mid-run. The single complaint each is the residue.
+
+### So the three-task verdict collapses to one
+
+    v_ca03   TASK defect       golden violated F1 as written; its own check for
+                               that clause was unreachable. Fixed 1e8ddc0.
+    v_ca06   SUBMISSION defect required error stickiness, which L7 names as
+                               latitude and D6 warns about in the clause itself
+    v_dsp02  SUBMISSION defect checked latency at end of run, which latitude 1
+                               names and forbids
+
+**Two of the three are the same failure: a testbench asserting on something the
+spec lists under "shall not check".** Different clauses, different tasks,
+identical shape — and in both cases the spec named the freedom in a numbered
+latitude list, so nothing was missing from the text either time.
+
+### What this does to the methodological result — it strengthens it
+
+The concentration discriminator fired 2-of-2 on three tasks and **one** of them
+was a task defect. Reading the clause is not a formality after concentration; it
+is where two of three verdicts inverted. And my own first reads were wrong on two
+of the three, in both directions: I called v_ca03 unresolved when the golden was
+at fault, and v_dsp02 a text gap when the text was explicit.
+
+**Concentration locates. Only the clause adjudicates.**
+
+## Do the v_ca03 records need re-scoring? No — and the reason is worth stating
+
+Measured rather than argued. F1 is the SOLE cause of both rejections:
+
+    v_ca03/chat     17 failures, every one F1
+    v_ca03/claude    6 failures, every one F1
+
+And re-run against the corrected task, both are unchanged:
+
+    golden FAIL, dut2 FAIL, conformants mostly FAIL
+    => INVALID: this submission does not DISCRIMINATE
+
+**No figure moves.** They were invalid, they remain invalid, and the
+fault-detection numbers stay suppressed at 11 of 11 either way. Re-scoring would
+produce byte-identical records.
+
+**But the reason inverted, and the record asserts the reason.** At the hash they
+answered, `18b1288587d371a8`, the verdict "REJECTS CORRECT HARDWARE" was FALSE —
+the hardware was not correct with respect to F1 as then written, and these two
+were the only submissions in the batch that noticed. At the current hash,
+`5e1adba7cce23c3a`, the same verdict is TRUE, because F1 no longer forbids what
+they check.
+
+    what to change    nothing in the numbers
+    what to add       an annotation on both records: the verdict is correct
+                      against 5e1adba7cce23c3a and was not correct against the
+                      text they were given
+    what NOT to do    re-run them at the new hash and file it as a correction of
+                      the old. That is a different question being answered by the
+                      same artefact, and recording it as an amendment would erase
+                      that they answered the earlier one correctly.
+
+The general form, which is the part that outlives this task: **a verdict carries a
+timestamp whether or not it records one.** "Rejects correct hardware" is a claim
+about a golden at a moment. When the golden or the clause moves, every stored
+verdict about it silently changes truth value, and nothing in the record
+re-evaluates. The `task_text_hash` on each record is what makes this recoverable
+at all — it is the only field that says which question was being answered.
