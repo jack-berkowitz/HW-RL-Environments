@@ -188,13 +188,29 @@ directions.
 ## 6. Reset
 
 **F1.** `rst_ni` is **synchronous and active low**. While it is low the design
-shall be returned to an idle state: no request is accepted and no response is
-presented. After release the table is empty, so `MAX_UNIQ_IDS` distinct
-identifiers may be accepted again, and **no transaction outstanding before reset
-shall produce a response afterwards.**
+shall be returned to an idle state: **no response is presented** — `s_bvalid` and
+`s_rvalid` stay low — and **anything the design does accept while `rst_ni` is low
+is discarded**: no response for it shall appear after release. After release the
+table is empty, so `MAX_UNIQ_IDS` distinct identifiers may be accepted again, and
+**no transaction outstanding before reset shall produce a response afterwards.**
+
+**`ready` is not constrained while `rst_ni` is low** — see latitude 7. A design
+may hold `s_awready`, `s_arready` or `s_wready` high throughout reset.
 *Authority: polarity and synchronicity fixed by the port map's `rst_ni`; the
 discard requirement is task intent, stated because AXI4 does not settle whether
 transactions survive a reset.*
+
+*CORRECTED 2026-08-28, and the correction is recorded rather than absorbed. This
+clause read "no request is accepted and no response is presented", and **both
+reference implementations violated it.** Offered a request while `rst_ni` was low,
+the golden and the independent `dut2` each completed five AW, five AR and five W
+handshakes in five reset cycles, because neither gates `ready`. AXI4 requires a
+master not to assert `valid` before reset release, so a conforming master offers
+nothing and nothing is accepted; gating `ready` as well is permitted and is not
+required. The obligation that survives is on RESPONSES and on DISCARD, and both
+are checkable against a master that does offer during reset — which the reference
+testbench now is. Two independent submissions rejected the golden on the old
+wording and were right to; they were scored as rejecting correct hardware.*
 
 *The **table-is-empty-after-release** half of this clause is **reported under
 A3**, and for a reason worth stating exactly: A3 is not aimed at reset. A3
@@ -241,6 +257,13 @@ Not constrained by this contract, and not to be checked:
 5. **The values on any output while its `valid` is low.** Unconstrained.
 6. **Whether reads and writes share table entries or hold separate tables**,
    beyond A1's requirement that they are counted separately.
+7. **Whether `ready` is gated while `rst_ni` is low.** A design may hold
+   `s_awready`, `s_arready` or `s_wready` high during reset, or drive them low.
+   Both reference implementations hold them high, and each accepts fifteen
+   handshakes across a five-cycle reset window when one is offered. A testbench
+   that requires a handshake to be **impossible** during reset rejects correct
+   hardware. What F1 requires is that no response is presented and that anything
+   accepted is discarded — not that acceptance is prevented.
 7. **Internal structure** — how the table is stored or searched.
 
 ---
