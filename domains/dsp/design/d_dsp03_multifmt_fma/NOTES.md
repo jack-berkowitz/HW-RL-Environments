@@ -247,3 +247,65 @@ line.** It is accurate over the region its set reached, and that region did not
 include the band -- zero cases in 13860. It is instance 1 in F59. No candidate
 has ever been scored against this task, so nothing needs re-scoring; the boundary
 is recorded so that a later reader does not compare across it.
+
+---
+
+## F53's blast radius, MEASURED. 2026-08-27
+
+Flagged as a build gate before further work on d_dsp03 and v_dsp01 and never
+confirmed. Confirmed now. **F53 reaches nothing live.**
+
+### Every site outside `refs/` that binds a cvfpu ascending format mask
+
+| site | how it builds the mask | live? |
+|---|---|---|
+| `d_dsp01/ref/fp_divsqrt_srt_ref.sv` | by index, `fmt_fp32_only()`, width-asserted | task **WITHDRAWN** |
+| `d_dsp03/ref/fp_multifmt_fma_ref.sv` | by index + **three `$fatal` width assertions** | **yes** |
+| `d_dsp03/controls/nc_a`, `nc_b`, `nc_c`, `nc_d` | by index, same construction | yes |
+| `v_dsp01/probe/semantic_probe.sv` | **by literal** `9'b101_000_000` / `4'b0110` | task **REJECTED at step 1, never built** |
+| `v_dsp01/dut/fp_convert.sv` | **by literal** `9'b101_000_000` / `4'b0010` | same |
+
+Eleven files match the mask vocabulary outside `refs/`; nine build by index, two
+by literal, both in `v_dsp01`.
+
+### The four literals are arithmetically correct, checked against the enum
+
+`fmt_logic_t` is `logic [0:8]`, so a 9-bit literal's leftmost bit lands on index
+0. `NUM_FP_FORMATS = 9`, `FP32 = 0`, `FP16 = 2`; `NUM_INT_FORMATS = 4`,
+`INT8/INT16/INT32/INT64 = 0/1/2/3`.
+
+    9'b101_000_000 -> indices 0, 2  = FP32 + FP16     matches its comment
+    4'b0110        -> indices 1, 2  = INT16 + INT32   matches its comment
+    4'b0010        -> index 2       = INT32 only      matches its comment
+
+Every one carries a comment stating the ascending convention, so both files were
+written after F53 was learned.
+
+### d_dsp03 is verified LIVE, not by inspection
+
+The shim asserts `max_fp_width == 32`, `min_fp_width == 16` and
+`LANES == WIDTH/16`, and **the reference passes 2/2 through the scored path** —
+so none of the three fired. That is the executable difference between d_dsp03 and
+d_dsp01: F53's only symptom was one `WIDTHTRUNC` among 133 warnings, and this
+build emits **192 warnings including WIDTHTRUNC**. The noise is still there. The
+assertions are what make it non-load-bearing.
+
+### The residual risk, named and not fixed here
+
+The two literal sites have **no width assertion**, which is the second half of
+d_dsp03's fix. F53's own text says indexing alone breaks silently if the package
+renumbers its formats — and a literal is strictly weaker than indexing, because
+it hardcodes the position *and* the width. If `NUM_FP_FORMATS` ever moves off 9,
+`9'b101_000_000` misaligns silently and only an assertion would catch it.
+`v_dsp01` is REJECTED and unbuilt so nothing scored depends on it, and it is
+verification's territory: **reported, not edited.**
+
+### And my first sweep missed both literal sites
+
+I grepped for a literal appearing inline at the port connection. Both real sites
+bind a `localparam` and then pass its NAME to the port, so the pattern is split
+across two lines and the grep returned empty — which I nearly reported as "no
+literal binding anywhere". **A pattern sweep on a BINDING fails on an
+indirection**, exactly as a numeric sweep on a relation fails on a capitalisation
+(F99). What found them was sweeping for the TYPE, which cannot be indirected away
+because the declaration must name it.

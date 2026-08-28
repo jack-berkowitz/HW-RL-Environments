@@ -105,6 +105,25 @@ These are selected on failure modes frontier models actually hit:
 
 # DESIGN TASKS (16)
 
+**THE COUNT, STATED RATHER THAN LEFT TO BE DERIVED (added 2026-08-27).** The 16
+in the heading above is the CATALOGUED count and it includes a withdrawn task.
+Headings in this file are append-only, so the heading is not restated; the
+breakdown lives here instead.
+
+    catalogued rows          16
+    withdrawn                 1   d_dsp01 -- see its row below, and its NOTES.md
+    LIVE                     15
+    with a directory on disk 11   the other 4 live rows are not started
+    with a task.yaml         10   d_dsp01's directory exists and has none
+
+**`d_dsp01` is WITHDRAWN under F54 and MUST NEVER ACQUIRE A `task.yaml`.** The
+absence of that file is the mechanical marker of the withdrawal and is why the
+two on-disk counts differ by one. Its row stays in this catalog because the row
+IS the evidence: removing it would make the disqualification unfindable to anyone
+who later wonders why `refs/` carries an FP divider that no task uses. It must
+not be counted as available work. The "DSP / Arithmetic (3)" heading below counts
+it; two of those three are live.
+
 ## Comp Arch (5)
 
 | id | module | why it's hard | anchor (vendored) | Class | status |
