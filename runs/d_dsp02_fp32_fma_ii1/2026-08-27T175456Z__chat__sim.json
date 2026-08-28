@@ -1,0 +1,59 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ASCRANGE,MULTIDRIVEN,TIMESCALEMOD,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "30",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "RDN": "894",
+      "RMM": "847",
+      "RNE": "860",
+      "RTZ": "850",
+      "RUP": "889",
+      "disagree": "100",
+      "exact": "650",
+      "overflow": "486",
+      "qnan_a": "46",
+      "qnan_b": "42",
+      "snan": "31",
+      "subn_op": "1243",
+      "subn_res": "172",
+      "tiny_edge": "235",
+      "underflow": "127",
+      "zero_res": "48"
+    }
+  },
+  "git_sha": "e50e8155bc511a91704d8b950af52907091de0d0",
+  "kind": "sim",
+  "label": "chat",
+  "metrics": {
+    "": {
+      "c3_accepted": "4340",
+      "c3_dead_cycles": "0",
+      "c3_offered": "4340",
+      "checks": "4341",
+      "h3_guard_true": "60",
+      "init_interval": "1",
+      "latency_cycles": "4",
+      "vectors": "4340"
+    }
+  },
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "candidates/d_dsp02/chat.sv",
+  "submission_sha256_16": "642db95637b0a9b4",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "task_text_hash": "fd4d334195354cfa",
+  "timestamp_utc": "2026-08-27T17:54:56Z"
+}

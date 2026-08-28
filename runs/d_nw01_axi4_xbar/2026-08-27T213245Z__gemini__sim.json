@@ -1,0 +1,14 @@
+{
+  "build_error": "3 error(s); first: sanitised_gemini.sv:393:13: error: declaration must come before all statements in the block ",
+  "build_status": "slang_rejected",
+  "git_sha": "b787b084584c50d81bf9b4a269eef7f0c53a200f-dirty",
+  "kind": "sim",
+  "label": "gemini",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "candidates/d_nw01/gemini.sv",
+  "submission_sha256_16": "acee2e18873e2a00",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "0d484a57107f3502",
+  "timestamp_utc": "2026-08-27T21:32:45Z"
+}
