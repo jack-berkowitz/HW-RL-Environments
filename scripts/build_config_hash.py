@@ -188,6 +188,42 @@ def main():
         _tp = " ".join(m_top.group(1).split())
         fields.append(f"VERILOG_TOP_PARAMS={_tp}")
 
+    # HASH WHAT ABC WAS ACTUALLY TOLD, not what a generated config happened to
+    # still contain.
+    #
+    # d_ai04 failed rule 17 with the reference on one digest and all three
+    # candidates on another, built minutes apart on one host from one exported
+    # CLK_PERIOD_NS. The only differing field was ABC_CLOCK_PERIOD_IN_PS: 33750
+    # for the reference, 40000 for the candidates -- while ALL FOUR recorded
+    # note.abc_runtime_target_ps=33750, i.e. every build mapped against the same
+    # target. A recording divergence reported as a comparability failure.
+    #
+    # THE CAUSE IS THAT THE TWO PATHS HASH DIFFERENT GENERATED FILES.
+    # reference_ppa.sh hashes orfs_runs/<task>_reference/config.mk;
+    # ppa_candidate.sh hashes orfs_runs/<nick>/config.mk. In one, ORFS had
+    # already expanded the `$(shell awk ...)` ABC line to 33750; in the other
+    # the expression survived and re-resolved at hash time against the SDC to
+    # 40000. So the field recorded which generated file was read, which is not a
+    # property of the build.
+    #
+    # When the period is overridden the effective ABC target is known exactly --
+    # it is what run_orfs_build.sh puts on the make command line -- so hash
+    # that. The field then means what its name says under every invocation and
+    # from either path.
+    #
+    # THIS MOVES EVERY PINNED BUILD'S DIGEST. That is F113's warning applied to
+    # itself: an instrument fixed mid-round partitions records either side of
+    # the fix. References built before this must be rebuilt for their round to
+    # be comparable BY THE INSTRUMENT rather than by argument.
+    if "CLK_PERIOD_NS" in overrides:
+        try:
+            _eff = int(round(float(overrides["CLK_PERIOD_NS"]) * 1000))
+            fields = [f"ABC_CLOCK_PERIOD_IN_PS={_eff}" if
+                      f.startswith("ABC_CLOCK_PERIOD_IN_PS=") else f
+                      for f in fields]
+        except (TypeError, ValueError):
+            pass
+
     for p in clock_periods(sdc_path):
         fields.append(f"sdc.{p}")
     for k, v in sorted(overrides.items()):

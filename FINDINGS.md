@@ -7167,3 +7167,48 @@ The fix was still right; what it needed was a rebuild of the same round's
 reference on the far side of it.
 
 **Rules:** 17, 19, 24
+
+## F114. Rule 17 failed on which generated file was read, not on what was built
+
+d_ai04's four records at the 33.75 ns pin split into two digests — the reference
+on `83088234b2c846ea`, all three candidates on `e3b4cfd4d327671f` — built
+minutes apart on one host from one exported `CLK_PERIOD_NS=33.75`. The only
+differing field was `ABC_CLOCK_PERIOD_IN_PS`: 33750 for the reference, 40000 for
+the candidates. **All four recorded `note.abc_runtime_target_ps=33750`**, so
+every build mapped against the same ABC target. A recording divergence reported
+as a comparability failure.
+
+**The two paths hash different generated files.** `reference_ppa.sh` hashes
+`orfs_runs/<task>_reference/config.mk`; `ppa_candidate.sh` hashes
+`orfs_runs/<nick>/config.mk`. In one, ORFS had already expanded the
+`$(shell awk …)` ABC line to 33750; in the other the expression survived and
+re-resolved at hash time against the SDC to 40000. The field recorded **which
+generated file was read**, which is not a property of the build.
+
+d_ca03 agreed on one digest in the same round, and the PC agent named why
+precisely: *neither* of its configs resolved the override, so they match by
+coincidence rather than by correctness. Two tasks, one code path, opposite
+outcomes, and the passing one passed for no better reason than the failing one
+failed.
+
+### The relaxation that was offered, and why it is the wrong fix
+
+The PC agent asked whether rule 17 could be judged on `note.abc_runtime_target_ps`
+— which agrees across all four — rather than on the hash, which does not. It was
+right to ask and right not to decide it alone. **It is the wrong fix, because it
+judges the guard by the thing the guard exists to check.** A digest that
+disagrees when the builds match is broken; permitting a manual override of it
+each time it disagrees converts a mechanical check into a judgement call, and
+the next disagreement will be the real one.
+
+The right fix is to make the field mean what its name says. When the period is
+overridden the effective ABC target is known exactly — it is what
+`run_orfs_build.sh` puts on the make command line — so that is what is hashed,
+under every invocation and from either path.
+
+**This moves every pinned build's digest**, which is F113 applied to itself: an
+instrument fixed mid-round partitions the records either side of the fix.
+References built before it must be rebuilt for their round to be comparable *by
+the instrument* rather than by argument.
+
+**Rules:** 17, 24
