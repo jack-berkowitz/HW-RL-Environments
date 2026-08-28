@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=sdp_requant; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=40000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=40.0; override.CLK_PERIOD_NS=33.75; note.abc_runtime_target_ps=33750 (make-line override; the hashed ABC value above is the config.mk text resolved against the SDC, not this);",
+  "build_config_hash": "e3b4cfd4d327671f",
+  "clk_period_ns": "33.75",
+  "correctness_gate": "passed:2026-08-27T001346Z__gemini__sim.json",
+  "design_area_um2": "179212",
+  "git_sha": "d0370f740c29b2f5274c6c3b0f412071a6f60b9f-dirty",
+  "kind": "ppa",
+  "label": "gemini_pin33p75",
+  "orfs_nickname": "d_ai04_cand_gemini_pin33p75",
+  "pdk": "sky130hd",
+  "power_w": "2.57e-01",
+  "status": "completed",
+  "submission": "candidates/d_ai04/gemini.sv",
+  "submission_sha256_16": "d813a9f3f21a1f86",
+  "synth_area_um2": "149087.987200",
+  "task": "d_ai04_sdp_requant",
+  "timestamp_utc": "2026-08-28T20:28:25Z",
+  "wns_ns": "2.43509"
+}
