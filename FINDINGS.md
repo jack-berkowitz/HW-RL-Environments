@@ -6997,3 +6997,5 @@ moved. Once the hashes agree the distinction is not recoverable from the record.
 `1592390f962a9578`, on disk `428f6b52d4c470f7`, consumed by d_ca04. The
 generator refuses and leaves `refs.lock` untouched. This is a checker whose
 correct behaviour is to block the tool that would silence it.
+
+**Rules:** 17, 20, 24
