@@ -8806,3 +8806,232 @@ against files that were never regenerated.
 Regenerating into a `mktemp -d` copy rather than the real tree is what made that
 a non-event. **The reassuring reading and the failure arrived in the same
 output**, three lines apart, and the "IDENTICAL" lines were the more prominent.
+
+## A false universal is worse than a loud refusal, and this is the third occurrence
+
+Two tasks, the same missing-policy-counterpart defect, opposite failure modes.
+
+    v_nw02   count guard present   exited 2 before its first build. Produced
+                                   NOTHING and CLAIMED nothing.
+    v_ca03   no guard at all       ran to completion over TEN of ELEVEN and
+                                   printed "OK: every defect is caught on BOTH
+                                   bases, and both clean implementations pass."
+
+**v_ca03's is the worse one, and the ordering is not close.** A refusal is
+recoverable by anyone who reads the exit code — the information is present, just
+in a channel people skip. A false universal is recoverable only by someone who
+**re-derives the set**: they must independently enumerate the anchor mutants,
+enumerate the policy files, and notice the difference. Nothing in the output
+prompts that. Every row read "as expected", the clean controls passed, the exit
+code was 0, and the summary said "every".
+
+    the refusal      withholds a claim         cost: a reader who skips exit codes
+    the universal    asserts a false one       cost: a reader must reconstruct the
+                                               set to discover it is false
+    what they share  a short set is invisible in the output of a globbing runner
+
+`task.yaml` compounded it: **"22 of 22"** — a real number, correctly counted, over
+two differently sized halves. Eleven mutants on the golden base and ten on the
+policy base is twenty-two checks, so the arithmetic was right and the sentence it
+supported was wrong. **The `-m1` shape again: a right number under a claim it does
+not license.**
+
+### Third occurrence of the class
+
+    v_ca07   recorded in v_nw02's generator comment -- a stale file left in
+             policy/ turned "a reported 22/22 into a real 21/22"
+    v_nw02   af_m11 added by hand, no counterpart; guard caught it LOUDLY and
+             the check then produced nothing for the life of that mutant
+    v_ca03   iw_m11 added, no counterpart, NO guard; graded 10 of 11 and printed
+             a universal
+
+Three tasks, one root: **a runner that enumerates by globbing a directory cannot
+distinguish a short set from a complete one.** v_nw02's own script says exactly
+this in a comment — and v_ca03, one domain over, had no guard at all.
+
+### The fix, and why a count guard was not enough to copy
+
+`mutants/policy/iw_p11_decerr_normalised_to_slverr_from_second.sv` now exists and
+the halves match. The guard added compares **ids as a set**, not counts:
+
+    missing counterpart   named: "anchor only (no policy re-derivation): iw_11_..."
+    a SWAP at 11 vs 11    named in BOTH directions -- a count guard PASSES this,
+                          since it sees only a shortfall, never a substitution
+    placement             before any build, so a mismatch costs one second rather
+                          than eleven compiles
+
+Both controls were run in place and both fired. The count form that all five
+existing guards use would have caught the first case and missed the second.
+
+## A predictor that is right by accident is a third outcome in a sweep
+
+My static sweep flagged v_ca03. It flagged it **for the wrong reason**: the test
+for "does this task have a guard" was a grep that matched *prose containing the
+words* `n_anchor`/`n_policy`, and v_ca03's script mentions counts only in an echo
+line. So the predictor reported **"would refuse (loud)"** when the truth was
+*"completes and lies"* — the opposite, and the worse of the two.
+
+    the sweep found      the right task
+    for the reason       that it had a guard which would fire
+    the truth            it had no guard at all
+    so the prediction    was inverted, and inverted toward the reassuring side
+
+**Right answer, wrong mechanism, and the mechanism is what generalises.** On any
+task where the prose and the guard disagreed the other way — a real guard with no
+prose, or prose absent where a guard exists — the same predictor returns a clean
+bill for a broken check. It found v_ca03 by luck of correlation, and correlation
+that holds on one sample is not a sweep.
+
+    outcomes in a sweep   TRUE POSITIVE   flagged, and for the stated reason
+                          FALSE POSITIVE  flagged, nothing there
+                          RIGHT BY LUCK   flagged, something there, NOT the
+                                          stated reason -- and it looks exactly
+                                          like a true positive in the output
+
+The third is the dangerous one, because acting on it confirms the predictor. Had
+I "fixed" v_ca03's count guard on the strength of that flag, the fix would have
+been wrong (there was nothing to fix) and the sweep would have been credited with
+a hit. What separated them was **running the script**, which took one command and
+disagreed with the prediction immediately.
+
+Same rule as the last two days, arriving from the sweep side: a static predictor
+licenses a claim about the text it matched, never about the behaviour that text is
+supposed to indicate.
+
+### Two record defects found in v_ca03's policy directory, not fixed
+
+Both are documentation, neither affects scoring, and both are recorded at the
+site in the new `iw_p11` header rather than only here.
+
+**Every policy file claims a provenance it does not have.** All ten open with
+`// GENERATED by mutants/gen_mutants.py -- do not edit by hand.` and
+`gen_mutants.py` contains **no policy-generation code at all** — grepping it for
+"policy" returns nothing. They were produced by something that no longer exists,
+and the banner tells the next person not to hand-edit files that only hand-editing
+can now maintain. `iw_p11` says it is hand-written for that reason; claiming the
+banner would have propagated the falsehood.
+
+**Every policy file's descriptive header names `iw_m1`.** `iw_p8_bresp_wrong_when_full.sv`
+opens by describing `iw_m1_blocks_one_early_on_long_bursts`, and so does every
+other one. The behaviour is correct — p8 and p10 differ by eleven lines, each
+carrying its own defect — so this is a labelling defect only. I checked it was
+not a shared catalogue header before claiming it: the files mention one or two
+distinct `iw_m` names, not ten.
+
+Noting the method, because it nearly went the other way: I first read this off a
+`grep -m1`, which returns the first match and would report `iw_m1` for a file
+containing all ten. **The same first-match-as-set error this corpus already has a
+finding about**, caught this time only because the earlier finding made it
+familiar.
+
+## "22 of 22": a correct number under a false claim, and no arithmetic check would catch it
+
+v_ca03's `task.yaml` recorded **22 of 22** for its policy-independence check. The
+number was right. The sentence it supported was false.
+
+    golden base    11 mutants graded, all caught
+    policy base    10 mutants graded, all caught
+    total checks   22, all passing -- the arithmetic is exact
+    the claim      "every one caught on BOTH bases"
+    the truth      iw_m11 was caught on ONE base; no iw_p11 existed
+
+**22 = 11 + 10 + the two clean controls minus... no.** It does not decompose,
+and that is the point: nobody ever computed it as a sum of two equal halves. The
+runner counted the checks it performed and the checks it performed were 22. Any
+verification of the number confirms it. **The number is not a summary of the
+claim; it is a count of a different thing that happens to sit next to it.**
+
+### Why this one is harder than every prior instance in the family
+
+    -m1 read as coverage         a right number, WRONG QUANTITY -- the first id
+                                 rather than the set. Checking the number against
+                                 what it counted exposes it.
+    commit message vs diff       a claim with NO number behind it. Nothing to check.
+    5c exiting on its guard      NO number at all under a sentence naming one.
+                                 Absence is detectable by looking.
+    22 of 22                     a RIGHT number, of the RIGHT quantity, correctly
+                                 computed, sitting under a claim it does not
+                                 license. Checking the number PASSES.
+
+The earlier cases all fail some available check: recompute the quantity, look for
+the diff, notice the missing figure. This one **invites verification and rewards
+it**. A reader who audits the arithmetic comes away more confident, not less,
+because the arithmetic is genuinely sound.
+
+### What actually catches it
+
+Not a number. The only thing that exposes it is asking **"22 over what?"** — and
+that question is answerable only by enumerating both halves independently and
+comparing them **as sets**. Which is the guard now installed on all eleven tasks,
+and it is not an arithmetic check: it compares membership and names the
+difference in both directions.
+
+    a count guard would have said     11 != 10, mismatch -- correct here, but it
+                                      passes when both halves are N with
+                                      different membership
+    the set guard says                which id is on which side and missing from
+                                      the other
+
+**The general rule: a total is not evidence about a universal.** "N of N" says
+every check that ran passed. It says nothing about whether the checks that ran
+are the checks the sentence claims. Two halves of different size produce a clean
+total exactly as readily as two halves of the same size, and only enumeration
+separates them.
+
+That is also why the fix had to change the sentence and not just the number.
+`24 of 24` over eleven-and-eleven is now true, but it would be equally true-
+looking over twelve-and-ten, and the guard is what makes the reading safe rather
+than the figure.
+
+## I broke a passing check while porting a guard, and had no baseline to prove it
+
+Porting the set guard to ten tasks broke **v_ai02**. Its 5c went from exit 0 with
+22 of 22 to exit 1, dying at `n_anchor: unbound variable`.
+
+The count guard I removed did not only *guard* — it **defined `n_anchor`, and two
+later lines used it**: the policy-half section header, and the summary that
+computes `2 * (n_anchor + 1)`. Deleting the block deleted the definition. Only
+v_ai02 did this; the other nine referenced the variable nowhere outside the block.
+
+`set -u` is what made it loud. Without it the two uses would have expanded to
+empty, printing *"the same  defects"* and *"OK: 2 of 2 checks passed -- defects
+and one clean control"* over a run that performed 22 — a false summary in exactly
+the family I had just filed, produced by my own edit to prevent that family.
+
+### The part that is mine to answer for
+
+**I had no baseline.** Two commits earlier I filed the convention *"write the
+probe BEFORE the change and re-run it UNMODIFIED after"*, and then ported a guard
+across ten scripts without capturing what any of them printed first. When v_ai02
+failed I could not tell whether I had broken it or found something, and had to
+reconstruct HEAD's behaviour to find out — `git show HEAD:<script>` run **in
+place**, because running it from `/tmp` breaks its relative `cd` to the repo root
+and produced a build failure that looked like a result. Fourth time that specific
+trap has cost me a measurement.
+
+    the convention I filed    probe first, unmodified after
+    what I did next           edited ten scripts, then measured
+    what it cost              one ambiguous failure and a reconstruction
+    what it would have cost   one cheap run before the edit
+
+**A convention filed is not a convention held.** I wrote that one from a case
+where the ordering was the whole of the evidence's value, and did not apply it to
+the very next change — which was larger, touched ten files instead of one, and had
+a higher prior of breaking something.
+
+### What actually caught it
+
+Running **all eleven** and reading the exit codes, rather than only the ones I
+expected to change. v_ai02 was not on my list of interesting tasks: its sets
+matched, it had a guard already, and the port was supposed to be a swap of
+equivalent forms. Had I spot-checked the tasks I had reasoned about, it would have
+shipped.
+
+That is the same shape as the finding it sits beside: **a check that fails is
+invisible if nobody runs it.** I filed that about a script exiting 2 unread, and
+reproduced it as a script exiting 1 unrun.
+
+Fixed by deriving the count from the verified set rather than restoring the raw
+grep — `n_anchor=$(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ')` — so the
+number printed comes from the set the guard just checked. Re-run: exit 0, 22 of
+22, 22 as-expected lines, identical to HEAD.

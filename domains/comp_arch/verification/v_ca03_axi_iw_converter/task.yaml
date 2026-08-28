@@ -84,10 +84,23 @@ second_dut:
 
 policy_independence_5c:
   policy_independence: >
-    All ten guarded defects re-derived on the policy-divergent implementation in
-    dut2/ -- an INDEPENDENT design written from the spec, not a wrapper around
+    All ELEVEN guarded defects re-derived on the policy-divergent implementation
+    in dut2/ -- an INDEPENDENT design written from the spec, not a wrapper around
     the anchor -- and re-run: every one caught on BOTH bases, both clean
-    implementations pass. 22 of 22.
+    implementations pass. 24 of 24, which is what the script printed on the run.
+
+    THIS CLAIM WAS FALSE BEFORE 2026-08-27 AND NOTHING DETECTED IT. iw_m11 was
+    added to the anchor set with no iw_p11 written. check_policy_independence.sh
+    globs policy/*.sv and grades what it finds, so it ran ELEVEN mutants on the
+    golden base and TEN on the policy base, every row read "as expected", and
+    the summary printed "every defect is caught on BOTH bases" -- a universal
+    that was false for exactly iw_m11. The count above said 22 of 22 while the
+    script was performing 22 checks over two differently sized sets.
+
+    Fixed by writing mutants/policy/iw_p11_*.sv and by replacing the missing
+    guard with a SET comparison by id -- not a count, because counts agree when
+    both sides are N with different membership. Both directions are named when
+    they differ, and the guard runs before any build.
 
     HOW THE RE-DERIVATION IS DONE. Every mutant in this task wraps an
     implementation and reads its guards from the PORTS only, so the re-derived
@@ -171,7 +184,7 @@ mutants:
     transaction was issued with, checks every beat rather than only the last,
     drives writes, and runs long enough to pass a count in the dozens.
   reference_reachability: >
-    The reference kills all ten, and all five conformant perturbations still
+    The reference kills all eleven, and all five conformant perturbations still
     pass. A mutant the reference cannot reach is unverified, not difficult.
 
 conformant_perturbations:

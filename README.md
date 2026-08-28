@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 24, compiled 15, correct 11, PPA measured 16. Verification: submitted 30, compiled 24, tells correct from broken 15, fault count 12." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 22, correct 17, PPA measured 16. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -38,7 +38,7 @@ area and slower.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/verification_faults_dark.svg">
-  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca04: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 6 of 10; Gemini 3.1 Pro 0 of 10. v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (gate); Gemini 3.1 Pro not scoreable (gate). v_dsp02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 10 of 10; Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw04: ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
+  <img alt="Seeded faults detected by each verification submission, against the ceiling its task's reference testbench achieves, shown as a dashed line per task. v_ai02: ChatGPT 5.6 Sol 2 of 10; Claude Opus 5 4 of 10; Gemini 3.1 Pro 2 of 10. v_ca03: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (nobuild). v_ca04: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid). v_ca05: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 6 of 10; Gemini 3.1 Pro not scoreable (gate). v_ca06: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (nobuild). v_ca07: ChatGPT 5.6 Sol 6 of 10; Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (gate). v_dsp02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 12 of 13; Gemini 3.1 Pro not scoreable (invalid). v_nw01: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 not scoreable (invalid); Gemini 3.1 Pro not scoreable (invalid). v_nw02: ChatGPT 5.6 Sol not scoreable (invalid); Claude Opus 5 10 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw03: ChatGPT 5.6 Sol 8 of 10; Claude Opus 5 9 of 10; Gemini 3.1 Pro not scoreable (invalid). v_nw04: ChatGPT 5.6 Sol not scoreable (gate); Claude Opus 5 8 of 10; Gemini 3.1 Pro not scoreable (invalid)." src="docs/assets/verification_faults_light.svg" width="100%">
 </picture>
 
 ---
@@ -57,36 +57,38 @@ area comparable at all: without it, area can be bought by relaxing timing.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_area_dark.svg">
-  <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.75x, claude 0.75x, gemini 0.73x. Stream switch at 4.25 ns, reference 26,340 um2: all three missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat 1.80x, claude 1.05x, gemini fails correctness. Multi-format FMA at 70.5 ns, reference 177,557 um2: chat fails correctness, claude 1.42x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.36x, claude missed timing, gemini fails correctness." src="docs/assets/design_area_light.svg" width="100%">
+  <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude missed timing, gemini missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat fails correctness, claude 1.42x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.36x, claude missed timing, gemini fails correctness. non-blocking D-cache at 15.0 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_area_light.svg" width="100%">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_power_dark.svg">
-  <img alt="Total power relative to each task's reference, at its pinned clock. async CDC FIFO: chat 0.61x, claude 0.60x, gemini 0.62x. Stream switch: all three missed timing. FP32 FMA: chat 0.30x, claude 0.89x, gemini fails correctness. Multi-format FMA: chat fails correctness, claude 0.88x, gemini did not build. AXI4 crossbar: chat 1.06x, claude missed timing, gemini did not build. Non-blocking D-cache: chat 1.68x, claude 1.24x, gemini fails correctness. Sv39 MMU: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_power_light.svg" width="100%">
+  <img alt="Total power relative to each task's reference, at its pinned clock. async CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. stream switch: chat missed timing, claude missed timing, gemini missed timing. FP32 FMA: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat fails correctness, claude 0.88x, gemini fails correctness. AXI4 crossbar: chat 1.06x, claude missed timing, gemini fails correctness. non-blocking D-cache: chat missed timing, claude 4.29x, gemini did not build. Sv39 MMU: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_power_light.svg" width="100%">
 </picture>
 
-**Power does not track area.** d_dsp02's `chat` is the clearest case: 1.80× the
-reference's area and **0.30× its power**. d_ca01's `chat` is the opposite — worse
-on both, 1.36× area and 1.68× power. A single figure of merit would have to
-weight these against each other, and nothing here establishes that weighting,
-which is why there is no combined score.
+**Power does not track area.** d_dsp02's `claude` is the clearest case: within
+2% of the reference's area at **1.02×**, and **0.29× its power**. d_ca01's
+`claude` runs the other way — 1.32× the area and **4.29× the power**. A single
+figure of merit would have to weight these against each other, and nothing here
+establishes that weighting, which is why there is no combined score.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_capability_dark.svg">
-  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. async CDC FIFO per capacity_beats_accepted: chat 0.91x, claude 0.91x, gemini 0.88x. Multi-format FMA per throughput_ops_per_1000cyc: claude 1.32x. AXI4 crossbar, range over 4 declared metrics: chat 2.59x to 3.40x. Non-blocking D-cache per max_outstanding_n: chat 1.36x, claude 1.15x." src="docs/assets/design_capability_light.svg" width="100%">
+  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. async CDC FIFO per capacity_beats_accepted: chat 0.90x, claude 0.89x, gemini 0.89x. multi-format FMA per throughput_ops_per_1000cyc: claude 1.42x. AXI4 crossbar, range over 4 declared metrics: chat 1.19x to 6.79x. non-blocking D-cache per max_outstanding_n: claude 1.53x." src="docs/assets/design_capability_light.svg" width="100%">
 </picture>
 
 **Raw area credits a design for being small when it was merely doing less**, and
 this chart is where that shows. Two conclusions from the area chart invert:
 
-- d_ca01's `claude` is **0.98×** on raw area — the only submission to come in
-  under a reference on a large design — and **1.15×** per unit of outstanding
-  capacity. The area win does not survive normalisation.
-- d_nw01's `chat` is 1.36× on area and **2.59×–3.40×** per unit delivered. It is
-  much further behind than the raw figure suggests, and *how much* further
-  depends on which unit — 2.59× per burst, 2.72× per disjoint pair, 3.40× per
-  outstanding transaction.
-- d_ca04's three narrow from 0.73–0.75× to 0.88–0.91×. Most of that headline gap
+- d_ca01's `claude` is 1.32× on raw area and **1.53×** per unit of outstanding
+  capacity. The gap widens under normalisation: part of the area it saved was
+  bought by tracking fewer outstanding misses.
+- d_nw01's `chat` is 1.36× on area and **1.19×–6.79×** per unit delivered, and
+  *how much* further behind depends entirely on which unit — 1.19× per burst,
+  1.21× per disjoint pair either way, and **6.79×** per outstanding transaction
+  on master 0. The declared metrics disagree by a factor of 5.7 about the same
+  submission, which is the strongest argument on this page against picking one
+  and calling it the capability.
+- d_ca04's three narrow from 0.73–0.74× to 0.89–0.90×. Most of that headline gap
   is two spill registers the reference has and they do not.
 
 **Where a task declares several capability metrics, the bar spans best to worst
@@ -107,22 +109,20 @@ declare none, so they are absent rather than shown against an invented axis —
 "more is better and area buys it" is a claim about the contract, not something to
 infer from a metric's name.
 
-**Nine of twenty-one submissions produce a comparable area number.** Five missed
-timing, four fail correctness, and three were rejected by the synthesis frontend
-without ever running. That is the result, not a gap in the data.
+**Seven of twenty-one submissions produce a comparable area number.** Seven
+missed timing, five fail correctness, and two were rejected by the synthesis
+frontend without ever running. That is the result, not a gap in the data.
+
+<!-- BEGIN GENERATED: design-tables -->
 
 ### d_ca04 — asynchronous CDC FIFO, pinned at 4.25 ns
 
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 19,837 | 13.4 | +0.606 | — |
-| `chat` | 14,939 | 8.1 | +0.507 | **0.75×** |
-| `claude` | 14,798 | 8.0 | +0.461 | **0.75×** |
-| `gemini` | 14,396 | 8.3 | +0.456 | **0.73×** |
-
-The only task where every submission closed timing, and all three are 25–27%
-smaller than the reference. Two of them reach that partly by a design choice
-rather than better implementation — see the like-for-like note below.
+| `chat` | 14,659 | 7.3 | +0.581 | **0.74×** |
+| `claude` | 14,520 | 8.2 | +0.479 | **0.73×** |
+| `gemini` | 14,520 | 8.5 | +0.489 | **0.73×** |
 
 ### d_nw03 — output-queued stream switch, pinned at 4.25 ns
 
@@ -133,17 +133,13 @@ rather than better implementation — see the like-for-like note below.
 | `claude` | *withheld* | *withheld* | **−0.078** | missed timing |
 | `gemini` | *withheld* | *withheld* | **−0.116** | missed timing |
 
-All three missed at the pin. `claude` missed by 78 ps, which is close — and close
-is still missed: the number it would have reported describes a circuit that
-cannot run at 4.25 ns.
-
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 60,031 | 74.7 | +2.710 | — |
-| `chat` | 108,000 | 22.3 | +1.703 | 1.80× |
-| `claude` | 63,197 | 66.2 | +0.992 | 1.05× |
+| `chat` | *withheld* | *withheld* | **−22.923** | missed timing |
+| `claude` | 61,305 | 21.5 | +1.424 | **1.02×** |
 | `gemini` | **0** | **0** | — | fails correctness |
 
 ### d_dsp03 — multi-format FMA, pinned at 70.5 ns
@@ -152,31 +148,26 @@ cannot run at 4.25 ns.
 |---|---|---|---|---|
 | reference | 177,557 | 91.1 | +1.995 | — |
 | `chat` | **0** | **0** | — | fails correctness |
-| `claude` | 251,769 | 80.1 | +8.179 | 1.42× |
-| `gemini` | **0** | **0** | — | did not build |
+| `claude` | 251,769 | 80.1 | +8.179 | **1.42×** |
+| `gemini` | **0** | **0** | — | fails correctness |
 
 ### d_nw01 — AXI4 crossbar, pinned at 8.0 ns
 
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 147,144 | 54.7 | +1.148 | — |
-| `chat` | 199,852 | 58.1 | +0.802 | 1.36× |
+| `chat` | 199,852 | 58.1 | +0.802 | **1.36×** |
 | `claude` | *withheld* | *withheld* | **−0.023** | missed timing |
-| `gemini` | **0** | **0** | — | did not build |
+| `gemini` | **0** | **0** | — | fails correctness |
 
 ### d_ca01 — non-blocking data cache, pinned at 15.0 ns
 
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 573,055 | 76.0 | +2.200 | — |
-| `chat` | 780,029 | 128.0 | +1.121 | 1.36× |
-| `claude` | 563,403 | 94.5 | +2.648 | **0.98×** |
-| `gemini` | **0** | **0** | — | fails correctness |
-
-`claude` is the only submission across all seven tasks to come in under a
-reference on a large design, and it did so with the most slack in the row. It
-reaches a different design point to do it — one cycle of minimum latency against
-the reference's two — so the area is correct but not like-for-like.
+| `chat` | *withheld* | *withheld* | **−0.049** | missed timing |
+| `claude` | 753,599 | 326.0 | +2.354 | **1.32×** |
+| `gemini` | **0** | **0** | — | did not build |
 
 ### d_ca03 — RISC-V Sv39 MMU, pinned at 12.5 ns
 
@@ -185,16 +176,9 @@ the reference's two — so the area is correct but not like-for-like.
 | reference | 279,456 | 32.6 | +0.989 | — |
 | `chat` | *withheld* | *withheld* | **−35.461** | missed timing |
 | `claude` | **0** | **0** | — | fails correctness |
-| `gemini` | **0** | **0** | — | rejected by the synthesis frontend |
+| `gemini` | **0** | **0** | — | did not build |
 
-`chat` is correct — it passes the scored configuration — and needs roughly 48 ns
-to do it, against a 12.5 ns pin. That is not a near miss like d_nw03's 78 ps; it
-is a design that works and is nearly four times too slow.
-
-`gemini` is a distinct outcome from a correctness failure: slang rejects it with
-ten diagnostics, none of them internal errors, and Verilator rejects the same
-construct at the same line. Two independent frontends agreeing makes it a
-genuine build failure rather than a host problem.
+<!-- END GENERATED: design-tables -->
 
 ### Why some cells are withheld and others are zero
 
@@ -253,90 +237,116 @@ FIFO capacity is worth in µm².
 
 ## Verification results
 
-One table per task, three columns, in the order a testbench has to earn them.
+One table per task, four columns, in the order a testbench has to earn them.
 
-**Passes golden, fails broken HW** is the gate: every testbench runs against the
-correct DUT and against one with every output tied high, and must pass the first
-and fail the second. Returning the same verdict on both means
-it is not observing the design, so its fault count is withheld rather than
-printed. A file that drives nothing and prints `PASS` scores 0 here.
+**The first two columns are the gate, and they are separate on purpose.** Every
+testbench is run against the correct DUT and against one with every output tied
+high. It must *accept* the first and *reject* the second. These were one merged
+column, which rendered two opposite failures identically: a testbench that
+accepts both is not observing the design at all, while one that rejects the
+golden is rejecting correct hardware. Both printed "no". Splitting them matters
+because rejecting the golden is the single most common failure in this round —
+several submissions do it while still killing every mutant they are shown.
+
+A testbench that fails the gate has its fault count **withheld** rather than
+printed, because a count from a testbench that cannot tell correct hardware from
+broken carries no information. A file that drives nothing and prints `PASS`
+scores 0 here.
 
 The ceiling is what each task's own reference testbench achieves, which proves
 every seeded fault is findable.
 
-### v_dsp02: FP non-computational ops (ceiling 10/10)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | yes | yes (5/5) | 2/10 |
-| Claude Opus 5 | yes | yes (5/5) | **10/10** |
-| Gemini 3.1 Pro | **no** | **no** (1/5) | *withheld* |
-
-### v_nw03: frame-arbitrating stream mux (ceiling 10/10)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | yes | yes (5/5) | **10/10** |
-| Claude Opus 5 | yes | yes (5/5) | **10/10** |
-| Gemini 3.1 Pro | **no** | **no** (0/5) | *withheld* |
-
-### v_ca05: tag tracker (ceiling 10/10)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | yes | yes (4/4) | 6/10 |
-| Claude Opus 5 | yes | **partial** (3/4) | *withheld* |
-| Gemini 3.1 Pro | yes | **partial** (3/4) | *withheld* |
-
-### v_nw01: ARP engine (ceiling 10/10)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | **no** | yes (1/1) | *withheld* |
-| Claude Opus 5 | **no** | yes (1/1) | *withheld* |
-| Gemini 3.1 Pro | **no** | **no** (0/1) | *withheld* |
-
-### v_nw04: PTP time base (ceiling 10/10)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | yes | **no** (0/1) | *withheld* |
-| Claude Opus 5 | yes | yes (1/1) | 8/10 |
-| Gemini 3.1 Pro | **no** | **no** (0/1) | *withheld* |
-
-### v_ca04: stream crossbar (ceiling 8/8)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | **no** | yes (1/1) | *withheld* |
-| Claude Opus 5 | yes | yes (1/1) | 6/10 |
-| Gemini 3.1 Pro | yes | yes (1/1) | 0/10 |
-
-*The reference run behind this ceiling exercised 8 of the 10 mutants now declared; it predates the rest.*
-
-### v_ca03: AXI ID-width converter (ceiling 10/10)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | **no** | **no** (1/5) | *withheld* |
-| Claude Opus 5 | **no** | **no** (1/5) | *withheld* |
-| Gemini 3.1 Pro | yes | yes (5/5) | 4/10 |
-
-### v_nw02: AXI atomic-op filter (ceiling 10/10)
-
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | **no** | **no** (0/1) | *withheld* |
-| Claude Opus 5 | yes | yes (1/1) | **10/10** |
-| Gemini 3.1 Pro | **no** | **no** (0/1) | *withheld* |
+<!-- BEGIN GENERATED: verification-tables -->
 
 ### v_ai02: byte-stream realignment (ceiling 10/10)
 
-| Submission | Passes golden, fails broken HW | Accepts other correct designs | Faults caught |
-|---|---|---|---|
-| ChatGPT 5.6 Sol | yes | yes (1/1) | 2/10 |
-| Claude Opus 5 | yes | yes (1/1) | 4/10 |
-| Gemini 3.1 Pro | yes | yes (1/1) | 2/10 |
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | yes | yes | 1/1 | **2/10** |
+| Claude Opus 5 | yes | yes | 1/1 | **4/10** |
+| Gemini 3.1 Pro | yes | yes | 1/1 | **2/10** |
+
+### v_ca03: AXI ID-width converter (ceiling 11/11)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | **no** | yes | 0/5 | *withheld* |
+| Claude Opus 5 | **no** | yes | 1/5 | *withheld* |
+| Gemini 3.1 Pro | **did not compile** | n/a | n/a | n/a |
+
+### v_ca04: stream crossbar (ceiling 10/10)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | yes | yes | 1/1 | **6/10** |
+| Claude Opus 5 | yes | yes | 1/1 | **8/10** |
+| Gemini 3.1 Pro | **no** | yes | 0/1 | *withheld* |
+
+### v_ca05: tag tracker (out-of-order queue) (ceiling 10/10)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | yes | yes | 4/4 | **6/10** |
+| Claude Opus 5 | yes | yes | 4/4 | **6/10** |
+| Gemini 3.1 Pro | yes | yes | 3/4 | *withheld* |
+
+### v_ca06: AXI data-width downsizer (ceiling 12/12)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | — | yes | 0/5 | *withheld* |
+| Claude Opus 5 | **no** | yes | 0/5 | *withheld* |
+| Gemini 3.1 Pro | **did not compile** | n/a | n/a | n/a |
+
+### v_ca07: Glitch-free integer clock divider (ceiling 10/10)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | yes | yes | 5/5 | **6/10** |
+| Claude Opus 5 | **no** | yes | 0/5 | *withheld* |
+| Gemini 3.1 Pro | yes | yes | 3/5 | *withheld* |
+
+### v_dsp02: FP non-computational ops (ceiling 10/10)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | **no** | yes | 0/5 | *withheld* |
+| Claude Opus 5 | yes | yes | 5/5 | **12/13** |
+| Gemini 3.1 Pro | **no** | yes | 1/5 | *withheld* |
+
+### v_nw01: arp engine (ceiling 10/10)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | **no** | yes | 1/1 | *withheld* |
+| Claude Opus 5 | **no** | yes | 1/1 | *withheld* |
+| Gemini 3.1 Pro | **no** | yes | 0/1 | *withheld* |
+
+### v_nw02: AXI atomic-op filter (ceiling 11/11)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | **no** | yes | 0/1 | *withheld* |
+| Claude Opus 5 | yes | yes | 1/1 | **10/10** |
+| Gemini 3.1 Pro | **no** | yes | 0/1 | *withheld* |
+
+### v_nw03: frame-arbitrating stream mux (ceiling 10/10)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | yes | yes | 5/5 | **8/10** |
+| Claude Opus 5 | yes | yes | 5/5 | **9/10** |
+| Gemini 3.1 Pro | **no** | yes | 0/5 | *withheld* |
+
+### v_nw04: PTP time base (ceiling 10/10)
+
+| Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
+|---|---|---|---|---|
+| ChatGPT 5.6 Sol | yes | yes | 0/1 | *withheld* |
+| Claude Opus 5 | yes | yes | 1/1 | **8/10** |
+| Gemini 3.1 Pro | **no** | yes | 0/1 | *withheld* |
+
+<!-- END GENERATED: verification-tables -->
 
 ## The tasks, and where this hardware is used
 

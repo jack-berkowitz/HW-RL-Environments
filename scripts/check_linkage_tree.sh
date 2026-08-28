@@ -100,6 +100,26 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   #                      2 = NO CONCLUSION, no sweep to check against    -> report
   #   check_unread_fields  always report, never fail; a field being unread
   #                        is a candidate for a human, not a violation
+  #   make_readme_tables --check  1 = README tables disagree with the records
+  #                               2 = README and results_table.md disagree
+  #                               both FAIL; the README is the published face
+  #                               of the results and it drifted for two rounds
+  #                               with nothing able to say so.
+  #   check_inbox_cataloged  1 = an inbox entry with no disposition that is not
+  #                              in the baseline, or a LANDED marker naming a
+  #                              finding that does not exist            -> FAIL
+  #                          2 = baseline stale, entries vanished       -> report
+  #   The 285-entry backlog is carried in inbox/.catalog_baseline and REPORTS.
+  #   Failing on it would be the cries-wolf failure warned about above.
+  if [ -f "$d/scripts/check_inbox_cataloged.py" ]; then
+    ( cd "$d" && python3 scripts/check_inbox_cataloged.py 2>&1 )
+    _inbrc=$?
+    if [ $_inbrc -eq 1 ]; then rc=1; echo "__FAILED__ inbox_cataloged"; fi
+  fi
+  if [ -f "$d/scripts/make_readme_tables.py" ]; then
+    ( cd "$d" && python3 scripts/make_readme_tables.py --check 2>&1 )
+    if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ readme_tables"; fi
+  fi
   if [ -f "$d/scripts/check_paste_sync.py" ]; then
     ( cd "$d" && python3 scripts/check_paste_sync.py 2>&1 )
     if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ paste_sync"; fi

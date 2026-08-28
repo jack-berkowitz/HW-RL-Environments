@@ -92,6 +92,15 @@ scored_metrics:
   # There is no dimension along which a submission may do MORE. Spec G5.
 
 ppa_status: >
+  STALE AS OF 2026-08-27 -- MARKED, NOT REWRITTEN, so the original claim stays
+  auditable. The text below says the sweep has not been run. IT HAS.
+  fmax_results/d_ai04_fmax.json and fmax_results/d_ai04_logs/ exist; spec G1
+  records the pin at 33.75 ns derived from a measured 22.5 ns (44.44 MHz,
+  WNS +0.01, DRC 0 at every iteration); scripts/check_pin.py reports
+  "33.75 / 22.5 / 33.75 ok"; and runs/d_ai04_sdp_requant/ already holds
+  2026-08-27T021633Z__reference_pin33p75__ppa.json. A PPA number exists at the
+  pinned period. ORIGINAL TEXT FOLLOWS.
+  --
   NO PPA MAY BE REPORTED YET. G1 pins the measurement period at 1.5x the
   reference's own measured period, and THE REFERENCE Fmax SWEEP HAS NOT BEEN RUN.
   Recorded as missing rather than filled with a plausible number.
@@ -176,4 +185,11 @@ prompting_status: >
   reader should know about before reading a submission.
 
 submissions_status: >
+  STALE AS OF 2026-08-27 -- MARKED, NOT REWRITTEN. The text below says no
+  submission exists. THREE DO, and all three PASS. candidates/d_ai04/ holds
+  chat.sv, claude.sv and gemini.sv, and runs/d_ai04_sdp_requant/ carries a sim
+  record for each -- 2026-08-27T001342Z chat, 001346Z gemini, 001505Z claude --
+  every one all_passed true, alongside the reference's own passing record.
+  ORIGINAL TEXT FOLLOWS.
+  --
   NOT YET SOLICITED. No submission exists for this task.

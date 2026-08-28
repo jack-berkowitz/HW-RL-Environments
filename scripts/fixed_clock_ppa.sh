@@ -48,8 +48,21 @@ build_at () {  # task, label(reference|model), period
     local ok; ok="$(buildable "candidates/${task}/${label}.sv")"
     [ "$ok" = "yes" ] || { say "SKIP ${task}/${label} -- correctness gate: $ok"; return 0; }
   fi
-  if ls "runs/${task}"_*/*"__${label}_fx${per}__ppa.json" >/dev/null 2>&1; then
-    say "SKIP ${task}/${label} at ${per} (already built)"; return 0; fi
+  # ASK WHETHER THE BUILD EXISTS, NOT WHETHER A FILENAME DOES. The glob here was
+  # `*__${label}_fx${per}__ppa.json`, so a record written under the later
+  # `_pin19p25` convention read as ABSENT and this queue would rebuild work
+  # already done. d_ai04/reference at 33.75 ns is the live instance: the glob
+  # misses it, the check below finds it. Same identify-by-filename defect that
+  # froze the charts and disabled the superseded-pin guard; here it costs
+  # compute rather than correctness.
+  #
+  # The helper matches on the clk_period_ns FIELD and prints the record it
+  # matched, so a skip names its evidence. A WRONG SKIP IS WORSE THAN A WRONG
+  # REBUILD -- it leaves a gap that reads as completed work -- and "already
+  # built" with no evidence cannot be told from a bug.
+  _hit="$(python3 scripts/_ppa_exists.py "$task" "$label" "$per" 2>/dev/null)"
+  if [ -n "$_hit" ]; then
+    say "SKIP ${task}/${label} at ${per} (already built: $_hit)"; return 0; fi
   say "BUILD ${task}/${label} at ${per} ns"
   [ "$PLAN" = "1" ] && return 0
   if [ "$label" = "reference" ]; then

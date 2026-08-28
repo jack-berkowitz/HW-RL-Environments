@@ -87,8 +87,8 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | latency | init interval | notes |
 |---|---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | 4 *(req. added later)* | 1 | **not scored against the current spec** — submitted 2026-08-15, before the 3-cycle latency requirement was added 2026-08-16; the spec it was given said "latency is not constrained" |
-| `claude` | **1/1 pass** | — | — | — | 3 | 1 |  |
+| `chat` | **1/1 pass** | withheld | withheld | not swept | 4 *(req. added later)* | 1 | **PPA withheld — the build did not meet timing** (slack -22.923 ns at 19.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; **not scored against the current spec** — submitted 2026-08-15, before the 3-cycle latency requirement was added 2026-08-16; the spec it was given said "latency is not constrained" |
+| `claude` | **1/1 pass** | 61,305 | 21.5 | not swept | 3 | 1 |  |
 | `gemini` | **FAILS** | n/a | n/a | n/a | n/a | n/a | **fails correctness** — fails the contract at vector 4 (a=1.0, b=0); no PPA, a number for a design that fails its contract is not a result |
 | `nc_h1_comb_ready` — *negative control, expected to fail* | 0/1 FAIL | — | — | — | 3 | 1 |  |
 | `nc_h1_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | **build failure** — 12 error(s); first: nc_h1_inert.sv:74:5: error: unknown class or package 'fpnew_pkg'  |

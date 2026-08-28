@@ -524,3 +524,55 @@ a mutant set a second time is their user's call — reported open with the remed
 not merely reported open.
 
 **Rules:** 13, 24
+
+## Which harness facts a clean reader may consult
+
+An isolation protocol that names the contract and forbids everything else makes
+the reader treat as UNKNOWN things the repository already answers. Fourth
+instance this week. The most recent: a second source could not determine whether
+`read_slang` takes `--top` before or after the file list, flagged it as an
+unverified item, and wrote a fallback path for it — while
+`scripts/sim_candidate.sh` has invoked it as `read_slang --top $DUT_MOD $files`
+for the project's entire history.
+
+**That is the isolation boundary's cost, not the reader's error.** They had no
+toolchain and no reason to read a script that is not part of the contract.
+
+**The fix is a stated allowlist, because "everything except the contract" is the
+wrong default.** What isolation protects is the reader's DERIVATION of what the
+contract requires. A fact is contract-neutral when knowing it cannot change that
+derivation — and withholding those buys nothing while costing exactly what it
+cost here.
+
+**CONSULTABLE, unless a protocol says otherwise for a stated reason:**
+
+* **Tool invocation syntax** — how the repo already calls slang, Verilator,
+  yosys, sby. Argument order is not a fact about the design.
+* **Which tools exist and their versions**, and known tool defects (`refs.lock`,
+  F47, F56). A reader who does not know `smtbmc` has no backend will propose
+  running it.
+* **File layout, naming and commit conventions** — where records live, how paths
+  are staged, what a task directory contains.
+* **`RULES.md` and `CONVENTIONS.md` in full.** Already conventional here, and it
+  is the same principle: process constraints are not contract content.
+
+**NOT CONSULTABLE, and this is the line:**
+
+* `ref/`, `tb/`, `mutants/`, `controls/`, `vectors/`, existing measurements,
+  other submissions — anything that says or implies what the reference DOES.
+* **`controls/` FILENAMES specifically**, not merely their contents. A control is
+  named for its defect and therefore asserts by negation what the reference does.
+  See the finding on `git ls-tree` leaking them during provenance pinning.
+* Any FINDINGS entry that reports a measurement on the task under derivation.
+
+**THE DISCRIMINATOR, in one question:** could knowing this change what the reader
+concludes the CONTRACT REQUIRES? If it could only change how they OPERATE THE
+TOOLS, it is harness and it should be given to them. If it could change the
+answer, it is contract content and it must not be.
+
+**And the protocol should hand these over rather than permit them.** A permission
+a reader must think to exercise is one they will not exercise, because the whole
+posture of isolation is to not go looking. The four consultable classes above are
+short enough to attach to the brief.
+
+**Rules:** 22, 24

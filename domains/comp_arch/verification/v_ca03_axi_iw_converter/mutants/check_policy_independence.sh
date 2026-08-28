@@ -21,6 +21,36 @@ T=domains/comp_arch/verification/v_ca03_axi_iw_converter
 D=$T/dut
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 fails=0
+
+# ---------------------------------------------------------------------------
+# THE TWO HALVES MUST BE THE SAME SET, not merely the same size.
+#
+# This runner globs policy/*.sv and grades whatever it finds, so a missing
+# re-derivation makes every row still read "as expected" and the summary still
+# say "every defect is caught on BOTH bases". That is what happened here: iw_m11
+# was added to the anchor set with no iw_p11, and this script graded TEN of
+# ELEVEN while printing a universal. A short set is indistinguishable from a
+# complete one in the output.
+#
+# A COUNT GUARD IS NOT ENOUGH, which is why this compares ids. Counts agree when
+# both sides are N with different membership -- a count cannot see a swap, only
+# a shortfall, and it reports neither WHICH mutant is missing nor in which
+# direction. This names both.
+anchor_ids=$(grep -oE "^module iw_m[0-9]+_[a-z0-9_]+" "$T/mutants/mutants.sv" \
+             | sed 's/^module iw_m/iw_/' | sort)
+policy_ids=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | xargs -n1 basename \
+             | sed 's/\.sv$//; s/^iw_p/iw_/' | sort)
+if [ "$anchor_ids" != "$policy_ids" ]; then
+  echo "  RULE24: the anchor and policy halves are not the same SET."
+  comm -23 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    anchor only (no policy re-derivation): /'
+  comm -13 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    policy only (no anchor mutant): /'
+  echo "  Add the missing re-derivation. Do NOT make the counts agree by"
+  echo "  deleting the other side -- the anchor half is what scoring uses."
+  exit 2
+fi
+
 OTHER=$(ls $D/*.sv | grep -v "/id_width_conv.sv$")
 
 run_one() {   # $1 label, $2 expected, $3.. files
@@ -46,7 +76,7 @@ ctl() {  # abort if a CONTROL failed -- it is not a result
   fi
 }
 
-echo "reference testbench vs the GOLDEN base and its ten defects"
+echo "reference testbench vs the GOLDEN base and its $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects"
 r=$fails; run_one "golden (clean)" PASS $OTHER "$D/id_width_conv.sv"; ctl "$r"
 # The mutant takes the top name and DELEGATES to the golden, so the golden has
 # to be renamed out of the way. Passing both under one name is a duplicate
@@ -71,7 +101,7 @@ open('$W/$M.sv','w').write(head+'\n'+b)"
 done
 
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and the same ten defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects"
 sed 's/module id_width_conv_alt/module id_width_conv/' "$T/dut2/id_width_conv_alt.sv" > "$W/clean_policy.sv"
 r=$fails; run_one "policy base (clean)" PASS $OTHER "$W/clean_policy.sv"; ctl "$r"
 for f in "$T"/mutants/policy/*.sv; do
@@ -80,8 +110,11 @@ done
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "OK: every defect is caught on BOTH bases, and both clean implementations"
-  echo "    pass. No mutant is killed by the latitude choice."
+  echo "OK: all $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects are caught on BOTH bases, and both clean"
+  echo "    implementations pass. No mutant is killed by the latitude choice."
+  echo "    The set guard above establishes that \"all\" means the same set on"
+  echo "    each side -- before it, this line said \"every defect\" while the"
+  echo "    policy half graded ten of eleven."
 else
   echo "MISMATCH in $fails case(s) -- a mutant is sensitive to the policy choice."
 fi

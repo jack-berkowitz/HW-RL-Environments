@@ -35,6 +35,29 @@ TRACKED = [
     "ABC_CLOCK_PERIOD_IN_PS", "ASPECT_RATIO", "CORE_MARGIN",
 ]
 
+# TRACKED ONLY WHEN THE DESIGN SETS THEM, and the distinction from TRACKED is
+# load-bearing rather than a convenience.
+#
+# d_ca05 overrides IO_PLACER_H/V to met3+met5 / met2+met4 because its 3,686 IO
+# pins exceed the 3,260 positions one layer per direction provides. That changes
+# where pins sit, hence routing, hence the silicon -- so it must change the
+# digest, or two genuinely different builds would claim one configuration.
+#
+# WHY NOT IN TRACKED. A key in TRACKED is recorded as <unset> when absent, which
+# changes the digest for every task that does not set it -- all nine others here.
+# Their silicon would be unchanged while their hash moved, and every pre-change
+# record would stop pairing with every post-change one on a difference that does
+# not exist. That is a false non-comparability signal, and it would land on the
+# five builds currently pending.
+#
+# THE PRINCIPLED HALF: an unset IO_PLACER is FULLY DETERMINED by PLATFORM, which
+# is already tracked -- sky130hd fixes met3/met2. Omitting it when unset
+# therefore loses no information. This is exactly what is NOT true of
+# ABC_CLOCK_PERIOD_IN_PS, whose unset value is determined by nothing else in the
+# list, which is why F24 required it to be recorded as <unset>. The rule is not
+# "record everything" but "record what no other tracked key determines".
+TRACKED_IF_SET = ["IO_PLACER_H", "IO_PLACER_V"]
+
 
 def resolve(value, sdc_path):
     """Evaluate the $(shell ...) forms ORFS configs use, against this SDC."""
@@ -111,6 +134,15 @@ def main():
         if var in overrides:
             val = overrides[var]
         fields.append(f"{var}={val}")
+
+    # Same "only when set" shape as VERILOG_TOP_PARAMS below, for the same
+    # reason: the digest must move when the design overrides the platform, and
+    # must not move for the nine tasks that do not.
+    for var in TRACKED_IF_SET:
+        m = re.search(r"^export\s+%s\s*:?=\s*(.*)$" % var, cfg, re.M)
+        if m:
+            val = overrides.get(var, resolve(m.group(1), sdc_path))
+            fields.append(f"{var}={val}")
 
     # TOP-LEVEL PARAMETERS CHANGE THE DESIGN, so they must change the hash --
     # but ONLY WHEN SET. d_ai01's scored geometry moved to HEIGHT=4 while its

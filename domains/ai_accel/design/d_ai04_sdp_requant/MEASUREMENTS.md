@@ -199,3 +199,47 @@ That is now clause F7 in `spec/sdp_requant_iface.sv`, and it was not in the
 landscape's mechanism list — which named four mechanisms, of which measurement
 refuted one, rewrote one, and missed both of the derived quantities that make
 this task worth setting.
+
+## d_ai04's own records understate it in three places. 2026-08-27
+
+First checkpoint on returning to this task. **Nothing was built. What was found
+is that three records disagree with the tree, all in the same direction.**
+
+| record | says | measured |
+|---|---|---|
+| `task.yaml` `ppa_status` | "THE REFERENCE Fmax SWEEP HAS NOT BEEN RUN" | `fmax_results/d_ai04_fmax.json` and `d_ai04_logs/` exist; G1 pins 33.75 ns from a measured 22.5 ns; `check_pin` reports `33.75 / 22.5 / 33.75 ok`; **a PPA record at the pin already exists** |
+| `task.yaml` `submissions_status` | "NOT YET SOLICITED. No submission exists" | `candidates/d_ai04/` holds `chat.sv`, `claude.sv`, `gemini.sv`; **all three have sim records and all three PASS** |
+| `TASK_CATALOG.md` row | "No PPA until its reference Fmax sweep sets the pin — G1 records it NOT YET SET" | G1 carries the pin and its full derivation, including `ceil(1.5 x 22.5 / 0.25) x 0.25 = 33.75` |
+
+**Every one understates.** Fourth, fifth and sixth instances of the class filed
+this week, and the first three found on a task the author had not touched since
+writing them. The direction has not varied once across three tasks and roughly
+two dozen sites.
+
+**These are not cosmetic.** `ppa_status` is what a PPA owner reads to decide
+whether a number may be recorded, and it says no while a record sits in `runs/`.
+`submissions_status` is what anyone reads to decide whether to solicit, and it
+says no submission exists while three passing ones sit in `candidates/`.
+Soliciting again on that basis would have produced a fourth for no reason.
+
+The two `task.yaml` fields are marked at the site, dated, with the original text
+kept below the marker. The catalog row is a shared document and is reported
+rather than edited.
+
+### What is actually outstanding on d_ai04
+
+Measured, not inferred, so the next checkpoint starts from a true statement:
+
+    spec, ref, scoring tb, prompt, task.yaml   BUILT
+    nine negative controls                     BUILT, all nine FAIL, reference PASSES
+    reference Fmax sweep and G1 pin            DONE, 33.75 ns, check_pin ok
+    reference PPA at the pin                   RECORDED
+    three candidates                           SOLICITED, RUN, ALL PASS
+    mutants/                                   ABSENT
+    conformant/                                ABSENT
+    task.yaml mutants: block (rule 21)         ABSENT
+    candidate PPA at the pin                   not present for chat/claude/gemini
+
+So the remaining design-side work is the mutant set and the conformant set — and
+under Rule 21 each mutant must carry a recorded evidence TYPE, `witness` or
+`bmc_cex`, not merely a kill.
