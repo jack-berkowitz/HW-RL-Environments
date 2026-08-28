@@ -47,6 +47,18 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASELINE = os.path.join(REPO, "inbox", ".catalog_baseline")
 NOT_FOR = re.compile(r"NOT-FOR-CATALOG", re.I)
 LANDED = re.compile(r"^\s*(?:LANDED|CATALOG(?:U?ED)?):\s*(F\d+)", re.I | re.M)
+# THE CONVENTION CASE HAD NO MARKER, so an entry destined for CONVENTIONS.md
+# could only be silenced with NOT-FOR-CATALOG -- which attests nothing and is
+# the disposal equivalent of making two counts agree by subtraction. Raised by
+# AGENT-DESIGN-43a92055 with AGENT-VERIF-A2 seconding it; eleven staged
+# convention blocks in inbox/CONVENTIONS.md.agent2.md hit it the moment they
+# leave the baseline.
+#
+# Verified against CONVENTIONS.md the same way LANDED is verified against
+# FINDINGS.md, because the second half of the rule is the whole rule: an
+# unverified marker lets an entry be dismissed by assertion. That half applied
+# to findings only, which made the gap asymmetric as well as unmarked.
+LANDED_CONV = re.compile(r"^\s*LANDED-CONVENTION:\s*(.+?)\s*$", re.I | re.M)
 
 
 def entries():
@@ -74,6 +86,13 @@ def main(argv):
     if os.path.isfile(fp):
         findings = open(fp, encoding="utf-8", errors="replace").read()
     known = set(re.findall(r"^## (F\d+)\.", findings, re.M))
+    cp = os.path.join(REPO, "CONVENTIONS.md")
+    conv_txt = (open(cp, encoding="utf-8", errors="replace").read()
+                if os.path.isfile(cp) else "")
+    # Match on a normalised heading so a marker need not reproduce punctuation.
+    def _norm(x):
+        return re.sub(r"[^a-z0-9]+", " ", x.lower()).strip()
+    conv_known = {_norm(h) for h in re.findall(r"^## (.+)$", conv_txt, re.M)}
 
     base = set()
     if os.path.isfile(BASELINE):
@@ -93,6 +112,12 @@ def main(argv):
             # A CLAIM THE TREE CAN CHECK, not a claim in a report.
             if m.group(1) not in known:
                 bad_marker.append((i, f, title, m.group(1)))
+            continue
+        mc = LANDED_CONV.search(body)
+        if mc:
+            want = _norm(mc.group(1))
+            if not any(want == k or want in k or k in want for k in conv_known):
+                bad_marker.append((i, f, title, f"convention {mc.group(1)!r}"))
             continue
         undisposed.append((i, f, title))
 

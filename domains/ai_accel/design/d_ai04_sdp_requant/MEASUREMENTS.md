@@ -243,3 +243,45 @@ Measured, not inferred, so the next checkpoint starts from a true statement:
 So the remaining design-side work is the mutant set and the conformant set — and
 under Rule 21 each mutant must carry a recorded evidence TYPE, `witness` or
 `bmc_cex`, not merely a kill.
+
+## Re-scored at the current hash, and the re-solicitation reason is not correctness. 2026-08-28
+
+The three candidates carried `task_text_hash 6254d37b17244bb0`; the current text
+is `203bc8a580aa44d4`. Re-scored:
+
+    chat    203bc8a580aa44d4  1/1  PASS   0 compile warnings
+    claude  203bc8a580aa44d4  1/1  PASS   0 compile warnings
+    gemini  203bc8a580aa44d4  1/1  PASS   0 compile warnings
+
+**Correctness is unchanged and now current.** Three of three, at the text as it
+stands.
+
+**BUT THEY STILL NEED RE-SOLICITING, AND THE SPEC ALREADY SAYS WHY.** G1's own
+paragraph records it: *"the three candidates solicited for this task were written
+against it — they were told the target frequency was unknown — and are
+re-solicited for that reason rather than because anything about the contract
+changed."*
+
+Nothing behavioural moved between the two hashes. The single change was G1's
+pinned-period paragraph, from "THE PINNED PERIOD IS NOT YET SET ... no PPA number
+may be reported" to 33.75 ns with its derivation. **A submitter told the frequency
+target is unknown makes different area/timing tradeoffs than one told 33.75 ns**,
+and that is a design input even though it is not a correctness clause.
+
+### AND THIS UNDERCUTS THE DIFFICULTY-FLOOR MEASUREMENT I PROPOSED
+
+I proposed deciding whether d_ai04 sits below the difficulty floor by building
+the three candidates' PPA at the pin and looking for spread: tight cluster means
+floor, spread means the band worth measuring.
+
+**That measurement is compromised on these three submissions.** They were written
+without a frequency target. A tight PPA cluster would then be consistent with two
+different explanations — the task is easy, or nobody was optimising toward
+anything — and the measurement cannot separate them. Spread would still be
+informative; absence of spread would not be.
+
+So the floor question needs the RE-SOLICITED set, not this one, and the order is:
+re-solicit against `203bc8a580aa44d4` → score → PPA at 33.75 ns → then read the
+spread. Building PPA on the current three first is not wasted (it is a reference
+point and Agent 1 has it queued) but it cannot answer the floor question on its
+own, and I should not have offered it as though it could.

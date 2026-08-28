@@ -6999,3 +6999,113 @@ generator refuses and leaves `refs.lock` untouched. This is a checker whose
 correct behaviour is to block the tool that would silence it.
 
 **Rules:** 17, 20, 24
+
+## F111. The moved anchor changed nine of eighteen configurations, and not the scored one
+
+`refs/common_cells/src/cdc_fifo_gray.sv` was edited in `c0a5a47` (2026-08-19
+09:17, author jack-berkowitz) to add `.SYNC_STAGES ( SYNC_STAGES )` to its two
+sub-instantiations, deliberately — an `UPSTREAM_v2` note landed in the same
+commit — while `refs.lock` was never updated. d_ca04's oracle moved under it.
+Three things were measured before anything was re-recorded, because once the
+hashes agree the distinction stops being recoverable from the record.
+
+**Which verdicts ran against which version.** d_ca04 has sim records on both
+sides: eleven before the edit and every current one after. The hardcoding probe
+`p3_ignores_sync_stages.sv` scored 9/18 on 2026-08-19T06:02Z, ten hours *before*
+the edit — so the finding that established d_ca04's SYNC_STAGES discrimination
+was itself produced against the pre-edit anchor.
+
+**The hash cannot tell the versions apart.** `build_config_hash` covers ten
+`config.mk` keys, the SDC periods and explicit overrides. It reads no vendored
+source and no `VERILOG_FILES` content, so both versions of the anchor produce an
+identical digest. Rule 17 comparability is blind to the oracle by construction:
+it answers "same build configuration", not "same hardware".
+
+**The passthrough is inert at `SYNC_STAGES=2` and live at `3`.** Measured, not
+inferred, by running the reference against both anchor versions in an isolated
+worktree and diffing metrics rather than pass/fail:
+
+    SYNC_STAGES=2 configs: 9, differing: 0
+    SYNC_STAGES=3 configs: 9, differing: 9
+    min crossing latency, pre-edit 3 -> post-edit 4
+
+Both sub-modules default `SYNC_STAGES = 2`, so before the edit the parent's
+value never reached them. **d_ca04's scored point is `SYNC_STAGES=2`, so no
+scored number moved.**
+
+### Pass/fail was the wrong instrument and nearly gave the wrong answer
+
+The reference passes 18/18 under *both* anchors, and the mutant scores 9/18
+under both with an identical failure message. Read at that resolution the edit
+looks inert everywhere, and the honest report would have been "no observable
+difference". The difference is in the metric VALUES, which pass/fail discards —
+a one-cycle latency change that every gate in the apparatus tolerates.
+
+A verdict is a threshold applied to a measurement. Comparing verdicts to decide
+whether two builds differ asks whether they fall on the same side of a line, not
+whether they are the same. When the question is "did this change anything",
+compare what was measured, not what was concluded about it.
+
+**Rules:** 17, 20, 24
+
+### The sweep that should have found more, and did not
+
+"Has any other anchor moved since the results depending on it were produced" now
+has a mechanical answer, because the closure capture supplies the file list.
+Of the **143 anchors the ten tasks actually consume, exactly one has more than a
+single commit**: `cdc_fifo_gray.sv`. Every other file's entire history is the
+2026-08-14 vendoring. The exposure is confined to d_ca04 and is now measured.
+
+Worth stating because the sweep was queued expecting a population. A clean
+negative here is only meaningful because the denominator is measured rather than
+guessed — the same question against the hand-maintained list would have swept 47
+files, 31 of which no task reads, and missed 127 that they do.
+
+## F112. A model scored as failing on a verdict the apparatus cannot stand behind
+
+`comb_loop_configs` was written onto 104 run records and read by nothing. It
+counts configurations Verilator simulated with UNOPTFLAT/ALWCOMBORDER warnings —
+the simulator picked an evaluation order for a cycle the design does not
+resolve, so the pass or fail that follows is a property of that choice rather
+than of the hardware.
+
+Reading it surfaced two rows, both d_ca05:
+
+    2026-08-27T21:34:07Z  claude.sv                 loops=1   0/1
+    2026-08-27T23:14:24Z  claude.sv                 loops=1   0/1
+    2026-08-28T02:20:48Z  miss_handler_arb_ref.sv   loops=1   1/1
+
+**`d_ca05/claude` is recorded as failing correctness on a run whose verdicts are
+artefacts.** The reference passes on the same footing, which is the part that
+makes it invisible: a task where the oracle passes looks healthy, and nothing
+distinguishes "this submission is wrong" from "this apparatus cannot tell".
+A model was carrying a correctness failure the harness is not entitled to
+assert.
+
+Third instance of F91 in one function, after `configs_no_verdict` and
+`expected_verdict` — all three written, carried on every record, read by
+nothing. The pattern is not that someone forgot a reader once; it is that
+writing a field and reading it are separate acts with nothing binding them, so
+the default outcome of adding a field is that it means nothing.
+
+The count is surfaced rather than used to withhold. A combinational loop makes a
+verdict UNRELIABLE, not wrong, and which of those applies is a judgement the
+reader has to make with the number in front of them.
+
+### The invalidation flag, same family, safe only by accident
+
+Five more fields — `invalidated`, `invalidated_by`, `invalidated_reason`,
+`invalidated_simulator`, `invalidated_superseded_by` — were written on one
+record and read by nothing. That record is d_ai01's REFERENCE captured as
+failing 0/2 under Verilator 5.032, a toolchain artefact, withdrawn by the PC
+agent and superseded twenty-nine minutes later.
+
+Nothing counted it, because every reader selects the newest record per
+submission and the superseding one is newer. **The flag was redundant with
+recency, which is not the same as being honoured.** A record invalidated in
+favour of an earlier one, or any reader that aggregates rather than selects,
+would have read a reference that fails its own task. Now skipped explicitly, and
+regenerating the tables confirms it changes no current output — which is what a
+correct guard looks like on the day it lands.
+
+**Rules:** 19, 20, 23

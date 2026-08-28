@@ -34,6 +34,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import report_table as RT  # noqa: E402
+import _record_valid as _RV  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 README = os.path.join(REPO, "README.md")
@@ -107,7 +108,7 @@ def load(kind):
             r = json.load(open(f))
         except Exception:
             continue
-        if r.get("kind") == kind:
+        if r.get("kind") == kind and not _RV.is_invalidated(r):
             out.append(r)
     return out
 

@@ -111,6 +111,17 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   #                          2 = baseline stale, entries vanished       -> report
   #   The 285-entry backlog is carried in inbox/.catalog_baseline and REPORTS.
   #   Failing on it would be the cries-wolf failure warned about above.
+  #   check_refs_hashes  non-zero = a vendored anchor no longer matches the
+  #                      hash recorded for it -> FAIL. Wireable only now that
+  #                      the lock is GENERATED from measured closures: against
+  #                      the hand-maintained list it guarded 16 of 143 consumed
+  #                      files while watching 31 nothing reads, so a green run
+  #                      meant almost nothing and a red one was as likely to be
+  #                      an unconsumed file as an oracle.
+  if [ -f "$d/scripts/check_refs_hashes.py" ]; then
+    ( cd "$d" && python3 scripts/check_refs_hashes.py 2>&1 )
+    if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ refs_hashes"; fi
+  fi
   if [ -f "$d/scripts/check_inbox_cataloged.py" ]; then
     ( cd "$d" && python3 scripts/check_inbox_cataloged.py 2>&1 )
     _inbrc=$?
@@ -203,7 +214,34 @@ report_failure () {   # $1 = checker output (with markers)  $2 = what was read
   fails="$(printf '%s\n' "$out" | sed -n 's/^__FAILED__ //p' | tr '\n' ' ')"
   body="$(printf '%s\n' "$out" | grep -v '^__FAILED__ ')"
   echo "CHECK FAILED on $what:"
-  printf '%s\n' "$body" | sed 's/^/  /'
+  # NAME THE OWNER ON EACH ROW. Peers route failures to each other, and a row
+  # naming only a file costs a `git log` -- but the real cost is worse than a
+  # lookup. Two sessions mis-attributed a row in one afternoon, one concluding a
+  # peer had routed on a reading the gate did not support, when they had in fact
+  # observed a two-minute window from outside it. Both observations were correct
+  # and the inference was not. A row carrying its owner does not need
+  # reconstructing from a moving tree.
+  #
+  # Generic on purpose: any token in a checker's output that resolves to a
+  # tracked path gets its last author appended, so a checker written later
+  # inherits attribution without being taught about it.
+  printf '%s\n' "$body" | while IFS= read -r _line; do
+    _own=""
+    for _tok in $_line; do
+      _tok="${_tok%:}"; _tok="${_tok%,}"
+      # `*/*` alone missed every repo-root file -- FINDINGS.md, RULES.md,
+      # results_table.md -- which are the ones failures name most often. Any
+      # token holding a dot or a slash is worth one ls-files.
+      case "$_tok" in
+        */*|*.*) if git -C "$REPO" ls-files --error-unmatch "$_tok" >/dev/null 2>&1; then
+                   _own="$(git -C "$REPO" log -1 --format='%an' -- "$_tok" 2>/dev/null)"
+                   break
+                 fi ;;
+      esac
+    done
+    if [ -n "$_own" ]; then echo "  $_line   [last touched by: $_own]"
+    else echo "  $_line"; fi
+  done
   case " $fails " in
     *" rule_linkage "*)
       echo
@@ -233,7 +271,13 @@ report_failure () {   # $1 = checker output (with markers)  $2 = what was read
       echo "FAILED: RULE/FINDING LINKAGE on $what -- see the lines above for the"
       echo "        specific rule or finding whose counterpart is missing." ;;
     *)
-      echo "FAILED on $what -- see the output above; no checker reported which," ;;
+      # THIS SAID "no checker reported which" WHILE $fails NAMED THEM. The
+      # arms above cover the three original checkers; every checker added since
+      # -- inbox_cataloged, readme_tables, paste_sync, pin -- fell through here
+      # and was reported as unattributable. The information was in hand and
+      # discarded one line before it was printed, so on the newest paths the
+      # trailer named neither the checker nor the owner.
+      echo "FAILED on $what -- failing checker(s): ${fails:-unknown}" ;;
   esac
 }
 
