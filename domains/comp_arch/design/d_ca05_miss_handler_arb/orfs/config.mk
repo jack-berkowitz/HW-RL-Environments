@@ -37,9 +37,37 @@ export DESIGN_NICKNAME = d_ca05_miss_handler_arb
 # measured the same way as every other task's. It DOES change
 # build_config_hash, so the reference and all three candidates must be built
 # under this config for the comparison to be within one configuration (rule 17).
-export IO_PLACER_H     = met3 met5
+# REVISED after the first attempt placed pins and then failed to route: 55 DRT
+# iterations flat at 260 violations, ten consecutive end-of-iteration totals
+# identical. Not slow -- not converging.
+#
+# met5 WAS THE MISTAKE, and the pitch table says why. sky130hd:
+#   met2 V 0.46um   met3 H 0.68um   met4 V 0.92um   met5 H 3.40um (width 1.60)
+# met5 is a power-distribution layer. On a ~898um edge at 3.4um pitch it
+# contributes only ~260 usable positions -- about 8% of what the pair added --
+# while consuming the whole top routing layer, and a pin there has nothing
+# above it and must drop met4->met3->met2->met1 to reach a cell. met4 supplies
+# the actual capacity at ~975. The first version counted positions without
+# weighting them by pitch or by escape cost.
+export IO_PLACER_H     = met3
 export IO_PLACER_V     = met2 met4
-export CORE_UTILIZATION = 10
+
+# AND MORE PERIMETER, because the violation distribution was UNIFORM across
+# met1-met5 (133/128/125/124/121) rather than concentrated on the new layers.
+# That reads as global congestion, not a few unroutable pins -- so freeing met5
+# alone may not be enough. Perimeter scales as sqrt(1/util): 10 -> 7 gives
+# ~1.20x, about 4,290um against the 5,013um OpenROAD asked for, and ~20% more
+# positions on every layer including the two that were always there.
+#
+# design_area_um2 is SUMMED CELL AREA, not die area, so this does not inflate
+# the reported metric. It does move it a little through longer wires and more
+# buffering, which is the real and smaller cost.
+#
+# TWO VARIABLES CHANGE AT ONCE AND A SUCCESS WILL NOT ATTRIBUTE CLEANLY. That
+# is deliberate: each attempt costs 12.5h, and the evidence for which one is
+# binding is a grep of log text rather than a DRC report, because routing never
+# finished to write one.
+export CORE_UTILIZATION = 7
 export PLACE_DENSITY    = 0.50
 export TNS_END_PERCENT  = 100
 
