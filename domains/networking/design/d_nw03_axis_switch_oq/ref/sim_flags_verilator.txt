@@ -1,10 +1,16 @@
 # Extra Verilator arguments for d_nw03. One token per line; %REPO% expands to the
 # repository root.
 #
-# The REFERENCE is a shim over vendored Forencich RTL -- axis_switch and its
-# closure: axis_demux, axis_register, axis_fifo, axis_arb_mux, arbiter,
-# priority_encoder. A self-contained candidate needs none of it; -y is consulted
-# only for modules that are otherwise unresolved, so the flag is harmless there.
+# The REFERENCE is a shim over vendored Forencich RTL. MEASURED closure, from
+# Verilator --MMD rather than from reading the source: axis_switch, arbiter,
+# axis_register, priority_encoder. FOUR files, not the seven this comment used
+# to name -- axis_demux, axis_fifo and axis_arb_mux are present in the -y
+# directory and never read. The claim was over-broad by three and nothing could
+# check it, because -y is a search path and the consumed set has no static
+# answer. scripts/capture_refs_closure.py regenerates this list.
+#
+# A self-contained candidate needs none of it; -y is consulted only for modules
+# that are otherwise unresolved, so the flag is harmless there.
 #
 # The vendored RTL is Verilog-2001 with `default_nettype none, and it declares
 # `timescale. No include paths are needed -- the closure is flat in one directory.

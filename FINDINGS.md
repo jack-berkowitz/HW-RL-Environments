@@ -6790,3 +6790,210 @@ about a claim whose scope is unmeasured. This one is about a claim whose scope i
 measured, written down in the same document, and then not consulted.
 
 **Rules:** 24, 36
+
+## F107. A correction reaches the normative text and not the record it was derived from
+
+> **A correction reaches the normative text and not the record the text was
+> derived from. The record then reads as a live claim to anyone arriving by
+> search, and quoting it propagates the dead version forward.**
+
+Two instances in one file, found within an hour of each other, pointing the same
+way.
+
+**One.** d_ai01's C2 was corrected in commit `0477595` to say flush clears every
+row *whose clock is enabled*, and MEASUREMENTS Sec 7 was written in the same
+commit to record why — quoting the dead draft in the past tense: *"C2 said flush
+forces every inter-stage register of every row to zero"*. A later reader
+searching the file for that string landed on the quotation and reported it as a
+live defect in current clause text. **The string appears zero times in the spec.**
+The correction was complete; the record of it was indistinguishable from the
+thing it corrected, to a reader who arrived at the line rather than at the
+paragraph.
+
+**Two.** The same file's Sec 6, written *before* the measurement that produced
+Sec 7, still said "while `flush_i` is asserted every inter-stage register reads
+zero" — the unqualified universal, two sections above its own refutation, never
+amended when the clause was. That one was live and had been for as long as the
+clause was wrong plus everything since.
+
+**The two failure modes are opposite and the cause is one.** A quotation of a
+dead claim reads as live; a superseded claim in a narrative reads as live. Both
+happen because the correction is applied where the *rule* lives and the *record*
+is left as an append-only history that nobody re-reads as a whole.
+
+**Handling, and it is not "delete the record".** Records are append-only for good
+reason — an artefact that only shows its corrected state cannot be audited for
+how it got there. The obligation is to MARK, at the sentence: a quotation of
+superseded text is marked as a quotation, and a superseded assertion is marked
+with the date and what falsifies it. Both cost one line and both are invisible to
+a reader who does not need them.
+
+**The sweep this implies.** When a clause is corrected, the sweep is not only
+over other copies of the clause — it is over every document that *quotes,
+restates or reasons from* the old text. Those sites do not match a search for the
+new wording, only for the old, which is exactly the search nobody runs after a
+fix.
+
+**Cross-cites:** "Marking a block SUPERSEDED does not mark the claims inside it"
+above — both are about a reader arriving at a LINE rather than at a document, and
+the fix in both is a marker at the sentence rather than at the container. Also
+"A correction reaches the copy whose purpose it was argued from", which is the
+same under-propagation confined to the normative text.
+
+**Rules:** 24, 26
+
+---
+
+## F108. A maintenance obligation stated as a grep is only as good as the grep
+
+> **A clause that makes itself checkable by naming a string has delegated its
+> correctness to a text match, and a neighbouring clause can break it by using
+> the same words to say the opposite thing.**
+
+d_ai01's C5 enumerates every interval this contract excludes from scoring, and
+states the obligation as a test: *"every site in this file matching 'excluded
+from scoring' appears above"*. That was true when written. It **began failing in
+the same commit that landed it**, because the C2 rewrite beside it contains the
+sentence `NOTHING IS EXCLUDED FROM SCORING DURING AN ASSERTION` — a negation,
+matching the string exactly, asserting the reverse. C5's own self-reference
+matched too. Three of five matches were not exclusion sites.
+
+**The failure is not the wording, it is the delegation.** A grep tests
+CONTAINMENT of words. A maintenance obligation is about what a sentence DOES.
+Those coincide only while no neighbouring text discusses the same subject, which
+is the one condition a clause cannot rely on: the neighbours of a clause about
+exclusions are clauses about exclusions.
+
+**Narrowed 2026-08-27** to test what a sentence does rather than the words it
+contains, with the negation and the self-reference named as non-sites. **And the
+narrowing has a cost that should be stated rather than discovered:** the test is
+no longer executable by a grep. It now needs a reader who can tell an exclusion
+from a statement about exclusions. "Checkable" moved from *mechanical* to
+*checkable by someone who reads it*, which is weaker and is what the honest
+version of the clause claims.
+
+**The general form.** When a document makes itself self-checking, state whether
+the check is MECHANICAL or requires judgement, and never let a mechanical check
+be phrased over a string that ordinary discussion of the subject would also
+produce. A mechanical check on vocabulary is a check on the absence of neighbours.
+
+**Cross-cites:** "A containment claim in a finding summary is a measurement"
+above — that entry requires a sweep to be stated; this one is what happens when
+the sweep IS stated and the sweep is the wrong instrument. Also the text-sweep
+half of "A correction reaches the copy whose purpose it was argued from": a text
+sweep on a relation fails on a capitalisation, and a text sweep on an obligation
+fails on a synonym or a negation.
+
+**Rules:** 24, 36
+
+---
+
+## F109. The working record understates what exists, and it does so by default
+
+> **MEASURED, not asserted: on a task where every deliverable was complete and
+> correct in the authoritative artefacts, NINE separate claims in the working
+> record contradicted them — and all nine erred in the same direction, saying
+> less exists than does.**
+
+d_ca01 was revisited for four items: a determinism check, a clause defect
+write-up, a design-difference refutation, and mutant non-equivalence evidence.
+**All four were already finished.** The spec, `task.yaml`, `RULES.md`,
+`FINDINGS.md` and `scripts/sim_candidate.sh` were each correct. `NOTES.md` and
+`PROPOSED_RULE.md` said otherwise in nine places:
+
+    a section describing a deleted script by filename, in the present tense
+    five headings reading FINDING (PROPOSED) for findings landed as F43-F48
+    a heading reading "PROPOSED for RULES.md -- NOT LANDED" for a landed rule
+    "Mutants -- six" for a set of seven
+    an equivalence table of six for nine artifacts carrying the evidence
+    "there is no formal non-equivalence result for these mutants" -- 70 lines
+      BELOW the section that obtained one for every mutant
+    a design difference proposed as live, refuted 460 lines further down
+    a top-of-file status row reading PPA NOT STARTED against 13 run records
+    a handoff item reading "still not landed ... not quotable" for a landed
+      exemption whose results are now quotable
+
+**The direction is the result.** Not one of the nine overstated. A working record
+decays toward *understating* what exists, because the act that makes a claim
+stale — finishing the thing — is the act whose author has the least reason to
+return to where it was last described as unfinished. Overstatement requires
+someone to write a claim that was never true; understatement requires only that
+someone succeed and move on.
+
+**Consequences, and they are not cosmetic.** A reader deciding what to work on
+next reads the record, not the authority: they will rebuild what exists, or
+report as blocked what is landed. And the record is what gets *quoted* — the
+sentence saying no formal non-equivalence result exists was still sitting under a
+heading about the tool a later instruction named, which is exactly where the next
+reader looking for that tool would arrive.
+
+**The top status block is the sharpest instance.** Its neighbouring rows —
+mutant count, conformant count — were current. The PPA row was not. **A
+maintained table goes stale one row at a time**, and being maintained is what
+makes the stale row credible.
+
+**The sweep that is mechanical, and it is worth running before the reading.**
+Every filename cited in a working record, tested for existence: 37 cited on this
+task, 2 absent, one of them a genuine defect. Every status word — NOT STARTED,
+NOT LANDED, PROPOSED, not built — enumerated and checked against its authority.
+Both are one-pass and both paid here. **What neither covers** is a claim stale in
+its content rather than in a filename, a count or a status word — those come out
+only by reading, and the reading was scoped to four items in a 1300-line file.
+
+**The remedy is a direction of travel, not a document.** When work lands in an
+authority, the sweep is over the record that *proposed* it — and the search term
+is the OLD status word, which is the only string that still matches.
+
+**Cross-cites:** "A correction reaches the normative text and not the record it
+was derived from" above — this is that finding measured on a third task, with a
+rate and a direction attached. "Marking a block SUPERSEDED does not mark the
+claims inside it" — the handling for all nine was a dated marker at the site,
+leaving the text as written. "A containment claim in a finding summary is a
+measurement" — the sweep above is stated because this entry's count is one.
+
+**Rules:** 13, 24, 26
+
+## F110. A dependency claim nobody could check, in the file that defines what a task consumes
+
+`refs.lock` guarded **16 of the 143 vendored files the tasks actually read**,
+and 31 of its 47 entries watch files no task reads at all. Both numbers are
+measured, from Verilator's own `--MMD` dependency output across 18 tops in 10
+tasks, with zero closures failing to elaborate.
+
+**The lock was hand-maintained and unverifiable, which is why it drifted.**
+`sim_flags_verilator.txt` is mostly `-y` search PATHS rather than file lists —
+d_nw03's entire vendored input is one directory — so "which anchors does this
+task consume" had no static answer. Nobody could tell the list was wrong.
+
+**I estimated this twice and was wrong both times.** First "30 unguarded of 36
+consumed", then "6 of 36 hash-recorded". Both came from parsing the flags
+statically, which cannot resolve a `-y` directory to the modules Verilator picks
+out of it. The real consumed set is 143, roughly four times my estimate. A
+static parse of a search path does not under-report by a little; it reports a
+different quantity.
+
+**The same defect, one layer up, in a header that reads as documentation.**
+d_nw03's `sim_flags_verilator.txt` stated its closure in prose: "axis_switch and
+its closure: axis_demux, axis_register, axis_fifo, axis_arb_mux, arbiter,
+priority_encoder". Elaboration reads four of those. `axis_demux`, `axis_fifo`
+and `axis_arb_mux` are in the directory and never read — **over-broad by three of
+seven, on the first task measured**. Swept the other nine headers for the same
+shape: every one is exact. The defect is isolated, which is worth as much as
+finding it, because it means the convention is sound and one instance rotted.
+
+**Believed because it was specific.** A comment naming six modules reads as
+someone having checked. Nothing distinguishes that from a comment naming six
+modules that were right when written.
+
+### The remedy has to refuse to launder the drift
+
+`gen_refs_lock.py` regenerates the block from a capture, and **refuses when a
+file it would record already has a different hash recorded**. That case is the
+one where the lock is doing its job: the mismatch IS the finding, and rewriting
+it from disk turns a red check green and destroys the only evidence the anchor
+moved. Once the hashes agree the distinction is not recoverable from the record.
+
+`refs/common_cells/src/cdc_fifo_gray.sv` is the live instance — recorded
+`1592390f962a9578`, on disk `428f6b52d4c470f7`, consumed by d_ca04. The
+generator refuses and leaves `refs.lock` untouched. This is a checker whose
+correct behaviour is to block the tool that would silence it.
