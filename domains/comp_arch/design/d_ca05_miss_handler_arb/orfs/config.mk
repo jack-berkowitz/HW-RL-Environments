@@ -11,6 +11,34 @@ export DESIGN_NICKNAME = d_ca05_miss_handler_arb
 # for this design -- a per-task floorplan target would make area incomparable
 # across the corpus. Without CORE_UTILIZATION or an explicit DIE_AREA, ORFS stops
 # at `No floorplan initialization method specified`.
+# PIN POSITIONS, NOT DIE AREA. The d_ca05 Fmax sweep aborted in 24 s at
+# 3_2_place_iop: PPL-0024, 3,686 IO pins against 3,260 available positions,
+# with OpenROAD proposing the die perimeter grow from 3,590.92 to 5,012.96 um.
+#
+# The interface is genuinely that wide -- 29 port declarations expanding to
+# 3,686 bits: four AXI req/rsp structs, cache_line_t [SET_ASSOC-1:0], and three
+# [NR_PORTS-1:0][...] arrays. This is an internal cache-module boundary being
+# synthesised as if it were a chip boundary.
+#
+# GROWING THE DIE IS THE WRONG FIX FOR THE RIGHT REASON. sky130hd offers the
+# pin placer ONE layer per direction (IO_PLACER_H ?= met3, IO_PLACER_V ?= met2)
+# while MAX_ROUTING_LAYER is met5, so met4 and met5 are routable but never
+# offered as pin positions. The shortfall is 426 pins, 13%. A second layer per
+# direction roughly doubles available positions to ~6,500 against 3,686 needed,
+# and leaves the die alone.
+#
+# Odd layers are horizontal in sky130, even vertical, so the pairs preserve
+# preferred routing directions. CORE_UTILIZATION and PLACE_DENSITY are
+# UNCHANGED and identical to the eight other tasks at util=10: this touches
+# where pins may sit, not how big the die is or how densely it is filled.
+#
+# This is the only task overriding the pin placer. The asymmetry is deliberate
+# and is a placement key, not an area key -- d_ca05's Design area stays
+# measured the same way as every other task's. It DOES change
+# build_config_hash, so the reference and all three candidates must be built
+# under this config for the comparison to be within one configuration (rule 17).
+export IO_PLACER_H     = met3 met5
+export IO_PLACER_V     = met2 met4
 export CORE_UTILIZATION = 10
 export PLACE_DENSITY    = 0.50
 export TNS_END_PERCENT  = 100
