@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=axi4_xbar; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=8000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=20.0; override.CLK_PERIOD_NS=8.0; note.abc_runtime_target_ps=8000;",
+  "build_config_hash": "c636536d13c33732",
+  "clk_period_ns": "8.0",
+  "correctness_gate": "passed:2026-08-27T014104Z__axi4_xbar_ref__sim.json 16/16 configs",
+  "design_area_um2": "147144",
+  "git_sha": "49c4a7343ce22e4717047ac6bff970bb3159d432-dirty",
+  "kind": "ppa",
+  "label": "reference_pin8p0",
+  "orfs_nickname": "d_nw01_axi4_xbar",
+  "pdk": "sky130hd",
+  "power_w": "5.47e-02",
+  "status": "completed",
+  "submission": "domains/networking/design/d_nw01_axi4_xbar/ref/axi4_xbar_ref.sv",
+  "submission_sha256_16": "a36958895aab26e0",
+  "synth_area_um2": "107890.976000",
+  "task": "d_nw01_axi4_xbar",
+  "timestamp_utc": "2026-08-28T01:58:58Z",
+  "wns_ns": "1.14764"
+}
