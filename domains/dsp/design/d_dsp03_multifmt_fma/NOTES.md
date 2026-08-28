@@ -326,3 +326,83 @@ literal binding anywhere". **A pattern sweep on a BINDING fails on an
 indirection**, exactly as a numeric sweep on a relation fails on a capitalisation
 (F99). What found them was sweeping for the TYPE, which cannot be indirected away
 because the declaration must name it.
+
+---
+
+## Mutants and conformant set, built 2026-08-28 — and this task is TIER-B
+
+**Built on instruction. Stated first, because it is a procedure change and not a
+gap being filled: d_dsp03 declares `procedure: TIER-B`, and TIER-B DROPS BOTH OF
+THESE.** `v_nw02`'s notes state it directly — *"Tier-B drops the full kill-rate
+table across historical candidates, the `bmc_cex` evidence path, and the
+conformant-perturbation set beyond the two negative controls"* — and this task's
+own `nc_d` header says the same from the other side: *"d_dsp02 carries this as a
+MUTANT (mA8); Tier-B skips mutant sets, so in this task the same artefact is a
+negative control."*
+
+**The correlation is exact across the design set**, which is why the absence was
+a decision rather than an omission:
+
+    TIER-B    d_ai01, d_ca03, d_dsp03, d_nw03      mutants: 0, 0, 0, 0
+    not       d_ca01, d_ca04, d_dsp02, d_nw01      mutants: 8, 7, 7, 8
+
+So this set puts d_dsp03 above its declared procedure. The decision is the
+user's; the record should not let a later reader think TIER-B produced it.
+
+### The set
+
+| artifact | clause | configs | evidence |
+|---|---|---|---|
+| `m_v3_upper_bits_zero` | V3 | **1/2** | witness: WIDTH=64 vec 0, upper bits 0 |
+| `m_a2_rmm_aliases_rne` | A2 | 0/2 | witness: vec 3804 rnd=4 |
+| `m_a5_no_nv_on_invalid` | A5 | 0/2 | witness: vec 2, flags 00000, NV expected |
+| `m_a6_negative_zero_lost` | A6 | 0/2 | witness: vec 3, -0 delivered as +0 |
+| `m_f1_bf16_decoded_as_fp16` | F1 | 0/2 | witness: vec 1082 fmt=2 |
+| `c01_one_pipe_stage` | L2 | **2/2** | survives; latency is free |
+| `c02_rnd_high_maps_rtz` | L6 | **2/2** | survives; rnd 5..7 is free |
+
+**`m_v3` at 1/2 is the correct kill count, not a weak mutant.** V3 only binds
+when the used width is narrower than `WIDTH`, so at `WIDTH=32` with FP32 there
+are no spare bits and the perturbation is inert *by construction*. A mutant that
+died at both settings would be violating something other than V3.
+
+### Rule 24's differential, done once rather than five times
+
+Every file is `ref/fp_multifmt_fma_ref.sv` **plus one substitution**, generated
+programmatically rather than hand-copied, with the non-comment diff measured:
+
+    m_a2  3 lines    m_f1  3 lines    c01  3 lines    c02  5 lines
+    m_a5  4 lines    m_v3 10 lines    m_a6 18 lines
+
+**So the reference IS the neutralised twin of all seven**, and it passes 2/2 —
+re-run today for this purpose. Removing any perturbation yields the reference
+exactly, which is what the differential asks and is stronger than seven
+hand-built twins, because a hand-built twin can differ from the reference in ways
+nobody checks.
+
+### What is NOT covered, stated so silence is not read as completeness
+
+**No mutant for H2 (result ordering).** With `NumPipeRegs=0` the anchor retires
+in order structurally; a reordering wrapper would be a new design rather than a
+perturbation of this one. Uncovered, not overlooked.
+
+**No conformant artifact for L1, L3 or L5.** L1 (algorithm free) and L3
+(throughput free) need a different implementation, not a perturbation of this
+shim. L5 is an input-side licence — the harness never drives the bits above the
+lanes to anything but the reference's own value, so nothing built here can
+exercise it.
+
+**And no `bmc_cex` for any mutant.** All five carry `witness`. The miter path
+`d_ca01` used is available in principle, but there is no SMT backend in the image
+(F47) and the `abc bmc3` route was not run here. Rule 21 accepts `witness` as a
+full-standing type; this is recorded so the kill counts are not read as carrying
+more than they do.
+
+### One stale field found while doing this
+
+`task.yaml`'s top-level `task_text_hash` reads `1952c56cdca33f36`. The computed
+current hash is **`ec21554692b610a5`**, which is also what every candidate and
+reference run record carries. The field's own comment explains that it exists to
+be distinct from the nested historical ones — so it is meant to be current, and
+is not. Reported here; the field is left as it stands because correcting a hash
+by hand is how the wrong one gets written twice.

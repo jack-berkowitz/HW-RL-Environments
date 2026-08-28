@@ -494,3 +494,54 @@ handshake_mirror_decision:
     but reports it as "the clause was never exercised", not as a violation of the
     mirror clause. Enforceable by inspection and by control, only partially by
     the harness. This is in each task's candidates README where a grader meets it.
+
+# =============================================================================
+# MUTANTS AND CONFORMANT SET -- built 2026-08-28, on instruction, and this task
+# is TIER-B, which drops both. See NOTES.md; the procedure change is the user's.
+# =============================================================================
+mutants:
+  status: BUILT
+  # Rule 21: the TYPE of non-equivalence evidence is recorded per mutant.
+  # All five carry `witness` -- a named clause failing at a named configuration
+  # under a named stimulus. None carries bmc_cex: no SMT backend exists in the
+  # image (F47), so the miter path d_ca01 used is available but was not run.
+  generated_from: >
+    ref/fp_multifmt_fma_ref.sv by targeted substitution. Each file is the
+    reference plus ONE perturbation; the non-comment diff is 3-18 lines and is
+    recorded per mutant below. The reference is therefore the neutralised twin
+    for every one of them, and it passes 2/2 -- which is rule 24's differential
+    performed once for the whole set rather than five times.
+  set:
+    - {name: m_v3_upper_bits_zero,      clause: V3, evidence: witness, configs_passed: 1, of: 2,
+       witness: "WIDTH=64 vec 0 fmt=0 vec=0 lanes=1 -- upper result bits 0, clause requires all ones",
+       note: "PASSES at WIDTH=32 BY CONSTRUCTION -- V3 only binds when the used width is narrower than WIDTH. 1/2 is the correct kill count, not a weak mutant."}
+    - {name: m_a2_rmm_aliases_rne,      clause: A2, evidence: witness, configs_passed: 0, of: 2,
+       witness: "WIDTH=32 vec 3804 fmt=0 vec=0 rnd=4 lanes=1 -- RMM result differs"}
+    - {name: m_a5_no_nv_on_invalid,     clause: A5, evidence: witness, configs_passed: 0, of: 2,
+       witness: "WIDTH=32 vec 2 fmt=0 vec=0 rnd=0 -- flags 00000, NV expected",
+       note: "FLAG-ONLY: the canonical NaN is still delivered, so only A5's flag half breaks. Isolates the flag from the value."}
+    - {name: m_a6_negative_zero_lost,   clause: A6, evidence: witness, configs_passed: 0, of: 2,
+       witness: "WIDTH=32 vec 3 fmt=0 vec=0 rnd=0 lanes=1 -- delivered -0 as +0"}
+    - {name: m_f1_bf16_decoded_as_fp16, clause: F1, evidence: witness, configs_passed: 0, of: 2,
+       witness: "WIDTH=32 vec 1082 fmt=2 vec=0 rnd=0 lanes=1 -- BF16 decoded as FP16"}
+  cut_from_the_set: []
+  not_covered: >
+    V1/V2 (lane count) and A3 (subnormals) and A7a (underflow predicate) already
+    have negative controls -- nc_b, nc_c, nc_d -- so no mutant duplicates them.
+    H2 (result ordering) has NO mutant: with NumPipeRegs=0 the anchor retires in
+    order structurally and a reordering wrapper would be a new design rather than
+    a perturbation. Recorded as uncovered rather than silently absent.
+
+conformant:
+  status: BUILT
+  set:
+    - {name: c01_one_pipe_stage,     licence_clause: L2, survives: "2/2",
+       perturbation: "NumPipeRegs 0 -> 1", note: "latency is free and never gated"}
+    - {name: c02_rnd_high_maps_rtz,  licence_clause: L6, survives: "2/2",
+       perturbation: "rnd_i 5..7 mapped to RTZ", note: "P2 says they are never driven, so any behaviour is legal"}
+  latitude_not_exercised: >
+    L1 (algorithm free), L3 (throughput free) and L5 (operand bits above the
+    lanes free) have no conformant artifact. L1 and L3 would need a different
+    implementation rather than a perturbation of this shim, which is the honest
+    reason; L5 is an input-side licence and the harness never drives those bits
+    to anything but the reference's own value, so nothing here can exercise it.
