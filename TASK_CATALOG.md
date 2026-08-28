@@ -116,6 +116,15 @@ breakdown lives here instead.
     with a directory on disk 11   the other 4 live rows are not started
     with a task.yaml         10   d_dsp01's directory exists and has none
 
+**`d_ai04`'s ROW BELOW IS STALE, 2026-08-28.** It reads "No PPA until its
+reference Fmax sweep sets the pin -- G1 records it NOT YET SET rather than a
+plausible number." **The sweep ran and the pin is set.** `fmax_results/d_ai04_fmax.json`
+and `d_ai04_logs/` exist; spec G1 records 33.75 ns with its derivation from a
+measured 22.5 ns; `scripts/check_pin.py` reports `33.75 / 22.5 / 33.75 ok`; and
+`runs/d_ai04_sdp_requant/` holds a reference PPA record at the pin. The row also
+predates three submissions, `chat`/`claude`/`gemini`, **all of which PASS**. This
+file is append-only, so the row is marked here rather than rewritten.
+
 **`d_dsp01` is WITHDRAWN under F54 and MUST NEVER ACQUIRE A `task.yaml`.** The
 absence of that file is the mechanical marker of the withdrawal and is why the
 two on-disk counts differ by one. Its row stays in this catalog because the row

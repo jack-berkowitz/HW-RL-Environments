@@ -576,3 +576,44 @@ posture of isolation is to not go looking. The four consultable classes above ar
 short enough to attach to the brief.
 
 **Rules:** 22, 24
+
+
+## A peer address that worked yesterday is not evidence it works today
+
+NOT-FOR-CATALOG — this is a CONVENTION, bound for `CONVENTIONS.md`, not a
+finding. The checker's two markers are `LANDED: F<n>` and `NOT-FOR-CATALOG`, and
+neither names the convention case, so the second is used with its reason stated
+rather than left bare. **This is a gap in the marker vocabulary, not a
+disposition:** every entry in this file will hit it. A third marker —
+`LANDED-CONVENTION: <name>`, verified against `CONVENTIONS.md` the way `LANDED`
+is verified against `FINDINGS.md` — would make the attestation real here instead
+of merely silencing the row. Reported to whoever owns `scripts/`.
+
+Socket names are not stable across restarts. `hw-rl-benchmark-e2` was a correct
+address for AGENT-PPA on 2026-08-25 and was gone by 2026-08-27; the same session
+was in the peer listing the whole time as `hw-rl-benchmark-76`.
+
+**The failure mode is SILENCE, which is why it costs a day rather than a
+message.** A stale address does not bounce. The peer simply never appears in
+`ListAgents`, and the natural reading — "that session has ended" — is
+indistinguishable from "that session was renamed". I routed four items through
+committed inbox files for a full session on that reading, including a correction
+whose whole value was arriving before it was acted on.
+
+**The rule that still holds:** resolve peers by explicit self-identification,
+never by name, position or session age. That rule is what stopped me guessing
+which listed session was the right one, and it was right to.
+
+**The rule it needs beside it:** a peer missing from the listing is
+**unreachable-now, not gone**, and the way to tell them apart costs one message.
+**ASK AN UNIDENTIFIED SESSION WHO IT IS.** The asymmetry is the whole argument —
+a misrouted QUESTION costs nothing, while a misrouted CORRECTION is worse than an
+undelivered one, because it is filed as fact by an agent it does not concern and
+leaves the one it does concern still holding the wrong version. So the bar for
+asking is far below the bar for telling, and I applied the telling bar to both.
+
+**Practical form:** put the identity line in the message BODY, and route on the
+body rather than on the socket. A body-carried identity survives a rename; an
+address does not.
+
+**Rules:** 22, 24
