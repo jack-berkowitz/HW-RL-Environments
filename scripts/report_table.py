@@ -404,6 +404,27 @@ def _label_period(label):
     return float(m.group(1)) if m else None
 
 
+def _build_period(ppa):
+    """The period a PPA record was BUILT at. Field first, label only as fallback.
+
+    THE GUARD BELOW WAS BLIND TO 60 OF 96 RECORDS. It read the period out of
+    the label, and _LABEL_PER_RE matches `_fx<N>` and nothing else -- so every
+    record written under the later `_pin19p25` convention, plus the `_at_4p5`
+    and bare-label ones, returned None and the superseded-pin check silently
+    did not run. Its failure mode is an ABSENT note, so a row measured at a
+    dead pin renders identically to one measured at the live pin.
+
+    clk_period_ns is a field in every one of those records. Reading the field
+    removes the naming convention from the decision. This is the same
+    identify-by-filename defect that froze the charts, found in the scored
+    table by sweeping for the pattern after fixing the charts.
+    """
+    try:
+        return float(ppa.get("clk_period_ns"))
+    except (TypeError, ValueError, AttributeError):
+        return _label_period((ppa or {}).get("label", ""))
+
+
 _OOP_CACHE = {}
 
 
@@ -819,7 +840,7 @@ def main():
                 # ns, with nothing in the row saying so, in a table whose other
                 # seven tasks are at their current pins.
                 _pin = _spec_pin(task)
-                _lab_per = _label_period(ppa.get("label", ""))
+                _lab_per = _build_period(ppa)
                 if _pin is not None and _lab_per is not None and \
                         abs(_pin - _lab_per) > 1e-9:
                     notes.append(
