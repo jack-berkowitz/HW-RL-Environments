@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "5/5",
+  "did_not_compile": "0",
+  "discriminates": "true",
+  "faults_caught": "12/13",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "483c5236b7aaad46e1bfe3208ccf843a970e93df-dirty",
+  "golden_accepted": "PASS",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "claude",
+  "second_dut_accepted": "PASS",
+  "status": "rejected",
+  "submission": "candidates/v_dsp02/claude.sv",
+  "submission_sha256_16": "29b41e9ef109e6e5",
+  "task": "v_dsp02_fp_noncomp",
+  "task_text_hash": "0d8119950359c940",
+  "timestamp_utc": "2026-08-27T23:44:05Z"
+}
