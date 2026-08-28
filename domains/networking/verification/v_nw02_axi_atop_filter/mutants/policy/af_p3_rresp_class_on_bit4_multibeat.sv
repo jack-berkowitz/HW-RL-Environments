@@ -88,6 +88,25 @@ module atop_filter #(
       a_full_q <= (debt >= MAXW) ? (a_full_q + 8'd1) : 8'd0;
     end
   end
+  // ---- guards for the two W3 re-derivations -------------------------------
+  // p11 counts CYCLES of its class, as af_m11 does. p12 counts PRESENTATIONS
+  // -- the rising edge -- because af_m12 does: s_awvalid_i is HELD until the AW
+  // is accepted, so a cycle ordinal counts how long ONE AW waited rather than
+  // how many arrived, and on the anchor that made ordinals 1, 2 and 3
+  // indistinguishable. Neither counter reads the defect's own effect.
+  wire        b_cls = s_awvalid_i && !is_atomic && (debt < MAXW);
+  wire        z_cls = s_awvalid_i && !is_atomic && (debt == 0);
+  logic [7:0] b_hit_q, z_hit_q;
+  logic       z_cls_q;
+  wire        z_pres = z_cls && !z_cls_q;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin b_hit_q <= '0; z_hit_q <= '0; z_cls_q <= 1'b0; end
+    else begin
+      z_cls_q <= z_cls;
+      if (b_cls)  b_hit_q <= b_hit_q + 8'd1;
+      if (z_pres) z_hit_q <= z_hit_q + 8'd1;
+    end
+  end
 
 
   wire is_atomic  = (s_awatop_i[5:4] != 2'b00);

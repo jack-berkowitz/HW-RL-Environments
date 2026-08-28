@@ -76,6 +76,26 @@ module axi_atop_filter_m11_stalls_aw_below_bound #(
 
   typedef logic [AxiIdWidth-1:0] id_t;
   id_t  id_d, id_q;
+  // ---- MUTANT bookkeeping: all of this counts things the CONTRACT names ----
+  logic [7:0] atomic_seen_q;     // how many filtered writes so far
+  logic [7:0] since_atomic_q;    // cycles since the last filtered write began
+  logic [7:0] full_aged_q;       // cycles the write debt has sat at its bound
+  wire        aw_is_atomic = slv_req_i.aw_valid
+                             && (slv_req_i.aw.atop[5:4] != axi_pkg::ATOP_NONE)
+                             && slv_resp_o.aw_ready;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      atomic_seen_q <= '0; since_atomic_q <= '0; full_aged_q <= '0;
+    end else begin
+      if (aw_is_atomic) begin
+        atomic_seen_q  <= atomic_seen_q + 8'd1;
+        since_atomic_q <= '0;
+      end else if (since_atomic_q != 8'hFF) since_atomic_q <= since_atomic_q + 8'd1;
+      full_aged_q <= (w_cnt_q.cnt == AxiMaxWriteTxns) ? (full_aged_q + 8'd1) : 8'd0;
+    end
+  end
+
+
 
   typedef logic [7:0] len_t;
   len_t   r_beats_d,  r_beats_q;
@@ -198,6 +218,7 @@ module axi_atop_filter_m11_stalls_aw_below_bound #(
         // bound, so W3 says this bound alone must not stall the AW -- and it does.
         if ((complete_w_without_aw_downstream || (w_cnt_q.cnt < AxiMaxWriteTxns))
             && !mut_stall_aw) begin
+
           mst_req_o.aw_valid  = slv_req_i.aw_valid;
           slv_resp_o.aw_ready = mst_resp_i.aw_ready;
         end

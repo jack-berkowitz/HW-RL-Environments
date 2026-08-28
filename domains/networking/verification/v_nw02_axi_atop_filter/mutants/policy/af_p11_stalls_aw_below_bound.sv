@@ -114,7 +114,7 @@ module atop_filter #(
   wire head_atom  = head_valid && kq[0];
 
   // ---- AW: forward the ordinary, swallow the atomic ---------------------------
-  wire can_fwd_aw = (debt < MAXW);
+  wire can_fwd_aw = (debt < MAXW) && !(b_cls && (b_hit_q >= 8'd4));
   wire take_atom  = s_awvalid_i && is_atomic && (atomic_pending == 0) && !cap_valid;
 
   assign m_awid_o = s_awid_i; assign m_awaddr_o = s_awaddr_i; assign m_awlen_o = s_awlen_i;
@@ -154,8 +154,7 @@ module atop_filter #(
   always_comb begin
     if (rsp == RSP_R) begin
       s_rvalid_o = 1'b1; s_rid_o = cap_id; s_rresp_o = SLVERR;
-      s_rlast_o  = (rbeat == 9'd0)
-                   || ((a_seen_q >= 8'd2) && (rbeat == 9'(cap_len)));
+      s_rlast_o  = (rbeat == 9'd0);
       s_rdata_o  = 32'(DATA_W'(32'hDEAD_BEEF));  // clause L2 -- golden drives zero
       s_ruser_o  = {USER_W{1'b1}};
       m_rready_o = 1'b0;

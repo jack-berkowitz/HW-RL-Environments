@@ -8735,3 +8735,74 @@ for this task is currently unmeasured — it has been since af_m11 landed, and t
 prose I added in e312ee3 describing the gap sits in a branch the guard makes
 unreachable. **I documented a gap in a code path that cannot execute**, which is
 the same shape as a caveat nobody reads, one level down.
+
+## A check that refuses looks exactly like a check that passes
+
+v_nw02's Tier-B 5c check has now run for the first time since af_m11 landed:
+**13 of 13**, the clean policy base passing and all twelve defects caught. Before
+today it exited on its count guard **before its first build** and produced
+nothing at all.
+
+    what the script did       exit 2, having built nothing
+    what task.yaml said       "11 of 11 ... every one of the ten is caught"
+    what distinguished them   the exit code, which nothing was reading
+
+**The window was the whole life of af_m11.** For that entire period this task
+carried a policy-independence claim backed by a script that had not executed a
+single build, and nothing in the corpus could tell the difference — the claim was
+prose in `task.yaml`, and prose does not go red.
+
+That is the same shape as the `-m1` finding and the commit-message finding, with
+the number removed entirely: **not a right number attached to a wrong sentence, but
+no number at all attached to a sentence that named one.**
+
+### The documentation was parked where nothing could reach it
+
+In `e312ee3` I added text to that script describing the af_m11 gap honestly. It
+sat below the count guard, so **the guard exited before it could print**. I
+documented a gap in a code path the gap itself made unreachable.
+
+The second half is sharper and I did not see it coming. That text called itself
+*"what should print once p11 and p12 exist and the counts agree again"* — so the
+moment I made the counts agree, it printed, **announcing a gap I had just
+closed.** It had been wrong for exactly as long as it had been reachable, which
+was no time at all until it was suddenly wrong out loud.
+
+**Documentation parked in an unreachable branch is not preserved, it is
+unmaintained.** Nothing could contradict it while nothing could reach it, so it
+aged without any of the signals that normally catch stale text. A comment at
+least sits next to code someone edits; this sat behind a guard that guaranteed no
+reader.
+
+### What made the regeneration safe was running the same script twice
+
+The named risk was that a generator-expressed guard is not the hand-written one,
+and that af_m11 would stop producing the cycle-145 witness `task.yaml` records.
+
+    ten pre-existing dut files   byte-identical
+    af_m11 / af_m12              +21 lines, -0 -- exactly the shared HELPERS
+                                 block, declaring nothing either guard reads
+    probe output before/after    IDENTICAL, byte for byte
+
+Both witnesses held (145, 139), both reference-tb id sets held, af_m12's ordinal
+stayed at 1 and its target branch still fires, 12 of 12 witnesses, and the
+differential still PASSES with the ordinal neutralised.
+
+**The probe was written before the change and re-run unmodified after**, which is
+the only reason "identical" means anything. Had I written the after-check
+afterwards I would have been comparing against a script shaped by knowing what
+changed. Cheap discipline, and the one thing here that was not learned the hard
+way today.
+
+### One error, caught by regenerating into a copy first
+
+I inserted the two anchor constants next to `A_CANFWD` — which sits in the policy
+section, **after** the `MUT` list that references them. `NameError`, nothing
+written. The run that caught it also reported "ten dut files identical, m11/m12
+IDENTICAL", which was **vacuous** — the generator had died before writing
+anything, so the copy still held the originals. A green-looking comparison
+against files that were never regenerated.
+
+Regenerating into a `mktemp -d` copy rather than the real tree is what made that
+a non-event. **The reassuring reading and the failure arrived in the same
+output**, three lines apart, and the "IDENTICAL" lines were the more prominent.
