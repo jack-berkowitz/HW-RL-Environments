@@ -25,7 +25,8 @@
 <text x="216" y="175" fill="#666" font-size="11" font-style="italic">missed timing</text>
 <text x="200" y="195" fill="#666" font-size="11" text-anchor="end">claude</text>
 <rect x="210" y="184" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<text x="216" y="195" fill="#666" font-size="11" font-style="italic">missed timing</text>
+<rect x="210" y="184" width="171" height="15" rx="2" fill="#7aa5f0"/>
+<text x="387" y="195" fill="#1a1a1a" font-size="11">1.66×</text>
 <text x="200" y="215" fill="#666" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="204" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
 <text x="216" y="215" fill="#666" font-size="11" font-style="italic">missed timing</text>
@@ -45,11 +46,12 @@
 <text x="20" y="362" fill="#666" font-size="11">d_dsp03 @ 70.5 ns</text>
 <text x="200" y="347" fill="#666" font-size="11" text-anchor="end">chat</text>
 <rect x="210" y="336" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<text x="216" y="347" fill="#666" font-size="11" font-style="italic">fails correctness</text>
+<rect x="210" y="336" width="189" height="15" rx="2" fill="#7aa5f0"/>
+<text x="405" y="347" fill="#1a1a1a" font-size="11">1.83×</text>
 <text x="200" y="367" fill="#666" font-size="11" text-anchor="end">claude</text>
 <rect x="210" y="356" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<rect x="210" y="356" width="91" height="15" rx="2" fill="#2f6feb"/>
-<text x="307" y="367" fill="#1a1a1a" font-size="11">0.88×</text>
+<rect x="210" y="356" width="152" height="15" rx="2" fill="#7aa5f0"/>
+<text x="368" y="367" fill="#1a1a1a" font-size="11">1.47×</text>
 <text x="200" y="387" fill="#666" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="376" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
 <text x="216" y="387" fill="#666" font-size="11" font-style="italic">fails correctness</text>
@@ -57,11 +59,12 @@
 <text x="20" y="448" fill="#666" font-size="11">d_nw01 @ 8.0 ns</text>
 <text x="200" y="433" fill="#666" font-size="11" text-anchor="end">chat</text>
 <rect x="210" y="422" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<rect x="210" y="422" width="110" height="15" rx="2" fill="#7aa5f0"/>
-<text x="326" y="433" fill="#1a1a1a" font-size="11">1.06×</text>
+<rect x="210" y="422" width="92" height="15" rx="2" fill="#2f6feb"/>
+<text x="308" y="433" fill="#1a1a1a" font-size="11">0.90×</text>
 <text x="200" y="453" fill="#666" font-size="11" text-anchor="end">claude</text>
 <rect x="210" y="442" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<text x="216" y="453" fill="#666" font-size="11" font-style="italic">missed timing</text>
+<rect x="210" y="442" width="93" height="15" rx="2" fill="#2f6feb"/>
+<text x="309" y="453" fill="#1a1a1a" font-size="11">0.90×</text>
 <text x="200" y="473" fill="#666" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="462" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
 <text x="216" y="473" fill="#666" font-size="11" font-style="italic">fails correctness</text>

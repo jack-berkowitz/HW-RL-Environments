@@ -57,12 +57,12 @@ area comparable at all: without it, area can be bought by relaxing timing.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_area_dark.svg">
-  <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude missed timing, gemini missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat fails correctness, claude 1.42x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.36x, claude missed timing, gemini fails correctness. non-blocking D-cache at 15.0 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_area_light.svg" width="100%">
+  <img alt="Design area relative to each task's reference, at its pinned clock. async CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude 0.99x, gemini missed timing. FP32 FMA at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat 3.28x, claude 1.28x, gemini fails correctness. AXI4 crossbar at 8.0 ns, reference 147,144 um2: chat 1.17x, claude 1.23x, gemini fails correctness. non-blocking D-cache at 15.0 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_area_light.svg" width="100%">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_power_dark.svg">
-  <img alt="Total power relative to each task's reference, at its pinned clock. async CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. stream switch: chat missed timing, claude missed timing, gemini missed timing. FP32 FMA: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat fails correctness, claude 0.88x, gemini fails correctness. AXI4 crossbar: chat 1.06x, claude missed timing, gemini fails correctness. non-blocking D-cache: chat missed timing, claude 4.29x, gemini did not build. Sv39 MMU: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_power_light.svg" width="100%">
+  <img alt="Total power relative to each task's reference, at its pinned clock. async CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. stream switch: chat missed timing, claude 1.66x, gemini missed timing. FP32 FMA: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat 1.83x, claude 1.47x, gemini fails correctness. AXI4 crossbar: chat 0.90x, claude 0.90x, gemini fails correctness. non-blocking D-cache: chat missed timing, claude 4.29x, gemini did not build. Sv39 MMU: chat missed timing, claude fails correctness, gemini did not build." src="docs/assets/design_power_light.svg" width="100%">
 </picture>
 
 **Power does not track area.** d_dsp02's `claude` is the clearest case: within
@@ -73,7 +73,7 @@ establishes that weighting, which is why there is no combined score.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_capability_dark.svg">
-  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. async CDC FIFO per capacity_beats_accepted: chat 0.90x, claude 0.89x, gemini 0.89x. multi-format FMA per throughput_ops_per_1000cyc: claude 1.42x. AXI4 crossbar, range over 4 declared metrics: chat 1.19x to 6.79x. non-blocking D-cache per max_outstanding_n: claude 1.53x." src="docs/assets/design_capability_light.svg" width="100%">
+  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. async CDC FIFO per capacity_beats_accepted: chat 0.90x, claude 0.89x, gemini 0.89x. stream switch per beats_delivered: claude 0.83x. multi-format FMA per throughput_ops_per_1000cyc: chat 3.05x, claude 1.28x. AXI4 crossbar, range over 4 declared metrics: chat 1.03x to 5.87x, claude 0.82x to 0.86x. non-blocking D-cache per max_outstanding_n: claude 1.53x." src="docs/assets/design_capability_light.svg" width="100%">
 </picture>
 
 **Raw area credits a design for being small when it was merely doing less**, and
@@ -109,9 +109,9 @@ declare none, so they are absent rather than shown against an invented axis —
 "more is better and area buys it" is a claim about the contract, not something to
 infer from a metric's name.
 
-**Seven of twenty-one submissions produce a comparable area number.** Seven
-missed timing, five fail correctness, and two were rejected by the synthesis
-frontend without ever running. That is the result, not a gap in the data.
+**Ten of twenty-one submissions produce a comparable area number.** Five missed
+timing, four fail correctness, and two were rejected by the synthesis frontend
+without ever running. That is the result, not a gap in the data.
 
 <!-- BEGIN GENERATED: design-tables -->
 
@@ -124,14 +124,24 @@ frontend without ever running. That is the result, not a gap in the data.
 | `claude` | 14,520 | 8.2 | +0.479 | **0.73×** |
 | `gemini` | 14,520 | 8.5 | +0.489 | **0.73×** |
 
+The only task where every submission closed timing, and all three are 26–27%
+smaller than the reference. Two of them reach that partly by a design choice
+rather than better implementation — see the like-for-like note below.
+
 ### d_nw03 — output-queued stream switch, pinned at 4.25 ns
 
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 26,340 | 10.2 | +0.337 | — |
-| `chat` | *withheld* | *withheld* | **−0.623** | missed timing |
-| `claude` | *withheld* | *withheld* | **−0.078** | missed timing |
-| `gemini` | *withheld* | *withheld* | **−0.116** | missed timing |
+| `chat` | *withheld* | *withheld* | **−0.184** | missed timing |
+| `claude` | 26,164 | 16.9 | +0.117 | **0.99×** |
+| `gemini` | *withheld* | *withheld* | **−0.266** | missed timing |
+
+`claude` closes at **+0.117 ns** and comes in at **0.99×** the reference's area
+— the only submission in this table to land under a reference. On the previous
+bytes it missed by 78 ps and was withheld; the re-solicited version clears the
+pin. `chat` and `gemini` still miss, and close is still missed: the numbers they
+would report describe circuits that cannot run at 4.25 ns.
 
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 
@@ -147,18 +157,25 @@ frontend without ever running. That is the result, not a gap in the data.
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 177,557 | 91.1 | +1.995 | — |
-| `chat` | **0** | **0** | — | fails correctness |
-| `claude` | 251,769 | 80.1 | +8.179 | **1.42×** |
+| `chat` | 582,093 | 167.0 | +4.136 | **3.28×** |
+| `claude` | 226,664 | 134.0 | +2.512 | **1.28×** |
 | `gemini` | **0** | **0** | — | fails correctness |
+
+`chat` closes the pin but at **3.28×** the reference's area — the largest
+comparable submission on the page, and a reminder that closing timing and
+spending area are separate axes. `claude` is at 1.28×.
 
 ### d_nw01 — AXI4 crossbar, pinned at 8.0 ns
 
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 147,144 | 54.7 | +1.148 | — |
-| `chat` | 199,852 | 58.1 | +0.802 | **1.36×** |
-| `claude` | *withheld* | *withheld* | **−0.023** | missed timing |
+| `chat` | 172,662 | 49.0 | +0.451 | **1.17×** |
+| `claude` | 181,174 | 49.3 | +0.009 | **1.23×** |
 | `gemini` | **0** | **0** | — | fails correctness |
+
+Both submissions that build now close the pin, at 1.17× and 1.23×, and both draw
+**0.90×** the reference's power. `claude` clears by 9 ps, which counts.
 
 ### d_ca01 — non-blocking data cache, pinned at 15.0 ns
 
@@ -169,6 +186,10 @@ frontend without ever running. That is the result, not a gap in the data.
 | `claude` | 753,599 | 326.0 | +2.354 | **1.32×** |
 | `gemini` | **0** | **0** | — | did not build |
 
+`claude` is 1.32× the reference's area and **4.29× its power** — the widest
+divergence between the two axes anywhere in these results. `chat` misses the pin
+by 49 ps and is withheld.
+
 ### d_ca03 — RISC-V Sv39 MMU, pinned at 12.5 ns
 
 | | area µm² | power mW | slack ns | vs reference |
@@ -177,6 +198,15 @@ frontend without ever running. That is the result, not a gap in the data.
 | `chat` | *withheld* | *withheld* | **−35.461** | missed timing |
 | `claude` | **0** | **0** | — | fails correctness |
 | `gemini` | **0** | **0** | — | did not build |
+
+`chat` is correct — it passes the scored configuration — and needs roughly 48 ns
+to do it, against a 12.5 ns pin. That is not a near miss like d_nw03's 78 ps; it
+is a design that works and is nearly four times too slow.
+
+`gemini` is a distinct outcome from a correctness failure: slang rejects it with
+ten diagnostics, none of them internal errors, and Verilator rejects the same
+construct at the same line. Two independent frontends agreeing makes it a
+genuine build failure rather than a host problem.
 
 <!-- END GENERATED: design-tables -->
 

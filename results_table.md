@@ -104,18 +104,18 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | ops/1k | notes |
 |---|---|---|---|---|---|---|---|---|
-| `chat` | **2/2 pass** | — | — | — | 1 | 14 | 460 |  |
-| `claude` | **2/2 pass** | — | — | — | 0 | 0 | 427 |  |
+| `chat` | **2/2 pass** | 582,093 | 167.0 | not swept | 1 | 14 | 460 | **different design point** (latency_min 1 vs reference 0): area is correct but not like-for-like; 1,265 um2 per unit of throughput_ops_per_1000cyc, 3.04x the reference per unit |
+| `claude` | **2/2 pass** | 226,664 | 134.0 | not swept | 0 | 0 | 427 | 531 um2 per unit of throughput_ops_per_1000cyc, 1.28x the reference per unit |
+| **reference** | **2/2 pass** | 177,557 | 91.1 | 21.3 | 0 | 0 | 427 | 416 um2 per unit of throughput_ops_per_1000cyc |
 | `gemini` | 0/2 FAIL | — | — | — | 1 | 14 | 460 |  |
-| `fp_multifmt_fma_ref` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
 | `nc_d_band_unbounded_tininess` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62ca0ac68332c76d`; the task text is now `ec21554692b610a5` |
 
 ## d_nw01 — AXI4 crossbar
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | capacity (C1) | 1-pair thruput | 2-pair thruput | aggregate thruput | beat rate | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `chat` | **16/16 pass** | n/a | n/a | n/a | — | — | — | — | — | **area, power and Fmax unavailable** — place-and-route exceeded the 5.8 GB container memory limit during detailed routing (peak 5.70 GB) — a limit of this test setup, not a property of the design, which was at 75 DRC violations and improving; scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
-| `claude` | **16/16 pass** | — | — | — | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
+| `chat` | **16/16 pass** | 172,662 | 49.0 | not swept | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
+| `claude` | **16/16 pass** | 181,174 | 49.3 | not swept | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
 | `gemini` | 0/16 FAIL | — | — | — | — | — | — | — | — |  |
 | `nc_l_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
 | `nc_m_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
@@ -139,9 +139,9 @@ capability, and nothing here establishes those weights.
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | beats | cycles | wait.max | notes |
 |---|---|---|---|---|---|---|---|---|
 | **second source** | **8/8 pass** | — | — | — | 14633 | 8183 | 41 |  |
-| `chat` | **8/8 pass** | — | — | — | 18254 | 8010 | 0 |  |
-| `claude` | **8/8 pass** | — | — | — | 18267 | 8025 | 1 |  |
-| `gemini` | **8/8 pass** | — | — | — | 18376 | 8066 | 54 |  |
+| `chat` | **8/8 pass** | withheld | withheld | not swept | 18254 | 8010 | 0 | **PPA withheld — the build did not meet timing** (slack -0.184 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 1 um2 per unit of beats_delivered, 0.60x the reference per unit |
+| `claude` | **8/8 pass** | 26,164 | 16.9 | not swept | 18267 | 8025 | 1 | 1 um2 per unit of beats_delivered, 0.81x the reference per unit |
+| `gemini` | **8/8 pass** | withheld | withheld | not swept | 18376 | 8066 | 54 | **PPA withheld — the build did not meet timing** (slack -0.266 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 8 um2 per unit of beats_delivered, 4.26x the reference per unit |
 | `axis_switch_oq_ref` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
 | `nc_a_reset_polarity` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
 | `nc_b_outputs_serialised` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |

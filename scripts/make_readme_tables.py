@@ -66,8 +66,30 @@ def _task_full(short):
 
 
 # ---------------------------------------------------------------- design ----
+def _notes():
+    """Per-task commentary, hand-edited, keyed by task id.
+
+    Kept OUT of the generated region because the generator once deleted it: the
+    README interleaved tables with analysis, the sentinels went round both, and
+    five paragraphs vanished in a commit that only claimed to generate tables.
+    A generator must only be able to rewrite what it authored.
+    """
+    path = os.path.join(REPO, "docs", "design_task_notes.md")
+    if not os.path.isfile(path):
+        return {}
+    out, cur = {}, None
+    for line in open(path, encoding="utf-8"):
+        m = re.match(r"^## (d_\w+)\s*$", line)
+        if m:
+            cur = m.group(1); out[cur] = []
+        elif cur:
+            out[cur].append(line.rstrip("\n"))
+    return {k: "\n".join(v).strip() for k, v in out.items()}
+
+
 def design_tables():
     recs = load("ppa")
+    notes = _notes()
     out = []
     for short, pin, label in DESIGN_PINS:
         full = _task_full(short)
@@ -109,7 +131,10 @@ def design_tables():
                 lines.append(f"| `{m}` | {_absent_cells(full, m, sims)} |")
                 continue
             lines.append("| `%s` | %s |" % (m, _design_cells(r, ref_area, full, m, sims)))
-        out.append("\n".join(lines))
+        blk = "\n".join(lines)
+        if notes.get(short):
+            blk += "\n\n" + notes[short]
+        out.append(blk)
     return "\n\n".join(out)
 
 
