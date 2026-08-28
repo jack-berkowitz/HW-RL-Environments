@@ -2048,15 +2048,7 @@ module af_m11_stalls_aw_below_bound #(
     mst_resp.r.user   = m_ruser_i;    mst_resp.r_valid = m_rvalid_i;
   end
 
-  // MUTANT af_m11_stalls_aw_below_bound -- violates W3: a non-atomic AW is
-  // stalled while the downstream write debt is STRICTLY BELOW the bound, from
-  // the FIFTH such AW. (This comment said "once the debt has sat at
-  // one-below-the-bound for eight cycles" -- that was the FIRST guard, measured
-  // unreachable and replaced by the ordinal one; the dut file recorded the
-  // replacement and this line did not.) W3 says the bound
-  // alone does not stall such an AW. Written because W3 had no witness anywhere
-  // in this corpus: two compound-id splits were made to give it a routable
-  // verdict and nothing drove either branch.
+  // MUTANT af_m11_stalls_aw_below_bound -- violates W3: a non-atomic AW is stalled while the write debt is strictly below the bound, from the fifth such AW
   axi_atop_filter_m11_stalls_aw_below_bound #(
     .AxiIdWidth      (ID_W),
     .AxiMaxWriteTxns (MAX_WRITE_TXNS),
@@ -2101,7 +2093,6 @@ module af_m11_stalls_aw_below_bound #(
   assign m_aruser_o  = mst_req.ar.user;    assign m_arvalid_o = mst_req.ar_valid;
   assign m_rready_o  = mst_req.r_ready;
 endmodule
-
 
 module af_m12_stalls_aw_with_no_debt #(
   parameter int unsigned ID_W   = 4,
@@ -2247,13 +2238,7 @@ module af_m12_stalls_aw_with_no_debt #(
     mst_resp.r.user   = m_ruser_i;    mst_resp.r_valid = m_rvalid_i;
   end
 
-  // MUTANT af_m12_stalls_aw_with_no_debt -- violates W3: a non-atomic AW is
-  // stalled while the downstream write debt is EMPTY, from the Nth such AW.
-  // Written because af_m11 drives W3 from ONE of its two reporting sites only:
-  // measured, it reaches gov_admitted and never gov_aw_timeout, which sees the
-  // debt AT the bound by the time the AW times out and reports X4. This one
-  // stalls with no debt outstanding at all, so the debt is still 0 when the
-  // timeout fires and gov_aw_timeout's antecedent holds.
+  // MUTANT af_m12_stalls_aw_with_no_debt -- violates W3: a non-atomic AW is stalled with no downstream write outstanding at all, from the second such AW
   axi_atop_filter_m12_stalls_aw_with_no_debt #(
     .AxiIdWidth      (ID_W),
     .AxiMaxWriteTxns (MAX_WRITE_TXNS),

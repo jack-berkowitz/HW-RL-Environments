@@ -53,7 +53,7 @@
 <text x="448" y="367" fill="#1a1a1a" font-size="11">0.88×</text>
 <text x="200" y="387" fill="#666" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="376" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<text x="216" y="387" fill="#666" font-size="11" font-style="italic">did not build</text>
+<text x="216" y="387" fill="#666" font-size="11" font-style="italic">fails correctness</text>
 <text x="20" y="432" fill="#1a1a1a" font-size="13" font-weight="600">AXI4 crossbar</text>
 <text x="20" y="448" fill="#666" font-size="11">d_nw01 @ 8.0 ns</text>
 <text x="200" y="433" fill="#666" font-size="11" text-anchor="end">chat</text>
@@ -65,7 +65,7 @@
 <text x="216" y="453" fill="#666" font-size="11" font-style="italic">missed timing</text>
 <text x="200" y="473" fill="#666" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="462" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<text x="216" y="473" fill="#666" font-size="11" font-style="italic">did not build</text>
+<text x="216" y="473" fill="#666" font-size="11" font-style="italic">fails correctness</text>
 <text x="20" y="518" fill="#1a1a1a" font-size="13" font-weight="600">non-blocking D-cache</text>
 <text x="20" y="534" fill="#666" font-size="11">d_ca01 @ 15.0 ns</text>
 <text x="200" y="519" fill="#666" font-size="11" text-anchor="end">chat</text>
@@ -78,7 +78,7 @@
 <text x="544" y="539" fill="#1a1a1a" font-size="11">1.24×</text>
 <text x="200" y="559" fill="#666" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="548" width="480" height="15" rx="2" fill="#e3e3e3" opacity="0.45"/>
-<text x="216" y="559" fill="#666" font-size="11" font-style="italic">fails correctness</text>
+<text x="216" y="559" fill="#666" font-size="11" font-style="italic">did not build</text>
 <text x="20" y="604" fill="#1a1a1a" font-size="13" font-weight="600">Sv39 MMU</text>
 <text x="20" y="620" fill="#666" font-size="11">d_ca03 @ 12.5 ns</text>
 <text x="200" y="605" fill="#666" font-size="11" text-anchor="end">chat</text>

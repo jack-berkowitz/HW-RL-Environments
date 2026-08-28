@@ -78,3 +78,24 @@ OK: every defect is caught on BOTH bases, so none of them is killed by
   #   2 FAIL11 aw_timeout=0           | 3 PASS   out of reach
   # Differential control: with the ordinal neutralised the reference PASSES, so
   # the perturbation is entirely guard-gated.
+
+  # 5c RE-RUN 2026-08-27, after af_m11/af_m12 were folded into gen_mutants.py
+  # and p11/p12 generated. THIS IS THE FIRST TIME THIS SCRIPT HAS RUN since
+  # af_m11 landed -- before this it exited on its count guard, before its first
+  # build, producing no verification while task.yaml cited it as passing.
+  reference testbench vs the POLICY-DIVERGENT base and the same 12 defects
+    policy base (clean)          PASS as expected
+    af_p1..af_p12                FAIL as expected  (12 of 12)
+  OK: all 13 checks here pass.
+   exit=0
+
+  # Regeneration probe, identical script run BEFORE and AFTER -- output was
+  # byte-identical, so no recorded witness moved:
+  #   ten pre-existing dut files    byte-identical
+  #   af_m11 / af_m12 dut files      +21 lines, -0: exactly the shared HELPERS
+  #                                  block, declaring nothing either guard reads
+  #   af_m11 witness  cycle 145 (unchanged)   af_m12 witness  cycle 139 (unchanged)
+  #   af_m11 ref tb   10 viol, P2 W3 W4 X4,    W3@aw_timeout 0, W3@admitted 1
+  #   af_m12 ref tb   17 viol, P2 W3 W4 X3 X4, W3@aw_timeout 1, W3@admitted 1
+  #   af_m12 ordinal still 1; differential (ordinal neutralised) -> ref PASSES
+  #   all twelve non-equivalence witnesses: 12 of 12, negative control clean
