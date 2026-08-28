@@ -1027,7 +1027,70 @@ in the disagreement requires D2 or any unpredicted mechanism. That is a cleaner
 result than either option and it is why the residual was worth chasing rather
 than classifying.
 
-**ONE BOUNDED REMAINDER, named rather than dissolved.** 4 of 112 flush
+**ONE BOUNDED REMAINDER — UNCHASED, NOT ACCOUNTED FOR.** 4 of 112 flush
 row-samples disagree even unshifted, at both geometries. 3.6%, identical count at
-two geometries, not chased further. It is small, it is real, and it is not
-covered by anything above.
+two geometries.
+
+**Stated this way deliberately so the flush finding above cannot be read as
+covering it.** The finding above establishes that the FREE-RUNNING residual is an
+artefact of a global shift, because flush does not travel the pipeline. That
+explains the 36 and the 33. It does not explain these 4. They disagree under the
+comparison that is CORRECT for a flush edge — unshifted — and nothing here says
+why. No hypothesis was formed and none was tested. An identical count at two
+geometries is the kind of regularity that usually has one cause, and that is an
+observation about its shape, not an explanation.
+
+
+## 23. T5, run. PASS at both geometries. 2026-08-27
+
+Docker returned; §20's open row is closed.
+
+    yosys -p 'read_slang --top d_ai01_ss_slang_top_h4 \
+      inbox/d_ai01_second_source_fp16_gemm_array.sv \
+      inbox/d_ai01_second_source_slang_top_h4.sv'      -> Build succeeded: 0 errors, 0 warnings, exit 0
+    ... the h8 wrapper                                  -> Build succeeded: 0 errors, 0 warnings, exit 0
+
+Error partition per F56: **0 total, 0 internal**, at both heights. The pass
+criterion the author set — both invocations exit 0 and report `Build succeeded:
+0 errors` — is met, and a pass at one height alone would not have counted.
+
+**THE HARNESS ROW WAS NOT HIT, and it was answerable without running anything.**
+Their one unverified item was whether `read_slang` takes `--top` and the file
+list in that order. It does: `scripts/sim_candidate.sh` has invoked it as
+`read_slang --top $DUT_MOD$pkgs $rel` for the whole project's history. **The
+uncertainty was resolvable from the repo's own harness rather than by
+experiment** — the author could not see it, having no toolchain and no reason to
+read a script that is not part of the contract.
+
+**Their own probes, re-run to confirm the artifact is the one the report
+describes** — the delivered `2524a28d…` content hash matches none of the eight
+files nor their concatenation, so identity was established by behaviour instead:
+
+    clause_check                     59 checks, 0 failures   (as specified)
+    timing_probe H=4  d(k)           15, 11, 7, 3            (as specified)
+    timing_probe H=8  d(0)           31                      (as specified)
+    dfb                              16 / 32                 (as specified)
+    status delay, every k            2                       (as specified)
+
+`dfb = 16 / 32` and `d(0) = 15 / 31` are the contract's own numbers, post-CF-4.
+**Their implementation encodes the stated values correctly. D1 is a disagreement
+about what the number COUNTS, not about the number.**
+
+### What T5's result means for the clause
+
+T5 is unusually well specified — it names its error strings, its mechanism and
+its reproduced history — so the author's asymmetry holds: a failure here would
+have been evidence FOR the clause, and only one row (an error naming a construct
+T5 does not warn about) would have been evidence against it. **A clean pass is
+neither.** It is evidence about the artifact and says nothing new about T5, which
+is the correct and least interesting outcome.
+
+### Provenance discrepancy, recorded not resolved
+
+The artifact is committed at `afbcbdb`, working tree clean, git blob
+`448857a1aa50e30f4926a924ef70a7693c4c97f4`, sha256
+`0fa69cb63237c9fe2736ce76f55a78997baf10c540fc4b61242ffeff5b481a7c`. The hash
+`2524a28d63f7300…` quoted in routing matches none of the eight delivered files
+individually, nor their combined listing. The artifact is verifiably unmodified
+since delivery, so nothing here is blocked; but the quoted hash and the files do
+not correspond and that is unexplained.
