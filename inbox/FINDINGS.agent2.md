@@ -8985,6 +8985,16 @@ than the figure.
 
 ## I broke a passing check while porting a guard, and had no baseline to prove it
 
+NOT-FOR-CATALOG — this is a working note about an incident I caused and fixed in
+the same change, not a new finding. Its two transferable claims are already
+staged as catalog entries in their own right: the probe-ordering discipline is in
+the CONVENTIONS block "Verify a transformation with a probe written before it,
+and transform a copy", and the invisible-failure point is the unrun-exit-1 case of
+"A check that refuses looks exactly like a check that passes". What is left here
+is the incident record and one observation about my own compliance, which belongs
+in the working file rather than the shared catalog. Marked by me; the owner of
+FINDINGS.md should overrule if they read it as catalog-worthy.
+
 Porting the set guard to ten tasks broke **v_ai02**. Its 5c went from exit 0 with
 22 of 22 to exit 1, dying at `n_anchor: unbound variable`.
 
