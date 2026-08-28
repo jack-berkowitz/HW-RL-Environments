@@ -7075,12 +7075,23 @@ Reading it surfaced two rows, both d_ca05:
     2026-08-27T23:14:24Z  claude.sv                 loops=1   0/1
     2026-08-28T02:20:48Z  miss_handler_arb_ref.sv   loops=1   1/1
 
-**`d_ca05/claude` is recorded as failing correctness on a run whose verdicts are
-artefacts.** The reference passes on the same footing, which is the part that
-makes it invisible: a task where the oracle passes looks healthy, and nothing
-distinguishes "this submission is wrong" from "this apparatus cannot tell".
-A model was carrying a correctness failure the harness is not entitled to
-assert.
+**CORRECTED, and the correction reverses the conclusion.** This first read
+`d_ca05/claude`'s 0/1 as a verdict the apparatus could not stand behind. That
+conflated two different Verilator messages. UNOPTFLAT reports a circular
+combinational path that Verilator ITERATES to settle — it reaches the fixed
+point, which is the value any correct simulator reaches. The unscorable case is
+the model failing to converge, a different message the harness never looked for:
+`CONVERGE` appeared zero times in it.
+
+Measured: d_ca05/claude ran with **4 UNOPTFLAT warnings and 0 convergence
+failures**. Its 0/1 is a real result — `p0 grants: got 30, the anchor gives 20`
+is an arbitration-fairness difference. Withholding it would have discarded a
+correct measurement and credited a submission that genuinely differs from the
+anchor.
+
+The field was still worth reading; what was wrong was the conclusion drawn from
+it. `nonconverged_configs` is now recorded separately, and it is the one that
+withholds.
 
 Third instance of F91 in one function, after `configs_no_verdict` and
 `expected_verdict` — all three written, carried on every record, read by

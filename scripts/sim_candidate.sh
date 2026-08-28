@@ -506,6 +506,19 @@ run_one() {
       # reports as ALWCOMBORDER ("Always_comb variable driven after use"). A
       # constructed instance of A2's exact hazard produced zero UNOPTFLAT.
       # UNOPT and UNOPTFLAT cover the shapes it does name that way.
+      # UNOPTFLAT IS NOT A CONVERGENCE FAILURE, and treating it as one
+      # withheld a real result. Verilator reports UNOPTFLAT when a signal has a
+      # circular combinational path: it evaluates it CORRECTLY by iterating to a
+      # fixed point, just more slowly. The unscorable case is CONVERGE -- the
+      # model failing to settle within --converge-limit -- and that is a
+      # different message this harness never looked for.
+      #
+      # d_ca05/claude ran with 4 UNOPTFLAT warnings and ZERO convergence
+      # failures, and its 0/1 was reported as an artefact on that basis. It is
+      # a real result: "p0 grants: got 30, the anchor gives 20" is an
+      # arbitration difference, and a converged fixed point is the same value
+      # any correct simulator reaches.
+      NCONV=$(printf '%s\n' "$cerr$out" | grep -cE 'CONVERGE|Verilated model didn.t converge')
       NLOOP=$(printf '%s\n' "$cerr" | grep -cE 'UNOPTFLAT|ALWCOMBORDER|%Warning-UNOPT\b')
       if [ "${NLOOP:-0}" -gt 0 ]; then
         # TO STDERR, BECAUSE run_one's STDOUT IS ITS RETURN VALUE. This function
@@ -520,7 +533,7 @@ run_one() {
         # line built beside comb_loop_configs. This stays as per-config detail for
         # a human watching, on the stream that is not load-bearing.
         printf '%-26s %-9s %s\n' "$name" "LOOP" \
-          "combinational-loop warning x$NLOOP in cfg '${cfg:-default}' (UNOPTFLAT/ALWCOMBORDER) -- verdicts from this run are settle-order artefacts, not design results" >&2
+          "combinational-loop warning x$NLOOP in cfg '${cfg:-default}' (UNOPTFLAT/ALWCOMBORDER) -- Verilator iterated to settle these; the verdict stands unless a CONVERGE failure is also reported" >&2
         # THE INCREMENT THAT USED TO BE HERE KILLED THE DETECTOR IT FED.
         # `LOOPSEEN=$((LOOPSEEN+1))` sat on this line. LOOPSEEN is unset in this
         # scope -- it is assigned only in the CALLER, from the file below -- and
@@ -562,6 +575,9 @@ run_one() {
         echo "$NWARN" >> "$RAW_DIR/_warn_counts"
         [ -n "$WCLASSES" ] && echo "$WCLASSES" >> "$RAW_DIR/_warn_classes"
         [ "${NLOOP:-0}" -gt 0 ] && echo 1 >> "$RAW_DIR/_unoptflat"
+        # MARKER FILE, NOT A VARIABLE, for the same reason _unoptflat is one:
+        # this runs in a subshell and an increment here would be lost.
+        [ "${NCONV:-0}" -gt 0 ] && echo 1 >> "$RAW_DIR/_nonconverged"
       fi
     fi
     printf '%s\n' "$out" > "$RAW_DIR/${tag}.txt"
@@ -939,6 +955,7 @@ for cand in "${CANDS[@]}"; do
   # stderr works because cat is a command, not a redirect.
   WARNCLASSES="$(cat "$RAW_DIR/_warn_classes" 2>/dev/null | tr ',' '\n' | grep -v '^$' | sort -u | paste -sd, -)"
   LOOPSEEN=$(grep -c . "$RAW_DIR/_unoptflat" 2>/dev/null || echo 0)
+  CONVSEEN=$(grep -c . "$RAW_DIR/_nonconverged" 2>/dev/null || echo 0)
   NBUILT=$(grep -c . "$RAW_DIR/_warn_counts" 2>/dev/null || echo 0)
   NNOBUILD=$(grep -c . "$RAW_DIR/_nobuild" 2>/dev/null || echo 0)
   if [ "${NBUILT:-0}" -eq 0 ]; then
@@ -948,7 +965,7 @@ for cand in "${CANDS[@]}"; do
       "${WARNTOTAL:-0}" "${NBUILT}" \
       "$([ "${NNOBUILD:-0}" -gt 0 ] && echo ", ${NNOBUILD} did NOT build")" \
       "${WARNCLASSES:+ classes=$WARNCLASSES}" \
-      "$([ "${LOOPSEEN:-0}" -gt 0 ] && echo "  *** COMBINATIONAL LOOP warning in ${LOOPSEEN} config(s) ***")"
+      "$([ "${LOOPSEEN:-0}" -gt 0 ] && echo "  *** COMBINATIONAL LOOP warning in ${LOOPSEEN} config(s) -- Verilator ITERATED TO SETTLE these; the verdict stands ***")$([ "${CONVSEEN:-0}" -gt 0 ] && echo "  *** DID NOT CONVERGE in ${CONVSEEN} config(s) -- NO FIXED POINT REACHED, verdict unscorable (rule 23) ***")"
   fi
   tt="$(python3 "$REPO/scripts/task_text_hash.py" "$TASK_DIR" 2>/dev/null | head -1)"
   # THE EXPECTED VERDICT TRAVELS WITH THE RECORD, read from the task's own
@@ -974,6 +991,7 @@ for cand in "${CANDS[@]}"; do
         "compile_warnings=${WARNTOTAL:-0}" \
         "compile_warning_classes=${WARNCLASSES:-}" \
         "comb_loop_configs=${LOOPSEEN:-0}" \
+        "nonconverged_configs=${CONVSEEN:-0}" \
         "compile_configs_built=${NBUILT:-0}" \
         "compile_configs_failed=${NNOBUILD:-0}" \
         "$RAW_DIR")"; then
