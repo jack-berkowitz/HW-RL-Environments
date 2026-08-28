@@ -32,6 +32,7 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mutant_evidence import mutants_for   # noqa: E402
+import _record_valid as _RV              # noqa: E402
 
 
 def evidence_note(task_dir):
@@ -169,12 +170,22 @@ CORRECTNESS_FAILURES = {
 
 
 def load_records():
+    """Every run record EXCEPT the explicitly invalidated ones.
+
+    The invalidated* fields were written and read by nothing. Skipping here is
+    safe today only because recency already masks the one such record -- see
+    _record_valid.py. Reading the flag makes that a property of the code rather
+    than of the timestamps.
+    """
     out = []
     for f in sorted(glob.glob(os.path.join(REPO, "runs", "*", "*.json"))):
         try:
-            out.append(json.load(open(f)))
+            r = json.load(open(f))
         except Exception:
-            pass
+            continue
+        if _RV.is_invalidated(r):
+            continue
+        out.append(r)
     return out
 
 
@@ -768,6 +779,31 @@ def main():
                 # non-zero value, the newest from 2026-08-27, so this is live rather than
                 # historical. Rolling it into the FAIL count makes a run that could not be
                 # scored indistinguishable from one that was scored and lost.
+                # A COMBINATIONAL LOOP MAKES A VERDICT A SETTLE-ORDER ARTEFACT,
+                # and the field recording it was written on 104 records and read
+                # by nothing. Verilator's UNOPTFLAT/ALWCOMBORDER mean the
+                # simulator picked an evaluation order for a cycle the design
+                # does not resolve; the pass or fail that follows is a property
+                # of that choice, not of the hardware. d_ca05's reference passes
+                # 1/1 with six such warnings, and the PC flagged the run's
+                # verdicts as artefacts on exactly this ground.
+                #
+                # Third instance of F91 in this function after configs_no_verdict
+                # and expected_verdict: written, carried, never read. The count
+                # is surfaced rather than used to withhold, because the loop
+                # makes the verdict UNRELIABLE rather than wrong, and deciding
+                # which is the reader's job.
+                _cl = sim.get("comb_loop_configs")
+                try:
+                    _cl = int(_cl)
+                except (TypeError, ValueError):
+                    _cl = 0
+                if _cl:
+                    notes.append(f"**{_cl} configuration(s) simulated with a "
+                                 f"combinational loop** — Verilator chose a "
+                                 f"settle order for a cycle the design does not "
+                                 f"resolve, so these verdicts are artefacts of "
+                                 f"that choice rather than results")
                 _nv = sim.get("configs_no_verdict")
                 try:
                     _nv = int(_nv)

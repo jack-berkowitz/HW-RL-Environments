@@ -30,9 +30,9 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | init interval | slots | latency | area | power | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `6254d37b17244bb0`; the task text is now `203bc8a580aa44d4` |
-| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `6254d37b17244bb0`; the task text is now `203bc8a580aa44d4` |
-| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `6254d37b17244bb0`; the task text is now `203bc8a580aa44d4` |
+| `chat` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
+| `claude` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
+| `gemini` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
 | `sdp_requant_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `bcf0d0df4071c9ea`; the task text is now `203bc8a580aa44d4` |
 - **init interval** — clocks between accepts
 - **latency** — clocks from accept to result
@@ -79,9 +79,9 @@ capability, and nothing here establishes those weights.
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | area | power | notes |
 |---|---|---|---|---|---|---|---|---|
 | `chat` | **1/1 pass** | — | — | — | — | — | — |  |
-| `claude` | 0/1 FAIL | — | — | — | — | — | — |  |
+| `claude` | 0/1 FAIL | — | — | — | — | — | — | **1 configuration(s) simulated with a combinational loop** — Verilator chose a settle order for a cycle the design does not resolve, so these verdicts are artefacts of that choice rather than results |
 | `gemini` | 0/1 FAIL | — | — | — | — | — | — |  |
-| **reference** | **1/1 pass** | — | — | — | — | — | — |  |
+| **reference** | **1/1 pass** | — | — | — | — | — | — | **1 configuration(s) simulated with a combinational loop** — Verilator chose a settle order for a cycle the design does not resolve, so these verdicts are artefacts of that choice rather than results |
 
 ## d_dsp02 — FP32 fused multiply-add
 
