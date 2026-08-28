@@ -703,6 +703,25 @@ under-propagates to copies with a different purpose, **and over-propagates to
 things that merely look like copies.** Both are the same failure to ask what the
 number means where it sits.
 
+**A THIRD VARIANT, 2026-08-27, and it is the same defect once more.** Sweeping
+for F53's ascending-mask defect, I grepped for a mask literal appearing inline at
+the port connection and got zero hits — which I nearly reported as "no literal
+binding anywhere". Both real sites bind a `localparam` and pass its NAME to the
+port, so the pattern is split across two lines and no single-line match can see
+it. **A pattern sweep on a BINDING fails on an indirection, as a numeric sweep on
+a RELATION fails on a capitalisation.**
+
+> **Both are one defect: a sweep matching SURFACE FORM where the thing swept for
+> is a STRUCTURE.** A relation can be respelled, a binding can be indirected, and
+> in both cases the structure survives the edit that defeats the grep.
+
+**THE GENERAL REMEDY, and it is what worked here: sweep for the TYPE, not the
+form.** The two literal sites were found immediately by grepping for
+`fmt_logic_t` / `ifmt_logic_t` — because a declaration MUST NAME ITS TYPE, and
+the type is the one token no indirection can remove. The numeric case has the
+same shape with recomputation standing in for the type: the derived value must
+equal its formula however it is spelled.
+
 **THE EXECUTABLE HALF, and it is the part that makes the rule usable.** A numeric
 correction is swept by **recomputing every derived table and expression**, not by
 matching the constant's text. On this instance a text sweep for `D*(H-1)+2`
@@ -1143,7 +1162,50 @@ write-up, a design-difference refutation, and mutant non-equivalence evidence.
     a handoff item reading "still not landed ... not quotable" for a landed
       exemption whose results are now quotable
 
-**The direction is the result.** Not one of the nine overstated. A working record
+**RATE, as of 2026-08-28: three tasks, FOUR SURFACES, ~two dozen sites,
+direction unvaried.**
+d_ai01 twice, d_ca01 twelve, d_ai04 three. **d_ai04 is the instance that removes
+the obvious explanation.** The other two were tasks under active edit, where
+"the author forgot to update the record" is available. d_ai04's author had not
+touched it since writing those records: they were ACCURATE WHEN WRITTEN and the
+tree moved past them. Nobody failed to update anything — the record was right and
+then stopped being right without being touched.
+
+**AND TWO OF d_ai04'S THREE ARE ACTIONABLE-FALSE, WHICH IS A DIFFERENT THING FROM
+INCOMPLETE.** A stale record that understates does not merely fail to mention
+work; it **withholds permission for work already done and licenses work already
+finished.**
+
+    ppa_status          "no PPA may be reported yet"     while a PPA record
+                                                         sits in runs/
+    submissions_status  "no submission exists"           while three passing
+                                                         ones sit in candidates/
+
+The first tells a PPA owner not to record a number that exists. The second tells
+anyone reading it to solicit, and acting on it produces a fourth submission for
+nothing.
+
+**BOTH COSTS WERE CONFIRMED INDEPENDENTLY BY THE AGENT THEY POINT AT, the same
+day.** AGENT-PPA reports that they had already found d_ai04's three candidates
+passing and queued them for a PPA build — *"Had I read that field and believed
+it, I would have solicited a fourth submission for a task that already has three
+passing ones"* — and that the reference PPA record `ppa_status` denies is the one
+they built the README row from. This is not a projected consequence. It is a
+near-miss recorded by the party the false record was pointed at.
+
+**AND A FOURTH SURFACE, theirs, same class and a different mechanism entirely.**
+d_ai04 appeared NOWHERE on the README — no chart, no table, not even "not
+measured yet" — because the design-task list was a **hardcoded seven-task
+tuple**. A pin, a reference that closes timing and three passing candidates, and
+the surface that publishes the project simply had no slot for it. So the count is
+now: two `task.yaml` fields, one catalog row, and one report generator, **four
+independent records, none of which was wrong when written, all understating the
+same task.** Neither is a gap in a narrative — each is an instruction, and each is
+the wrong one. **That is the reason this class is worth a mechanical check rather
+than a habit of tidying:** the cost is not an out-of-date document, it is work
+not done and work done twice.
+
+**The direction is the result.** Not one of the twenty-plus overstated. A working record
 decays toward *understating* what exists, because the act that makes a claim
 stale — finishing the thing — is the act whose author has the least reason to
 return to where it was last described as unfinished. Overstatement requires
@@ -1429,6 +1491,26 @@ after writing up why it was wrong the first time. That is the argument for
 attaching the question to the ACT of sending a mechanism to a peer, rather than
 trusting recognition.
 
+**THE FIFTH INSTANCE ARRIVED INSIDE A MESSAGE ABOUT THE FOURTH, and it is the one
+that settles the placement.** A peer ran the commit gate once, saw one red row,
+concluded a second row had never been there, and used that to suggest I had
+routed a correction on a reading the gate did not support — **in a message whose
+subject was correcting me for confusing two objects.** The two runs were three
+minutes apart across a two-minute window in which the row existed and was fixed.
+
+**What makes this instance decisive is not the error, it is what was already in
+their hands.** My message to them contained a VERBATIM QUOTE of the gate output
+naming the row they concluded had never appeared. The refuting evidence was not
+merely available — it had been handed to them, in the message they were replying
+to, and reconciling it was reading rather than measuring. Their own summary:
+*"Recognition was not just insufficient — I was actively writing about the
+failure mode while committing it."*
+
+So the control cannot be "notice that you are inferring". Both parties have now
+demonstrated that noticing runs concurrently with doing. It has to be a step
+attached to sending: **before transmitting a mechanism, reconcile it against any
+contrary evidence the recipient has already shown you.**
+
 **WIDENED BY AGENT-VERIF-A2, and their framing supersedes the title.** The three
 rows above are all mechanism-from-measurement, which is how I first filed it. That
 is a special case. The family is **a source that underdetermines, and a reader who
@@ -1522,3 +1604,54 @@ source that predicted its own divergences is a stronger instrument than one that
 merely produced them, and that strength lives in the shapes, not in the order.
 
 **Rules:** 24
+
+---
+
+### A gate that lives in a commit helper protects only the agents who use that helper
+
+**CO-OWNED with AGENT-VERIF-A2**, who made the disclosure and has seen and agreed
+this text. The observation is theirs; the framing is mine, at their request.
+
+> **A check enforced by a wrapper is opt-in per commit path. "The tree was green
+> when I committed" then means different things depending on which path an agent
+> used, and nothing in the output says which.**
+
+Three agents share this repository. Two commit through a helper that runs
+`check_linkage_tree.sh` and refuses on a non-zero exit. **The third commits
+through a temp index directly. There are no git hooks. Nothing has ever stopped
+them on a red tree.** Disclosed voluntarily by that agent, who has been running
+the gate by hand anyway.
+
+**Why this is worth an entry and not just a hook.** The gate has been treated all
+week as a property of the REPOSITORY — red anywhere blocks everyone, which is the
+argument that defeated path-scoping and was right. That argument assumed
+universal enforcement. **It is actually a property of a TOOL two of three agents
+happen to invoke.** Every "the gate held" and "I was blocked" this week is a
+statement about the helper, not the tree.
+
+**And the exemption is invisible from inside.** An agent using the helper cannot
+tell that another path exists, and an agent not using it sees no gate to be
+exempt from. Neither party can discover the asymmetry from their own experience —
+it took a voluntary disclosure.
+
+**THE DISCOVERY CHANNEL IS NARROWER THAN "SOMEONE SAYS SO", and this is the
+co-owner's correction to my framing.** They did not discover it either. They went
+looking for what the gate would do to their commit **only because a blocked agent
+told them a gate was blocking**, and found that nothing would. So it took the
+asymmetry being ACTIVELY FELT by one party and REPORTED to the other. An
+exemption that costs its holder nothing generates no occasion to look for it, and
+a cost paid by someone else is the only signal that reaches them. **That is not a
+channel any project can rely on**, and it is the practical argument for putting
+enforcement where it cannot be bypassed rather than for asking people to check.
+
+**The general form:** where a check is enforced by a wrapper rather than by the
+thing being protected, the enforcement boundary is the wrapper's user population,
+which is not written down anywhere and is not what the check's own documentation
+implies. Ask of any gate: *what would happen if someone did this the other way?*
+If the answer is "nothing", the gate is a convention with a good error message.
+
+**The fix is not to trust harder.** A pre-commit hook lives in the repository and
+applies to every path into it. Adding one to a shared repo is `scripts/`'s owner's
+call, and none of the three of us should do it unasked.
+
+**Rules:** 3, 24

@@ -133,3 +133,55 @@ of which came out by reading along four named items, in a 1300-line file. Parts 
 and 2 were run; Parts 3 and 4 are assessed against those ten and not measured.
 The honest figure is: **of the ten, Parts 1+2 caught seven, Part 3 would reach
 two more, Part 4 reaches the residue and my own instance above.** One task.
+
+
+---
+
+## UNEVALUABLE IS A THIRD OUTCOME, not an omission
+
+NOT-FOR-CATALOG — this file is a design proposal for a checker, not a catalog
+entry, and this section is a design decision inside it answering a question
+AGENT-PPA raised. Same marker-vocabulary gap as above: the entry is neither a
+finding to land nor a note to discard.
+
+Raised by AGENT-PPA before this becomes code, and it is the right question:
+bindings differ in cost. `submissions_status` binds to a directory listing and
+`ppa_status` to the existence of a file — both free. *"G1 records NOT YET SET"*
+binds to parsing a spec section, which is not.
+
+**Their objection is the one that matters: if the index admits only cheap
+bindings it covers the easy two-thirds and goes quiet on the rest, which is a
+green check over a subset nobody can enumerate.** That is the coverage illusion,
+and it is worse than no check, because a passing checker is read as coverage.
+
+**So the check reports THREE outcomes per claim, never two:**
+
+    AGREES        the binding was evaluated and matches the tree
+    DISAGREES     the binding was evaluated and does not match  -> the finding
+    UNEVALUABLE   the claim was recognised as a claim and its binding could not
+                  be evaluated -- with the REASON, and the claim's text
+
+**UNEVALUABLE is a first-class result and must appear in the summary line**, not
+in a log nobody reads: *"41 agree, 3 disagree, 12 unevaluable"*. A run reporting
+zero disagreements over 12 unevaluable claims has not established what a reader
+would take it to have established, and only the third number says so.
+
+**The line between the second and third outcomes is not difficulty, it is
+DETERMINACY.** A binding is evaluable when its answer does not depend on a
+judgement the checker would have to make. Parsing a spec section for "is the pin
+set" is not expensive — it is *ambiguous*, because the checker would have to
+decide what counts as set. That is the reason to refuse it, and it is a better
+reason than cost.
+
+**Which yields the design rule:** where a claim's binding is unevaluable, the fix
+is to give the claim a cheap binding rather than to give the checker a parser.
+`ppa_status` should not be prose a checker interprets; it should carry the
+command whose output it summarises. That is Part 4's bound negatives arriving
+from the other direction, and it is why the two parts belong in one check — Part
+3 finds the claims, Part 4 is what makes the hard ones evaluable, and UNEVALUABLE
+is the queue of claims waiting for a binding.
+
+**One consequence worth stating so it is not discovered later:** on the first run
+the UNEVALUABLE count will be large, because no existing record was written with
+a binding. That is not a failure of the check. It is the check reporting how much
+of the record is unverifiable, which is a measurement nobody currently has.

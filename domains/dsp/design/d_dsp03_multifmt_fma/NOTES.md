@@ -290,7 +290,7 @@ d_dsp01: F53's only symptom was one `WIDTHTRUNC` among 133 warnings, and this
 build emits **192 warnings including WIDTHTRUNC**. The noise is still there. The
 assertions are what make it non-load-bearing.
 
-### The residual risk, named and not fixed here
+### The residual risk: PRESENT AND UNFIXED, not absent
 
 The two literal sites have **no width assertion**, which is the second half of
 d_dsp03's fix. F53's own text says indexing alone breaks silently if the package
@@ -299,6 +299,23 @@ it hardcodes the position *and* the width. If `NUM_FP_FORMATS` ever moves off 9,
 `9'b101_000_000` misaligns silently and only an assertion would catch it.
 `v_dsp01` is REJECTED and unbuilt so nothing scored depends on it, and it is
 verification's territory: **reported, not edited.**
+
+**STATED AS UNFIXED RATHER THAN ABSENT, deliberately.** The sweep's conclusion is
+that F53 reaches nothing LIVE — not that every site is safe. Two sites carry the
+weaker construction today. If `v_dsp01` is ever resumed, or if either file is
+copied as a starting point for something that IS built, the defect arrives with
+it and the assertions that would catch it are not there. "Reaches nothing live"
+is a statement about the current build set and expires the moment that set
+changes.
+
+### And d_dsp03 is unblocked ON F53's GROUNDS ONLY
+
+F53 is closed for this task and is not what is holding it. **d_dsp03 still waits
+on Agent 1's vendored-anchor sweep, for an unrelated reason:** 2 of its 3 named
+files are recorded, with five search directories underneath whose coverage is
+poor. That is a provenance question about which bytes the anchor actually
+comprises, not a question about format masks. Do not read "F53 closed" as
+"d_dsp03 unblocked".
 
 ### And my first sweep missed both literal sites
 

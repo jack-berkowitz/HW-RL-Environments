@@ -8985,6 +8985,16 @@ than the figure.
 
 ## I broke a passing check while porting a guard, and had no baseline to prove it
 
+NOT-FOR-CATALOG — this is a working note about an incident I caused and fixed in
+the same change, not a new finding. Its two transferable claims are already
+staged as catalog entries in their own right: the probe-ordering discipline is in
+the CONVENTIONS block "Verify a transformation with a probe written before it,
+and transform a copy", and the invisible-failure point is the unrun-exit-1 case of
+"A check that refuses looks exactly like a check that passes". What is left here
+is the incident record and one observation about my own compliance, which belongs
+in the working file rather than the shared catalog. Marked by me; the owner of
+FINDINGS.md should overrule if they read it as catalog-worthy.
+
 Porting the set guard to ten tasks broke **v_ai02**. Its 5c went from exit 0 with
 22 of 22 to exit 1, dying at `n_anchor: unbound variable`.
 
@@ -9035,3 +9045,81 @@ Fixed by deriving the count from the verified set rather than restoring the raw
 grep — `n_anchor=$(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ')` — so the
 number printed comes from the set the guard just checked. Re-run: exit 0, 22 of
 22, 22 as-expected lines, identical to HEAD.
+
+## The rejections concentrate perfectly, and concentration does not tell you whose fault it is
+
+NOT-FOR-CATALOG until the causes below are resolved; the concentration measurement
+itself is solid and is the part worth reading now.
+
+Six submissions, three tasks, two per task, each pair written independently by a
+different vendor. Every pair fails the golden on **the same clause**:
+
+    task      submission   clause  message
+    v_ca03    chat         F1      "write address accepted while reset was low"
+    v_ca03    claude       F1      "AW handshake occurred while rst_ni was low"
+    v_ca06    chat         D6      "upstream R response does not implement
+                                    required error propagation"
+    v_ca06    claude       D6      "upstream R beat 1 resp=00, expected 10"
+    v_dsp02   chat         H2      "accepted operations did not all produce results"
+    v_dsp02   gemini       H2      "RESULT: FAIL (H2 - Unexpected result delivered)"
+
+**Three tasks, three clauses, 2 of 2 on each.** That is the concentration the
+discriminator was meant to find, and it is as clean as it could be.
+
+### But the three causes are not the same, and the clause id does not reveal which
+
+**v_ca06 is a SUBMISSION defect, and the spec anticipated it in writing.** D6
+constrains an upstream beat only by its OWN group and says so: *"Beats whose own
+group was error-free are unconstrained by this clause -- see L7."* L7 makes
+stickiness explicit latitude: *"Do not require either, in any direction."* And
+D6's measured note warns in the exact words of the failure: *"It is not 'all beats
+error', and a testbench that requires that rejects correct hardware."* Claude's
+message is `upstream R beat 1 resp=00, expected 10 (downstream error on beat 0)` —
+requiring the error to persist onto a beat whose own group was clean. **Both
+submissions did the one thing the spec names, warns about, and forbids.** Nothing
+is missing from the text.
+
+**v_dsp02 looks like a TEXT GAP.** H2 says only: *"A result is delivered on a
+rising clock edge where `out_valid_o && out_ready_i`, and results are delivered in
+the order the operations were accepted."* It fixes delivery and ordering and is
+**silent on the correspondence between operations accepted and results
+delivered.** Both submissions supplied that missing rule, and **supplied it in
+opposite directions** — chat requiring every accepted operation to produce a
+result, gemini rejecting a result it considered unexpected. Two independent
+readings of one silence, disagreeing about which way the obligation runs, is
+better evidence of ambiguity than either failure alone.
+
+**v_ca03 is UNRESOLVED, and my own measurement contradicts the submissions.**
+Both report AW/AR handshakes during reset. Probing the golden directly with valid
+held low:
+
+    during reset (rst_n=0):  s_awready=0   s_arready=0   s_wready=1
+
+AW and AR ready are LOW, so a handshake on those channels cannot occur however the
+master behaves. The submissions' specific claim is not reproduced by the golden's
+own signals, so the mechanism is not established and I am not calling it a task
+defect. What IS true: `s_wready` is parked high during reset, the spec nowhere
+states the AXI convention that a master must not assert valid before reset
+release, and the reference testbench's F1(a) block carries the reasoning in a
+SOURCE COMMENT rather than in the spec — *"a design that parks s_arready high
+while nothing is offered accepts nothing and is correct."* That reasoning is
+exactly what a submission would need and cannot see.
+
+### The methodological result, which is the transferable part
+
+**Concentration is necessary evidence and not sufficient.** The proposed
+discriminator — same clause across independent submissions — fired identically on
+all three tasks and the three causes are a submission defect, a probable text gap,
+and an unresolved contradiction. To separate them you must read the clause and
+probe the golden; the concentration only tells you *where* to do that.
+
+    what concentration proves      the failure is not idiosyncratic to one model
+    what it does NOT prove         that the task is at fault
+    v_ca06 is the counter-example  perfect concentration, spec explicitly correct,
+                                   and the warning is in the clause both ignored
+
+That also answers the ranking question from the other direction. v_ca06's two
+submissions killed 11/11 and 10/10 mutants while requiring behaviour their spec
+forbids in bold. **Fault detection and contract fidelity are not merely different
+metrics — here they are anti-correlated**, because the same over-strict assertion
+that rejects the golden also catches every mutant that perturbs that signal.
