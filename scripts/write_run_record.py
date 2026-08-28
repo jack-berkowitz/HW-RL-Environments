@@ -233,6 +233,38 @@ def main():
         json.dump(rec, fh, indent=2, sort_keys=True)
     print(os.path.relpath(path, REPO))
 
+    # REGENERATE THE DERIVED TABLES HERE, because the alternative red-gates the
+    # repository every time a build SUCCEEDS.
+    #
+    # Every other red gate this week came from an omission -- a missing footer,
+    # an undisposed inbox entry, a missing witness. This one came from work
+    # finishing: a PPA record lands, README.md no longer matches the records,
+    # make_readme_tables --check fails, and every agent is blocked until someone
+    # remembers to run a generator. AGENT-DESIGN-43a92055 hit exactly that on
+    # d_ai04/chat and correctly declined to publish someone else's number to
+    # clear it.
+    #
+    # Coupling "nobody can commit" to "someone's build worked" is a worse
+    # failure mode than coupling it to someone's mistake, and it has a different
+    # remedy: make the generator part of recording rather than a step to
+    # remember.
+    #
+    # BEST-EFFORT, NEVER FATAL. This runs on build hosts mid-queue; a generator
+    # problem must not fail a build that already produced its result. A failure
+    # here leaves the gate red, which is the status quo it improves on, and says
+    # so on stderr rather than silently.
+    try:
+        import subprocess
+        r = subprocess.run([sys.executable,
+                            os.path.join(REPO, "scripts", "make_readme_tables.py")],
+                           capture_output=True, text=True, timeout=180)
+        if r.returncode != 0:
+            print(f"note: README tables not regenerated (rc={r.returncode}); "
+                  f"run scripts/make_readme_tables.py", file=sys.stderr)
+    except Exception as e:
+        print(f"note: README tables not regenerated ({e}); "
+              f"run scripts/make_readme_tables.py", file=sys.stderr)
+
 
 if __name__ == "__main__":
     main()

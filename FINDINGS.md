@@ -7120,3 +7120,50 @@ regenerating the tables confirms it changes no current output — which is what 
 correct guard looks like on the day it lands.
 
 **Rules:** 19, 20, 23
+
+## F113. A gate that goes red when work succeeds
+
+`make_readme_tables --check` is wired into the commit gate, so when a PPA record
+lands the README no longer matches the records and **every agent is blocked
+until someone remembers to run a generator**. AGENT-DESIGN-43a92055 hit this on
+d_ai04/chat, ran the generator into a scratch copy to size the change, found it
+altered exactly one row, and declined to publish another session's PPA number to
+unblock itself.
+
+Every other red gate this week was triggered by an omission — a missing rule
+footer, an undisposed inbox entry, a missing witness. **This one was triggered
+by a build finishing.** Coupling "nobody can commit" to "someone's work
+succeeded" is a different failure mode from coupling it to someone's mistake,
+and it has a different remedy: the generator belongs in the act of RECORDING a
+result, not in a step someone must remember afterwards.
+
+`write_run_record.py` now regenerates after writing, best-effort and never
+fatal — it runs on build hosts mid-queue, and a generator problem must not fail
+a build that already produced its result. A failure leaves the gate red, which
+is the status quo it improves on, and says so.
+
+### Changing a hash function mid-run partitions records that are identical
+
+The same d_ai04 round produced two `build_config_hash` values at one pin, which
+reads as a rule-17 comparability failure:
+
+    reference  2026-08-28T19:40  83088234b2c846ea  area 179943  wns 1.91211
+    chat       2026-08-28T19:57  e3b4cfd4d327671f  area 174421  wns 2.74306
+    claude     2026-08-28T20:12  e3b4cfd4d327671f  area 158486  wns 5.88599
+
+**It is an artefact of my own fix landing between builds.** The reference was
+built while `build_config_hash` still inherited the caller's environment, so
+`ABC_CLOCK_PERIOD_IN_PS` resolved to 33750; the candidates were built after the
+scrub, so it resolved to 40000 from the SDC. The period actually used was 33750
+in both — the record's own note says so, and `run_orfs_build.sh` passes it on
+the make line.
+
+The two reference builds are the control: **identical area 179,943 and identical
+WNS 1.91211 across the two hashes.** Same silicon, different recorded field.
+
+Fixing an instrument mid-flight makes the records on either side of the fix
+incomparable *by the instrument*, even when the thing measured did not change.
+The fix was still right; what it needed was a rebuild of the same round's
+reference on the far side of it.
+
+**Rules:** 17, 19, 24

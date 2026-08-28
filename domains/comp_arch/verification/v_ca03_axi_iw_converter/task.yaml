@@ -255,6 +255,53 @@ scoring:
   unpromised_reliance: must PASS every conformant perturbation
   fault_detection: reported PER MUTANT, never as a rate
 
+f1_narrowing_boundary:
+  date: 2026-08-28
+  task_text_hash_before: 18b1288587d371a8
+  task_text_hash_after:  5e1adba7cce23c3a
+  what_changed: >
+    F1 narrowed, latitude 7 added, and the reference testbench given a reset
+    window it actually offers into. Spec, probe/PASTE.md and tb move together;
+    landing any one alone leaves the others asserting something they cannot
+    support.
+  why: >
+    F1 read "no request is accepted and no response is presented" while rst_ni is
+    low, and BOTH reference implementations violated it. Offered a request during
+    reset, the golden and the independent dut2 each completed five AW, five AR
+    and five W handshakes in five reset cycles, because neither gates ready.
+    Measured directly, not inferred.
+
+    The task could not see this. The reference's F1(a) block checked
+    s_arvalid && s_arready and the AW and W equivalents -- correctly written --
+    but instrumented on its own stimulus it read: reset_cycles=8, aw_offered=0,
+    ar_offered=0, w_offered=0. All three handshake halves were unreachable by
+    construction, so a clause the golden actually violated had a check that could
+    never fire.
+  what_it_cost: >
+    Two submissions, v_ca03/chat and v_ca03/claude, both at 11 of 11 mutants,
+    were scored REJECTS CORRECT HARDWARE for detecting a real violation of the
+    clause as written. UNDER THE TEXT THEY WERE GIVEN THEY WERE RIGHT. Under the
+    narrowed text they check a latitude and are wrong. Neither reading supports
+    the verdict they received, and any re-scoring should say which text it is
+    scoring against -- they answered 18b1288587d371a8, not 5e1adba7cce23c3a.
+  verified: >
+    Probe written BEFORE the change and re-run UNMODIFIED after. 5c and the
+    eleven rule-21 witnesses are byte-identical across it: golden PASS, dut2 PASS,
+    five conformant perturbations PASS, 11 of 11 mutants killed on their own
+    clauses, 24 of 24 checks. The only differences are in the two F1 negative
+    controls, which now fail MORE -- 8 to 16 and 1 to 3 -- because the run
+    contains another reset window for them to misbehave in, and both still fail
+    on F1 ALONE.
+
+    An intermediate version had f1_answers_across_reset firing "C2 F1" instead of
+    "F1". That was the control reporting that attribution had moved: the new
+    window lacked the C2 precedence F1(c)'s window has. Fixed at all three
+    response branches; the control went back to F1 alone.
+  anti_vacuity: >
+    "[coverage] F1(b): offered on 6 cycle(s) while rst_ni was low, of which the
+    design ACCEPTED 6." A FLOOR fails the run if that count is zero, so the
+    window cannot go unexercised again without the run saying so.
+
 e1_boundary:
   date: 2026-08-25
   task_text_hash_before: a04f965ad7552b22

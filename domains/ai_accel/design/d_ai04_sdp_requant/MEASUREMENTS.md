@@ -285,3 +285,60 @@ re-solicit against `203bc8a580aa44d4` → score → PPA at 33.75 ns → then rea
 spread. Building PPA on the current three first is not wasted (it is a reference
 point and Agent 1 has it queued) but it cannot answer the floor question on its
 own, and I should not have offered it as though it could.
+
+## The floor evidence, updated: two of three built, and there IS spread. 2026-08-28
+
+| | area | power | WNS | vs reference |
+|---|---|---|---|---|
+| reference | 179,943 | 230.0 mW | +1.912 | — |
+| `chat` | 174,421 | 230.0 mW | +2.743 | **0.97x** |
+| `claude` | **158,486** | **181.0 mW** | **+5.886** | **0.88x** |
+| `gemini` | pending | | | |
+
+**Comparability was checked before these were published, not after.** Two
+`build_config_hash` values appear at this pin because the hash function was fixed
+mid-round; the control is that the two reference builds report **identical area
+179,943 and identical WNS 1.91211 across both hashes** — same silicon, different
+recorded field. Filed by the PPA owner as F113.
+
+### Read against the archived precedent, clause by clause
+
+The v2 archive retired three tasks with a three-way decomposition, and its
+finding about `nw_d01` was: *"no off-spec configuration, a real capability gap
+… and **essentially no genuine optimisation** — the area figures disagree in
+sign."*
+
+    off-spec configuration    NONE here -- all three pass 1/1
+    capability gap            UNMEASURABLE here, not absent: d_ai04 has no
+                              capability parameter to sweep, so the axis the
+                              archive used does not exist on this task
+    genuine optimisation      PRESENT AND SUBSTANTIAL -- 12% on area between the
+                              two candidates, 21% on power, 3.1 ns on slack, and
+                              the area figures AGREE IN SIGN, both under the
+                              reference
+
+**That third row is exactly what the archived tasks lacked**, and it is the
+strongest evidence available so far that d_ai04 is not at the floor.
+
+### But this solicitation cannot produce an archive verdict either way
+
+The caveat stands and now cuts sharply:
+
+* **SPREAD is informative**, and there is spread. It says three models given the
+  same contract produced materially different designs.
+* **ABSENCE of spread would NOT be informative**, because all three were told the
+  frequency target was unknown — so a tight cluster cannot separate "the task is
+  easy" from "nobody was optimising toward anything".
+
+**Absence is the outcome that triggers archiving.** So the one conclusion this
+solicitation could have supported is the one it cannot support, and the one it
+does support — spread — argues against archiving. `gemini` clustering tightly
+with the others would not restore the archive case; it would only fail to add to
+the case against.
+
+**CONCLUSION: on the evidence the floor question is no longer open in both
+directions.** It is open toward "keep", and closed toward "archive" for as long
+as the only PPA numbers come from a targetless solicitation. A verdict that means
+something needs the re-solicitation the spec already calls for — against
+`203bc8a580aa44d4`, with G1 stating 33.75 ns — and these three become the
+baseline it is measured against rather than the evidence itself.

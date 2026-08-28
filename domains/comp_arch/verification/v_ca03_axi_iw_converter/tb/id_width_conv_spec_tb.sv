@@ -69,21 +69,51 @@ module id_width_conv_tb;
   //     purpose and cannot reuse an existing one: their gate is the thing being
   //     removed.
   //
-  //     "No request is accepted" is a statement about HANDSHAKES, not about ready.
-  //     A design that parks s_arready high while nothing is offered accepts
-  //     nothing and is correct; testing ready alone would reject it (rule 24).
+  //     THE HANDSHAKE CHECKS THAT USED TO LIVE HERE WERE REMOVED 2026-08-28 and
+  //     the reason is worth keeping. They read `s_arvalid && s_arready` etc. and
+  //     were correct against F1's old wording -- "no request is accepted". That
+  //     wording was wrong: BOTH reference implementations accept during reset,
+  //     fifteen handshakes across five cycles, because neither gates ready. F1 is
+  //     now narrowed to responses and discard, with ready named as latitude 7, so
+  //     these three checks would REJECT CORRECT HARDWARE and are gone.
+  //
+  //     THEY WERE ALSO UNREACHABLE, which is how the golden's violation of the
+  //     old wording survived. Instrumented on this stimulus: 8 reset cycles, 0
+  //     AW offered, 0 AR offered, 0 W offered. A correctly written check for a
+  //     clause the golden actually violated, kept silent by stimulus that never
+  //     exercised it. The F1(b) phase below exists so that can no longer happen.
+  //
+  //     What remains is the half F1 still requires and which needs no offer to
+  //     observe: a response presented while rst_ni is low.
   always @(posedge clk) if (!rst_n) begin
-    if (s_arvalid && s_arready)
-      fail("F1", $sformatf("AR handshake completed while rst_ni was low (id %0d)", s_arid));
-    if (s_awvalid && s_awready)
-      fail("F1", $sformatf("AW handshake completed while rst_ni was low (id %0d)", s_awid));
-    if (s_wvalid && s_wready)
-      fail("F1", "W handshake completed while rst_ni was low");
     if (s_rvalid)
       fail("F1", $sformatf("s_rvalid asserted while rst_ni was low (id %0d)", s_rid));
     if (s_bvalid)
       fail("F1", $sformatf("s_bvalid asserted while rst_ni was low (id %0d)", s_bid));
   end
+
+  // (b) ANYTHING ACCEPTED WHILE rst_ni IS LOW IS DISCARDED.
+  //     F1's surviving request-side obligation. It cannot be observed without
+  //     OFFERING during reset, which is exactly what this testbench never did.
+  //     cov_f1b_offered is the anti-vacuity evidence: if it is zero the phase did
+  //     not run and the FLOOR below fails rather than the run passing quietly.
+  int unsigned f1b_win = 0;
+  int unsigned cov_f1b_offered = 0, cov_f1b_accepted = 0;
+  always @(posedge clk) begin
+    if (!rst_n) begin
+      if (s_arvalid || s_awvalid || s_wvalid) cov_f1b_offered <= cov_f1b_offered + 1;
+      if ((s_arvalid && s_arready) || (s_awvalid && s_awready) || (s_wvalid && s_wready))
+        cov_f1b_accepted <= cov_f1b_accepted + 1;
+    end else if (f1b_win != 0) begin
+      f1b_win <= f1b_win - 1;
+    end
+  end
+  // The failure itself is raised at the three RESPONSE branches below, not here,
+  // so that F1 takes precedence over C2 in this window exactly as it does in
+  // F1(c)'s. Reporting it here as well double-counted, and reporting it ONLY here
+  // left C2 to claim the response first -- measured: f1_answers_across_reset went
+  // from "F1 alone" to "C2 F1", which is the negative control telling me the
+  // attribution had moved.
 
   // (c) NOTHING OUTSTANDING BEFORE A RESET ANSWERS AFTER IT.
   //     The model is CLEARED on the same edge that resets the design -- live_r,
@@ -406,7 +436,9 @@ module id_width_conv_tb;
       // ---- every read data BEAT, not only the last -----------------------
       if (s_rvalid && s_rready) begin
         n_rbeat++;
-        if (surv_win != 0 && pre_rst_r[s_rid]) begin
+        if (f1b_win != 0) begin
+          fail("F1", $sformatf("read beat for slave id %0d arrived %0d cycle(s) after reset release; nothing was outstanding before that reset and nothing has been offered since, so it answers work accepted WHILE rst_ni was low, which F1 requires discarded", s_rid, SURV_WINDOW - f1b_win));
+        end else if (surv_win != 0 && pre_rst_r[s_rid]) begin
           // F1 TAKES PRECEDENCE OVER C2 HERE. This id was outstanding when
           // rst_ni went low and the model was cleared on the same edge, so C2's
           // test below is true of it and says the wrong thing: the converter did
@@ -450,13 +482,17 @@ module id_width_conv_tb;
       if (s_bvalid && s_bready) begin
         n_b++;
         // F1 TAKES PRECEDENCE OVER C2 HERE, for the reason given at the read site.
-        if (surv_win != 0 && pre_rst_w[s_bid])
+        if (f1b_win != 0)
+          fail("F1", $sformatf("write response for slave id %0d arrived %0d cycle(s) after reset release; it answers work accepted WHILE rst_ni was low, which F1 requires discarded", s_bid, SURV_WINDOW - f1b_win));
+        else if (surv_win != 0 && pre_rst_w[s_bid])
           fail("F1", $sformatf("write response for slave id %0d arrived %0d cycle(s) after reset release; it was outstanding before the reset and F1 requires it discarded", s_bid, SURV_WINDOW - surv_win));
         else if (live_w[s_bid] == 0)
           fail("C2", $sformatf("write response for slave id %0d with none outstanding", s_bid));
         else
           live_w[s_bid] <= live_w[s_bid] - 1;
-        if (surv_win != 0 && pre_rst_w[s_bid]) begin
+        if (f1b_win != 0) begin
+          fail("F1", $sformatf("write response for slave id %0d arrived %0d cycle(s) after reset release; it answers work accepted WHILE rst_ni was low, which F1 requires discarded", s_bid, SURV_WINDOW - f1b_win));
+        end else if (surv_win != 0 && pre_rst_w[s_bid]) begin
           // reported under F1 above; this C2 test is TRUE of a survivor and
           // says the wrong thing about it, so it does not run for one.
         end else if (waddr_q[s_bid].size() == 0)
@@ -720,6 +756,32 @@ module id_width_conv_tb;
     if (!acc)
       fail("F1", "no request was accepted after reset release -- the table is required to be empty");
     drain(200);
+
+    // ---- F1(b): OFFER WHILE rst_ni IS LOW ---------------------------------
+    // The design is quiescent here: F1(c) drained for 200 cycles above. So any
+    // response inside the window below can only answer work accepted during the
+    // reset, which is what makes "no response at all" the right check.
+    phase = "F1(b): offered while rst_ni low";
+    @(negedge clk) rst_n = 1'b0;
+    @(negedge clk);
+    s_arvalid = 1; s_arid = 3; s_araddr = 32'h7000; s_arlen = 0;
+    s_awvalid = 1; s_awid = 4; s_awaddr = 32'h7100; s_awlen = 0;
+    s_wvalid  = 1; s_wdata = 32'hF00D_F00D; s_wstrb = '1; s_wlast = 1;
+    repeat (6) @(posedge clk);
+    @(negedge clk); s_arvalid = 0; s_awvalid = 0; s_wvalid = 0; s_wlast = 0;
+    @(negedge clk) rst_n = 1'b1;
+    f1b_win = SURV_WINDOW;
+    drain(SURV_WINDOW + 8);
+    // and the design must still be usable after that reset too
+    offer_ar(0, 400, acc, took, 0);
+    if (!acc)
+      fail("F1", "no request was accepted after the F1(b) reset release -- the table is required to be empty");
+    drain(200);
+
+    if (cov_f1b_offered == 0)
+      fail("FLOOR", "F1(b) offered nothing while rst_ni was low -- F1's response and discard halves went unexercised in the reset window, which is the exact gap that hid a golden violating this clause");
+    $display("  [coverage] F1(b): offered on %0d cycle(s) while rst_ni was low, of which the design ACCEPTED %0d -- acceptance is latitude 7, the discard is what F1 requires",
+             cov_f1b_offered, cov_f1b_accepted);
 
     if (cov_pre_rst_r == 0 && cov_pre_rst_w == 0)
       fail("FLOOR", "the reset phase dropped rst_ni with NOTHING outstanding -- F1's discard requirement was not exercised");

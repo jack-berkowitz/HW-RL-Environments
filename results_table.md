@@ -30,8 +30,8 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | init interval | slots | latency | area | power | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
-| `claude` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
+| `chat` | **1/1 pass** | 174,421 | 230.0 | not swept | — | — | — | — | — |  |
+| `claude` | **1/1 pass** | 158,486 | 181.0 | not swept | — | — | — | — | — |  |
 | `gemini` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
 | **reference** | **1/1 pass** | 179,943 | 230.0 | 44.4 | — | — | — | — | — |  |
 - **init interval** — clocks between accepts
