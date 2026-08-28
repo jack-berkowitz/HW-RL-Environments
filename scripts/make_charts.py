@@ -416,20 +416,20 @@ def sync_readme_alt():
 # The reference line at 1.0 is the anchor: below it is smaller than the
 # reference, above it is larger. Absolute µm² is in results_table.md; a ratio is
 # what makes five tasks of different sizes readable on one axis.
-DESIGN_PINS = [("d_ca04", "4.25", "async CDC FIFO"),
-               ("d_nw03", "4.25", "stream switch"),
-               ("d_dsp02", "19.25", "FP32 FMA"),
-               ("d_dsp03", "70.5", "multi-format FMA"),
-               ("d_nw01", "8.0", "AXI4 crossbar"),
-               ("d_ca01", "15.0", "non-blocking D-cache"),
-               ("d_ca03", "12.5", "Sv39 MMU")]
+# DERIVED FROM DISK, NOT LISTED HERE -- see make_readme_tables.design_pins for
+# the full argument. A hardcoded seven-task tuple made d_ai04 invisible on every
+# chart despite having a pin and a reference build, and it is the third instance
+# of this shape in the repo.
+def _design_pins():
+    import make_readme_tables as _M
+    return _M.design_pins()
 DESIGN_MODELS = ("chat", "claude", "gemini")
 
 
 def design_rows():
     """[(task, label, pin, ref_area, [(model, ratio|None, note)])] for finished tasks."""
     out = []
-    for short, pin, label in DESIGN_PINS:
+    for short, pin, label in _design_pins():
         dirs = glob.glob(os.path.join(REPO, "domains", "*", "design", short + "_*"))
         if not dirs:
             continue
@@ -654,7 +654,7 @@ def _metric_value(task, label, key):
 
 def capability_rows():
     out = []
-    for short, pin, label in DESIGN_PINS:
+    for short, pin, label in _design_pins():
         dirs = glob.glob(os.path.join(REPO, "domains", "*", "design", short + "_*"))
         if not dirs:
             continue

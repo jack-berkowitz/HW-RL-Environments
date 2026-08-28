@@ -32,16 +32,69 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import report_table as RT  # noqa: E402
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 README = os.path.join(REPO, "README.md")
 
-DESIGN_PINS = [("d_ca04", "4.25", "asynchronous CDC FIFO"),
-               ("d_nw03", "4.25", "output-queued stream switch"),
-               ("d_dsp02", "19.25", "FP32 fused multiply-add"),
-               ("d_dsp03", "70.5", "multi-format FMA"),
-               ("d_nw01", "8.0", "AXI4 crossbar"),
-               ("d_ca01", "15.0", "non-blocking data cache"),
-               ("d_ca03", "12.5", "RISC-V Sv39 MMU")]
+def design_pins():
+    """[(short, pin, label)] for every design task WITH a pin, derived from disk.
+
+    THIS WAS A HARDCODED SEVEN-TASK TUPLE, and it is the third instance of that
+    defect in this repo -- report_table.py's own comments record the previous
+    two, where hand-written maps covered 3 of 8 verification tasks and silently
+    dropped claude.sv. The failure mode is identical each time: a task absent
+    from the tuple does not render as missing, it does not render at all.
+
+    d_ai04 was the live instance. It has a spec pin of 33.75 ns, a reference
+    that closed timing at it, and three candidates passing 1/1 -- and it
+    appeared NOWHERE on the README. Not in a chart, not in a table, not in "not
+    measured yet". A reader had no way to learn the task existed. d_ai01 was
+    half-visible in a worse way: listed under "not measured yet" saying its
+    sweep "is queued", when the sweep had run on 2026-08-26 and its reference
+    is recorded at 16.75 ns.
+
+    The pin comes from the spec, which is where the pin rule says it lives, so
+    a task joins this list by having one rather than by being named here.
+    """
+    out = []
+    for d in sorted(glob.glob(os.path.join(REPO, "domains", "*", "design", "d_*"))):
+        task = os.path.basename(d)
+        short = "_".join(task.split("_")[:2])
+        try:
+            pin = RT._spec_pin(task)
+        except Exception:
+            pin = None
+        if pin is None:
+            continue
+        out.append((short, f"{float(pin):g}", _label(d, short)))
+    return out
+
+
+def _label(task_dir, short):
+    y = os.path.join(task_dir, "task.yaml")
+    if os.path.isfile(y):
+        m = re.search(r"^[ \t]*title:[ \t]*(.+)$",
+                      open(y, encoding="utf-8", errors="replace").read(), re.M)
+        if m:
+            return m.group(1).strip().strip("\"'").split(" -- ")[0]
+    return short
+
+
+def unpinned():
+    """[(short, reason)] -- tasks with NO pin. Absence rendered as absence."""
+    out = []
+    for d in sorted(glob.glob(os.path.join(REPO, "domains", "*", "design", "d_*"))):
+        task = os.path.basename(d)
+        short = "_".join(task.split("_")[:2])
+        try:
+            if RT._spec_pin(task) is not None:
+                continue
+        except Exception:
+            pass
+        out.append((short, _label(d, short)))
+    return out
 MODELS = ("chat", "claude", "gemini")
 DISPLAY = {"chat": "ChatGPT 5.6 Sol", "claude": "Claude Opus 5",
            "gemini": "Gemini 3.1 Pro"}
@@ -91,7 +144,7 @@ def design_tables():
     recs = load("ppa")
     notes = _notes()
     out = []
-    for short, pin, label in DESIGN_PINS:
+    for short, pin, label in design_pins():
         full = _task_full(short)
         # SELECT ON THE FIELD, NOT THE FILENAME -- the same defect that froze
         # the charts at the August records. clk_period_ns is in every record.
@@ -191,6 +244,17 @@ def _absent_cells(task, model, sims):
     sm = sims.get(model) or {}
     if sm.get("build_status"):
         return "**0** | **0** | — | did not build"
+    p, t = sm.get("configs_passed"), sm.get("configs_total")
+    # A PENDING BUILD IS NOT A FAILURE, and this collapsed the two. Any missing
+    # PPA record scored 0 and read "fails correctness", so d_ai04's three
+    # candidates -- all passing 1/1, all simply not built yet -- were about to
+    # be published as three models that got the hardware wrong. An in-range
+    # failure value: 0 is a legitimate score, so nothing downstream could tell
+    # the difference. Caught by rendering a task that had never been visible.
+    if isinstance(p, int) and isinstance(t, int) and t and p == t:
+        return "— | — | — | *correct; PPA not built yet*"
+    if not sm:
+        return "— | — | — | *not simulated*"
     return "**0** | **0** | — | fails correctness"
 
 
@@ -280,6 +344,22 @@ def _verif_cells(r):
 
 
 # ------------------------------------------------------------ cross-check ---
+def unpinned_table():
+    """Tasks with no pin, rendered rather than omitted (rule 20)."""
+    reasons = {
+        "d_ca05": ("no pin — the reference Fmax sweep cannot floorplan yet. "
+                   "3,686 IO pins against 3,260 positions (PPL-0024); with the "
+                   "pin placer given met4 the die places but detailed routing "
+                   "stalls flat at 260 violations. Retry queued at "
+                   "`CORE_UTILIZATION=7` with met5 dropped"),
+        "d_dsp01": "no scoring testbench; withdrawn",
+    }
+    lines = ["| task | state |", "|---|---|"]
+    for short, _label in unpinned():
+        lines.append(f"| {short} | {reasons.get(short, 'no pin recorded')} |")
+    return "\n".join(lines)
+
+
 def cross_check(vtables):
     """results_table.md is generated independently; the two must agree."""
     path = os.path.join(REPO, "results_table.md")
@@ -342,6 +422,7 @@ def main():
             print("  " + b)
         return 2
     new = splice(text, "design-tables", design_tables())
+    new = splice(new, "unpinned-table", unpinned_table())
     new = splice(new, "verification-tables", v)
     if new == text:
         print("README tables match the records.")
