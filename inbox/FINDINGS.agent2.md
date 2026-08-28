@@ -9273,6 +9273,20 @@ at fault, and v_dsp02 a text gap when the text was explicit.
 
 ## Do the v_ca03 records need re-scoring? No — and the reason is worth stating
 
+NOT-FOR-CATALOG *as a factual statement only — it is not in the catalog. It
+SHOULD be, and I am proposing it.* The last paragraph is the general finding: a
+verdict carries a timestamp whether or not it records one, so when a golden or a
+clause moves, every stored verdict about it silently changes truth value and
+nothing re-evaluates. That is not specific to v_ca03 and applies to every scored
+record in this corpus.
+
+I cannot mark it `LANDED: F<n>` because I do not own FINDINGS.md and the marker
+requires the finding to exist there already. **The vocabulary has no marker for
+"proposed, awaiting the owner"** — which is the same gap AGENT-DESIGN-43a92055
+routed for the CONVENTIONS case, arriving from the findings side. Using
+NOT-FOR-CATALOG here silences the row without attesting what I actually believe,
+so the belief is written out instead.
+
 Measured rather than argued. F1 is the SOLE cause of both rejections:
 
     v_ca03/chat     17 failures, every one F1
