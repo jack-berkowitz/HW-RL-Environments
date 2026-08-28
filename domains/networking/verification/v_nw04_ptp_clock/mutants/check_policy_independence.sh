@@ -13,6 +13,37 @@ T=domains/networking/verification/v_nw04_ptp_clock
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 fails=0
 
+# ---------------------------------------------------------------------------
+# THE TWO HALVES MUST BE THE SAME SET, not merely the same size.
+#
+# This runner globs policy/*.sv and grades whatever it finds, so a missing
+# re-derivation leaves every row reading "as expected" and the summary still
+# claiming every defect is covered. A short set is indistinguishable from a
+# complete one in the output. On v_ca03 that produced a universal that was false
+# for exactly one mutant, and on v_ca07 it once turned a reported 22/22 into a
+# real 21/22.
+#
+# COMPARING IDS, NOT COUNTS. A count agrees whenever both sides are N with
+# different membership -- it sees a shortfall, never a substitution, and names
+# neither the missing id nor the direction. Demonstrated: renaming one policy
+# file to a bogus id leaves the counts equal and the sets unequal.
+#
+# BEFORE ANY BUILD, so a mismatch costs a second rather than a full compile pass.
+anchor_ids=$(grep -oE "^module pt_m[0-9]+_[a-z0-9_]+" "$T/mutants/mutants.sv" \
+             | sed 's/^module pt_m/pt_/' | sort)
+policy_ids=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | xargs -n1 basename \
+             | sed 's/\.sv$//; s/^pt_p/pt_/' | sort)
+if [ "$anchor_ids" != "$policy_ids" ]; then
+  echo "  RULE24: the anchor and policy halves are not the same SET."
+  comm -23 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    anchor only (no policy re-derivation): /'
+  comm -13 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    policy only (no anchor mutant): /'
+  echo "  Add the missing re-derivation. Do NOT make the counts agree by"
+  echo "  deleting the other side -- the anchor half is what scoring uses."
+  exit 2
+fi
+
 run_one() {   # $1 label, $2 expected, $3.. files
   local label="$1" expect="$2"; shift 2
   rm -rf "$W/obj"
@@ -30,7 +61,7 @@ run_one() {   # $1 label, $2 expected, $3.. files
 echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
 echo "         implementation must PASS. Each defect line is the positive half."
 echo
-echo "reference testbench vs the GOLDEN base and its $(grep -cE '^module pt_m[0-9]+_' "$T/mutants/mutants.sv") defects"
+echo "reference testbench vs the GOLDEN base and its $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects"
 _r24=$fails
 run_one "golden (clean)" PASS "$T/dut/ptp_clock.sv" "$T/dut/ptp_time_base.sv"
 if [ "$fails" -ne "$_r24" ]; then
@@ -49,19 +80,7 @@ open('$W/$M.sv','w').write(b.replace('module $M','module ptp_time_base',1))"
 done
 
 echo
-# The two halves must be the SAME SET. This runner globs policy/*.sv, so a
-# generation that failed part way leaves fewer files and every row still reads
-# "as expected" -- a short set is indistinguishable from a complete one in the
-# output. Paired with the generator wiping the directory first, a miscount is
-# now the loud failure and a stale file is impossible.
-n_anchor=$(grep -cE "^module pt_m[0-9]+_" "$T/mutants/mutants.sv")
-n_policy=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | wc -l | tr -d ' ')
-if [ "$n_anchor" -ne "$n_policy" ]; then
-  echo "  RULE24: $n_anchor defects on the anchor but $n_policy re-derivations."
-  echo "          The two halves are not the same set. Re-run gen_mutants.py."
-  exit 2
-fi
-echo "reference testbench vs the POLICY-DIVERGENT base and the same $(grep -cE '^module pt_m[0-9]+_' "$T/mutants/mutants.sv") defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects"
 sed 's/module pt_c1_zero_latency/module ptp_time_base/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean_policy.sv"
 _r24=$fails

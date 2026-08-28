@@ -1,4 +1,4 @@
-// GENERATED-EQUIVALENT policy-base mutant, written by hand -- see the note below.
+// HAND-MAINTAINED policy-base mutant. NOT generated.
 // The v_ca03 mutant set: every defect GUARDED by a rare predicate over
 // contract-level state. Scoring only, never shipped to a submission.
 

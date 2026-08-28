@@ -15,6 +15,45 @@ W=$(mktemp -d)
 trap 'rm -rf "$W"' EXIT
 fails=0
 
+# ---------------------------------------------------------------------------
+# THE TWO HALVES MUST BE THE SAME SET, not merely the same size.
+#
+# This runner globs policy/*.sv and grades whatever it finds, so a missing
+# re-derivation leaves every row reading "as expected" and the summary still
+# claiming every defect is covered. A short set is indistinguishable from a
+# complete one in the output. On v_ca03 that produced a universal that was false
+# for exactly one mutant, and on v_ca07 it once turned a reported 22/22 into a
+# real 21/22.
+#
+# COMPARING IDS, NOT COUNTS. A count agrees whenever both sides are N with
+# different membership -- it sees a shortfall, never a substitution, and names
+# neither the missing id nor the direction. Demonstrated: renaming one policy
+# file to a bogus id leaves the counts equal and the sets unequal.
+#
+# BEFORE ANY BUILD, so a mismatch costs a second rather than a full compile pass.
+anchor_ids=$(grep -oE "^module af_m[0-9]+_[a-z0-9_]+" "$T/mutants/mutants.sv" \
+             | sed 's/^module af_m/af_/' | sort)
+policy_ids=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | xargs -n1 basename \
+             | sed 's/\.sv$//; s/^af_p/af_/' | sort)
+if [ "$anchor_ids" != "$policy_ids" ]; then
+  echo "  RULE24: the anchor and policy halves are not the same SET."
+  comm -23 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    anchor only (no policy re-derivation): /'
+  comm -13 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    policy only (no anchor mutant): /'
+  echo "  Add the missing re-derivation. Do NOT make the counts agree by"
+  echo "  deleting the other side -- the anchor half is what scoring uses."
+  echo ""
+  echo "  AND DO NOT 'just re-run gen_mutants.py' TO RESOLVE THIS. That advice"
+  echo "  used to print here and it was destructive: the generator rewrites"
+  echo "  mutants.sv from its own list, so on a mismatch caused by a mutant"
+  echo "  ADDED BY HAND it would delete the mutant and 'fix' the count by"
+  echo "  removing the anchor side. af_m11 and af_m12 were both in that"
+  echo "  position. The generator now REFUSES to drop mutants it does not"
+  echo "  define; add the missing entries to MUT and POLICY instead."
+  exit 2
+fi
+
 run_one() {  # $1 = label, $2 = dut file, $3 = expected (PASS|FAIL)
   rm -rf "$W/obj"
   if ! verilator --binary --timing -j 4 -Wno-fatal --top-module atop_filter_tb \
@@ -33,31 +72,7 @@ run_one() {  # $1 = label, $2 = dut file, $3 = expected (PASS|FAIL)
 echo "RULE 24: each \"(clean)\" line below is a CONTROL -- a conforming"
 echo "         implementation must PASS. Each defect line is the positive half."
 echo
-# The two halves must be the SAME SET. This runner globs policy/*.sv, so a
-# generation that failed part way leaves fewer files and every row still reads
-# "as expected" -- a short set is indistinguishable from a complete one in the
-# output. Paired with the generator wiping the directory first, a miscount is
-# now the loud failure and a stale file is impossible.
-n_anchor=$(grep -cE "^module af_m[0-9]+_" "$T/mutants/mutants.sv")
-n_policy=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | wc -l | tr -d ' ')
-if [ "$n_anchor" -ne "$n_policy" ]; then
-  echo "  RULE24: $n_anchor defects on the anchor but $n_policy re-derivations."
-  echo "          The two halves are not the same set."
-  echo ""
-  echo "  DO NOT 'just re-run gen_mutants.py' -- this message used to say that,"
-  echo "  and it was destructive advice. The generator rewrites mutants.sv from"
-  echo "  its own 10-entry list, so on the mismatch it is most likely to be run"
-  echo "  against -- one caused by mutants ADDED BY HAND -- it would delete them"
-  echo "  and 'fix' the count by removing the anchor side. af_m11 and af_m12 are"
-  echo "  both in that position. The generator now REFUSES rather than dropping"
-  echo "  them; see the guard in gen_mutants.py."
-  echo ""
-  echo "  The fix is to add the missing re-derivations to POLICY (and the"
-  echo "  hand-written mutants to MUT), not to make the counts agree by"
-  echo "  subtraction."
-  exit 2
-fi
-echo "reference testbench vs the POLICY-DIVERGENT base and the same $(grep -cE '^module af_m[0-9]+_' "$T/mutants/mutants.sv") defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects"
 sed 's/module af_c1_b_before_r/module atop_filter/' \
     "$T/conformant/conformant_perturbations.sv" > "$W/clean.sv"
 _r24=$fails

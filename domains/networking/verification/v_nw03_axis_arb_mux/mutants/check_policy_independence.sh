@@ -21,6 +21,37 @@ T=domains/networking/verification/v_nw03_axis_arb_mux
 D=$T/dut
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 fails=0
+
+# ---------------------------------------------------------------------------
+# THE TWO HALVES MUST BE THE SAME SET, not merely the same size.
+#
+# This runner globs policy/*.sv and grades whatever it finds, so a missing
+# re-derivation leaves every row reading "as expected" and the summary still
+# claiming every defect is covered. A short set is indistinguishable from a
+# complete one in the output. On v_ca03 that produced a universal that was false
+# for exactly one mutant, and on v_ca07 it once turned a reported 22/22 into a
+# real 21/22.
+#
+# COMPARING IDS, NOT COUNTS. A count agrees whenever both sides are N with
+# different membership -- it sees a shortfall, never a substitution, and names
+# neither the missing id nor the direction. Demonstrated: renaming one policy
+# file to a bogus id leaves the counts equal and the sets unequal.
+#
+# BEFORE ANY BUILD, so a mismatch costs a second rather than a full compile pass.
+anchor_ids=$(grep -oE "^module fm_m[0-9]+_[a-z0-9_]+" "$T/mutants/mutants.sv" \
+             | sed 's/^module fm_m/fm_/' | sort)
+policy_ids=$(ls "$T"/mutants/policy/*.sv 2>/dev/null | xargs -n1 basename \
+             | sed 's/\.sv$//; s/^fm_p/fm_/' | sort)
+if [ "$anchor_ids" != "$policy_ids" ]; then
+  echo "  RULE24: the anchor and policy halves are not the same SET."
+  comm -23 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    anchor only (no policy re-derivation): /'
+  comm -13 <(printf '%s\n' "$anchor_ids") <(printf '%s\n' "$policy_ids") \
+    | sed 's/^/    policy only (no anchor mutant): /'
+  echo "  Add the missing re-derivation. Do NOT make the counts agree by"
+  echo "  deleting the other side -- the anchor half is what scoring uses."
+  exit 2
+fi
 OTHER=$(ls $D/*.sv | grep -v "/frame_arb_mux.sv$")
 
 run_one() {   # $1 label, $2 expected, $3.. files
@@ -46,7 +77,7 @@ ctl() {  # abort if a CONTROL failed -- it is not a result
   fi
 }
 
-echo "reference testbench vs the GOLDEN base and its ten defects"
+echo "reference testbench vs the GOLDEN base and its $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects"
 r=$fails; run_one "golden (clean)" PASS $OTHER "$D/frame_arb_mux.sv"; ctl "$r"
 # The mutant takes the top name and DELEGATES to the golden, so the golden has
 # to be renamed out of the way. Passing both under one name is a duplicate
@@ -71,7 +102,7 @@ open('$W/$M.sv','w').write(head+'\n'+b)"
 done
 
 echo
-echo "reference testbench vs the POLICY-DIVERGENT base and the same ten defects"
+echo "reference testbench vs the POLICY-DIVERGENT base and the same $(printf '%s\n' "$anchor_ids" | wc -l | tr -d ' ') defects"
 sed 's/module frame_arb_mux_alt/module frame_arb_mux/' "$T/dut2/frame_arb_mux_alt.sv" > "$W/clean_policy.sv"
 r=$fails; run_one "policy base (clean)" PASS $OTHER "$W/clean_policy.sv"; ctl "$r"
 for f in "$T"/mutants/policy/*.sv; do
