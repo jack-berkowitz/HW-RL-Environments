@@ -7,35 +7,12 @@ f09329ed2d28  CONTROL_ENUMERATION.contract.md  Settled
 0eea653bf216  CONTROL_ENUMERATION.contract.md  What a control is, for this contract
 7bc0f1a0e4ed  CONTROL_ENUMERATION.contract.md  What it does NOT do
 673875efbb13  CONTROL_ENUMERATION.contract.md  What the runner asserts, per kind
-5bfb695ceb12  CONVENTIONS.md.agent2.md  "A case list that fails when the scope narrows" means state the scope, not accept more
-a9ad38ff7ca4  CONVENTIONS.md.agent2.md  A caveat written by the person who did the work concedes the least damaging thing
-e264f44c02d8  CONVENTIONS.md.agent2.md  A check that refuses looks exactly like a check that passes
-ab2242c22edd  CONVENTIONS.md.agent2.md  A wrong value inside the range of legitimate outputs cannot be caught by reading it harder
-801196eef8d6  CONVENTIONS.md.agent2.md  An attribution case and a mutant establish different halves, and the case is the half that looks
-64d5892e0640  CONVENTIONS.md.agent2.md  Before building a measurement, check whether the task already ships one
-b0fa2cb4f2da  CONVENTIONS.md.agent2.md  Choose the discriminator, or you cannot check what it hides
-1feecabc6c98  CONVENTIONS.md.agent2.md  Cite what you shipped
-785c61753cd4  CONVENTIONS.md.agent2.md  Classify a message before sending it to an address you cannot verify
-cd8c1ae3a9c1  CONVENTIONS.md.agent2.md  Documentation behind a guard is not preserved, it is unmaintained
-6ff20b43838b  CONVENTIONS.md.agent2.md  Per branch, not per site — and three instruments with a stated limit
-56c0509f5b39  CONVENTIONS.md.agent2.md  Re-derivation protocol: disqualify on an act, write before you run, pre-commit the disagreement
-35f20b59e91a  CONVENTIONS.md.agent2.md  Stamp a corpus count with when it was taken
-ef479c5a55c3  CONVENTIONS.md.agent2.md  Verify a transformation with a probe written before it, and transform a copy
-d2fa560bc636  CONVENTIONS.md.agent3.md  A lesson carried across cases without re-deriving it is worse than no lesson
 4731d791dc3a  CONVENTIONS.md.agent3.md  A probe that discriminates on WHEN needs both controls, not one
-b02025688813  CONVENTIONS.md.agent3.md  A relayed ruling is not the ruling
-d2705a16360e  CONVENTIONS.md.agent3.md  A routing message for isolation work is inside the isolation boundary
 b7c9f79aa6dd  CONVENTIONS.md.agent3.md  And the one that is worth more than either check
 5d3dd0a88524  CONVENTIONS.md.agent3.md  And the reason the two sweeps differed
-5515d730d425  CONVENTIONS.md.agent3.md  Attribution cases: count SELECTORS, not repairs
-4d6db9641554  CONVENTIONS.md.agent3.md  Clause status is per task, traced, never pattern-matched
-f25d6b9f2a6c  CONVENTIONS.md.agent3.md  Disable the perturbation and require the control to PASS
-2cf46db11dca  CONVENTIONS.md.agent3.md  Holding at a scope boundary: the report is what makes the decision recoverable
 0a958aa9bc7b  CONVENTIONS.md.agent3.md  Reading harder never worked — and there is a second family it cannot fix either
 b2d0cfea2fff  CONVENTIONS.md.agent3.md  The same failure from the other side, in the same hour
 f1666125d40d  CONVENTIONS.md.agent3.md  The variant: a measurement you took and did not connect
-2d04157e3570  CONVENTIONS.md.agent3.md  When a peer reports something is unmeasurable, ask the instrument, not the peer
-3b45109e5a7a  CONVENTIONS.md.agent3.md  Which harness facts a clean reader may consult
 b8cf312e8fd3  CONVENTION_disclaimers.md  1. "never gated" is NOT a reserved token — it is a SCORING statement
 cfe91b9ddff4  CONVENTION_disclaimers.md  2. A fourth form: PARTIAL CONFESSION
 99afaf4861c4  CONVENTION_disclaimers.md  3. RATIONALE is exempt and must be written to stay exempt

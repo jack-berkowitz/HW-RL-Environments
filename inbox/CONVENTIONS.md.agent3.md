@@ -2,6 +2,8 @@
 <!-- author: agent3 -->
 ## A lesson carried across cases without re-deriving it is worse than no lesson
 
+LANDED-CONVENTION: A lesson carried across cases without re-deriving it is worse than no lesson
+
 It arrives with evidence attached, so it is believed faster and questioned less
 than a bare guess would be.
 
@@ -43,6 +45,8 @@ placed next to a question, settling it without being consulted.
 <!-- author: agent3 -->
 ## Clause status is per task, traced, never pattern-matched
 
+LANDED-CONVENTION: Clause status is per task, traced, never pattern-matched
+
 The same clause letter has opposite status in different tasks. `B1` is
 **enforced** in d_nw03 — `nc_h_overbuffered` dies on it at 72 beats — and
 **unchecked** in d_ca04, where it has zero mentions in the testbench. `R1b` is
@@ -74,6 +78,8 @@ exercised. It tells you where to look. It does not tell you what you will find.
 ---
 
 ## A relayed ruling is not the ruling
+
+LANDED-CONVENTION: A relayed ruling is not the ruling
 
 AGENT-VERIF-A2 declined to land two sentences on a user decision that reached
 them through me, while landing the three that did not depend on it. I had
@@ -193,6 +199,8 @@ the most expensive way to be wrong that we have found.
 
 ## When a peer reports something is unmeasurable, ask the instrument, not the peer
 
+LANDED-CONVENTION: When a peer reports something is unmeasurable, ask the instrument, not the peer
+
 AGENT-VERIF-A2's rule, from the retraction of my d_ai01 claim. It is worth more
 than the retraction.
 
@@ -255,6 +263,8 @@ one difference that was not luck.
 
 ## Disable the perturbation and require the control to PASS
 
+LANDED-CONVENTION: Disable the perturbation and require the control to PASS
+
 AGENT-VERIF-A2 measured nine versions of three controls and found **six where
 the verdict line alone would have misled**: four passed because nothing
 perturbed, two failed on the wrong clause. Their remedy is a FIRED counter on
@@ -310,6 +320,8 @@ IS, and it is answered by reading, not by running.
 ---
 
 ## A routing message for isolation work is inside the isolation boundary
+
+LANDED-CONVENTION: A routing message for isolation work is inside the isolation boundary
 
 I disqualified myself from re-deriving d_ai01's flush oracle, correctly, on
 evidence: I had decoded the reference's `status_o` at flush cycles and read all
@@ -411,6 +423,8 @@ existed to catch.
 
 ## Attribution cases: count SELECTORS, not repairs
 
+LANDED-CONVENTION: Attribution cases: count SELECTORS, not repairs
+
 From AGENT-VERIF-A2's completed attribution work, recorded here because it sizes
 the design half's version of the same job and would otherwise exist only in a
 socket transcript — the channel the entry above establishes has no audit trail.
@@ -490,6 +504,8 @@ output.
 
 ## Holding at a scope boundary: the report is what makes the decision recoverable
 
+LANDED-CONVENTION: Holding at a scope boundary: the report is what makes the decision recoverable
+
 Two ways to stop short of work you could do, and they are not the same act:
 
 * **Not taking work that was withheld.** Someone else drew the line. Holding it
@@ -526,6 +542,8 @@ not merely reported open.
 **Rules:** 13, 24
 
 ## Which harness facts a clean reader may consult
+
+LANDED-CONVENTION: Which harness facts a clean reader may consult
 
 An isolation protocol that names the contract and forbids everything else makes
 the reader treat as UNKNOWN things the repository already answers. Fourth
@@ -580,6 +598,8 @@ short enough to attach to the brief.
 
 ## A peer address that worked yesterday is not evidence it works today
 
+LANDED-CONVENTION: A peer address that worked yesterday is not evidence it works today
+
 NOT-FOR-CATALOG — this is a CONVENTION, bound for `CONVENTIONS.md`, not a
 finding. The checker's two markers are `LANDED: F<n>` and `NOT-FOR-CATALOG`, and
 neither names the convention case, so the second is used with its reason stated
@@ -619,6 +639,8 @@ address does not.
 **Rules:** 22, 24
 
 ## Check at the boundary: a claim gets verified when it is SENT, not when it is formed
+
+LANDED-CONVENTION: Check at the boundary: a claim gets verified when it is SENT, not when it is formed
 
 NOT-FOR-CATALOG — a CONVENTION bound for `CONVENTIONS.md`, not a finding. Same
 marker-vocabulary gap as the entries above: `LANDED: F<n>` and `NOT-FOR-CATALOG`
