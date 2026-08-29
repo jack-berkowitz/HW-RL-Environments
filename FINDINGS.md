@@ -7536,3 +7536,52 @@ axis is findable in it — `outstanding_master1` was found that way — and not
 worth counting.
 
 **Rules:** 20, 24
+
+## F120. Seventeen checkers, no shared exit vocabulary, and a gate that guesses per checker
+
+Every checker in `scripts/` signals its result by exit code, the gate acts on
+those codes, and **the codes do not agree on what they mean.**
+
+    check_stimulus_variation   returns 3      a value nothing else uses
+    check_stimulus_legality    returns none   cannot fail by construction
+    check_pin                  2 = NO CONCLUSION, no sweep to compare against
+    check_refs_hashes          2 = malformed lock, a usage error
+    check_denominator          2 = no records found, a broken invocation
+    check_witness_sync         2 = bad usage
+
+**The value 2 means "report this" in one checker and "something is broken" in
+another**, so the gate cannot have one rule. It does not have one:
+
+    check_refs_hashes      if [ $? -ne 0 ]     -> 2 FAILS the gate
+    check_denominator      if [ $? -ne 0 ]     -> 2 FAILS the gate
+    check_inbox_cataloged  if [ $_inbrc -eq 1 ] -> 2 is SILENTLY IGNORED
+    check_pin              if [ $_pinrc -eq 1 ] -> 2 is SILENTLY IGNORED
+
+Both handlings are correct for their checker and wrong for the other's. Adding a
+checker requires knowing its private vocabulary, and the failure mode of getting
+it wrong is silent in one direction and misattributed in the other.
+
+**The misattribution is live.** `check_refs_hashes` exits 2 when `refs.lock` has
+no `file_hashes` block at all. The gate treats that as failure and prints
+`__FAILED__ refs_hashes`, which reads as *a vendored anchor moved* — the one
+thing that checker exists to detect, and the one thing a malformed lock proves
+nothing about. A reader would go looking for a changed oracle.
+
+### And a report-only checker inside this gate is silent
+
+The gate captures each checker's output and prints it **only when something
+fails**. That is deliberate and right for pass/fail checkers: a clean run should
+be quiet.
+
+It makes a report-only checker useless. `check_unread_fields` reports rather than
+fails, by design and with a comment explaining why — wired in, its findings would
+appear only on runs where a *different* checker failed. `check_metric_emitted` is
+the same shape. Both are therefore deliberately **not** wired, which leaves them
+depending on someone remembering to run them, which is the condition the gate
+exists to remove.
+
+The two defects compose: there is no exit code that means *"I have something to
+say and nothing is wrong"*, and no output path for one either. A checker whose
+value is a count rather than a verdict has nowhere to put it.
+
+**Rules:** 24, 26
