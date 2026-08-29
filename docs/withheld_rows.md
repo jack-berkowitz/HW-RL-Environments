@@ -23,7 +23,30 @@ The empty dash was the hazard, not the number. An unexplained gap in a results
 table gets filled by whoever finds it next, and what found it next was the
 generator.
 
-d_ai04 chat :: pinned at one configuration and declares no capability metric; its own catalog records three of four precision codes as byte-identical on the scored stimulus, so a smaller design and a less complete one are indistinguishable here
-d_ai04 claude :: pinned at one configuration and declares no capability metric; its own catalog records three of four precision codes as byte-identical on the scored stimulus, so a smaller design and a less complete one are indistinguishable here
-d_ai04 gemini :: pinned at one configuration and declares no capability metric; its own catalog records three of four precision codes as byte-identical on the scored stimulus, so a smaller design and a less complete one are indistinguishable here
+# CORRECTION, 2026-08-29. The three d_ai04 reasons previously said the precision
+# axis made a smaller design and a less complete one indistinguishable. The
+# catalog sentence behind that is true and the inference from it was FALSE.
+# Verified against the contract and the controls, not argued:
+#
+#   spec F2, line 60: "The three integer codes are INDISTINGUISHABLE from one
+#   another ... A submission may not use 2'd1 or 2'd3 to select any behaviour of
+#   its own." So collapsing 0/1/3 is CONFORMING, not incomplete.
+#
+#   controls/nc_g_alias_modes.sv scores 0/1 -- the collapse that WOULD make a
+#   design less complete, aliasing float into the integer path, is caught.
+#
+#   The scoring tb carries coverage floors (n_sub, n_inf, n_nan, n_n2z,
+#   n_disjoint) that fail a run leaving float mode unexercised.
+#
+# Raised by AGENT-DESIGN-43a92055, who measured it rather than arguing it. A
+# withheld reason is the only thing a reader gets in place of a number, it reads
+# as deliberate, and "the apparatus cannot tell these apart" is exactly the
+# claim that stops anyone checking whether it can. Same shape as an attribution
+# field carrying no attribution, with more force.
+#
+# The other two clauses were and remain sufficient on their own.
+
+d_ai04 chat :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 claude :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 gemini :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
 d_ca03 claude :: declares no capability metric, so a 0.76x raw-area result cannot be separated from a design that implements less

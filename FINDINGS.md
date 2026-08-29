@@ -7252,3 +7252,50 @@ publishing the number. The same in-range-failure-value trap the fix existed to
 close, walked into while closing it. Withheld is now its own bar state.
 
 **Rules:** 19, 20, 22
+
+## F116. A withheld reason that read as measured and was inferred
+
+The three d_ai04 rows were withheld with a reason ending *"its own catalog
+records three of four precision codes as byte-identical on the scored stimulus,
+so a smaller design and a less complete one are indistinguishable here"*. The
+catalog sentence is true. **The inference from it is false**, and it was the
+half that got rendered.
+
+Verified against the contract and the controls rather than argued:
+
+- Spec F2: *"The three integer codes are INDISTINGUISHABLE from one another …
+  A submission may not use 2'd1 or 2'd3 to select any behaviour of its own."*
+  Collapsing 0/1/3 is **conforming**, not incomplete. There is nothing there for
+  a smaller design to be hiding.
+- `controls/nc_g_alias_modes.sv` scores **0/1**. The collapse that would make a
+  design less complete — aliasing float into the integer path — is caught, and
+  there is a failing control proving it.
+- The scoring tb carries coverage floors (`n_sub`, `n_inf`, `n_nan`, `n_n2z`,
+  `n_disjoint`) that fail a run leaving float mode unexercised.
+
+So on the precision axis a smaller design and a less complete one **are**
+distinguishable, and the passing/failing control pair demonstrates it.
+
+### Why this class is worse than a wrong number
+
+A withheld reason is the only thing a reader gets **in place of** a number. It
+reads as deliberate, because someone chose it. And *"the apparatus cannot tell
+these apart"* is precisely the claim that stops anyone checking whether the
+apparatus can — it forecloses the check it is a claim about.
+
+Same property as an attribution field carrying no attribution, with more force:
+that one invites a reader to stop looking, this one tells them looking is
+pointless. Both were introduced in the same afternoon, in fixes for the
+in-range-failure-value class, by the session filing findings about it.
+
+It is also the passes-by-coincidence shape one level up. Not a check that passed
+for the wrong reason — a **reason** that reads as measured and was not. The
+sentence it came from was true; only the step to the conclusion was unmeasured,
+and nothing in the rendered text marked which half was which.
+
+The other two clauses — one scored configuration, no declared capability
+metric — were and remain sufficient on their own. The correction narrows the
+justification without changing the decision, which is the outcome that makes it
+easy to leave a wrong reason standing.
+
+**Rules:** 16, 20, 23

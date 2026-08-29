@@ -131,9 +131,9 @@ six that are. That is the result, not a gap in the data.
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 179,943 | 230.0 | +1.912 | — |
-| `chat` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric; its own catalog records three of four precision codes as byte-identical on the scored stimulus, so a smaller design and a less complete one are indistinguishable here* |
-| `claude` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric; its own catalog records three of four precision codes as byte-identical on the scored stimulus, so a smaller design and a less complete one are indistinguishable here* |
-| `gemini` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric; its own catalog records three of four precision codes as byte-identical on the scored stimulus, so a smaller design and a less complete one are indistinguishable here* |
+| `chat` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
+| `claude` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
+| `gemini` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
 
 ### d_ca01 — non-blocking data cache, pinned at 15 ns
 
