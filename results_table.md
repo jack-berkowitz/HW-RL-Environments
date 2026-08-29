@@ -28,36 +28,36 @@ capability, and nothing here establishes those weights.
 
 ## d_ai04 — SDP requantise / convert unit
 
-| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | init interval | slots | latency | area | power | notes |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | 174,421 | 230.0 | not swept | — | — | — | — | — |  |
-| `claude` | **1/1 pass** | 158,486 | 181.0 | not swept | — | — | — | — | — |  |
-| `gemini` | **1/1 pass** | 179,212 | 257.0 | not swept | — | — | — | — | — |  |
-| `nc_g_alias_modes` — *negative control, expected to fail* | 0/1 FAIL | — | — | — | — | — | — | — | — |  |
-| **reference** | **1/1 pass** | 179,943 | 230.0 | 44.4 | — | — | — | — | — |  |
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | init interval | slots | latency | notes |
+|---|---|---|---|---|---|---|---|---|
+| `chat` | **1/1 pass** | 174,421 | 230.0 | not swept | — | — | — |  |
+| `claude` | **1/1 pass** | 158,486 | 181.0 | not swept | — | — | — |  |
+| `gemini` | **1/1 pass** | 179,212 | 257.0 | not swept | — | — | — |  |
+| `nc_g_alias_modes` — *negative control, expected to fail* | 0/1 FAIL | — | — | — | — | — | — |  |
+| **reference** | **1/1 pass** | 179,943 | 230.0 | 44.4 | 1 | 2 | 1 |  |
 - **init interval** — clocks between accepts
 - **latency** — clocks from accept to result
 
 ## d_ca01 — non-blocking data cache
 
-| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | outstd | fills | notes |
-|---|---|---|---|---|---|---|---|---|---|
-| `chat` | **16/16 pass** | withheld | withheld | not swept | 3 | 226 | 14 | 501 | **PPA withheld — the build did not meet timing** (slack -0.049 ns at 15.0 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; **different design point** (latency_min 3 vs reference 2): area is correct but not like-for-like; 70,342 um2 per unit of max_outstanding_n, 1.23x the reference per unit |
-| `claude` | **16/16 pass** | 753,599 | 326.0 | not swept | 1 | 20057 | 9 | 493 | **different design point** (latency_min 1 vs reference 2): area is correct but not like-for-like; 83,733 um2 per unit of max_outstanding_n, 1.46x the reference per unit |
-| `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | **build failure** — 1 error(s); first: sanitised_gemini.sv:99:7: error: incrementing previous value 2'b11 would overflow enum base type 'logic[1:0]'  |
-| `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `63385929275747be` |
-| `nonblocking_dcache_alt_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `c9c3532f93fe4954`; the task text is now `63385929275747be` |
-| `nonblocking_dcache_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `f7a68c4dbec4a1b7`; the task text is now `63385929275747be` |
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | outstd | fills | wb | notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `chat` | **16/16 pass** | withheld | withheld | not swept | 3 | 226 | 14 | 501 | 315 | **PPA withheld — the build did not meet timing** (slack -0.049 ns at 15.0 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; **different design point** (latency_min 3 vs reference 2; mem_txns_writebacks 315 vs reference 298): area is correct but not like-for-like; 70,342 um2 per unit of max_outstanding_n, 1.23x the reference per unit |
+| `claude` | **16/16 pass** | 753,599 | 326.0 | not swept | 1 | 20057 | 9 | 493 | 318 | **different design point** (latency_min 1 vs reference 2; mem_txns_writebacks 318 vs reference 298): area is correct but not like-for-like; 83,733 um2 per unit of max_outstanding_n, 1.46x the reference per unit |
+| `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 1 error(s); first: sanitised_gemini.sv:99:7: error: incrementing previous value 2'b11 would overflow enum base type 'logic[1:0]'  |
+| `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `63385929275747be` |
+| `nonblocking_dcache_alt_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `c9c3532f93fe4954`; the task text is now `63385929275747be` |
+| `nonblocking_dcache_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `f7a68c4dbec4a1b7`; the task text is now `63385929275747be` |
 
 ## d_ca03 — RISC-V Sv39 MMU -- page-table walker, TLBs, PMP
 
-| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | tlb.hits | hit% | pte.rd | cycles | notes |
-|---|---|---|---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | — | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
-| `claude` | **1/1 pass** | 212,774 | 33.4 | not swept | — | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
-| `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | **build failure** — 4 error(s); first: sanitised_gemini.sv:430:23: error: use of undeclared identifier 'clk'  |
-| `sv39_mmu_ref` | — | 279,456 | 32.6 | 121.9 | — | — | — | — |  |
-| `sv39_mmu_top` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `d79170d3b150c5e6`; the task text is now `5c30f59627bedc60` |
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | req/1k | cycles | tlb.hits | hit% | pte.rd | notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `chat` | **1/1 pass** | — | — | — | — | — | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
+| `claude` | **1/1 pass** | 212,774 | 33.4 | not swept | — | — | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
+| `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 4 error(s); first: sanitised_gemini.sv:430:23: error: use of undeclared identifier 'clk'  |
+| `sv39_mmu_ref` | — | 279,456 | 32.6 | 121.9 | — | — | — | — | — |  |
+| **reference** | **1/1 pass** | 279,456 | 32.6 | not swept | — | — | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
 
 ## d_ca04 — asynchronous CDC FIFO
 
@@ -77,12 +77,12 @@ capability, and nothing here establishes those weights.
 
 ## d_ca05 — Multi-requester cache miss handler
 
-| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | area | power | notes |
-|---|---|---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | — | — | — |  |
-| `claude` | 0/1 FAIL | — | — | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands |
-| `gemini` | 0/1 FAIL | — | — | — | — | — | — |  |
-| **reference** | **1/1 pass** | — | — | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands |
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | notes |
+|---|---|---|---|---|---|---|
+| `chat` | **1/1 pass** | — | — | — | — |  |
+| `claude` | 0/1 FAIL | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands |
+| `gemini` | 0/1 FAIL | — | — | — | — |  |
+| **reference** | **1/1 pass** | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration NR_PORTS_4 not present in this run |
 
 ## d_dsp02 — FP32 fused multiply-add
 
@@ -118,22 +118,22 @@ capability, and nothing here establishes those weights.
 
 ## d_nw01 — AXI4 crossbar
 
-| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | capacity (C1) | 1-pair thruput | 2-pair thruput | aggregate thruput | beat rate | notes |
-|---|---|---|---|---|---|---|---|---|---|---|
-| `chat` | **16/16 pass** | 172,662 | 49.0 | not swept | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
-| `claude` | **16/16 pass** | 181,174 | 49.3 | not swept | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
-| `gemini` | 0/16 FAIL | — | — | — | — | — | — | — | — |  |
-| `nc_l_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
-| `nc_m_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
-| `nc_n_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
-| `axi4_xbar_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
-| `DeepSeek V4 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `4e277da1edfe8af7`; the task text is now `0d484a57107f3502` |
-| `nc_i_overbuffered_r` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
-| `nc_j_overbuffered_w` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
-| `nc_l_comb_ready` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad79bb69c9a09efb`; the task text is now `0d484a57107f3502` |
-| `nc_m_withdraws_r_valid` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad79bb69c9a09efb`; the task text is now `0d484a57107f3502` |
-| `nc_n_drops_sideband` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `ad79bb69c9a09efb`; the task text is now `0d484a57107f3502` |
-| `Qwen 3.7 Plus` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `4e277da1edfe8af7`; the task text is now `0d484a57107f3502` |
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | capacity (C1) | 1-pair thruput | 2-pair thruput | aggregate thruput | beat rate | outstd1 | r.held | w.held | rlat | fair | notes |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `chat` | **16/16 pass** | 172,662 | 49.0 | not swept | — | — | — | — | — | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
+| `claude` | **16/16 pass** | 181,174 | 49.3 | not swept | — | — | — | — | — | — | — | — | — | — | scored configuration MAX_TRANS_8_MAX_BURST_LEN_255 not present in this run |
+| `gemini` | 0/16 FAIL | — | — | — | — | — | — | — | — | — | — | — | — | — |  |
+| `nc_l_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
+| `nc_m_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
+| `nc_n_inert` — *negative control, expected to fail* | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | **build failure** — 20 error(s); first: typedef.svh': No such file or directory  |
+| `axi4_xbar_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
+| `DeepSeek V4 Pro` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `4e277da1edfe8af7`; the task text is now `0d484a57107f3502` |
+| `nc_i_overbuffered_r` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
+| `nc_j_overbuffered_w` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `ad1f7eec79eba35f`; the task text is now `0d484a57107f3502` |
+| `nc_l_comb_ready` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `ad79bb69c9a09efb`; the task text is now `0d484a57107f3502` |
+| `nc_m_withdraws_r_valid` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `ad79bb69c9a09efb`; the task text is now `0d484a57107f3502` |
+| `nc_n_drops_sideband` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `ad79bb69c9a09efb`; the task text is now `0d484a57107f3502` |
+| `Qwen 3.7 Plus` | *not scored against this prompt* | — | — | — | — | — | — | — | — | — | — | — | — | — | last run answered task text `4e277da1edfe8af7`; the task text is now `0d484a57107f3502` |
 - **capacity (C1)** — checker's C1 capacity measure, master 0 — units unresolved, see note
 - **1-pair thruput** — bursts/1k cyc, one master-slave pair alone
 - **2-pair thruput** — bursts/1k cyc, two disjoint pairs concurrently
@@ -142,17 +142,17 @@ capability, and nothing here establishes those weights.
 
 ## d_nw03 — output-queued AXI-Stream switch
 
-| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | beats | cycles | wait.max | notes |
-|---|---|---|---|---|---|---|---|---|
-| **second source** | **8/8 pass** | — | — | — | 14633 | 8183 | 41 |  |
-| `chat` | **8/8 pass** | withheld | withheld | not swept | 18254 | 8010 | 0 | **PPA withheld — the build did not meet timing** (slack -0.184 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 1 um2 per unit of beats_delivered, 0.60x the reference per unit |
-| `claude` | **8/8 pass** | 26,164 | 16.9 | not swept | 18267 | 8025 | 1 | 1 um2 per unit of beats_delivered, 0.81x the reference per unit |
-| `gemini` | **8/8 pass** | withheld | withheld | not swept | 18376 | 8066 | 54 | **PPA withheld — the build did not meet timing** (slack -0.266 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 8 um2 per unit of beats_delivered, 4.26x the reference per unit |
-| `axis_switch_oq_ref` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
-| `nc_a_reset_polarity` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
-| `nc_b_outputs_serialised` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
-| `nc_h_overbuffered` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
-| `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | beats | cycles | wait.max | lat.1st | held | notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **second source** | **8/8 pass** | — | — | — | 14633 | 8183 | 41 | — | — |  |
+| **reference** | **8/8 pass** | 26,340 | 10.2 | 363.6 | 14882 | 8021 | 0 | 1 | 8 | 2 um2 per unit of beats_delivered; 3,292 um2 per unit of b1_beats_held |
+| `chat` | **8/8 pass** | withheld | withheld | not swept | 18254 | 8010 | 0 | — | 0 | **PPA withheld — the build did not meet timing** (slack -0.184 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 1 um2 per unit of beats_delivered, 0.60x the reference per unit |
+| `claude` | **8/8 pass** | 26,164 | 16.9 | not swept | 18267 | 8025 | 1 | — | 8 | 1 um2 per unit of beats_delivered, 0.81x the reference per unit; 3,270 um2 per unit of b1_beats_held, 0.99x the reference per unit |
+| `gemini` | **8/8 pass** | withheld | withheld | not swept | 18376 | 8066 | 54 | — | 64 | **PPA withheld — the build did not meet timing** (slack -0.266 ns at 4.25 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; 8 um2 per unit of beats_delivered, 4.26x the reference per unit; 2,166 um2 per unit of b1_beats_held, 0.66x the reference per unit |
+| `nc_a_reset_polarity` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
+| `nc_b_outputs_serialised` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
+| `nc_h_overbuffered` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
+| `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `62e627b4957c0e2c`; the task text is now `f621889159c58a9d` |
 
 ---
 

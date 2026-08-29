@@ -44,7 +44,7 @@
 <rect x="250" y="290" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="256" y="301" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
 <text x="20" y="346" fill="#e8e8e8" font-size="13" font-weight="600">AXI4 crossbar</text>
-<text x="20" y="362" fill="#9a9a9a" font-size="10">range over 4 declared metrics</text>
+<text x="20" y="362" fill="#9a9a9a" font-size="10">range over 5 declared metrics</text>
 <text x="240" y="347" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
 <rect x="250" y="336" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <rect x="250" y="336" width="71" height="15" rx="2" fill="#2f4f8f"/>
@@ -59,14 +59,16 @@
 <rect x="250" y="376" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="256" y="387" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
 <text x="20" y="432" fill="#e8e8e8" font-size="13" font-weight="600">output-queued AXI-Stream switch</text>
-<text x="20" y="448" fill="#9a9a9a" font-size="10">per beats_delivered</text>
+<text x="20" y="448" fill="#9a9a9a" font-size="10">range over 2 declared metrics</text>
 <text x="240" y="433" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
 <rect x="250" y="422" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="256" y="433" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
 <text x="240" y="453" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
 <rect x="250" y="442" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <rect x="250" y="442" width="57" height="15" rx="2" fill="#5b8dfb"/>
-<text x="313" y="453" fill="#e8e8e8" font-size="11">0.83×</text>
+<rect x="307" y="446" width="8" height="7" fill="#5b8dfb" opacity="0.42"/>
+<line x1="315" y1="442" x2="315" y2="457" stroke="#5b8dfb" stroke-width="2"/>
+<text x="321" y="453" fill="#e8e8e8" font-size="11">0.83–0.94×</text>
 <text x="240" y="473" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="250" y="462" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="256" y="473" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>

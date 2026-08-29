@@ -7503,3 +7503,36 @@ name the line that emits it**, the way a withheld row now names the clause that
 justifies it — then no parser has to infer the relationship from text.
 
 **Rules:** 16, 20, 23
+
+### Four wrong parses, and the fifth attempt stopped parsing
+
+`check_metric_emitted` was rewritten four times, each failing differently:
+
+    1. one name per METRIC: line   missed multi-metric $display
+    2. every `name=`               swept in min/max/n sub-fields
+    3. first token wins            missed composed <name>_<subfield>
+    4. any static parse            d_nw01 builds names at RUNTIME via
+                                   `outstanding_master%0d`, and d_nw03's
+                                   liveness_worst_wait comes from a shared
+                                   include rather than its own testbench
+
+Every version reported false positives, and version 1's looked corroborated
+because an independent audit had flagged the same task names for unrelated
+reasons — two errors landing on one list, read as agreement.
+
+A metric name that exists only after format expansion **cannot be read out of
+the source**. "Is this metric ever produced" is not answerable from the
+testbench text, and four attempts to answer it anyway is enough evidence that
+the question was posed against the wrong artefact. The fifth version reads the
+**run records** — which are what the emit produced — and reports
+declared-but-never-emitted as zero across all ten tasks, agreeing with the
+independent audit for the first time on a basis that is a measurement rather
+than a parse.
+
+The emitted-but-undeclared direction is reported as informational rather than as
+findings: it contains sub-fields, guard flags and control-only metrics that no
+task is obliged to declare. It is worth printing because a genuinely undeclared
+axis is findable in it — `outstanding_master1` was found that way — and not
+worth counting.
+
+**Rules:** 20, 24
