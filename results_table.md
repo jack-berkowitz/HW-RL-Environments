@@ -235,10 +235,10 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
+| **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 1/1 | **6/10** |  |
 | `Claude Opus 5` | yes | yes | yes | 1/1 | **8/10** |  |
 | `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `route_xbar_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `f4ed051311687cf7` |
 
 ## v_ca05 — tag tracker (out-of-order queue)
 
