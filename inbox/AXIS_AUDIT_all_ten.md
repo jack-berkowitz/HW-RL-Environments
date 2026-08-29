@@ -48,8 +48,15 @@ spec calls free.
 
 Also hidden: **`b1_beats_held`** (free below B1's 2-frame ceiling, more-is-better,
 capability-shaped — the same shape as d_ca04's `capacity_beats_accepted`, which is
-declared) and **`c1_rate`** (throughput above C1's 2.0 beats/cycle floor;
-more-is-better; G3 says serialising *fails*, so above the floor area buys it).
+declared).
+
+**CORRECTED 2026-08-29: `c1_rate` was listed here as a third hidden axis and is
+NOT one.** `beats_delivered` is already declared `role: capability` with
+`beats_cycles` as its denominator, and that IS the throughput axis. `c1_rate`
+measures the same axis inside the C1 phase specifically. I listed it without
+checking whether an existing declaration already covered it — the same failure as
+`tlb_hits`, one column over: classifying a metric from its name rather than
+against what is already declared.
 
 ### d_ca03 — one hidden, one wrongly published
 
@@ -64,9 +71,17 @@ and is **published wrongly as `role: capability`**. **That one is mine**, from
 `1530c80`, and it should come out. Variation between designs comes from
 replacement policy, which A9 **explicitly declines to score**.
 
-    reference   279,456   1269 cyc   2,430 um2/hit   3,005,336 um2*cyc/req
-    claude      212,774   1078 cyc   2,046 um2/hit   1,943,817 um2*cyc/req
+    reference   279,456   1269 cyc   2,430 um2/hit   1,713,300 um2*cyc/req
+    claude      212,774   1078 cyc   2,046 um2/hit   1,108,100 um2*cyc/req
                 0.76x raw            0.84x per hit   0.65x per throughput
+
+**CORRECTED 2026-08-29.** The two absolute figures first read 3,005,336 and
+1,943,817, computed with **118** requests taken from the testbench header
+comment. The checker counts **207** -- the header was stale and I quoted it.
+**The RATIOS are unaffected**, because the request count is the same constant on
+both sides and cancels; only the absolutes moved. The emitted metric divides by
+the measured `checked` rather than a literal, so the stale number cannot reach a
+published ratio.
 
 ### d_nw01 — three hidden
 

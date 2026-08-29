@@ -196,10 +196,25 @@ scored_axes:
 # against 0.76x raw. The raw figure overstates the gap by about a third, which
 # is precisely what G2 says the per-unit column is for.
 scored_metrics:
-  - {metric: tlb_hits,     label: "tlb.hits", role: capability}
+  # CORRECTED 2026-08-29. The first version of this block tagged `tlb_hits` as
+  # role: capability. THAT WAS WRONG AND IT WAS MINE. P2 reads "TRANSLATION
+  # STORAGE IS NORMATIVE, NOT A DESIGN CHOICE" and pins 16+16 fully associative,
+  # with T4/T9 checking both counts behaviourally. Capability means more is
+  # better AND AREA BUYS IT; here area cannot buy an entry. Per-TLB-hit would
+  # have divided by something the design cannot trade, and the variation that
+  # does exist between designs comes from REPLACEMENT POLICY, which A9
+  # explicitly declines to score. P2's own closing line is the rule:
+  # "See rule 25: an unpriced axis is bounded in the specification, not given a
+  # metric of its own."
+  #
+  # THE CAPABILITY IS THROUGHPUT. L1 scores cycles; G4 says the cycle axis is
+  # what charges for buying area with time. Published as the INVERTED metric so
+  # the renderer's single division reads correctly -- see the tb comment.
+  - {metric: requests_per_1000cyc, label: "req/1k", role: capability}
+  - {metric: total_cycles, label: "cycles"}    # the same axis uninverted; the serialisation guard
+  - {metric: tlb_hits,     label: "tlb.hits"}  # PINNED by P2 -- reported, never a role
   - {metric: hit_pct,      label: "hit%"}      # normalised tlb_hits, not independent
-  - {metric: pte_reads,    label: "pte.rd"}    # consequence of tlb_hits
-  - {metric: total_cycles, label: "cycles"}    # the serialisation guard; see the axis block
+  - {metric: pte_reads,    label: "pte.rd"}    # consequence of replacement policy, which A9 declines to score
 
 reporting_requirement_for_agent_1:
   status: REQUIREMENT, not a suggestion

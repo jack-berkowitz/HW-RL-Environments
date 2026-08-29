@@ -167,6 +167,20 @@ scored_metrics:
   - {metric: beats_delivered,       label: "beats",    role: capability}
   - {metric: beats_cycles,          label: "cycles"}   # denominator of throughput
   - {metric: liveness_worst_wait,   label: "wait.max"} # stimulus-driven
+  # ADDED 2026-08-29 from the axis audit. Both were EMITTED and UNDECLARED, so
+  # neither reached a chart or a per-unit column.
+  #
+  # latency_first_beat exists because L3 says "LATENCY IS FREE. Input-to-output
+  # delay is a design choice, REPORTED AS A METRIC and never gated" -- and until
+  # today NO LINE IN THE TESTBENCH EMITTED ONE. The clause promised a metric the
+  # harness never produced. role: choice, not capability: it is lower-is-better,
+  # and `choice` is not divided by area, so it needs no inversion.
+  - {metric: latency_first_beat,    label: "lat.1st",  role: choice}
+  # b1_beats_held is free BELOW B1's ceiling of 2 frames per output -- a ceiling
+  # is not a pin, freedom exists under it, and area buys it. Same shape as
+  # d_ca04's capacity_beats_accepted, which is declared capability for the same
+  # reason.
+  - {metric: b1_beats_held,         label: "held",     role: capability}
 
 # =============================================================================
 capability_controls:
