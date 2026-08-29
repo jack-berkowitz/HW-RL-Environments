@@ -633,3 +633,41 @@ and has a control proving it discriminates.
 
 **A withheld reason copied across two rows because the rows look similar is the
 same defect as a constant copied across two clauses because they look similar.**
+
+### The schema bridge, and what it changes. 2026-08-29
+
+The PPA owner separated the two objects correctly and it is the resolution worth
+keeping: **"declares no capability metric" was TRUE OF THE TOOLING and FALSE OF
+THE CONTRACT**, and it was asserted of the contract.
+
+    d_ca04   scored_metrics: - {metric: capacity_beats_accepted, role: capability}
+    d_ca03   - axis: total_cycles / kind: reported / where: ...   (no role: key)
+
+`report_table.metric_roles()` reads the first form only. So d_ca03's capability
+was real in G2, emitted on every run, and **invisible to every consumer** — the
+capability chart omitted the task and no per-unit column was generated. A reader
+of the tooling concluded the axis did not exist, correctly, from the tooling.
+
+`scored_metrics` now declares it; the richer `axis:` blocks stay, since they carry
+the validating controls. `metric_roles('d_ca03')` returns
+`{'tlb_hits': 'capability'}`, measured after the edit.
+
+**`tlb_hits` IS THE CAPABILITY AND `total_cycles` IS NOT, and the reason is the
+renderer.** `report_table` computes `design_area_um2 / metric` — "µm² per unit" —
+so the metric must be MORE-IS-BETTER or the normalisation inverts. TLB hits fit
+G2 exactly: entries cost area and buy hits. Cycles do not — fewer is better, so
+area-per-cycle would **flatter a slower design**, the opposite of the disclosure
+the axis exists for. `total_cycles` keeps its axis block and no role.
+
+**What the per-unit column will show, from records already in the tree:**
+
+    reference   279,456 / 115 hits = 2,430 um2 per TLB hit
+    claude      212,774 / 104 hits = 2,046 um2 per TLB hit   = 0.84x per unit
+
+against **0.76× raw**. The raw figure overstates the gap by about a third — which
+is exactly what G2 says the per-unit column is for: *"raw area credits a design
+for being small when it was actually doing less."*
+
+So the row is no longer withheld for want of an instrument. It wants rendering as
+`0.76× raw / 0.84× per unit of TLB hit`, which is what the contract asked for
+before any of this started.

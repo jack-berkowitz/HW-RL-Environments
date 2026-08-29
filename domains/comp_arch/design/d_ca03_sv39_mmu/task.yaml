@@ -172,6 +172,35 @@ scored_axes:
       byte-identical at 832, and moves area 190,561 -> 329,980 with an exact
       +4,096 flop delta.
 
+# =============================================================================
+# SCHEMA BRIDGE, 2026-08-29. The axis: blocks above are the richer record and
+# stay; this block exists because report_table.metric_roles() reads ONLY the
+# scored_metrics/role form, so d_ca03's capability was real in spec G2, emitted
+# on every run, and invisible to every consumer. The capability chart omitted
+# this task and no per-unit column was generated -- and a reader of the TOOLING
+# correctly concluded the axis did not exist, which is how a withheld-row reason
+# came to say d_ca03 "declares no capability metric". True of the tooling, false
+# of the contract, and the gap between those was the whole defect.
+#
+# WHY tlb_hits IS THE CAPABILITY AND total_cycles IS NOT.
+# report_table renders capability as design_area_um2 / metric -- "um2 per unit"
+# -- so the metric must be MORE-IS-BETTER or the normalisation inverts. TLB hits
+# fit G2 exactly: more entries cost area and buy hits. CYCLES DO NOT: fewer is
+# better, so area-per-cycle would flatter a SLOWER design, which is the opposite
+# of the disclosure the axis exists for. total_cycles keeps its axis: block and
+# no role, which is what it already was.
+#
+# WHAT IT MAKES VISIBLE, on records already in the tree:
+#   reference  area 279,456 / 115 hits = 2,430 um2 per TLB hit
+#   claude     area 212,774 / 104 hits = 2,046 um2 per TLB hit = 0.84x per unit
+# against 0.76x raw. The raw figure overstates the gap by about a third, which
+# is precisely what G2 says the per-unit column is for.
+scored_metrics:
+  - {metric: tlb_hits,     label: "tlb.hits", role: capability}
+  - {metric: hit_pct,      label: "hit%"}      # normalised tlb_hits, not independent
+  - {metric: pte_reads,    label: "pte.rd"}    # consequence of tlb_hits
+  - {metric: total_cycles, label: "cycles"}    # the serialisation guard; see the axis block
+
 reporting_requirement_for_agent_1:
   status: REQUIREMENT, not a suggestion
   what_exists: >
