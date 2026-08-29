@@ -9392,3 +9392,86 @@ note sees a failure.
 All of that changes what the NEXT batch measures. None of it changes this one, and
 those are different kinds of value that a summary line reporting "scores
 unchanged" would flatten into one.
+
+## Vacuity sweep across the eleven: the F1 shape does not recur, and 53% of failure sites are never exercised
+
+NOT-FOR-CATALOG *as a factual statement only — proposed; the 53% number is the
+part that belongs in the catalog.*
+
+### The instrument, and its control
+
+Every `fail()` call site in each reference testbench was tagged with a unique
+index — **sites, not clause ids**, because two sites can share an id and a
+clause-level count cannot separate them. Each task's tb was then run against its
+golden, every one of its mutants, **and the gate mutant**.
+
+The gate mutant is the discriminator and the reason this measures vacuity rather
+than coverage. With every DUT output tied high, any site trippable by DUT
+BEHAVIOUR trips. A site that still never fires needs stimulus the testbench does
+not produce — which is what "vacuous" means here.
+
+**Control: it rediscovers the one vacuity I already knew about.** Run against
+v_ca03's tb as it stood before the F1 fix:
+
+    site 1  AR handshake while rst_ni low   NEVER FIRED   <- known vacuous
+    site 2  AW handshake while rst_ni low   NEVER FIRED   <- known vacuous
+    site 3  W  handshake while rst_ni low   NEVER FIRED   <- known vacuous
+    site 4  s_rvalid while rst_ni low       fired         <- reachable
+    site 5  s_bvalid while rst_ni low       fired         <- reachable
+
+Without the gate mutant, sites 4 and 5 were also flagged — the control is what
+showed the mutant set alone cannot draw this distinction.
+
+### The result: the F1 shape does not recur
+
+Zero never-fired sites sit inside an in-reset window on any of the eleven tasks.
+
+**That number was 1 before I corrected a bug in my own filter.** The regex tested
+`if (!rst...)`, which is the IN-RESET gate on the seven tasks using active-low
+`rst_n` and the NORMAL-OPERATION gate on the four using active-high `rst`. It
+matched a v_nw04 site that is a testbench self-discipline check and correctly
+never fires. Polarity is per task and I assumed it was uniform:
+
+    active-low rst_n   v_ai02 v_ca03 v_ca04 v_ca05 v_ca06 v_ca07 v_dsp02 v_nw02
+    active-high rst    v_nw01 v_nw03 v_nw04
+
+### What this does and does not establish
+
+**Does:** the specific defect found on v_ca03 — a check inside a reset window the
+stimulus never enters — exists nowhere else in the eleven.
+
+**Does not:** that there is no other vacuity. I tested ONE shape. 226 sites never
+fired and I examined only those matching a reset-window pattern. A site gated on a
+testbench phase variable, a parameter, or a coverage counter would be equally
+vacuous and this sweep would not see it.
+
+### The number that is worth more than the negative result
+
+    across 11 tasks   419 fail() sites
+                      226 never fired against golden + EVERY mutant + gate mutant
+                      53%
+
+    task            sites  never  exercised
+    v_ai02             25     19      6
+    v_ca03             55     31     24
+    v_ca04             25     14     11
+    v_ca05             27     14     13
+    v_ca06             56     22     34
+    v_ca07             45     21     24
+    v_dsp02            19     13      6
+    v_nw01             70     46     24
+    v_nw02             49     23     26
+    v_nw03             20      9     11
+    v_nw04             28     14     14
+
+**More than half of every reference testbench's failure sites are never exercised
+by the task's own defect set.** That is not vacuity — most of those sites are
+reachable and simply have no shipped mutant that drives them. It is a COVERAGE
+statement about the mutant sets, measured at whole-testbench scale for the first
+time, and it is the same finding as the per-selector reachability work
+(15 of 22 branches) arriving three levels coarser and much larger.
+
+It also bounds what a kill count means. A submission scoring 11 of 11 has been
+measured against defects that touch 24 of v_ca03's 55 failure sites. The other 31
+are checks no mutant asks about, so a submission that omits every one of them
+scores identically to one that implements them all.
