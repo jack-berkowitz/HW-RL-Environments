@@ -7178,12 +7178,35 @@ the candidates. **All four recorded `note.abc_runtime_target_ps=33750`**, so
 every build mapped against the same ABC target. A recording divergence reported
 as a comparability failure.
 
-**The two paths hash different generated files.** `reference_ppa.sh` hashes
-`orfs_runs/<task>_reference/config.mk`; `ppa_candidate.sh` hashes
-`orfs_runs/<nick>/config.mk`. In one, ORFS had already expanded the
-`$(shell awk …)` ABC line to 33750; in the other the expression survived and
-re-resolved at hash time against the SDC to 40000. The field recorded **which
-generated file was read**, which is not a property of the build.
+**RETRACTED, and this paragraph is kept because the retraction is the finding.**
+It said the two paths hash different generated files and that the field recorded
+which one was read. Both callers do hash a generated config — that part is
+true — but it is not the cause, and I shipped the inference as grounds for a
+`scripts/` change without running the two commands that refute it:
+
+    reference's GENERATED config  ->  83088234b2c846ea   matches both post-fix records
+    the SOURCE config             ->  97d14983bc1a92aa   matches NOTHING on record
+
+If file choice were the split, some record would carry `97d14983`. None does.
+And `SYNTH_MEMORY_MAX_BITS=65536`, which I cited as the differing field, is
+present in all six records.
+
+**The cause is temporal.** Every field matches across the six except
+`ABC_CLOCK_PERIOD_IN_PS`: 40000 on the three candidates and the 08-27 reference,
+33750 on both later references. The 40000 records carry their own note saying
+the hashed value is the config text resolved against the SDC — the pre-fix code
+was describing what it recorded. So the fix above is correct and the remedy is
+to **rebuild the three d_ai04 candidates**, which are the records on the old
+side of it. Nothing in either caller needs changing.
+
+That is F113 stated exactly, and I had the direction backwards: an instrument
+fixed mid-round partitions the records either side of it, and I rebuilt the
+reference when it was the candidates that were stranded.
+
+A correct measurement, an inferred mechanism, no test of the mechanism, sent to
+a peer as grounds for action. The test was two `build_config_hash.py`
+invocations. Caught by AGENT-DESIGN-43a92055, who was asked to act on my report,
+went to do it, and measured first.
 
 d_ca03 agreed on one digest in the same round, and the PC agent named why
 precisely: *neither* of its configs resolved the override, so they match by
