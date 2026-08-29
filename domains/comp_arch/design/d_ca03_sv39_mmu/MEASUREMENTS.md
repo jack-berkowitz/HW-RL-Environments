@@ -578,3 +578,58 @@ that sequence F now hit-interleaves for both.
 **The A5 check can fail now.** `+mutate_pte` flips one bit in a planted entry at
 step 50 and the table comparison fires. Its predecessor was a counter that was
 declared, compared, printed and never incremented — see F75.
+
+## The withheld reason for `claude` is false in both clauses. 2026-08-29
+
+`docs/withheld_rows.md` reads:
+
+    d_ca03 claude :: declares no capability metric, so a 0.76x raw-area result
+                     cannot be separated from a design that implements less
+
+**Both halves are wrong, and the second is wrong because the separation has
+already been made.**
+
+**d_ca03 DECLARES a capability axis.** Spec G2, in terms that anticipate this
+exact confusion: *"CAPABILITY — more is better and area buys it. Reported both
+raw and per unit of area, **because raw area credits a design for being small
+when it was actually doing less**."* `task.yaml` additionally carries a
+CAPABILITY-REDUCED control whose *"whole evidentiary value is the SPLIT — it
+passes where the capability is not needed and fails where it is, and that pair is
+what proves the capability is scored."*
+
+**And the metric was recorded, for this candidate, in this round:**
+
+| | hit_pct | tlb_hits | pte_reads | total_cycles | design area |
+|---|---|---|---|---|---|
+| reference | **55** | **115** | **502** | 1269 | 279,456 |
+| `chat` | 50 | 104 | 584 | 976 | — |
+| `claude` | **50** | **104** | **584** | 1078 | **212,774** |
+
+**`claude` is smaller AND doing less, and by how much is on the record.** 0.76x
+the area with a 5-point lower TLB hit rate, 11 fewer TLB hits and **16% more
+page-table reads** across the same 118 requests. That is precisely the trade G2
+exists to disclose, and it is measured rather than suspected.
+
+### What follows, and it is not "publish it"
+
+The reason for withholding is refuted; that is not the same as the row being
+ready. G2's own prescription is that capability is *"reported both raw and per
+unit of area"* — so the correct object is not the bare 0.76x, it is 0.76x
+**alongside hit_pct 50 against 55**. A row carrying raw area alone is the thing
+G2 warns about, whichever direction it points.
+
+So: the row should not be published as `0.76x`, and it should not be withheld for
+the stated reason either. It should carry the capability number beside the area
+number, which is what the contract already asks for and what the records already
+contain.
+
+### Why this was worth checking rather than assuming
+
+The PPA owner flagged this line as unchecked by either of us and said *"its two
+clauses are the same two that survive on d_ai04, so I expect it holds, but
+expecting is what produced this."* It did not hold. The two tasks look alike and
+are not: d_ai04 genuinely has no capability metric, and d_ca03 has one, emits it,
+and has a control proving it discriminates.
+
+**A withheld reason copied across two rows because the rows look similar is the
+same defect as a constant copied across two clauses because they look similar.**
