@@ -73,7 +73,7 @@ establishes that weighting, which is why there is no combined score.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_capability_dark.svg">
-  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. non-blocking data cache per max_outstanding_n: claude 1.53x. asynchronous CDC FIFO per capacity_beats_accepted: chat 0.90x, claude 0.89x, gemini 0.89x. multi-format FMA per throughput_ops_per_1000cyc: chat 3.05x, claude 1.28x. AXI4 crossbar, range over 4 declared metrics: chat 1.03x to 5.87x, claude 0.82x to 0.86x. output-queued AXI-Stream switch per beats_delivered: claude 0.83x." src="docs/assets/design_capability_light.svg" width="100%">
+  <img alt="Area per unit of capability, relative to each task's reference. Where a task declares several capability metrics the bar spans best to worst. non-blocking data cache per max_outstanding_n: claude 1.53x. asynchronous CDC FIFO per capacity_beats_accepted: chat 0.90x, claude 0.89x, gemini 0.89x. multi-format FMA per throughput_ops_per_1000cyc: chat 3.05x, claude 1.28x. AXI4 crossbar, range over 5 declared metrics: chat 1.03x to 5.87x, claude 0.82x to 0.86x. output-queued AXI-Stream switch, range over 2 declared metrics: claude 0.83x to 0.94x." src="docs/assets/design_capability_light.svg" width="100%">
 </picture>
 
 **Raw area credits a design for being small when it was merely doing less**, and

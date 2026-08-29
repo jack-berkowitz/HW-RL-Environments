@@ -30,6 +30,7 @@ the name.
 """
 import glob
 import os
+import json
 import re
 import sys
 
@@ -38,40 +39,44 @@ sys.path.insert(0, os.path.join(REPO, "scripts"))
 PPA_ONLY = {"area_um2", "power_mw", "area", "power", "design_area_um2", "power_w"}
 
 
-def emitted(task_dir):
-    """Every metric name on a METRIC: line, not just the first.
+def emitted(task):
+    """Metric names that ACTUALLY APPEAR in this task's run records.
 
-    THE FIRST VERSION CAPTURED ONE NAME PER LINE and was wrong on most tasks.
-    d_ca03 emits four metrics from a single $display:
+    FOUR STATIC PARSES OF THE TESTBENCH WERE WRONG BEFORE THIS ONE, each in a
+    different way, and the sequence is the argument:
 
-        $display("METRIC: total_cycles=%0d pte_reads=%0d tlb_hits=%0d hit_pct=%0d", ...)
+      1. one name per METRIC: line   -- missed multi-metric $display
+      2. every `name=`               -- swept in min/max/n sub-fields
+      3. first token wins            -- missed composed <name>_<subfield>
+      4. any static parse at all     -- d_nw01 builds names at RUNTIME with
+                                        `outstanding_master%0d`, and d_nw03's
+                                        liveness_worst_wait is emitted from a
+                                        shared include, not from its own tb
 
-    so it reported pte_reads, tlb_hits and hit_pct as DECLARED, NEVER EMITTED
-    while all three sit in every d_ca03 run record. A checker whose failure mode
-    is a false positive, nearly shipped because an independent audit had flagged
-    the same tasks -- the agreement looked like corroboration and was
-    coincidence, which is the shape this repo has now filed four times.
+    A metric name that only exists after format expansion cannot be read out of
+    the source, so the question "is this metric ever produced" is not answerable
+    from the testbench text. It IS answerable from the records, which are what
+    the emit produced. Measure the output rather than infer it from the program.
+
+    Every earlier version reported false positives, and one of them looked
+    corroborated because an independent audit had flagged the same task names
+    for unrelated reasons.
     """
     out = set()
-    for f in glob.glob(os.path.join(task_dir, "tb", "*.sv")):
-        for line in open(f, errors="replace"):
-            if "METRIC:" not in line:
-                continue
-            body = line.split("METRIC:", 1)[1]
-            # TWO EMIT SHAPES, and conflating them produced junk names.
-            #   METRIC: total_cycles=%0d pte_reads=%0d      -> each name= is a metric
-            #   METRIC: crossing_latency_rdclk min=%0d max=%0d n=%0d
-            #                                               -> ONE metric, then sub-fields
-            # The discriminator is the first token: if it carries no `=`, it is
-            # the metric name and everything after it qualifies it. Without this
-            # the checker reported `min`, `max`, `n`, `ok` and `expected` as
-            # undeclared metrics -- noise that would have buried the two real
-            # findings under fourteen false ones.
-            toks = body.split()
-            if toks and "=" not in toks[0]:
-                out.add(re.sub(r"[^A-Za-z_0-9].*$", "", toks[0]))
-            else:
-                out |= set(re.findall(r"([A-Za-z_][A-Za-z_0-9]*)\s*=", body))
+    for f in glob.glob(os.path.join(REPO, "runs", task, "*__sim.json")):
+        try:
+            r = json.load(open(f))
+        except Exception:
+            continue
+        for v in (r.get("metrics") or {}).values():
+            if isinstance(v, dict):
+                out |= set(v)
+            elif isinstance(v, str):
+                out.add(v)
+        for k in ("metrics",):
+            m = r.get(k)
+            if isinstance(m, dict):
+                out |= {x for x in m if not isinstance(m[x], dict)}
     return out
 
 
@@ -84,7 +89,7 @@ def main():
             dec = {m for m, _e, _r in RT.scored_metrics(d)}
         except Exception:
             dec = set()
-        emi = emitted(d)
+        emi = emitted(task)
         ppa = dec & PPA_ONLY
         missing = dec - emi - PPA_ONLY
         extra = emi - dec
@@ -98,7 +103,13 @@ def main():
         if miss:
             print(f"      DECLARED, NEVER EMITTED: {', '.join(miss)}")
         if extra:
-            print(f"      EMITTED, NOT DECLARED:   {', '.join(extra)}")
+            # INFORMATIONAL, NOT A FINDING LIST. It includes sub-fields of
+            # composite metrics, guard flags, and metrics emitted only by
+            # controls -- none of which a task is obliged to declare. Reported
+            # so a genuinely undeclared axis is FINDABLE, not so the count means
+            # something. d_nw01's outstanding_master1 was found this way.
+            print(f"      emitted, not declared ({len(extra)}, informational): "
+                  f"{', '.join(extra)}")
         if ppa:
             print(f"      PPA FIELD IN sim METRICS: {', '.join(ppa)}"
                   f"  (can never appear in a sim record)")
