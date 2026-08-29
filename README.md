@@ -131,9 +131,9 @@ six that are. That is the result, not a gap in the data.
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 179,943 | 230.0 | +1.912 | — |
-| `chat` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
-| `claude` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
-| `gemini` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
+| `chat` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
+| `claude` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
+| `gemini` | *withheld* | *withheld* | *withheld* | *withheld — pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
 
 ### d_ca01 — non-blocking data cache, pinned at 15 ns
 
@@ -154,7 +154,7 @@ by 49 ps and is withheld.
 |---|---|---|---|---|
 | reference | 279,456 | 32.6 | +0.989 | — |
 | `chat` | *withheld* | *withheld* | **−35.461** | missed timing |
-| `claude` | *withheld* | *withheld* | *withheld* | *withheld — G2 prescribes capability reported RAW AND PER UNIT OF AREA, and the metric is recorded every run -- claude hit_pct 50, tlb_hits 104, pte_reads 584 against the reference's 55, 115, 502 -- so smaller-and-doing-less IS separable here and is measured. The row is held because task.yaml declares these under `axis:` rather than `scored_metrics: role: capability`, so metric_roles() returns {} and no per-unit column is generated; G2 says the object is 0.76x ALONGSIDE hit_pct 50 against 55, and a bare 0.76x is what G2 exists to warn about* |
+| `claude` | *withheld* | *withheld* | *withheld* | *withheld — the per-unit column that would have justified publishing is INVALID: tlb_hits is PINNED by P2 (translation storage is normative, 16+16 fully associative), so area-per-TLB-hit divides by a constant the design cannot trade. total_cycles IS free and is not rendered, because the renderer performs one division. Until a free axis is declared AND rendered, 0.76x raw is the bare figure G2 exists to warn about* |
 | `gemini` | **0** | **0** | — | did not build |
 
 `chat` is correct — it passes the scored configuration — and needs roughly 48 ns

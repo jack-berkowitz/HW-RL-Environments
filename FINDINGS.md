@@ -7457,3 +7457,49 @@ eighteen: the check names the task, prints the disagreeing counts, and returns
 to quiet when the probe is removed.
 
 **Rules:** 17, 19, 20
+
+## F119. An axis the renderer cannot express is an axis the task does not have
+
+AGENT-DESIGN-43a92055's audit of all ten design tasks, verified on the points
+that carry consequences, and mechanised for the half a script can reach.
+
+**`tlb_hits` was published as `capability` and P2 pins it.** The spec is
+unambiguous — *"P2. TRANSLATION STORAGE IS NORMATIVE, NOT A DESIGN CHOICE"*,
+16+16 fully associative — so area-per-TLB-hit divides by a constant the design
+cannot trade. It was tagged `capability` while fixing the adjacent defect, which
+is the audit's own sharpest point: **a hidden axis produces no number; a wrongly
+published one produces a number that looks like a measurement.**
+
+**Nothing reached a reader.** The row was withheld pending a decision and the
+capability chart suppresses held rows, so the invalid 0.84× never rendered. A
+withholding whose stated reason was itself wrong protected against an error
+neither session knew about — which is luck, not a control, and worth recording
+as luck.
+
+**Three tasks declare metrics nothing produces.** d_ai04 declares five and its
+testbench emits zero `METRIC:` lines; d_ca05 declares three, also zero. Both
+also declare `area_um2` and `power_mw` as *sim* metrics, which are PPA outputs
+and can never appear in a sim record — a category error independent of the emit
+gap. d_nw03's L3 states latency is *"REPORTED AS A METRIC and never gated"* and
+the string `latency` appears zero times in both its testbench files.
+
+### The checker was wrong twice before it was right, in opposite directions
+
+First cut captured one name per `METRIC:` line, so d_ca03's
+`$display("METRIC: total_cycles=%0d pte_reads=%0d tlb_hits=%0d hit_pct=%0d")`
+registered as three metrics never emitted — while all three sit in every d_ca03
+run record. **A checker whose failure mode is a false positive, and the audit's
+independent flagging of the same tasks made the agreement look like
+corroboration.** It was coincidence.
+
+Second cut captured every `name=`, which swept in the sub-fields of composite
+lines — `min`, `max`, `n`, `ok`, `expected` reported as undeclared metrics,
+fourteen false findings burying two real ones. There are two emit shapes and the
+first token discriminates them: no `=` means it is the metric name and the rest
+qualifies it.
+
+The remedy this argues for is not a better regex. **A declared metric should
+name the line that emits it**, the way a withheld row now names the clause that
+justifies it — then no parser has to infer the relationship from text.
+
+**Rules:** 16, 20, 23
