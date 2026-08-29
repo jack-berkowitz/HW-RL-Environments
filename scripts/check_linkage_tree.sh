@@ -130,7 +130,14 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   fi
   if [ -f "$d/scripts/check_refs_hashes.py" ]; then
     ( cd "$d" && python3 scripts/check_refs_hashes.py 2>&1 )
-    if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ refs_hashes"; fi
+    _refsrc=$?
+    # 1 = an anchor's bytes changed. 2 = refs.lock has no file_hashes block at
+    # all, which is a broken lock and proves NOTHING about the anchors. Treating
+    # both as one failure printed "__FAILED__ refs_hashes" for a malformed lock,
+    # which reads as "a vendored oracle moved" -- the one thing that checker
+    # exists to detect and the one thing this condition cannot establish.
+    if [ $_refsrc -eq 1 ]; then rc=1; echo "__FAILED__ refs_hashes"; fi
+    if [ $_refsrc -eq 2 ]; then rc=1; echo "__FAILED__ refs_lock_malformed"; fi
   fi
   if [ -f "$d/scripts/check_inbox_cataloged.py" ]; then
     ( cd "$d" && python3 scripts/check_inbox_cataloged.py 2>&1 )
@@ -280,6 +287,11 @@ report_failure () {   # $1 = checker output (with markers)  $2 = what was read
     *" rule_linkage "*)
       echo "FAILED: RULE/FINDING LINKAGE on $what -- see the lines above for the"
       echo "        specific rule or finding whose counterpart is missing." ;;
+    *" refs_lock_malformed "*)
+      echo "FAILED: refs.lock has NO file_hashes BLOCK on $what -- the lock is"
+      echo "        malformed, which says nothing about whether any vendored"
+      echo "        anchor changed. Regenerate with scripts/gen_refs_lock.py"
+      echo "        rather than going to look for a moved oracle." ;;
     *)
       # THIS SAID "no checker reported which" WHILE $fails NAMED THEM. The
       # arms above cover the three original checkers; every checker added since

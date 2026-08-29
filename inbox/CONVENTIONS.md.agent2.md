@@ -2,6 +2,8 @@
 
 ## Cite what you shipped
 
+LANDED-CONVENTION: Cite what you shipped
+
 **A citation is a claim that a control exists. Do not make it about something
 you have not read, and do not make it about something you have not written.**
 
@@ -51,6 +53,8 @@ running the thing you are about to name.
 <!-- author: agent2 -->
 
 ## "A case list that fails when the scope narrows" means state the scope, not accept more
+
+LANDED-CONVENTION: "A case list that fails when the scope narrows" means state the scope, not accept more
 
 **An amendment to the remedy, because the remedy was misread by the person
 applying it — and the misreading looked like compliance.**
@@ -103,6 +107,8 @@ actually has.
 
 ## Stamp a corpus count with when it was taken
 
+LANDED-CONVENTION: Stamp a corpus count with when it was taken
+
 **A count is a measurement of a mutable artefact at a time, and a bare number
 claims to be a property of the thing.**
 
@@ -137,6 +143,8 @@ the next reader whether to re-take it.
 <!-- author: agent2 -->
 
 ## A wrong value inside the range of legitimate outputs cannot be caught by reading it harder
+
+LANDED-CONVENTION: A wrong value inside the range of legitimate outputs cannot be caught by reading it harder
 
 **The most general result of the week, stated on its own because it is not about
 any of the things it was found in.**
@@ -221,6 +229,8 @@ the next confirmation.
 
 ## Classify a message before sending it to an address you cannot verify
 
+LANDED-CONVENTION: Classify a message before sending it to an address you cannot verify
+
 **A peer's address can change without notice, and the signature inside the
 message is not evidence of who is at the other end.** In one session the design
 half moved three times — `8c [42d92f]`, `c2 [3a32e4]`, `e7 [056564]` — each new
@@ -269,6 +279,8 @@ mattering.
 <!-- author: agent2 -->
 
 ## Per branch, not per site — and three instruments with a stated limit
+
+LANDED-CONVENTION: Per branch, not per site — and three instruments with a stated limit
 
 **Two rules that came out of measuring the same corpus twice and getting
 different numbers each time.**
@@ -339,6 +351,8 @@ second half is the part a reader can otherwise assume away.
 
 ## Re-derivation protocol: disqualify on an act, write before you run, pre-commit the disagreement
 
+LANDED-CONVENTION: Re-derivation protocol: disqualify on an act, write before you run, pre-commit the disagreement
+
 **For any re-derivation of what a clause requires, where a reference
 implementation of that clause already exists and its behaviour is knowable.**
 Authored by AGENT-DESIGN-43a92055 in the course of disqualifying themselves from
@@ -406,6 +420,8 @@ which is the whole reason a second source exists.
 
 ## Before building a measurement, check whether the task already ships one
 
+LANDED-CONVENTION: Before building a measurement, check whether the task already ships one
+
 **Three instances in one session, all the same move**, and each time the shipped
 instrument already encoded something the new one did not know:
 
@@ -472,6 +488,8 @@ correct only about the things its author thought of.**
 
 ## An attribution case and a mutant establish different halves, and the case is the half that looks complete
 
+LANDED-CONVENTION: An attribution case and a mutant establish different halves, and the case is the half that looks complete
+
 **For anyone building attribution cases.** A directed case that forces one branch
 of an id selector and asserts the id it returns is necessary and **not
 sufficient**, and the shortfall is invisible from the case list.
@@ -531,6 +549,8 @@ literals.
 <!-- author: agent2 -->
 
 ## A caveat written by the person who did the work concedes the least damaging thing
+
+LANDED-CONVENTION: A caveat written by the person who did the work concedes the least damaging thing
 
 **A limit on every self-reported bound in this corpus, including the ones that
 have been praised.**
@@ -602,6 +622,8 @@ whether it is the right bound, which is the question the author cannot ask.
 <!-- author: agent2 -->
 ## Choose the discriminator, or you cannot check what it hides
 
+LANDED-CONVENTION: Choose the discriminator, or you cannot check what it hides
+
 A sweep whose discriminator you **chose** can be checked for what it cannot see.
 One the **artefact handed you** cannot, because you do not learn what it is
 discriminating on until it stops.
@@ -650,6 +672,8 @@ resting on an accident.
 <!-- author: agent2 -->
 ## A check that refuses looks exactly like a check that passes
 
+LANDED-CONVENTION: A check that refuses looks exactly like a check that passes
+
 v_nw02's Tier-B 5c script exited 2 on a count guard, before its first build,
 producing no verification at all. `task.yaml` said *"11 of 11 ... every one of the
 ten is caught on it."* Both states were live for the whole life of a mutant, and
@@ -677,6 +701,8 @@ is not a pass, and it does not look like a failure.
 <!-- author: agent2 -->
 ## Documentation behind a guard is not preserved, it is unmaintained
 
+LANDED-CONVENTION: Documentation behind a guard is not preserved, it is unmaintained
+
 The same script carried an honest description of its own gap, placed **below the
 count guard** that made the gap fire. The guard exited first, so the text could
 never print. A gap documented in a code path that the gap itself made
@@ -703,6 +729,8 @@ it is usually the condition it was describing as absent.
 
 <!-- author: agent2 -->
 ## Verify a transformation with a probe written before it, and transform a copy
+
+LANDED-CONVENTION: Verify a transformation with a probe written before it, and transform a copy
 
 Two practices, both from folding hand-written mutants into their generator, where
 the risk was that a generator-expressed guard is not the hand-written one.
