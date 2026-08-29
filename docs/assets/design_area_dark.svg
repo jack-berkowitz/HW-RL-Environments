@@ -45,7 +45,8 @@
 <text x="216" y="347" fill="#9a9a9a" font-size="11" font-style="italic">missed timing</text>
 <text x="200" y="367" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
 <rect x="210" y="356" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="216" y="367" fill="#9a9a9a" font-size="11" font-style="italic">withheld</text>
+<rect x="210" y="356" width="103" height="15" rx="2" fill="#5b8dfb"/>
+<text x="319" y="367" fill="#e8e8e8" font-size="11">0.76×</text>
 <text x="200" y="387" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="376" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="216" y="387" fill="#9a9a9a" font-size="11" font-style="italic">did not build</text>

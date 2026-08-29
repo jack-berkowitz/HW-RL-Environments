@@ -40,6 +40,19 @@ divergence between the two axes anywhere in these results. `chat` misses the pin
 by 49 ps and is withheld.
 
 ## d_ca03
+`claude` is **0.76×** the reference's area raw and **0.65×** per unit of
+throughput — the only submission on this page that improves in the *same*
+direction on both. It delivers 192 requests per 1000 cycles against the
+reference's 163 while using a quarter less area, so normalisation widens its
+lead rather than narrowing it. The contrast with d_ca04 is the point: there, per
+unit closed most of the raw gap.
+
+A caution on reading it: the same submission looks *worse* per TLB hit
+(0.84× against 0.76× raw), because it retains fewer entries. That axis is not
+scored — P2 pins translation storage at 16+16 fully associative, so hit rate is
+not a design choice and area-per-hit divides by a constant. Throughput is the
+axis the design is free on, and it is the one shown.
+
 `chat` is correct — it passes the scored configuration — and needs roughly 48 ns
 to do it, against a 12.5 ns pin. That is not a near miss like d_nw03's 78 ps; it
 is a design that works and is nearly four times too slow.
