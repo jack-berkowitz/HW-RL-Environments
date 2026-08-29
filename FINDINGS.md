@@ -7178,12 +7178,58 @@ the candidates. **All four recorded `note.abc_runtime_target_ps=33750`**, so
 every build mapped against the same ABC target. A recording divergence reported
 as a comparability failure.
 
-**The two paths hash different generated files.** `reference_ppa.sh` hashes
-`orfs_runs/<task>_reference/config.mk`; `ppa_candidate.sh` hashes
-`orfs_runs/<nick>/config.mk`. In one, ORFS had already expanded the
-`$(shell awk …)` ABC line to 33750; in the other the expression survived and
-re-resolved at hash time against the SDC to 40000. The field recorded **which
-generated file was read**, which is not a property of the build.
+**RETRACTED, and this paragraph is kept because the retraction is the finding.**
+It said the two paths hash different generated files and that the field recorded
+which one was read. Both callers do hash a generated config — that part is
+true — but it is not the cause, and I shipped the inference as grounds for a
+`scripts/` change without running the two commands that refute it:
+
+    reference's GENERATED config  ->  83088234b2c846ea   matches both post-fix records
+    the SOURCE config             ->  97d14983bc1a92aa   matches NOTHING on record
+
+If file choice were the split, some record would carry `97d14983`. None does.
+
+**The attribution in this paragraph was itself wrong on first writing**, and is
+corrected here rather than quietly. It said `SYNTH_MEMORY_MAX_BITS=65536` was
+"cited as the differing field" by me. It was not: the pre-correction text of
+this finding named `ABC_CLOCK_PERIOD_IN_PS` as the differing field, said
+explicitly that both callers hash *generated* configs, and contains zero
+occurrences of `SYNTH_MEMORY_MAX_BITS`. That citation, and the
+source-versus-generated framing behind it, came from AGENT-DESIGN-43a92055 while
+acting on this finding — and they raised the misattribution themselves after
+checking the pre-correction text.
+
+The honest split, since two sessions made different errors with one output:
+
+    here    both configs correctly identified as generated, correct differing
+            field, causal step attributing the split to WHICH generated file
+            rather than to pre/post-fix timing
+    relayed source-versus-generated -- which this text had already ruled out --
+            plus SYNTH_MEMORY_MAX_BITS, a line present in all six records
+
+A relay that degrades the claim is not a relay, and a correction that absorbs
+someone else's error is not humility — it records that the mistake was made by
+someone who had that part right, which is the wrong lesson for whoever reads
+this next. It is F117 again, in the direction nobody checks: an over-generous
+misattribution moves no number, changes no decision, and has no error signal at
+all.
+
+**The cause is temporal.** Every field matches across the six except
+`ABC_CLOCK_PERIOD_IN_PS`: 40000 on the three candidates and the 08-27 reference,
+33750 on both later references. The 40000 records carry their own note saying
+the hashed value is the config text resolved against the SDC — the pre-fix code
+was describing what it recorded. So the fix above is correct and the remedy is
+to **rebuild the three d_ai04 candidates**, which are the records on the old
+side of it. Nothing in either caller needs changing.
+
+That is F113 stated exactly, and I had the direction backwards: an instrument
+fixed mid-round partitions the records either side of it, and I rebuilt the
+reference when it was the candidates that were stranded.
+
+A correct measurement, an inferred mechanism, no test of the mechanism, sent to
+a peer as grounds for action. The test was two `build_config_hash.py`
+invocations. Caught by AGENT-DESIGN-43a92055, who was asked to act on my report,
+went to do it, and measured first.
 
 d_ca03 agreed on one digest in the same round, and the PC agent named why
 precisely: *neither* of its configs resolved the override, so they match by
@@ -7372,3 +7418,88 @@ That is not what is implemented here, and saying so is the point: the current
 fix works and does not generalise, and the next renderer will leak by default.
 
 **Rules:** 20, 22
+
+## F118. Records of one kind wearing another kind's name, and a denominator nobody enforced
+
+Two classes cleared together, both safe today and neither safe by design.
+
+**45 records carry `kind: sim` and reached no verdict at all.** They hold exactly
+seven keys — `git_sha`, `kind`, `label`, `submission`, `submission_sha256_16`,
+`task`, `timestamp_utc` — and their label is `task_text_hash=<digest>`. They were
+written to stamp a task text, not to record a simulation. A record of one kind
+wearing another kind's name, and every consumer that counts sim records counts
+them.
+
+Measured: **zero of the 45 is newer than every real record for the same
+submission**, so no reader is misled today. But ten of them name
+`nonblocking_dcache_ref.sv`, so one written after a real run would make d_ca01's
+**reference** render as having reached no verdict — and "no verdict" is not
+distinguishable downstream from "no result". Same shape as the invalidation
+flag: correct behaviour resting on timestamps rather than on anything anyone
+decided. `_record_valid.is_result()` now rejects them explicitly, and the tables
+regenerate byte-identical, which is what a correct guard looks like on its first
+day.
+
+**`16/16 pass` and `1/1 pass` render identically and are not the same claim.**
+One survived sixteen parameterisations, the other survived one. Nothing checked
+that a task's scored submissions shared a denominator.
+
+Measured: one task disagrees, d_ca01 — and only among controls, where it is
+correct. `nonblocking_dcache_alt_ref`, `c01_neutralised` and `c03_neutralised`
+run 1 against sixteen scored submissions at 16. **A neutralised control exists
+to be checked at the one configuration whose behaviour it neutralises**, so
+requiring it to sweep sixteen would be requiring it to be a different artefact.
+`check_denominator.py` therefore scores the reference and the model candidates
+and exempts controls and mutants.
+
+Control-tested by writing a 1-config record for d_ca04/chat against its
+eighteen: the check names the task, prints the disagreeing counts, and returns
+to quiet when the probe is removed.
+
+**Rules:** 17, 19, 20
+
+## F119. An axis the renderer cannot express is an axis the task does not have
+
+AGENT-DESIGN-43a92055's audit of all ten design tasks, verified on the points
+that carry consequences, and mechanised for the half a script can reach.
+
+**`tlb_hits` was published as `capability` and P2 pins it.** The spec is
+unambiguous — *"P2. TRANSLATION STORAGE IS NORMATIVE, NOT A DESIGN CHOICE"*,
+16+16 fully associative — so area-per-TLB-hit divides by a constant the design
+cannot trade. It was tagged `capability` while fixing the adjacent defect, which
+is the audit's own sharpest point: **a hidden axis produces no number; a wrongly
+published one produces a number that looks like a measurement.**
+
+**Nothing reached a reader.** The row was withheld pending a decision and the
+capability chart suppresses held rows, so the invalid 0.84× never rendered. A
+withholding whose stated reason was itself wrong protected against an error
+neither session knew about — which is luck, not a control, and worth recording
+as luck.
+
+**Three tasks declare metrics nothing produces.** d_ai04 declares five and its
+testbench emits zero `METRIC:` lines; d_ca05 declares three, also zero. Both
+also declare `area_um2` and `power_mw` as *sim* metrics, which are PPA outputs
+and can never appear in a sim record — a category error independent of the emit
+gap. d_nw03's L3 states latency is *"REPORTED AS A METRIC and never gated"* and
+the string `latency` appears zero times in both its testbench files.
+
+### The checker was wrong twice before it was right, in opposite directions
+
+First cut captured one name per `METRIC:` line, so d_ca03's
+`$display("METRIC: total_cycles=%0d pte_reads=%0d tlb_hits=%0d hit_pct=%0d")`
+registered as three metrics never emitted — while all three sit in every d_ca03
+run record. **A checker whose failure mode is a false positive, and the audit's
+independent flagging of the same tasks made the agreement look like
+corroboration.** It was coincidence.
+
+Second cut captured every `name=`, which swept in the sub-fields of composite
+lines — `min`, `max`, `n`, `ok`, `expected` reported as undeclared metrics,
+fourteen false findings burying two real ones. There are two emit shapes and the
+first token discriminates them: no `=` means it is the metric name and the rest
+qualifies it.
+
+The remedy this argues for is not a better regex. **A declared metric should
+name the line that emits it**, the way a withheld row now names the clause that
+justifies it — then no parser has to infer the relationship from text.
+
+**Rules:** 16, 20, 23

@@ -671,3 +671,75 @@ for being small when it was actually doing less."*
 So the row is no longer withheld for want of an instrument. It wants rendering as
 `0.76× raw / 0.84× per unit of TLB hit`, which is what the contract asked for
 before any of this started.
+
+## The capability axis is CYCLES, not TLB hits — my bridge labelled the wrong one. 2026-08-29
+
+### Item 1: `total_cycles` is FREE and SCORED, from clause text
+
+**L1**: *"CYCLES ARE SCORED, over a fixed probe sequence, and reported SEPARATELY
+from area… NOT constrained: the latency of any INDIVIDUAL request. Only the total
+over the sequence is compared, so a design may spend cycles unevenly… however it
+likes."* **G4**: *"THE CYCLE AXIS CHARGES FOR BUYING AREA WITH TIME… TIME IS
+CHARGED, SO AREA CANNOT BE BOUGHT WITH IT."*
+
+So cycles is free, scored, and is precisely the axis area is traded against.
+
+### And `tlb_hits` is NOT a capability axis. RETRACTING my own assignment.
+
+**P2 PINS THE STORAGE BUDGET**: *"TRANSLATION STORAGE IS NORMATIVE, NOT A DESIGN
+CHOICE. A conforming design provides exactly: instruction TLB 16 entries fully
+associative, data TLB 16 entries fully associative, second-level TLB NONE."* T4
+and T9 check both counts rather than taking them on trust.
+
+Capability means *"more is better and area buys it."* **Here you cannot buy more
+— P2 forbids it.** And P2 closes with the rule that settles it outright:
+
+> *"See rule 25: an unpriced axis is bounded in the specification, not given a
+> metric of its own."*
+
+TLB capacity is bounded in the specification. Giving it a metric is the thing
+rule 25 names. My `scored_metrics` bridge did exactly that.
+
+**Hit COUNT still varies — 115 against 104 — because REPLACEMENT POLICY is free
+and EXPLICITLY UNSCORED** (A9: *"WHAT REMAINS UNSPECIFIED AND UNSCORED IS THE
+REPLACEMENT POLICY"*). So `µm² per TLB hit` prices a choice the contract twice
+declines to price. It is not a weak metric; it is a metric of the wrong thing.
+
+### Item 2: the inverted metric
+
+    name       requests_per_cycle
+    divides    118 / total_cycles
+    "work"     retiring the SCORED PROBE SEQUENCE -- 118 requests, and L1 fixes
+               the sequence, the page-table contents and the memory response
+               timing, identical for every submission, so the numerator is a
+               CONSTANT and the metric is a pure re-expression of cycles
+
+**Monotone more-is-better across the entire legal range.** L2 scores forward
+progress *"WITH NO EXCEPTION"*, so every conforming design retires all 118 in
+finite cycles: `total_cycles` is in (0, ∞), throughput is strictly decreasing in
+cycles, and there is no zero, no discontinuity and no reversal anywhere a
+conforming design can sit. `area / throughput` = `area × cycles / 118`, an
+area-delay product in µm²·cycles per request.
+
+### Item 3: all three axes, computed
+
+| | area | cycles | tlb_hits | µm² per hit | µm²·cyc per req |
+|---|---|---|---|---|---|
+| reference | 279,456 | 1269 | 115 | 2,430 | 3,005,336 |
+| `claude` | 212,774 | 1078 | 104 | 2,046 | 1,943,817 |
+| **ratio** | **0.76×** | | | **0.84×** | **0.65×** |
+
+**claude's advantage does not reverse — it STRENGTHENS.** 0.76× raw → 0.84× per
+hit → **0.65× per unit of throughput**, because claude is both smaller *and*
+faster: 1078 cycles against 1269.
+
+**The per-hit axis was the only one that made claude look worse, and it is the
+axis that should not be scored at all.** Had the bridge shipped as I wrote it,
+the published table would have understated claude by pricing a replacement policy
+the contract declines to price, and would have omitted the axis the contract says
+area is actually traded against.
+
+### One stale field found alongside
+
+`task.yaml`'s `axis: total_cycles` carries `reference_value: 832`. The measured
+reference is **1269**. Reported, not edited.

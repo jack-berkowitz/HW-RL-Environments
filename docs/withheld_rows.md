@@ -46,9 +46,9 @@ generator.
 #
 # The other two clauses were and remain sufficient on their own.
 
-d_ai04 chat :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
-d_ai04 claude :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
-d_ai04 gemini :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 chat :: pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 claude :: pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 gemini :: pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
 # CORRECTION, 2026-08-29, second one. The d_ca03 reason previously said the task
 # "declares no capability metric". That was true of the TOOLING and false of the
 # CONTRACT, and I asserted it of the contract. Spec G2 line 719 declares
@@ -62,4 +62,4 @@ d_ai04 gemini :: pinned at one configuration and declares no capability metric, 
 #   d_ca03  - axis: total_cycles / kind: reported / where: ...   (no role: key)
 # metric_roles() reads the first form only.
 
-d_ca03 claude :: G2 prescribes capability reported RAW AND PER UNIT OF AREA, and the metric is recorded every run -- claude hit_pct 50, tlb_hits 104, pte_reads 584 against the reference's 55, 115, 502 -- so smaller-and-doing-less IS separable here and is measured. The row is held because task.yaml declares these under `axis:` rather than `scored_metrics: role: capability`, so metric_roles() returns {} and no per-unit column is generated; G2 says the object is 0.76x ALONGSIDE hit_pct 50 against 55, and a bare 0.76x is what G2 exists to warn about
+d_ca03 claude :: the per-unit column that would have justified publishing is INVALID: tlb_hits is PINNED by P2 (translation storage is normative, 16+16 fully associative), so area-per-TLB-hit divides by a constant the design cannot trade. total_cycles IS free and is not rendered, because the renderer performs one division. Until a free axis is declared AND rendered, 0.76x raw is the bare figure G2 exists to warn about

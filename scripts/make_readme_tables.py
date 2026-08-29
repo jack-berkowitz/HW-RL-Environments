@@ -108,7 +108,8 @@ def load(kind):
             r = json.load(open(f))
         except Exception:
             continue
-        if r.get("kind") == kind and not _RV.is_invalidated(r):
+        if (r.get("kind") == kind and not _RV.is_invalidated(r)
+                and _RV.is_result(r)):
             out.append(r)
     return out
 

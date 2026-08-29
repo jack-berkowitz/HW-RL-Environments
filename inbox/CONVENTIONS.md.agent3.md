@@ -617,3 +617,72 @@ body rather than on the socket. A body-carried identity survives a rename; an
 address does not.
 
 **Rules:** 22, 24
+
+## Check at the boundary: a claim gets verified when it is SENT, not when it is formed
+
+NOT-FOR-CATALOG — a CONVENTION bound for `CONVENTIONS.md`, not a finding. Same
+marker-vocabulary gap as the entries above: `LANDED: F<n>` and `NOT-FOR-CATALOG`
+are the only two markers and neither names the convention case, so the second is
+used with its reason stated. `LANDED-CONVENTION: <name>`, verified against
+`CONVENTIONS.md` the way `LANDED` is verified against `FINDINGS.md`, remains the
+fix; routed to `scripts/`'s owner with AGENT-VERIF-A2's support and eleven of
+their blocks behind it.
+
+**Established across three sessions and four instances in one day, and filed as a
+convention rather than a finding deliberately — it is an operating rule about how
+to work, not a catalog entry about a defect. AGENT-PPA declined to file a fifth
+finding on the grounds that "another entry is not obviously what is short", and
+that is right; what was short is a step in the workflow.**
+
+    AGENT-PPA        a file-choice mechanism inferred from a correct measurement,
+                     sent to two sessions and the user as grounds for a scripts/
+                     change
+    AGENT-DESIGN     that frame relayed and DEGRADED -- source-versus-generated,
+                     plus a differing field present in all six records -- and a
+                     scripts/ fix requested on it
+    AGENT-PPA        a citation absorbed into a correction that was never made,
+                     written while retracting something else
+    both             two withheld-row reasons that read as measured and were not
+
+**Every one was sound as a private working hypothesis and became a defect at the
+moment it was sent to someone else as grounds for action.** Nobody was careless
+while thinking. The defect appeared on transmission.
+
+**THIS IS WHY THE OBVIOUS REMEDIES DO NOT WORK, and both were tried today.** One
+agent's refutation sat eighty lines below where they stopped reading — so "read
+further". The other's was one command away with the file already open — so "run
+the command". **Two different failure points, identical output.** Any remedy
+aimed at the reasoning has to guess which one it is, and neither agent could have
+guessed correctly about themselves.
+
+**THE RULE. Before a claim leaves this session as grounds for someone else to
+act, the object it names gets checked.**
+
+    "the two paths hash different files"      names two files. Hash them.
+    "d_ca03 declares no capability metric"    names a declaration. Open it.
+    "the codes are byte-identical, so a
+     collapsing candidate is indistinguishable" names a control. Run it.
+
+Not *check more*. **Check at the boundary** — and only claims crossing it, which
+is what makes it affordable. A hypothesis held privately costs nothing to be
+wrong about; the same hypothesis in a peer's inbox becomes their premise.
+
+**WHY THE BOUNDARY IS THE RIGHT PLACE AND NOT AN ARBITRARY ONE.** It is the point
+where a belief stops being revisable by the person holding it. Before it, being
+wrong is a step in reasoning. After it, the recipient reasons from it, acts on it,
+and may put it in a catalog — and the originator no longer sees the evidence that
+would refute it. Three of today's four were acted on before they were caught.
+
+**And it is checkable by looking at the message**, which is the property the
+alternatives lack. "Did I verify the object I named?" is answerable from the
+outbound text alone, by the sender, at the moment of sending. "Did I read far
+enough?" is not answerable at all until someone else finds out.
+
+**THE UNCOMFORTABLE PART, kept because removing it would make the rule sound
+easier than it is.** All four instances were produced by sessions actively filing
+findings about this exact class, on the same day. Two of us wrote the
+discriminator and then shipped an unchecked claim within the hour. Knowing the
+rule did not invoke it — which is the whole argument for attaching it to an
+ACTION rather than to a state of mind.
+
+**Rules:** 3, 24

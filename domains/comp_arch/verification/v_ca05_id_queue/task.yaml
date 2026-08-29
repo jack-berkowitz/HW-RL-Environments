@@ -62,6 +62,34 @@ scoring_ceiling:
     came from re-testing the same clauses at occupancies the earlier phases
     never constructed.
 
+negative_controls:
+  date: 2026-08-28
+  why: >
+    This task shipped NO negative controls. Every clause check rested on the
+    mutant set, so nothing showed any of them could fire independently of the
+    defects that happen to ship with it. Eight of the eleven verification tasks
+    carried controls; this was one of the three that did not.
+
+    The motivating case is v_ca03's F1(a): a correctly written check for a clause
+    the golden actually violated, kept silent by stimulus that never exercised
+    it, undetected until two submissions happened to concentrate on it. A
+    negative control is the standing version of that detection -- a DUT that MUST
+    fail, on one named clause.
+  control: negctl/r15_store_not_emptied_by_reset.sv
+  targets: "R15"
+  verified: >
+    With the perturbation: RESULT: FAIL, clauses fired: R15 only, driving two sites -- 'empty low after reset' and 'empty_o low after a reset asserted on a NON-EMPTY store'. All four of this task's R15 sites were among the 14 of 27 that never fire, so no shipped defect drove R15 at all.
+    Differential, perturbation replaced by a constant as the file's first line
+    declares: RESULT: PASS. That makes the perturbation NECESSARY for the
+    failure rather than merely present during it, which a FIRED counter alone
+    cannot establish.
+  wrapper_hazard: >
+    tb/tag_tracker_spec_tb.sv reads `dut.linked_data_free`, internal to the
+    golden. It sits under `ifdef PROBE so ordinary builds do not reach it, but
+    ANY wrapper for this task -- this control and the mutants alike -- fails to
+    compile under -DPROBE. The reference is the only DUT satisfying that
+    reference.
+
 scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS all 4 conformant perturbations

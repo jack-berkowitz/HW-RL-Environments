@@ -9475,3 +9475,132 @@ It also bounds what a kill count means. A submission scoring 11 of 11 has been
 measured against defects that touch 24 of v_ca03's 55 failure sites. The other 31
 are checks no mutant asks about, so a submission that omits every one of them
 scores identically to one that implements them all.
+
+## The three tasks without negative controls now have them, and one turned up a second vacuity
+
+NOT-FOR-CATALOG *as a factual statement only — proposed; the S15 vacuity below is
+the part that belongs in the catalog.*
+
+v_ca05, v_dsp02 and v_nw03 shipped no negative controls. Every clause check in
+them rested on the mutant set, so nothing showed any check could fire
+independently of the ten-or-so defects that happen to ship with each task.
+
+    task      control                              targets  result
+    v_dsp02   h2_results_stop_arriving.sv          H2       FAIL, H2 alone, 2 failures
+    v_ca05    r15_store_not_emptied_by_reset.sv    R15      FAIL, R15 alone, 2 sites
+    v_nw03    s12_beat_survives_reset.sv           S12      FAIL, S12 alone, 1 failure
+
+Each has a declared differential on its first line, and each was verified both
+ways: **with the perturbation FAIL on the named clause alone; with it replaced by
+a constant, PASS.** That makes the perturbation NECESSARY for the failure rather
+than merely present during it — which a FIRED counter cannot establish, and which
+is the gap that let two earlier versions of v_ca03's F1(a) control fail on the
+wrong clause while their own counters read healthy.
+
+Two of the three drive sites the vacuity sweep had found never fire: v_dsp02's
+drain-time "results never arrived", and all four of v_ca05's R15 sites — **no
+shipped defect in that task drove R15 at all.**
+
+### A SECOND VACUITY, and it is the same class as F1(a)
+
+v_dsp02's S15 site:
+
+    if (exp_q.size() != 0) fail("S15", "model still holds an expectation after reset");
+
+**This cannot fire for any DUT.** `exp_q` is written only by `issue()`, and the
+checker empties it on every `posedge` while `!rst_n`. Between reset release and
+that check the stimulus issues nothing, so the condition is false regardless of
+what the design does. It is dead code wearing the shape of a check.
+
+**My sweep found the site and my triage missed it.** It was in the never-fired
+list. The filter I applied looked for sites *inside an in-reset gate*, and this
+one sits in the stimulus body — so the structural signature I searched for was
+the signature of the instance I already knew about, not of the class. I reported
+"the F1 shape does not recur" and the honest version is narrower: **the shape I
+tested for does not recur; the CLASS does, and I found the second instance by
+reading rather than by sweeping.**
+
+    what the sweep is good for   producing the candidate list -- 226 sites
+    what it did not do           tell me which candidates matter
+    what found this one          reading one of them, because a control had to
+                                 target something and I needed to know what
+                                 could actually fire
+
+Not changed here. Removing or re-stimulating that site is the same decision F1(a)
+needed, and adding a control is not licence to rewrite a clause check in the same
+change.
+
+### And one clause is still uncontrolled, with the reason recorded
+
+v_nw03's **S3** was the first choice: it has a single check site, which makes it
+the clause with no redundancy behind it. It is not reachable from the ports. The
+testbench infers a beat's source from its payload tag and compares `m_tlast`
+under S4, so every port-level way to fake a mid-frame switch also corrupts a
+field S4 owns — forcing tlast either way trips S4, redirecting a beat trips S4
+and S5. An S3-only violation needs the arbiter to interleave correctly-ordered
+beats from two inputs, which is internal behaviour a wrapper cannot reach.
+
+**"S3 has one site and no control" is still true after this work**, and the
+reason is a property of the testbench's attribution rather than an omission. It
+is recorded in the task and in the control's own header rather than left for
+someone to rediscover.
+
+## The S15 dead site is fixed, and the clause it was standing in for had no check at all
+
+NOT-FOR-CATALOG *as a factual statement only — proposed.*
+
+The dead line was the smaller half. Investigating it showed that **S15's third
+obligation had no check anywhere**: `discarded_tag` was filled on every reset for
+S15's benefit and **never read**, and a result surviving a reset landed on H2's
+*"a result was delivered with no operation outstanding"* — a true sentence about
+the wrong clause. The design did not invent a result; it failed to discard one.
+
+    S15's three obligations        where each was checked, before
+    idle while rst_ni low          out_valid check, fires
+    out_valid low after release    fires
+    nothing accepted before or     NOWHERE. Misattributed to H2, and the one
+    during reset answers after     S15 line that existed could never fire.
+
+### What replaced it
+
+**A survivor window with S15 taking precedence over H2**, the same construction
+v_ca03's F1(c) uses against C2. Inside 10 cycles of release, with something
+actually discarded and nothing issued since, a delivered result cannot be
+anything but a survivor. The port map carries no tag — H2's own authority note
+says so — so identity matching is impossible and the window is what does the
+attributing.
+
+**And the dead line became a floor that can fire:** `discarded_tag.size() == 0`
+means the reset was applied with nothing in flight, which would make the whole
+window prove nothing. That is what the old line was worth — a statement about the
+stimulus, not the design — and it is now written as one.
+
+### Verified, probe written before and re-run unmodified after
+
+The only difference across the change:
+
+    >     [coverage] S15: 1 operation(s) discarded by reset, survivor window 10 cycles
+
+Golden PASS, all thirteen witnesses on the same clauses with the same operands,
+5c exit 0 at 28 as-expected, and the H2 negative control still failing on H2
+alone. Nothing moved but the new line.
+
+### The control took three attempts and each failure is one this corpus has already paid for
+
+    v1  armed on EVERY reset release, including the one at time zero when nothing
+        had been accepted. The forced result landed where a real expectation was
+        waiting: FAIL on H2, S1 and S15. A control that trips three clauses proves
+        none of them.
+    v2  guarded on work-in-flight -- and SUPPRESSED ITS OWN TRIGGER. It cleared
+        nc_inflight on !rst_ni and then sampled it while !rst_ni, so the sample
+        always read the cleared value. FIRED reported 0 survivors on a run where
+        the control was armed for exactly the reset it was written for.
+    v3  captures the count on the FALLING edge and clears it in the same
+        assignment, so the capture reads the value the reset is about to destroy.
+        FAIL, S15 alone, 1 survivor. Differential: PASS, 0 survivors.
+
+**v2 is af_m11's trap exactly** — a guard whose own effect prevents it from
+counting — and this task's mutants carry a header recording it. I wrote it again
+anyway, in the same task, having read that header while writing the mutants three
+days ago. The FIRED counter is what caught it, which is the one part of the
+pattern I did carry over.

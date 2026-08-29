@@ -66,6 +66,37 @@ scored_configuration:
     LAST_ENABLE=1. Exposing either would let a submission build the golden
     off-spec and fail the validity gate for a configuration error.
 
+negative_controls:
+  date: 2026-08-28
+  why: >
+    This task shipped NO negative controls. Every clause check rested on the
+    mutant set, so nothing showed any of them could fire independently of the
+    defects that happen to ship with it. Eight of the eleven verification tasks
+    carried controls; this was one of the three that did not.
+
+    The motivating case is v_ca03's F1(a): a correctly written check for a clause
+    the golden actually violated, kept silent by stimulus that never exercised
+    it, undetected until two submissions happened to concentrate on it. A
+    negative control is the standing version of that detection -- a DUT that MUST
+    fail, on one named clause.
+  control: negctl/s12_beat_survives_reset.sv
+  targets: "S12"
+  verified: >
+    With the perturbation: RESULT: FAIL (1 failure), clauses fired: S12 only -- a beat accepted before reset replayed once after release.
+    Differential, perturbation replaced by a constant as the file's first line
+    declares: RESULT: PASS. That makes the perturbation NECESSARY for the
+    failure rather than merely present during it, which a FIRED counter alone
+    cannot establish.
+  s3_still_uncontrolled: >
+    S3 was the first choice and is not reachable from the ports. It has a SINGLE
+    check site, which makes it the clause with no redundancy behind it, but the
+    testbench infers a beat's source from its payload tag and compares m_tlast
+    under S4, so every port-level way to fake a mid-frame switch also corrupts a
+    field S4 owns. An S3-only violation needs the arbiter to interleave
+    correctly-ordered beats from two inputs, which is internal behaviour a
+    wrapper cannot reach. 'S3 has one site and no control' remains true, and the
+    reason is the testbench's attribution rather than an omission.
+
 scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation

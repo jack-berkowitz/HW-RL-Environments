@@ -86,6 +86,39 @@ second_dut:
     result above came from running the reference testbench by hand. Do not assume
     it working as a gate.
 
+negative_controls:
+  date: 2026-08-28
+  why: >
+    This task shipped NO negative controls. Every clause check rested on the
+    mutant set, so nothing showed any of them could fire independently of the
+    defects that happen to ship with it. Eight of the eleven verification tasks
+    carried controls; this was one of the three that did not.
+
+    The motivating case is v_ca03's F1(a): a correctly written check for a clause
+    the golden actually violated, kept silent by stimulus that never exercised
+    it, undetected until two submissions happened to concentrate on it. A
+    negative control is the standing version of that detection -- a DUT that MUST
+    fail, on one named clause.
+  control: negctl/h2_results_stop_arriving.sv
+  targets: "H2"
+  verified: >
+    With the perturbation: RESULT: FAIL (2 failures), clauses fired: H2 only. It drives the drain() site that reports how many results never arrived -- one of 13 of this task's 19 fail() sites that never fire against the golden, every mutant or the gate mutant.
+    Differential, perturbation replaced by a constant as the file's first line
+    declares: RESULT: PASS. That makes the perturbation NECESSARY for the
+    failure rather than merely present during it, which a FIRED counter alone
+    cannot establish.
+  s15_site_is_vacuous: >
+    FOUND WHILE WRITING THIS, and it is the same class as v_ca03's F1(a). The
+    S15 site reading `if (exp_q.size() != 0) fail("S15", "model still holds an
+    expectation after reset")` CANNOT FIRE FOR ANY DUT. exp_q is written only by
+    issue(), and the checker empties it on every posedge while !rst_n; between
+    reset release and that check the stimulus issues nothing. So the condition is
+    false regardless of what the design does.
+
+    It is dead code, not a check. It should be removed or given stimulus, and the
+    decision is the same one F1(a) needed. NOT changed here -- this entry adds a
+    control and does not silently rewrite a clause check while doing so.
+
 scoring:
   validity_gate: submission must PASS the golden DUT
   unpromised_reliance: must PASS every conformant perturbation

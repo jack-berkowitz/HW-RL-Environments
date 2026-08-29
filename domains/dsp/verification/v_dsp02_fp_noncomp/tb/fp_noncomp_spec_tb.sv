@@ -180,6 +180,16 @@ module fp_noncomp_tb;
   endfunction
   exp_t exp_q [$];
   logic [31:0] discarded_tag [$];      // ops accepted before a reset (S15)
+  // S15's SURVIVOR WINDOW. Until 2026-08-28 discarded_tag was WRITTEN AND NEVER
+  // READ: the queue was filled on every reset for S15's benefit and nothing ever
+  // consulted it, so the clause's third obligation -- no operation accepted
+  // before or during reset produces a result afterwards -- had no check at all.
+  // A surviving result landed on H2's "delivered with no operation outstanding"
+  // instead, which is a true sentence about the wrong clause: the design did not
+  // invent a result, it failed to discard one.
+  localparam int unsigned S15_WINDOW = 10;   // cycles after release in which a
+                                             // delivered result can only be a survivor
+  int unsigned s15_win = 0;
 
   int unsigned n_issued = 0, n_checked = 0;
 
@@ -197,8 +207,21 @@ module fp_noncomp_tb;
         automatic exp_t e = exp_q.pop_front();
         discarded_tag.push_back(e.a);
       end
-    end else if (out_valid && out_ready) begin
-      if (exp_q.size() == 0) begin
+      s15_win <= S15_WINDOW;      // armed while low; counts down after release
+    end else begin
+      if (s15_win != 0) s15_win <= s15_win - 1;
+    end
+    if (rst_n && out_valid && out_ready) begin
+      // S15 TAKES PRECEDENCE OVER H2 HERE, and the reason is the same one F1
+      // takes precedence over C2 on v_ca03. The model was cleared on the edge
+      // that reset the design, so H2's test below is true of a survivor and says
+      // the wrong thing about it. Inside the window, with something actually
+      // discarded and nothing issued since release, a delivered result cannot be
+      // anything BUT a survivor -- the port map carries no tag, so identity
+      // matching is impossible and the window is what does the attributing.
+      if (exp_q.size() == 0 && s15_win != 0 && discarded_tag.size() > 0) begin
+        fail("S15", $sformatf("a result (%h) was delivered %0d cycle(s) after reset release with nothing outstanding and nothing issued since; it answers an operation accepted before the reset, which S15 requires discarded", result, S15_WINDOW - s15_win));
+      end else if (exp_q.size() == 0) begin
         fail("H2", $sformatf("a result was delivered with no operation outstanding (result=%h)", result));
       end else begin
         automatic exp_t e = exp_q.pop_front();
@@ -376,7 +399,22 @@ module fp_noncomp_tb;
     if (out_valid !== 1'b0)
       fail("S15", "out_valid_o high on the first cycle after reset release");
     repeat (10) @(posedge clk);
-    if (exp_q.size() != 0) fail("S15", "model still holds an expectation after reset");
+    // WAS: if (exp_q.size() != 0) fail("S15", "model still holds an expectation
+    // after reset"). THAT COULD NEVER FIRE FOR ANY DUT. exp_q is written only by
+    // issue(), the checker empties it on every posedge while !rst_n, and nothing
+    // is issued between release and here -- so the condition was false whatever
+    // the design did. Found by a per-site sweep that tags every fail() site and
+    // runs the tb against the golden, every mutant and the gate mutant; it is
+    // the second instance of the class v_ca03's F1(a) was the first of.
+    //
+    // What replaces it is a FLOOR on the stimulus rather than a check on the
+    // design, because that is what this line was actually worth: it fires if the
+    // reset was applied with nothing in flight, which would make S15's discard
+    // obligation untested no matter how the window above is written.
+    if (discarded_tag.size() == 0)
+      fail("FLOOR", "the reset was applied with NOTHING in flight -- S15's discard obligation was not exercised, so the survivor window above proves nothing");
+    $display("  [coverage] S15: %0d operation(s) discarded by reset, survivor window %0d cycles",
+             discarded_tag.size(), S15_WINDOW);
     // and the design must be usable again
     issue(OP_CMP, 3'd2, 32'h3F80_0000, 32'h3F80_0000);
     drain();

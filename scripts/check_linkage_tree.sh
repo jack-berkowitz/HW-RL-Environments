@@ -118,6 +118,16 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   #                      files while watching 31 nothing reads, so a green run
   #                      meant almost nothing and a red one was as likely to be
   #                      an unconsumed file as an oracle.
+  #   check_denominator  non-zero = a task's SCORED submissions were run over
+  #                      different numbers of configurations -> FAIL. "16/16
+  #                      pass" and "1/1 pass" render identically and are not the
+  #                      same claim. Controls and mutants are exempt: a
+  #                      neutralised control exists to be checked at the one
+  #                      configuration it neutralises.
+  if [ -f "$d/scripts/check_denominator.py" ]; then
+    ( cd "$d" && python3 scripts/check_denominator.py 2>&1 )
+    if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ denominator"; fi
+  fi
   if [ -f "$d/scripts/check_refs_hashes.py" ]; then
     ( cd "$d" && python3 scripts/check_refs_hashes.py 2>&1 )
     if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ refs_hashes"; fi

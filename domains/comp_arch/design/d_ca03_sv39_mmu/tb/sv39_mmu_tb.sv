@@ -8,7 +8,12 @@
 //   correctness  -- lsu_valid_o, lsu_paddr_o, lsu_exc_valid_o, lsu_exc_cause_o,
 //                   bit-exact on every request. A gate: fail it and no PPA
 //                   number is produced.
-//   cycles       -- the total to retire all 118 requests. Emitted as a METRIC
+//   cycles       -- the total to retire all 207 requests. Emitted as a METRIC
+//                   (THIS READ 118 UNTIL 2026-08-29 and the checker has always
+//                   counted 207. Corrected by RECOMPUTING from `checked`, not by
+//                   editing the numeral: the new requests_per_1000cyc metric
+//                   divides by `checked` for exactly this reason, so a stale
+//                   literal cannot get baked into a published ratio.)
 //                   for the run record; NOT folded into a scalar with area,
 //                   because that needs a cycle-per-square-micron exchange rate
 //                   nobody can defend (rule 22).
@@ -379,6 +384,21 @@ module sv39_mmu_tb;
     $display("");
     $display("METRIC: total_cycles=%0d pte_reads=%0d tlb_hits=%0d hit_pct=%0d",
              tot_cyc, tot_acc, n_hit, (100*n_hit)/(cov_tallied==0?1:cov_tallied));
+    // THE SAME QUANTITY AS total_cycles, INVERTED SO IT CAN BE PUBLISHED.
+    // report_table renders a capability as design_area_um2 / metric, one
+    // division, so a LOWER-IS-BETTER axis has nowhere to go: area-per-cycle
+    // would flatter a SLOWER design. L1 makes cycles free and scored and G4
+    // says the cycle axis is what charges for buying area with time, so the
+    // axis must be published -- inverting the METRIC is the fix, not inverting
+    // the formula. Scaled by 1000 to stay in integer arithmetic, matching
+    // d_nw01's aggregate_bursts_per_1000cyc and d_dsp03's
+    // throughput_ops_per_1000cyc.
+    //
+    // MONOTONE MORE-IS-BETTER ACROSS THE WHOLE LEGAL RANGE: L2 scores forward
+    // progress WITH NO EXCEPTION, so every conforming design retires all
+    // `checked` requests in finite positive cycles. No zero, no reversal.
+    $display("METRIC: requests_per_1000cyc=%0d",
+             (1000*checked)/(tot_cyc==0 ? 1 : tot_cyc));
     $display("d_ca03 sv39_mmu : %0d requests checked, %0d failures", checked, errs);
     // NOT a ternary between two string literals: SystemVerilog pads the shorter
     // one with NULs to the longer one's width and the line prints as nothing.

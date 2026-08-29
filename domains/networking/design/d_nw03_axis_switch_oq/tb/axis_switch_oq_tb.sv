@@ -183,6 +183,21 @@ module axis_switch_oq_tb #(
   assign m_ready = mr_r;
 
   int accepts_r, delivers_r, cycle_r;
+  // L3's METRIC. The clause says "LATENCY IS FREE. Input-to-output delay is a
+  // design choice, REPORTED AS A METRIC and never gated" -- and until
+  // 2026-08-29 no line in this testbench emitted one. The string `latency` did
+  // not appear in this file. A contract that promises a metric and a harness
+  // that never produces it leaves a FREE axis unmeasured, so a design may
+  // pipeline arbitrarily deeply or go combinational and nothing sees it.
+  //
+  // WHAT IS MEASURED: the cycle of the first beat ACCEPTED on any input, and
+  // the cycle of the first beat DELIVERED on any output. Their difference is
+  // input-to-output delay for the first beat through an empty switch, which is
+  // exactly the choice L3 names -- 0 for the permitted combinational path, and
+  // the pipeline depth for a registered one. It is NOT an average over the run:
+  // a steady-state average is dominated by arbitration and backpressure, which
+  // are separate axes (L1, B1), and would not isolate the depth choice.
+  int cyc_first_acc = -1, cyc_first_dlv = -1;
   int b1_snap, b1_prev, b1_quiet, b1_guard, b1_held;
 
   // ---------------------------------------------------------------- scoreboard
@@ -340,6 +355,8 @@ module axis_switch_oq_tb #(
 
       accepts_r  <= accepts_r  + n_acc;
       delivers_r <= delivers_r + n_dlv;
+      if (n_acc != 0 && cyc_first_acc < 0) cyc_first_acc <= cycle_r;
+      if (n_dlv != 0 && cyc_first_dlv < 0) cyc_first_dlv <= cycle_r;
       if (c1_arm) c1_beats <= c1_beats + n_dlv;
       maxlen_r <= maxlen_r + n_maxlen;
 
@@ -564,6 +581,14 @@ module axis_switch_oq_tb #(
         $sformatf("B1: held %0d beats with every output stalled; at most 2 frames per output is %0d beats -- storage beyond that is non-conforming",
                   b1_held, 16 * int'(M_COUNT)));
 
+    // SIGNED, and deliberately. cyc_first_* are int and stay -1 if the run
+    // never accepted or never delivered; -1 is then emitted and reads as
+    // "not exercised" rather than as a latency of zero, which is a real value
+    // here because L3 permits a combinational path. An unsigned sentinel would
+    // promote and print as a huge positive number -- the F64 family.
+    $display("METRIC: latency_first_beat=%0d",
+             (cyc_first_acc < 0 || cyc_first_dlv < 0) ? -1
+                                                      : (cyc_first_dlv - cyc_first_acc));
     $display("METRIC: frames total=%0d", cov_frames);
     $display("METRIC: beats accepted=%0d delivered=%0d cycles=%0d", accepts_r, delivers_r, cycle_r);
 
