@@ -1460,3 +1460,73 @@ retrospective fit** — the proposal was written before these two were found.
 Running total on this task: twelve stale sites, every one understating what
 exists. Parts 1 and 2 caught seven, Part 3 has now caught four by hand, and one
 came out by ordinary reading.
+
+---
+
+## Second source, iteration 4: the hypothesis is CONFIRMED as a mechanism and REFUTED as the cause
+
+The budget note said a fourth iteration *"belongs in a session with room to confirm
+the hypothesis by instrumentation rather than reason about it."* Done. **Both
+halves of the answer are negative results and both are worth more than another
+guess.**
+
+### The hypothesis was right about a real defect
+
+Counters over one failing run, each conjunct of the hypothesis counted separately
+so that whichever reads zero is the one that kills it:
+
+    fills completed                                     850
+      + a request accepted in the same cycle             60
+        + same index                                     38
+          + same tag                                     36
+            + and the lookup declared a MISS             36
+
+**Of 36 requests that arrived in the very cycle their own line's fill completed,
+all 36 were declared a miss.** The last two counts are equal, which is the shape
+the hypothesis predicts: `hit` reads `valid_q` combinationally while the fill sets
+it with a non-blocking assignment, so a same-cycle request *can never* see the
+line it is asking for. It then allocates a second record for a line already
+becoming resident.
+
+**The probe is not inert** — 850 fills, 60 coincident requests — so the counts are
+a measurement rather than a silence.
+
+### And it is not what breaks this run
+
+Fixed by declining the request for one cycle (`fill_shadow`) rather than
+bypassing: a bypass would have to forward `valid_q`, `tag_q` **and** the last fill
+beat, since `data_q`'s final word is written by the same non-blocking assignment
+— three forwards to avoid one stall, on an axis L6 leaves free.
+
+Re-measured with the fix in place:
+
+    fills=850   accepted-miss-on-filling-line=0   shadow_fired=49
+    TEST_RESULT: FAIL  -- unchanged, same phase, same config
+
+**The mechanism is gone and the failure is identical.** Three iterations of
+reasoning produced a hypothesis that was correct about a real bug and wrong about
+this one. The fix is kept because the defect it removes is real; it is not the
+repair this task needs.
+
+### What the failure actually is, measured
+
+    DBG-ERR normal cyc=29851 id=4 got=598603dd exp=598603c9
+    DBG-ERR normal cyc=32154 id=0 got=598603dd exp=598603c9
+
+Two errors, **different cycles, different ids, byte-identical values**. Only the
+low byte differs — `dd` against an expected `c9`, upper three bytes matching. So a
+masked store's byte merge is missing, and **the same wrong value is returned
+twice, thousands of cycles apart**.
+
+**That is durable, not transient.** The line is sitting in the cache holding the
+unmerged byte; it is not a read that raced a write. Which points away from the
+`valid_q` timing family entirely and at the **merged-store path** — C4's *"one
+merged store word per pending miss"* — where a store applied to a pending record
+is either never merged into the arriving block or is overwritten by it.
+
+### Where iteration 5 should start
+
+Not from a hypothesis. Instrument the merge itself: for the address in the dump,
+record every write to that line — the masked store's merge into the pending
+record, the fill's write of the block, and their order. The symptom says one
+overwrites the other; the instrumentation should say which.
