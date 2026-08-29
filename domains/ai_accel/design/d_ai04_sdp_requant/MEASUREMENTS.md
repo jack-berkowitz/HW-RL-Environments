@@ -342,3 +342,57 @@ as the only PPA numbers come from a targetless solicitation. A verdict that mean
 something needs the re-solicitation the spec already calls for — against
 `203bc8a580aa44d4`, with G1 stating 33.75 ns — and these three become the
 baseline it is measured against rather than the evidence itself.
+
+## RETRACTION: the call sites are not divergent, and I was the one inferring. 2026-08-29
+
+**I reported that `reference_ppa.sh` and `ppa_candidate.sh` hash different files
+and that the digest split followed from it. That is false.** Retracted here
+rather than quietly corrected, because it was routed to the PPA owner as a
+diagnosis and a fix was requested on the strength of it.
+
+**How I got it wrong.** I read `reference_ppa.sh`'s `CFG="$TASK_DIR/orfs/config.mk"`
+near the top, saw `ppa_candidate.sh` hash `"$RUNDIR/config.mk"`, and concluded the
+two paths hash different objects. **I did not read forward to line 118**, where
+`reference_ppa.sh` generates its own config and reassigns:
+
+    GEN_CFG="orfs_runs/${TASK_NAME}_reference/config.mk"
+    { cat "$CFG"; printf '\nexport SYNTH_MEMORY_MAX_BITS = 65536\n'; } > "$GEN_CFG"
+    CFG="$GEN_CFG"
+
+So both paths hash a GENERATED config. **A variable's value at the point of use
+is not its value at the point of declaration**, and I inferred one from the other.
+
+**Measured, which settles it:**
+
+    reference's generated config  ->  83088234b2c846ea   matches both post-fix records
+    the SOURCE config             ->  97d14983bc1a92aa   matches NOTHING on record
+
+No record was ever produced from the source file. Had the divergence been
+file-choice, some record would carry `97d14983`. None does.
+
+### The actual cause is temporal, and the fix already works
+
+Every field is identical across all six records except one:
+
+    ABC_CLOCK_PERIOD_IN_PS = 40000   ->  e3b4cfd4   three candidates + the 2026-08-27 reference
+    ABC_CLOCK_PERIOD_IN_PS = 33750   ->  83088234   both post-fix references
+
+`SYNTH_MEMORY_MAX_BITS=65536` is present in **all six** — so the line I cited as
+the difference is not a difference at all. The `40000` records even carry their
+own note: *"the hashed ABC value above is the config.mk text resolved against the
+SDC"*, i.e. the pre-fix code said what it was recording.
+
+**So `49e967e` is correct and working.** The three candidates are simply on the
+old side of it. **The remedy is to rebuild the three candidates, not to touch any
+call site** — which is F113 stated exactly: an instrument fixed mid-round
+partitions the records either side of the fix, and what it needs is a rebuild of
+the same round on the far side. I rebuilt the reference; it was the candidates
+that were stale.
+
+### My own instance of the class I have been filing all week
+
+A correct measurement — the digests genuinely differ — an inferred mechanism, no
+test of the mechanism, shipped to a peer as grounds for action. The test was two
+commands and I ran neither before reporting. **And the refutation was available
+in the same file I had already opened**, eighty lines below where I stopped
+reading.
