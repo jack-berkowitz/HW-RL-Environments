@@ -9475,3 +9475,72 @@ It also bounds what a kill count means. A submission scoring 11 of 11 has been
 measured against defects that touch 24 of v_ca03's 55 failure sites. The other 31
 are checks no mutant asks about, so a submission that omits every one of them
 scores identically to one that implements them all.
+
+## The three tasks without negative controls now have them, and one turned up a second vacuity
+
+NOT-FOR-CATALOG *as a factual statement only — proposed; the S15 vacuity below is
+the part that belongs in the catalog.*
+
+v_ca05, v_dsp02 and v_nw03 shipped no negative controls. Every clause check in
+them rested on the mutant set, so nothing showed any check could fire
+independently of the ten-or-so defects that happen to ship with each task.
+
+    task      control                              targets  result
+    v_dsp02   h2_results_stop_arriving.sv          H2       FAIL, H2 alone, 2 failures
+    v_ca05    r15_store_not_emptied_by_reset.sv    R15      FAIL, R15 alone, 2 sites
+    v_nw03    s12_beat_survives_reset.sv           S12      FAIL, S12 alone, 1 failure
+
+Each has a declared differential on its first line, and each was verified both
+ways: **with the perturbation FAIL on the named clause alone; with it replaced by
+a constant, PASS.** That makes the perturbation NECESSARY for the failure rather
+than merely present during it — which a FIRED counter cannot establish, and which
+is the gap that let two earlier versions of v_ca03's F1(a) control fail on the
+wrong clause while their own counters read healthy.
+
+Two of the three drive sites the vacuity sweep had found never fire: v_dsp02's
+drain-time "results never arrived", and all four of v_ca05's R15 sites — **no
+shipped defect in that task drove R15 at all.**
+
+### A SECOND VACUITY, and it is the same class as F1(a)
+
+v_dsp02's S15 site:
+
+    if (exp_q.size() != 0) fail("S15", "model still holds an expectation after reset");
+
+**This cannot fire for any DUT.** `exp_q` is written only by `issue()`, and the
+checker empties it on every `posedge` while `!rst_n`. Between reset release and
+that check the stimulus issues nothing, so the condition is false regardless of
+what the design does. It is dead code wearing the shape of a check.
+
+**My sweep found the site and my triage missed it.** It was in the never-fired
+list. The filter I applied looked for sites *inside an in-reset gate*, and this
+one sits in the stimulus body — so the structural signature I searched for was
+the signature of the instance I already knew about, not of the class. I reported
+"the F1 shape does not recur" and the honest version is narrower: **the shape I
+tested for does not recur; the CLASS does, and I found the second instance by
+reading rather than by sweeping.**
+
+    what the sweep is good for   producing the candidate list -- 226 sites
+    what it did not do           tell me which candidates matter
+    what found this one          reading one of them, because a control had to
+                                 target something and I needed to know what
+                                 could actually fire
+
+Not changed here. Removing or re-stimulating that site is the same decision F1(a)
+needed, and adding a control is not licence to rewrite a clause check in the same
+change.
+
+### And one clause is still uncontrolled, with the reason recorded
+
+v_nw03's **S3** was the first choice: it has a single check site, which makes it
+the clause with no redundancy behind it. It is not reachable from the ports. The
+testbench infers a beat's source from its payload tag and compares `m_tlast`
+under S4, so every port-level way to fake a mid-frame switch also corrupts a
+field S4 owns — forcing tlast either way trips S4, redirecting a beat trips S4
+and S5. An S3-only violation needs the arbiter to interleave correctly-ordered
+beats from two inputs, which is internal behaviour a wrapper cannot reach.
+
+**"S3 has one site and no control" is still true after this work**, and the
+reason is a property of the testbench's attribution rather than an omission. It
+is recorded in the task and in the control's own header rather than left for
+someone to rediscover.
