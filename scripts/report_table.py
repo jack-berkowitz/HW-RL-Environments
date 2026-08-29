@@ -183,7 +183,7 @@ def load_records():
             r = json.load(open(f))
         except Exception:
             continue
-        if _RV.is_invalidated(r):
+        if _RV.is_invalidated(r) or not _RV.is_result(r):
             continue
         out.append(r)
     return out

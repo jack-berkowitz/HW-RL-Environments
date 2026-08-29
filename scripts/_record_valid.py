@@ -27,8 +27,39 @@ def is_invalidated(rec):
     return v is True or (isinstance(v, str) and v.strip().lower() in ("true", "yes", "1"))
 
 
+# A VERDICT FIELD IS WHAT MAKES A SIM RECORD A RESULT. Any one of these being
+# present means the run reached a conclusion about something.
+_VERDICT_FIELDS = ("configs_total", "configs_passed", "build_status",
+                   "golden_accepted", "all_passed", "faults_caught")
+
+
+def is_result(rec):
+    """False for a `kind: sim` record that reached no verdict at all.
+
+    45 records carry kind=sim with EXACTLY seven keys -- git_sha, kind, label,
+    submission, submission_sha256_16, task, timestamp_utc -- and no verdict
+    field of any sort. Their label is `task_text_hash=<digest>`: they were
+    written to stamp a task text, not to record a simulation. A record of one
+    kind wearing another kind's name.
+
+    SAFE TODAY BY ACCIDENT, which is the reason to fix it rather than the reason
+    not to. Every reader selects the newest record per submission, and measured
+    across the corpus zero stamping records are newer than every real record for
+    the same submission. But TEN of them name `nonblocking_dcache_ref.sv`, so
+    one written after a real run would make d_ca01's REFERENCE render as having
+    reached no verdict -- and "no verdict" is not distinguishable downstream
+    from "no result", which is the in-range failure value again.
+
+    Same shape as the invalidated flag: correct behaviour that depends on
+    timestamps rather than on anything anyone decided.
+    """
+    if (rec or {}).get("kind") != "sim":
+        return True
+    return any(rec.get(k) is not None for k in _VERDICT_FIELDS)
+
+
 def valid_records(recs):
-    return [r for r in recs if not is_invalidated(r)]
+    return [r for r in recs if not is_invalidated(r) and is_result(r)]
 
 
 def main():

@@ -7418,3 +7418,42 @@ That is not what is implemented here, and saying so is the point: the current
 fix works and does not generalise, and the next renderer will leak by default.
 
 **Rules:** 20, 22
+
+## F118. Records of one kind wearing another kind's name, and a denominator nobody enforced
+
+Two classes cleared together, both safe today and neither safe by design.
+
+**45 records carry `kind: sim` and reached no verdict at all.** They hold exactly
+seven keys — `git_sha`, `kind`, `label`, `submission`, `submission_sha256_16`,
+`task`, `timestamp_utc` — and their label is `task_text_hash=<digest>`. They were
+written to stamp a task text, not to record a simulation. A record of one kind
+wearing another kind's name, and every consumer that counts sim records counts
+them.
+
+Measured: **zero of the 45 is newer than every real record for the same
+submission**, so no reader is misled today. But ten of them name
+`nonblocking_dcache_ref.sv`, so one written after a real run would make d_ca01's
+**reference** render as having reached no verdict — and "no verdict" is not
+distinguishable downstream from "no result". Same shape as the invalidation
+flag: correct behaviour resting on timestamps rather than on anything anyone
+decided. `_record_valid.is_result()` now rejects them explicitly, and the tables
+regenerate byte-identical, which is what a correct guard looks like on its first
+day.
+
+**`16/16 pass` and `1/1 pass` render identically and are not the same claim.**
+One survived sixteen parameterisations, the other survived one. Nothing checked
+that a task's scored submissions shared a denominator.
+
+Measured: one task disagrees, d_ca01 — and only among controls, where it is
+correct. `nonblocking_dcache_alt_ref`, `c01_neutralised` and `c03_neutralised`
+run 1 against sixteen scored submissions at 16. **A neutralised control exists
+to be checked at the one configuration whose behaviour it neutralises**, so
+requiring it to sweep sixteen would be requiring it to be a different artefact.
+`check_denominator.py` therefore scores the reference and the model candidates
+and exempts controls and mutants.
+
+Control-tested by writing a 1-config record for d_ca04/chat against its
+eighteen: the check names the task, prints the disagreeing counts, and returns
+to quiet when the probe is removed.
+
+**Rules:** 17, 19, 20
