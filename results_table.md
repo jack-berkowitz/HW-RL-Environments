@@ -32,7 +32,8 @@ capability, and nothing here establishes those weights.
 |---|---|---|---|---|---|---|---|---|---|---|
 | `chat` | **1/1 pass** | 174,421 | 230.0 | not swept | — | — | — | — | — |  |
 | `claude` | **1/1 pass** | 158,486 | 181.0 | not swept | — | — | — | — | — |  |
-| `gemini` | **1/1 pass** | — | — | — | — | — | — | — | — |  |
+| `gemini` | **1/1 pass** | 179,212 | 257.0 | not swept | — | — | — | — | — |  |
+| `nc_g_alias_modes` — *negative control, expected to fail* | 0/1 FAIL | — | — | — | — | — | — | — | — |  |
 | **reference** | **1/1 pass** | 179,943 | 230.0 | 44.4 | — | — | — | — | — |  |
 - **init interval** — clocks between accepts
 - **latency** — clocks from accept to result
@@ -53,7 +54,7 @@ capability, and nothing here establishes those weights.
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | notes |
 |---|---|---|---|---|---|
 | `chat` | **1/1 pass** | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
-| `claude` | **1/1 pass** | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
+| `claude` | **1/1 pass** | 212,774 | 33.4 | not swept | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
 | `gemini` | **did not build** | **0** | **0** | **0** | **build failure** — 4 error(s); first: sanitised_gemini.sv:430:23: error: use of undeclared identifier 'clk'  |
 | `sv39_mmu_ref` | — | 279,456 | 32.6 | 121.9 |  |
 | `sv39_mmu_top` | *not scored against this prompt* | — | — | — | last run answered task text `d79170d3b150c5e6`; the task text is now `5c30f59627bedc60` |
@@ -211,7 +212,7 @@ prompt is a different question and is not listed.
 
 ## v_ca03 — AXI ID-width converter
 
-Rows below answer task text `aa1fdb52d0b8482b` (spec + the prompt the
+Rows below answer task text `5e1adba7cce23c3a` (spec + the prompt the
 model is handed). A submission scored against a different
 prompt is a different question and is not listed.
 
@@ -219,9 +220,9 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
+| `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Claude Opus 5` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 | `id_width_conv_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `fa23813e5874ef92` |
-| `chat` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
-| `claude` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
 | `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
 
 ## v_ca04 — stream crossbar

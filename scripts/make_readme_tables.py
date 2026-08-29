@@ -120,6 +120,28 @@ def _task_full(short):
 
 
 # ---------------------------------------------------------------- design ----
+def withheld():
+    """{(task, model): reason} -- rows a human decided not to publish.
+
+    A WITHHELD ROW AND AN UNBUILT ROW ARE DIFFERENT FACTS and rendered
+    identically before this existed: both an empty dash. That made a
+    withholding decision unable to survive a regeneration, and since
+    --check gates commits, the gate then compelled the regeneration.
+    """
+    path = os.path.join(REPO, "docs", "withheld_rows.md")
+    out = {}
+    if not os.path.isfile(path):
+        return out
+    for line in open(path, encoding="utf-8"):
+        if "::" not in line or line.startswith("#"):
+            continue
+        left, reason = line.split("::", 1)
+        parts = left.split()
+        if len(parts) == 2:
+            out[(parts[0], parts[1])] = reason.strip()
+    return out
+
+
 def _notes():
     """Per-task commentary, hand-edited, keyed by task id.
 
@@ -149,6 +171,7 @@ def design_tables():
         full = _task_full(short)
         # SELECT ON THE FIELD, NOT THE FILENAME -- the same defect that froze
         # the charts at the August records. clk_period_ns is in every record.
+        held = withheld()
         best = {}
         for r in recs:
             if r.get("task") != full:
@@ -181,8 +204,18 @@ def design_tables():
                          f"| {_fmt_slack(ref)} | — |")
         for m in MODELS:
             r = best.get(m)
+            if (short, m) in held:
+                lines.append(f"| `{m}` | *withheld* | *withheld* | *withheld* "
+                             f"| *withheld — {held[(short, m)]}* |")
+                continue
             if not r:
                 lines.append(f"| `{m}` | {_absent_cells(full, m, sims)} |")
+                continue
+            if (short, m) in held:
+                # THE REASON IS RENDERED, not just the absence. An unexplained
+                # gap in a results table gets filled by whoever finds it next.
+                lines.append(f"| `{m}` | *withheld* | *withheld* | *withheld* "
+                             f"| *withheld — {held[(short, m)]}* |")
                 continue
             lines.append("| `%s` | %s |" % (m, _design_cells(r, ref_area, full, m, sims)))
         blk = "\n".join(lines)

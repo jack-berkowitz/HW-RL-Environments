@@ -465,6 +465,12 @@ def design_rows():
             who = re.split(r"_(?:fx|pin)", str(r.get("label", "")))[0]
             if who not in best or r.get("timestamp_utc", "") > best[who].get("timestamp_utc", ""):
                 best[who] = r
+        # THE CHARTS MUST HONOUR THE SAME HOLD LIST AS THE TABLES. Withholding a
+        # row from the table and drawing it as a bar two sections above is not a
+        # withholding; the number is published either way, and the chart is the
+        # more prominent of the two.
+        import make_readme_tables as _MT
+        _held = _MT.withheld()
         ref = best.get("reference")
         if not ref or not ref.get("design_area_um2"):
             continue
@@ -504,6 +510,16 @@ def design_rows():
             if w not in sims or r.get("timestamp_utc", "") > sims[w].get("timestamp_utc", ""):
                 sims[w] = r
         for m in DESIGN_MODELS:
+            # WITHHELD IS ITS OWN STATE. Deleting the record instead made these
+            # rows fall through to the absent-record branch and render "fails
+            # correctness" -- turning a human's decision not to publish into a
+            # false accusation against the model, which is worse than publishing
+            # the number. Same in-range-failure-value trap as the empty dash,
+            # walked into while fixing the empty dash.
+            if (short, m) in _held:
+                bars[DESIGN_MODELS.index(m)] = (m, None, "withheld")
+                pbars[DESIGN_MODELS.index(m)] = (m, None, "withheld")
+                continue
             if best.get(m) is None:
                 sm = sims.get(m) or {}
                 note = "did not build" if sm.get("build_status") else "fails correctness"

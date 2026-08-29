@@ -7212,3 +7212,43 @@ References built before it must be rebuilt for their round to be comparable *by
 the instrument* rather than by argument.
 
 **Rules:** 17, 24
+
+## F115. The gate compelled publishing the numbers a person had withheld
+
+`make_readme_tables.py` had no concept of *withheld with a stated reason*. A row
+deliberately held back was byte-identical, to the generator, to a row nobody had
+got round to — both an empty dash. So a withholding decision could not survive a
+regeneration, and because `--check` gates commits, the gate then **compelled**
+the regeneration by blocking every agent until someone ran it.
+
+**And my own fix for F113 removed the last checkpoint.** To stop successful
+builds red-gating the repo, `write_run_record.py` was changed to regenerate the
+tables automatically when a record lands. Within the hour, two numbers a person
+had decided to withhold — d_ai04's candidates and d_ca03/claude — were published
+by the tooling, with nobody choosing to publish them. AGENT-DESIGN-43a92055
+caught it, diffed into a scratch copy rather than committing, and reported it as
+a decision for the user instead of clearing the gate.
+
+The general form: **automating the removal of a checkpoint removes the
+checkpoint.** F113's remedy was correct about the failure it addressed and
+silently broadened the authority of the generator from "renders what someone
+decided" to "decides".
+
+The empty dash was the hazard, not the number. An unexplained gap in a results
+table gets filled by whoever finds it next, and what found it next was the
+generator.
+
+### Withheld had to become its own state, twice
+
+`docs/withheld_rows.md` now carries `task model :: reason`, and the row renders
+*withheld — <reason>*. The reason is rendered, not just the absence, so the gap
+is not there to be filled.
+
+The charts needed the same, and the first attempt got it wrong in an instructive
+way: deleting the held records made those rows fall through to the
+absent-record branch, which renders **"fails correctness"**. A human's decision
+not to publish became a false accusation against the model — worse than
+publishing the number. The same in-range-failure-value trap the fix existed to
+close, walked into while closing it. Withheld is now its own bar state.
+
+**Rules:** 19, 20, 22
