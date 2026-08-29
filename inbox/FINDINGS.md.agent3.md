@@ -1655,3 +1655,59 @@ applies to every path into it. Adding one to a shared repo is `scripts/`'s owner
 call, and none of the three of us should do it unasked.
 
 **Rules:** 3, 24
+
+---
+
+### A check that passes by coincidence is not evidence, and this is the fourth
+
+> **A green result from an instrument that was not actually looking at the thing
+> it is read for licenses a belief nobody measured. The instrument is not wrong.
+> It is correct about something else, and the pass is what hides that.**
+
+**FOURTH INSTANCE THIS WEEK, and at four the pattern is the finding rather than
+any instance:**
+
+    configs_no_verdict     run records carried a verdict block that a path change
+                           had silently stopped populating; the field was present
+                           and empty, and empty read as "no failures" (F46)
+    check_refs_hashes      passes while covering 1 file in 50 on d_ca01, and
+                           6 of 36 elsewhere. A control that runs, passes, and
+                           covers a twentieth of its subject (F43)
+    d_ca03's rule-17 pass  NEITHER config resolved the ABC override, so both
+                           recorded the same WRONG value and the digests matched.
+                           Same code path as d_ai04, opposite outcome (F114)
+    the fourth is the one   below
+
+**d_ca03 is the sharpest because its twin failed.** One code path, two tasks:
+d_ai04's two build paths resolved the override differently and rule 17 fired;
+d_ca03's two paths *both failed to resolve it* and rule 17 passed. **The passing
+task passed for no better reason than the failing one failed** — and if only
+d_ca03 had been in that round, the defect would have shipped with a green check
+behind it.
+
+**Why this family is distinct from a check that is simply broken.** A broken
+check announces itself: it errors, or it fails on something known good, and
+somebody investigates. These four all PASSED, and each pass was read as evidence
+for a proposition the check never tested — that configs were scored, that vendored
+bytes were pinned, that two builds were comparable. **The failure mode is not a
+wrong answer. It is a right answer to an unasked question, consumed as an answer
+to the asked one.**
+
+**THE DISCRIMINATOR, and it is the only one I have found that works:** for any
+green check, ask **what state of the world would make this go red**, and then
+confirm that state is reachable and distinct from the state you care about. All
+four die on the second half. `check_refs_hashes` goes red if a *covered* file
+changes — reachable, but not the same state as "the anchor is pinned".
+
+**And it explains why "add a control" is not automatically the fix.** Rule 24
+makes an apparatus prove it can fire. Three of these four *could* fire. What they
+could not do is fire on the specific proposition being read off them, and a
+control demonstrating the instrument works in general is exactly what makes that
+gap invisible.
+
+**Cross-cites:** F43, F46, F114. And "A maintenance obligation stated as a grep
+is only as good as the grep" above — the grep case is this family with the
+coincidence made structural: the check passes because the words happen not to
+collide, not because the obligation holds.
+
+**Rules:** 3, 24, 36
