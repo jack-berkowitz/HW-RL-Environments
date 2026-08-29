@@ -9544,3 +9544,63 @@ beats from two inputs, which is internal behaviour a wrapper cannot reach.
 reason is a property of the testbench's attribution rather than an omission. It
 is recorded in the task and in the control's own header rather than left for
 someone to rediscover.
+
+## The S15 dead site is fixed, and the clause it was standing in for had no check at all
+
+NOT-FOR-CATALOG *as a factual statement only — proposed.*
+
+The dead line was the smaller half. Investigating it showed that **S15's third
+obligation had no check anywhere**: `discarded_tag` was filled on every reset for
+S15's benefit and **never read**, and a result surviving a reset landed on H2's
+*"a result was delivered with no operation outstanding"* — a true sentence about
+the wrong clause. The design did not invent a result; it failed to discard one.
+
+    S15's three obligations        where each was checked, before
+    idle while rst_ni low          out_valid check, fires
+    out_valid low after release    fires
+    nothing accepted before or     NOWHERE. Misattributed to H2, and the one
+    during reset answers after     S15 line that existed could never fire.
+
+### What replaced it
+
+**A survivor window with S15 taking precedence over H2**, the same construction
+v_ca03's F1(c) uses against C2. Inside 10 cycles of release, with something
+actually discarded and nothing issued since, a delivered result cannot be
+anything but a survivor. The port map carries no tag — H2's own authority note
+says so — so identity matching is impossible and the window is what does the
+attributing.
+
+**And the dead line became a floor that can fire:** `discarded_tag.size() == 0`
+means the reset was applied with nothing in flight, which would make the whole
+window prove nothing. That is what the old line was worth — a statement about the
+stimulus, not the design — and it is now written as one.
+
+### Verified, probe written before and re-run unmodified after
+
+The only difference across the change:
+
+    >     [coverage] S15: 1 operation(s) discarded by reset, survivor window 10 cycles
+
+Golden PASS, all thirteen witnesses on the same clauses with the same operands,
+5c exit 0 at 28 as-expected, and the H2 negative control still failing on H2
+alone. Nothing moved but the new line.
+
+### The control took three attempts and each failure is one this corpus has already paid for
+
+    v1  armed on EVERY reset release, including the one at time zero when nothing
+        had been accepted. The forced result landed where a real expectation was
+        waiting: FAIL on H2, S1 and S15. A control that trips three clauses proves
+        none of them.
+    v2  guarded on work-in-flight -- and SUPPRESSED ITS OWN TRIGGER. It cleared
+        nc_inflight on !rst_ni and then sampled it while !rst_ni, so the sample
+        always read the cleared value. FIRED reported 0 survivors on a run where
+        the control was armed for exactly the reset it was written for.
+    v3  captures the count on the FALLING edge and clears it in the same
+        assignment, so the capture reads the value the reset is about to destroy.
+        FAIL, S15 alone, 1 survivor. Differential: PASS, 0 survivors.
+
+**v2 is af_m11's trap exactly** — a guard whose own effect prevents it from
+counting — and this task's mutants carry a header recording it. I wrote it again
+anyway, in the same task, having read that header while writing the mutants three
+days ago. The FIRED counter is what caught it, which is the one part of the
+pattern I did carry over.
