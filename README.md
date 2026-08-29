@@ -154,7 +154,7 @@ by 49 ps and is withheld.
 |---|---|---|---|---|
 | reference | 279,456 | 32.6 | +0.989 | — |
 | `chat` | *withheld* | *withheld* | **−35.461** | missed timing |
-| `claude` | *withheld* | *withheld* | *withheld* | *withheld — declares no capability metric, so a 0.76x raw-area result cannot be separated from a design that implements less* |
+| `claude` | *withheld* | *withheld* | *withheld* | *withheld — G2 prescribes capability reported RAW AND PER UNIT OF AREA, and the metric is recorded every run -- claude hit_pct 50, tlb_hits 104, pte_reads 584 against the reference's 55, 115, 502 -- so smaller-and-doing-less IS separable here and is measured. The row is held because task.yaml declares these under `axis:` rather than `scored_metrics: role: capability`, so metric_roles() returns {} and no per-unit column is generated; G2 says the object is 0.76x ALONGSIDE hit_pct 50 against 55, and a bare 0.76x is what G2 exists to warn about* |
 | `gemini` | **0** | **0** | — | did not build |
 
 `chat` is correct — it passes the scored configuration — and needs roughly 48 ns

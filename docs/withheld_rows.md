@@ -49,4 +49,17 @@ generator.
 d_ai04 chat :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
 d_ai04 claude :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
 d_ai04 gemini :: pinned at one configuration and declares no capability metric, so raw area cannot be separated from capacity or throughput a candidate simply did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
-d_ca03 claude :: declares no capability metric, so a 0.76x raw-area result cannot be separated from a design that implements less
+# CORRECTION, 2026-08-29, second one. The d_ca03 reason previously said the task
+# "declares no capability metric". That was true of the TOOLING and false of the
+# CONTRACT, and I asserted it of the contract. Spec G2 line 719 declares
+# capability explicitly, task.yaml carries a CAPABILITY-REDUCED control whose
+# evidentiary value is the pass/fail split, and the metrics are emitted on every
+# run. Raised and measured by AGENT-DESIGN-43a92055 after I said I EXPECTED the
+# line held.
+#
+# The gap is a schema mismatch and is d_ca03's to close, not scripts/:
+#   d_ca04  scored_metrics: - {metric: capacity_beats_accepted, role: capability}
+#   d_ca03  - axis: total_cycles / kind: reported / where: ...   (no role: key)
+# metric_roles() reads the first form only.
+
+d_ca03 claude :: G2 prescribes capability reported RAW AND PER UNIT OF AREA, and the metric is recorded every run -- claude hit_pct 50, tlb_hits 104, pte_reads 584 against the reference's 55, 115, 502 -- so smaller-and-doing-less IS separable here and is measured. The row is held because task.yaml declares these under `axis:` rather than `scored_metrics: role: capability`, so metric_roles() returns {} and no per-unit column is generated; G2 says the object is 0.76x ALONGSIDE hit_pct 50 against 55, and a bare 0.76x is what G2 exists to warn about

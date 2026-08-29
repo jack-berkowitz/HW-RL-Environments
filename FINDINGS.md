@@ -7299,3 +7299,54 @@ justification without changing the decision, which is the outcome that makes it
 easy to leave a wrong reason standing.
 
 **Rules:** 16, 20, 23
+
+## F117. A wrong justification behind a correct decision has no error signal
+
+Both withheld reasons written yesterday were false, and neither falsehood could
+have been caught by anything going wrong. The rows stay withheld under the
+correct reasoning and under the incorrect reasoning alike, so **no check goes
+red, no number moves, and no reader is inconvenienced.** Every other class filed
+this week was eventually surfaced by a failure. This one cannot be, by
+construction.
+
+d_ai04's reason inferred a coverage gap from a true catalog sentence; F2
+requires the codes to be indistinguishable and a control catches the collapse
+that would matter. d_ca03's said the task *"declares no capability metric"* —
+**true of the tooling, false of the contract, and asserted of the contract.**
+Spec G2 declares capability explicitly, task.yaml carries a CAPABILITY-REDUCED
+control whose value is the pass/fail split, and the metrics are emitted every
+run:
+
+    reference   hit_pct 55   tlb_hits 115   pte_reads 502   area 279,456
+    claude      hit_pct 50   tlb_hits 104   pte_reads 584   area 212,774
+
+claude is smaller **and** doing less, and by how much is measured — 0.76× the
+area, five points of hit rate, 16% more page-table reads. The separation my
+reason said was impossible was already on the record.
+
+I wrote that reason after saying I *expected* d_ca03's line held, and that
+expecting was what produced the previous error.
+
+### The mechanism under it: a declaration the tooling cannot reach
+
+    d_ca04   scored_metrics: - {metric: capacity_beats_accepted, role: capability}
+    d_ca03   - axis: total_cycles / kind: reported / where: ...      (no role:)
+
+`metric_roles()` reads the first form only, so it returns `{}` for d_ca03. The
+capability is real in the contract and in every record and invisible to every
+consumer — the chart omits the task, no per-unit column is generated, and a
+reader of the tooling concludes the axis does not exist. G2's own sentence is
+the one that fails: *"reported both raw and per unit of area, because raw area
+credits a design for being small when it was actually doing less."*
+
+**A withheld reason copied across two rows because the rows looked similar is
+F99 in the justification layer** — a constant copied across two clauses because
+they looked similar. d_ai04 genuinely has no capability metric; d_ca03 has one,
+emits it, and has a control proving it discriminates. The rows looked alike and
+were not.
+
+The remedy is not more care. It is that a reason should name an object something
+can check — a spec clause, a control's verdict, a recorded metric — rather than
+assert a state of the world in prose. Every reason in this file now cites one.
+
+**Rules:** 16, 20, 23
