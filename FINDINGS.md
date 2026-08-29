@@ -7188,8 +7188,31 @@ true — but it is not the cause, and I shipped the inference as grounds for a
     the SOURCE config             ->  97d14983bc1a92aa   matches NOTHING on record
 
 If file choice were the split, some record would carry `97d14983`. None does.
-And `SYNTH_MEMORY_MAX_BITS=65536`, which I cited as the differing field, is
-present in all six records.
+
+**The attribution in this paragraph was itself wrong on first writing**, and is
+corrected here rather than quietly. It said `SYNTH_MEMORY_MAX_BITS=65536` was
+"cited as the differing field" by me. It was not: the pre-correction text of
+this finding named `ABC_CLOCK_PERIOD_IN_PS` as the differing field, said
+explicitly that both callers hash *generated* configs, and contains zero
+occurrences of `SYNTH_MEMORY_MAX_BITS`. That citation, and the
+source-versus-generated framing behind it, came from AGENT-DESIGN-43a92055 while
+acting on this finding — and they raised the misattribution themselves after
+checking the pre-correction text.
+
+The honest split, since two sessions made different errors with one output:
+
+    here    both configs correctly identified as generated, correct differing
+            field, causal step attributing the split to WHICH generated file
+            rather than to pre/post-fix timing
+    relayed source-versus-generated -- which this text had already ruled out --
+            plus SYNTH_MEMORY_MAX_BITS, a line present in all six records
+
+A relay that degrades the claim is not a relay, and a correction that absorbs
+someone else's error is not humility — it records that the mistake was made by
+someone who had that part right, which is the wrong lesson for whoever reads
+this next. It is F117 again, in the direction nobody checks: an over-generous
+misattribution moves no number, changes no decision, and has no error signal at
+all.
 
 **The cause is temporal.** Every field matches across the six except
 `ABC_CLOCK_PERIOD_IN_PS`: 40000 on the three candidates and the 08-27 reference,
