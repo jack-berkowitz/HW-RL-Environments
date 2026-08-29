@@ -669,6 +669,8 @@ def _metric_value(task, label, key):
 
 
 def capability_rows():
+    import make_readme_tables as _MT
+    _held = _MT.withheld()
     out = []
     for short, pin, label in _design_pins():
         dirs = glob.glob(os.path.join(REPO, "domains", "*", "design", short + "_*"))
@@ -734,6 +736,20 @@ def capability_rows():
                 continue
             if r.get("wns_ns") is not None and float(r["wns_ns"]) < 0:
                 bars.append((m, None, None, [], "missed timing"))
+                continue
+            # THE HOLD LIST APPLIES HERE TOO, and this is the THIRD time this
+            # exact shape has bitten in this file. design_rows was taught to
+            # honour withheld rows; capability_rows was not, so the moment
+            # d_ca03 gained a capability metric the chart published
+            # "claude 0.84x" while the table beside it said withheld.
+            #
+            # Suppressing a number in one artefact and drawing it in another is
+            # not suppression. The pattern is that every NEW consumer of the
+            # records starts out not knowing about the decision, so the decision
+            # has to live where the records are read, not where they are
+            # rendered -- which is the fix this comment does not implement.
+            if (short, m) in _held:
+                bars.append((m, None, None, [], "withheld"))
                 continue
             ratios = []
             for k, rp in ref_per.items():

@@ -7350,3 +7350,25 @@ can check — a spec clause, a control's verdict, a recorded metric — rather t
 assert a state of the world in prose. Every reason in this file now cites one.
 
 **Rules:** 16, 20, 23
+
+### Third instance: every new consumer starts out not knowing
+
+`design_rows` was taught to honour the hold list. `capability_rows` was not — so
+the moment d_ca03 gained a machine-readable capability metric, the capability
+chart published **`claude 0.84×`** while the table beside it said *withheld*.
+Suppressing a number in one artefact and drawing it in another is not
+suppression.
+
+That is three consumers in two days: the tables, the area and power charts, and
+the capability chart. The pattern is not carelessness about any one of them —
+**a new consumer of the records begins life not knowing about a decision made
+about those records**, and will publish what it finds. The hold list is
+consulted where records are *rendered*, so every renderer has to be told
+separately, and the next one will have to be told too.
+
+The structural answer is that suppression belongs where records are *read* — a
+loader that refuses to hand out a held record — rather than at each render site.
+That is not what is implemented here, and saying so is the point: the current
+fix works and does not generalise, and the next renderer will leak by default.
+
+**Rules:** 20, 22

@@ -51,13 +51,13 @@ capability, and nothing here establishes those weights.
 
 ## d_ca03 — RISC-V Sv39 MMU -- page-table walker, TLBs, PMP
 
-| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | notes |
-|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
-| `claude` | **1/1 pass** | 212,774 | 33.4 | not swept | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
-| `gemini` | **did not build** | **0** | **0** | **0** | **build failure** — 4 error(s); first: sanitised_gemini.sv:430:23: error: use of undeclared identifier 'clk'  |
-| `sv39_mmu_ref` | — | 279,456 | 32.6 | 121.9 |  |
-| `sv39_mmu_top` | *not scored against this prompt* | — | — | — | last run answered task text `d79170d3b150c5e6`; the task text is now `5c30f59627bedc60` |
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | tlb.hits | hit% | pte.rd | cycles | notes |
+|---|---|---|---|---|---|---|---|---|---|
+| `chat` | **1/1 pass** | — | — | — | — | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
+| `claude` | **1/1 pass** | 212,774 | 33.4 | not swept | — | — | — | — | scored configuration SV_39_XLEN_64_VLEN_64_PLEN_56_ASID_WIDTH_16_NrPMPEntries_8_ITLB_ENTRIES_16_DTLB_ENTRIES_16 not present in this run |
+| `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | **build failure** — 4 error(s); first: sanitised_gemini.sv:430:23: error: use of undeclared identifier 'clk'  |
+| `sv39_mmu_ref` | — | 279,456 | 32.6 | 121.9 | — | — | — | — |  |
+| `sv39_mmu_top` | *not scored against this prompt* | — | — | — | — | — | — | — | last run answered task text `d79170d3b150c5e6`; the task text is now `5c30f59627bedc60` |
 
 ## d_ca04 — asynchronous CDC FIFO
 
