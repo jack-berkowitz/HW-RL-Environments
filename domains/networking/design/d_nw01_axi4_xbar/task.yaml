@@ -253,6 +253,35 @@ scored_metrics:
   - {metric: disjoint_two_pairs,            label: "2pair", role: capability}
   - {metric: aggregate_bursts_per_1000cyc,  label: "agg/1k", role: capability}
   - {metric: scored_beats_per_1000cyc,      label: "beat/1k"}
+  # ADDED 2026-08-29 from the axis audit. All five were EMITTED and UNDECLARED,
+  # so none reached a chart or a per-unit column.
+  #
+  # outstanding_master1: the tb emits one key PER MASTER and only master0 was
+  #   declared, so C1's floor was measured on both and published for one.
+  - {metric: outstanding_master1,           label: "outstd1", role: capability}
+  # r_/w_beats_held_at_rest: response buffering is FREE BELOW C3's ceiling of 4 R
+  #   and 4 W beats per master port, and a ceiling is not a pin -- freedom exists
+  #   under it and area buys it. Same shape as d_ca04's capacity_beats_accepted
+  #   and d_nw03's b1_beats_held. THIS IS THE AXIS `backpressure_stalls` IS THE
+  #   CONSEQUENCE OF; the direct capacity measurement is the right thing to
+  #   declare, and the stall count stays reported.
+  - {metric: r_beats_held_at_rest,          label: "r.held",  role: capability}
+  - {metric: w_beats_held_at_rest,          label: "w.held",  role: capability}
+  # read_latency_avg and fairness_spread: both FREE per G4 -- "where registers
+  #   sit relative to the LATENCY_MODE cuts" and "how arbitration is done,
+  #   subject only to L2". Both LOWER-is-better, so both are `choice`: a choice
+  #   is not divided by area and needs no inversion, unlike a capability.
+  - {metric: read_latency_avg,              label: "rlat",    role: choice}
+  - {metric: fairness_spread,               label: "fair",    role: choice}
+  #
+  # RESOLVED AND DELIBERATELY NOT DECLARED, from the same audit:
+  #   speedup_pct         = (disjoint_two_pairs*100)/disjoint_one_pair, a DERIVED
+  #                         form of two axes already declared capability.
+  #   backpressure_stalls = the consequence of the buffering axis declared just
+  #                         above, not an independent choice.
+  #   cross_id_reorderings, liveness*  = PINNED by O1/O4 and L1/L2/L3; the tb's
+  #                         own line says "reported, never gated".
+  #   max, min, n         = sub-fields of composite METRIC lines, not metrics.
 
 scored_metrics_gap: >
   THE CONCURRENCY RATIO IS NOT EMITTED. Both of its terms are --

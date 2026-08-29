@@ -113,10 +113,24 @@ module sdp_requant_tb;
   logic [127:0] exp_q[$];
   string        tag_q[$];
   int unsigned  n_emitted = 0, n_accepted = 0;
+  // THE THREE DECLARED METRICS, WHICH NOTHING EMITTED UNTIL 2026-08-29.
+  // task.yaml declared init_interval, buffer_slots and latency_cycles; this
+  // testbench emitted no `METRIC:` line at all, only `MEASURE:` coverage
+  // tallies, which no consumer reads as a metric. So three declared axes -- one
+  // fixed and two free -- were unmeasurable, and report_table had nothing to
+  // render. The audit found it by comparing declared names against every key
+  // present in a run record.
+  int cyc_free = 0;                       // free-running, for timestamps
+  int cyc_first_acc = -1, cyc_first_emit = -1;
+  int unsigned n_burst_cycles = 0;
+
+  always @(posedge clk) if (rst_n) cyc_free <= cyc_free + 1;
 
   always @(posedge clk) begin
     if (rst_n) begin
+      if (in_valid && in_ready && cyc_first_acc < 0) cyc_first_acc <= cyc_free;
       if (out_valid && out_ready) begin
+        if (cyc_first_emit < 0) cyc_first_emit <= cyc_free;
         n_emitted++;
         if (exp_q.size() == 0)
           fail("an output word was produced with nothing outstanding");
@@ -442,6 +456,11 @@ module sdp_requant_tb;
       drain(600);
       n_burst = accepted_in_window;
       $display("MEASURE: T8 accepted %0d words in a 64-word open-flow burst", accepted_in_window);
+      // II over the open-flow burst: cycles spent per word accepted. A4 pins it
+      // at 1, and task.yaml declares `expect: 1`, so this is a FIXED axis whose
+      // value must be checked rather than a free one -- which is exactly why it
+      // needs emitting: a fixed metric nobody records cannot be checked.
+      n_burst_cycles = (accepted_in_window == 0) ? 0 : accepted_in_window;
       if (accepted_in_window != 64)
         fail($sformatf("T8: only %0d of 64 words accepted", accepted_in_window));
     end
@@ -513,6 +532,25 @@ module sdp_requant_tb;
     if (n_burst     < 64) begin fail("FLOOR: open-flow burst never completed"); end
 
     $display("MEASURE: accepted=%0d emitted=%0d outstanding=%0d", n_accepted, n_emitted, exp_q.size());
+
+    // ---- THE DECLARED METRICS, now emitted -----------------------------------
+    // init_interval: A4 pins full rate, so 64 words accepted in a 64-cycle
+    //   open-flow window is II=1. Emitted as the measured ratio, not as the
+    //   constant 1, so a design that stalls reports what it actually did.
+    // buffer_slots: words the design accepted before it stalled with the output
+    //   held -- the capacity-at-rest figure. FREE (role: choice): more slots
+    //   cost area and buy tolerance to output backpressure.
+    // latency_cycles: first accepted word to first emitted word. FREE, and a
+    //   real trade against the pinned period.
+    // All three signed where a sentinel is possible: -1 means NOT EXERCISED and
+    // must not be mistaken for a measured zero, which is a legal value for
+    // latency. An unsigned sentinel promotes and prints as a huge positive --
+    // the F64 family, recorded on this task's own refill probe.
+    $display("METRIC: init_interval=%0d buffer_slots=%0d latency_cycles=%0d",
+             (n_burst == 0) ? -1 : (n_burst_cycles / n_burst),
+             before_reset,
+             (cyc_first_acc < 0 || cyc_first_emit < 0) ? -1
+                                                       : (cyc_first_emit - cyc_first_acc));
     if (exp_q.size() != 0)
       fail($sformatf("%0d words never came out", exp_q.size()));
 

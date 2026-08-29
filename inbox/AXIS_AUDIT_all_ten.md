@@ -147,3 +147,45 @@ for.** A hidden axis produces no number. A wrongly published one produces a numb
 that looks like a measurement — d_ca03's `µm² per TLB hit` priced a replacement
 policy the contract twice declines to price, and I introduced it while fixing the
 hidden axis next to it.
+
+---
+
+# CLOSED, 2026-08-29 — every row actioned
+
+| task | action | verified |
+|---|---|---|
+| `d_ca03` | `tlb_hits` role removed (pinned by P2); `requests_per_1000cyc` emitted + declared capability | ref 163, 1/1 |
+| `d_nw03` | **`latency_first_beat` emitted** — L3 promised it and no line produced one; `b1_beats_held` declared capability | ref lat=1, 8/8 |
+| `d_ai04` | three metrics emitted for the first time; `area_um2`/`power_mw` removed as sim metrics | II=1, slots=2, lat=1, 1/1 |
+| `d_ca05` | `total_cycles` emitted for the first time; same two removed | 3947, 1/1 |
+| `d_nw01` | five declared: `outstanding_master1`, `r_`/`w_beats_held_at_rest` (capability), `read_latency_avg`, `fairness_spread` (choice) | roles resolve |
+| `d_ca01` | `mem_txns_writebacks` declared choice — the observable of replacement policy, free per L1 | roles resolve |
+
+**Declared-but-never-emitted is now ZERO on all four tasks that had it.**
+
+## The three flagged rows, resolved from clause text
+
+* **`speedup_pct`** (d_nw01) — **NOT an axis.** It is
+  `(disjoint_two_pairs*100)/disjoint_one_pair`, a derived form of two metrics
+  already declared capability.
+* **`accept_rate`** (d_ca01) — **NOT an axis.** The request port is a single
+  `req_valid_i`/`req_ready_o` handshake, so acceptance is bounded by the
+  interface at one per cycle, and the rate achieved is a composite of miss
+  parallelism (declared capability) and hit latency (declared choice).
+* **`backpressure_stalls`** (d_nw01) — **a real axis, but the wrong metric for
+  it.** Response buffering is free below C3's ceiling; stalls are its
+  *consequence*. The direct measurement is `r_`/`w_beats_held_at_rest`, which
+  were also emitted and undeclared, and those are what got declared. Same
+  treatment as d_ca04's `capacity_beats_accepted` and d_nw03's `b1_beats_held`.
+
+## Two corrections to this audit, both mine
+
+* **`c1_rate` on d_nw03 was never a hidden axis.** `beats_delivered` is already
+  declared capability with `beats_cycles` as its denominator. I classified it
+  from its name without checking what was already declared — the `tlb_hits`
+  failure one column over.
+* **The absolute µm²·cyc/req figures were computed with 118 requests** taken from
+  d_ca03's testbench header. The checker counts **207**; the header was stale and
+  I quoted it. Ratios unaffected — the constant cancels — absolutes corrected
+  above. The emit now divides by the measured `checked`, so the stale literal
+  cannot reach a published ratio.

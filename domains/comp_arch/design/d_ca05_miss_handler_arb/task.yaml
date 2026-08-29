@@ -54,9 +54,13 @@ scored_configuration:
     submission does not have to reconstruct a configuration to get them right.
 
 scored_metrics:
+  # CORRECTED 2026-08-29 from the axis audit. Same two problems as d_ai04:
+  # total_cycles was declared and NEVER EMITTED -- this testbench produced no
+  # `METRIC:` line at all, only `MEASURE:` tallies -- and area_um2/power_mw are
+  # PPA outputs that could never appear in a sim record however the testbench
+  # behaved. G2 already compares both; declaring them here invited a per-unit
+  # division against themselves. total_cycles is now emitted.
   - {metric: total_cycles, label: "cycles", role: choice}
-  - {metric: area_um2,     label: "area",   role: choice}
-  - {metric: power_mw,     label: "power",  role: choice}
   # A CYCLE AXIS EXISTS HERE and does not on d_ai04. F4 is why: the flush walk's
   # 512 array accesses are a real cost a design can trade against area.
   # NO CAPABILITY COLUMN -- P1 pins the geometry and P2 the port count, so there

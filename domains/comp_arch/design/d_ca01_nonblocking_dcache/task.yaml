@@ -138,6 +138,21 @@ scored_metrics:
   - {metric: latency_max,         label: "lat.max"}   # worst case; stimulus-driven
   - {metric: max_outstanding_n,   label: "outstd",   role: capability}
   - {metric: mem_txns_fills,      label: "fills"}     # stimulus-driven
+  # AXIS AUDIT, 2026-08-29 -- one added, one resolved as NOT an axis.
+  #
+  # mem_txns_writebacks is the observable of REPLACEMENT POLICY, which L1 makes
+  # free and G4 lists first among the real choices. A better policy evicts fewer
+  # dirty lines. LOWER-is-better, so role: choice -- a choice is not divided by
+  # area and needs no inversion.
+  - {metric: mem_txns_writebacks, label: "wb", role: choice}
+  #
+  # accept_rate: RESOLVED AS NOT AN INDEPENDENT AXIS and deliberately undeclared.
+  # The request port is a single req_valid_i/req_ready_o handshake, so acceptance
+  # is bounded by the interface at one per cycle; the rate a design achieves is
+  # then a composite of miss parallelism (max_outstanding_n, declared capability)
+  # and hit latency (latency_min, declared choice). Declaring it would count both
+  # a third time rather than measure anything new.
+
 
 configs:
   # CORRECTNESS SWEEP -- multi-configuration, unchanged by rule 18. Full cross of

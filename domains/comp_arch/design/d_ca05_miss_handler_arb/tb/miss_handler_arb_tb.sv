@@ -19,8 +19,11 @@ module miss_handler_arb_tb;
   localparam int unsigned NR_PORTS = 4;
 
   logic clk = 1'b0, rst_n = 1'b0;
+
+  int cyc_free = 0;   // free-running, for the total_cycles metric
   always #5 clk = ~clk;
 
+  always @(posedge clk) cyc_free <= cyc_free + 1;
   logic flush_i = 1'b0, flush_ack_o, miss_o, busy_i = 1'b0;
   logic [NR_PORTS-1:0][$bits(miss_req_t)-1:0] miss_req_i = '0;
   logic [NR_PORTS-1:0] bypass_gnt_o, bypass_valid_o, miss_gnt_o, active_serving_o;
@@ -342,6 +345,14 @@ module miss_handler_arb_tb;
     if (!n_order)      fail("FLOOR: atomic ordering never exercised");
     if (!n_atop)       fail("FLOOR: no atomic ever completed");
     if (!n_reset)      fail("FLOOR: mid-operation reset never exercised");
+
+    // THE DECLARED METRIC, WHICH NOTHING EMITTED UNTIL 2026-08-29. task.yaml
+    // declares total_cycles as role: choice with the reason stated -- F4's flush
+    // walk is 512 array accesses and is a real cost a design can trade against
+    // area -- and this testbench produced no `METRIC:` line at all, only
+    // `MEASURE:` tallies, which no consumer reads as a metric. So the one free
+    // axis this task has was declared and unmeasurable.
+    $display("METRIC: total_cycles=%0d", cyc_free);
 
     if (errs == 0) $display("TEST_RESULT: PASS");
     else           $display("TEST_RESULT: FAIL: %0d failing checks", errs);

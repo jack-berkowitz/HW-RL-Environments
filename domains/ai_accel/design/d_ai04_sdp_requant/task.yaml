@@ -82,11 +82,23 @@ scored_configuration:
     every subnormal boundary and truncate values to 47.
 
 scored_metrics:
+  # CORRECTED 2026-08-29 from the axis audit. Two problems, both found by
+  # comparing declared names against every key present in a run record:
+  #
+  # 1. ALL FIVE WERE DECLARED AND NONE WAS EVER EMITTED. This testbench produced
+  #    no `METRIC:` line at all -- only `MEASURE:` coverage tallies, which no
+  #    consumer reads as a metric. Three declared axes, one fixed and two free,
+  #    were unmeasurable and report_table had nothing to render. The three below
+  #    are now emitted; the reference reads II=1, slots=2, latency=1.
+  #
+  # 2. area_um2 AND power_mw WERE NEVER SIM METRICS. They are PPA outputs and
+  #    live in the ppa record, so they could not appear here however the
+  #    testbench behaved -- a category error independent of problem 1. Removed:
+  #    G2 already compares both, and declaring them again as `choice` invited a
+  #    per-unit division against themselves.
   - {metric: init_interval,   label: "II",       expect: 1, role: fixed}
   - {metric: buffer_slots,    label: "slots",               role: choice}
   - {metric: latency_cycles,  label: "lat(cyc)",            role: choice}
-  - {metric: area_um2,        label: "area",                role: choice}
-  - {metric: power_mw,        label: "power",               role: choice}
   # NO CAPABILITY COLUMN, and that is a consequence of the contract rather than
   # an omission -- P1 pins the lanes, P2 the arithmetic, A4 the throughput.
   # There is no dimension along which a submission may do MORE. Spec G5.
