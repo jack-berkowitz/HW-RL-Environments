@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=sdp_requant; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=33750; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=40.0; override.CLK_PERIOD_NS=33.75; note.abc_runtime_target_ps=33750;",
+  "build_config_hash": "83088234b2c846ea",
+  "clk_period_ns": "33.75",
+  "correctness_gate": "passed:2026-08-27T001505Z__claude__sim.json",
+  "design_area_um2": "158486",
+  "git_sha": "d4d08779300123a8dfff88c1d4b7a27c752cbff4-dirty",
+  "kind": "ppa",
+  "label": "claude_pin33p75",
+  "orfs_nickname": "d_ai04_cand_claude_pin33p75",
+  "pdk": "sky130hd",
+  "power_w": "1.81e-01",
+  "status": "completed",
+  "submission": "candidates/d_ai04/claude.sv",
+  "submission_sha256_16": "08b2ac37b962e279",
+  "synth_area_um2": "132883.696000",
+  "task": "d_ai04_sdp_requant",
+  "timestamp_utc": "2026-08-29T02:48:24Z",
+  "wns_ns": "5.88599"
+}
