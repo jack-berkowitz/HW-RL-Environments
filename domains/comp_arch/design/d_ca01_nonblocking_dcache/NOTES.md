@@ -1727,3 +1727,72 @@ this shape.
 
 **Rule 5 intact: the anchor is 16/16 on this stimulus.** Second source holds at
 4/16, up from 2/16, with the improvement attributable to a verified invariant.
+
+---
+
+## Iteration 8: R5 same-word ordering. 4/16 -> 8/16, anchor still 16/16
+
+**Found by the instrument iteration 7 specified — logging every response with its
+PRODUCER — and it took one reading.**
+
+### The log
+
+Every response for the failing address, tagged by which of the three producers
+wrote it (hit path, D3'' fill-stream forward, or replay):
+
+    t=207545 FWD    id=8 addr=00000f20 beat=0 rec=5 data=599203c9
+    t=210695 HIT    id=7 addr=00000f20 idx=2 way=0 word=0 data=599203c9
+    t=210705 REPLAY id=1 addr=00000f20 idx=2 way=0 word=0 rec=0 op=1
+    t=222055 HIT    id=0 addr=00000f20 idx=2 way=1 word=0 data=59000071
+
+**`id=7`'s load is answered from the array at t=210695. One cycle later a STORE
+to the same word replays.** The load was ordered after that store and returned
+the pre-store value — and `59000071`, the value the tb expected, is what the same
+address reads at t=222055 once the store has landed.
+
+### The cause is one missing term
+
+    wire accept_hit = req_valid_i & hit & rsp_slot_free & ~p_full;
+
+**`accept_hit` consults the ARRAY and never the pending queue.** A load that hits
+is answered immediately even when an older store to the same word is sitting
+unreplayed, which is exactly what R5 forbids.
+
+### Why every earlier probe missed it, measured rather than guessed
+
+    hits over the whole run ............................ 320
+    hits accepted with a pending entry on the same word ... 1
+    of which the pending entry is a STORE ................. 1
+
+**One occurrence in 320.** Every aggregate counter this investigation ran would
+have shown it as noise or rounded it away; the response log surfaced it on the
+first read because it prints the *pairing*, not a count.
+
+### The fix
+
+`accept_hit` is now also gated on `~pend_same_word`. The request is declined while
+an older entry covers its word, retries, and hits normally once the replay clears
+`p_v`. **No circular wait** — a hit needs no MSHR record, and the pending store
+replays as soon as its own record fills. L6 makes latency free.
+
+    second source   4/16 -> 8/16
+    reference       16/16, unchanged -- no check moved
+    running total   2/16 -> 4/16 -> 8/16 over iterations 6 and 8
+
+### What the two fixes have in common
+
+Both are the same omission in different clothes: **a decision made by looking at
+one structure while a second structure held the newer truth.** Iteration 6's
+`victim_way` read `rank_q` and not the outstanding records; iteration 8's
+`accept_hit` read the tag array and not the pending queue. Neither is a timing
+race — the first spans 210 time units, the second one cycle — which is why five
+same-cycle hypotheses in iterations 1-5 all correctly read zero.
+
+### Where iteration 9 starts
+
+8/16 with the anchor at 16/16, so the remaining failures are real and the method
+is working. **Re-run the response log at a failing configuration and read the
+pairing again** — it has now found the cause twice on first reading, where
+aggregate probes found it zero times in five attempts.
+
+**Rule 5 intact: the anchor passes every configuration on this stimulus.**

@@ -233,7 +233,32 @@ module nonblocking_dcache #(
                  & (beat_q == (LG_BLK+1)'(BLOCK_WORDS-1));
   wire fill_shadow = fill_last & (req_idx == m_idx[cur_m]) & (req_tag == m_tag[cur_m]);
 
-  wire accept_hit  = req_valid_i & hit & rsp_slot_free & ~p_full;
+  // R5, SAME-WORD ORDERING. accept_hit consulted the ARRAY only and never the
+  // pending queue, so a load that hit could be answered while an OLDER store to
+  // the same word was still queued and unreplayed -- returning the pre-store
+  // value for a request the contract orders after it.
+  //
+  // FOUND BY LOGGING EVERY RESPONSE WITH ITS PRODUCER, iteration 8:
+  //   t=210695 HIT    id=7 addr=00000f20 idx=2 way=0 word=0 data=599203c9
+  //   t=210705 REPLAY id=1 addr=00000f20 idx=2 way=0 word=0 op=1
+  // the hit is answered one cycle before the store to the same word replays.
+  // Counted over a full run: 320 hits, exactly ONE over a pending same-word
+  // entry, and that one is a store. A single occurrence, which is why every
+  // aggregate probe missed it and why the response log found it immediately.
+  //
+  // The request is DECLINED for as long as the older entry is pending; it
+  // retries and hits normally once the replay clears p_v. No circular wait: a
+  // hit needs no record, and the pending store replays as soon as its own
+  // record fills. Latency is free here (L6).
+  logic pend_same_word;
+  always_comb begin
+    pend_same_word = 1'b0;
+    for (int j = 0; j < int'(NIDS); j++)
+      if (p_v[j] && (p_addr[j][31:WORD_SEL_W] == req_addr_i[31:WORD_SEL_W]))
+        pend_same_word = 1'b1;
+  end
+
+  wire accept_hit  = req_valid_i & hit & rsp_slot_free & ~p_full & ~pend_same_word;
   // and a miss may not allocate when EVERY way in the set is already claimed by
   // an in-flight record -- there is nowhere to put the line. It retries.
   wire accept_miss = req_valid_i & ~hit & ~p_full & (m_match | (m_free & victim_ok))
