@@ -9,7 +9,7 @@
 | `tb/nonblocking_dcache_tb.sv` | scoring checker, passes the anchor 16/16 |
 | `mutants/` | **7**, each with `bmc_cex` evidence and a recorded depth |
 | `conformant/` | **2**, both survive 16/16 gated, both witnessed |
-| `tb/nonblocking_dcache_alt_ref.sv` | second source — **probe, not a deliverable.** Does not pass; see below |
+| `tb/nonblocking_dcache_alt_ref.sv` | second source — **probe, not a deliverable.** ~~Does not pass~~ **PASSES 16/16 as of iteration 10 (2026-08-29).** Still not a deliverable and still not to be given a PPA number; see the handoff note below |
 | `probe/PASTE.md` | paste-ready solicitation prompt |
 | `candidates/d_ca01/` | created, empty |
 | **PPA** | ~~**NOT STARTED — Agent 1**~~ **STALE 2026-08-27: STARTED AND RUNNING.** `runs/d_ca01_nonblocking_dcache/` holds **13** PPA records, the newest three from 2026-08-27 at the pinned 15.0 ns — reference plus two candidates. The rows above it were kept current and this one was not. |
@@ -23,10 +23,24 @@
 2. **Scored configuration is `DATA_W=32 SETS=16 WAYS=4 MAX_MISSES=8`.** 8 kbit of
    data array — sized deliberately to close, given the container memory ceiling
    that already killed one route on this bench.
-3. **The reference is the only artifact to build.** The second source does not
-   pass the checker and must not be given a PPA number.
+3. **The reference is the only artifact to build.** ~~The second source does not
+   pass the checker and~~ **CORRECTED 2026-08-29: the second source now passes
+   the checker 16/16 — and it still** must not be given a PPA number. The reason
+   was never that it failed; it is that a second source is a falsifier that
+   lives in `tb/`, not a shipped artefact. Its passing removes the rule-5
+   blocker on solicitation; it does not make it a build target.
 
 ### The one open defect, logged against the SECOND SOURCE
+
+> **CLOSED 2026-08-29, iterations 4–10.** The second source passes 16/16 and the
+> anchor was re-measured at 16/16 afterwards. Five defects were found in it; the
+> masked-store byte described below was a symptom of the last and largest —
+> the memory engine served records in index order, so a fill overtook the
+> writeback of the same block and the cache kept a pre-store value. The
+> hypothesis recorded below (a request racing a fill's `valid_q` update) was
+> **not** the cause; it was never confirmed, and the actual cause was found by
+> instrumentation. Full account in *Iteration 10* at the end of this file.
+> The text below is kept as written.
 
 `tb/nonblocking_dcache_alt_ref.sv` loses one byte of a masked store —
 `got=…dd exp=…c9`, in the soak and again in the readback sweep. **The anchor is
@@ -35,6 +49,7 @@ being wrong, and nothing in the checker was touched.**
 
 Not fixed, deliberately. The second source is a probe rather than a shipped
 artefact; the checker is validated and closing the task does not depend on it.
+*(Superseded: it was fixed, on instruction, in iterations 4–10.)*
 The hypothesis on record — a request arriving in the same cycle a fill completes
 reads `valid_q` before the fill's non-blocking update lands, allocates a fresh
 record for a line that has just become resident, and the re-fetch discards a
@@ -42,7 +57,8 @@ store already applied — is a hypothesis, not a diagnosis, and confirming it by
 instrumentation is a fourth iteration nobody needs.
 
 **What the second source bought before it stopped: two harness defects, written
-up as F52.** Both were invisible to the reference and to all seven mutants,
+up as F52.** *(It did not stay stopped — see iterations 4–10. The two harness
+defects below remain the argument for rule 5, unchanged by the repair.)* Both were invisible to the reference and to all seven mutants,
 because every one of them wraps the anchor and shares its non-forwarding
 behaviour. That is the argument for rule 5 the project did not previously have —
 a negative control feeds the checker a bad input and cannot establish that a
