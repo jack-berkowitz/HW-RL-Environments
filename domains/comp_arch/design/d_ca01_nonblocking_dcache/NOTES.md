@@ -1656,3 +1656,74 @@ briefly 0 and the way is not marked busy.
 
 **Rule 5 intact: the anchor is 16/16 on this stimulus, so the second source is
 wrong and no check was touched.**
+
+---
+
+## Iteration 7: the way-collision family is CLOSED, and MAX_MISSES=8 is a different bug
+
+**No fix. Three results, and the first is the one that matters — it retires a
+whole family of hypotheses instead of adding one.**
+
+### Iteration 6's fix is verified, not assumed
+
+The fix is supposed to guarantee at most one valid record per `(idx, way)`.
+Asserted directly rather than trusted, over every record pair every cycle:
+
+    INV pair-checks = 908,936      VIOLATIONS = 0
+
+**Zero, at MAX_MISSES=8** — eight records against two ways, a far wider surface
+than the two records the bug was found with. So the way-collision family is
+closed and does not need revisiting. That is worth more than another candidate
+mechanism: iterations 1-5 spent five hypotheses inside a family that a single
+invariant can now rule out in one run.
+
+### The remaining failure is not the same bug
+
+    MAX_MISSES=2 (fixed)   598603dd vs 598603c9   ONE byte, upper three matching
+    MAX_MISSES=8           599203c9 vs 59000071   whole words differ
+                           59be03e5 vs 59000352
+                           598c03d7 vs 50000325
+                           59ba0114 vs 50ba014c
+
+The first was a lost byte-merge. **These are not** — the words differ in several
+bytes, and in the top byte, so nothing here is a masked store failing to land.
+
+### Where it happens, measured
+
+Captured the address per failing id by carrying `req_addr` alongside `exp_val`:
+
+    cyc=21061 id=7  addr=0x00000f20   idx=2
+    cyc=21190 id=15 addr=0x00000f90   idx=1
+    cyc=22861 id=10 addr=0x00000f58   idx=5
+    cyc=23246 id=0  addr=0x00000f80   idx=0
+
+**Four different indices**, so it is not one line, and the addresses cluster
+tightly in `0xf00-0xf9f` — one phase's working set rather than a scattered
+corruption.
+
+### Two dead ends, recorded so iteration 8 does not repeat them
+
+* **`exp` is not a store word.** I traced `50ba014c` through every queue-store,
+  store-replay and store-hit path in the design and it appears **nowhere**. The
+  tb computes `exp_val` from its own shadow memory, so an expected value is not
+  in general a value the design was ever handed. Tracing by expected value does
+  not work on this task.
+* **The per-line log on an affected index shows no stores at all** in the failing
+  window, and every eviction there carries `dirty_q=0 -> m_wb=0`. Lines cycle
+  through tags 1e,1f,20,21,22,23 across two ways — conflict thrashing with a
+  clean working set. Whatever this is, **it is not a lost store**, which is what
+  the whole investigation has assumed since iteration 1.
+
+### Where iteration 8 starts
+
+The assumption that carried iterations 1-7 — that a store is being lost — is now
+contradicted by measurement on the surviving failure. Start from the load side
+instead: for one failing id, log every response the design produces for it
+(`rsp_id_q`, `rsp_d_q`, and which of the three producers wrote it — the hit path,
+the D3'' fill-stream forward `fw_fire`, or the replay `rep_fire`). The tb reports
+by id, and D3'' is this second source's own declared difference, so a response
+attributed to the wrong id or forwarded off the wrong beat would produce exactly
+this shape.
+
+**Rule 5 intact: the anchor is 16/16 on this stimulus.** Second source holds at
+4/16, up from 2/16, with the improvement attributable to a verified invariant.
