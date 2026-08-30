@@ -1,0 +1,34 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "TIMESCALEMOD,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "42",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "48076ab45a3193f18390f8fe32513fffcc8aa753-dirty",
+  "kind": "sim",
+  "label": "claude",
+  "metrics": {
+    "": {
+      "total_cycles": "3446"
+    }
+  },
+  "nonconverged_configs": "0",
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ca05/claude.sv",
+  "submission_sha256_16": "3584001943db7005",
+  "task": "d_ca05_miss_handler_arb",
+  "task_text_hash": "1ecf57426c98a135",
+  "timestamp_utc": "2026-08-30T04:31:45Z"
+}

@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 22, correct 19, PPA measured 20. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 24, correct 21, PPA measured 20. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -200,8 +200,8 @@ rather than better implementation — see the like-for-like note below.
 |---|---|---|---|---|
 | reference | **1/1 pass** | *not built* | *not built* | *not built* |
 | `chat` | **1/1 pass** | *not built* | *not built* | *not built* |
-| `claude` | 0/1 FAIL | *not built* | *not built* | *not built* |
-| `gemini` | 0/1 FAIL | *not built* | *not built* | *not built* |
+| `claude` | **1/1 pass** | *not built* | *not built* | *not built* |
+| `gemini` | did not build (slang_rejected) | *not built* | *not built* | *not built* |
 
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 
