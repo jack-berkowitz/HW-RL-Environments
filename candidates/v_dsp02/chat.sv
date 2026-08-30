@@ -1,26 +1,12 @@
 module fp_noncomp_tb;
 
-  // ---------------------------------------------------------------------------
-  // PROVIDED PLUMBING -- issues operations, checks nothing.
-  // ---------------------------------------------------------------------------
+  // ==========================================================================
+  // DUT signals
+  // ==========================================================================
 
-  // ---- clock -----------------------------------------------------------------
-  logic clk;
-  initial begin clk = 1'b0; forever #5 clk = ~clk; end
+  logic        clk;
+  logic        rst_n;
 
-  // ---- reset (active low, synchronous) ---------------------------------------
-  logic rst_n;
-  initial rst_n = 1'b0;
-
-  task automatic bfm_reset(input int cycles = 4);
-    @(negedge clk);
-    rst_n = 1'b0;
-    repeat (cycles) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
-  endtask
-
-  // ---- DUT signals -----------------------------------------------------------
   logic [31:0] operand_a_i;
   logic [31:0] operand_b_i;
   logic [1:0]  op_i;
@@ -34,642 +20,1576 @@ module fp_noncomp_tb;
   logic        out_valid_o;
   logic        out_ready_i;
 
+
   fp_noncomp dut (
-    .clk_i(clk),
-    .rst_ni(rst_n),
-    .operand_a_i(operand_a_i),
-    .operand_b_i(operand_b_i),
-    .op_i(op_i),
-    .op_mode_i(op_mode_i),
-    .in_valid_i(in_valid_i),
-    .in_ready_o(in_ready_o),
-    .result_o(result_o),
-    .class_mask_o(class_mask_o),
-    .status_o(status_o),
-    .out_valid_o(out_valid_o),
-    .out_ready_i(out_ready_i)
+      .clk_i         (clk),
+      .rst_ni        (rst_n),
+
+      .operand_a_i   (operand_a_i),
+      .operand_b_i   (operand_b_i),
+      .op_i          (op_i),
+      .op_mode_i     (op_mode_i),
+
+      .in_valid_i    (in_valid_i),
+      .in_ready_o    (in_ready_o),
+
+      .result_o      (result_o),
+      .class_mask_o  (class_mask_o),
+      .status_o      (status_o),
+
+      .out_valid_o   (out_valid_o),
+      .out_ready_i   (out_ready_i)
   );
 
-  // ---- issue -----------------------------------------------------------------
-  task automatic bfm_issue(input logic [31:0] a,
-                           input logic [31:0] b,
-                           input logic [1:0]  op,
-                           input logic [2:0]  mode);
-    @(negedge clk);
-    operand_a_i = a;
-    operand_b_i = b;
-    op_i        = op;
-    op_mode_i   = mode;
-    in_valid_i  = 1'b1;
-    forever begin
-      @(posedge clk);
-      if (in_ready_o) break;
-    end
-  endtask
 
-  // Stops issuing.
-  task automatic bfm_idle();
-    @(negedge clk);
-    in_valid_i = 1'b0;
-  endtask
+  // ==========================================================================
+  // Constants
+  // ==========================================================================
 
-  // ---- result side -----------------------------------------------------------
-  task automatic bfm_out_ready(input logic value);
-    @(negedge clk);
-    out_ready_i = value;
-  endtask
-
-  // ---------------------------------------------------------------------------
-  // Reference model helpers
-  // ---------------------------------------------------------------------------
+  localparam logic [1:0] OP_SGNJ     = 2'd0;
+  localparam logic [1:0] OP_MINMAX   = 2'd1;
+  localparam logic [1:0] OP_CMP      = 2'd2;
+  localparam logic [1:0] OP_CLASSIFY = 2'd3;
 
   localparam logic [31:0] CANON_QNAN = 32'h7FC0_0000;
-  localparam int QDEPTH = 512;
 
-  function automatic bit fp_is_nan(input logic [31:0] x);
+  localparam integer WAIT_LIMIT = 50000;
+
+
+  // ==========================================================================
+  // Clock / reset / provided-style BFM
+  // ==========================================================================
+
+  initial begin
+    clk = 1'b0;
+    forever #5 clk = ~clk;
+  end
+
+
+  initial begin
+    rst_n = 1'b0;
+  end
+
+
+  task automatic bfm_reset(input integer cycles);
     begin
-      fp_is_nan = (&x[30:23]) && (x[22:0] != 23'b0);
+      @(negedge clk);
+      rst_n = 1'b0;
+
+      repeat (cycles)
+        @(posedge clk);
+
+      @(negedge clk);
+      rst_n = 1'b1;
     end
-  endfunction
+  endtask
 
-  function automatic bit fp_is_snan(input logic [31:0] x);
-    begin
-      fp_is_snan = fp_is_nan(x) && (x[22] == 1'b0);
-    end
-  endfunction
 
-  function automatic bit fp_is_zero(input logic [31:0] x);
-    begin
-      fp_is_zero = (x[30:0] == 31'b0);
-    end
-  endfunction
-
-  // IEEE numeric less-than for non-NaN binary32 operands.  The two zeros are
-  // equal for CMP, so neither is less than the other.
-  function automatic bit fp_lt_non_nan(
-      input logic [31:0] a,
-      input logic [31:0] b
-  );
-    begin
-      if (fp_is_zero(a) && fp_is_zero(b)) begin
-        fp_lt_non_nan = 1'b0;
-      end else if (a == b) begin
-        fp_lt_non_nan = 1'b0;
-      end else if (a[31] != b[31]) begin
-        fp_lt_non_nan = a[31];
-      end else if (a[31] == 1'b0) begin
-        fp_lt_non_nan = (a[30:0] < b[30:0]);
-      end else begin
-        fp_lt_non_nan = (a[30:0] > b[30:0]);
-      end
-    end
-  endfunction
-
-  function automatic bit fp_eq_non_nan(
-      input logic [31:0] a,
-      input logic [31:0] b
-  );
-    begin
-      if (fp_is_zero(a) && fp_is_zero(b))
-        fp_eq_non_nan = 1'b1;
-      else
-        fp_eq_non_nan = (a == b);
-    end
-  endfunction
-
-  function automatic logic [31:0] model_sgnj(
-      input logic [31:0] a,
-      input logic [31:0] b,
-      input logic [2:0] mode
-  );
-    logic sign_v;
-    begin
-      sign_v = 1'b0;
-      case (mode)
-        3'd0: sign_v = b[31];
-        3'd1: sign_v = ~b[31];
-        3'd2: sign_v = a[31] ^ b[31];
-        default: sign_v = 1'b0;
-      endcase
-      model_sgnj = {sign_v, a[30:0]};
-    end
-  endfunction
-
-  function automatic logic [31:0] model_minmax(
-      input logic [31:0] a,
-      input logic [31:0] b,
-      input logic        is_max
-  );
-    bit nan_a;
-    bit nan_b;
-    bit less_ab;
-    begin
-      nan_a = fp_is_nan(a);
-      nan_b = fp_is_nan(b);
-      less_ab = 1'b0;
-
-      if (nan_a && nan_b) begin
-        model_minmax = CANON_QNAN;
-      end else if (nan_a) begin
-        model_minmax = b;
-      end else if (nan_b) begin
-        model_minmax = a;
-      end else if (fp_is_zero(a) && fp_is_zero(b)) begin
-        // For MINMAX only, -0 is ordered below +0.  Preserve the correct
-        // endpoint even when both operands have the same zero sign.
-        if (is_max)
-          model_minmax = (a[31] && b[31]) ? 32'h8000_0000 : 32'h0000_0000;
-        else
-          model_minmax = (a[31] || b[31]) ? 32'h8000_0000 : 32'h0000_0000;
-      end else begin
-        less_ab = fp_lt_non_nan(a, b);
-        if (is_max)
-          model_minmax = less_ab ? b : a;
-        else
-          model_minmax = less_ab ? a : b;
-      end
-    end
-  endfunction
-
-  function automatic logic [31:0] model_cmp(
-      input logic [31:0] a,
-      input logic [31:0] b,
-      input logic [2:0]  mode
-  );
-    bit nan_any;
-    bit pred_v;
-    begin
-      nan_any = fp_is_nan(a) || fp_is_nan(b);
-      pred_v = 1'b0;
-
-      if (!nan_any) begin
-        case (mode)
-          3'd0: pred_v = fp_lt_non_nan(a, b) || fp_eq_non_nan(a, b);
-          3'd1: pred_v = fp_lt_non_nan(a, b);
-          3'd2: pred_v = fp_eq_non_nan(a, b);
-          default: pred_v = 1'b0;
-        endcase
-      end
-
-      model_cmp = pred_v ? 32'h0000_0001 : 32'h0000_0000;
-    end
-  endfunction
-
-  function automatic logic [9:0] model_class(input logic [31:0] a);
-    logic [9:0] mask_v;
-    begin
-      mask_v = 10'b0;
-
-      if (a[30:23] == 8'hFF) begin
-        if (a[22:0] == 23'b0) begin
-          if (a[31]) mask_v[0] = 1'b1;
-          else       mask_v[7] = 1'b1;
-        end else if (a[22] == 1'b0) begin
-          mask_v[8] = 1'b1;
-        end else begin
-          mask_v[9] = 1'b1;
-        end
-      end else if (a[30:23] == 8'h00) begin
-        if (a[22:0] == 23'b0) begin
-          if (a[31]) mask_v[3] = 1'b1;
-          else       mask_v[4] = 1'b1;
-        end else begin
-          if (a[31]) mask_v[2] = 1'b1;
-          else       mask_v[5] = 1'b1;
-        end
-      end else begin
-        if (a[31]) mask_v[1] = 1'b1;
-        else       mask_v[6] = 1'b1;
-      end
-
-      model_class = mask_v;
-    end
-  endfunction
-
-  function automatic logic [4:0] model_status(
+  task automatic bfm_issue(
       input logic [31:0] a,
       input logic [31:0] b,
       input logic [1:0]  op,
       input logic [2:0]  mode
   );
-    bit nv_v;
-    bit nan_any;
-    bit snan_any;
     begin
-      nv_v = 1'b0;
-      nan_any = fp_is_nan(a) || fp_is_nan(b);
-      snan_any = fp_is_snan(a) || fp_is_snan(b);
+      @(negedge clk);
 
-      case (op)
-        2'd0: nv_v = 1'b0;
-        2'd1: nv_v = snan_any;
-        2'd2: begin
-          case (mode)
-            3'd0, 3'd1: nv_v = nan_any;
-            3'd2:       nv_v = snan_any;
-            default:    nv_v = 1'b0;
-          endcase
-        end
-        2'd3: nv_v = 1'b0;
-        default: nv_v = 1'b0;
-      endcase
+      operand_a_i = a;
+      operand_b_i = b;
+      op_i        = op;
+      op_mode_i   = mode;
+      in_valid_i  = 1'b1;
 
-      model_status = {nv_v, 4'b0000};
+      forever begin
+        @(posedge clk);
+
+        if (in_ready_o)
+          break;
+      end
+    end
+  endtask
+
+
+  task automatic bfm_idle;
+    begin
+      @(negedge clk);
+      in_valid_i = 1'b0;
+    end
+  endtask
+
+
+  task automatic bfm_out_ready(
+      input logic value
+  );
+    begin
+      @(negedge clk);
+      out_ready_i = value;
+    end
+  endtask
+
+
+  // ==========================================================================
+  // Reference-model record
+  // ==========================================================================
+
+  typedef struct packed {
+    logic [31:0] result;
+    logic [9:0]  class_mask;
+    logic [4:0]  status;
+    logic        check_result;
+    logic        check_class;
+  } exp_rec_t;
+
+  exp_rec_t exp_q[$];
+
+  integer fail_count;
+  integer accepted_count;
+  integer delivered_count;
+  integer stall_cycle_count;
+
+  integer reset_low_edges;
+
+
+  // ==========================================================================
+  // Floating-point bit helpers
+  // ==========================================================================
+
+  function automatic logic fp_is_nan(
+      input logic [31:0] x
+  );
+    begin
+      fp_is_nan =
+          (x[30:23] == 8'hFF) &&
+          (x[22:0]  != 23'h0);
     end
   endfunction
 
-  // ---------------------------------------------------------------------------
-  // Expected-result FIFO.  Results are identified strictly by acceptance order
-  // as H2 requires; payload values are never used to search for an operation.
-  // ---------------------------------------------------------------------------
 
-  logic [31:0] exp_result [0:QDEPTH-1];
-  logic [9:0]  exp_class  [0:QDEPTH-1];
-  logic [4:0]  exp_status [0:QDEPTH-1];
-  logic [1:0]  exp_op     [0:QDEPTH-1];
-  logic [2:0]  exp_mode   [0:QDEPTH-1];
-  logic        exp_check_result [0:QDEPTH-1];
-  logic        exp_check_class  [0:QDEPTH-1];
+  function automatic logic fp_is_snan(
+      input logic [31:0] x
+  );
+    begin
+      fp_is_snan =
+          (x[30:23] == 8'hFF) &&
+          (x[22:0]  != 23'h0) &&
+          (x[22]    == 1'b0);
+    end
+  endfunction
 
-  int q_head;
-  int q_tail;
-  int accepted_count;
-  int delivered_count;
-  int tb_cycle;
-  bit verdict_done;
-  bit prev_rst_low;
 
-  integer q_slot;
+  function automatic logic fp_is_zero(
+      input logic [31:0] x
+  );
+    begin
+      fp_is_zero =
+          (x[30:0] == 31'h0);
+    end
+  endfunction
 
-  task automatic fail_clause(
-      input string clause_name,
+
+  /*
+   * IEEE comparison less-than for NON-NaN inputs.
+   *
+   * +0 and -0 compare equal here, as required by CMP.
+   */
+  function automatic logic fp_lt(
+      input logic [31:0] a,
+      input logic [31:0] b
+  );
+    logic [30:0] amag;
+    logic [30:0] bmag;
+
+    begin
+      amag = a[30:0];
+      bmag = b[30:0];
+
+      if (
+          fp_is_zero(a) &&
+          fp_is_zero(b)
+      ) begin
+
+        fp_lt = 1'b0;
+
+      end
+      else if (a[31] != b[31]) begin
+
+        fp_lt = a[31];
+
+      end
+      else if (a[31] == 1'b0) begin
+
+        fp_lt =
+            (amag < bmag);
+
+      end
+      else begin
+
+        fp_lt =
+            (amag > bmag);
+
+      end
+    end
+  endfunction
+
+
+  function automatic logic fp_eq(
+      input logic [31:0] a,
+      input logic [31:0] b
+  );
+    begin
+      if (
+          fp_is_zero(a) &&
+          fp_is_zero(b)
+      )
+        fp_eq = 1'b1;
+      else
+        fp_eq = (a == b);
+    end
+  endfunction
+
+
+  // ==========================================================================
+  // CLASSIFY model
+  // ==========================================================================
+
+  function automatic logic [9:0] fp_classify(
+      input logic [31:0] x
+  );
+    logic [9:0] m;
+
+    begin
+      m = 10'b0;
+
+      if (x[30:23] == 8'hFF) begin
+
+        if (x[22:0] == 23'h0) begin
+
+          if (x[31])
+            m[0] = 1'b1;
+          else
+            m[7] = 1'b1;
+
+        end
+        else if (x[22] == 1'b0) begin
+
+          m[8] = 1'b1;
+
+        end
+        else begin
+
+          m[9] = 1'b1;
+
+        end
+
+      end
+      else if (x[30:23] == 8'h00) begin
+
+        if (x[22:0] == 23'h0) begin
+
+          if (x[31])
+            m[3] = 1'b1;
+          else
+            m[4] = 1'b1;
+
+        end
+        else begin
+
+          if (x[31])
+            m[2] = 1'b1;
+          else
+            m[5] = 1'b1;
+
+        end
+
+      end
+      else begin
+
+        if (x[31])
+          m[1] = 1'b1;
+        else
+          m[6] = 1'b1;
+
+      end
+
+      fp_classify = m;
+    end
+  endfunction
+
+
+  // ==========================================================================
+  // Expected-result model
+  // ==========================================================================
+
+  function automatic exp_rec_t make_expected(
+      input logic [31:0] a,
+      input logic [31:0] b,
+      input logic [1:0]  op,
+      input logic [2:0]  mode
+  );
+    exp_rec_t e;
+
+    logic nan_a;
+    logic nan_b;
+    logic snan_a;
+    logic snan_b;
+    logic nv;
+
+    logic comparison;
+    logic [31:0] chosen;
+
+    begin
+      e = '0;
+
+      e.check_result = 1'b1;
+      e.check_class  = 1'b0;
+
+      nan_a  = fp_is_nan(a);
+      nan_b  = fp_is_nan(b);
+      snan_a = fp_is_snan(a);
+      snan_b = fp_is_snan(b);
+
+      nv         = 1'b0;
+      comparison = 1'b0;
+      chosen     = 32'h0;
+
+
+      case (op)
+
+        // --------------------------------------------------------------------
+        // SGNJ
+        // --------------------------------------------------------------------
+
+        OP_SGNJ: begin
+
+          e.result[30:0] = a[30:0];
+
+          case (mode)
+
+            3'd0:
+              e.result[31] = b[31];
+
+            3'd1:
+              e.result[31] = ~b[31];
+
+            3'd2:
+              e.result[31] = a[31] ^ b[31];
+
+            default:
+              e.result[31] = 1'b0;
+
+          endcase
+
+          /*
+           * S2: even an sNaN operand causes no exception.
+           */
+          nv = 1'b0;
+
+        end
+
+
+        // --------------------------------------------------------------------
+        // MINMAX
+        // --------------------------------------------------------------------
+
+        OP_MINMAX: begin
+
+          nv =
+              snan_a ||
+              snan_b;
+
+
+          if (nan_a && nan_b) begin
+
+            e.result =
+                CANON_QNAN;
+
+          end
+          else if (nan_a) begin
+
+            e.result =
+                b;
+
+          end
+          else if (nan_b) begin
+
+            e.result =
+                a;
+
+          end
+          else if (
+              fp_is_zero(a) &&
+              fp_is_zero(b)
+          ) begin
+
+            /*
+             * MINMAX gives -0 an ordering below +0.
+             */
+            if (mode == 3'd0) begin
+
+              if (a[31] || b[31])
+                e.result = 32'h8000_0000;
+              else
+                e.result = 32'h0000_0000;
+
+            end
+            else begin
+
+              if (!a[31] || !b[31])
+                e.result = 32'h0000_0000;
+              else
+                e.result = 32'h8000_0000;
+
+            end
+
+          end
+          else begin
+
+            if (mode == 3'd0) begin
+
+              if (fp_lt(a, b))
+                chosen = a;
+              else
+                chosen = b;
+
+            end
+            else begin
+
+              if (fp_lt(a, b))
+                chosen = b;
+              else
+                chosen = a;
+
+            end
+
+            e.result = chosen;
+
+          end
+
+        end
+
+
+        // --------------------------------------------------------------------
+        // CMP
+        // --------------------------------------------------------------------
+
+        OP_CMP: begin
+
+          if (mode == 3'd0) begin
+
+            /*
+             * FLE is signalling.
+             */
+            if (nan_a || nan_b) begin
+
+              comparison = 1'b0;
+              nv         = 1'b1;
+
+            end
+            else begin
+
+              comparison =
+                  fp_lt(a, b) ||
+                  fp_eq(a, b);
+
+            end
+
+          end
+          else if (mode == 3'd1) begin
+
+            /*
+             * FLT is signalling.
+             */
+            if (nan_a || nan_b) begin
+
+              comparison = 1'b0;
+              nv         = 1'b1;
+
+            end
+            else begin
+
+              comparison =
+                  fp_lt(a, b);
+
+            end
+
+          end
+          else begin
+
+            /*
+             * FEQ is quiet.
+             */
+            if (nan_a || nan_b) begin
+
+              comparison = 1'b0;
+              nv         =
+                  snan_a ||
+                  snan_b;
+
+            end
+            else begin
+
+              comparison =
+                  fp_eq(a, b);
+
+            end
+
+          end
+
+
+          if (comparison)
+            e.result = 32'h0000_0001;
+          else
+            e.result = 32'h0000_0000;
+
+        end
+
+
+        // --------------------------------------------------------------------
+        // CLASSIFY
+        // --------------------------------------------------------------------
+
+        OP_CLASSIFY: begin
+
+          /*
+           * result_o is explicitly unconstrained for CLASSIFY.
+           */
+          e.check_result = 1'b0;
+          e.check_class  = 1'b1;
+
+          e.class_mask =
+              fp_classify(a);
+
+          nv =
+              1'b0;
+
+        end
+
+
+        default: begin
+
+          /*
+           * Invalid op encodings are never driven.
+           */
+          e.check_result = 1'b0;
+          e.check_class  = 1'b0;
+          nv             = 1'b0;
+
+        end
+
+      endcase
+
+
+      /*
+       * {NV,DZ,OF,UF,NX}
+       */
+      e.status =
+          {nv, 4'b0000};
+
+      make_expected =
+          e;
+    end
+  endfunction
+
+
+  // ==========================================================================
+  // Diagnostics
+  // ==========================================================================
+
+  task automatic fail_req(
+      input string req_name,
       input string detail
   );
     begin
-      if (!verdict_done) begin
-        verdict_done = 1'b1;
-        $display("FAIL [%s] cycle=%0d: %s", clause_name, tb_cycle, detail);
-        $display("RESULT: FAIL");
-        $finish;
-      end
+      fail_count = fail_count + 1;
+      $display("FAIL %s: %s", req_name, detail);
     end
   endtask
 
-  task automatic check_result_entry(input int slot);
-    begin
-      if (status_o !== exp_status[slot]) begin
-        case (exp_op[slot])
-          2'd0: fail_clause("S2/S14", "SGNJ status flags were incorrect");
-          2'd1: fail_clause("S6/S14", "MINMAX status flags were incorrect");
-          2'd2: fail_clause("S8/S9/S11/S14", "CMP status flags were incorrect");
-          2'd3: fail_clause("S13/S14", "CLASSIFY status flags were incorrect");
-          default: fail_clause("S14", "status flags were incorrect");
-        endcase
-      end
 
-      if (exp_check_result[slot] && (result_o !== exp_result[slot])) begin
-        case (exp_op[slot])
-          2'd0: fail_clause("S1", "SGNJ result bits/sign were incorrect");
-          2'd1: fail_clause("S3/S4/S5", "MINMAX result was incorrect");
-          2'd2: fail_clause("S7/S8/S9/S10", "CMP boolean result was incorrect");
-          default: fail_clause("H2", "result mismatch for a constrained operation");
-        endcase
-      end
+  // ==========================================================================
+  // Acceptance / output scoreboard
+  // ==========================================================================
 
-      if (exp_check_class[slot] && (class_mask_o !== exp_class[slot]))
-        fail_clause("S12", "CLASSIFY mask was not the required one-hot class");
-    end
-  endtask
+  always @(posedge clk) begin : scoreboard
+    automatic exp_rec_t exp_item;
 
-  always @(posedge clk) begin
     if (!rst_n) begin
-      tb_cycle = 0;
-      q_head = 0;
-      q_tail = 0;
-      prev_rst_low = 1'b1;
-    end else begin
-      tb_cycle = tb_cycle + 1;
 
-      // S15 pins the first cycle after reset release: no old result may remain.
-      if (prev_rst_low && out_valid_o)
-        fail_clause("S15", "out_valid_o was high on the first cycle after reset release");
+      /*
+       * S15: all pre-reset accepted work is discarded.
+       */
+      exp_q.delete();
 
-      prev_rst_low = 1'b0;
+    end
+    else begin
 
-      // H1: enqueue exactly the operation accepted on this edge.
-      if (in_valid_i && in_ready_o) begin
-        if ((q_tail - q_head) >= QDEPTH)
-          fail_clause("H1/H2", "expected-result FIFO overflowed");
+      /*
+       * H1: create an expected result only on the actual input handshake.
+       */
+      if (
+          in_valid_i &&
+          in_ready_o
+      ) begin
 
-        q_slot = q_tail % QDEPTH;
-        exp_op[q_slot] = op_i;
-        exp_mode[q_slot] = op_mode_i;
-        exp_status[q_slot] = model_status(operand_a_i, operand_b_i, op_i, op_mode_i);
-        exp_check_result[q_slot] = (op_i != 2'd3);
-        exp_check_class[q_slot] = (op_i == 2'd3);
-        exp_class[q_slot] = model_class(operand_a_i);
+        exp_item =
+            make_expected(
+                operand_a_i,
+                operand_b_i,
+                op_i,
+                op_mode_i
+            );
 
-        case (op_i)
-          2'd0: exp_result[q_slot] = model_sgnj(operand_a_i, operand_b_i, op_mode_i);
-          2'd1: exp_result[q_slot] = model_minmax(operand_a_i, operand_b_i,
-                                                 (op_mode_i == 3'd1));
-          2'd2: exp_result[q_slot] = model_cmp(operand_a_i, operand_b_i, op_mode_i);
-          default: exp_result[q_slot] = 32'b0;
-        endcase
+        exp_q.push_back(
+            exp_item
+        );
 
-        q_tail = q_tail + 1;
-        accepted_count = accepted_count + 1;
+        accepted_count =
+            accepted_count + 1;
+
       end
 
-      // H2/H3: a delivered result must be exactly the oldest accepted operation.
-      // Input enqueue is done first, so zero-latency same-edge accept/deliver is legal.
-      if (out_valid_o && out_ready_i) begin
-        if (q_head >= q_tail)
-          fail_clause("H2/H3", "a result was duplicated or delivered with no accepted operation owed");
 
-        q_slot = q_head % QDEPTH;
-        check_result_entry(q_slot);
-        q_head = q_head + 1;
-        delivered_count = delivered_count + 1;
+      /*
+       * H2: outputs must correspond one-for-one and in acceptance order.
+       *
+       * Input enqueue is deliberately processed first, so a legal zero-cycle
+       * implementation can accept and deliver the same operation on one edge.
+       */
+      if (
+          out_valid_o &&
+          out_ready_i
+      ) begin
+
+        if (exp_q.size() == 0) begin
+
+          fail_req(
+              "H2",
+              "result delivered with no accepted operation awaiting a result"
+          );
+
+        end
+        else begin
+
+          exp_item =
+              exp_q.pop_front();
+
+          if (
+              exp_item.check_result &&
+              (result_o !== exp_item.result)
+          )
+            fail_req(
+                "H2",
+                "result_o did not match the next accepted operation"
+            );
+
+
+          if (
+              exp_item.check_class &&
+              (class_mask_o !== exp_item.class_mask)
+          )
+            fail_req(
+                "S12",
+                "CLASSIFY one-hot mask was incorrect"
+            );
+
+
+          if (
+              status_o !==
+              exp_item.status
+          )
+            fail_req(
+                "S14",
+                "status_o did not match the per-operation exception flags"
+            );
+
+
+          delivered_count =
+              delivered_count + 1;
+
+        end
+
       end
+
     end
   end
 
-  // ---------------------------------------------------------------------------
-  // Bounded test helpers
-  // ---------------------------------------------------------------------------
 
-  task automatic wait_empty(input int max_cycles, input string clause_name);
-    int n;
+  /*
+   * Count actual backpressure stimulus.  The contract requires at least
+   * twenty cycles with out_ready_i low.
+   */
+  always @(posedge clk) begin
+    if (
+        rst_n &&
+        !out_ready_i
+    )
+      stall_cycle_count =
+          stall_cycle_count + 1;
+  end
+
+
+  /*
+   * Track sampled reset edges so reset-time checks are never made before the
+   * synchronous reset has actually been clocked.
+   */
+  always @(posedge clk) begin
+    if (!rst_n)
+      reset_low_edges =
+          reset_low_edges + 1;
+    else
+      reset_low_edges =
+          0;
+  end
+
+
+  // ==========================================================================
+  // Drain helper
+  // ==========================================================================
+
+  task automatic wait_for_all_results;
+    integer n;
+    bit done;
+
     begin
-      n = 0;
-      while ((q_head != q_tail) && (n < max_cycles)) begin
+      done = 1'b0;
+
+      for (n = 0; n < WAIT_LIMIT; n = n + 1) begin
+
         @(negedge clk);
-        n = n + 1;
+
+        if (
+            (exp_q.size() == 0) &&
+            (accepted_count == delivered_count)
+        ) begin
+
+          done = 1'b1;
+          break;
+
+        end
+
       end
 
-      if (q_head != q_tail)
-        fail_clause(clause_name, "accepted operations did not all produce results within the bounded test window");
+
+      if (!done)
+        fail_req(
+            "H2",
+            "accepted operations did not all produce results"
+        );
+
+
+      /*
+       * Leave several extra ready cycles to expose duplicated responses.
+       */
+      repeat (5)
+        @(posedge clk);
+
     end
   endtask
 
-  task automatic issue_one(
-      input logic [31:0] a,
-      input logic [31:0] b,
-      input logic [1:0]  op,
-      input logic [2:0]  mode
-  );
+
+  // ==========================================================================
+  // Reset helper
+  // ==========================================================================
+
+  task automatic reset_and_check;
+    integer n;
+
     begin
-      bfm_issue(a, b, op, mode);
-      bfm_idle();
+      /*
+       * No source request is active while reset is entered.
+       */
+      @(negedge clk);
+
+      in_valid_i  = 1'b0;
+      out_ready_i = 1'b0;
+      rst_n       = 1'b0;
+
+
+      repeat (4)
+        @(posedge clk);
+
+
+      /*
+       * Synchronous reset has now been sampled repeatedly.
+       */
+      @(negedge clk);
+
+      if (out_valid_o)
+        fail_req(
+            "S15",
+            "out_valid_o remained asserted after synchronous reset had been sampled"
+        );
+
+
+      rst_n =
+          1'b1;
+
+
+      /*
+       * S15 explicitly requires out_valid_o low on the first cycle after
+       * release.  Sample it after that clock edge, away from the edge race.
+       */
+      @(posedge clk);
+      @(negedge clk);
+
+      if (out_valid_o)
+        fail_req(
+            "S15",
+            "out_valid_o was high on the first cycle after reset release"
+        );
+
+
+      out_ready_i =
+          1'b1;
+
+
+      /*
+       * With no new operation offered, no stale pre-reset result may appear.
+       */
+      for (n = 0; n < 4; n = n + 1) begin
+
+        @(posedge clk);
+        @(negedge clk);
+
+        if (out_valid_o)
+          fail_req(
+              "S15",
+              "operation from before reset produced a result after reset"
+          );
+
+      end
+
     end
   endtask
 
-  task automatic issue_batch_3(
-      input logic [31:0] a0, input logic [31:0] b0, input logic [1:0] op0, input logic [2:0] m0,
-      input logic [31:0] a1, input logic [31:0] b1, input logic [1:0] op1, input logic [2:0] m1,
-      input logic [31:0] a2, input logic [31:0] b2, input logic [1:0] op2, input logic [2:0] m2
-  );
-    begin
-      bfm_issue(a0, b0, op0, m0);
-      bfm_issue(a1, b1, op1, m1);
-      bfm_issue(a2, b2, op2, m2);
-      bfm_idle();
-    end
-  endtask
+
+  // ==========================================================================
+  // Directed functional tests
+  // ==========================================================================
 
   task automatic test_sgnj;
     begin
-      // Normal operands, all three variants.
-      issue_one(32'h3F80_0001, 32'hBF00_0000, 2'd0, 3'd0);
-      issue_one(32'hBF80_0001, 32'h3F00_0000, 2'd0, 3'd1);
-      issue_one(32'hBF80_1234, 32'h8000_0000, 2'd0, 3'd2);
 
-      // NaN payloads must be copied unchanged except for the selected sign.
-      issue_one(32'h7FC1_2345, 32'h8000_0000, 2'd0, 3'd0);
-      issue_one(32'h7FA1_2345, 32'h0000_0000, 2'd0, 3'd1);
-      issue_one(32'hFFA1_1111, 32'h8000_0000, 2'd0, 3'd2);
+      // FSGNJ-style sign copy
+      bfm_issue(
+          32'h3F81_2345,
+          32'hBF00_0000,
+          OP_SGNJ,
+          3'd0
+      );
 
-      wait_empty(4096, "S1/S2/H2");
+      // sign inversion
+      bfm_issue(
+          32'hBF81_2345,
+          32'hBF00_0000,
+          OP_SGNJ,
+          3'd1
+      );
+
+      // sign XOR
+      bfm_issue(
+          32'hBF81_2345,
+          32'hBF00_0000,
+          OP_SGNJ,
+          3'd2
+      );
+
+      /*
+       * S1/S2: signalling-NaN payload must pass through unchanged except sign,
+       * and NV must remain clear.
+       */
+      bfm_issue(
+          32'h7F81_2345,
+          32'h8000_0000,
+          OP_SGNJ,
+          3'd0
+      );
+
+      bfm_idle();
+      wait_for_all_results();
+
     end
   endtask
+
 
   task automatic test_minmax;
     begin
-      // Ordinary positive/negative ordering and infinities.
-      issue_one(32'h3F80_0000, 32'h4000_0000, 2'd1, 3'd0); // min 1,2
-      issue_one(32'h3F80_0000, 32'h4000_0000, 2'd1, 3'd1); // max 1,2
-      issue_one(32'hC040_0000, 32'hBF80_0000, 2'd1, 3'd0); // min -3,-1
-      issue_one(32'hC040_0000, 32'hBF80_0000, 2'd1, 3'd1); // max -3,-1
-      issue_one(32'hFF80_0000, 32'h7F80_0000, 2'd1, 3'd0);
-      issue_one(32'hFF80_0000, 32'h7F80_0000, 2'd1, 3'd1);
 
-      // RISC-V zero ordering for MINMAX, in both operand orders.
-      issue_one(32'h8000_0000, 32'h0000_0000, 2'd1, 3'd0);
-      issue_one(32'h0000_0000, 32'h8000_0000, 2'd1, 3'd0);
-      issue_one(32'h8000_0000, 32'h0000_0000, 2'd1, 3'd1);
-      issue_one(32'h0000_0000, 32'h8000_0000, 2'd1, 3'd1);
+      // ordinary min/max
+      bfm_issue(
+          32'hC000_0000,      // -2.0
+          32'h3F80_0000,      // +1.0
+          OP_MINMAX,
+          3'd0
+      );
 
-      // Exactly one NaN: return the other operand, including qNaN and sNaN.
-      issue_one(32'h7FC1_0001, 32'h4040_0000, 2'd1, 3'd0);
-      issue_one(32'h4040_0000, 32'h7FC1_0001, 2'd1, 3'd1);
-      issue_one(32'h7FA1_0001, 32'hC0A0_0000, 2'd1, 3'd0);
-      issue_one(32'hC0A0_0000, 32'hFFA1_0001, 2'd1, 3'd1);
+      bfm_issue(
+          32'hC000_0000,
+          32'h3F80_0000,
+          OP_MINMAX,
+          3'd1
+      );
 
-      // Both NaN: canonical qNaN, with NV iff at least one is signalling.
-      issue_one(32'h7FC0_1111, 32'hFFC2_2222, 2'd1, 3'd0);
-      issue_one(32'h7FA0_1111, 32'h7FC2_2222, 2'd1, 3'd1);
-      issue_one(32'hFFA0_1111, 32'h7FA2_2222, 2'd1, 3'd0);
 
-      wait_empty(4096, "S3/S4/S5/S6/H2");
+      // S3: signed zero ordering
+      bfm_issue(
+          32'h0000_0000,
+          32'h8000_0000,
+          OP_MINMAX,
+          3'd0
+      );
+
+      bfm_issue(
+          32'h8000_0000,
+          32'h0000_0000,
+          OP_MINMAX,
+          3'd1
+      );
+
+
+      // S4: one qNaN -> other operand, no NV
+      bfm_issue(
+          32'h7FC1_2345,
+          32'h3F80_0000,
+          OP_MINMAX,
+          3'd0
+      );
+
+
+      // S4/S6: one sNaN -> other operand, NV
+      bfm_issue(
+          32'h7F81_2345,
+          32'hC000_0000,
+          OP_MINMAX,
+          3'd1
+      );
+
+
+      // S5: both qNaNs -> exact canonical qNaN, no NV
+      bfm_issue(
+          32'h7FC1_1111,
+          32'hFFC2_2222,
+          OP_MINMAX,
+          3'd0
+      );
+
+
+      // S5/S6: qNaN + sNaN -> canonical qNaN and NV
+      bfm_issue(
+          32'h7FC1_1111,
+          32'h7F81_3333,
+          OP_MINMAX,
+          3'd1
+      );
+
+
+      // infinities
+      bfm_issue(
+          32'hFF80_0000,
+          32'h7F80_0000,
+          OP_MINMAX,
+          3'd0
+      );
+
+      bfm_issue(
+          32'hFF80_0000,
+          32'h7F80_0000,
+          OP_MINMAX,
+          3'd1
+      );
+
+
+      bfm_idle();
+      wait_for_all_results();
+
     end
   endtask
+
 
   task automatic test_cmp;
     begin
-      // Basic numeric comparisons.
-      issue_one(32'h3F80_0000, 32'h4000_0000, 2'd2, 3'd0); // 1 <= 2
-      issue_one(32'h4000_0000, 32'h3F80_0000, 2'd2, 3'd0); // 2 <= 1
-      issue_one(32'hBF80_0000, 32'hC000_0000, 2'd2, 3'd1); // -1 < -2 false
-      issue_one(32'hC000_0000, 32'hBF80_0000, 2'd2, 3'd1); // -2 < -1 true
-      issue_one(32'h4040_0000, 32'h4040_0000, 2'd2, 3'd2); // equal
 
-      // CMP treats +0 and -0 as equal and neither is less.
-      issue_one(32'h8000_0000, 32'h0000_0000, 2'd2, 3'd2);
-      issue_one(32'h8000_0000, 32'h0000_0000, 2'd2, 3'd1);
-      issue_one(32'h0000_0000, 32'h8000_0000, 2'd2, 3'd0);
+      // -2 <= +1 -> true
+      bfm_issue(
+          32'hC000_0000,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd0
+      );
 
-      // FLE/FLT are signalling comparisons: either NaN kind raises NV.
-      issue_one(32'h7FC0_1234, 32'h3F80_0000, 2'd2, 3'd0);
-      issue_one(32'h3F80_0000, 32'h7FC0_1234, 2'd2, 3'd1);
-      issue_one(32'h7FA0_1234, 32'h3F80_0000, 2'd2, 3'd0);
-      issue_one(32'h3F80_0000, 32'hFFA0_1234, 2'd2, 3'd1);
 
-      // FEQ is quiet: qNaN -> false/no NV, sNaN -> false/NV.
-      issue_one(32'h7FC0_5678, 32'h3F80_0000, 2'd2, 3'd2);
-      issue_one(32'h3F80_0000, 32'h7FC0_5678, 2'd2, 3'd2);
-      issue_one(32'h7FA0_5678, 32'h3F80_0000, 2'd2, 3'd2);
+      // +1 < -2 -> false
+      bfm_issue(
+          32'h3F80_0000,
+          32'hC000_0000,
+          OP_CMP,
+          3'd1
+      );
 
-      wait_empty(4096, "S7/S8/S9/S10/S11/H2");
+
+      // equality
+      bfm_issue(
+          32'h3F80_0000,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd2
+      );
+
+
+      // S10: +0 == -0
+      bfm_issue(
+          32'h0000_0000,
+          32'h8000_0000,
+          OP_CMP,
+          3'd2
+      );
+
+
+      // S10: neither zero is less
+      bfm_issue(
+          32'h8000_0000,
+          32'h0000_0000,
+          OP_CMP,
+          3'd1
+      );
+
+      bfm_issue(
+          32'h0000_0000,
+          32'h8000_0000,
+          OP_CMP,
+          3'd1
+      );
+
+
+      // S8: FLE with qNaN -> false + NV
+      bfm_issue(
+          32'h7FC1_2345,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd0
+      );
+
+
+      // S8: FLT with qNaN -> false + NV
+      bfm_issue(
+          32'h7FC1_2345,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd1
+      );
+
+
+      // S9: FEQ with qNaN -> false, no NV
+      bfm_issue(
+          32'h7FC1_2345,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd2
+      );
+
+
+      // S9: FEQ with sNaN -> false + NV
+      bfm_issue(
+          32'h7F81_2345,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd2
+      );
+
+
+      // -infinity < finite
+      bfm_issue(
+          32'hFF80_0000,
+          32'h0000_0000,
+          OP_CMP,
+          3'd1
+      );
+
+
+      // +infinity <= finite -> false
+      bfm_issue(
+          32'h7F80_0000,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd0
+      );
+
+
+      bfm_idle();
+      wait_for_all_results();
+
     end
   endtask
+
 
   task automatic test_classify;
     begin
-      // One representative of every class.  operand_b and mode are deliberately
-      // varied because CLASSIFY must ignore both.
-      issue_one(32'hFF80_0000, 32'h1234_5678, 2'd3, 3'd0); // -inf
-      issue_one(32'hBF80_0000, 32'h8765_4321, 2'd3, 3'd1); // -normal
-      issue_one(32'h8000_0001, 32'hFFFF_FFFF, 2'd3, 3'd2); // -subnormal
-      issue_one(32'h8000_0000, 32'h0000_0001, 2'd3, 3'd3); // -zero
-      issue_one(32'h0000_0000, 32'h8000_0001, 2'd3, 3'd4); // +zero
-      issue_one(32'h0000_0001, 32'h7FC0_0000, 2'd3, 3'd5); // +subnormal
-      issue_one(32'h3F80_0000, 32'h7FA0_0001, 2'd3, 3'd6); // +normal
-      issue_one(32'h7F80_0000, 32'h0000_0000, 2'd3, 3'd7); // +inf
-      issue_one(32'h7FA0_0001, 32'hDEAD_BEEF, 2'd3, 3'd0); // sNaN
-      issue_one(32'h7FC0_0001, 32'hCAFE_BABE, 2'd3, 3'd7); // qNaN
 
-      wait_empty(4096, "S12/S13/S14/H2");
-    end
-  endtask
-
-  task automatic test_backpressure_and_order;
-    int start_delivered;
-    int n;
-    begin
-      wait_empty(4096, "H2");
-
-      bfm_out_ready(1'b0);
-
-      // One accepted result is held back for a substantial interval.  The sink
-      // makes no assumption about when out_valid appears while stalled.
-      issue_one(32'h7FC1_1111, 32'h8000_0000, 2'd0, 3'd0);
-      start_delivered = delivered_count;
-
-      repeat (20) @(negedge clk);
-
-      if (delivered_count != start_delivered)
-        fail_clause("H3", "a result transferred while out_ready_i was low");
-
-      bfm_out_ready(1'b1);
-      wait_empty(4096, "H3");
-
-      // Back-to-back accepted operations must emerge in acceptance order.  The
-      // scoreboard is FIFO-based, so any reorder is caught regardless of latency.
-      issue_batch_3(
-          32'h3F80_0000, 32'h4000_0000, 2'd2, 3'd1,
-          32'h8000_0000, 32'h0000_0000, 2'd1, 3'd0,
-          32'h7FC0_1234, 32'h3F80_0000, 2'd2, 3'd2
+      // bit 0: -infinity
+      bfm_issue(
+          32'hFF80_0000,
+          32'hDEAD_BEEF,
+          OP_CLASSIFY,
+          3'd0
       );
 
-      wait_empty(4096, "H2/H3");
-
-      // With no operation owed, any extra transfer is a duplicate.
-      n = 0;
-      while (n < 6) begin
-        @(negedge clk);
-        n = n + 1;
-      end
-    end
-  endtask
-
-  task automatic test_status_not_sticky;
-    begin
-      // First operation must raise NV; immediately following SGNJ must report
-      // zero status.  This catches an accumulating/sticky status implementation.
-      issue_batch_3(
-          32'h7FA0_0001, 32'h3F80_0000, 2'd2, 3'd2,
-          32'h3F80_0000, 32'h0000_0000, 2'd0, 3'd0,
-          32'h7FC0_0001, 32'h3F80_0000, 2'd2, 3'd2
+      // bit 1: -normal
+      bfm_issue(
+          32'hBF80_0000,
+          32'h1234_5678,
+          OP_CLASSIFY,
+          3'd1
       );
-      wait_empty(4096, "S14/H2");
+
+      // bit 2: -subnormal
+      bfm_issue(
+          32'h8000_0001,
+          32'hCAFE_BABE,
+          OP_CLASSIFY,
+          3'd2
+      );
+
+      // bit 3: -zero
+      bfm_issue(
+          32'h8000_0000,
+          32'hFFFF_FFFF,
+          OP_CLASSIFY,
+          3'd3
+      );
+
+      // bit 4: +zero
+      bfm_issue(
+          32'h0000_0000,
+          32'h0000_0001,
+          OP_CLASSIFY,
+          3'd4
+      );
+
+      // bit 5: +subnormal
+      bfm_issue(
+          32'h0000_0001,
+          32'h8765_4321,
+          OP_CLASSIFY,
+          3'd5
+      );
+
+      // bit 6: +normal
+      bfm_issue(
+          32'h3F80_0000,
+          32'h0000_0000,
+          OP_CLASSIFY,
+          3'd6
+      );
+
+      // bit 7: +infinity
+      bfm_issue(
+          32'h7F80_0000,
+          32'h8000_0000,
+          OP_CLASSIFY,
+          3'd7
+      );
+
+      // bit 8: signalling NaN
+      bfm_issue(
+          32'h7F81_2345,
+          32'h1111_1111,
+          OP_CLASSIFY,
+          3'd0
+      );
+
+      // bit 9: quiet NaN
+      bfm_issue(
+          32'hFFC1_2345,
+          32'h2222_2222,
+          OP_CLASSIFY,
+          3'd7
+      );
+
+
+      bfm_idle();
+      wait_for_all_results();
+
     end
   endtask
+
+
+  // ==========================================================================
+  // Backpressure stress
+  // ==========================================================================
+
+  task automatic test_backpressure;
+    begin
+
+      fork
+
+        begin : issue_thread
+
+          /*
+           * Repeated and mixed results make value-based matching unsafe;
+           * the FIFO acceptance scoreboard is what identifies each response.
+           */
+          bfm_issue(
+              32'h3F80_0000,
+              32'h4000_0000,
+              OP_CMP,
+              3'd1
+          );
+
+          bfm_issue(
+              32'hBF80_0000,
+              32'h0000_0000,
+              OP_MINMAX,
+              3'd0
+          );
+
+          bfm_issue(
+              32'h7FC1_2345,
+              32'h3F80_0000,
+              OP_MINMAX,
+              3'd1
+          );
+
+          bfm_issue(
+              32'h7F81_2345,
+              32'h0000_0000,
+              OP_CLASSIFY,
+              3'd4
+          );
+
+          bfm_issue(
+              32'h3F12_3456,
+              32'h8000_0000,
+              OP_SGNJ,
+              3'd0
+          );
+
+          bfm_issue(
+              32'h0000_0000,
+              32'h8000_0000,
+              OP_CMP,
+              3'd2
+          );
+
+          bfm_issue(
+              32'hC000_0000,
+              32'h3F80_0000,
+              OP_MINMAX,
+              3'd1
+          );
+
+          bfm_issue(
+              32'h7FC0_0001,
+              32'h0000_0000,
+              OP_CMP,
+              3'd2
+          );
+
+          bfm_issue(
+              32'h0000_0001,
+              32'hABCD_EF01,
+              OP_CLASSIFY,
+              3'd2
+          );
+
+          bfm_issue(
+              32'hBF12_3456,
+              32'h0000_0000,
+              OP_SGNJ,
+              3'd2
+          );
+
+          bfm_issue(
+              32'hFF80_0000,
+              32'h7F80_0000,
+              OP_CMP,
+              3'd1
+          );
+
+          bfm_issue(
+              32'h7F81_0001,
+              32'h3F80_0000,
+              OP_MINMAX,
+              3'd0
+          );
+
+          bfm_idle();
+
+        end
+
+
+        begin : stall_thread
+
+          bfm_out_ready(
+              1'b0
+          );
+
+          /*
+           * H3's testbench floor requires at least 20 stalled cycles.
+           */
+          repeat (30)
+            @(posedge clk);
+
+          bfm_out_ready(
+              1'b1
+          );
+
+        end
+
+      join
+
+
+      wait_for_all_results();
+
+
+      if (stall_cycle_count < 20)
+        fail_req(
+            "H3",
+            "testbench failed to apply the required minimum backpressure interval"
+        );
+
+    end
+  endtask
+
+
+  // ==========================================================================
+  // Reset-discard test
+  // ==========================================================================
 
   task automatic test_reset_discard;
-    int n;
+    integer old_delivered;
+    integer n;
+    bit pending_before_reset;
+
     begin
-      wait_empty(4096, "H2");
+      /*
+       * Accept one operation normally.
+       */
+      out_ready_i =
+          1'b1;
 
-      // Prevent the accepted operation from transferring before reset.
-      bfm_out_ready(1'b0);
-      issue_one(32'h4000_0000, 32'h3F80_0000, 2'd2, 3'd1);
+      old_delivered =
+          delivered_count;
 
-      // Let the implementation place the result anywhere in its pipeline, then
-      // synchronously reset it.  The scoreboard is cleared on reset edges.
-      repeat (6) @(negedge clk);
-      bfm_reset(4);
+      bfm_issue(
+          32'hC000_0000,
+          32'h3F80_0000,
+          OP_MINMAX,
+          3'd0
+      );
 
-      // The first post-release rising edge is checked by the always block for
-      // out_valid_o == 0.  Keep the source idle and re-enable the sink.
-      bfm_out_ready(1'b1);
 
-      for (n = 0; n < 12; n = n + 1) begin
+      /*
+       * The input handshake has completed.  At the next safe edge stop new
+       * source traffic and apply result backpressure.  If the result was not
+       * zero-latency, it is now guaranteed to remain outstanding until reset.
+       */
+      @(negedge clk);
+
+      in_valid_i =
+          1'b0;
+
+      out_ready_i =
+          1'b0;
+
+      if (exp_q.size() != 0)
+        pending_before_reset = 1'b1;
+      else
+        pending_before_reset = 1'b0;
+
+
+      /*
+       * Assert synchronous reset before another result-side handshake.
+       */
+      rst_n =
+          1'b0;
+
+
+      repeat (4)
+        @(posedge clk);
+
+
+      @(negedge clk);
+
+      if (out_valid_o)
+        fail_req(
+            "S15",
+            "design did not return to idle while synchronous reset was active"
+        );
+
+
+      rst_n =
+          1'b1;
+
+
+      /*
+       * First cycle after release must have out_valid low.
+       */
+      @(posedge clk);
+      @(negedge clk);
+
+      if (out_valid_o)
+        fail_req(
+            "S15",
+            "out_valid_o was not low on the first cycle after reset release"
+        );
+
+
+      out_ready_i =
+          1'b1;
+
+
+      /*
+       * No stale result may emerge after reset.  A zero-latency design may
+       * already have completed the operation before reset; that is legal.
+       */
+      for (n = 0; n < 8; n = n + 1) begin
+
+        @(posedge clk);
         @(negedge clk);
-        if (q_head != q_tail)
-          fail_clause("S15", "a pre-reset operation re-entered the expected queue after reset");
+
+        if (
+            pending_before_reset &&
+            out_valid_o
+        )
+          fail_req(
+              "S15",
+              "pre-reset outstanding operation produced a result after reset"
+          );
+
       end
 
-      // Prove the post-reset datapath still accepts and returns fresh work.
-      issue_one(32'h3F80_0000, 32'h4000_0000, 2'd2, 3'd1);
-      wait_empty(4096, "S15/H2");
+
+      /*
+       * Fresh post-reset work must still operate normally.
+       */
+      bfm_issue(
+          32'h3F80_0000,
+          32'h3F80_0000,
+          OP_CMP,
+          3'd2
+      );
+
+      bfm_idle();
+
+      wait_for_all_results();
+
     end
   endtask
 
-  // ---------------------------------------------------------------------------
-  // Initialization, watchdog, and top-level stimulus
-  // ---------------------------------------------------------------------------
 
-  initial begin
-    operand_a_i = 32'b0;
-    operand_b_i = 32'b0;
-    op_i = 2'b0;
-    op_mode_i = 3'b0;
-    in_valid_i = 1'b0;
-    out_ready_i = 1'b1;
+  // ==========================================================================
+  // Main
+  // ==========================================================================
 
-    q_head = 0;
-    q_tail = 0;
-    accepted_count = 0;
-    delivered_count = 0;
-    tb_cycle = 0;
-    verdict_done = 1'b0;
-    prev_rst_low = 1'b1;
-  end
+  initial begin : main_test
 
-  // Watchdog required by S16.  It is independent of DUT progress.
-  initial begin
-    #200_000_000;
-    if (!verdict_done) begin
-      verdict_done = 1'b1;
-      $display("FAIL [S16]: watchdog: no forward progress");
-      $display("RESULT: FAIL");
-      $finish;
-    end
-  end
+    fail_count         = 0;
+    accepted_count     = 0;
+    delivered_count    = 0;
+    stall_cycle_count  = 0;
+    reset_low_edges    = 0;
 
-  initial begin
-    // Initial synchronous reset.  Do not inspect invalid payload outputs.
-    bfm_reset(4);
+    operand_a_i =
+        32'h0;
 
-    // First cycle after reset release is checked automatically by S15 logic.
-    repeat (2) @(negedge clk);
+    operand_b_i =
+        32'h0;
+
+    op_i =
+        OP_SGNJ;
+
+    op_mode_i =
+        3'd0;
+
+    in_valid_i =
+        1'b0;
+
+    out_ready_i =
+        1'b1;
+
+
+    // ------------------------------------------------------------------------
+    // Initial synchronous reset
+    // ------------------------------------------------------------------------
+
+    reset_and_check();
+
+
+    // ------------------------------------------------------------------------
+    // S1/S2
+    // ------------------------------------------------------------------------
 
     test_sgnj();
+
+
+    // ------------------------------------------------------------------------
+    // S3-S6
+    // ------------------------------------------------------------------------
+
     test_minmax();
+
+
+    // ------------------------------------------------------------------------
+    // S7-S11
+    // ------------------------------------------------------------------------
+
     test_cmp();
+
+
+    // ------------------------------------------------------------------------
+    // S12/S13
+    // ------------------------------------------------------------------------
+
     test_classify();
-    test_backpressure_and_order();
-    test_status_not_sticky();
+
+
+    // ------------------------------------------------------------------------
+    // H2/H3 under substantial result backpressure
+    // ------------------------------------------------------------------------
+
+    test_backpressure();
+
+
+    // ------------------------------------------------------------------------
+    // S15 reset/discard semantics
+    // ------------------------------------------------------------------------
+
     test_reset_discard();
 
-    wait_empty(4096, "H2/H3");
 
-    if (!verdict_done) begin
-      verdict_done = 1'b1;
+    /*
+     * Every accepted non-reset operation must have exactly one response.
+     */
+    if (exp_q.size() != 0)
+      fail_req(
+          "H2",
+          "expected-result queue was non-empty at end of test"
+      );
+
+
+    if (fail_count == 0)
       $display("RESULT: PASS");
-      $finish;
-    end
+    else
+      $display("RESULT: FAIL");
+
+    $finish;
+  end
+
+
+  // ==========================================================================
+  // S16 unconditional watchdog
+  // ==========================================================================
+
+  initial begin
+    #200_000_000;
+
+    $display(
+        "FAIL S16: watchdog expired before the testbench reached a verdict"
+    );
+
+    $display("RESULT: FAIL");
+
+    $finish;
   end
 
 endmodule

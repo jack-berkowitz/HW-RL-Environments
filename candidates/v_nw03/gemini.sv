@@ -1,369 +1,390 @@
 module frame_arb_mux_tb;
 
-  localparam int S_COUNT    = 4;
-  localparam int DATA_WIDTH = 32;
-  localparam int USER_WIDTH = 1;
+    localparam int S_COUNT = 4;
+    localparam int DATA_WIDTH = 32;
+    localparam int USER_WIDTH = 1;
 
-  // ---- Port signals --------------------------------------------------------
-  logic [S_COUNT-1:0][DATA_WIDTH-1:0]       s_tdata;
-  logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0]   s_tkeep;
-  logic [S_COUNT-1:0]                       s_tvalid;
-  logic [S_COUNT-1:0]                       s_tready;
-  logic [S_COUNT-1:0]                       s_tlast;
-  logic [S_COUNT-1:0][USER_WIDTH-1:0]       s_tuser;
+    logic                                   clk;
+    logic                                   rst;
 
-  logic [DATA_WIDTH-1:0]                    m_tdata;
-  logic [(DATA_WIDTH/8)-1:0]                m_tkeep;
-  logic                                     m_tvalid;
-  logic                                     m_tready;
-  logic                                     m_tlast;
-  logic [USER_WIDTH-1:0]                    m_tuser;
+    logic [S_COUNT-1:0][DATA_WIDTH-1:0]     s_tdata;
+    logic [S_COUNT-1:0][(DATA_WIDTH/8)-1:0] s_tkeep;
+    logic [S_COUNT-1:0]                     s_tvalid;
+    logic [S_COUNT-1:0]                     s_tready;
+    logic [S_COUNT-1:0]                     s_tlast;
+    logic [S_COUNT-1:0][USER_WIDTH-1:0]     s_tuser;
 
-  // ---- DUT Instantiation ---------------------------------------------------
-  frame_arb_mux #(
-      .S_COUNT(S_COUNT),
-      .DATA_WIDTH(DATA_WIDTH),
-      .USER_WIDTH(USER_WIDTH)
-  ) dut (
-      .clk_i(clk),
-      .rst_i(rst),
-      .s_tdata_i(s_tdata),
-      .s_tkeep_i(s_tkeep),
-      .s_tvalid_i(s_tvalid),
-      .s_tready_o(s_tready),
-      .s_tlast_i(s_tlast),
-      .s_tuser_i(s_tuser),
-      .m_tdata_o(m_tdata),
-      .m_tkeep_o(m_tkeep),
-      .m_tvalid_o(m_tvalid),
-      .m_tready_i(m_tready),
-      .m_tlast_o(m_tlast),
-      .m_tuser_o(m_tuser)
-  );
+    logic [DATA_WIDTH-1:0]                  m_tdata;
+    logic [(DATA_WIDTH/8)-1:0]              m_tkeep;
+    logic                                   m_tvalid;
+    logic                                   m_tready;
+    logic                                   m_tlast;
+    logic [USER_WIDTH-1:0]                  m_tuser;
 
-// ---------------------------------------------------------------------------
-// PROVIDED PLUMBING -- moves beats, checks nothing.
-// ---------------------------------------------------------------------------
-  // ---- clock -----------------------------------------------------------------
-  logic clk;
-  initial begin clk = 1'b0; forever #5 clk = ~clk; end
+    frame_arb_mux #(
+        .S_COUNT(S_COUNT),
+        .DATA_WIDTH(DATA_WIDTH),
+        .USER_WIDTH(USER_WIDTH)
+    ) dut (
+        .clk_i(clk),
+        .rst_i(rst),
+        .s_tdata_i(s_tdata),
+        .s_tkeep_i(s_tkeep),
+        .s_tvalid_i(s_tvalid),
+        .s_tready_o(s_tready),
+        .s_tlast_i(s_tlast),
+        .s_tuser_i(s_tuser),
+        .m_tdata_o(m_tdata),
+        .m_tkeep_o(m_tkeep),
+        .m_tvalid_o(m_tvalid),
+        .m_tready_i(m_tready),
+        .m_tlast_o(m_tlast),
+        .m_tuser_o(m_tuser)
+    );
 
-  // ---- reset -----------------------------------------------------------------
-  logic rst;
-  initial rst = 1'b1;
+    // ---------------------------------------------------------------------------
+    // PROVIDED PLUMBING -- moves beats, checks nothing.
+    // ---------------------------------------------------------------------------
+    initial begin clk = 1'b0; forever #5 clk = ~clk; end
+    initial rst = 1'b1;
 
-  // Asserts reset, holds it, and releases it OFF the sampling edge so nothing
-  // you or the design samples changes in the same timestep as the change.
-  task automatic bfm_reset(input int cycles = 4);
-    @(negedge clk);
-    rst = 1'b1;
-    repeat (cycles) @(posedge clk);
-    @(negedge clk);
-    rst = 1'b0;
-  endtask
+    task automatic bfm_reset(input int cycles = 4);
+        @(negedge clk);
+        rst = 1'b1;
+        repeat (cycles) @(posedge clk);
+        @(negedge clk);
+        rst = 1'b0;
+    endtask
 
-  // ---- input side ------------------------------------------------------------
-  // Offers ONE beat on input k and returns once that beat has transferred.
-  // Every field is presented at the negative edge and held stable until the
-  // transfer, which is the source obligation S7 states.
-  //
-  // Calling bfm_send again immediately presents the next beat with valid still
-  // high, so back-to-back beats and continuous offered load are available.
-  task automatic bfm_send(input int                          k,
-                          input logic [DATA_WIDTH-1:0]       data,
-                          input logic [(DATA_WIDTH/8)-1:0]   keep,
-                          input logic                        last,
-                          input logic [USER_WIDTH-1:0]       user);
-    @(negedge clk);
-    s_tdata[k]  = data;
-    s_tkeep[k]  = keep;
-    s_tlast[k]  = last;
-    s_tuser[k]  = user;
-    s_tvalid[k] = 1'b1;
-    forever begin
-      @(posedge clk);
-      if (s_tready[k]) break;
+    task automatic bfm_send(input int                          k,
+                            input logic [DATA_WIDTH-1:0]       data,
+                            input logic [(DATA_WIDTH/8)-1:0]   keep,
+                            input logic                        last,
+                            input logic [USER_WIDTH-1:0]       user);
+        @(negedge clk);
+        s_tdata[k]  = data;
+        s_tkeep[k]  = keep;
+        s_tlast[k]  = last;
+        s_tuser[k]  = user;
+        s_tvalid[k] = 1'b1;
+        forever begin
+            @(posedge clk);
+            if (s_tready[k]) break;
+        end
+    endtask
+
+    task automatic bfm_idle(input int k);
+        @(negedge clk);
+        s_tvalid[k] = 1'b0;
+    endtask
+
+    task automatic bfm_ready(input logic value);
+        @(negedge clk);
+        m_tready = value;
+    endtask
+
+    initial begin
+        #20_000_000;
+        $display("RESULT: FAIL (watchdog: no forward progress)");
+        $finish;
     end
-  endtask
 
-  // Stops offering on input k.
-  task automatic bfm_idle(input int k);
-    @(negedge clk);
-    s_tvalid[k] = 1'b0;
-  endtask
+    // ---------------------------------------------------------------------------
+    // Testbench structures and state
+    // ---------------------------------------------------------------------------
+    typedef struct {
+        logic [DATA_WIDTH-1:0]     data;
+        logic [(DATA_WIDTH/8)-1:0] keep;
+        logic [USER_WIDTH-1:0]     user;
+        logic                      last;
+        int                        src_id;
+    } beat_t;
 
-  // ---- output side -----------------------------------------------------------
-  // Sets the sink's ready. Changed at the negative edge, never at the edge the
-  // design samples it on.
-  task automatic bfm_ready(input logic value);
-    @(negedge clk);
-    m_tready = value;
-  endtask
+    beat_t expected_queues[S_COUNT][$];
+    beat_t inflight_frame[$];
 
-  // ---- watchdog (S13) --------------------------------------------------------
-  // Yours to keep. It fires regardless of what the design does, which is what
-  // S13 requires; one of the faulty designs never selects an input that a
-  // correct one would.
-  initial begin
-    #20_000_000;
-    $display("RESULT: FAIL (watchdog: no forward progress)");
-    $finish;
-  end
+    int active_source = -1;
+    bit in_frame = 0;
+    int completed_frames_count = 0;
+    int source_last_frame_stamp[S_COUNT];
+    
+    // Backpressure tracker state (S8)
+    logic [DATA_WIDTH-1:0]     expected_data_hold;
+    logic [(DATA_WIDTH/8)-1:0] expected_keep_hold;
+    logic [USER_WIDTH-1:0]     expected_user_hold;
+    logic                      expected_last_hold;
+    logic                      expected_valid_hold;
+    
+    task automatic check_fail(string msg);
+        $display("RESULT: FAIL (%s)", msg);
+        $finish;
+    endtask
 
-// ---------------------------------------------------------------------------
-// TESTBENCH IMPLEMENTATION
-// ---------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
+    // Monitors and Checkers
+    // ---------------------------------------------------------------------------
 
-  typedef enum {IDLE, BACKPRESSURE, FAIRNESS} test_phase_e;
-  test_phase_e test_phase = IDLE;
-  int bp_counter = 0;
+    // Track Acceptance (S5 handling setup)
+    always @(posedge clk) begin
+        if (!rst) begin
+            for (int k = 0; k < S_COUNT; k++) begin
+                if (s_tvalid[k] && s_tready[k]) begin
+                    automatic beat_t b;
+                    b.data = s_tdata[k];
+                    b.keep = s_tkeep[k];
+                    b.user = s_tuser[k];
+                    b.last = s_tlast[k];
+                    b.src_id = k;
+                    expected_queues[k].push_back(b);
+                end
+            end
+        end
+    end
 
-  typedef struct packed {
-      logic [DATA_WIDTH-1:0]       data;
-      logic [(DATA_WIDTH/8)-1:0]   keep;
-      logic                        last;
-      logic [USER_WIDTH-1:0]       user;
-  } beat_t;
+    // Track Output Delivery and Atomicity (S3, S4, S5, S8, S10)
+    always @(posedge clk) begin
+        if (rst) begin
+            active_source <= -1;
+            in_frame <= 0;
+            completed_frames_count <= 0;
+            for (int i=0; i<S_COUNT; i++) source_last_frame_stamp[i] <= 0;
+            expected_valid_hold <= 0;
+            inflight_frame.delete();
+        end else begin
+            // Stability check under backpressure (S8 subset)
+            if (expected_valid_hold && !m_tready) begin
+                if (!m_tvalid) check_fail("S8: Valid dropped while waiting for ready");
+                if (m_tdata !== expected_data_hold ||
+                    m_tkeep !== expected_keep_hold ||
+                    m_tuser !== expected_user_hold ||
+                    m_tlast !== expected_last_hold) begin
+                    check_fail("S8: Payload changed while waiting for ready");
+                end
+            end
+            
+            expected_valid_hold <= m_tvalid;
+            expected_data_hold <= m_tdata;
+            expected_keep_hold <= m_tkeep;
+            expected_user_hold <= m_tuser;
+            expected_last_hold <= m_tlast;
 
-  beat_t ref_queues[S_COUNT][$];
-  int active_source = -1;
-  int fairness_window[$];
-  logic was_rst;
+            if (m_tvalid && m_tready) begin
+                automatic beat_t match_b;
+                
+                // Identify source of beat if starting new frame
+                if (!in_frame) begin
+                    automatic int found_src = -1;
+                    for (int k = 0; k < S_COUNT; k++) begin
+                        if (expected_queues[k].size() > 0 && 
+                            expected_queues[k][0].data === m_tdata &&
+                            expected_queues[k][0].keep === m_tkeep &&
+                            expected_queues[k][0].user === m_tuser &&
+                            expected_queues[k][0].last === m_tlast) begin
+                            found_src = k;
+                            break;
+                        end
+                    end
+                    if (found_src == -1) begin
+                        check_fail("S5/S4: Output beat does not match head of any input queue");
+                    end
+                    
+                    active_source <= found_src;
+                    in_frame <= 1;
+                    match_b = expected_queues[found_src].pop_front();
+                    
+                    if (match_b.last) begin
+                        in_frame <= 0;
+                        active_source <= -1;
+                        completed_frames_count <= completed_frames_count + 1;
+                        source_last_frame_stamp[found_src] <= completed_frames_count + 1;
+                    end
+                end else begin
+                    // Verify atomicity - must continue from active_source
+                    if (expected_queues[active_source].size() == 0) begin
+                        check_fail("S3: Output beat interleaved or active source ran dry unexpectedly");
+                    end
+                    
+                    match_b = expected_queues[active_source].pop_front();
+                    
+                    if (match_b.data !== m_tdata ||
+                        match_b.keep !== m_tkeep ||
+                        match_b.user !== m_tuser ||
+                        match_b.last !== m_tlast) begin
+                        check_fail("S4/S3: Interleaved beat or modified payload detected mid-frame");
+                    end
+                    
+                    if (m_tlast) begin
+                        in_frame <= 0;
+                        completed_frames_count <= completed_frames_count + 1;
+                        source_last_frame_stamp[active_source] <= completed_frames_count + 1;
+                        active_source <= -1;
+                    end
+                end
+            end
+        end
+    end
 
-  // Payload Encoders/Decoders for unique identification per beat
-  function automatic logic [31:0] build_data(int src, int fseq, int bseq);
-      return {8'hA5, 8'(src), 8'(fseq), 8'(bseq)};
-  endfunction
+    // Fairness monitoring (S10)
+    always @(posedge clk) begin
+        if (!rst && completed_frames_count >= 16) begin
+            // This is a strictly simplified check running continuously. 
+            // In the main thread, we generate uniform continuous load.
+            // If any source falls behind by more than 16 frames while load is offered, it's a violation.
+            // The main test loop manages the exact conditions for this check.
+        end
+    end
 
-  function automatic int extract_source(logic [31:0] d);
-      if (d[31:24] != 8'hA5) return -1;
-      return int'(d[23:16]);
-  endfunction
+    // Reset monitoring (S12)
+    always @(posedge clk) begin
+        if (rst) begin
+            if (m_tvalid) check_fail("S12: Output valid asserted during reset");
+        end
+    end
 
-  // Background task to toggle m_tready_i for backpressure scenario
-  task automatic run_backpressure();
-      forever begin
-          if (test_phase == BACKPRESSURE) begin
-              bp_counter++;
-              bfm_ready((bp_counter % 3) != 0); // 66% ready duty cycle
-          end else begin
-              bfm_ready(1'b1);
-          end
-      end
-  endtask
+    // ---------------------------------------------------------------------------
+    // Stimulus
+    // ---------------------------------------------------------------------------
+    initial begin
+        s_tvalid = 0; s_tdata = 0; s_tkeep = 0; s_tlast = 0; s_tuser = 0;
+        m_tready = 1;
 
-  // Wait until all strictly fully-submitted frames have transferred out
-  task automatic wait_for_complete_frames();
-      int count = 0;
-      while (count < 1000) begin
-          bit has_complete = 0;
-          for (int i=0; i<S_COUNT; i++) begin
-              foreach (ref_queues[i][j]) begin
-                  if (ref_queues[i][j].last) has_complete = 1'b1;
-              end
-          end
-          if (!has_complete) return;
-          @(posedge clk);
-          count++;
-      end
-  endtask
+        // Reset
+        bfm_reset();
+        
+        @(posedge clk);
+        if (m_tvalid) check_fail("S12: Output valid asserted on first cycle after reset release");
 
-  // Stimulus task to submit full multi-beat frames
-  task automatic send_frame(int src, int fseq, int num_beats);
-      for (int b = 0; b < num_beats; b++) begin
-          logic last = (b == num_beats - 1);
-          bfm_send(src, build_data(src, fseq, b), 4'hF, last, 1'b1);
-      end
-      bfm_idle(src);
-  endtask
+        // PHASE 1: Basic disjoint frames
+        for (int k = 0; k < S_COUNT; k++) begin
+            bfm_send(k, 32'hAAAA_0000 + k, 4'hF, 0, 1'b0);
+            bfm_send(k, 32'hBBBB_0000 + k, 4'hF, 0, 1'b0);
+            bfm_send(k, 32'hCCCC_0000 + k, 4'hF, 1, 1'b0);
+            bfm_idle(k);
+        end
+        
+        // Wait for all deliveries
+        begin
+            automatic int watchdog = 0;
+            while (expected_queues[0].size() > 0 || expected_queues[1].size() > 0 || 
+                   expected_queues[2].size() > 0 || expected_queues[3].size() > 0) begin
+                @(posedge clk);
+                watchdog++;
+                if (watchdog > 500) check_fail("S5: Missing frames");
+            end
+        end
 
-  // Main Checker Block
-  always @(posedge clk) begin : checker_block
-      if (was_rst && !rst) begin
-          if (m_tvalid) begin
-              $display("RESULT: FAIL (S12: m_tvalid_o not low on the first cycle after reset release)");
-              $finish;
-          end
-      end
-      was_rst <= rst;
+        // PHASE 2: Backpressure during frame (S8)
+        bfm_ready(0);
+        
+        // Push concurrent frames
+        fork
+            begin
+                bfm_send(0, 32'hDDDD_0000, 4'hF, 0, 0);
+                bfm_send(0, 32'hEEEE_0000, 4'hF, 1, 0);
+                bfm_idle(0);
+            end
+            begin
+                bfm_send(1, 32'hDDDD_0001, 4'hF, 0, 0);
+                bfm_send(1, 32'hEEEE_0001, 4'hF, 1, 0);
+                bfm_idle(1);
+            end
+        join
 
-      if (rst) begin
-          for (int i=0; i<S_COUNT; i++) ref_queues[i].delete();
-          active_source <= -1;
-          fairness_window.delete();
-      end else begin
-          
-          // 1. Observe input queues
-          for (int i=0; i<S_COUNT; i++) begin
-              if (s_tvalid[i] && s_tready[i]) begin
-                  automatic beat_t b;
-                  b.data = s_tdata[i];
-                  b.keep = s_tkeep[i];
-                  b.last = s_tlast[i];
-                  b.user = s_tuser[i];
-                  ref_queues[i].push_back(b);
-              end
-          end
+        repeat(10) @(posedge clk);
+        
+        // Throttle ready
+        for (int i=0; i<10; i++) begin
+            bfm_ready(1);
+            @(posedge clk);
+            bfm_ready(0);
+            repeat(3) @(posedge clk);
+        end
+        bfm_ready(1);
+        
+        // Wait for delivery
+        begin
+            automatic int watchdog = 0;
+            while (expected_queues[0].size() > 0 || expected_queues[1].size() > 0) begin
+                @(posedge clk);
+                watchdog++;
+                if (watchdog > 500) check_fail("S8: Delivery failed under backpressure");
+            end
+        end
 
-          // 2. Observe and verify outputs
-          if (m_tvalid && m_tready) begin
-              automatic beat_t out_b;
-              automatic int beat_src;
-              
-              out_b.data = m_tdata;
-              out_b.keep = m_tkeep;
-              out_b.last = m_tlast;
-              out_b.user = m_tuser;
-              beat_src = extract_source(out_b.data);
+        // PHASE 3: S10 Fairness Check (Continuous Load)
+        // Setup state for fairness check
+        completed_frames_count = 0;
+        for (int i=0; i<S_COUNT; i++) source_last_frame_stamp[i] = 0;
+        
+        fork
+            // Continuous offered load for S_COUNT ports
+            begin
+                for(int j=0; j<20; j++) begin
+                    bfm_send(0, 32'hF0F0_0000 + j, 4'hF, 1, 0);
+                end
+                bfm_idle(0);
+            end
+            begin
+                for(int j=0; j<20; j++) begin
+                    bfm_send(1, 32'hF1F1_0000 + j, 4'hF, 1, 0);
+                end
+                bfm_idle(1);
+            end
+            begin
+                for(int j=0; j<20; j++) begin
+                    bfm_send(2, 32'hF2F2_0000 + j, 4'hF, 1, 0);
+                end
+                bfm_idle(2);
+            end
+            begin
+                for(int j=0; j<20; j++) begin
+                    bfm_send(3, 32'hF3F3_0000 + j, 4'hF, 1, 0);
+                end
+                bfm_idle(3);
+            end
+        join_none
 
-              if (active_source == -1) begin
-                  active_source = beat_src;
-                  if (active_source < 0 || active_source >= S_COUNT) begin
-                      $display("RESULT: FAIL (S4: Output data payload corrupt or originated from unknown source)");
-                      $finish;
-                  end
-                  
-                  // Track S10 fairness constraint
-                  if (test_phase == FAIRNESS) begin
-                      fairness_window.push_back(active_source);
-                      if (fairness_window.size() > 16) void'(fairness_window.pop_front());
-                      if (fairness_window.size() == 16) begin
-                          automatic bit [S_COUNT-1:0] seen = '0;
-                          foreach (fairness_window[j]) seen[fairness_window[j]] = 1'b1;
-                          if (seen != {S_COUNT{1'b1}}) begin
-                              $display("RESULT: FAIL (S10: Fairness violated. A source was starved within 16 consecutive output frames under continuous load)");
-                              $finish;
-                          end
-                      end
-                  end
-              end else begin
-                  if (beat_src != active_source) begin
-                      $display("RESULT: FAIL (S3: Frame atomicity violated. Interleaved beat from %0d during frame from %0d)", beat_src, active_source);
-                      $finish;
-                  end
-              end
+        // Monitor while continuous load processes
+        begin
+            automatic int watchdog = 0;
+            while(completed_frames_count < 60) begin
+                @(posedge clk);
+                if (completed_frames_count > 16) begin
+                    for (int k=0; k<S_COUNT; k++) begin
+                        if ((completed_frames_count - source_last_frame_stamp[k]) > 16) begin
+                            check_fail("S10: Fairness bound violated");
+                        end
+                    end
+                end
+                watchdog++;
+                if (watchdog > 2000) check_fail("S10/S5: Stalled during fairness test");
+            end
+        end
+        
+        // Wait for queues to flush cleanly
+        begin
+            automatic int watchdog = 0;
+            while (expected_queues[0].size() > 0 || expected_queues[1].size() > 0 || 
+                   expected_queues[2].size() > 0 || expected_queues[3].size() > 0) begin
+                @(posedge clk);
+                watchdog++;
+                if (watchdog > 500) check_fail("S5: Missing frames after fairness phase");
+            end
+        end
 
-              if (ref_queues[active_source].size() == 0) begin
-                  $display("RESULT: FAIL (S4: Output beat transferred but none expected from source %0d)", active_source);
-                  $finish;
-              end
-              
-              begin
-                  automatic beat_t exp_b = ref_queues[active_source].pop_front();
-                  if (out_b.data !== exp_b.data || out_b.keep !== exp_b.keep || 
-                      out_b.user !== exp_b.user || out_b.last !== exp_b.last) begin
-                      $display("RESULT: FAIL (S4: Payload integrity mismatch on output)");
-                      $finish;
-                  end
-              end
+        // PHASE 4: Reset Discard (S12)
+        // Inject a partial frame and assert reset
+        bfm_send(2, 32'h9999_9999, 4'hF, 0, 0);
+        
+        bfm_reset();
+        
+        expected_queues[2].delete(); // clear expectation model since we expect discard
+        
+        repeat (10) @(posedge clk);
+        if (m_tvalid) check_fail("S12: Transaction survived reset");
 
-              if (out_b.last) begin
-                  active_source = -1;
-              end
-          end
-      end
-  end
-
-  // Test Sequencer
-  initial begin
-      // Initialize variables
-      for (int i=0; i<S_COUNT; i++) begin
-          s_tvalid[i] = 1'b0;
-          s_tdata[i] = '0;
-          s_tkeep[i] = '0;
-          s_tlast[i] = '0;
-          s_tuser[i] = '0;
-      end
-      m_tready = 1'b0;
-      
-      fork run_backpressure(); join_none
-
-      #100;
-      bfm_reset();
-
-      // Phase 1: Basic Sequential Transfers
-      send_frame(0, 1, 3);
-      send_frame(1, 1, 1);
-      send_frame(2, 1, 4);
-      send_frame(3, 1, 2);
-      wait_for_complete_frames();
-
-      // Phase 2: Concurrent Multi-Input Transfers
-      fork
-          send_frame(0, 2, 4);
-          send_frame(1, 2, 5);
-          send_frame(2, 2, 2);
-          send_frame(3, 2, 3);
-      join
-      wait_for_complete_frames();
-
-      // Phase 3: Backpressure Verification (S8)
-      @(negedge clk);
-      test_phase = BACKPRESSURE;
-      fork
-          send_frame(0, 3, 5);
-          send_frame(1, 3, 3);
-          send_frame(2, 3, 7);
-          send_frame(3, 3, 2);
-      join
-      wait_for_complete_frames();
-
-      // Phase 4: Abandoned Frame and Reset (S5a, S12)
-      @(negedge clk);
-      test_phase = IDLE;
-      
-      // Submit an incomplete frame to input 0 (2 out of 4 expected beats)
-      bfm_send(0, build_data(0, 4, 0), 4'hF, 1'b0, 1'b0);
-      bfm_send(0, build_data(0, 4, 1), 4'hF, 1'b0, 1'b0);
-      bfm_idle(0);
-
-      // Submit a complete frame to input 1 to ensure system routes it correctly while 0 is stalled
-      send_frame(1, 4, 3);
-      wait_for_complete_frames();
-      
-      bfm_reset(); // This tests S12 & clears queues preventing S5 failure on abandoned frame
-
-      // Phase 5: Continuous Load Fairness (S10)
-      @(negedge clk);
-      test_phase = FAIRNESS;
-      fork
-          for(int i=0; i<30; i++) send_frame(0, 10+i, 2);
-          for(int i=0; i<30; i++) send_frame(1, 10+i, 2);
-          for(int i=0; i<30; i++) send_frame(2, 10+i, 2);
-          for(int i=0; i<30; i++) send_frame(3, 10+i, 2);
-      join
-      wait_for_complete_frames();
-
-      // Final Drain and S5 Verification
-      // Ensure there are absolutely no frames containing a `tlast` that got stuck
-      begin
-          automatic int timeout = 0;
-          while (timeout < 2000) begin
-              automatic bit has_complete = 0;
-              for (int i=0; i<S_COUNT; i++) begin
-                  foreach (ref_queues[i][j]) begin
-                      if (ref_queues[i][j].last) has_complete = 1'b1;
-                  end
-              end
-              if (!has_complete) break;
-              @(posedge clk);
-              timeout++;
-          end
-
-          for (int i=0; i<S_COUNT; i++) begin
-              automatic bit frame_found = 0;
-              foreach (ref_queues[i][j]) begin
-                  if (ref_queues[i][j].last) frame_found = 1'b1;
-              end
-              if (frame_found) begin
-                  $display("RESULT: FAIL (S5: Frame completed on input but never fully outputted)");
-                  $finish;
-              end
-          end
-      end
-
-      $display("RESULT: PASS");
-      $finish;
-  end
+        $display("RESULT: PASS");
+        $finish;
+    end
 
 endmodule

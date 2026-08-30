@@ -1,9 +1,8 @@
-// ---------------------------------------------------------------------------
-// AXI4 Data-Width Downsizer Testbench
-// ---------------------------------------------------------------------------
-
 module dw_downsizer_tb;
 
+    // ---------------------------------------------------------------------------
+    // PARAMETERS & SIGNALS
+    // ---------------------------------------------------------------------------
     localparam int unsigned ADDR_W     = 32;
     localparam int unsigned ID_W       = 4;
     localparam int unsigned SLV_DATA_W = 64;
@@ -11,71 +10,69 @@ module dw_downsizer_tb;
     localparam int unsigned MAX_READS  = 4;
 
     logic clk_i;
-    initial begin clk_i = 1'b0; forever #5 clk_i = ~clk_i; end
-
     logic rst_ni;
 
-    // Upstream (Slave) Port
-    logic [ID_W-1:0]         s_awid;
-    logic [ADDR_W-1:0]       s_awaddr;
-    logic [7:0]              s_awlen;
-    logic [2:0]              s_awsize;
-    logic [1:0]              s_awburst;
-    logic                    s_awvalid;
-    logic                    s_awready;
-    logic [SLV_DATA_W-1:0]   s_wdata;
-    logic [SLV_DATA_W/8-1:0] s_wstrb;
-    logic                    s_wlast;
-    logic                    s_wvalid;
-    logic                    s_wready;
-    logic [ID_W-1:0]         s_bid;
-    logic [1:0]              s_bresp;
-    logic                    s_bvalid;
-    logic                    s_bready;
-    logic [ID_W-1:0]         s_arid;
-    logic [ADDR_W-1:0]       s_araddr;
-    logic [7:0]              s_arlen;
-    logic [2:0]              s_arsize;
-    logic [1:0]              s_arburst;
-    logic                    s_arvalid;
-    logic                    s_arready;
-    logic [ID_W-1:0]         s_rid;
-    logic [SLV_DATA_W-1:0]   s_rdata;
-    logic [1:0]              s_rresp;
-    logic                    s_rlast;
-    logic                    s_rvalid;
-    logic                    s_rready;
+    // Upstream (slave) port
+    logic [ID_W-1:0]          s_awid;
+    logic [ADDR_W-1:0]        s_awaddr;
+    logic [7:0]               s_awlen;
+    logic [2:0]               s_awsize;
+    logic [1:0]               s_awburst;
+    logic                     s_awvalid;
+    logic                     s_awready;
+    logic [SLV_DATA_W-1:0]    s_wdata;
+    logic [SLV_DATA_W/8-1:0]  s_wstrb;
+    logic                     s_wlast;
+    logic                     s_wvalid;
+    logic                     s_wready;
+    logic [ID_W-1:0]          s_bid;
+    logic [1:0]               s_bresp;
+    logic                     s_bvalid;
+    logic                     s_bready;
+    logic [ID_W-1:0]          s_arid;
+    logic [ADDR_W-1:0]        s_araddr;
+    logic [7:0]               s_arlen;
+    logic [2:0]               s_arsize;
+    logic [1:0]               s_arburst;
+    logic                     s_arvalid;
+    logic                     s_arready;
+    logic [ID_W-1:0]          s_rid;
+    logic [SLV_DATA_W-1:0]    s_rdata;
+    logic [1:0]               s_rresp;
+    logic                     s_rlast;
+    logic                     s_rvalid;
+    logic                     s_rready;
 
-    // Downstream (Master) Port
-    logic [ID_W-1:0]         m_awid;
-    logic [ADDR_W-1:0]       m_awaddr;
-    logic [7:0]              m_awlen;
-    logic [2:0]              m_awsize;
-    logic [1:0]              m_awburst;
-    logic                    m_awvalid;
-    logic                    m_awready;
-    logic [MST_DATA_W-1:0]   m_wdata;
-    logic [MST_DATA_W/8-1:0] m_wstrb;
-    logic                    m_wlast;
-    logic                    m_wvalid;
-    logic                    m_wready;
-    logic [ID_W-1:0]         m_bid;
-    logic [1:0]              m_bresp;
-    logic                    m_bvalid;
-    logic                    m_bready;
-    logic [ID_W-1:0]         m_arid;
-    logic [ADDR_W-1:0]       m_araddr;
-    logic [7:0]              m_arlen;
-    logic [2:0]              m_arsize;
-    logic [1:0]              m_arburst;
-    logic                    m_arvalid;
-    logic                    m_arready;
-    logic [ID_W-1:0]         m_rid;
-    logic [MST_DATA_W-1:0]   m_rdata;
-    logic [1:0]              m_rresp;
-    logic                    m_rlast;
-    logic                    m_rvalid;
-    logic                    m_rready;
+    // Downstream (master) port
+    logic [ID_W-1:0]          m_awid;
+    logic [ADDR_W-1:0]        m_awaddr;
+    logic [7:0]               m_awlen;
+    logic [2:0]               m_awsize;
+    logic [1:0]               m_awburst;
+    logic                     m_awvalid;
+    logic                     m_awready;
+    logic [MST_DATA_W-1:0]    m_wdata;
+    logic [MST_DATA_W/8-1:0]  m_wstrb;
+    logic                     m_wlast;
+    logic                     m_wvalid;
+    logic                     m_wready;
+    logic [ID_W-1:0]          m_bid;
+    logic [1:0]               m_bresp;
+    logic                     m_bvalid;
+    logic                     m_bready;
+    logic [ID_W-1:0]          m_arid;
+    logic [ADDR_W-1:0]        m_araddr;
+    logic [7:0]               m_arlen;
+    logic [2:0]               m_arsize;
+    logic [1:0]               m_arburst;
+    logic                     m_arvalid;
+    logic                     m_arready;
+    logic [ID_W-1:0]          m_rid;
+    logic [MST_DATA_W-1:0]    m_rdata;
+    logic [1:0]               m_rresp;
+    logic                     m_rlast;
+    logic                     m_rvalid;
+    logic                     m_rready;
 
     dw_downsizer #(
         .ADDR_W(ADDR_W),
@@ -83,524 +80,501 @@ module dw_downsizer_tb;
         .SLV_DATA_W(SLV_DATA_W),
         .MST_DATA_W(MST_DATA_W),
         .MAX_READS(MAX_READS)
-    ) dut (
-        .*
-    );
+    ) dut (.*);
 
-    task automatic fail(string msg);
-        $display("RESULT: FAIL (%s)", msg);
-        $finish;
-    endtask
+    // ---------------------------------------------------------------------------
+    // PLUMBING & UTILITIES
+    // ---------------------------------------------------------------------------
+    initial begin clk_i = 1'b0; forever #5 clk_i = ~clk_i; end
 
-    // -------------------------------------------------------------------------
-    // BFM Functions and Tasks
-    // -------------------------------------------------------------------------
-    
-    function int calc_expected_dlen(logic [31:0] addr, logic [7:0] len, logic [2:0] size);
-        automatic int beat_bytes = 1 << size;
-        automatic logic [31:0] mask = ~(32'(beat_bytes) - 1);
-        automatic int total_bytes = (len + 1) * beat_bytes - (addr - (addr & mask));
-        automatic logic [2:0] dsize = (size < 1) ? size : 1;
-        automatic int d_beat_bytes = 1 << dsize;
-        automatic logic [31:0] dmask = ~(32'(d_beat_bytes) - 1);
-        automatic logic [31:0] first = addr;
-        automatic logic [31:0] last = addr + total_bytes - 1;
-        automatic logic [31:0] aligned_first = first & dmask;
-        automatic logic [31:0] aligned_last  = last & dmask;
-        return (aligned_last - aligned_first) / d_beat_bytes;
-    endfunction
-
-    task automatic drive_reset();
+    task automatic bfm_reset(input int cycles = 4);
         @(negedge clk_i);
         rst_ni = 1'b0;
-        @(posedge clk_i);
-        for (int i=0; i<5; i++) begin
-            if (s_bvalid || s_rvalid || m_awvalid || m_wvalid || m_arvalid)
-                fail("F1: Valid high during reset");
-            @(posedge clk_i);
-        end
+        repeat (cycles) @(posedge clk_i);
         @(negedge clk_i);
         rst_ni = 1'b1;
     endtask
 
-    task automatic bfm_ar(input  logic [ID_W-1:0]   id,
-                          input  logic [ADDR_W-1:0] addr,
-                          input  logic [7:0]        len,
-                          input  logic [2:0]        size,
-                          input  logic [1:0]        burst,
-                          input  int                budget,
-                          output bit                accepted,
-                          output int                waited);
-        accepted = 1'b0; waited = 0;
-        @(negedge clk_i);
-        s_arid = id; s_araddr = addr; s_arlen = len; s_arsize = size; s_arburst = burst; s_arvalid = 1'b1;
-        while (waited < budget) begin
-            @(posedge clk_i);
-            if (s_arready) begin accepted = 1'b1; break; end
-            waited++;
-        end
-        @(negedge clk_i) s_arvalid = 1'b0;
-    endtask
-
-    task automatic bfm_aw(input  logic [ID_W-1:0]   id,
-                          input  logic [ADDR_W-1:0] addr,
-                          input  logic [7:0]        len,
-                          input  logic [2:0]        size,
-                          input  logic [1:0]        burst,
-                          input  int                budget,
-                          output bit                accepted,
-                          output int                waited);
-        accepted = 1'b0; waited = 0;
-        @(negedge clk_i);
-        s_awid = id; s_awaddr = addr; s_awlen = len; s_awsize = size; s_awburst = burst; s_awvalid = 1'b1;
-        while (waited < budget) begin
-            @(posedge clk_i);
-            if (s_awready) begin accepted = 1'b1; break; end
-            waited++;
-        end
-        @(negedge clk_i) s_awvalid = 1'b0;
-    endtask
-
-    task automatic wait_and_accept_m_ar(output logic [3:0] id, output logic [31:0] addr, output logic [7:0] len, output logic [2:0] size, output logic [1:0] burst);
-        @(negedge clk_i);
-        m_arready = 1'b1;
-        forever begin
-            @(posedge clk_i);
-            if (m_arvalid) begin
-                id = m_arid; addr = m_araddr; len = m_arlen; size = m_arsize; burst = m_arburst;
-                break;
-            end
-        end
-        @(negedge clk_i);
-        m_arready = 1'b0;
-    endtask
-
-    task automatic wait_and_accept_m_aw(output logic [3:0] id, output logic [31:0] addr, output logic [7:0] len, output logic [2:0] size, output logic [1:0] burst);
-        @(negedge clk_i);
-        m_awready = 1'b1;
-        forever begin
-            @(posedge clk_i);
-            if (m_awvalid) begin
-                id = m_awid; addr = m_awaddr; len = m_awlen; size = m_awsize; burst = m_awburst;
-                break;
-            end
-        end
-        @(negedge clk_i);
-        m_awready = 1'b0;
-    endtask
-
-    task automatic bfm_rbeat(input logic [ID_W-1:0] mid, input logic [15:0] data, input logic [1:0] resp, input logic last);
-        @(negedge clk_i);
-        m_rid = mid; m_rdata = data; m_rlast = last; m_rresp = resp; m_rvalid = 1'b1;
-        forever begin @(posedge clk_i); if (m_rready) break; end
-        @(negedge clk_i) m_rvalid = 1'b0;
-    endtask
-
-    task automatic serve_downstream_r(logic [3:0] id, logic [31:0] start_addr, logic [7:0] dlen, logic [2:0] dsize, logic [1:0] inject_err = 0);
-        automatic int d_beat_bytes = 1 << dsize;
-        automatic logic [31:0] d_addr = start_addr;
-        for (int i = 0; i <= dlen; i++) begin
-            automatic logic [15:0] rdata = 0;
-            automatic int start_lane = d_addr % d_beat_bytes;
-            for (int b = start_lane; b < d_beat_bytes; b++) begin
-                automatic logic [31:0] abs_addr = (d_addr & ~(32'(d_beat_bytes)-1)) + b;
-                if (b == 0) rdata[7:0] = abs_addr[7:0] ^ 8'hAA;
-                if (b == 1) rdata[15:8] = abs_addr[7:0] ^ 8'hAA;
-            end
-            bfm_rbeat(id, rdata, (inject_err != 0 && i == dlen) ? inject_err : 2'b00, (i == dlen));
-            d_addr = (d_addr & ~(32'(d_beat_bytes)-1)) + d_beat_bytes;
-        end
-    endtask
-
-    task automatic wait_for_r(output logic [3:0] id, output logic [63:0] data, output logic [1:0] resp, output logic last);
-        @(negedge clk_i);
-        s_rready = 1'b1;
-        forever begin
-            @(posedge clk_i);
-            if (s_rvalid) begin
-                id = s_rid; data = s_rdata; resp = s_rresp; last = s_rlast;
-                break;
-            end
-        end
-        @(negedge clk_i);
-        s_rready = 1'b0;
-    endtask
-
-    task automatic check_upstream_r(logic [3:0] exp_id, logic [31:0] start_addr, logic [7:0] len, logic [2:0] size, logic [1:0] expect_err_on_last = 0);
-        automatic int beat_bytes = 1 << size;
-        automatic logic [31:0] mask = ~(32'(beat_bytes) - 1);
-        automatic logic [31:0] cur_addr = start_addr;
-        for (int i = 0; i <= len; i++) begin
-            automatic logic [3:0] obs_id;
-            automatic logic [63:0] obs_data;
-            automatic logic [1:0] obs_resp;
-            automatic logic obs_last;
-            wait_for_r(obs_id, obs_data, obs_resp, obs_last);
-
-            if (obs_id != exp_id) fail("D3: wrong ID");
-            if (i == len && obs_last !== 1'b1) fail("D4: missing rlast");
-            if (i < len && obs_last === 1'b1) fail("D4: early rlast");
-
-            if (expect_err_on_last != 0) begin
-                if (i == len && obs_resp != expect_err_on_last) fail("D6: missing err on last");
-                if (i < len && obs_resp != 2'b00) fail("D6: early err");
-            end else begin
-                if (obs_resp != 2'b00) fail("D5: resp not OKAY");
-            end
-
-            // Check Data content
-            begin
-                automatic int start_lane = cur_addr % beat_bytes;
-                for (int b = start_lane; b < beat_bytes; b++) begin
-                    automatic logic [31:0] abs_addr = (cur_addr & mask) + b;
-                    automatic int lane = abs_addr % 8;
-                    automatic logic [7:0] exp_byte = abs_addr[7:0] ^ 8'hAA;
-                    automatic logic [7:0] obs_byte = obs_data[lane*8 +: 8];
-                    if (obs_byte != exp_byte) fail($sformatf("D1/D2: Data mismatch. Exp %0x got %0x", exp_byte, obs_byte));
-                end
-            end
-            cur_addr = (cur_addr & mask) + beat_bytes;
-        end
-    endtask
-
-    task automatic bfm_w(input logic [63:0] data, input logic [7:0] strb, input logic last);
-        @(negedge clk_i);
-        s_wdata = data; s_wstrb = strb; s_wlast = last; s_wvalid = 1'b1;
-        forever begin @(posedge clk_i); if (s_wready) break; end
-        @(negedge clk_i) s_wvalid = 1'b0;
-    endtask
-
-    task automatic send_upstream_w(logic [31:0] start_addr, logic [7:0] len, logic [2:0] size);
-        automatic int beat_bytes = 1 << size;
-        automatic logic [31:0] mask = ~(32'(beat_bytes) - 1);
-        automatic logic [31:0] cur_addr = start_addr;
-        for (int i = 0; i <= len; i++) begin
-            automatic logic [63:0] wdata = 0;
-            automatic logic [7:0] wstrb = 0;
-            automatic bit unstrobed_beat = (len >= 1 && i == 1);
-
-            automatic int start_lane = cur_addr % beat_bytes;
-            for (int b = start_lane; b < beat_bytes; b++) begin
-                automatic logic [31:0] abs_addr = (cur_addr & mask) + b;
-                automatic int lane = abs_addr % 8;
-                wdata[lane*8 +: 8] = abs_addr[7:0] ^ 8'h55;
-                if (!unstrobed_beat) wstrb[lane] = 1'b1;
-            end
-            bfm_w(wdata, wstrb, (i == len));
-            cur_addr = (cur_addr & mask) + beat_bytes;
-        end
-    endtask
-
-    task automatic check_downstream_w(logic [31:0] start_addr, logic [7:0] up_len, logic [2:0] up_size, logic [7:0] exp_dlen);
-        automatic int up_beat_bytes = 1 << up_size;
-        automatic logic [2:0] dsize = (up_size < 1) ? up_size : 1;
-        automatic int d_beat_bytes = 1 << dsize;
-        automatic logic [31:0] d_addr = start_addr;
-        automatic logic [31:0] up_aligned_start = start_addr & ~(32'(up_beat_bytes)-1);
-        automatic int total_bytes = (up_len + 1) * up_beat_bytes - (start_addr - up_aligned_start);
-        automatic logic [31:0] end_addr = start_addr + total_bytes - 1;
-
-        @(negedge clk_i);
-        m_wready = 1'b1;
-
-        for (int i = 0; i <= exp_dlen; i++) begin
-            automatic logic [15:0] obs_data;
-            automatic logic [1:0] obs_strb;
-            automatic logic obs_last;
-            forever begin
-                @(posedge clk_i);
-                if (m_wvalid) begin
-                    obs_data = m_wdata; obs_strb = m_wstrb; obs_last = m_wlast;
-                    break;
-                end
-            end
-
-            if (i == exp_dlen && obs_last !== 1'b1) fail("E4: missing wlast");
-            if (i < exp_dlen && obs_last === 1'b1) fail("E4: early wlast");
-
-            begin
-                automatic logic [31:0] d_aligned = d_addr & ~(32'(d_beat_bytes)-1);
-                automatic int up_beat_idx = 0;
-                automatic bit exp_unstrobed = 0;
-                automatic logic [1:0] exp_strb = 0;
-                automatic logic [15:0] exp_data = 0;
-                automatic int start_lane = d_addr % d_beat_bytes;
-
-                if (d_aligned >= start_addr) up_beat_idx = (d_aligned - up_aligned_start) / up_beat_bytes;
-                exp_unstrobed = (up_len >= 1 && up_beat_idx == 1);
-
-                for (int b = start_lane; b < d_beat_bytes; b++) begin
-                    automatic logic [31:0] abs_addr = d_aligned + b;
-                    automatic logic [7:0] expected_byte = abs_addr[7:0] ^ 8'h55;
-                    exp_data[b*8 +: 8] = expected_byte;
-                    if (abs_addr >= start_addr && abs_addr <= end_addr && !exp_unstrobed) begin
-                        exp_strb[b] = 1'b1;
-                    end
-                end
-
-                if (obs_strb !== exp_strb) fail("E2/E3: Strobe mismatch");
-                for (int lane=0; lane<2; lane++) begin
-                    if (exp_strb[lane]) begin
-                        if (obs_data[lane*8 +: 8] !== exp_data[lane*8 +: 8]) fail("E1: Data mismatch");
-                    end
-                end
-            end
-            d_addr = (d_addr & ~(32'(d_beat_bytes)-1)) + d_beat_bytes;
-        end
-        @(negedge clk_i);
-        m_wready = 1'b0;
-    endtask
-
-    task automatic bfm_bbeat(input logic [3:0] mid, input logic [1:0] resp);
-        @(negedge clk_i);
-        m_bid = mid; m_bresp = resp; m_bvalid = 1'b1;
-        forever begin @(posedge clk_i); if (m_bready) break; end
-        @(negedge clk_i) m_bvalid = 1'b0;
-    endtask
-
-    task automatic wait_for_b(output logic [3:0] id, output logic [1:0] resp);
-        @(negedge clk_i);
-        s_bready = 1'b1;
-        forever begin
-            @(posedge clk_i);
-            if (s_bvalid) begin
-                id = s_bid; resp = s_bresp;
-                break;
-            end
-        end
-        @(negedge clk_i);
-        s_bready = 1'b0;
-    endtask
-
-
-    // -------------------------------------------------------------------------
-    // Top-Level Test Routines
-    // -------------------------------------------------------------------------
-
-    task automatic test_read(logic [3:0] id, logic [31:0] addr, logic [7:0] len, logic [2:0] size, logic [1:0] burst, logic [1:0] inject_err = 0);
-        automatic bit is_refused = (burst == 2'b10) || (burst == 2'b00 && len > 0);
-        automatic int expected_dlen = calc_expected_dlen(addr, len, size);
-        automatic logic [2:0] expected_dsize = (size < 1) ? size : 1;
-        automatic bit ar_accepted;
-        automatic int ar_waited;
-
-        bfm_ar(id, addr, len, size, burst, 100, ar_accepted, ar_waited);
-        if (!ar_accepted) fail("A1: AR not accepted");
-
-        if (is_refused) begin
-            fork
-                begin
-                    for (int i=0; i<20; i++) begin
-                        @(posedge clk_i);
-                        if (m_arvalid) fail("C4: Downstream AR seen for refused transaction");
-                    end
-                end
-                begin
-                    for (int i = 0; i <= len; i++) begin
-                        automatic logic [3:0] obs_rid;
-                        automatic logic [63:0] obs_rdata;
-                        automatic logic [1:0] obs_rresp;
-                        automatic logic obs_rlast;
-                        wait_for_r(obs_rid, obs_rdata, obs_rresp, obs_rlast);
-                        if (obs_rid != id) fail("D3: Wrong ID on refused R beat");
-                        if (obs_rresp != 2'b10) fail("C4: Refused R beat not SLVERR");
-                        if (i == len && obs_rlast !== 1'b1) fail("C4: Last not set on final refused R beat");
-                        if (i < len && obs_rlast === 1'b1) fail("C4: Last set early on refused R beat");
-                    end
-                end
-            join
-        end else begin
-            automatic logic [3:0] obs_arid;
-            automatic logic [31:0] obs_araddr;
-            automatic logic [7:0] obs_arlen;
-            automatic logic [2:0] obs_arsize;
-            automatic logic [1:0] obs_arburst;
-
-            wait_and_accept_m_ar(obs_arid, obs_araddr, obs_arlen, obs_arsize, obs_arburst);
-            if (obs_araddr != addr) fail("B3: Downstream addr mismatch");
-            if (obs_arlen != expected_dlen) fail("B2: Downstream len mismatch");
-            if (obs_arsize != expected_dsize) fail("B1: Downstream size mismatch");
-            if (expected_dlen > 0 && obs_arburst != 2'b01) fail("B4: Downstream burst must be INCR");
-
-            fork
-                begin serve_downstream_r(id, addr, expected_dlen, expected_dsize, inject_err); end
-                begin check_upstream_r(id, addr, len, size, inject_err); end
-            join
-        end
-    endtask
-
-    task automatic test_write(logic [3:0] id, logic [31:0] addr, logic [7:0] len, logic [2:0] size, logic [1:0] burst, logic [1:0] inject_err = 0);
-        automatic bit is_refused = (burst == 2'b10) || (burst == 2'b00 && len > 0);
-        automatic int expected_dlen = calc_expected_dlen(addr, len, size);
-        automatic logic [2:0] expected_dsize = (size < 1) ? size : 1;
-        automatic bit aw_accepted;
-        automatic int aw_waited;
-
-        bfm_aw(id, addr, len, size, burst, 100, aw_accepted, aw_waited);
-        if (!aw_accepted) fail("A1: AW not accepted");
-
-        if (is_refused) begin
-            fork
-                begin send_upstream_w(addr, len, size); end
-                begin
-                    for (int i=0; i<20; i++) begin
-                        @(posedge clk_i);
-                        if (m_awvalid || m_wvalid) fail("C4: Downstream req seen for refused transaction");
-                    end
-                end
-                begin
-                    automatic logic [3:0] obs_bid;
-                    automatic logic [1:0] obs_bresp;
-                    wait_for_b(obs_bid, obs_bresp);
-                    if (obs_bid != id) fail("C4: wrong ID on refused B");
-                    if (obs_bresp != 2'b10) fail("C4: missing SLVERR on refused B");
-                end
-            join
-        end else begin
-            automatic logic [3:0] obs_awid;
-            automatic logic [31:0] obs_awaddr;
-            automatic logic [7:0] obs_awlen;
-            automatic logic [2:0] obs_awsize;
-            automatic logic [1:0] obs_awburst;
-
-            wait_and_accept_m_aw(obs_awid, obs_awaddr, obs_awlen, obs_awsize, obs_awburst);
-            if (obs_awaddr != addr) fail("B3: Downstream AW addr mismatch");
-            if (obs_awlen != expected_dlen) fail("B2: Downstream AW len mismatch");
-            if (obs_awsize != expected_dsize) fail("B1: Downstream AW size mismatch");
-            if (expected_dlen > 0 && obs_awburst != 2'b01) fail("B4: Downstream AW burst not INCR");
-
-            fork
-                begin send_upstream_w(addr, len, size); end
-                begin
-                    check_downstream_w(addr, len, size, expected_dlen);
-                    bfm_bbeat(id, inject_err);
-                end
-                begin
-                    automatic logic [3:0] obs_bid;
-                    automatic logic [1:0] obs_bresp;
-                    wait_for_b(obs_bid, obs_bresp);
-                    if (obs_bid != id) fail("E5: Upstream B ID mismatch");
-                    if (inject_err != 0) begin
-                        if (obs_bresp != inject_err) fail("E6: Upstream B err precedence failed");
-                    end else begin
-                        if (obs_bresp != 2'b00) fail("E6: Upstream B should be OKAY");
-                    end
-                end
-            join
-        end
-    endtask
-
-    task automatic test_max_reads();
-        automatic bit acc;
-        automatic int wait_cycles;
-
-        for(int i=0; i<4; i++) begin
-            bfm_ar(i, 32'h2000 + i*16, 0, 3, 1, 100, acc, wait_cycles);
-            if (!acc) fail("A4: Could not accept 4 reads");
-        end
-
-        fork
-            begin
-                bfm_ar(4, 32'h2040, 0, 3, 1, 200, acc, wait_cycles);
-                if (!acc) fail("A4: 5th read not accepted after retiring 1");
-            end
-            begin
-                automatic logic [3:0] m_id;
-                automatic logic [31:0] m_addr;
-                automatic logic [7:0] m_len;
-                automatic logic [2:0] m_sz;
-                automatic logic [1:0] m_brst;
-                
-                repeat(20) @(posedge clk_i);
-                wait_and_accept_m_ar(m_id, m_addr, m_len, m_sz, m_brst);
-                fork
-                    serve_downstream_r(m_id, m_addr, m_len, m_sz, 0);
-                    check_upstream_r(m_id, m_addr, 0, 3, 0);
-                join
-            end
-        join
-
-        for(int i=0; i<4; i++) begin
-            automatic logic [3:0] m_id;
-            automatic logic [31:0] m_addr;
-            automatic logic [7:0] m_len;
-            automatic logic [2:0] m_sz;
-            automatic logic [1:0] m_brst;
-            wait_and_accept_m_ar(m_id, m_addr, m_len, m_sz, m_brst);
-            fork
-                serve_downstream_r(m_id, m_addr, m_len, m_sz, 0);
-                check_upstream_r(m_id, m_addr, 0, 3, 0);
-            join
-        end
-    endtask
-
-    task automatic test_reset_aborts();
-        automatic bit acc;
-        automatic int wait_cycles;
-        automatic logic [3:0] m_id;
-        automatic logic [31:0] m_addr;
-        automatic logic [7:0] m_len;
-        automatic logic [2:0] m_sz;
-        automatic logic [1:0] m_brst;
-        
-        bfm_ar(5, 32'h3000, 0, 3, 1, 100, acc, wait_cycles);
-        if (!acc) fail("Reset setup: AR not accepted");
-
-        wait_and_accept_m_ar(m_id, m_addr, m_len, m_sz, m_brst);
-        
-        drive_reset();
-
-        repeat(10) @(posedge clk_i);
-        if (s_rvalid || s_bvalid || m_arvalid || m_awvalid || m_wvalid)
-            fail("F3: Transaction produced response/request after reset");
-
-        test_max_reads();
-    endtask
-
-    // Watchdog
     initial begin
         #4_000_000;
         $display("RESULT: FAIL (watchdog: no forward progress)");
         $finish;
     end
 
-    // Main Test Sequence
+    task automatic fail(string msg);
+        $display("RESULT: FAIL (%s)", msg);
+        $finish;
+    endtask
+
+    function automatic logic [31:0] aligned(logic [31:0] addr, logic [2:0] size);
+        automatic logic [31:0] mask = (1 << size) - 1;
+        return addr & ~mask;
+    endfunction
+
+    function automatic int total_bytes(logic [31:0] addr, logic [7:0] len, logic [2:0] size);
+        return (len + 1) * (1 << size) - (addr - aligned(addr, size));
+    endfunction
+
+    function automatic logic [7:0] exp_dlen(logic [31:0] addr, logic [7:0] len, logic [2:0] size);
+        automatic logic [31:0] first = addr;
+        automatic int tb = total_bytes(addr, len, size);
+        automatic logic [31:0] last = addr + tb - 1;
+        automatic logic [2:0] dsize = (size > 1) ? 1 : size;
+        return (aligned(last, dsize) - aligned(first, dsize)) / (1 << dsize);
+    endfunction
+
+    function automatic logic [31:0] next_addr(logic [31:0] addr, logic [2:0] size);
+        return aligned(addr, size) + (1 << size);
+    endfunction
+
+    // ---------------------------------------------------------------------------
+    // EXPECTATION TRACKING MODELS
+    // ---------------------------------------------------------------------------
+    typedef struct {
+        logic [ID_W-1:0] id;
+        logic [ADDR_W-1:0] addr;
+        logic [7:0] len;
+        logic [2:0] size;
+        logic [1:0] burst;
+        logic [1:0] expected_strobes[256];
+    } req_t;
+
+    typedef struct {
+        logic [ID_W-1:0] id;
+        logic [ADDR_W-1:0] addr;
+        logic [7:0] len;
+        logic [2:0] size;
+        logic [1:0] burst;
+        logic is_refused;
+        int beat_count;
+        logic [1:0] expected_resp;
+    } s_ar_t;
+
+    typedef struct {
+        logic [ID_W-1:0] id;
+        logic [ADDR_W-1:0] addr;
+        logic [7:0] len;
+        logic [2:0] size;
+        logic [1:0] burst;
+        logic is_refused;
+    } s_aw_t;
+
+    typedef struct {
+        logic [ID_W-1:0] id;
+        logic [ADDR_W-1:0] addr;
+        logic [7:0] len;
+        logic [2:0] size;
+        int beat_count;
+        logic [1:0] expected_strobes[256];
+    } m_aw_t;
+
+    typedef struct {
+        logic [ID_W-1:0] id;
+        logic [ADDR_W-1:0] addr;
+        logic [7:0] len;
+        logic [2:0] size;
+    } m_ar_t;
+
+    typedef struct {
+        logic [ID_W-1:0] id;
+        logic [1:0] resp;
+    } b_resp_t;
+
+    req_t exp_m_ar[$];
+    req_t exp_m_aw[$];
+
+    s_ar_t pending_s_ar[$];
+    s_aw_t pending_s_aw[$];
+    m_aw_t pending_m_aw[$];
+    m_ar_t pending_m_ar[$];
+    b_resp_t b_resp_q[$];
+
+    // ---------------------------------------------------------------------------
+    // BFM TRANSACTORS
+    // ---------------------------------------------------------------------------
+    task automatic expect_downstream(logic [ID_W-1:0] id, logic [ADDR_W-1:0] addr, logic [7:0] len, logic [2:0] size, logic [1:0] burst, logic is_write);
+        automatic logic is_refused = (burst == 2'b10) || (burst == 2'b00 && len != 0);
+        if (!is_refused) begin
+            automatic req_t exp;
+            exp.id = id;
+            exp.addr = addr;
+            exp.size = (size > 1) ? 1 : size;
+            exp.len = exp_dlen(addr, len, size);
+            exp.burst = (exp.len == 0) ? 2'bxx : 2'b01; 
+
+            if (is_write) begin
+                automatic logic [31:0] d_addr = addr;
+                for (int db = 0; db <= exp.len; db++) begin
+                    automatic logic [31:0] d_al = aligned(d_addr, exp.size);
+                    automatic logic [1:0] d_strb = 0;
+                    for (int i = 0; i < 2; i++) begin
+                        automatic logic [31:0] A = d_al + i;
+                        automatic logic is_valid = 0;
+                        automatic logic [31:0] u_cur = addr;
+                        for (int ub = 0; ub <= len; ub++) begin
+                            automatic logic [31:0] u_al = aligned(u_cur, size);
+                            automatic int tb = total_bytes(addr, len, size);
+                            automatic logic [31:0] u_start = (ub == 0) ? addr : u_al;
+                            automatic logic [31:0] u_end = (ub == len) ? (addr + tb - 1) : (u_al + (1 << size) - 1);
+                            if (A >= u_start && A <= u_end) begin
+                                if (!(ub == 1 && len > 1)) is_valid = 1; // Align wstrb clearing for E3 test
+                            end
+                            u_cur = next_addr(u_cur, size);
+                        end
+                        if (is_valid) d_strb[i] = 1'b1;
+                    end
+                    exp.expected_strobes[db] = d_strb;
+                    d_addr = d_al + 2;
+                end
+                exp_m_aw.push_back(exp);
+            end else begin
+                exp_m_ar.push_back(exp);
+            end
+        end
+    endtask
+
+    task automatic do_upstream_read_start(logic [ID_W-1:0] id, logic [ADDR_W-1:0] addr, logic [7:0] len, logic [2:0] size, logic [1:0] burst);
+        expect_downstream(id, addr, len, size, burst, 0);
+        @(negedge clk_i);
+        s_arid = id; s_araddr = addr; s_arlen = len; s_arsize = size; s_arburst = burst;
+        s_arvalid = 1;
+    endtask
+
+    task automatic wait_ar_accept();
+        forever begin @(posedge clk_i); if (s_arready) break; end
+        @(negedge clk_i); s_arvalid = 0;
+    endtask
+
+    task automatic do_upstream_read(logic [ID_W-1:0] id, logic [ADDR_W-1:0] addr, logic [7:0] len, logic [2:0] size, logic [1:0] burst);
+        do_upstream_read_start(id, addr, len, size, burst);
+        wait_ar_accept();
+    endtask
+
+    task automatic do_upstream_write(logic [ID_W-1:0] id, logic [ADDR_W-1:0] addr, logic [7:0] len, logic [2:0] size, logic [1:0] burst);
+        expect_downstream(id, addr, len, size, burst, 1);
+        
+        @(negedge clk_i);
+        s_awid = id; s_awaddr = addr; s_awlen = len; s_awsize = size; s_awburst = burst;
+        s_awvalid = 1;
+        forever begin @(posedge clk_i); if (s_awready) break; end
+        @(negedge clk_i); s_awvalid = 0;
+        
+        begin
+            automatic logic [31:0] cur_addr = addr;
+            for (int b = 0; b <= len; b++) begin
+                automatic logic [SLV_DATA_W-1:0] wdata = 0;
+                automatic logic [SLV_DATA_W/8-1:0] wstrb = 0;
+                
+                automatic logic [31:0] al_addr = aligned(cur_addr, size);
+                automatic int tb = total_bytes(addr, len, size);
+                automatic logic [31:0] start_A = (b == 0) ? addr : al_addr;
+                automatic logic [31:0] end_A = (b == len) ? (addr + tb - 1) : (al_addr + (1 << size) - 1);
+                
+                for (logic [31:0] A = start_A; A <= end_A; A++) begin
+                    automatic int lane = A % 8;
+                    wdata[lane*8 +: 8] = A[7:0];
+                    wstrb[lane] = 1'b1;
+                end
+                
+                if (b == 1 && len > 1) wstrb = 0; // E3 test case
+                
+                @(negedge clk_i);
+                s_wdata = wdata; s_wstrb = wstrb; s_wlast = (b == len); s_wvalid = 1;
+                forever begin @(posedge clk_i); if (s_wready) break; end
+                
+                cur_addr = next_addr(cur_addr, size);
+            end
+        end
+        @(negedge clk_i); s_wvalid = 0;
+    endtask
+
+    task automatic send_b_resp(logic [ID_W-1:0] id, logic [1:0] resp);
+        automatic b_resp_t r;
+        r.id = id; r.resp = resp;
+        b_resp_q.push_back(r);
+    endtask
+
+    // ---------------------------------------------------------------------------
+    // DOWNSTREAM RESPONDERS
+    // ---------------------------------------------------------------------------
     initial begin
-        s_arvalid = 0; s_awvalid = 0; s_wvalid = 0; s_rready = 0; s_bready = 0;
-        m_arready = 0; m_awready = 0; m_wready = 0; m_rvalid = 0; m_bvalid = 0;
+        m_bvalid = 0;
+        forever begin
+            @(posedge clk_i);
+            if (rst_ni && b_resp_q.size() > 0) begin
+                automatic b_resp_t r = b_resp_q.pop_front();
+                @(negedge clk_i);
+                m_bvalid = 1; m_bid = r.id; m_bresp = r.resp;
+                forever begin @(posedge clk_i); if (m_bready) break; end
+                @(negedge clk_i); m_bvalid = 0;
+            end
+        end
+    end
 
-        drive_reset();
+    initial begin
+        m_rvalid = 0;
+        forever begin
+            @(posedge clk_i);
+            if (rst_ni && pending_m_ar.size() > 0) begin
+                automatic m_ar_t req = pending_m_ar.pop_front();
+                automatic logic [31:0] cur_addr = req.addr;
+                for (int i = 0; i <= req.len; i++) begin
+                    automatic logic [15:0] rdata;
+                    automatic logic [31:0] al_addr = aligned(cur_addr, req.size);
+                    automatic logic [1:0] rresp = 2'b00;
 
-        // Test normal reads
-        test_read(0, 32'h1000, 0, 3, 2'b01);
-        test_read(1, 32'h1000, 1, 3, 2'b01);
-        test_read(2, 32'h1004, 1, 3, 2'b01);
-        test_read(3, 32'h1001, 0, 1, 2'b01);
-        test_read(4, 32'h1005, 3, 0, 2'b01);
-        test_read(5, 32'h1020, 1, 3, 2'b01, 2'b11); // DECERR on last read beat
+                    rdata[7:0]   = ~(al_addr[7:0]);
+                    rdata[15:8]  = ~((al_addr + 1) & 32'hFF);
+                    
+                    if ((al_addr & ~1) == 32'h3000) rresp = 2'b10;
+                    else if ((al_addr & ~1) == 32'h4000) rresp = 2'b11;
+                    
+                    @(negedge clk_i);
+                    m_rvalid = 1; m_rid = req.id; m_rdata = rdata; m_rresp = rresp; m_rlast = (i == req.len);
+                    forever begin @(posedge clk_i); if (m_rready) break; end
+                    cur_addr = next_addr(cur_addr, req.size);
+                end
+                @(negedge clk_i); m_rvalid = 0;
+            end
+        end
+    end
 
-        // Test normal writes (with unstrobed beat handling tests)
-        test_write(6, 32'h2000, 0, 3, 2'b01);
-        test_write(7, 32'h2000, 1, 3, 2'b01);
-        test_write(8, 32'h2004, 1, 3, 2'b01);
-        test_write(9, 32'h2001, 0, 1, 2'b01);
-        test_write(10, 32'h2005, 3, 0, 2'b01);
-        test_write(11, 32'h2020, 1, 3, 2'b01, 2'b10); // SLVERR on write response
+    // ---------------------------------------------------------------------------
+    // MONITORS & CHECKERS
+    // ---------------------------------------------------------------------------
+    always @(posedge clk_i) begin
+        if (rst_ni && s_arvalid && s_arready) begin
+            automatic s_ar_t req;
+            req.id = s_arid; req.addr = s_araddr; req.len = s_arlen; req.size = s_arsize; req.burst = s_arburst;
+            req.is_refused = (req.burst == 2'b10) || (req.burst == 2'b00 && req.len != 0);
+            req.beat_count = 0;
+            req.expected_resp = 2'b00;
+            pending_s_ar.push_back(req);
+        end
+    end
 
-        // Test Refusals
-        test_read(12, 32'h3000, 3, 3, 2'b10);  // WRAP
-        test_write(13, 32'h3000, 3, 3, 2'b10);
-        test_read(14, 32'h4000, 1, 3, 2'b00);  // FIXED len>0
-        test_write(15, 32'h4000, 1, 3, 2'b00);
+    always @(posedge clk_i) begin
+        if (rst_ni && s_rvalid && s_rready) begin
+            automatic int idx = -1;
+            for (int i=0; i<pending_s_ar.size(); i++) begin
+                if (pending_s_ar[i].id == s_rid) begin
+                    idx = i; break;
+                end
+            end
+            if (idx == -1) fail("D3: Upstream R carries unknown ID");
+            
+            begin
+                automatic s_ar_t req = pending_s_ar[idx];
+                automatic logic [31:0] cur_addr = req.addr;
+                for (int b=0; b<req.beat_count; b++) cur_addr = next_addr(cur_addr, req.size);
+                
+                automatic int tb = total_bytes(req.addr, req.len, req.size);
+                automatic logic [31:0] al_addr = aligned(cur_addr, req.size);
+                automatic logic [31:0] start_A = (req.beat_count == 0) ? req.addr : al_addr;
+                automatic logic [31:0] end_A = (req.beat_count == req.len) ? (req.addr + tb - 1) : (al_addr + (1 << req.size) - 1);
+                
+                if (req.is_refused) begin
+                    if (s_rresp !== 2'b10) fail("C4: Refused read must return SLVERR");
+                end else begin
+                    for (logic [31:0] A = start_A; A <= end_A; A++) begin
+                        automatic int lane = A % 8;
+                        automatic logic [7:0] expected_byte = ~(A[7:0]);
+                        if (s_rdata[lane*8 +: 8] !== expected_byte) fail("D1/D2: Upstream R data mismatch in valid byte lane");
+                        if ((A & ~1) == 32'h3000) req.expected_resp = 2'b10;
+                        else if ((A & ~1) == 32'h4000) req.expected_resp = 2'b11;
+                    end
+                    if (s_rresp !== req.expected_resp) fail("D6/D7/D5: Upstream R error response mismatch");
+                end
+                
+                if (s_rlast !== (req.beat_count == req.len)) fail("D4: s_rlast incorrect");
+                
+                req.beat_count++;
+                if (s_rlast) pending_s_ar.delete(idx);
+                else pending_s_ar[idx] = req;
+            end
+        end
+    end
 
-        // FIXED len=0 works normally
-        test_read(0, 32'h5000, 0, 3, 2'b00);
-        test_write(1, 32'h5000, 0, 3, 2'b00);
+    always @(posedge clk_i) begin
+        if (rst_ni && m_arvalid && m_arready) begin
+            automatic int found = -1;
+            if (exp_m_ar.size() == 0) fail("A2/C4: Unexpected downstream AR");
+            for (int i=0; i<exp_m_ar.size(); i++) begin
+                if (exp_m_ar[i].id == m_arid) begin found = i; break; end
+            end
+            if (found == -1) fail("A2: Downstream AR ID unexpected");
+            
+            begin
+                automatic req_t exp = exp_m_ar[found];
+                exp_m_ar.delete(found);
+                
+                if (m_araddr !== exp.addr || m_arlen !== exp.len || m_arsize !== exp.size) fail("A2/B1/B2/B3: Downstream AR attributes mismatch");
+                if (exp.len != 0 && m_arburst !== 2'b01) fail("B4: Downstream AR burst must be INCR");
+                
+                begin
+                    automatic m_ar_t req;
+                    req.id = m_arid; req.addr = m_araddr; req.len = m_arlen; req.size = m_arsize;
+                    pending_m_ar.push_back(req);
+                end
+            end
+        end
+    end
 
-        // MAX_READS Limit & Reset Cleanup Testing
-        test_reset_aborts();
+    always @(posedge clk_i) begin
+        if (rst_ni && s_awvalid && s_awready) begin
+            automatic s_aw_t req;
+            req.id = s_awid; req.addr = s_awaddr; req.len = s_awlen; req.size = s_awsize; req.burst = s_awburst;
+            req.is_refused = (req.burst == 2'b10) || (req.burst == 2'b00 && req.len != 0);
+            pending_s_aw.push_back(req);
+        end
+    end
 
+    always @(posedge clk_i) begin
+        if (rst_ni && m_awvalid && m_awready) begin
+            automatic int found = -1;
+            if (exp_m_aw.size() == 0) fail("A2/C4: Unexpected downstream AW");
+            for (int i=0; i<exp_m_aw.size(); i++) begin
+                if (exp_m_aw[i].id == m_awid) begin found = i; break; end
+            end
+            if (found == -1) fail("A2: Downstream AW ID unexpected");
+            
+            begin
+                automatic req_t exp = exp_m_aw[found];
+                exp_m_aw.delete(found);
+                
+                if (m_awaddr !== exp.addr || m_awlen !== exp.len || m_awsize !== exp.size) fail("A2/B1/B2/B3: Downstream AW attributes mismatch");
+                if (exp.len != 0 && m_awburst !== 2'b01) fail("B4: Downstream AW burst must be INCR");
+                
+                begin
+                    automatic m_aw_t req;
+                    req.id = m_awid; req.addr = m_awaddr; req.len = m_awlen; req.size = m_awsize;
+                    req.beat_count = 0;
+                    for (int db=0; db<=req.len; db++) req.expected_strobes[db] = exp.expected_strobes[db];
+                    pending_m_aw.push_back(req);
+                end
+            end
+        end
+    end
+
+    always @(posedge clk_i) begin
+        if (rst_ni && m_wvalid && m_wready) begin
+            if (pending_m_aw.size() == 0) fail("Unexpected downstream W");
+            begin
+                automatic m_aw_t req = pending_m_aw[0];
+                automatic logic [31:0] cur_addr = req.addr;
+                for (int b=0; b<req.beat_count; b++) cur_addr = next_addr(cur_addr, req.size);
+                
+                begin
+                    automatic logic [31:0] al_addr = aligned(cur_addr, req.size);
+                    automatic logic [7:0] exp_byte0 = al_addr[7:0];
+                    automatic logic [7:0] exp_byte1 = (al_addr + 1) & 8'hFF;
+                    automatic logic [1:0] exp_strb = req.expected_strobes[req.beat_count];
+                    
+                    if (m_wlast !== (req.beat_count == req.len)) fail("E4: m_wlast incorrect");
+                    if (m_wstrb !== exp_strb) fail("E2/E3: Downstream strb mismatch");
+                    if (m_wstrb[0] && m_wdata[7:0] !== exp_byte0) fail("E1: Write data mismatch");
+                    if (m_wstrb[1] && m_wdata[15:8] !== exp_byte1) fail("E1: Write data mismatch");
+                    
+                    req.beat_count++;
+                    if (m_wlast) begin
+                        automatic logic [1:0] bresp = 2'b00;
+                        if ((al_addr & ~1) == 32'h5000) bresp = 2'b10;
+                        if ((al_addr & ~1) == 32'h6000) bresp = 2'b11;
+                        send_b_resp(req.id, bresp);
+                        pending_m_aw.pop_front();
+                    end else begin
+                        pending_m_aw[0] = req;
+                    end
+                end
+            end
+        end
+    end
+
+    always @(posedge clk_i) begin
+        if (rst_ni && s_bvalid && s_bready) begin
+            automatic int idx = -1;
+            if (pending_s_aw.size() == 0) fail("E5: Unexpected upstream B");
+            for (int i=0; i<pending_s_aw.size(); i++) begin
+                if (pending_s_aw[i].id == s_bid) begin idx = i; break; end
+            end
+            if (idx == -1) fail("E5: Upstream B carries unknown ID");
+            
+            begin
+                automatic s_aw_t req = pending_s_aw[idx];
+                if (req.is_refused) begin
+                    if (s_bresp !== 2'b10) fail("C4: Refused write must return SLVERR");
+                end else begin
+                    automatic logic [1:0] exp_bresp = 2'b00;
+                    automatic int tb = total_bytes(req.addr, req.len, req.size);
+                    automatic logic [31:0] last_A = req.addr + tb - 1;
+                    for (logic [31:0] A = req.addr; A <= last_A; A++) begin
+                        if ((A & ~1) == 32'h5000) exp_bresp = 2'b10;
+                        else if ((A & ~1) == 32'h6000) exp_bresp = 2'b11;
+                    end
+                    if (s_bresp !== exp_bresp) fail("E6: Upstream B error response mismatch");
+                end
+                pending_s_aw.delete(idx);
+            end
+        end
+    end
+
+    // ---------------------------------------------------------------------------
+    // TEST SEQUENCE
+    // ---------------------------------------------------------------------------
+    initial begin
+        m_arready = 1; m_awready = 1; m_wready = 1; s_rready = 1; s_bready = 1;
+        s_awid = 0; s_awaddr = 0; s_awlen = 0; s_awsize = 0; s_awburst = 0; s_awvalid = 0;
+        s_wdata = 0; s_wstrb = 0; s_wlast = 0; s_wvalid = 0;
+        s_arid = 0; s_araddr = 0; s_arlen = 0; s_arsize = 0; s_arburst = 0; s_arvalid = 0;
+
+        bfm_reset();
+        if (m_awvalid || m_wvalid || m_arvalid || s_rvalid || s_bvalid) fail("F2: Valid active immediately after reset");
+
+        do_upstream_read(4'd1, 32'h1000, 0, 3, 2'b01);
+        do_upstream_read(4'd2, 32'h1004, 1, 3, 2'b01);
+        do_upstream_read(4'd3, 32'h1001, 0, 1, 2'b01);
+
+        do_upstream_read(4'd4, 32'h2000, 3, 3, 2'b10); 
+        do_upstream_read(4'd5, 32'h2000, 1, 3, 2'b00); 
+        do_upstream_read(4'd6, 32'h2000, 0, 3, 2'b00); 
+
+        do_upstream_write(4'd7, 32'h3000, 0, 3, 2'b01);
+        do_upstream_write(4'd8, 32'h3004, 1, 3, 2'b01);
+        do_upstream_write(4'd9, 32'h4000, 3, 3, 2'b10); 
+
+        do_upstream_read(4'd10, 32'h3000, 1, 3, 2'b01);
+        do_upstream_read(4'd11, 32'h4000, 1, 3, 2'b01);
+
+        do_upstream_write(4'd12, 32'h5000, 1, 3, 2'b01);
+        do_upstream_write(4'd13, 32'h6000, 1, 3, 2'b01);
+        
+        repeat(100) @(posedge clk_i);
+        
+        @(negedge clk_i); m_arready = 0;
+        
+        do_upstream_read_start(4'd1, 32'h7000, 0, 3, 2'b01); wait_ar_accept();
+        do_upstream_read_start(4'd2, 32'h7008, 0, 3, 2'b01); wait_ar_accept();
+        do_upstream_read_start(4'd3, 32'h7010, 0, 3, 2'b01); wait_ar_accept();
+        do_upstream_read_start(4'd4, 32'h7018, 0, 3, 2'b01); wait_ar_accept();
+        
+        do_upstream_read_start(4'd5, 32'h7020, 0, 3, 2'b01);
+        
+        repeat(10) @(posedge clk_i);
+        if (s_arready) fail("A4: 5th read accepted while 4 outstanding");
+        
+        @(negedge clk_i); m_arready = 1;
+        wait_ar_accept();
+        repeat(100) @(posedge clk_i);
+        
+        do_upstream_read_start(4'd6, 32'h8000, 0, 3, 2'b01);
+        wait_ar_accept();
+        bfm_reset();
+        
+        repeat(20) @(posedge clk_i);
+        if (m_arvalid || m_awvalid || m_wvalid || s_rvalid || s_bvalid) fail("F3: Transaction survived reset");
+        
         $display("RESULT: PASS");
         $finish;
     end
+
 endmodule

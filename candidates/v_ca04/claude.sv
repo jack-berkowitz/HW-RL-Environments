@@ -1,33 +1,38 @@
 // ===========================================================================
-// route_xbar_tb.sv  --  specification-driven testbench for route_xbar
+// route_xbar_tb.sv -- decides whether a route_xbar obeys the specification.
 //
-// Strategy
-// --------
-//   * A per-(input,output) reference FIFO is filled at every input handshake
-//     and drained at every output handshake, keyed by out_idx_o.  That single
-//     model decides R1 (misroute), R2 (payload), R3 (wrong source index),
-//     R4 (loss / duplication) and R5 (per-pair ordering) at once, with no
-//     assumption at all about latency (L1) or about whether an output is
-//     registered or combinational (L3):  accepts are recorded before
-//     deliveries in the same cycle, so a zero-latency design is fine too.
-//   * A3 is checked by remembering the previous rising edge: an output that
-//     offered while not ready must still offer the same data / idx next edge.
-//   * A2 is checked at the output, on the out_idx_o sequence, over windows of
-//     |S| consecutive transfers while a known set S is continuously offering.
-//     That is rotation-agnostic, so L2 is not constrained.
-//   * X3 gives a per-input age counter, restarted whenever the bound output
-//     is not ready, so it never fires spuriously; it is what catches a design
-//     that accepts nothing, and it backs up the I1/I2 back-pressure phase.
-//   * Everything is driven from the falling edge and sampled at the rising
-//     edge; the verdict is printed unconditionally at the end.
+// IDENTITY.  Every beat carries {s, ~s} with s a counter that only increases.
+// The delivered value therefore names exactly one accepted beat -- bookkeeping,
+// not content matching.  The redundant half is what lets a CORRUPTED payload
+// still be attributed: if the top half or the bottom half still names a known
+// beat, the payload was modified (R2) rather than invented (R6).  Without it
+// those two look identical and the wrong clause gets named.
+//
+// THE THREE LATITUDES ARE NOT REQUIRED EITHER WAY:
+//   L1 latency   -- nothing asserts a beat appears within n cycles of being
+//                   accepted; only X3's acceptance bound is timed, and the
+//                   spec pins that at 32.
+//   L2 rotation  -- A2 is checked as a WINDOW over |S| transfers, never as a
+//                   particular first input or rotation, and the first four
+//                   transfers of each fairness phase are skipped so a start-up
+//                   rotation cannot fail a correct design.
+//   L3 comb/reg  -- acceptances are processed BEFORE deliveries at each edge,
+//                   so a beat accepted and delivered in the SAME cycle, which
+//                   only a combinational design can do, is recognised instead
+//                   of being reported as an un-accepted beat.
+//
+// Nothing here checks order between different inputs, order between outputs,
+// or out_data/out_idx while out_valid is low.  in_ready is only ever read in a
+// cycle where that input is offering (H3).
 // ===========================================================================
+
+`timescale 1ns/1ps
 
 module route_xbar_tb;
 
-  // -------------------------------------------------------------------------
+  // =========================================================================
   // PROVIDED PLUMBING -- moves beats, checks nothing.
-  // -------------------------------------------------------------------------
-
+  // =========================================================================
   localparam int N_IN = 4, N_OUT = 4, DW = 32, SW = 2, IW = 2;
 
   // ---- clock ---------------------------------------------------------------
@@ -105,421 +110,430 @@ module route_xbar_tb;
   end
 
   // =========================================================================
-  //                        FROM HERE ON: MY OWN CODE
+  // Model state.  Everything below the fail task is written only by the
+  // monitor; the stimulus writes only tgt_sel, fair_watch, quiet_x2, purge_req
+  // and the plumbing's own drive signals.
   // =========================================================================
+  int  nerr   = 0;
+  int  nprint = 0;
 
-  // ---- verdict bookkeeping -------------------------------------------------
-  int err_count = 0;
-  int msg_count = 0;
-
-  task automatic tb_fail(input string clause, input string what);
-    err_count = err_count + 1;
-    if (msg_count < 40) begin
-      msg_count = msg_count + 1;
-      $display("VIOLATION [%s] t=%0t cyc=%0d : %s", clause, $time, bfm_cycle, what);
-    end
-    if (err_count >= 100) begin
-      $display("SUMMARY: aborting after %0d violations", err_count);
-      $display("RESULT: FAIL");
-      $finish;
+  task automatic fail(input string cl, input string msg);
+    nerr = nerr + 1;
+    if (nprint < 30) begin
+      nprint = nprint + 1;
+      $display("FAIL [%0s] cycle=%0d time=%0t : %0s", cl, bfm_cycle, $time, msg);
     end
   endtask
 
-  // ---- reference model: one FIFO per (input,output) pair --------------------
-  // Absolute head/tail counters, storage indexed modulo QD.  Only a couple of
-  // beats per pair are ever outstanding, so QD is never a constraint.
-  localparam int QD = 1024;
-  logic [DW-1:0] q_data [N_IN][N_OUT][QD];
-  int            q_head [N_IN][N_OUT];
-  int            q_tail [N_IN][N_OUT];
+  // accepted-beat records, keyed by the beat's unique payload
+  int  rec_in  [logic [31:0]];
+  int  rec_out [logic [31:0]];
+  bit  rec_dlv [logic [31:0]];
 
-  int acc_cnt [N_IN];
-  int del_cnt [N_OUT];
-  int total_acc = 0;
-  int total_del = 0;
+  int          pend_out [N_OUT];        // accepted, not yet delivered, per output
+  int          n_pending = 0;
+  logic [31:0] last_id  [16];           // per (input,output): last delivered id
+  int          acc_cnt  [N_IN];
+  int          dlv_cnt  [N_OUT];
+  int          tot_acc = 0, tot_dlv = 0;
+  logic [31:0] seq_ctr = 32'd0;
+  int          x3_cnt  [N_IN];
 
-  task automatic q_push(input int k, input int j, input logic [DW-1:0] d);
-    q_data[k][j][q_tail[k][j] % QD] = d;
-    q_tail[k][j] = q_tail[k][j] + 1;
-  endtask
+  // A3 needs the previous edge's picture of every output
+  logic [N_OUT-1:0] p_valid, p_ready;
+  logic [DW-1:0]    p_data [N_OUT];
+  logic [IW-1:0]    p_idx  [N_OUT];
+  int               a3_witness = 0;     // times the antecedent actually held
+  int               rst_low_cnt = 0;
 
-  // ---- flags the stimulus raises (always at a falling edge) ----------------
-  logic            x1_en    = 1'b0;   // check "quiet while reset is low"
-  logic            x2_en    = 1'b0;   // check "owes nothing after reset"
-  logic            live_en  = 1'b0;   // check X3
-  logic            fair_arm = 1'b0;   // check A2
-  int              fair_out = 0;      // output under fairness observation
-  logic [N_IN-1:0] fair_mask = '1;    // the set S
+  // stimulus -> monitor
+  int  tgt_sel [N_IN];                  // selector each input should use, -1 random
+  int  fair_watch = -1;                 // output whose sources are recorded
+  bit  quiet_x2 = 1'b0;                 // a delivery now is an owed beat (X2)
+  int  purge_req = 0;
 
-  // ---- previous rising-edge sample, for A3 ---------------------------------
-  logic [N_OUT-1:0] pv_valid;
-  logic [N_OUT-1:0] pv_ready;
-  logic [DW-1:0]    pv_data [N_OUT];
-  logic [IW-1:0]    pv_idx  [N_OUT];
-  logic             pv_have = 1'b0;
-
-  // ---- X3 age counters and A2 history --------------------------------------
-  int age [N_IN];
-  int fair_run = 0;
-  int fair_hist [512];
-  int fair_n = 0;
+  // monitor -> stimulus
+  int  fair_seen = -1;
+  int  fair_src [$];
+  int  purge_ack = 0;
 
   // =========================================================================
-  // THE MONITOR.  Samples at the rising edge, which is the edge the design
-  // uses; accepts are folded into the model before deliveries so that a
-  // combinational (zero-latency) design is handled correctly.
+  // MONITOR.  One block, so the order of events inside a cycle is defined:
+  // purge, then reset, then ACCEPTANCES, then deliveries, then A3, then X3.
+  // Acceptances precede deliveries so that a combinational design delivering
+  // in the same cycle it accepts (L3) is understood rather than accused.
   // =========================================================================
   always @(posedge clk) begin
+    int k, j, src, dst;
+    logic [31:0] d, c1, c2;
+    logic [IW-1:0] ix;
+
+    // The fairness recorder is cleared by the monitor when the stimulus moves
+    // the watch, so only one process ever writes the queue.
+    if (fair_watch != fair_seen) begin
+      fair_src.delete();
+      fair_seen = fair_watch;
+    end
+
+    // ---- purge, requested by the stimulus around a mid-run reset ----------
+    if (purge_req != purge_ack) begin
+      rec_in.delete(); rec_out.delete(); rec_dlv.delete();
+      for (j = 0; j < N_OUT; j++) pend_out[j] = 0;
+      for (j = 0; j < 16; j++) last_id[j] = 32'd0;
+      n_pending = 0;
+      purge_ack = purge_req;
+    end
+
     if (!rst_n) begin
-      pv_have = 1'b0;
-      fair_run = 0;
-      for (int k = 0; k < N_IN; k++) begin
-        age[k]     = 0;
-        acc_cnt[k] = 0;
-        for (int j = 0; j < N_OUT; j++) begin
-          q_head[k][j] = 0;
-          q_tail[k][j] = 0;
-        end
+      // X1: while reset is low the crossbar completes nothing.  Checked only
+      // from the second edge: before the first edge the design's registers
+      // hold no defined value, and the inputs are held quiet by the plumbing.
+      rst_low_cnt = rst_low_cnt + 1;
+      if (rst_low_cnt >= 2) begin
+        for (j = 0; j < N_OUT; j++)
+          if (out_valid[j])
+            fail("X1", $sformatf("out_valid[%0d] high while rst_ni low with inputs quiet", j));
       end
-      for (int j = 0; j < N_OUT; j++) del_cnt[j] = 0;
-      total_acc = 0;
-      total_del = 0;
-      // X1: with the inputs held quiet there is no combinational path to
-      // excuse an asserted output.  (Enabled only after clock edges have
-      // occurred, so this never reads the pre-first-edge unknown state.)
-      if (x1_en && (out_valid !== {N_OUT{1'b0}}))
-        tb_fail("X1", $sformatf("out_valid_o = %b while rst_ni is low and no input is offering", out_valid));
-    end else begin
+      for (k = 0; k < N_IN; k++) x3_cnt[k] = 0;
+      p_valid = '0;
+    end
+    else begin
+      rst_low_cnt = 0;
 
-      // ---- X2 : after reset the crossbar holds no beat and owes nothing ----
-      if (x2_en && (out_valid !== {N_OUT{1'b0}}))
-        tb_fail("X2", $sformatf("out_valid_o = %b just after reset release with nothing ever accepted", out_valid));
-
-      // ---- A3 : an offered beat may not be withdrawn or re-aimed -----------
-      if (pv_have) begin
-        for (int j = 0; j < N_OUT; j++) begin
-          if (pv_valid[j] === 1'b1 && pv_ready[j] !== 1'b1) begin
-            if (out_valid[j] !== 1'b1)
-              tb_fail("A3", $sformatf("out_valid_o[%0d] was asserted with out_ready_i[%0d] low and has been withdrawn before the handshake", j, j));
-            else if (bfm_odata(j) !== pv_data[j])
-              tb_fail("A3", $sformatf("output %0d changed its payload while stalled: had %h, now %h", j, pv_data[j], bfm_odata(j)));
-            else if (bfm_oidx(j) !== pv_idx[j])
-              tb_fail("A3", $sformatf("output %0d was re-aimed while stalled: out_idx_o was %0d, now %0d", j, pv_idx[j], bfm_oidx(j)));
-          end
-        end
-      end
-
-      // ---- input handshakes: record what was accepted ----------------------
-      for (int k = 0; k < N_IN; k++) begin
-        if (in_valid[k] === 1'b1 && in_ready[k] === 1'b1) begin
-          automatic int s = int'(in_sel[k*SW +: SW]);
-          q_push(k, s, in_data[k*DW +: DW]);
-          acc_cnt[k] = acc_cnt[k] + 1;
-          total_acc  = total_acc + 1;
-        end
-      end
-
-      // ---- output handshakes: check against the model ----------------------
-      for (int j = 0; j < N_OUT; j++) begin
-        if (out_valid[j] === 1'b1 && out_ready[j] === 1'b1) begin
-          automatic logic [DW-1:0] d = bfm_odata(j);
-          automatic int            src;
-          del_cnt[j] = del_cnt[j] + 1;
-          total_del  = total_del + 1;
-          if ($isunknown(bfm_oidx(j))) begin
-            tb_fail("R3", $sformatf("output %0d completed a beat with out_idx_o = %b", j, bfm_oidx(j)));
+      // ---- acceptances (H1) ------------------------------------------------
+      for (k = 0; k < N_IN; k++) begin
+        if (in_valid[k] && in_ready[k]) begin
+          d = in_data[k*DW +: DW];
+          if (rec_in.exists(d)) begin
+            fail("R4", $sformatf("payload %08h accepted twice -- testbench identity broken", d));
           end else begin
-            src = int'(bfm_oidx(j));
-            if ($isunknown(d))
-              tb_fail("R2", $sformatf("output %0d completed a beat with payload %h", j, d));
-            if (q_head[src][j] == q_tail[src][j]) begin
-              tb_fail("R1/R3/R4", $sformatf("output %0d completed a beat (payload %h) naming input %0d as its source, but no beat accepted from input %0d was bound for output %0d and still owed -- misroute, wrong out_idx_o, or a second delivery of the same beat", j, d, src, src, j));
-            end else begin
-              automatic logic [DW-1:0] e = q_data[src][j][q_head[src][j] % QD];
-              q_head[src][j] = q_head[src][j] + 1;
-              if (d !== e)
-                tb_fail("R2/R5", $sformatf("output %0d, source input %0d: expected payload %h (the oldest beat still owed for that pair) but got %h -- payload modified, or beats from one input to one output delivered out of order", j, src, e, d));
+            rec_in[d]  = k;
+            rec_out[d] = int'(in_sel[k*SW +: SW]);
+            rec_dlv[d] = 1'b0;
+            pend_out[rec_out[d]] = pend_out[rec_out[d]] + 1;
+            n_pending = n_pending + 1;
+          end
+          acc_cnt[k] = acc_cnt[k] + 1;
+          tot_acc    = tot_acc + 1;
+        end
+      end
+
+      // ---- deliveries ------------------------------------------------------
+      for (j = 0; j < N_OUT; j++) begin
+        if (out_valid[j] && out_ready[j]) begin
+          d  = bfm_odata(j);
+          ix = bfm_oidx(j);
+          dlv_cnt[j] = dlv_cnt[j] + 1;
+          tot_dlv    = tot_dlv + 1;
+
+          if (!rec_in.exists(d)) begin
+            // Either the payload was modified, or the beat was never accepted.
+            // The redundant half of the payload tells them apart.
+            c1 = {d[31:16], ~d[31:16]};
+            c2 = {~d[15:0],  d[15:0]};
+            if (rec_in.exists(c1) && !rec_dlv[c1]) begin
+              fail("R2", $sformatf("output %0d delivered %08h; the beat accepted on input %0d was %08h",
+                                   j, d, rec_in[c1], c1));
+              rec_dlv[c1] = 1'b1;
+              pend_out[rec_out[c1]] = pend_out[rec_out[c1]] - 1;
+              n_pending = n_pending - 1;
+            end
+            else if (rec_in.exists(c2) && !rec_dlv[c2]) begin
+              fail("R2", $sformatf("output %0d delivered %08h; the beat accepted on input %0d was %08h",
+                                   j, d, rec_in[c2], c2));
+              rec_dlv[c2] = 1'b1;
+              pend_out[rec_out[c2]] = pend_out[rec_out[c2]] - 1;
+              n_pending = n_pending - 1;
+            end
+            else if (quiet_x2) begin
+              fail("X2", $sformatf("output %0d delivered %08h after reset; the crossbar owed nothing",
+                                   j, d));
+            end
+            else if (pend_out[j] == 0) begin
+              fail("R6", $sformatf("output %0d delivered %08h with no beat outstanding for it",
+                                   j, d));
+            end
+            else begin
+              fail("R2", $sformatf("output %0d delivered %08h, which was never accepted", j, d));
             end
           end
+          else if (rec_dlv[d]) begin
+            fail("R4", $sformatf("beat %08h delivered a second time, on output %0d", d, j));
+          end
+          else begin
+            src = rec_in[d];
+            dst = rec_out[d];
+            rec_dlv[d] = 1'b1;
+            pend_out[dst] = pend_out[dst] - 1;
+            n_pending = n_pending - 1;
+
+            if (dst != j)
+              fail("R1", $sformatf("beat %08h was bound for output %0d but appeared on output %0d",
+                                   d, dst, j));
+            if (int'(ix) != src)
+              fail("R3", $sformatf("output %0d delivered a beat from input %0d but out_idx says %0d",
+                                   j, src, int'(ix)));
+            if (d < last_id[src*N_OUT + dst])
+              fail("R5", $sformatf("beat %08h from input %0d to output %0d delivered after a later beat",
+                                   d, src, dst));
+            else
+              last_id[src*N_OUT + dst] = d;
+
+            if ((fair_watch == j) && (dst == j)) fair_src.push_back(src);
+          end
         end
       end
 
-      // ---- X3 : offered, bound output continuously ready, not accepted -----
-      for (int k = 0; k < N_IN; k++) begin
-        automatic int s = int'(in_sel[k*SW +: SW]);
-        if      (in_valid[k] !== 1'b1)      age[k] = 0;   // not offering
-        else if (in_ready[k] === 1'b1)      age[k] = 0;   // taken
-        else if (out_ready[s] !== 1'b1)     age[k] = 0;   // bound output not ready: clock restarts
+      // ---- A3: an offered beat may not be withdrawn or re-aimed ------------
+      for (j = 0; j < N_OUT; j++) begin
+        if (p_valid[j] && !p_ready[j]) begin
+          a3_witness = a3_witness + 1;
+          if (!out_valid[j])
+            fail("A3", $sformatf("output %0d withdrew out_valid before out_ready was seen", j));
+          else if (bfm_odata(j) !== p_data[j])
+            fail("A3", $sformatf("output %0d changed out_data while its beat was unaccepted", j));
+          else if (bfm_oidx(j) !== p_idx[j])
+            fail("A3", $sformatf("output %0d changed out_idx while its beat was unaccepted", j));
+        end
+      end
+
+      // ---- X3: accepted within 32 cycles of continuous readiness ----------
+      for (k = 0; k < N_IN; k++) begin
+        if (in_valid[k] && in_ready[k]) begin
+          x3_cnt[k] = 0;
+        end
+        else if (in_valid[k] && out_ready[int'(in_sel[k*SW +: SW])]) begin
+          x3_cnt[k] = x3_cnt[k] + 1;
+          if (x3_cnt[k] > 32) begin
+            fail("X3", $sformatf("input %0d offered for %0d cycles with its output continuously ready",
+                                 k, x3_cnt[k]));
+            x3_cnt[k] = 0;
+          end
+        end
         else begin
-          age[k] = age[k] + 1;
-          if (live_en && age[k] > 40) begin
-            tb_fail("X3", $sformatf("input %0d has offered a beat bound for output %0d for %0d consecutive cycles with that output continuously ready, and has not been accepted", k, s, age[k]));
-            age[k] = 0;                                   // re-arm rather than spam
-          end
+          x3_cnt[k] = 0;
         end
       end
 
-      // ---- A2 : record the source of every transfer on the watched output --
-      // while every member of S (and only members of S) is offering to it.
-      begin
-        automatic bit cond;
-        cond = 1'b1;
-        for (int k = 0; k < N_IN; k++) begin
-          automatic int s = int'(in_sel[k*SW +: SW]);
-          if (fair_mask[k]) begin
-            if (in_valid[k] !== 1'b1 || s != fair_out) cond = 1'b0;
-          end else begin
-            if (in_valid[k] === 1'b1 && s == fair_out)  cond = 1'b0;
-          end
-        end
-        if (out_ready[fair_out] !== 1'b1) cond = 1'b0;
-        if (fair_arm && cond) fair_run = fair_run + 1;
-        else                  fair_run = 0;
-        // fair_run >= 20 lets any beat accepted before the set settled drain
-        // out first, whatever the pipeline depth (L1).
-        if (fair_arm && fair_run >= 20 &&
-            out_valid[fair_out] === 1'b1 && out_ready[fair_out] === 1'b1 &&
-            !$isunknown(bfm_oidx(fair_out)) && fair_n < 512) begin
-          fair_hist[fair_n] = int'(bfm_oidx(fair_out));
-          fair_n = fair_n + 1;
-        end
+      p_valid = out_valid;
+      p_ready = out_ready;
+      for (j = 0; j < N_OUT; j++) begin
+        p_data[j] = bfm_odata(j);
+        p_idx[j]  = bfm_oidx(j);
       end
+    end
 
-      // ---- remember this edge for the A3 check next time -------------------
-      pv_valid = out_valid;
-      pv_ready = out_ready;
-      for (int j = 0; j < N_OUT; j++) begin
-        pv_data[j] = bfm_odata(j);
-        pv_idx [j] = bfm_oidx(j);
+    // Keep the NEXT beat of every input fresh: on acceptance, because the
+    // previous one has just been consumed, and whenever nothing is pending,
+    // because that is when a change of target must reach the BFM.
+    for (k = 0; k < N_IN; k++) begin
+      if ((rst_n && in_valid[k] && in_ready[k]) || !in_valid[k]) begin
+        seq_ctr = seq_ctr + 32'd1;
+        bfm_next_data[k] = {seq_ctr[15:0], ~seq_ctr[15:0]};
+        bfm_next_sel[k]  = (tgt_sel[k] >= 0) ? SW'(tgt_sel[k]) : SW'($urandom_range(3));
       end
-      pv_have = 1'b1;
     end
   end
 
   // =========================================================================
-  // STIMULUS GENERATION
-  // The payload of every beat in the whole run is unique, so a mismatch is
-  // never ambiguous.  Loaded at the rising edge on which the previous beat
-  // was taken, i.e. before the falling edge at which the plumbing picks it
-  // up -- never mid-offer, so H2 is respected.
+  // Stimulus
   // =========================================================================
-  int unsigned data_ctr = 0;
-  logic          sel_rand = 1'b0;
-  logic [SW-1:0] sel_fix [N_IN];
+  task automatic set_targets(input int s0, input int s1, input int s2, input int s3);
+    tgt_sel[0] = s0; tgt_sel[1] = s1; tgt_sel[2] = s2; tgt_sel[3] = s3;
+  endtask
 
-  int unsigned rnd_s = 32'h1234_5678;
-  function automatic int unsigned rnd_next();
-    rnd_s = rnd_s ^ (rnd_s << 13);
-    rnd_s = rnd_s ^ (rnd_s >> 17);
-    rnd_s = rnd_s ^ (rnd_s << 5);
-    return rnd_s;
-  endfunction
-
-  task automatic gen_load(input int k);
-    automatic int unsigned r;
-    data_ctr = data_ctr + 1;
-    bfm_next_data[k] = {k[7:0], data_ctr[23:0]};
-    if (sel_rand) begin
-      r = rnd_next();
-      bfm_next_sel[k] = r[SW-1:0];
-    end else begin
-      bfm_next_sel[k] = sel_fix[k];
+  // Stop offering, open every output, and wait for the design to empty.
+  task automatic drain(input int budget);
+    int g;
+    @(negedge clk);
+    bfm_offer = '0;
+    out_ready = '1;
+    g = 0;
+    while ((g < budget) && ((n_pending != 0) || (in_valid != '0))) begin
+      @(negedge clk);
+      g = g + 1;
     end
+    if (in_valid != '0)
+      fail("X3", "a beat was still being offered after the drain window: it was never accepted");
+    if (n_pending != 0)
+      fail("R4", $sformatf("%0d accepted beat(s) never delivered", n_pending));
   endtask
 
-  always @(posedge clk) begin
-    if (!rst_n) begin
-      for (int k = 0; k < N_IN; k++) gen_load(k);
-    end else begin
-      for (int k = 0; k < N_IN; k++)
-        if (in_valid[k] === 1'b1 && in_ready[k] === 1'b1) gen_load(k);
+  // A2: every member of S served at least once in every |S| transfers.
+  // The window is what is checked -- never which member goes first (L2).
+  task automatic run_fairness(input int outp, input logic [3:0] mask,
+                              input int ssz, input int nwant);
+    int g, b, i, ndist;
+    bit present [4];
+    set_targets(outp, outp, outp, outp);
+    @(negedge clk);
+    fair_watch = outp;
+    out_ready  = '1;
+    bfm_offer  = mask;
+    g = 0;
+    while ((g < 6000) && (fair_src.size() < nwant)) begin
+      @(negedge clk);
+      g = g + 1;
     end
-  end
-
-  // =========================================================================
-  // HELPERS
-  // =========================================================================
-  task automatic wait_neg(input int n);
-    repeat (n) @(negedge clk);
-  endtask
-
-  task automatic set_sel(input int k, input int j);
-    automatic int jj = j;
-    sel_fix[k] = jj[SW-1:0];
-  endtask
-
-  function automatic int pcount(input logic [N_IN-1:0] m);
-    automatic int c = 0;
-    for (int i = 0; i < N_IN; i++) if (m[i]) c = c + 1;
-    return c;
-  endfunction
-
-  // A2 is "every member of S at least once in every |S| consecutive transfers
-  // on output j".  Checked as a sliding window over the recorded out_idx_o
-  // sequence, which fixes the window without fixing the phase (L2).
-  task automatic fair_check(input int j, input logic [N_IN-1:0] m);
-    automatic int w = pcount(m);
-    automatic logic [N_IN-1:0] seen;
-    automatic int i;
-    $display("NOTE: A2 window check on output %0d, S = %b, %0d transfers observed", j, m, fair_n);
-    if (fair_n < w) return;                 // nothing conclusive; other checks cover it
-    for (i = 0; i + w <= fair_n; i++) begin
-      seen = '0;
-      for (int q = 0; q < w; q++) seen[fair_hist[i+q][SW-1:0]] = 1'b1;
-      if ((seen & m) !== m) begin
-        tb_fail("A2", $sformatf("output %0d: across the %0d consecutive transfers starting at transfer #%0d only inputs %b were served, although all of %b were continuously offering beats bound for it", j, w, i, seen, m));
-        return;                             // one report is enough
+    if (fair_src.size() < nwant) begin
+      fail("A2", $sformatf("only %0d transfer(s) on output %0d with %0d inputs offering: cannot be fair",
+                           fair_src.size(), outp, ssz));
+    end
+    else begin
+      // Skip the first eight transfers: a design's start-up rotation is L2's
+      // to choose, and A2 fixes the window rather than the phase.  A design
+      // that is actually unfair fails every later window, so skipping costs
+      // nothing in detection.
+      for (b = 8; (b + ssz) <= fair_src.size(); b = b + 1) begin
+        for (i = 0; i < 4; i++) present[i] = 1'b0;
+        for (i = 0; i < ssz; i++) present[fair_src[b+i]] = 1'b1;
+        ndist = 0;
+        for (i = 0; i < 4; i++) if (present[i]) ndist = ndist + 1;
+        if (ndist != ssz) begin
+          fail("A2", $sformatf("output %0d: %0d consecutive transfers covered only %0d of %0d offering inputs",
+                               outp, ssz, ndist, ssz));
+          b = fair_src.size();   // one report is enough
+        end
       end
     end
+    @(negedge clk);
+    fair_watch = -1;
+    drain(600);
   endtask
 
-  task automatic fair_reset(input int j, input logic [N_IN-1:0] m);
-    fair_arm  = 1'b0;
-    fair_n    = 0;
-    fair_out  = j;
-    fair_mask = m;
+  // I1 / I2: one output held shut must not stop the others, and the input
+  // bound to it must not stop the other inputs being accepted.
+  task automatic run_independence();
+    int i, g;
+    int a0 [4];
+    int d0 [4];
+    set_targets(0, 1, 2, 3);
+    @(negedge clk);
+    bfm_offer = 4'b1111;
+    out_ready = 4'b1110;              // output 0 never accepts
+    repeat (30) @(negedge clk);
+    for (i = 0; i < 4; i++) begin
+      a0[i] = acc_cnt[i];
+      d0[i] = dlv_cnt[i];
+    end
+    repeat (300) @(negedge clk);
+    for (i = 1; i < 4; i++) begin
+      if ((acc_cnt[i] - a0[i]) < 3)
+        fail("I2", $sformatf("input %0d accepted %0d times in 300 cycles while output 0 was shut",
+                             i, acc_cnt[i] - a0[i]));
+      if ((dlv_cnt[i] - d0[i]) < 3)
+        fail("I1", $sformatf("output %0d delivered %0d times in 300 cycles while output 0 was shut",
+                             i, dlv_cnt[i] - d0[i]));
+    end
+    drain(1000);
   endtask
 
-  // =========================================================================
-  // THE RUN
-  // =========================================================================
-  int snap_a [N_IN];
-  int snap_d [N_OUT];
+  // X1 / X2: fill the design, reset it, and check it neither completes during
+  // reset nor owes anything after it.
+  task automatic run_reset_test();
+    int i;
+    set_targets(0, 1, 2, 3);
+    @(negedge clk);
+    out_ready = '0;                   // nothing can leave: beats pile up inside
+    bfm_offer = 4'b1111;
+    repeat (40) @(negedge clk);
+    @(negedge clk);
+    rst_n     = 1'b0;                 // asynchronous, active low
+    quiet_x2  = 1'b1;
+    purge_req = purge_req + 1;        // the model forgets; the design must too
+    repeat (8) @(posedge clk);
+    @(negedge clk);
+    bfm_offer = '0;                   // inputs quiet, so only the design speaks
+    out_ready = '1;
+    @(negedge clk);
+    rst_n = 1'b1;
+    repeat (40) @(negedge clk);
+    quiet_x2 = 1'b0;
+    if (purge_ack != purge_req)
+      fail("X2", "internal: model purge did not complete");
+  endtask
 
   initial begin
-    // static setup at time 0 (nothing here is touched by the plumbing)
-    for (int k = 0; k < N_IN; k++) begin
-      sel_fix[k] = k[SW-1:0];
-      snap_a[k]  = 0;
+    int ph, i;
+    logic [3:0] rmask;
+
+    for (i = 0; i < N_IN; i++) begin
+      tgt_sel[i] = -1;
+      x3_cnt[i]  = 0;
+      acc_cnt[i] = 0;
     end
-    for (int j = 0; j < N_OUT; j++) snap_d[j] = 0;
-
-    // ---- X1 : quiet while reset is asserted ------------------------------
-    // Reset is already low.  Wait for real clock edges first -- before any
-    // edge the design's registers hold nothing defined.
-    wait_neg(3);
-    x1_en = 1'b1;
-    wait_neg(6);
-    x1_en = 1'b0;
-
-    // ---- release reset ---------------------------------------------------
-    bfm_reset(4);
-    x2_en   = 1'b1;
-    live_en = 1'b1;
-    wait_neg(10);          // still no offers: the crossbar must stay silent
-    x2_en = 1'b0;
-
-    // ---- phase A : one input per output, everything ready ----------------
-    bfm_ready('1);
-    sel_rand = 1'b0;
-    for (int k = 0; k < N_IN; k++) set_sel(k, k);
-    bfm_offer = '1;
-    wait_neg(40);
-
-    // ---- phase A' : rotate the mapping, so a "sel is ignored" design and a
-    //                 "out_idx is the output number" design both show up ---
-    for (int k = 0; k < N_IN; k++) set_sel(k, (k + 1) % N_OUT);
-    wait_neg(40);
-    for (int k = 0; k < N_IN; k++) set_sel(k, (k + 2) % N_OUT);
-    wait_neg(40);
-    for (int k = 0; k < N_IN; k++) set_sel(k, (k + 3) % N_OUT);
-    wait_neg(40);
-
-    // ---- phase B1 : A2 with S = all four inputs, on output 0 -------------
-    fair_reset(0, 4'b1111);
-    for (int k = 0; k < N_IN; k++) set_sel(k, 0);
-    bfm_ready('1);
-    wait_neg(10);
-    fair_arm = 1'b1;
-    wait_neg(180);
-    fair_arm = 1'b0;
-    fair_check(0, 4'b1111);
-
-    // ---- phase B2 : A2 with S = {1,3}, on output 3 -----------------------
-    // The two-member window is the sharp one: it forbids serving the same
-    // input twice running while the other is waiting.
-    fair_reset(3, 4'b1010);
-    set_sel(0, 0); set_sel(1, 3); set_sel(2, 2); set_sel(3, 3);
-    wait_neg(30);
-    fair_arm = 1'b1;
-    wait_neg(180);
-    fair_arm = 1'b0;
-    fair_check(3, 4'b1010);
-    fair_reset(0, 4'b1111);
-
-    // ---- phase C : one output stops accepting (I1, I2) -------------------
-    for (int k = 0; k < N_IN; k++) set_sel(k, k);
-    bfm_ready('1);
-    wait_neg(20);                       // let the previous phase drain
-    bfm_ready(4'b1110);                 // output 0 accepts nothing
-    wait_neg(10);
-    for (int k = 0; k < N_IN; k++) snap_a[k] = acc_cnt[k];
-    for (int j = 0; j < N_OUT; j++) snap_d[j] = del_cnt[j];
-    wait_neg(256);
-    // X3 alone guarantees at least 8 acceptances per unblocked input in this
-    // window, so 4 cannot fail a conforming design however slow it is.
-    for (int k = 1; k < N_IN; k++)
-      if (acc_cnt[k] - snap_a[k] < 4)
-        tb_fail("I2", $sformatf("input %0d (bound for output %0d, which was ready throughout) was accepted only %0d times in 256 cycles while input 0 was stalled on the one output that was not ready -- head-of-line blocking across inputs", k, k, acc_cnt[k]-snap_a[k]));
-    for (int j = 1; j < N_OUT; j++)
-      if (del_cnt[j] - snap_d[j] < 4)
-        tb_fail("I1", $sformatf("output %0d completed only %0d beats in 256 cycles while output 0 was the only one not accepting -- a stalled output is holding up the others", j, del_cnt[j]-snap_d[j]));
-    bfm_ready('1);
-    wait_neg(60);
-
-    // ---- phase D : stalls with contention (A3) ---------------------------
-    set_sel(0, 0); set_sel(1, 0); set_sel(2, 1); set_sel(3, 1);
-    wait_neg(20);
-    repeat (6) begin
-      bfm_ready('1);
-      wait_neg(6);
-      bfm_ready('0);                    // everything stops accepting
-      wait_neg(12);
+    for (i = 0; i < N_OUT; i++) begin
+      pend_out[i] = 0;
+      dlv_cnt[i]  = 0;
+      p_data[i]   = '0;
+      p_idx[i]    = '0;
     end
-    bfm_ready('1);
-    wait_neg(20);
-    set_sel(0, 2); set_sel(1, 2); set_sel(2, 2); set_sel(3, 2);
-    wait_neg(10);
-    repeat (5) begin
-      bfm_ready(4'b1011);               // output 2 alone stalls, under 4-way contention
-      wait_neg(14);
-      bfm_ready('1);
-      wait_neg(6);
-    end
-    bfm_ready('1);
-    wait_neg(40);
+    for (i = 0; i < 16; i++) last_id[i] = 32'd0;
+    p_valid = '0; p_ready = '0;
 
-    // ---- phase E : random selectors, random back-pressure ----------------
-    sel_rand = 1'b1;
-    wait_neg(10);
-    for (int i = 0; i < 500; i++) begin
-      automatic int unsigned r = rnd_next();
-      bfm_ready(r[N_OUT-1:0]);
-      bfm_offer = r[11:8] | 4'b0011;
-      @(negedge clk);
-    end
-    sel_rand = 1'b0;
+    bfm_reset(6);
 
-    // ---- drain -----------------------------------------------------------
+    // ---- quiet after reset: X2 says nothing is owed, R6 says nothing is
+    // ---- invented.  Outputs are open, so anything offered is taken and seen.
+    @(negedge clk);
     bfm_offer = '0;
-    bfm_ready('1);
-    wait_neg(400);
+    out_ready = '1;
+    quiet_x2  = 1'b1;
+    repeat (20) @(negedge clk);
+    quiet_x2  = 1'b0;
 
-    // ---- R4 : nothing accepted may be left undelivered --------------------
-    for (int k = 0; k < N_IN; k++)
-      for (int j = 0; j < N_OUT; j++)
-        if (q_tail[k][j] != q_head[k][j])
-          tb_fail("R4", $sformatf("%0d beat(s) accepted on input %0d bound for output %0d were never delivered (first one still owed: payload %h)", q_tail[k][j]-q_head[k][j], k, j, q_data[k][j][q_head[k][j] % QD]));
+    // ---- phase 1: every input to a random output, every output open -------
+    set_targets(-1, -1, -1, -1);
+    @(negedge clk);
+    bfm_offer = 4'b1111;
+    out_ready = '1;
+    repeat (400) @(negedge clk);
 
-    if (out_valid !== {N_OUT{1'b0}})
-      tb_fail("R4/A3", $sformatf("out_valid_o = %b after a long drain with every output ready and nothing owed", out_valid));
+    // ---- phase 2: same, with the outputs opening and closing at random.
+    // ---- This is what makes A3's antecedent happen.
+    for (ph = 0; ph < 500; ph++) begin
+      @(negedge clk);
+      rmask = $urandom_range(15);
+      out_ready = rmask;
+      repeat ($urandom_range(3) + 1) @(negedge clk);
+    end
+    drain(2000);
 
-    if (total_acc == 0)
-      tb_fail("X3", "the design never accepted a single beat");
+    // ---- phase 3: fairness with all four inputs on one output -------------
+    run_fairness(0, 4'b1111, 4, 80);
 
-    $display("SUMMARY: accepted=%0d delivered=%0d violations=%0d", total_acc, total_del, err_count);
-    if (err_count == 0) $display("RESULT: PASS");
-    else                $display("RESULT: FAIL");
+    // ---- phase 4: fairness with two inputs on one output ------------------
+    run_fairness(1, 4'b0101, 2, 60);
+
+    // ---- phase 5: independence --------------------------------------------
+    run_independence();
+
+    // ---- phase 6: reset in the middle of a full crossbar ------------------
+    run_reset_test();
+
+    // ---- a last stretch of ordinary traffic, to prove it still works ------
+    set_targets(-1, -1, -1, -1);
+    @(negedge clk);
+    bfm_offer = 4'b1111;
+    out_ready = '1;
+    repeat (200) @(negedge clk);
+    drain(2000);
+
+    // ---- verdict -----------------------------------------------------------
+    if (tot_acc == 0)
+      fail("X3", "the design never accepted a single beat");
+    if (tot_dlv == 0)
+      fail("R4", "the design never delivered a single beat");
+    if (n_pending != 0)
+      fail("R4", $sformatf("%0d accepted beat(s) were never delivered", n_pending));
+
+    $display("stats: accepted=%0d delivered=%0d a3_stall_edges=%0d errors=%0d",
+             tot_acc, tot_dlv, a3_witness, nerr);
+    if (a3_witness == 0)
+      $display("note: no cycle ever had an output offering while not ready; A3 was not exercised");
+
+    if (nerr == 0) $display("RESULT: PASS");
+    else           $display("RESULT: FAIL");
     $finish;
   end
 

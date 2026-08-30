@@ -1,628 +1,1099 @@
 module tag_tracker_tb;
 
-  // ---------------------------------------------------------------------------
-  // Configuration required by the specification.
-  // ---------------------------------------------------------------------------
   localparam int TAG_W   = 3;
   localparam int SLOTS   = 8;
   localparam int N_MATCH = 1;
 
-  typedef logic [31:0] payload_t;
+  localparam int TAG_COUNT = (1 << TAG_W);
+
+  /*
+   * Generous local request timeout.  The global watchdog remains the
+   * unconditional termination mechanism.
+   */
+  localparam int REQ_BUDGET = 10000;
+
+  typedef logic [31:0] tb_payload_t;
+
 
   // ---------------------------------------------------------------------------
-  // PROVIDED PLUMBING -- clock, reset and watchdog discipline.
+  // Clock / reset
   // ---------------------------------------------------------------------------
+
   logic clk;
+
   initial begin
     clk = 1'b0;
     forever #5 clk = ~clk;
   end
 
   logic rst_n;
+
   initial rst_n = 1'b0;
+
 
   task automatic bfm_reset(input int cycles = 4);
     @(negedge clk);
     rst_n = 1'b0;
-    repeat (cycles) @(posedge clk);
+
+    repeat (cycles)
+      @(posedge clk);
+
     @(negedge clk);
     rst_n = 1'b1;
   endtask
+
 
   task automatic bfm_drive_point();
     @(negedge clk);
   endtask
 
+
   task automatic bfm_tick();
     @(posedge clk);
   endtask
 
+
   // ---------------------------------------------------------------------------
-  // DUT signals.  The match arrays are PACKED, matching the port declaration.
+  // DUT signals
   // ---------------------------------------------------------------------------
+
   logic [TAG_W-1:0] push_tag;
-  payload_t         push_data;
+  tb_payload_t      push_data;
   logic             push_req;
   logic             push_gnt;
 
-  payload_t [N_MATCH-1:0] match_data;
-  payload_t [N_MATCH-1:0] match_mask;
-  logic     [N_MATCH-1:0] match_req;
-  logic     [N_MATCH-1:0] match_hit;
-  logic     [N_MATCH-1:0] match_gnt;
+  /*
+   * These dimensions are PACKED, exactly matching the DUT port form.
+   */
+  tb_payload_t [N_MATCH-1:0] match_data;
+  tb_payload_t [N_MATCH-1:0] match_mask;
+  logic        [N_MATCH-1:0] match_req;
+  logic        [N_MATCH-1:0] match_hit;
+  logic        [N_MATCH-1:0] match_gnt;
 
   logic [TAG_W-1:0] pop_tag;
   logic             pop_en;
   logic             pop_req;
-  payload_t         pop_data;
+
+  tb_payload_t      pop_data;
   logic             pop_data_valid;
   logic             pop_gnt;
 
-  logic             full_s;
-  logic             empty_s;
+  logic             full;
+  logic             empty;
+
 
   tag_tracker #(
-    .TAG_W(TAG_W),
-    .SLOTS(SLOTS),
-    .FULL_RATE(1'b0),
-    .CUT_POP_PATH(1'b0),
-    .N_MATCH(N_MATCH),
-    .payload_t(payload_t)
+      .TAG_W        (TAG_W),
+      .SLOTS        (SLOTS),
+      .FULL_RATE    (1'b0),
+      .CUT_POP_PATH (1'b0),
+      .N_MATCH      (N_MATCH),
+      .payload_t    (tb_payload_t)
   ) dut (
-    .clk_i(clk),
-    .rst_ni(rst_n),
+      .clk_i              (clk),
+      .rst_ni             (rst_n),
 
-    .push_tag_i(push_tag),
-    .push_data_i(push_data),
-    .push_req_i(push_req),
-    .push_gnt_o(push_gnt),
+      .push_tag_i         (push_tag),
+      .push_data_i        (push_data),
+      .push_req_i         (push_req),
+      .push_gnt_o         (push_gnt),
 
-    .match_data_i(match_data),
-    .match_mask_i(match_mask),
-    .match_req_i(match_req),
-    .match_hit_o(match_hit),
-    .match_gnt_o(match_gnt),
+      .match_data_i       (match_data),
+      .match_mask_i       (match_mask),
+      .match_req_i        (match_req),
+      .match_hit_o        (match_hit),
+      .match_gnt_o        (match_gnt),
 
-    .pop_tag_i(pop_tag),
-    .pop_en_i(pop_en),
-    .pop_req_i(pop_req),
-    .pop_data_o(pop_data),
-    .pop_data_valid_o(pop_data_valid),
-    .pop_gnt_o(pop_gnt),
+      .pop_tag_i          (pop_tag),
+      .pop_en_i           (pop_en),
+      .pop_req_i          (pop_req),
+      .pop_data_o         (pop_data),
+      .pop_data_valid_o   (pop_data_valid),
+      .pop_gnt_o          (pop_gnt),
 
-    .full_o(full_s),
-    .empty_o(empty_s)
+      .full_o             (full),
+      .empty_o            (empty)
   );
 
-  // ---------------------------------------------------------------------------
-  // Reference model.
-  //
-  // Entries are kept in global insertion order.  A per-tag FIFO pop is modeled
-  // by finding the first entry carrying the requested tag and removing only
-  // that entry.  No cross-tag order is ever checked.
-  // ---------------------------------------------------------------------------
-  logic [TAG_W-1:0] model_tag  [0:SLOTS-1];
-  payload_t         model_data [0:SLOTS-1];
-  int               model_count;
 
-  bit verdict_printed;
+  // ---------------------------------------------------------------------------
+  // Reference model
+  // ---------------------------------------------------------------------------
 
-  function automatic int model_find_tag(input logic [TAG_W-1:0] tag_v);
-    int i;
+  tb_payload_t model_mem [0:TAG_COUNT-1][0:SLOTS-1];
+
+  integer model_head  [0:TAG_COUNT-1];
+  integer model_tail  [0:TAG_COUNT-1];
+  integer model_count [0:TAG_COUNT-1];
+
+  integer model_total;
+
+  integer fail_count;
+
+
+  task automatic report_fail(
+      input string req_name,
+      input string detail
+  );
     begin
-      model_find_tag = -1;
-      for (i = 0; i < model_count; i = i + 1) begin
-        if (model_tag[i] == tag_v) begin
-          model_find_tag = i;
-          break;
-        end
+      fail_count = fail_count + 1;
+      $display("FAIL %s: %s", req_name, detail);
+    end
+  endtask
+
+
+  task automatic model_clear;
+    integer t;
+    integer n;
+
+    begin
+      model_total = 0;
+
+      for (t = 0; t < TAG_COUNT; t = t + 1) begin
+
+        model_head[t]  = 0;
+        model_tail[t]  = 0;
+        model_count[t] = 0;
+
+        for (n = 0; n < SLOTS; n = n + 1)
+          model_mem[t][n] = '0;
+
       end
+    end
+  endtask
+
+
+  task automatic model_push(
+      input logic [TAG_W-1:0] tag_v,
+      input tb_payload_t      data_v
+  );
+    integer t;
+
+    begin
+      t = tag_v;
+
+      model_mem[t][model_tail[t]] =
+          data_v;
+
+      if (model_tail[t] == (SLOTS - 1))
+        model_tail[t] = 0;
+      else
+        model_tail[t] =
+            model_tail[t] + 1;
+
+      model_count[t] =
+          model_count[t] + 1;
+
+      model_total =
+          model_total + 1;
+    end
+  endtask
+
+
+  task automatic model_remove(
+      input logic [TAG_W-1:0] tag_v
+  );
+    integer t;
+
+    begin
+      t = tag_v;
+
+      if (model_count[t] > 0) begin
+
+        if (model_head[t] == (SLOTS - 1))
+          model_head[t] = 0;
+        else
+          model_head[t] =
+              model_head[t] + 1;
+
+        model_count[t] =
+            model_count[t] - 1;
+
+        model_total =
+            model_total - 1;
+
+      end
+    end
+  endtask
+
+
+  function automatic tb_payload_t model_oldest(
+      input logic [TAG_W-1:0] tag_v
+  );
+    integer t;
+
+    begin
+      t = tag_v;
+
+      if (model_count[t] > 0)
+        model_oldest =
+            model_mem[t][model_head[t]];
+      else
+        model_oldest =
+            '0;
     end
   endfunction
 
-  function automatic bit model_has_match(
-    input payload_t data_v,
-    input payload_t mask_v
+
+  function automatic logic model_search(
+      input tb_payload_t data_v,
+      input tb_payload_t mask_v
   );
-    int i;
+    integer t;
+    integer n;
+    integer idx;
+    logic hit_v;
+
     begin
-      model_has_match = 1'b0;
-      for (i = 0; i < model_count; i = i + 1) begin
-        if ((model_data[i] & mask_v) == (data_v & mask_v)) begin
-          model_has_match = 1'b1;
-          break;
+      hit_v = 1'b0;
+
+      for (t = 0; t < TAG_COUNT; t = t + 1) begin
+
+        for (n = 0; n < SLOTS; n = n + 1) begin
+
+          if (n < model_count[t]) begin
+
+            idx =
+                model_head[t] + n;
+
+            if (idx >= SLOTS)
+              idx = idx - SLOTS;
+
+            if (
+                (model_mem[t][idx] & mask_v) ==
+                (data_v           & mask_v)
+            )
+              hit_v = 1'b1;
+
+          end
+
         end
+
       end
+
+      model_search = hit_v;
     end
   endfunction
 
-  task automatic model_remove_index(input int idx);
-    int i;
-    begin
-      for (i = idx; i < model_count - 1; i = i + 1) begin
-        model_tag[i]  = model_tag[i+1];
-        model_data[i] = model_data[i+1];
-      end
-      model_count = model_count - 1;
-    end
-  endtask
 
   // ---------------------------------------------------------------------------
-  // Verdict and common checks.
+  // Status checks
   // ---------------------------------------------------------------------------
-  task automatic fail_now(input string req_name, input string msg);
-    begin
-      if (!verdict_printed) begin
-        verdict_printed = 1'b1;
-        $display("FAIL %s: %s", req_name, msg);
-        $display("RESULT: FAIL");
-        $finish;
-      end
-    end
-  endtask
 
-  task automatic pass_now();
-    begin
-      if (!verdict_printed) begin
-        verdict_printed = 1'b1;
-        $display("RESULT: PASS");
-        $finish;
-      end
-    end
-  endtask
-
-  task automatic check_status_now(input string req_name);
+  task automatic check_status;
     logic exp_empty;
     logic exp_full;
+
     begin
-      exp_empty = (model_count == 0);
-      exp_full  = (model_count == SLOTS);
+      exp_empty =
+          (model_total == 0);
 
-      if (empty_s !== exp_empty) begin
-        fail_now(
-          req_name,
-          $sformatf(
-            "empty_o=%0b, expected %0b for model_count=%0d",
-            empty_s, exp_empty, model_count
-          )
-        );
-      end
+      exp_full =
+          (model_total == SLOTS);
 
-      if (full_s !== exp_full) begin
-        fail_now(
-          req_name,
-          $sformatf(
-            "full_o=%0b, expected %0b for model_count=%0d",
-            full_s, exp_full, model_count
-          )
+      if (empty !== exp_empty)
+        report_fail(
+            "R14",
+            "empty_o does not exactly reflect whether zero entries are stored"
         );
-      end
+
+      if (full !== exp_full)
+        report_fail(
+            "R14",
+            "full_o does not exactly reflect whether SLOTS entries are stored"
+        );
     end
   endtask
 
-  // ---------------------------------------------------------------------------
-  // Serialized request drivers.
-  //
-  // The specification leaves arbitration and latency open.  Each task therefore
-  // presents exactly one request, holds it unchanged, and recognizes completion
-  // only from that request's grant at a rising edge.  The generous finite bound
-  // prevents a deliberately inert faulty implementation from hanging the run.
-  // ---------------------------------------------------------------------------
-  localparam int REQ_TIMEOUT = 10000;
 
-  task automatic push_checked(
-    input logic [TAG_W-1:0] tag_v,
-    input payload_t data_v
-  );
-    int t;
-    bit got_grant;
+  task automatic check_reset_status;
     begin
-      if (model_count >= SLOTS)
-        fail_now("R1", "testbench attempted push_checked while model was full");
+      if (empty !== 1'b1)
+        report_fail(
+            "R15",
+            "empty_o was not high after reset emptied the store"
+        );
+
+      if (full !== 1'b0)
+        report_fail(
+            "R15",
+            "full_o was not low after reset emptied the store"
+        );
+    end
+  endtask
+
+
+  // ---------------------------------------------------------------------------
+  // Push BFM
+  // ---------------------------------------------------------------------------
+
+  task automatic do_push(
+      input logic [TAG_W-1:0] tag_v,
+      input tb_payload_t      data_v
+  );
+    integer n;
+    bit granted;
+
+    begin
+      granted = 1'b0;
 
       bfm_drive_point();
+
       push_tag  = tag_v;
       push_data = data_v;
       push_req  = 1'b1;
 
-      got_grant = 1'b0;
-      for (t = 0; t < REQ_TIMEOUT; t = t + 1) begin
+      for (n = 0; n < REQ_BUDGET; n = n + 1) begin
+
         bfm_tick();
-        if (push_req && push_gnt) begin
-          got_grant = 1'b1;
+
+        if (push_gnt) begin
+          granted = 1'b1;
           break;
         end
+
       end
 
-      if (!got_grant) begin
-        bfm_drive_point();
-        push_req = 1'b0;
-        fail_now(
-          "R1",
-          $sformatf(
-            "store did not accept required push tag=%0d data=%08h",
-            tag_v, data_v
-          )
+      if (!granted) begin
+
+        report_fail(
+            "R1",
+            "push was never granted even though the capacity test required another entry to be accepted"
         );
-      end
 
-      // R4: this entry is committed only on the observed request/grant cycle.
-      model_tag[model_count]  = tag_v;
-      model_data[model_count] = data_v;
-      model_count = model_count + 1;
+      end
+      else begin
+
+        /*
+         * R4: the model changes only on push_req && push_gnt.
+         */
+        model_push(
+            tag_v,
+            data_v
+        );
+
+      end
 
       bfm_drive_point();
-      check_status_now("R14");
       push_req = 1'b0;
+
+      check_status();
     end
   endtask
 
-  task automatic pop_checked(
-    input logic [TAG_W-1:0] tag_v,
-    input logic remove_v
-  );
-    int t;
-    int idx;
-    bit got_grant;
-    bit exp_valid;
-    payload_t exp_data;
+
+  /*
+   * R5 probe: while full, a push grant must remain low.
+   */
+  task automatic probe_push_while_full;
+    integer n;
+    bit bad_grant;
+
     begin
-      idx = model_find_tag(tag_v);
-      exp_valid = (idx >= 0);
-      exp_data = '0;
-      if (exp_valid)
-        exp_data = model_data[idx];
+      bad_grant = 1'b0;
 
       bfm_drive_point();
+
+      push_tag  = 3'd7;
+      push_data = 32'hDEAD_0008;
+      push_req  = 1'b1;
+
+      for (n = 0; n < 8; n = n + 1) begin
+
+        bfm_tick();
+
+        if (push_gnt)
+          bad_grant = 1'b1;
+
+      end
+
+      bfm_drive_point();
+      push_req = 1'b0;
+
+      if (bad_grant)
+        report_fail(
+            "R5",
+            "push_gnt_o asserted while the store already held SLOTS entries"
+        );
+    end
+  endtask
+
+
+  // ---------------------------------------------------------------------------
+  // Pop / peek BFM
+  // ---------------------------------------------------------------------------
+
+  task automatic do_pop(
+      input logic [TAG_W-1:0] tag_v,
+      input logic             remove_v
+  );
+    integer n;
+    bit granted;
+
+    logic expected_valid;
+    tb_payload_t expected_data;
+
+    begin
+      granted = 1'b0;
+
+      expected_valid =
+          (model_count[tag_v] != 0);
+
+      expected_data =
+          model_oldest(tag_v);
+
+      bfm_drive_point();
+
       pop_tag = tag_v;
       pop_en  = remove_v;
       pop_req = 1'b1;
 
-      got_grant = 1'b0;
-      for (t = 0; t < REQ_TIMEOUT; t = t + 1) begin
+      for (n = 0; n < REQ_BUDGET; n = n + 1) begin
+
         bfm_tick();
-        if (pop_req && pop_gnt) begin
-          got_grant = 1'b1;
 
-          if (pop_data_valid !== exp_valid) begin
-            if (exp_valid) begin
-              fail_now(
+        if (pop_gnt) begin
+
+          granted = 1'b1;
+
+          /*
+           * R8 / R10.
+           */
+          if (pop_data_valid !== expected_valid)
+            report_fail(
                 "R8",
-                $sformatf(
-                  "pop tag=%0d returned valid=%0b, expected valid=1",
-                  tag_v, pop_data_valid
-                )
-              );
-            end else begin
-              fail_now(
-                "R10",
-                $sformatf(
-                  "empty-tag pop tag=%0d returned valid=%0b, expected 0",
-                  tag_v, pop_data_valid
-                )
-              );
-            end
-          end
-
-          if (exp_valid && (pop_data !== exp_data)) begin
-            fail_now(
-              "R2/R8",
-              $sformatf(
-                "pop tag=%0d returned %08h, expected oldest payload %08h",
-                tag_v, pop_data, exp_data
-              )
+                "pop_data_valid_o did not reflect whether the requested tag had an entry"
             );
-          end
+
+          if (
+              expected_valid &&
+              (pop_data !== expected_data)
+          )
+            report_fail(
+                "R8",
+                "pop_data_o was not the oldest stored payload for the requested tag"
+            );
 
           break;
         end
+
       end
 
-      if (!got_grant) begin
-        bfm_drive_point();
-        pop_req = 1'b0;
-        fail_now(
-          exp_valid ? "R7/R8" : "R7/R10",
-          $sformatf("pop request for tag=%0d never completed", tag_v)
+      if (!granted)
+        report_fail(
+            "R7",
+            "pop request did not complete within the generous request budget"
         );
-      end
+      else if (
+          remove_v &&
+          expected_valid
+      ) begin
 
-      // R9: removal happens only for completing, valid pops with pop_en_i high.
-      if (remove_v && exp_valid)
-        model_remove_index(idx);
+        /*
+         * R9: only a completing pop with pop_en_i removes the entry.
+         */
+        model_remove(tag_v);
+
+      end
 
       bfm_drive_point();
-      check_status_now("R14");
       pop_req = 1'b0;
       pop_en  = 1'b0;
+
+      check_status();
     end
   endtask
 
-  task automatic search_checked(
-    input payload_t data_v,
-    input payload_t mask_v
+
+  // ---------------------------------------------------------------------------
+  // Search BFM
+  // ---------------------------------------------------------------------------
+
+  task automatic do_search(
+      input tb_payload_t data_v,
+      input tb_payload_t mask_v
   );
-    int t;
-    bit got_grant;
-    bit hit_exp;
+    integer n;
+    bit granted;
+    logic expected_hit;
+
     begin
-      hit_exp = model_has_match(data_v, mask_v);
+      granted =
+          1'b0;
+
+      expected_hit =
+          model_search(
+              data_v,
+              mask_v
+          );
 
       bfm_drive_point();
-      match_data[0] = data_v;
-      match_mask[0] = mask_v;
-      match_req[0]  = 1'b1;
 
-      got_grant = 1'b0;
-      for (t = 0; t < REQ_TIMEOUT; t = t + 1) begin
+      match_data[0] =
+          data_v;
+
+      match_mask[0] =
+          mask_v;
+
+      match_req[0] =
+          1'b1;
+
+      for (n = 0; n < REQ_BUDGET; n = n + 1) begin
+
         bfm_tick();
-        if (match_req[0] && match_gnt[0]) begin
-          got_grant = 1'b1;
 
-          if (match_hit[0] !== hit_exp) begin
-            if ((mask_v == '0) && (model_count > 0)) begin
-              fail_now(
-                "R13",
-                $sformatf(
-                  "zero-mask search returned hit=%0b with model_count=%0d",
-                  match_hit[0], model_count
-                )
-              );
-            end else begin
-              fail_now(
+        if (match_gnt[0]) begin
+
+          granted =
+              1'b1;
+
+          if (
+              match_hit[0] !==
+              expected_hit
+          )
+            report_fail(
                 "R12",
-                $sformatf(
-                  "search data=%08h mask=%08h returned hit=%0b expected=%0b",
-                  data_v, mask_v, match_hit[0], hit_exp
-                )
-              );
-            end
-          end
+                "search hit did not match the masked comparison over all stored payloads"
+            );
 
           break;
         end
+
       end
 
-      if (!got_grant) begin
-        bfm_drive_point();
-        match_req[0] = 1'b0;
-        fail_now("R11", "search request never completed");
-      end
+      if (!granted)
+        report_fail(
+            "R11",
+            "search request did not complete within the generous request budget"
+        );
 
       bfm_drive_point();
-      check_status_now("R14");
-      match_req[0] = 1'b0;
+
+      match_req[0] =
+          1'b0;
+
+      check_status();
     end
   endtask
 
-  task automatic push_must_be_blocked_when_full(
-    input logic [TAG_W-1:0] tag_v,
-    input payload_t data_v
-  );
-    int t;
+
+  // ---------------------------------------------------------------------------
+  // Common reset
+  // ---------------------------------------------------------------------------
+
+  task automatic clean_reset;
     begin
-      if (model_count != SLOTS)
-        fail_now("R5", "full-block test started while model was not full");
-
+      /*
+       * Stop all requests before reset.
+       */
       bfm_drive_point();
-      push_tag  = tag_v;
-      push_data = data_v;
-      push_req  = 1'b1;
 
-      for (t = 0; t < 32; t = t + 1) begin
-        bfm_tick();
-        if (push_req && push_gnt) begin
-          fail_now(
-            "R5",
-            $sformatf(
-              "push_gnt_o asserted while store already held %0d entries",
-              SLOTS
-            )
-          );
-        end
-      end
+      push_req     = 1'b0;
+      pop_req      = 1'b0;
+      pop_en       = 1'b0;
+      match_req    = '0;
 
-      bfm_drive_point();
-      check_status_now("R14");
-      push_req = 1'b0;
-    end
-  endtask
+      model_clear();
 
-  task automatic reset_model_and_check();
-    begin
       bfm_reset(4);
-      model_count = 0;
 
-      // Move through a complete sampled cycle before checking post-reset status.
+      /*
+       * Wait through a sampled post-reset cycle before inspecting status.
+       */
       bfm_tick();
       bfm_drive_point();
-      check_status_now("R15/R14");
+
+      check_reset_status();
+      check_status();
     end
   endtask
 
-  task automatic reset_live_store_and_check();
+
+  // ---------------------------------------------------------------------------
+  // Reset while live entries exist
+  // ---------------------------------------------------------------------------
+
+  task automatic test_live_reset;
+    integer n;
+
     begin
-      // Inputs are idle when this task is called.  Assert reset away from the
-      // sampling edge, check status while reset is still low, then release it
-      // away from the sampling edge and check the post-reset state again.
-      bfm_drive_point();
-      rst_n = 1'b0;
-      model_count = 0;
+      do_push(
+          3'd1,
+          32'hAB01_0001
+      );
 
-      repeat (4) @(posedge clk);
-      bfm_drive_point();
-      check_status_now("R15");
+      do_push(
+          3'd2,
+          32'hAB02_0002
+      );
 
-      rst_n = 1'b1;
+      do_push(
+          3'd1,
+          32'hAB01_0003
+      );
+
+      if (model_total != 3)
+        report_fail(
+            "R1",
+            "testbench model expected three live entries before reset"
+        );
+
+
+      /*
+       * Assert reset away from the sampling edge.
+       */
+      bfm_drive_point();
+
+      push_req  = 1'b0;
+      pop_req   = 1'b0;
+      match_req = '0;
+
+      rst_n =
+          1'b0;
+
+      /*
+       * Give the active-low reset sampled clock edges.
+       */
+      for (n = 0; n < 3; n = n + 1)
+        bfm_tick();
+
+      model_clear();
+
+      bfm_drive_point();
+
+      /*
+       * Still in reset here.
+       */
+      check_reset_status();
+
+
+      /*
+       * Release reset, again away from the sampling edge.
+       */
+      rst_n =
+          1'b1;
+
       bfm_tick();
       bfm_drive_point();
-      check_status_now("R15/R14");
+
+      check_reset_status();
+      check_status();
+
+
+      /*
+       * Old contents must really be gone, not merely hidden by status bits.
+       */
+      do_pop(
+          3'd1,
+          1'b1
+      );
+
+      do_pop(
+          3'd2,
+          1'b1
+      );
+
     end
   endtask
 
-  // ---------------------------------------------------------------------------
-  // Initial stimulus values.
-  // ---------------------------------------------------------------------------
-  initial begin
-    push_tag = '0;
-    push_data = '0;
-    push_req = 1'b0;
-
-    match_data = '0;
-    match_mask = '0;
-    match_req = '0;
-
-    pop_tag = '0;
-    pop_en = 1'b0;
-    pop_req = 1'b0;
-
-    model_count = 0;
-    verdict_printed = 1'b0;
-  end
 
   // ---------------------------------------------------------------------------
-  // Directed tests.
+  // Main test
   // ---------------------------------------------------------------------------
-  initial begin
-    int i;
 
-    // R15/R14: reset starts empty and not full.
-    reset_model_and_check();
+  initial begin : main_test
+    integer i;
 
-    // R10: an empty-tag pop is a normal completion with data_valid low.
-    pop_checked(3'd6, 1'b1);
+    fail_count =
+        0;
 
-    // R12/R13 on an empty store: even the all-zero mask must miss when empty.
-    search_checked(32'hDEAD_BEEF, 32'h0000_0000);
-    search_checked(32'h0000_0000, 32'hFFFF_FFFF);
+    push_tag =
+        '0;
 
-    // -----------------------------------------------------------------------
-    // Mixed-tag functional set.
-    // R2 is checked only within a tag; no cross-tag ordering is assumed.
-    // -----------------------------------------------------------------------
-    push_checked(3'd1, 32'h1122_3344);
-    push_checked(3'd2, 32'hA5C3_5A7E);
-    push_checked(3'd1, 32'h5566_7788);
+    push_data =
+        '0;
 
-    // R12: exact hit, exact miss, and a partial-mask hit across all tags.
-    search_checked(32'h5566_7788, 32'hFFFF_FFFF);
-    search_checked(32'h1234_5678, 32'hFFFF_FFFF);
-    search_checked(32'hA000_007E, 32'hF000_00FF);
+    push_req =
+        1'b0;
 
-    // R13: zero mask matches every stored payload when non-empty.
-    search_checked(32'hCAFE_BABE, 32'h0000_0000);
+    match_data =
+        '0;
 
-    // R9: inspect tag 1 without removing it.
-    pop_checked(3'd1, 1'b0);
+    match_mask =
+        '0;
 
-    // R2/R8/R9: same oldest value remains, then removal exposes the next one.
-    pop_checked(3'd1, 1'b1);
-    pop_checked(3'd1, 1'b0);
-    pop_checked(3'd1, 1'b1);
+    match_req =
+        '0;
 
-    // R10: tag 1 is empty even though tag 2 still contains an entry.
-    pop_checked(3'd1, 1'b1);
+    pop_tag =
+        '0;
 
-    // Search is across all tags; tag 2's entry must remain.
-    search_checked(32'hA5C3_5A7E, 32'hFFFF_FFFF);
+    pop_en =
+        1'b0;
 
-    // -----------------------------------------------------------------------
-    // R15: reset while live entries exist must erase the store.
-    // -----------------------------------------------------------------------
-    reset_live_store_and_check();
+    pop_req =
+        1'b0;
 
-    pop_checked(3'd2, 1'b1);
-    search_checked(32'h0000_0000, 32'h0000_0000);
+    model_clear();
 
-    // -----------------------------------------------------------------------
-    // R1: all eight entries may carry the SAME tag.
-    // -----------------------------------------------------------------------
+
+    // ========================================================================
+    // R15 / initial empty state
+    // ========================================================================
+
+    clean_reset();
+
+
+    // ========================================================================
+    // R8 / R10: pop of an absent tag must complete with VALID low.
+    // ========================================================================
+
+    do_pop(
+        3'd5,
+        1'b1
+    );
+
+
+    // ========================================================================
+    // R12: empty-store searches.
+    // ========================================================================
+
+    do_search(
+        32'h1234_5678,
+        32'hFFFF_FFFF
+    );
+
+    /*
+     * Zero mask on an EMPTY store must still miss according to R12:
+     * there is no stored entry satisfying the predicate.
+     */
+    do_search(
+        32'hFFFF_FFFF,
+        32'h0000_0000
+    );
+
+
+    // ========================================================================
+    // R2 / R8 / R9: FIFO and peek semantics on one tag.
+    // ========================================================================
+
+    do_push(
+        3'd3,
+        32'h3300_0001
+    );
+
+    do_push(
+        3'd3,
+        32'h3300_0002
+    );
+
+    do_push(
+        3'd3,
+        32'h3300_0003
+    );
+
+    do_push(
+        3'd3,
+        32'h3300_0004
+    );
+
+
+    /*
+     * Peek: must report entry 1, but must not remove it.
+     */
+    do_pop(
+        3'd3,
+        1'b0
+    );
+
+
+    /*
+     * Actual removal must still return entry 1.
+     */
+    do_pop(
+        3'd3,
+        1'b1
+    );
+
+    do_pop(
+        3'd3,
+        1'b1
+    );
+
+    do_pop(
+        3'd3,
+        1'b1
+    );
+
+    do_pop(
+        3'd3,
+        1'b1
+    );
+
+
+    /*
+     * Tag now absent.
+     */
+    do_pop(
+        3'd3,
+        1'b1
+    );
+
+
+    // ========================================================================
+    // R2/R3: interleaved insertion, but FIFO is independently maintained
+    // for each tag.
+    // ========================================================================
+
+    do_push(
+        3'd1,
+        32'h1100_0001
+    );
+
+    do_push(
+        3'd2,
+        32'h2200_0001
+    );
+
+    do_push(
+        3'd1,
+        32'h1100_0002
+    );
+
+    do_push(
+        3'd2,
+        32'h2200_0002
+    );
+
+
+    /*
+     * Pop tag 1 twice even though tag 2 was interposed in insertion order.
+     * This checks per-tag FIFO without imposing cross-tag ordering.
+     */
+    do_pop(
+        3'd1,
+        1'b1
+    );
+
+    do_pop(
+        3'd1,
+        1'b1
+    );
+
+    do_pop(
+        3'd2,
+        1'b1
+    );
+
+    do_pop(
+        3'd2,
+        1'b1
+    );
+
+
+    // ========================================================================
+    // R12/R13: content-addressed search over all tags.
+    // ========================================================================
+
+    do_push(
+        3'd0,
+        32'h1234_5678
+    );
+
+    do_push(
+        3'd4,
+        32'hABCD_00EF
+    );
+
+    do_push(
+        3'd7,
+        32'hFFFF_0000
+    );
+
+
+    /*
+     * Exact hit.
+     */
+    do_search(
+        32'hABCD_00EF,
+        32'hFFFF_FFFF
+    );
+
+
+    /*
+     * Exact miss.
+     */
+    do_search(
+        32'hABCD_00EE,
+        32'hFFFF_FFFF
+    );
+
+
+    /*
+     * Masked hit across all tags.
+     */
+    do_search(
+        32'h0000_00EF,
+        32'h0000_00FF
+    );
+
+
+    /*
+     * Masked miss.
+     */
+    do_search(
+        32'h0000_00AA,
+        32'h0000_00FF
+    );
+
+
+    /*
+     * R13: zero mask must hit whenever non-empty.
+     */
+    do_search(
+        32'hDEAD_BEEF,
+        32'h0000_0000
+    );
+
+
+    clean_reset();
+
+
+    // ========================================================================
+    // R1: all SLOTS entries may use THE SAME TAG.
+    // ========================================================================
+
     for (i = 0; i < SLOTS; i = i + 1) begin
-      push_checked(3'd3, 32'h3000_0000 + i);
+
+      do_push(
+          3'd6,
+          32'h6000_0000 + i
+      );
+
     end
 
-    // R14: eighth committed entry must make full_o high.
-    bfm_drive_point();
-    check_status_now("R14");
 
-    // R13 when full.
-    search_checked(32'hFFFF_FFFF, 32'h0000_0000);
+    if (model_total != SLOTS)
+      report_fail(
+          "R1",
+          "model did not reach SLOTS entries in the same-tag capacity phase"
+      );
 
-    // R5: ninth push cannot be granted.
-    push_must_be_blocked_when_full(3'd4, 32'h9999_9999);
 
-    // R9: inspection cannot create free space.
-    pop_checked(3'd3, 1'b0);
+    /*
+     * Search must still work while full.
+     */
+    do_search(
+        32'h6000_0003,
+        32'hFFFF_FFFF
+    );
 
-    if (model_count != SLOTS)
-      fail_now("R9", "inspection unexpectedly changed model occupancy");
 
-    bfm_drive_point();
-    check_status_now("R9/R14");
+    /*
+     * R5: no ninth push.
+     */
+    probe_push_while_full();
 
-    // R2: remove all eight same-tag entries in insertion order.
+
+    clean_reset();
+
+
+    // ========================================================================
+    // R1: storage is shared across tags.  Fill with one entry on each tag.
+    // ========================================================================
+
     for (i = 0; i < SLOTS; i = i + 1) begin
-      pop_checked(3'd3, 1'b1);
+
+      do_push(
+          i[TAG_W-1:0],
+          32'h7000_0000 + i
+      );
+
     end
 
-    // R14 after final removal.
-    bfm_drive_point();
-    check_status_now("R14");
 
-    // R10/R13 after draining.
-    pop_checked(3'd3, 1'b1);
-    search_checked(32'h1234_5678, 32'h0000_0000);
+    if (model_total != SLOTS)
+      report_fail(
+          "R1",
+          "store failed to accept SLOTS entries distributed across tags"
+      );
 
-    // -----------------------------------------------------------------------
-    // Shared capacity across tags and reuse of freed space.
-    // -----------------------------------------------------------------------
-    reset_model_and_check();
 
-    push_checked(3'd0, 32'h0101_0000);
-    push_checked(3'd1, 32'h0202_0001);
-    push_checked(3'd2, 32'h0303_0002);
-    push_checked(3'd3, 32'h0404_0003);
-    push_checked(3'd4, 32'h0505_0004);
-    push_checked(3'd5, 32'h0606_0005);
-    push_checked(3'd6, 32'h0707_0006);
-    push_checked(3'd7, 32'h0808_0007);
+    /*
+     * R13 again at full occupancy.
+     */
+    do_search(
+        32'hCAFE_BABE,
+        32'h0000_0000
+    );
 
-    bfm_drive_point();
-    check_status_now("R1/R14");
 
-    // Remove one middle-tag entry.
-    pop_checked(3'd4, 1'b1);
+    probe_push_while_full();
 
-    // Freed globally shared slot must be reusable by any tag.
-    push_checked(3'd0, 32'h0A0A_00A0);
 
-    bfm_drive_point();
-    check_status_now("R1/R14");
+    clean_reset();
 
-    // Per-tag FIFO for tag 0.
-    pop_checked(3'd0, 1'b1);
-    pop_checked(3'd0, 1'b1);
 
-    // Final reset proves no live state leaks past reset.
-    reset_model_and_check();
+    // ========================================================================
+    // R15: reset destroys live contents.
+    // ========================================================================
 
-    pop_checked(3'd7, 1'b1);
-    search_checked(32'h0000_0000, 32'h0000_0000);
+    test_live_reset();
 
-    pass_now();
+
+    // ========================================================================
+    // Final sanity: capacity remains usable after reset.
+    // ========================================================================
+
+    for (i = 0; i < SLOTS; i = i + 1) begin
+
+      do_push(
+          3'd0,
+          32'h8000_0000 + i
+      );
+
+    end
+
+    for (i = 0; i < SLOTS; i = i + 1) begin
+
+      do_pop(
+          3'd0,
+          1'b1
+      );
+
+    end
+
+
+    check_status();
+
+
+    /*
+     * Exactly one final RESULT line.
+     */
+    if (fail_count == 0)
+      $display("RESULT: PASS");
+    else
+      $display("RESULT: FAIL");
+
+    $finish;
   end
 
+
   // ---------------------------------------------------------------------------
-  // Independent watchdog.
+  // Unconditional watchdog
   // ---------------------------------------------------------------------------
+
   initial begin
     #20_000_000;
-    if (!verdict_printed) begin
-      verdict_printed = 1'b1;
-      $display("FAIL R1/R7/R11: watchdog: no forward progress");
-      $display("RESULT: FAIL");
-      $finish;
-    end
+
+    $display(
+        "FAIL R1: watchdog expired before the testbench reached a verdict"
+    );
+
+    $display("RESULT: FAIL");
+
+    $finish;
   end
 
 endmodule
