@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 514" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
-<rect width="900" height="514" fill="none"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">
+<rect width="900" height="600" fill="none"/>
 <text x="20" y="26" fill="#e8e8e8" font-size="15" font-weight="600">Area PER UNIT OF CAPABILITY, vs the reference</text>
 <text x="20" y="45" fill="#9a9a9a" font-size="12">Lower is cheaper for what it delivers. Where a task declares several capability metrics, the bar spans best to worst.</text>
-<line x1="319.439199772452" y1="58" x2="319.439199772452" y2="494" stroke="#ff6b6b" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="319.439199772452" y1="58" x2="319.439199772452" y2="580" stroke="#ff6b6b" stroke-width="1.5" stroke-dasharray="4 3"/>
 <text x="324.439199772452" y="68" fill="#ff6b6b" font-size="11">reference (1.0×)</text>
 <text x="20" y="88" fill="#e8e8e8" font-size="13" font-weight="600">non-blocking data cache</text>
 <text x="20" y="104" fill="#9a9a9a" font-size="10">per max_outstanding_n</text>
@@ -16,60 +16,72 @@
 <text x="240" y="129" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="250" y="118" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="256" y="129" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
-<text x="20" y="174" fill="#e8e8e8" font-size="13" font-weight="600">asynchronous CDC FIFO</text>
-<text x="20" y="190" fill="#9a9a9a" font-size="10">per capacity_beats_accepted</text>
+<text x="20" y="174" fill="#e8e8e8" font-size="13" font-weight="600">RISC-V Sv39 MMU</text>
+<text x="20" y="190" fill="#9a9a9a" font-size="10">per requests_per_1000cyc</text>
 <text x="240" y="175" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
 <rect x="250" y="164" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<rect x="250" y="164" width="62" height="15" rx="2" fill="#5b8dfb"/>
-<text x="318" y="175" fill="#e8e8e8" font-size="11">0.90×</text>
+<text x="256" y="175" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
 <text x="240" y="195" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
 <rect x="250" y="184" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<rect x="250" y="184" width="61" height="15" rx="2" fill="#5b8dfb"/>
-<text x="317" y="195" fill="#e8e8e8" font-size="11">0.89×</text>
+<rect x="250" y="184" width="44" height="15" rx="2" fill="#5b8dfb"/>
+<text x="300" y="195" fill="#e8e8e8" font-size="11">0.65×</text>
 <text x="240" y="215" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="250" y="204" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<rect x="250" y="204" width="61" height="15" rx="2" fill="#5b8dfb"/>
-<text x="317" y="215" fill="#e8e8e8" font-size="11">0.89×</text>
-<text x="20" y="260" fill="#e8e8e8" font-size="13" font-weight="600">multi-format FMA</text>
-<text x="20" y="276" fill="#9a9a9a" font-size="10">per throughput_ops_per_1000cyc</text>
+<text x="256" y="215" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
+<text x="20" y="260" fill="#e8e8e8" font-size="13" font-weight="600">asynchronous CDC FIFO</text>
+<text x="20" y="276" fill="#9a9a9a" font-size="10">per capacity_beats_accepted</text>
 <text x="240" y="261" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
 <rect x="250" y="250" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<rect x="250" y="250" width="211" height="15" rx="2" fill="#2f4f8f"/>
-<text x="467" y="261" fill="#e8e8e8" font-size="11">3.05×</text>
+<rect x="250" y="250" width="62" height="15" rx="2" fill="#5b8dfb"/>
+<text x="318" y="261" fill="#e8e8e8" font-size="11">0.90×</text>
 <text x="240" y="281" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
 <rect x="250" y="270" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<rect x="250" y="270" width="88" height="15" rx="2" fill="#2f4f8f"/>
-<text x="344" y="281" fill="#e8e8e8" font-size="11">1.28×</text>
+<rect x="250" y="270" width="61" height="15" rx="2" fill="#5b8dfb"/>
+<text x="317" y="281" fill="#e8e8e8" font-size="11">0.89×</text>
 <text x="240" y="301" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="250" y="290" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="256" y="301" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
-<text x="20" y="346" fill="#e8e8e8" font-size="13" font-weight="600">AXI4 crossbar</text>
-<text x="20" y="362" fill="#9a9a9a" font-size="10">range over 5 declared metrics</text>
+<rect x="250" y="290" width="61" height="15" rx="2" fill="#5b8dfb"/>
+<text x="317" y="301" fill="#e8e8e8" font-size="11">0.89×</text>
+<text x="20" y="346" fill="#e8e8e8" font-size="13" font-weight="600">multi-format FMA</text>
+<text x="20" y="362" fill="#9a9a9a" font-size="10">per throughput_ops_per_1000cyc</text>
 <text x="240" y="347" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
 <rect x="250" y="336" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<rect x="250" y="336" width="71" height="15" rx="2" fill="#2f4f8f"/>
-<rect x="321" y="340" width="336" height="7" fill="#2f4f8f" opacity="0.42"/>
-<line x1="657" y1="336" x2="657" y2="351" stroke="#2f4f8f" stroke-width="2"/>
-<text x="663" y="347" fill="#e8e8e8" font-size="11">1.03–5.87×</text>
+<rect x="250" y="336" width="211" height="15" rx="2" fill="#2f4f8f"/>
+<text x="467" y="347" fill="#e8e8e8" font-size="11">3.05×</text>
 <text x="240" y="367" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
 <rect x="250" y="356" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<rect x="250" y="356" width="57" height="15" rx="2" fill="#5b8dfb"/>
-<text x="313" y="367" fill="#e8e8e8" font-size="11">0.82×</text>
+<rect x="250" y="356" width="88" height="15" rx="2" fill="#2f4f8f"/>
+<text x="344" y="367" fill="#e8e8e8" font-size="11">1.28×</text>
 <text x="240" y="387" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="250" y="376" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="256" y="387" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
-<text x="20" y="432" fill="#e8e8e8" font-size="13" font-weight="600">output-queued AXI-Stream switch</text>
-<text x="20" y="448" fill="#9a9a9a" font-size="10">range over 2 declared metrics</text>
+<text x="20" y="432" fill="#e8e8e8" font-size="13" font-weight="600">AXI4 crossbar</text>
+<text x="20" y="448" fill="#9a9a9a" font-size="10">range over 5 declared metrics</text>
 <text x="240" y="433" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
 <rect x="250" y="422" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="256" y="433" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
+<rect x="250" y="422" width="71" height="15" rx="2" fill="#2f4f8f"/>
+<rect x="321" y="426" width="336" height="7" fill="#2f4f8f" opacity="0.42"/>
+<line x1="657" y1="422" x2="657" y2="437" stroke="#2f4f8f" stroke-width="2"/>
+<text x="663" y="433" fill="#e8e8e8" font-size="11">1.03–5.87×</text>
 <text x="240" y="453" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
 <rect x="250" y="442" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <rect x="250" y="442" width="57" height="15" rx="2" fill="#5b8dfb"/>
-<rect x="307" y="446" width="8" height="7" fill="#5b8dfb" opacity="0.42"/>
-<line x1="315" y1="442" x2="315" y2="457" stroke="#5b8dfb" stroke-width="2"/>
-<text x="321" y="453" fill="#e8e8e8" font-size="11">0.83–0.94×</text>
+<text x="313" y="453" fill="#e8e8e8" font-size="11">0.82×</text>
 <text x="240" y="473" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="250" y="462" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
 <text x="256" y="473" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
+<text x="20" y="518" fill="#e8e8e8" font-size="13" font-weight="600">output-queued AXI-Stream switch</text>
+<text x="20" y="534" fill="#9a9a9a" font-size="10">range over 2 declared metrics</text>
+<text x="240" y="519" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
+<rect x="250" y="508" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
+<text x="256" y="519" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
+<text x="240" y="539" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
+<rect x="250" y="528" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
+<rect x="250" y="528" width="57" height="15" rx="2" fill="#5b8dfb"/>
+<rect x="307" y="532" width="8" height="7" fill="#5b8dfb" opacity="0.42"/>
+<line x1="315" y1="528" x2="315" y2="543" stroke="#5b8dfb" stroke-width="2"/>
+<text x="321" y="539" fill="#e8e8e8" font-size="11">0.83–0.94×</text>
+<text x="240" y="559" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
+<rect x="250" y="548" width="440" height="15" rx="2" fill="#333" opacity="0.45"/>
+<text x="256" y="559" fill="#9a9a9a" font-size="11" font-style="italic">not comparable</text>
 </svg>

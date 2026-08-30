@@ -1460,3 +1460,129 @@ retrospective fit** — the proposal was written before these two were found.
 Running total on this task: twelve stale sites, every one understating what
 exists. Parts 1 and 2 caught seven, Part 3 has now caught four by hand, and one
 came out by ordinary reading.
+
+---
+
+## Second source, iteration 4: the hypothesis is CONFIRMED as a mechanism and REFUTED as the cause
+
+The budget note said a fourth iteration *"belongs in a session with room to confirm
+the hypothesis by instrumentation rather than reason about it."* Done. **Both
+halves of the answer are negative results and both are worth more than another
+guess.**
+
+### The hypothesis was right about a real defect
+
+Counters over one failing run, each conjunct of the hypothesis counted separately
+so that whichever reads zero is the one that kills it:
+
+    fills completed                                     850
+      + a request accepted in the same cycle             60
+        + same index                                     38
+          + same tag                                     36
+            + and the lookup declared a MISS             36
+
+**Of 36 requests that arrived in the very cycle their own line's fill completed,
+all 36 were declared a miss.** The last two counts are equal, which is the shape
+the hypothesis predicts: `hit` reads `valid_q` combinationally while the fill sets
+it with a non-blocking assignment, so a same-cycle request *can never* see the
+line it is asking for. It then allocates a second record for a line already
+becoming resident.
+
+**The probe is not inert** — 850 fills, 60 coincident requests — so the counts are
+a measurement rather than a silence.
+
+### And it is not what breaks this run
+
+Fixed by declining the request for one cycle (`fill_shadow`) rather than
+bypassing: a bypass would have to forward `valid_q`, `tag_q` **and** the last fill
+beat, since `data_q`'s final word is written by the same non-blocking assignment
+— three forwards to avoid one stall, on an axis L6 leaves free.
+
+Re-measured with the fix in place:
+
+    fills=850   accepted-miss-on-filling-line=0   shadow_fired=49
+    TEST_RESULT: FAIL  -- unchanged, same phase, same config
+
+**The mechanism is gone and the failure is identical.** Three iterations of
+reasoning produced a hypothesis that was correct about a real bug and wrong about
+this one. The fix is kept because the defect it removes is real; it is not the
+repair this task needs.
+
+### What the failure actually is, measured
+
+    DBG-ERR normal cyc=29851 id=4 got=598603dd exp=598603c9
+    DBG-ERR normal cyc=32154 id=0 got=598603dd exp=598603c9
+
+Two errors, **different cycles, different ids, byte-identical values**. Only the
+low byte differs — `dd` against an expected `c9`, upper three bytes matching. So a
+masked store's byte merge is missing, and **the same wrong value is returned
+twice, thousands of cycles apart**.
+
+**That is durable, not transient.** The line is sitting in the cache holding the
+unmerged byte; it is not a read that raced a write. Which points away from the
+`valid_q` timing family entirely and at the **merged-store path** — C4's *"one
+merged store word per pending miss"* — where a store applied to a pending record
+is either never merged into the arriving block or is overwritten by it.
+
+### Where iteration 5 should start
+
+Not from a hypothesis. Instrument the merge itself: for the address in the dump,
+record every write to that line — the masked store's merge into the pending
+record, the fill's write of the block, and their order. The symptom says one
+overwrites the other; the instrumentation should say which.
+
+---
+
+## Iteration 5: the trace is ground truth, and five mechanisms are refuted against it
+
+**No fix. What this iteration produced is a measured event sequence and five dead
+hypotheses, which is what the next one should start from instead of a sixth
+guess.**
+
+### The trace — the failing word, end to end
+
+Logged every event touching either value, in the design, filtered to
+`598603dd` / `598603c9`:
+
+    t=295535  FILL-BEAT     idx=7 way=1 word=0  data=598603dd
+    t=295575  STORE-REPLAY  idx=7 way=1 word=0  mask=0001 data=500003c9
+    t=298595  FILL-BEAT     idx=7 way=1 word=0  data=598603dd      <-- overwrites
+
+    writebacks carrying c9, whole run ....... 0
+    store replays into idx=7 way=1 word=0 ... 1
+
+**The store IS applied**, to the right index, way and word. **A later fill
+overwrites it ~150 cycles afterwards**, and the merged byte never reaches memory
+in any writeback anywhere in the run. That is the whole symptom, and none of it
+is a same-cycle race — the gap is 3,020 time units.
+
+### Five mechanisms, each instrumented, each refuted
+
+Every probe is shown live by its own first conjunct, so each zero is a
+measurement rather than a silence.
+
+| # | mechanism | counter | verdict |
+|---|---|---|---|
+| 1 | same-cycle `valid_q` read at lookup | fills 850 → **36** same-cycle misses on the filling line | **CONFIRMED as a defect, FIXED, and NOT causal** — with it eliminated (0) the failure is byte-identical |
+| 2 | replay and fill beat write the same `data_q` word | store replays 404 → fill active **0** | refuted |
+| 3 | `dirty_q` race: replay makes a victim dirty in its eviction cycle | allocations 850 → same-cycle replay **0** | refuted |
+| 4 | duplicate record for a covered line, `m_match`'s `!m_filled[k]` exclusion | allocations 850 → **0** | refuted |
+| 5 | store replays into a way already invalidated by a committed eviction | store replays 404 → **0** | refuted |
+
+### What that leaves, stated as the constraint set rather than a hypothesis
+
+The line at `idx=7 way=1` is refilled between t=295575 and t=298595, so it was
+evicted in that window. At eviction `m_wb <= valid_q & dirty_q`, and the store at
+295575 set `dirty_q[7][1]`. **So `m_wb` should have been 1 and a writeback should
+have carried `c9`. Zero writebacks in the entire run carry it.**
+
+Those two facts are in direct tension and one of them has a false premise. The
+next instrument is not another mechanism — it is a **per-line event log for
+`idx=7`**: every allocation naming its `victim_way` and the `m_wb` it captured,
+every `E_WB_*` transition with `cur_m`, and every `dirty_q` write, in order. The
+contradiction resolves itself once the eviction that should have written back is
+visible with the `m_wb` it actually took.
+
+**Rule 5 intact throughout: the anchor is correct on this stimulus, so the second
+source is wrong and no check was touched.** The iteration-4 fix stays — the defect
+it removes is real and separately confirmed.

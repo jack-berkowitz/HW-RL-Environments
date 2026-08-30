@@ -23,6 +23,14 @@ The empty dash was the hazard, not the number. An unexplained gap in a results
 table gets filled by whoever finds it next, and what found it next was the
 generator.
 
+# UPDATED 2026-08-29 after the emit landed. The metrics now exist, so the
+# "declares five, produces none" clause is discharged -- and the row still does
+# not publish, for a reason the emit made visible rather than removed:
+# buffer_slots is a CHOICE, not a capability, and gemini spent 4 where the
+# reference, chat and claude spent 2. Per-unit normalisation is the wrong
+# instrument for a choice axis; like-for-like grouping is, and nothing renders
+# that yet.
+#
 # CORRECTION, 2026-08-29. The three d_ai04 reasons previously said the precision
 # axis made a smaller design and a less complete one indistinguishable. The
 # catalog sentence behind that is true and the inference from it was FALSE.
@@ -46,9 +54,18 @@ generator.
 #
 # The other two clauses were and remain sufficient on their own.
 
-d_ai04 chat :: pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
-d_ai04 claude :: pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
-d_ai04 gemini :: pinned at one configuration, and it declares FIVE metrics of which NONE is ever produced -- its testbench emits zero METRIC: lines, so raw area cannot be separated from capacity or throughput a candidate did not build; the precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 chat :: its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 claude :: its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+d_ai04 gemini :: its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
+# RELEASED 2026-08-29 on the user's instruction. The blocker recorded below was
+# that tlb_hits is pinned by P2 and no valid free axis was rendered.
+# AGENT-DESIGN-43a92055 removed the tlb_hits role and declared
+# requests_per_1000cyc, which P2 does not pin; the candidate sim was re-run so
+# the metric exists on both sides (reference 163, claude 192); and the row now
+# publishes raw ALONGSIDE per unit, which is what G2 prescribed from the start.
+# The history below is kept because the reason was wrong twice before it was
+# discharged.
+#
 # CORRECTION, 2026-08-29, second one. The d_ca03 reason previously said the task
 # "declares no capability metric". That was true of the TOOLING and false of the
 # CONTRACT, and I asserted it of the contract. Spec G2 line 719 declares
@@ -62,4 +79,3 @@ d_ai04 gemini :: pinned at one configuration, and it declares FIVE metrics of wh
 #   d_ca03  - axis: total_cycles / kind: reported / where: ...   (no role: key)
 # metric_roles() reads the first form only.
 
-d_ca03 claude :: the per-unit column that would have justified publishing is INVALID: tlb_hits is PINNED by P2 (translation storage is normative, 16+16 fully associative), so area-per-TLB-hit divides by a constant the design cannot trade. total_cycles IS free and is not rendered, because the renderer performs one division. Until a free axis is declared AND rendered, 0.76x raw is the bare figure G2 exists to warn about

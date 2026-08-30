@@ -179,8 +179,30 @@ module nonblocking_dcache #(
   assign mem_rd_ready_o  = (est_q == E_FL_DATA);
 
   // ---------------------------------------------------------------- acceptance
+  //
+  // FIX, 2026-08-29, iteration 4. CONFIRMED BY INSTRUMENTATION, not reasoned:
+  // counters over one failing run gave
+  //     fills=850  +same-cycle request=60  +same index=38  +same tag=36  +MISS=36
+  // i.e. of 36 requests that arrived in the very cycle their own line's fill
+  // completed, ALL 36 were declared a miss. `hit` reads valid_q combinationally
+  // while the fill sets it with a non-blocking assignment, so a same-cycle
+  // request can never see the line it is asking for. It then ALLOCATES A SECOND
+  // RECORD for a line that is already becoming resident, and the re-fetch
+  // overwrites the block -- discarding a store already applied to it. That loses
+  // exactly one word, which is the reported symptom (`got=..dd exp=..c9`).
+  //
+  // THE FIX IS TO DECLINE THE REQUEST FOR ONE CYCLE, not to bypass the data.
+  // A bypass would have to forward valid_q AND tag_q AND the last fill beat,
+  // since data_q's final word is written by the same non-blocking assignment;
+  // three forwards to avoid one stall cycle. Latency is FREE here (L6) and this
+  // fires on 36 of 850 fills, so the stall is the cheaper and far smaller
+  // change. The request retries next cycle and hits normally.
+  wire fill_last = (est_q == E_FL_DATA) & mem_rd_valid_i
+                 & (beat_q == (LG_BLK+1)'(BLOCK_WORDS-1));
+  wire fill_shadow = fill_last & (req_idx == m_idx[cur_m]) & (req_tag == m_tag[cur_m]);
+
   wire accept_hit  = req_valid_i & hit & rsp_slot_free & ~p_full;
-  wire accept_miss = req_valid_i & ~hit & ~p_full & (m_match | m_free);
+  wire accept_miss = req_valid_i & ~hit & ~p_full & (m_match | m_free) & ~fill_shadow;
   assign req_ready_o = accept_hit | accept_miss;
 
   // ---------------------------------------------------------------- replay pick
