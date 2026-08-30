@@ -1586,3 +1586,73 @@ visible with the `m_wb` it actually took.
 **Rule 5 intact throughout: the anchor is correct on this stimulus, so the second
 source is wrong and no check was touched.** The iteration-4 fix stays — the defect
 it removes is real and separately confirmed.
+
+---
+
+## Iteration 6: the per-line log found the bug. 2/16 -> 4/16, and the anchor is untouched at 16/16
+
+**The instrument the previous iteration specified was the one that worked.** Five
+hypotheses had been instrumented and refuted; the event log for one index found
+the cause in its first reading.
+
+### The log, `idx=7`, and the contradiction resolves
+
+    t=295145 ALLOC rec=0 victim_way=1 newtag=1e | v=1 d=1 -> m_wb=1 | evict tag=1f
+    t=295345 ENGINE rec=0 idx=7 way=1 tag=1e   | m_wb=1 -> WRITEBACK then fill
+    t=295355 ALLOC rec=1 victim_way=1 newtag=20 | v=0 d=1 -> m_wb=0 | evict tag=1f
+    t=295565 FILL-DONE rec=0 way=1 tag=1e
+    t=295575 STORE-REP way=1 word=0 rec=0                  <- store merged into 1e
+    t=295575 ENGINE rec=1 idx=7 way=1 tag=20   | m_wb=0 -> FILL ONLY
+    t=295675 FILL-DONE rec=1 way=1 tag=20                  <- overwrites 1e AND the store
+
+**TWO MSHR RECORDS OWNED WAY 1 AT THE SAME TIME.** `rank_q` is not updated until a
+record allocates, so the true-LRU picker returned way 1 again 210 time units
+later while `rec=0`'s fill was still in flight. `rec=1` then captured `m_wb=0` —
+**correctly**, because `rec=0` had already set `valid_q=0` — so when its fill
+overwrote a line that had since become resident *and* dirty, no writeback carried
+the store.
+
+**That is why no writeback in the entire run carries the merged byte**, which was
+the contradiction iteration 5 could not resolve. Both premises were true; the
+missing term was a second record.
+
+**The collision is on the WAY, not the LINE.** Tags `1e` and `20` differ, so
+`m_match` was right not to match and every line-keyed probe correctly read zero.
+Five refutations were all correct answers to the wrong question.
+
+### The fix
+
+`victim_way` now skips any way an outstanding record already targets
+(`way_busy` from `m_v[k] && m_idx[k]==req_idx`), taking the next-oldest instead;
+and a miss may not allocate when every way in the set is claimed — it retries,
+which L6 permits since latency is free.
+
+    second source   2/16 -> 4/16     the MAX_MISSES=2 failures are gone
+    reference       16/16            unchanged, so no check moved
+    failing config  now MAX_MISSES=8
+
+### A false lead, recorded because it looked like a result
+
+A pattern search over the `MAX_MISSES=8` log for "STORE then FILL on the same
+idx/way" returned **417 hits**, which reads as a large finding. It is not: all 417
+have an intervening `ALLOC` with `m_wb=1`, and the store precedes it in every
+case. So the sequence is store, correct dirty eviction with writeback, refill —
+**the ordinary lifecycle of a cache line.** My pattern matched the normal case.
+
+The discriminator that separates it from the real bug is the one the idx=7 log
+showed: a *second allocation on the same way while the first is in flight*, whose
+`m_wb` is 0 because the first already invalidated it. Counting STORE→FILL pairs
+cannot see that; counting `m_wb=0` evictions of a line that later becomes dirty
+can.
+
+### Where iteration 7 starts
+
+The `MAX_MISSES=8` failure is **not characterised**, and the one search I ran
+found the normal case rather than the defect. With eight records and two ways the
+way-collision surface is wider, so the first thing to check is whether the same
+shape survives the fix in a form `way_busy` does not cover — for instance a
+record freed and reallocated between the fill and the replay, where `m_v` is
+briefly 0 and the way is not marked busy.
+
+**Rule 5 intact: the anchor is 16/16 on this stimulus, so the second source is
+wrong and no check was touched.**

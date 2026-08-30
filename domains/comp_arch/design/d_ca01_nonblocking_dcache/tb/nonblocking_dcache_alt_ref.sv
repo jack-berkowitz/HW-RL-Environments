@@ -146,12 +146,44 @@ module nonblocking_dcache #(
     end
   end
 
-  // true-LRU victim for the request's set
-  logic [LG_WAYS-1:0] victim_way;
+  // true-LRU victim for the request's set, EXCLUDING WAYS AN IN-FLIGHT RECORD
+  // HAS ALREADY CLAIMED.
+  //
+  // FOUND BY A PER-LINE EVENT LOG, iteration 6, after five hypotheses were
+  // instrumented and refuted. The log for idx=7:
+  //
+  //   t=295145 ALLOC rec=0 victim_way=1 newtag=1e | valid=1 dirty=1 -> m_wb=1
+  //   t=295355 ALLOC rec=1 victim_way=1 newtag=20 | valid=0 dirty=1 -> m_wb=0
+  //   t=295565 FILL-DONE rec=0 way=1 tag=1e
+  //   t=295575 STORE-REP way=1 word=0            <- store merged into tag 1e
+  //   t=295675 FILL-DONE rec=1 way=1 tag=20      <- overwrites tag 1e AND the store
+  //
+  // TWO RECORDS OWNED WAY 1 AT ONCE. rank_q is not updated until a record
+  // allocates, so the LRU picker returned way 1 again 210 time units later while
+  // rec=0's fill was still in flight. rec=1 then captured m_wb=0 -- correctly,
+  // since rec=0 had already set valid_q=0 -- so when its fill overwrote a line
+  // that had since become resident AND dirty, no writeback carried the store.
+  // That is why NO writeback in the whole run carries the merged byte.
+  //
+  // The collision is on the WAY, not the LINE, which is why m_match was right
+  // not to match (tags 1e and 20 differ) and why every line-keyed probe read 0.
+  logic [WAYS-1:0] way_busy;
   always_comb begin
-    victim_way = '0;
-    for (int w = 0; w < int'(WAYS); w++)
-      if (rank_q[req_idx][w] == 3'(WAYS-1)) victim_way = LG_WAYS'(w);
+    way_busy = '0;
+    for (int k = 0; k < int'(NMSHR); k++)
+      if (m_v[k] && (m_idx[k] == req_idx)) way_busy[m_way[k]] = 1'b1;
+  end
+
+  logic [LG_WAYS-1:0] victim_way;
+  logic               victim_ok;
+  always_comb begin
+    victim_way = '0; victim_ok = 1'b0;
+    // oldest first, skipping ways an outstanding record is already replacing
+    for (int r = int'(WAYS)-1; r >= 0; r--)
+      for (int w = 0; w < int'(WAYS); w++)
+        if (!victim_ok && (rank_q[req_idx][w] == 3'(r)) && !way_busy[w]) begin
+          victim_way = LG_WAYS'(w); victim_ok = 1'b1;
+        end
   end
 
   // ---------------------------------------------------------------- response port
@@ -202,7 +234,10 @@ module nonblocking_dcache #(
   wire fill_shadow = fill_last & (req_idx == m_idx[cur_m]) & (req_tag == m_tag[cur_m]);
 
   wire accept_hit  = req_valid_i & hit & rsp_slot_free & ~p_full;
-  wire accept_miss = req_valid_i & ~hit & ~p_full & (m_match | m_free) & ~fill_shadow;
+  // and a miss may not allocate when EVERY way in the set is already claimed by
+  // an in-flight record -- there is nowhere to put the line. It retries.
+  wire accept_miss = req_valid_i & ~hit & ~p_full & (m_match | (m_free & victim_ok))
+                   & ~fill_shadow;
   assign req_ready_o = accept_hit | accept_miss;
 
   // ---------------------------------------------------------------- replay pick
