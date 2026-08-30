@@ -285,11 +285,42 @@ endmodule
 //        PERIOD rather than by sweeping for a maximum frequency, so every
 //        submission is compared at one frequency.
 //
-//        THE PINNED PERIOD IS NOT YET SET. It is derived as 1.5x the reference
-//        implementation's own measured period, rounded up to the next 0.25 ns,
-//        from a single reference Fmax sweep -- AND THAT SWEEP HAS NOT BEEN RUN.
-//        No PPA number may be reported for d_ca05 until it is. Recorded as
-//        missing rather than filled with a plausible value.
+//        THE PINNED PERIOD IS 8.75 ns on sky130hd. It is derived as 1.5x the
+//        reference implementation's own measured period (5.7812 ns, 172.97 MHz,
+//        WNS +0.09, DRC 0 at every iteration), rounded up to the next 0.25 ns:
+//
+//            ceil(1.5 x 5.7812 / 0.25) x 0.25  =  35 x 0.25  =  8.75 ns
+//
+//        ONE SWEEP, ON ONE MACHINE, WITH A CONFIRMING RE-RUN. Ten place-and-route
+//        runs over five bisection steps; the tenth repeated 5.7812 ns, passed,
+//        and did not fall back. d_ai01's pin converged twice on two hosts with
+//        the second not told the first's answer, and this has not had that
+//        treatment -- the re-run is a reproducibility check on one host, not an
+//        independent measurement, and is recorded as the weaker thing it is.
+//
+//        THE FIRST ATTEMPT DID NOT REACH A NUMBER, and why it did not is part of
+//        the provenance. Its seed run aborted with the router stalled flat at
+//        260 met5 shorts -- unchanged from 10% through 50% of detailed routing.
+//        The cause was signal pins placed on the power-distribution layer, so
+//        they shorted to VDD/VSS by construction; the retry moves them
+//        (IO_PLACER_H met3, IO_PLACER_V met2/met4, CORE_UTILIZATION 7).
+//        ALL TEN ITERATIONS OF THE SWEEP THEN ROUTED WITH ZERO VIOLATIONS,
+//        INCLUDING 5.0 ns, which is tighter than the 40 ns the first attempt
+//        stalled at. An all-or-nothing result across the whole range is what a
+//        pin-placement cause predicts and what a density-only cause does not:
+//        density would more plausibly have reduced the count than eliminated it.
+//        Two of the ten runs failed, both on TIMING (-0.10 and -0.03 ns), and
+//        both routed clean.
+//
+//        THE THREE CANDIDATES IN candidates/d_ca05/ PREDATE THIS LINE. They were
+//        solicited on 2026-08-27 against a spec that said the period was NOT YET
+//        SET, so they were told the frequency target was unknown. Their PPA
+//        numbers therefore cannot separate "this task is easy" from "nobody was
+//        optimising toward a target" -- the same caveat d_ai04 carries, and the
+//        reason its rows are withheld. Only `chat` passes correctness (1/1);
+//        `claude` and `gemini` are 0/1, so the existing set yields at most one
+//        comparable row. Whether to re-solicit against this text or build the
+//        one row as-is is the task owner's decision and is not settled here.
 //
 //        The period does not move in response to what is submitted. Pinning the
 //        row at the slowest submission's own Fmax rewards a slow design by
