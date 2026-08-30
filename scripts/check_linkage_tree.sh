@@ -124,6 +124,15 @@ check_tree () {   # $1 = tree-ish; echoes checker output; returns its status
   #                      same claim. Controls and mutants are exempt: a
   #                      neutralised control exists to be checked at the one
   #                      configuration it neutralises.
+  #   check_record_bytes  non-zero = a run record's newest submission does not
+  #                       match the COMMITTED bytes at its path -> FAIL. Either
+  #                       the file was never committed (the result describes
+  #                       bytes no other host has) or the record is stale (the
+  #                       file moved after the run). The checker names which.
+  if [ -f "$d/scripts/check_record_bytes.py" ]; then
+    ( cd "$d" && python3 scripts/check_record_bytes.py 2>&1 )
+    if [ $? -eq 1 ]; then rc=1; echo "__FAILED__ record_bytes"; fi
+  fi
   if [ -f "$d/scripts/check_denominator.py" ]; then
     ( cd "$d" && python3 scripts/check_denominator.py 2>&1 )
     if [ $? -ne 0 ]; then rc=1; echo "__FAILED__ denominator"; fi

@@ -7631,3 +7631,58 @@ finding quotes is gone, and a log path is not a stable citation when the sweep
 that writes it is re-runnable.
 
 **Rules:** 20, 22, 24
+
+## F122. Results published for bytes the repository does not contain
+
+d_ca05's three re-solicited candidates were simulated, their records committed
+and their correctness published — and **the `.sv` files were never committed.**
+The commit named `runs/` and `docs/assets/` explicitly and never named
+`candidates/`. A build prompt then went out quoting their sha256s as shared
+state.
+
+**The PC agent caught it before building, and its reading is sharper than the
+mismatch.** The committed `claude.sv` was the pre-re-solicitation file that had
+failed 0/1 five times, so the correctness gate would have refused it — loud and
+recoverable. **The committed `chat.sv` had a *passing* record from the earlier
+solicitation**, so `ppa_candidate.sh` would have accepted it and produced a
+clean, plausible PPA number answering the spec text that said the period was NOT
+YET SET. That is exactly the distinction the re-solicitation existed to remove,
+and nothing downstream would have flagged it.
+
+**Sweeping the corpus found eighteen more**, across v_ca04, v_ca05, v_ca06,
+v_ca07, v_dsp02 and v_nw03 — three submissions each, all with published gate
+outcomes, conformant fractions and kill counts describing bytes no other host
+could obtain. v_ca07's three were not merely stale in HEAD but **untracked**, so
+its published counts described submissions absent from the repository entirely.
+
+**The explicit-path commit rule guards against committing too much and has no
+guard against committing too little.** Naming paths deliberately is what stops
+`git add -A` sweeping in another session's work; it also makes a forgotten path
+silent, because the commit succeeds and everything derived from the missing file
+lands cleanly beside it.
+
+### Then the fix produced an empty commit that claimed to do the work
+
+The eighteen paths were built into a shell variable and passed unquoted. **zsh
+does not word-split an unquoted expansion**, so `git update-index` received one
+argument containing all eighteen names, errored, and `commit-tree` ran anyway on
+an unchanged index. The commit and push both succeeded, and its message asserts
+eighteen files it did not touch.
+
+Second time in one day the same zsh behaviour has bitten. The first made correct
+code look broken; this one made a broken commit look correct, and **that
+direction is worse — a test that wrongly fails gets investigated, a commit that
+wrongly succeeds gets believed.** The procedure now refuses when the written
+tree equals HEAD's.
+
+### Two directions, opposite remedies
+
+    working tree == record, HEAD differs  -> the FILE was never committed
+    working tree == HEAD,   record differs -> the RECORD is stale, re-run
+
+Seven remain and all are the second kind: reference testbenches edited after
+their last run, on v_ai02, v_ca03, v_dsp02 and others. Collapsing the two would
+send someone to commit a file already committed, or to re-run against bytes
+nobody has.
+
+**Rules:** 17, 20, 24
