@@ -362,17 +362,35 @@ watchdog:
 # NOT YET BUILT -- step 3. Listed so their absence is visible rather than implied.
 # ---------------------------------------------------------------------------
 second_source:
-  status: BUILT_NOT_PASSING
+  status: PRESENT -- PASS, 16 of 16 configurations
   file: tb/nonblocking_dcache_alt_ref.sv
   differences_implemented: [D1, D2, D3_prime_prime]
-  iterations_used: 3        # of 3 budgeted
+  iterations_used: 10       # 3 budgeted; 4-10 run on direct instruction to
+                            # iterate until it passed. Recorded, not hidden.
   adjudications:
     - {iter: 1, symptom: "fails C2", verdict: HARNESS_SETUP_DEFECT,
        detail: "C2 warm-up treated a response as proof the line was installed; a forwarding design answers mid-fill"}
     - {iter: 2, symptom: "fails C1, only 1 outstanding", verdict: HARNESS_SETUP_DEFECT,
        detail: "C1 stalled the memory before the previous phase's fill had drained, leaking a record"}
-    - {iter: 3, symptom: "masked-store byte wrong", verdict: SECOND_SOURCE_IS_WRONG, open: true}
+    - {iter: 3, symptom: "masked-store byte wrong", verdict: SECOND_SOURCE_IS_WRONG, open: false,
+       closed_by: "iterations 4-10; see NOTES.md"}
+    - {iter: 4, symptom: "miss accepted in the shadow of its own last fill beat",
+       verdict: SECOND_SOURCE_IS_WRONG, causal: false, score: "2/16 -> 2/16"}
+    - {iter: 6, symptom: "victim chosen from a way already in flight for this set",
+       verdict: SECOND_SOURCE_IS_WRONG, causal: true, score: "2/16 -> 4/16"}
+    - {iter: 8, symptom: "hit bypassed a pending access to the same word (R5 ordering)",
+       verdict: SECOND_SOURCE_IS_WRONG, causal: true, score: "4/16 -> 8/16"}
+    - {iter: 9, symptom: "p_m is a record index and records are reused; 37 forwards returned another line",
+       verdict: SECOND_SOURCE_IS_WRONG, causal: false, score: "8/16 -> 8/16"}
+    - {iter: 10, symptom: "memory engine served records in index order, so a fill overtook the writeback of the same block",
+       verdict: SECOND_SOURCE_IS_WRONG, causal: true, score: "8/16 -> 16/16",
+       detail: "failure partitioned exactly on MAX_MISSES: 8/8 pass at 2, 8/8 fail at 8, independent of DATA_W/SETS/WAYS"}
   no_check_was_loosened: >
+    Iterations 4-10 changed the second source only. No check, no testbench, no
+    anchor and no clause was touched, and the anchor was re-measured at 16/16
+    through scripts/build_and_score.sh --sim-only after the final fix. Rule 5
+    held for the whole repair: the anchor was correct on the stimulus, so the
+    second source was wrong.
     Both harness fixes make a phase wait for the memory model to go idle before
     stalling -- establishing the phase's own precondition. Verified unchanged
     afterwards: reference 16/16, mCAP1 8/16 on C1, m05 0/16 on C2, m06 0/16,
@@ -387,8 +405,10 @@ second_source:
     CHANGED. A spec edit that silently flips something built earlier is the kind
     of thing that surfaces much later, so it was checked rather than assumed.
   differences_named: true          # tb/audit/SECOND_SOURCE_DIFFERENCES.md, committed before the shim
-  D1: {claim: "merge against all outstanding lines", risk: highest, status: unmeasured}
-  D2: {claim: "true LRU vs tree-PLRU", status: unmeasured, also_conformant: true}
+  D1: {claim: "merge against all outstanding lines", risk: highest, status: SURVIVES,
+       note: "second source passes 16/16 carrying it"}
+  D2: {claim: "true LRU vs tree-PLRU", status: SURVIVES, also_conformant: true,
+       note: "second source passes 16/16 carrying it"}
   D3: {claim: "fetch first, write victim back after", status: REFUTED,
        reason: "measured -- the anchor already fetches first and writes back after"}
   D3_prime: {claim: "strictly in-order responses", status: unmeasured, also_conformant: true,

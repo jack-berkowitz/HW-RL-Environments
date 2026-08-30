@@ -1864,3 +1864,83 @@ instrument is not exhausted. The next reading should be taken at a **failing
 configuration other than MAX_MISSES=8** — eight of sixteen now pass, and the
 eight that fail have not been enumerated. Knowing whether they share a
 configuration axis would say whether one mechanism remains or several.
+
+---
+
+## Iteration 10 — the engine served records in index order, and the fill overtook the writeback
+
+### The enumeration first, because it was the cheap question
+
+Iteration 9 closed asking which eight configurations fail. They split perfectly
+on one axis:
+
+    MAX_MISSES=2 ..... 8/8 PASS
+    MAX_MISSES=8 ..... 8/8 FAIL
+
+independent of `DATA_W`, `SETS` and `WAYS`. Not a spread — a clean partition. One
+mechanism remained, and it was gated on the number of records, not on geometry.
+That answer cost one sweep and replaced a second log reading.
+
+### The reading
+
+Two probes were spent before the right one. Both are recorded because both were
+measurements, and a refuted hypothesis that was *measured* is not a wasted step:
+
+- The failing loads returned the **memory** data pattern where a previously
+  stored value was expected, and the accesses either side were plain HITs with
+  no miss between them. That is only possible if two ways of one set hold the
+  same tag. **Probed directly: `dup_cnt=0` against a live control of 525,525
+  valid lines scanned.** Refuted, cleanly.
+- So the block had been evicted and re-fetched. Logging the whole lifecycle of
+  one set — ALLOC, WB beats, FILL beats, store writes — showed it:
+
+      t=226665 ALLOC rec=3 set=1 way=0 newtag=23 wb=1 wbtag=21   <- evicts 0x21 dirty
+      t=226825 ALLOC rec=0 set=1 way=2 newtag=21                 <- re-fetches 0x21
+      t=227115 FILL  rec=0 way=2 tag=21 beat=1 data=521f0844
+      t=227615 WB    rec=3 way=0 wbtag=21 beat=1 data=5000019c
+
+  and the checker, verbatim: `got=521f0844 exp=5000019c`. The refill of 0x21 read
+  memory **500 time units before** the writeback of 0x21 reached it.
+
+### The defect
+
+    E_IDLE: for (k = NMSHR-1; k >= 0; k--)
+              if (m_v[k] && !m_issued[k]) begin cur_m <= k; ... end
+
+No `break`. The last assignment wins, so the engine served the **lowest-indexed**
+unissued record — index order, not allocation order. `rec=0` was allocated 160
+units *after* `rec=3` and served *first* because 0 < 3, so a younger record's
+fill bypassed an older record's pending writeback of the same block.
+
+This is why only `MAX_MISSES=8` failed: with two records the engine drains an
+eviction before a second allocation can overtake it. The window is a function of
+how many records can queue ahead of a writeback.
+
+### The fix
+
+Each record is stamped with an allocation sequence number at accept; `E_IDLE`
+selects the smallest outstanding stamp. Servicing the oldest record first is
+*sufficient*, not merely helpful: the record that evicts a block is always
+allocated before any record that can re-fetch that block — the block must be
+re-requested after it was evicted — so in allocation order a block's writeback
+always drains ahead of its refill.
+
+### Score
+
+    second source  8/16 before  ->  16/16 after
+    reference      16/16 (harness gate, scripts/build_and_score.sh --sim-only)
+
+**The second source passes.** Causal, and the last mechanism.
+
+### Running total across the repair
+
+    2/16 -> 4/16 (iter 6, way collision)
+         -> 8/16 (iter 8, R5 same-word ordering)
+         -> 16/16 (iter 10, allocation-order service)
+
+    iter 4 (fill shadow), iter 9 (stale p_m line guard): real defects, closed,
+    not causal.
+
+Five fixes, three causal, two real-but-not-causal — and the split was decided
+every time by re-running the score, never by argument. The anchor stayed 16/16
+throughout: **Rule 5 held for the whole repair, and no check was touched.**

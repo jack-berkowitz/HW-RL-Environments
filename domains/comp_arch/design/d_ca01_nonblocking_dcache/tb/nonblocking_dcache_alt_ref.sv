@@ -98,6 +98,9 @@ module nonblocking_dcache #(
   logic [LG_WAYS-1:0] m_way   [NMSHR];
   logic              m_wb     [NMSHR];   // victim needs writing back
   logic [TAG_W-1:0]  m_wbtag  [NMSHR];
+  // FIX, iteration 10: allocation order. See the E_IDLE picker below.
+  logic [15:0]       m_seq    [NMSHR];
+  logic [15:0]       seq_q;
   logic              m_issued [NMSHR];   // the memory engine has taken it
   logic              m_filled [NMSHR];   // block is in the array
 
@@ -331,7 +334,9 @@ module nonblocking_dcache #(
         end
       for (k = 0; k < int'(NMSHR); k++) begin
         m_v[k] <= 1'b0; m_issued[k] <= 1'b0; m_filled[k] <= 1'b0; m_wb[k] <= 1'b0;
+        m_seq[k] <= '0;
       end
+      seq_q <= '0;
       for (i = 0; i < int'(NIDS); i++) p_v[i] <= 1'b0;
       p_head <= '0; p_tail <= '0;
       rsp_v_q <= 1'b0; rsp_id_q <= '0; rsp_d_q <= '0;
@@ -381,6 +386,8 @@ module nonblocking_dcache #(
             m_wbtag [m_free_i] <= tag_q[req_idx][victim_way];
             m_issued[m_free_i] <= 1'b0;
             m_filled[m_free_i] <= 1'b0;
+            m_seq   [m_free_i] <= seq_q;
+            seq_q              <= seq_q + 16'd1;
             // the victim is being taken now; stop it being picked again
             valid_q[req_idx][victim_way] <= 1'b0;
             for (w = 0; w < int'(WAYS); w++)
@@ -421,12 +428,47 @@ module nonblocking_dcache #(
       // ---- memory engine ----------------------------------------------------
       case (est_q)
         E_IDLE: begin
-          for (k = int'(NMSHR)-1; k >= 0; k--)
-            if (m_v[k] && !m_issued[k]) begin
-              cur_m   <= 4'(k);
+          // FIX, 2026-08-29, iteration 10. CONFIRMED BY INSTRUMENTATION.
+          //
+          // The old loop ran k high->low with no break, so the LAST assignment
+          // won and the engine serviced the LOWEST-INDEXED unissued record --
+          // index order, not allocation order. That lets a younger record's
+          // fill overtake an older record's pending writeback of the SAME
+          // block, and the fill then reads memory that the writeback has not
+          // reached yet. Measured, set=1 tag=0x21, WAYS=4 SETS=16 MAX_MISSES=8:
+          //
+          //   t=226665 ALLOC rec=3 way=0 newtag=23 wb=1 wbtag=21  <- evict 0x21
+          //   t=226825 ALLOC rec=0 way=2 newtag=21               <- refetch 0x21
+          //   t=227115 FILL  rec=0 way=2 tag=21 beat=1 data=521f0844
+          //   t=227615 WB    rec=3 way=0 wbtag=21 beat=1 data=5000019c
+          //
+          // rec=0 was allocated LATER but serviced FIRST because 0 < 3, so the
+          // refill preceded the writeback and the cache kept the pre-store
+          // value. The checker read exactly that: got=521f0844 exp=5000019c.
+          //
+          // Servicing the oldest record first is sufficient: the record that
+          // evicts a block is always allocated before any record that can
+          // re-fetch it, so in allocation order a block's writeback always
+          // drains ahead of its refill.
+          //
+          // Why only MAX_MISSES=8 failed: with two records the engine drains
+          // an eviction before a second allocation can overtake it. All eight
+          // MAX_MISSES=8 configurations failed and all eight MAX_MISSES=2
+          // configurations passed, independent of DATA_W, SETS and WAYS.
+          begin
+            automatic logic        pick_ok = 1'b0;
+            automatic logic [15:0] pick_s  = '0;
+            automatic integer      pick_k  = 0;
+            for (k = 0; k < int'(NMSHR); k++)
+              if (m_v[k] && !m_issued[k] && (!pick_ok || (m_seq[k] < pick_s))) begin
+                pick_ok = 1'b1; pick_s = m_seq[k]; pick_k = k;
+              end
+            if (pick_ok) begin
+              cur_m   <= 4'(pick_k);
               beat_q  <= '0;
-              est_q   <= m_wb[k] ? E_WB_REQ : E_FL_REQ;
+              est_q   <= m_wb[pick_k] ? E_WB_REQ : E_FL_REQ;
             end
+          end
         end
         E_WB_REQ: if (mem_req_ready_i) begin est_q <= E_WB_DATA; beat_q <= '0; end
         E_WB_DATA: if (mem_wr_ready_i) begin
