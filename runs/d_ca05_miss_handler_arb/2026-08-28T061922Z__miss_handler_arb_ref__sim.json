@@ -1,0 +1,29 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "1",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "MULTIDRIVEN,TIMESCALEMOD,UNOPTFLAT,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "83",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "638f75e7f18d0586e92befad8d65816bcd691e2e",
+  "kind": "sim",
+  "label": "miss_handler_arb_ref",
+  "metrics": {},
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "domains/comp_arch/design/d_ca05_miss_handler_arb/ref/miss_handler_arb_ref.sv",
+  "submission_sha256_16": "707ae5a75cb094a9",
+  "task": "d_ca05_miss_handler_arb",
+  "task_text_hash": "ee4cc2172854ca1f",
+  "timestamp_utc": "2026-08-28T06:19:22Z"
+}
