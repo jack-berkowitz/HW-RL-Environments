@@ -30,9 +30,9 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | init interval | slots | latency | notes |
 |---|---|---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | 174,421 | 230.0 | not swept | — | — | — |  |
-| `claude` | **1/1 pass** | 158,486 | 181.0 | not swept | — | — | — |  |
-| `gemini` | **1/1 pass** | 179,212 | 257.0 | not swept | — | — | — |  |
+| `chat` | **1/1 pass** | 174,421 | 230.0 | not swept | 1 | 2 | 1 |  |
+| `claude` | **1/1 pass** | 158,486 | 181.0 | not swept | 1 | 2 | 1 |  |
+| `gemini` | **1/1 pass** | 179,212 | 257.0 | not swept | 1 | 4 | 1 | **different design point** (buffer_slots 4 vs reference 2): area is correct but not like-for-like |
 | `nc_g_alias_modes` — *negative control, expected to fail* | 0/1 FAIL | — | — | — | — | — | — |  |
 | **reference** | **1/1 pass** | 179,943 | 230.0 | 44.4 | 1 | 2 | 1 |  |
 - **init interval** — clocks between accepts
@@ -42,11 +42,13 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | lat.min | lat.max | outstd | fills | wb | notes |
 |---|---|---|---|---|---|---|---|---|---|---|
+| `alt_cnt` | 2/16 FAIL | — | — | — | 1 | 20053 | 16 | 519 | 312 |  |
+| `alt_instr` | 2/16 FAIL | — | — | — | 1 | 20053 | 16 | 519 | 312 |  |
 | `chat` | **16/16 pass** | withheld | withheld | not swept | 3 | 226 | 14 | 501 | 315 | **PPA withheld — the build did not meet timing** (slack -0.049 ns at 15.0 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; **different design point** (latency_min 3 vs reference 2; mem_txns_writebacks 315 vs reference 298): area is correct but not like-for-like; 70,342 um2 per unit of max_outstanding_n, 1.23x the reference per unit |
 | `claude` | **16/16 pass** | 753,599 | 326.0 | not swept | 1 | 20057 | 9 | 493 | 318 | **different design point** (latency_min 1 vs reference 2; mem_txns_writebacks 318 vs reference 298): area is correct but not like-for-like; 83,733 um2 per unit of max_outstanding_n, 1.46x the reference per unit |
 | `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 1 error(s); first: sanitised_gemini.sv:99:7: error: incrementing previous value 2'b11 would overflow enum base type 'logic[1:0]'  |
+| **second source** | 2/16 FAIL | — | — | — | 1 | 20053 | 16 | 519 | 312 |  |
 | `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `63385929275747be` |
-| `nonblocking_dcache_alt_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `c9c3532f93fe4954`; the task text is now `63385929275747be` |
 | `nonblocking_dcache_ref` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `f7a68c4dbec4a1b7`; the task text is now `63385929275747be` |
 
 ## d_ca03 — RISC-V Sv39 MMU -- page-table walker, TLBs, PMP
@@ -79,10 +81,10 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | notes |
 |---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | — |  |
-| `claude` | 0/1 FAIL | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands |
-| `gemini` | 0/1 FAIL | — | — | — | — |  |
-| **reference** | **1/1 pass** | — | — | — | — | 1 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration NR_PORTS_4 not present in this run |
+| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | — | last run answered task text `ee4cc2172854ca1f`; the task text is now `1ecf57426c98a135` |
+| `Claude Opus 5` | *not scored against this prompt* | — | — | — | — | last run answered task text `ee4cc2172854ca1f`; the task text is now `1ecf57426c98a135` |
+| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | — | last run answered task text `ee4cc2172854ca1f`; the task text is now `1ecf57426c98a135` |
+| `miss_handler_arb_ref` | *not scored against this prompt* | — | — | — | — | last run answered task text `ee4cc2172854ca1f`; the task text is now `1ecf57426c98a135` |
 
 ## d_dsp02 — FP32 fused multiply-add
 

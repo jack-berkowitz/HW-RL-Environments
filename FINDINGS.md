@@ -7585,3 +7585,49 @@ say and nothing is wrong"*, and no output path for one either. A checker whose
 value is a count rather than a verdict has nowhere to put it.
 
 **Rules:** 24, 26
+
+## F121. The window between a sweep converging and a build landing rendered as absence
+
+d_ca05's Fmax sweep converged, the pin went into its spec, and the task
+**disappeared from the README entirely** — no row, no bar, and not in "not
+measured yet" either. `grep -n 'd_ca05' README.md` returned nothing.
+
+It has a pin, so it leaves `unpinned()`. It has no PPA record, so
+`design_tables()` skipped it. **There was no state between "no pin" and "has a
+build"**, and every task passes through that window between its sweep converging
+and its first build landing.
+
+This is the fourth-surface defect from the same morning, reintroduced by the
+generator that replaced the hardcoded tuple. d_ai04 was invisible because a
+seven-task list had no slot for it; d_ca05 was invisible because there was no
+row state for it. Replacing a fixed list with a derived one fixed the mechanism
+and left the failure mode.
+
+**The gate's stated remedy was the harmful act.** `readme_tables` went red on the
+spec edit and instructed whoever hit it to run the generator — which is what
+deletes the row. AGENT-DESIGN-43a92055 diffed into a scratch copy first, saw one
+deletion and no addition, restored the file and took a documented
+`LINKAGE_OVERRIDE` rather than running it. They had declined an override earlier
+the same day when a fix was in flight; this one had none and its remedy was
+destructive, which is the case the escape hatch exists for.
+
+### The fix was worse than the defect for one revision
+
+The new branch read `sims` before it was rebuilt for the current task, so
+**d_ca05 rendered d_ca04's `18/18`** under d_ca05's heading — a stale loop
+variable, and d_ca05 runs one configuration, not eighteen. Wrong numbers under
+the right heading read as a measurement; the absence they replaced at least
+looked like absence. Caught by checking the rendered output against the records
+rather than by the row appearing.
+
+### An artefact cited in a finding no longer exists
+
+The `260/260 met5 shorts` observation that grounded the pin-layer diagnosis came
+from `fmax_results/d_ca05_logs/d_ca05_iter01_40.0000ns.log`. The successful
+sweep **overwrote that file** — same name, different run. The reasoning stands
+on the ten new logs, which reach `0 violations` at every period including 5.0 ns,
+tighter than anything the failed attempt reached. But the artefact the earlier
+finding quotes is gone, and a log path is not a stable citation when the sweep
+that writes it is re-runnable.
+
+**Rules:** 20, 22, 24

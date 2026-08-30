@@ -7,12 +7,12 @@
 <text x="562" y="78" fill="#1a1a1a" font-size="13" font-weight="600">30 of 30</text>
 <text x="238" y="108" fill="#666" font-size="13" text-anchor="end">compiled</text>
 <rect x="250" y="93" width="300" height="16" rx="3" fill="#e3e3e3"/>
-<rect x="250" y="93" width="250" height="16" rx="3" fill="#2f6feb"/>
-<text x="562" y="108" fill="#1a1a1a" font-size="13" font-weight="600">25 of 30</text>
+<rect x="250" y="93" width="220" height="16" rx="3" fill="#2f6feb"/>
+<text x="562" y="108" fill="#1a1a1a" font-size="13" font-weight="600">22 of 30</text>
 <text x="238" y="138" fill="#666" font-size="13" text-anchor="end">correct</text>
 <rect x="250" y="123" width="300" height="16" rx="3" fill="#e3e3e3"/>
-<rect x="250" y="123" width="200" height="16" rx="3" fill="#2f6feb"/>
-<text x="562" y="138" fill="#1a1a1a" font-size="13" font-weight="600">20 of 30</text>
+<rect x="250" y="123" width="190" height="16" rx="3" fill="#2f6feb"/>
+<text x="562" y="138" fill="#1a1a1a" font-size="13" font-weight="600">19 of 30</text>
 <text x="238" y="168" fill="#666" font-size="13" text-anchor="end">PPA measured</text>
 <rect x="250" y="153" width="300" height="16" rx="3" fill="#e3e3e3"/>
 <rect x="250" y="153" width="200" height="16" rx="3" fill="#2f6feb"/>

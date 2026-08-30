@@ -185,15 +185,58 @@ def design_tables():
             who = re.split(r"_(?:fx|pin)", str(r.get("label", "")))[0]
             if who not in best or r.get("timestamp_utc", "") > best[who].get("timestamp_utc", ""):
                 best[who] = r
-        if not best:
-            continue
+        # BUILD sims BEFORE THE EARLY RETURN. The pinned-awaiting-PPA
+        # branch below reads it, and it used to be built after -- so that
+        # branch saw the PREVIOUS task's sims and rendered d_ca04's 18/18
+        # as d_ca05's correctness. A stale loop variable, and worse than
+        # the absence it was added to fix: wrong numbers under the right
+        # heading read as a measurement.
         sims = {}
         for r in load("sim"):
             if r.get("task") != full:
                 continue
             w = r.get("label", "")
+            if w.endswith("_ref") or "_ref" in w or w.endswith("_top"):
+                w = "reference"
             if w not in sims or r.get("timestamp_utc", "") > sims[w].get("timestamp_utc", ""):
                 sims[w] = r
+        if not best:
+            # PINNED, AWAITING PPA -- the third row state, and its absence made
+            # a task vanish entirely. d_ca05's sweep converged, the pin went
+            # into the spec, and it left unpinned() without entering any table:
+            # no row, no bar, and not in "not measured yet" either. Zero
+            # occurrences in the whole README.
+            #
+            # This is the fourth-surface defect from this morning reintroduced
+            # by the generator that replaced the hardcoded tuple -- d_ai04 was
+            # invisible because a seven-task list had no slot for it, and
+            # d_ca05 was invisible because there was no state between "no pin"
+            # and "has a build". EVERY task passes through this window between
+            # its sweep converging and its first build landing. Caught by
+            # AGENT-DESIGN-43a92055, who diffed into a scratch copy and took a
+            # documented override rather than running a generator whose stated
+            # remedy deletes the row.
+            lines = [f"### {short} — {label}, pinned at {pin} ns", "",
+                     "*Pinned; no PPA build yet. Correctness stands as below.*",
+                     "",
+                     "| | correctness | area µm² | power mW | slack ns |",
+                     "|---|---|---|---|---|"]
+            for m in ("reference",) + MODELS:
+                sm = sims.get(m) or {}
+                pc, tc = sm.get("configs_passed"), sm.get("configs_total")
+                if isinstance(pc, int) and isinstance(tc, int) and tc:
+                    corr = f"**{pc}/{tc} pass**" if pc == tc else f"{pc}/{tc} FAIL"
+                elif sm.get("build_status"):
+                    corr = f"did not build ({sm['build_status']})"
+                else:
+                    corr = "—"
+                nm = "reference" if m == "reference" else f"`{m}`"
+                lines.append(f"| {nm} | {corr} | *not built* | *not built* | *not built* |")
+            blk = "\n".join(lines)
+            if notes.get(short):
+                blk += "\n\n" + notes[short]
+            out.append(blk)
+            continue
         ref = best.get("reference")
         lines = [f"### {short} — {label}, pinned at {pin} ns", "",
                  "| | area µm² | power mW | slack ns | vs reference |",
