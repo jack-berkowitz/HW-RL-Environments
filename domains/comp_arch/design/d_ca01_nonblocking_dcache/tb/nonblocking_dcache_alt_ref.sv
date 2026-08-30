@@ -273,7 +273,12 @@ module nonblocking_dcache #(
     rep_v = 1'b0; rep_s = '0;
     for (int j = int'(NIDS)-1; j >= 0; j--) begin
       automatic logic [4:0] s = p_head + 5'(j);
-      if (((p_tail - p_head) > 5'(j)) && p_v[s[3:0]] && m_filled[p_m[s[3:0]]]) begin
+      // Same staleness on the replay path: rway is m_way[p_m[rep_i]], so an
+      // entry left over from an earlier incarnation of that record number would
+      // be replayed into whichever way the record now owns.
+      if (((p_tail - p_head) > 5'(j)) && p_v[s[3:0]] && m_filled[p_m[s[3:0]]]
+          && (p_addr[s[3:0]][ADDR_W-1 -: TAG_W]  == m_tag[p_m[s[3:0]]])
+          && (p_addr[s[3:0]][BLK_OFF +: LG_SETS] == m_idx[p_m[s[3:0]]])) begin
         rep_v = 1'b1; rep_s = s;
       end
     end
@@ -290,7 +295,16 @@ module nonblocking_dcache #(
     if (est_q == E_FL_DATA) begin
       for (int j = int'(NIDS)-1; j >= 0; j--) begin
         automatic logic [4:0] s = p_head + 5'(j);
-        if (((p_tail - p_head) > 5'(j)) && p_v[s[3:0]] && (p_m[s[3:0]] == cur_m)) begin
+        // p_m IS A RECORD INDEX AND RECORDS ARE REUSED. Matching on it alone
+        // forwards to an entry queued against an EARLIER INCARNATION of the
+        // same record number, whose line is a different line entirely.
+        // Measured: rec=1 filling the block at 0x0f80 forwarded to an entry
+        // whose address was 0x0f90 -- a different block -- because the word
+        // offset happened to match the beat and p_m still read 1. The entry's
+        // own line must be compared against the record's CURRENT line.
+        if (((p_tail - p_head) > 5'(j)) && p_v[s[3:0]] && (p_m[s[3:0]] == cur_m)
+            && (p_addr[s[3:0]][ADDR_W-1 -: TAG_W]      == m_tag[cur_m])
+            && (p_addr[s[3:0]][BLK_OFF +: LG_SETS]     == m_idx[cur_m])) begin
           fw_v = 1'b1; fw_i = s[3:0];
         end
       end

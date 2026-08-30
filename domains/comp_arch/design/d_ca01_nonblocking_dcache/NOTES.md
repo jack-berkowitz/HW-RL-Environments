@@ -1796,3 +1796,71 @@ pairing again** — it has now found the cause twice on first reading, where
 aggregate probes found it zero times in five attempts.
 
 **Rule 5 intact: the anchor passes every configuration on this stimulus.**
+
+---
+
+## Iteration 9: a stale record index across reuse. CONFIRMED, FIXED, NOT CAUSAL — score holds at 8/16
+
+**Same outcome shape as iteration 4, and worth recording as such rather than as a
+failure: a real defect found and closed, which did not move the number.**
+
+### What the response log showed
+
+    t=211765 FWD id=11 addr=00000f88 beat=2 rec=1
+    t=212255 FWD id=15 addr=00000f90 beat=0 rec=1   <- the failing response
+
+`0x0f88` is **index 0**; `0x0f90` is **index 1**. Two forwards, the same record
+number, ~500 time units apart, on **different lines** — because the record was
+freed and reallocated in between.
+
+### The cause
+
+D3''s eligibility test was:
+
+    p_v[s] && (p_m[s] == cur_m)   plus a LOAD check and a word-offset check
+
+**`p_m` is a record INDEX and records are reused.** Matching on it alone admits an
+entry queued against an *earlier incarnation* of that record number, whose line is
+a different line entirely. The word-offset check passes whenever the offsets
+coincide, which for a 4-word block is one time in four.
+
+The replay path carries the same staleness: `rway = m_way[p_m[rep_i]]` reads the
+way the record owns *now*, not the way the entry was queued against.
+
+### The fix, and the measurement that says it is real
+
+Both paths now require the pending entry's own tag and index to equal the
+record's **current** tag and index.
+
+    forwards admitted by the old rule ..... 637
+    REJECTED by the line guard ............  37
+
+**37 forwards were returning another line's data.** The guard is live and the
+defect is real.
+
+### And it is not what breaks the remaining eight configurations
+
+    second source  8/16 before the fix, 8/16 after
+    reference      16/16, unchanged
+
+A rejected forward falls through to the replay path, which reads `data_q` after
+the fill completes — so the load is still answered, later and from the array, and
+where the array ends up correct both routes give the same value. That is why 37
+wrong forwards can exist without moving the score, and it is the same lesson as
+iteration 4: **a mechanism being real and a mechanism being causal are separate
+claims needing separate measurements.** Three of the five fixes made on this file
+now sit in that category.
+
+### Running total
+
+    2/16 -> 4/16 (iter 6, way collision) -> 8/16 (iter 8, R5 ordering)
+    iter 9: real defect closed, no score change
+    anchor 16/16 throughout -- Rule 5 intact, no check touched
+
+### Where iteration 10 starts
+
+The response log has now found three real defects in three readings, so the
+instrument is not exhausted. The next reading should be taken at a **failing
+configuration other than MAX_MISSES=8** — eight of sixteen now pass, and the
+eight that fail have not been enumerated. Knowing whether they share a
+configuration axis would say whether one mechanism remains or several.
