@@ -9604,3 +9604,88 @@ counting — and this task's mutants carry a header recording it. I wrote it aga
 anyway, in the same task, having read that header while writing the mutants three
 days ago. The FIRED counter is what caught it, which is the one part of the
 pattern I did carry over.
+
+## CORRECTION: the "53% coverage gap" is 10%, and what remains is one kind of clause
+
+NOT-FOR-CATALOG *as a factual statement only — proposed; the liveness finding is
+the part that belongs in the catalog.*
+
+I reported that **226 of 419 failure sites never fire — 53%** — and called it the
+number that bounds what a kill count means. **It was wrong by a factor of five**,
+and it took three corrections to get to a number worth acting on.
+
+    419   tagged "sites"
+    -12   INSIDE COMMENTS. My instrument regex-matched `fail(` without checking
+          whether it sat after `//`, so commented-out code like
+          `// WAS fail("R1/R4", ...)` was counted as a site that never fires.
+          Three of my "untested clauses" -- F, R1/R4, W2/W3 -- were comment text.
+    ---
+    400   live sites
+    -126  HARNESS SELF-CHECKS: FLOOR, COVERAGE, ATTRIB. These fail when the
+          TESTBENCH under-drives itself, so on a healthy run they correctly never
+          fire. Counting them as coverage gaps was the largest single error.
+    ---
+     86   live clause-check sites that never fire
+
+And at clause level, which is the unit that actually means something:
+
+    12 of 117 distinct clauses have NO check site that any shipped defect fires
+
+**Ten percent, not fifty-three.** The claim I made — that a submission scoring
+11 of 11 was measured against defects touching fewer than half the checks — does
+not survive the correction. Most of what looked unexercised is either a floor
+that should not fire or a comment.
+
+### What the twelve have in common, which is the actual finding
+
+    ai02  X3   "the input stream stalled with N beat(s) still to send"
+    ca04  X3   "not accepted within N cycles"
+    ca04  I1   "only N beats moved with four inputs bound for four ready outputs"
+    ca04  I2   "with output 0 stalled, only N beats moved on the other three"
+    ca04  H1   "beats delivered while every output was stalled"
+    ca07  H1   "div was never accepted in 400 cycles"
+    ca07  R1   "rising edge(s) while rst_ni is low"
+    ca06  A5   "valid was withdrawn without a handshake" / "payload changed while
+               the offer was held"
+    nw01  Q5   "an unanswered lookup never gave up"
+    nw04  R2   "the time base is not advancing after reset was released"
+    ca03  D1   "master id N serves slave id X and Y at once"
+    nw02  P4   "a forwarded B is returned with the wrong user"
+
+**Ten of the twelve are liveness, progress or protocol-stability** — what the
+design must EVENTUALLY do, or must not STOP doing, or must not WITHDRAW. Only
+D1 and P4 are value-correctness.
+
+That is not a coincidence and it has a structural cause. **A guarded mutant that
+corrupts a value is easy to write**: flip a bit under a rare predicate, and
+everything else stays exact. **A mutant that violates liveness must stall,
+withdraw or hang**, and those do not stay local — af_m12 needed a threshold sweep
+because stalling shifted which clause reported first, and v_nw03's S3 control
+turned out to be unreachable from the ports at all because every port-level way
+to fake it corrupts a field another clause owns.
+
+So the mutant sets are thorough where mutants are cheap and thin where they are
+expensive, and the shape of the coverage follows the shape of the tooling rather
+than the shape of the contract.
+
+### What closing it would take, stated honestly
+
+Not a quick pass. Each of the ten needs a mutant that stalls or withdraws without
+tripping its neighbours, which is the hardest class in this corpus — the two I
+have written (af_m12, and the S15 control's three attempts) each took calibration
+and one turned out impossible. It is a real project and I would not start it
+without you choosing to spend on it.
+
+### And the instrument lesson, which is mine
+
+The comment bug is the fourth time this session that a measurement I built
+produced a confident wrong number. What is different here is that **nothing
+external caught it** — no peer, no shipped control, no gate. I found it only
+because a later question ("which clauses are untested?") forced me to look at the
+sites individually, and the first one I read was `// WAS fail(...)`.
+
+**A number I reported prominently stood for a day at five times its real value**,
+and the thing that would have caught it immediately is the discipline I keep
+applying to other people's instruments and not to my own: run it against a case
+where you know the answer. I did that for the vacuity control and not for the
+site count.
