@@ -16,205 +16,122 @@ module fp16_gemm_array #(
   output logic [WIDTH-1:0][HEIGHT-1:0][4:0]        status_o
 );
 
-  /*
-   * Four registered ticks separate adjacent FMA stages.
-   *
-   * The final stage also owns four registers.  With cycle indexing:
-   *
-   *   pipe[0] at tick t = operation sampled at t
-   *   pipe[1]           = operation sampled at t-1
-   *   pipe[2]           = operation sampled at t-2
-   *   pipe[3]           = operation sampled at t-3
-   *
-   * Thus z_o observes the final-stage operation three enabled ticks
-   * after that operation samples its operands.
-   *
-   * A following FMA samples pipe[3] on the NEXT edge, giving the
-   * required four-enabled-tick stage-to-stage spacing.
-   */
-  localparam int unsigned STAGE_DELAY  = 4;
-  localparam int unsigned STATUS_DELAY = 3;
-
-  localparam logic [15:0] FP16_QNAN = 16'h7e00;
-
+  localparam logic [2:0] RNE = 3'd0;
+  localparam logic [2:0] RTZ = 3'd1;
+  localparam logic [2:0] RDN = 3'd2;
+  localparam logic [2:0] RUP = 3'd3;
+  localparam logic [2:0] RMM = 3'd4;
 
   /*
-   * stage_pipe_q[row][stage][delay]
-   */
-  logic [15:0] stage_pipe_q
-      [0:WIDTH-1][0:HEIGHT-1][0:STAGE_DELAY-1];
-
-  /*
-   * Three registers give:
+   * Four registers per stage:
    *
-   *   status(t) = raw_status(t-2)
-   */
-  logic [4:0] status_pipe_q
-      [0:WIDTH-1][0:HEIGHT-1][0:STATUS_DELAY-1];
-
-  /*
-   * { status[4:0], result[15:0] }
-   */
-  logic [20:0] fma_comb
-      [0:WIDTH-1][0:HEIGHT-1];
-
-  integer r_idx;
-  integer k_idx;
-  integer d_idx;
-
-
-  /*
-   * --------------------------------------------------------------------------
-   * Small priority encoder.
-   * --------------------------------------------------------------------------
+   * sampled at t -> q[0]
+   * q[1] at t+1
+   * q[2] at t+2
+   * q[3] at t+3
    *
-   * Explicit logic is used instead of a wide loop so slang does not have to
-   * unroll a leading-one search once for every row/stage FMA.
+   * The following FMA stage consumes q[3] at t+4.
    */
-  function automatic integer msb16(
-    input logic [15:0] v
-  );
-    begin
-      if      (v[15]) msb16 = 15;
-      else if (v[14]) msb16 = 14;
-      else if (v[13]) msb16 = 13;
-      else if (v[12]) msb16 = 12;
-      else if (v[11]) msb16 = 11;
-      else if (v[10]) msb16 = 10;
-      else if (v[9])  msb16 = 9;
-      else if (v[8])  msb16 = 8;
-      else if (v[7])  msb16 = 7;
-      else if (v[6])  msb16 = 6;
-      else if (v[5])  msb16 = 5;
-      else if (v[4])  msb16 = 4;
-      else if (v[3])  msb16 = 3;
-      else if (v[2])  msb16 = 2;
-      else if (v[1])  msb16 = 1;
-      else             msb16 = 0;
-    end
-  endfunction
+  logic [WIDTH-1:0][HEIGHT-1:0][3:0][15:0] data_q;
+
+  /*
+   * Three registers give a two-enabled-tick delay from sampling
+   * to status_o.
+   */
+  logic [WIDTH-1:0][HEIGHT-1:0][2:0][4:0] flag_q;
+
+  logic [WIDTH-1:0] flush_seen_q;
+
+  /*
+   * {NV,DZ,OF,UF,NX,result}
+   */
+  logic [WIDTH-1:0][HEIGHT-1:0][20:0] fma_now;
 
 
-  function automatic integer msb80(
+  function automatic integer msb_index80(
     input logic [79:0] v
   );
+    logic [127:0] t;
+    integer idx;
+
     begin
-      if (|v[79:64])
-        msb80 = 64 + msb16(v[79:64]);
-      else if (|v[63:48])
-        msb80 = 48 + msb16(v[63:48]);
-      else if (|v[47:32])
-        msb80 = 32 + msb16(v[47:32]);
-      else if (|v[31:16])
-        msb80 = 16 + msb16(v[31:16]);
-      else
-        msb80 = msb16(v[15:0]);
+      t   = {48'b0, v};
+      idx = 0;
+
+      if (|t[127:64]) begin
+        t   = t >> 64;
+        idx = idx + 64;
+      end
+
+      if (|t[63:32]) begin
+        t   = t >> 32;
+        idx = idx + 32;
+      end
+
+      if (|t[31:16]) begin
+        t   = t >> 16;
+        idx = idx + 16;
+      end
+
+      if (|t[15:8]) begin
+        t   = t >> 8;
+        idx = idx + 8;
+      end
+
+      if (|t[7:4]) begin
+        t   = t >> 4;
+        idx = idx + 4;
+      end
+
+      if (|t[3:2]) begin
+        t   = t >> 2;
+        idx = idx + 2;
+      end
+
+      if (t[1])
+        idx = idx + 1;
+
+      msb_index80 = idx;
     end
   endfunction
 
 
-  /*
-   * --------------------------------------------------------------------------
-   * Overflow result table from A5.
-   * --------------------------------------------------------------------------
-   */
-  function automatic logic [15:0] fp16_overflow_value(
+  function automatic logic [15:0] overflow_value(
     input logic       sign,
     input logic [2:0] rnd
   );
-    logic to_inf;
+    logic [15:0] inf_v;
+    logic [15:0] max_v;
 
     begin
-      to_inf = 1'b0;
+      inf_v = {sign, 5'h1f, 10'h000};
+      max_v = {sign, 5'h1e, 10'h3ff};
 
       case (rnd)
-
-        /*
-         * RNE
-         */
-        3'd0:
-          to_inf = 1'b1;
-
-        /*
-         * RTZ
-         */
-        3'd1:
-          to_inf = 1'b0;
-
-        /*
-         * RDN
-         *
-         * + overflow -> +65504
-         * - overflow -> -inf
-         */
-        3'd2:
-          to_inf = sign;
-
-        /*
-         * RUP
-         *
-         * + overflow -> +inf
-         * - overflow -> -65504
-         */
-        3'd3:
-          to_inf = !sign;
-
-        /*
-         * RMM
-         */
-        3'd4:
-          to_inf = 1'b1;
-
-        default:
-          to_inf = 1'b1;
-
+        RNE: overflow_value = inf_v;
+        RTZ: overflow_value = max_v;
+        RDN: overflow_value = sign ? inf_v : max_v;
+        RUP: overflow_value = sign ? max_v : inf_v;
+        RMM: overflow_value = inf_v;
+        default: overflow_value = inf_v;
       endcase
-
-      if (to_inf)
-        fp16_overflow_value = {
-          sign,
-          5'h1f,
-          10'h000
-        };
-      else
-        fp16_overflow_value = {
-          sign,
-          5'h1e,
-          10'h3ff
-        };
     end
   endfunction
 
 
   /*
-   * --------------------------------------------------------------------------
-   * One exact FP16 fused multiply-add.
-   * --------------------------------------------------------------------------
+   * Exact binary16 fused multiply-add.
    *
-   * Finite binary16 is represented as:
+   * Finite values use an exact fixed-point representation whose
+   * least-significant unit is 2^-48.
    *
-   *     sign * mantissa_integer * 2^pow
-   *
-   * normal:
-   *     mantissa = 1024 + fraction
-   *     pow      = exponent_field - 25
-   *
-   * subnormal:
-   *     mantissa = fraction
-   *     pow      = -24
-   *
-   * Every finite FP16 product can therefore be represented exactly on a
-   * common 2^-48 integer grid:
-   *
-   *     product = integer * 2^-48
-   *
-   * The addend also lands exactly on that same grid.  We add those exact
-   * integers first and perform only ONE FP16 rounding afterwards.
+   * This permits a*b+c to be formed exactly before a single FP16
+   * rounding step.
    *
    * Return:
    *
-   *     [20:16] = {NV,DZ,OF,UF,NX}
-   *     [15:0]  = binary16 result
+   *   [20:16] {NV,DZ,OF,UF,NX}
+   *   [15:0]  result
    */
   function automatic logic [20:0] fp16_fma(
     input logic [15:0] a,
@@ -226,8 +143,9 @@ module fp16_gemm_array #(
     logic sign_a;
     logic sign_b;
     logic sign_c;
-    logic sign_p;
-    logic sign_r;
+    logic prod_sign;
+    logic sum_sign;
+    logic zero_sign;
 
     logic [4:0] exp_a;
     logic [4:0] exp_b;
@@ -241,6 +159,14 @@ module fp16_gemm_array #(
     logic b_nan;
     logic c_nan;
 
+    logic a_qnan;
+    logic b_qnan;
+    logic c_qnan;
+
+    logic a_snan;
+    logic b_snan;
+    logic c_snan;
+
     logic a_inf;
     logic b_inf;
     logic c_inf;
@@ -249,226 +175,193 @@ module fp16_gemm_array #(
     logic b_zero;
     logic c_zero;
 
-    logic [10:0] mant_a;
-    logic [10:0] mant_b;
-    logic [10:0] mant_c;
+    logic [10:0] sig_a;
+    logic [10:0] sig_b;
+    logic [10:0] sig_c;
 
-    integer pow_a;
-    integer pow_b;
-    integer pow_c;
+    logic [21:0] prod_sig;
 
+    integer scale_a;
+    integer scale_b;
+    integer scale_c;
     integer prod_shift;
     integer c_shift;
 
-    logic [21:0] prod_mant;
+    integer msb;
+    integer rshift;
+    integer exp_field;
 
     logic [79:0] prod_mag;
     logic [79:0] c_mag;
-    logic [79:0] magnitude;
+    logic [79:0] sum_mag;
 
-    logic signed [80:0] prod_term;
-    logic signed [80:0] c_term;
-    logic signed [80:0] exact_sum;
+    logic [79:0] retained_wide;
+    logic [79:0] rem;
+    logic [79:0] half;
 
-    logic [79:0] trunc_mag;
-    logic [79:0] remainder;
-    logic [79:0] half_ulp;
+    logic [79:0] ovf_threshold;
+    logic [79:0] minsub_threshold;
+    logic [79:0] minnorm_threshold;
 
-    /*
-     * 65520 * 2^48.
-     *
-     * 65520 is the binary16 RNE overflow boundary immediately above
-     * the largest finite value 65504.
-     */
-    logic [79:0] overflow_threshold;
+    logic [11:0] retained;
 
-    logic [11:0] rounded_sig;
+    logic round_inc;
+    logic inexact;
 
-    logic rem_nonzero;
-    logic round_increment;
-
-    integer leading_bit;
-    integer shift_amt;
-    integer unbiased_exp;
-
-    logic [4:0] out_exp;
+    logic nv;
+    logic of;
+    logic uf;
+    logic nx;
 
     logic [15:0] result;
-    logic [4:0]  flags;
 
     begin
-
-      /*
-       * Defaults.
-       */
-      result = 16'h0000;
-      flags  = 5'b00000;
 
       sign_a = a[15];
       sign_b = b[15];
       sign_c = c[15];
 
-      sign_p = sign_a ^ sign_b;
-      sign_r = 1'b0;
-
-      exp_a = a[14:10];
-      exp_b = b[14:10];
-      exp_c = c[14:10];
+      exp_a  = a[14:10];
+      exp_b  = b[14:10];
+      exp_c  = c[14:10];
 
       frac_a = a[9:0];
       frac_b = b[9:0];
       frac_c = c[9:0];
 
-      a_nan = (exp_a == 5'h1f) && (frac_a != 10'b0);
-      b_nan = (exp_b == 5'h1f) && (frac_b != 10'b0);
-      c_nan = (exp_c == 5'h1f) && (frac_c != 10'b0);
+      a_nan =
+        (exp_a == 5'h1f) &&
+        (frac_a != 10'h000);
 
-      a_inf = (exp_a == 5'h1f) && (frac_a == 10'b0);
-      b_inf = (exp_b == 5'h1f) && (frac_b == 10'b0);
-      c_inf = (exp_c == 5'h1f) && (frac_c == 10'b0);
+      b_nan =
+        (exp_b == 5'h1f) &&
+        (frac_b != 10'h000);
 
-      a_zero = (exp_a == 5'b0) && (frac_a == 10'b0);
-      b_zero = (exp_b == 5'b0) && (frac_b == 10'b0);
-      c_zero = (exp_c == 5'b0) && (frac_c == 10'b0);
+      c_nan =
+        (exp_c == 5'h1f) &&
+        (frac_c != 10'h000);
+
+      a_qnan = a_nan && frac_a[9];
+      b_qnan = b_nan && frac_b[9];
+      c_qnan = c_nan && frac_c[9];
+
+      a_snan = a_nan && !frac_a[9];
+      b_snan = b_nan && !frac_b[9];
+      c_snan = c_nan && !frac_c[9];
+
+      a_inf =
+        (exp_a == 5'h1f) &&
+        (frac_a == 10'h000);
+
+      b_inf =
+        (exp_b == 5'h1f) &&
+        (frac_b == 10'h000);
+
+      c_inf =
+        (exp_c == 5'h1f) &&
+        (frac_c == 10'h000);
+
+      a_zero =
+        (exp_a == 5'h00) &&
+        (frac_a == 10'h000);
+
+      b_zero =
+        (exp_b == 5'h00) &&
+        (frac_b == 10'h000);
+
+      c_zero =
+        (exp_c == 5'h00) &&
+        (frac_c == 10'h000);
+
+      nv = 1'b0;
+      of = 1'b0;
+      uf = 1'b0;
+      nx = 1'b0;
+
+      result = 16'h0000;
+
+      sig_a = 11'h000;
+      sig_b = 11'h000;
+      sig_c = 11'h000;
+
+      scale_a = -24;
+      scale_b = -24;
+      scale_c = -24;
+
+      prod_sig = 22'h000000;
+
+      prod_shift = 0;
+      c_shift    = 0;
+
+      prod_mag = 80'h0;
+      c_mag    = 80'h0;
+      sum_mag  = 80'h0;
+
+      prod_sign = 1'b0;
+      sum_sign  = 1'b0;
+      zero_sign = 1'b0;
+
+      retained_wide = 80'h0;
+      rem           = 80'h0;
+      half          = 80'h0;
+
+      retained = 12'h000;
+
+      round_inc = 1'b0;
+      inexact   = 1'b0;
+
+      msb       = 0;
+      rshift    = 0;
+      exp_field = 0;
 
       /*
-       * Decode finite significands and powers.
-       */
-      if (exp_a == 5'b0) begin
-        mant_a = {1'b0, frac_a};
-        pow_a  = -24;
-      end
-      else begin
-        mant_a = {1'b1, frac_a};
-        pow_a  = exp_a;
-        pow_a  = pow_a - 25;
-      end
-
-      if (exp_b == 5'b0) begin
-        mant_b = {1'b0, frac_b};
-        pow_b  = -24;
-      end
-      else begin
-        mant_b = {1'b1, frac_b};
-        pow_b  = exp_b;
-        pow_b  = pow_b - 25;
-      end
-
-      if (exp_c == 5'b0) begin
-        mant_c = {1'b0, frac_c};
-        pow_c  = -24;
-      end
-      else begin
-        mant_c = {1'b1, frac_c};
-        pow_c  = exp_c;
-        pow_c  = pow_c - 25;
-      end
-
-      prod_shift = pow_a + pow_b + 48;
-      c_shift    = pow_c + 48;
-
-      prod_mant =
-          {{11{1'b0}}, mant_a} *
-          {{11{1'b0}}, mant_b};
-
-      prod_mag = {{58{1'b0}}, prod_mant};
-      c_mag    = {{69{1'b0}}, mant_c};
-
-      prod_mag = prod_mag << prod_shift;
-      c_mag    = c_mag << c_shift;
-
-      prod_term = $signed({1'b0, prod_mag});
-      c_term    = $signed({1'b0, c_mag});
-
-      if (sign_p)
-        prod_term = -prod_term;
-
-      if (sign_c)
-        c_term = -c_term;
-
-      exact_sum = prod_term + c_term;
-
-      overflow_threshold = 80'b0;
-      overflow_threshold[63:48] = 16'hfff0;
-
-      trunc_mag       = 80'b0;
-      remainder       = 80'b0;
-      half_ulp        = 80'b0;
-      rounded_sig     = 12'b0;
-      rem_nonzero     = 1'b0;
-      round_increment = 1'b0;
-      leading_bit     = 0;
-      shift_amt       = 0;
-      unbiased_exp    = 0;
-      out_exp         = 5'b0;
-
-
-      /*
-       * ----------------------------------------------------------------------
-       * NaN propagation.
-       * ----------------------------------------------------------------------
+       * Internal unit = 2^-48.
        *
-       * The contract's quiet-NaN case delivers the canonical qNaN and raises
-       * no exception.
+       * 65520 * 2^48
+       * 2^-24 * 2^48 = 2^24
+       * 2^-14 * 2^48 = 2^34
        */
-      if (a_nan || b_nan || c_nan) begin
-
-        result = FP16_QNAN;
-
-      end
+      ovf_threshold     = (80'd65520 << 48);
+      minsub_threshold  = (80'd1 << 24);
+      minnorm_threshold = (80'd1 << 34);
 
 
       /*
-       * ----------------------------------------------------------------------
-       * infinity * zero
-       * ----------------------------------------------------------------------
+       * Quiet NaN has contractual no-NV behavior.
        */
-      else if (
-          (a_inf && b_zero) ||
-          (b_inf && a_zero)
+      if (a_qnan || b_qnan || c_qnan) begin
+
+        result = 16'h7e00;
+
+      end else if (a_snan || b_snan || c_snan) begin
+
+        result = 16'h7e00;
+        nv     = 1'b1;
+
+      end else if (
+        (a_inf && b_zero) ||
+        (b_inf && a_zero)
       ) begin
 
-        result   = FP16_QNAN;
-        flags[4] = 1'b1;
+        result = 16'h7e00;
+        nv     = 1'b1;
 
-      end
+      end else if (a_inf || b_inf) begin
 
+        prod_sign = sign_a ^ sign_b;
 
-      /*
-       * ----------------------------------------------------------------------
-       * Infinite product.
-       * ----------------------------------------------------------------------
-       */
-      else if (a_inf || b_inf) begin
-
-        /*
-         * +inf + -inf is invalid.
-         */
-        if (c_inf && (sign_c != sign_p)) begin
-
-          result   = FP16_QNAN;
-          flags[4] = 1'b1;
-
-        end
-        else begin
-
+        if (c_inf && (sign_c != prod_sign)) begin
+          result = 16'h7e00;
+          nv     = 1'b1;
+        end else begin
           result = {
-            sign_p,
+            prod_sign,
             5'h1f,
             10'h000
           };
-
         end
 
-      end
-
-
-      /*
-       * ----------------------------------------------------------------------
-       * Finite product plus infinite c.
-       * ----------------------------------------------------------------------
-       */
-      else if (c_inf) begin
+      end else if (c_inf) begin
 
         result = {
           sign_c,
@@ -476,362 +369,396 @@ module fp16_gemm_array #(
           10'h000
         };
 
-      end
-
-
-      /*
-       * ----------------------------------------------------------------------
-       * Exact finite zero.
-       * ----------------------------------------------------------------------
-       */
-      else if (exact_sum == 81'sd0) begin
+      end else begin
 
         /*
-         * Same-sign zeros preserve their sign.
-         *
-         * Opposite-sign zeros and exact cancellation are +0 except under
-         * roundTowardNegative, where they are -0.
+         * finite value = significand * 2^scale
          */
-        if (
-            (prod_mag == 80'b0) &&
-            (c_mag == 80'b0) &&
-            (sign_p == sign_c)
-        )
-          sign_r = sign_p;
-        else if (rnd == 3'd2)
-          sign_r = 1'b1;
-        else
-          sign_r = 1'b0;
+        if (exp_a == 5'h00) begin
+          sig_a   = {1'b0, frac_a};
+          scale_a = -24;
+        end else begin
+          sig_a   = {1'b1, frac_a};
+          scale_a = $signed({1'b0, exp_a}) - 25;
+        end
 
-        result = {
-          sign_r,
-          15'b0
-        };
+        if (exp_b == 5'h00) begin
+          sig_b   = {1'b0, frac_b};
+          scale_b = -24;
+        end else begin
+          sig_b   = {1'b1, frac_b};
+          scale_b = $signed({1'b0, exp_b}) - 25;
+        end
 
-      end
+        if (exp_c == 5'h00) begin
+          sig_c   = {1'b0, frac_c};
+          scale_c = -24;
+        end else begin
+          sig_c   = {1'b1, frac_c};
+          scale_c = $signed({1'b0, exp_c}) - 25;
+        end
 
+        prod_sign = sign_a ^ sign_b;
 
-      /*
-       * ----------------------------------------------------------------------
-       * Finite nonzero exact result.
-       * ----------------------------------------------------------------------
-       */
-      else begin
+        prod_sig =
+          {11'b0, sig_a} * sig_b;
 
-        sign_r = exact_sum[80];
+        prod_shift =
+          scale_a + scale_b + 48;
 
-        if (sign_r)
-          magnitude =
-              (~exact_sum[79:0]) +
-              80'd1;
-        else
-          magnitude =
-              exact_sum[79:0];
+        c_shift =
+          scale_c + 48;
 
+        if (prod_sig != 22'h000000)
+          prod_mag =
+            {{58{1'b0}}, prod_sig}
+            << prod_shift;
+
+        if (sig_c != 11'h000)
+          c_mag =
+            {{69{1'b0}}, sig_c}
+            << c_shift;
 
         /*
-         * --------------------------------------------------------------------
-         * Explicit A5 range boundary.
-         * --------------------------------------------------------------------
+         * Exact signed magnitude addition.
          */
-        if (magnitude >= overflow_threshold) begin
+        if (prod_sign == sign_c) begin
 
-          result = fp16_overflow_value(
-            sign_r,
-            rnd
-          );
+          sum_mag  = prod_mag + c_mag;
+          sum_sign = prod_sign;
 
-          flags[2] = 1'b1;  // OF
-          flags[0] = 1'b1;  // NX
+        end else if (prod_mag > c_mag) begin
+
+          sum_mag  = prod_mag - c_mag;
+          sum_sign = prod_sign;
+
+        end else if (c_mag > prod_mag) begin
+
+          sum_mag  = c_mag - prod_mag;
+          sum_sign = sign_c;
+
+        end else begin
+
+          sum_mag = 80'h0;
+
+          /*
+           * Same-sign zero + zero retains that sign.
+           *
+           * Exact cancellation of opposite signs yields -0 only
+           * for roundTowardNegative.
+           */
+          if (
+            (prod_mag == 80'h0) &&
+            (c_mag == 80'h0) &&
+            (prod_sign == sign_c)
+          )
+            zero_sign = prod_sign;
+          else
+            zero_sign = (rnd == RDN);
+
+          sum_sign = zero_sign;
 
         end
-        else begin
-
-          leading_bit = msb80(magnitude);
 
 
-          /*
-           * ------------------------------------------------------------------
-           * Subnormal range.
-           * ------------------------------------------------------------------
-           *
-           * Since the exact integer grid is 2^-48 and a binary16 subnormal
-           * quantum is 2^-24, rounding to the subnormal grid means dropping
-           * exactly 24 low bits.
-           */
-          if (leading_bit < 34) begin
+        /*
+         * Exact zero.
+         */
+        if (sum_mag == 80'h0) begin
 
-            shift_amt = 24;
-
-            trunc_mag =
-                magnitude >>
-                shift_amt;
-
-            remainder =
-                magnitude -
-                (trunc_mag << shift_amt);
-
-            half_ulp = 80'd1 << (shift_amt - 1);
-
-            rounded_sig =
-                trunc_mag[11:0];
-
-            rem_nonzero =
-                (remainder != 80'b0);
-
-            round_increment = 1'b0;
-
-            if (rem_nonzero) begin
-
-              case (rnd)
-
-                /*
-                 * RNE
-                 */
-                3'd0:
-                  round_increment =
-                      (remainder > half_ulp) ||
-                      (
-                        (remainder == half_ulp) &&
-                        rounded_sig[0]
-                      );
-
-                /*
-                 * RTZ
-                 */
-                3'd1:
-                  round_increment = 1'b0;
-
-                /*
-                 * RDN
-                 */
-                3'd2:
-                  round_increment = sign_r;
-
-                /*
-                 * RUP
-                 */
-                3'd3:
-                  round_increment = !sign_r;
-
-                /*
-                 * RMM
-                 */
-                3'd4:
-                  round_increment =
-                      (remainder >= half_ulp);
-
-                default:
-                  round_increment =
-                      (remainder > half_ulp) ||
-                      (
-                        (remainder == half_ulp) &&
-                        rounded_sig[0]
-                      );
-
-              endcase
-
-            end
-
-            if (round_increment)
-              rounded_sig =
-                  rounded_sig +
-                  12'd1;
+          result = {
+            sum_sign,
+            15'h0000
+          };
 
 
-            /*
-             * Rounding the largest subnormal can create the minimum normal.
-             */
-            if (rounded_sig >= 12'd1024) begin
+        /*
+         * Exact magnitude at or above FP16 overflow threshold.
+         */
+        end else if (sum_mag >= ovf_threshold) begin
 
-              result = {
-                sign_r,
-                5'd1,
-                10'h000
-              };
+          result =
+            overflow_value(
+              sum_sign,
+              rnd
+            );
 
-            end
-            else begin
-
-              result = {
-                sign_r,
-                5'd0,
-                rounded_sig[9:0]
-              };
-
-            end
+          of = 1'b1;
+          nx = 1'b1;
 
 
-            /*
-             * A7:
-             *
-             * exact subnormal => no UF and no NX.
-             *
-             * tiny + inexact => both UF and NX.
-             */
-            if (rem_nonzero) begin
-              flags[1] = 1'b1;
-              flags[0] = 1'b1;
-            end
+        /*
+         * Below the smallest positive subnormal.
+         */
+        end else if (sum_mag < minsub_threshold) begin
 
-          end
+          rem  = sum_mag;
+          half = (80'd1 << 23);
 
+          round_inc = 1'b0;
 
-          /*
-           * ------------------------------------------------------------------
-           * Normal range.
-           * ------------------------------------------------------------------
-           */
-          else begin
+          case (rnd)
 
-            unbiased_exp =
-                leading_bit - 48;
+            RNE:
+              round_inc =
+                (rem > half);
 
-            /*
-             * Retain hidden bit + ten fraction bits.
-             */
-            shift_amt =
-                leading_bit - 10;
+            RTZ:
+              round_inc =
+                1'b0;
 
-            trunc_mag =
-                magnitude >>
-                shift_amt;
+            RDN:
+              round_inc =
+                sum_sign;
 
-            remainder =
-                magnitude -
-                (trunc_mag << shift_amt);
+            RUP:
+              round_inc =
+                !sum_sign;
 
-            half_ulp =
-                80'd1 <<
-                (shift_amt - 1);
+            RMM:
+              round_inc =
+                (rem >= half);
 
-            rounded_sig =
-                trunc_mag[11:0];
+            default:
+              round_inc =
+                (rem > half);
 
-            rem_nonzero =
-                (remainder != 80'b0);
+          endcase
 
-            round_increment = 1'b0;
+          if (round_inc)
+            result = {
+              sum_sign,
+              5'h00,
+              10'h001
+            };
+          else
+            result = {
+              sum_sign,
+              15'h0000
+            };
 
-            if (rem_nonzero) begin
-
-              case (rnd)
-
-                /*
-                 * RNE
-                 */
-                3'd0:
-                  round_increment =
-                      (remainder > half_ulp) ||
-                      (
-                        (remainder == half_ulp) &&
-                        rounded_sig[0]
-                      );
-
-                /*
-                 * RTZ
-                 */
-                3'd1:
-                  round_increment = 1'b0;
-
-                /*
-                 * RDN
-                 */
-                3'd2:
-                  round_increment = sign_r;
-
-                /*
-                 * RUP
-                 */
-                3'd3:
-                  round_increment = !sign_r;
-
-                /*
-                 * RMM
-                 */
-                3'd4:
-                  round_increment =
-                      (remainder >= half_ulp);
-
-                default:
-                  round_increment =
-                      (remainder > half_ulp) ||
-                      (
-                        (remainder == half_ulp) &&
-                        rounded_sig[0]
-                      );
-
-              endcase
-
-            end
+          uf = 1'b1;
+          nx = 1'b1;
 
 
-            if (round_increment)
-              rounded_sig =
-                  rounded_sig +
-                  12'd1;
+        /*
+         * Subnormal result.
+         *
+         * FP16 subnormal ULP = 2^-24, therefore 2^24 units
+         * of the internal 2^-48 representation.
+         */
+        end else if (sum_mag < minnorm_threshold) begin
 
+          retained_wide =
+            sum_mag >> 24;
 
-            /*
-             * Significand rounding carried into the next exponent.
-             */
-            if (rounded_sig >= 12'd2048) begin
+          retained =
+            retained_wide[11:0];
 
-              rounded_sig =
-                  rounded_sig >> 1;
+          rem =
+            sum_mag -
+            (retained_wide << 24);
 
-              unbiased_exp =
-                  unbiased_exp + 1;
+          half =
+            (80'd1 << 23);
 
-            end
+          inexact =
+            (rem != 80'h0);
 
+          round_inc = 1'b0;
 
-            /*
-             * Directed rounding can cross into overflow below the fixed
-             * RNE threshold.
-             */
-            if (unbiased_exp > 15) begin
+          if (inexact) begin
 
-              result =
-                  fp16_overflow_value(
-                    sign_r,
-                    rnd
+            case (rnd)
+
+              RNE:
+                round_inc =
+                  (rem > half) ||
+                  (
+                    (rem == half) &&
+                    retained[0]
                   );
 
-              flags[2] = 1'b1;
-              flags[0] = 1'b1;
+              RTZ:
+                round_inc =
+                  1'b0;
 
-            end
-            else begin
+              RDN:
+                round_inc =
+                  sum_sign;
 
-              out_exp =
-                  unbiased_exp + 15;
+              RUP:
+                round_inc =
+                  !sum_sign;
 
-              result = {
-                sign_r,
-                out_exp,
-                rounded_sig[9:0]
-              };
+              RMM:
+                round_inc =
+                  (rem >= half);
 
-              if (rem_nonzero)
-                flags[0] = 1'b1;
+              default:
+                round_inc =
+                  (rem > half) ||
+                  (
+                    (rem == half) &&
+                    retained[0]
+                  );
 
-            end
+            endcase
+
+          end
+
+          retained =
+            retained + round_inc;
+
+          nx = inexact;
+          uf = inexact;
+
+          /*
+           * Largest subnormal can round into minimum normal.
+           */
+          if (retained >= 12'd1024)
+            result = {
+              sum_sign,
+              5'h01,
+              10'h000
+            };
+          else
+            result = {
+              sum_sign,
+              5'h00,
+              retained[9:0]
+            };
+
+
+        /*
+         * Normal FP16 result.
+         */
+        end else begin
+
+          msb =
+            msb_index80(sum_mag);
+
+          rshift =
+            msb - 10;
+
+          retained_wide =
+            sum_mag >> rshift;
+
+          retained =
+            retained_wide[11:0];
+
+          rem =
+            sum_mag -
+            (retained_wide << rshift);
+
+          half =
+            (80'd1 << (rshift - 1));
+
+          inexact =
+            (rem != 80'h0);
+
+          round_inc =
+            1'b0;
+
+          if (inexact) begin
+
+            case (rnd)
+
+              RNE:
+                round_inc =
+                  (rem > half) ||
+                  (
+                    (rem == half) &&
+                    retained[0]
+                  );
+
+              RTZ:
+                round_inc =
+                  1'b0;
+
+              RDN:
+                round_inc =
+                  sum_sign;
+
+              RUP:
+                round_inc =
+                  !sum_sign;
+
+              RMM:
+                round_inc =
+                  (rem >= half);
+
+              default:
+                round_inc =
+                  (rem > half) ||
+                  (
+                    (rem == half) &&
+                    retained[0]
+                  );
+
+            endcase
+
+          end
+
+          retained =
+            retained + round_inc;
+
+          /*
+           * Internal scaling is 2^-48.
+           *
+           * biased FP16 exponent:
+           *
+           *   msb - 48 + 15
+           * = msb - 33
+           */
+          exp_field =
+            msb - 33;
+
+          /*
+           * Carry from significand rounding.
+           */
+          if (retained >= 12'd2048) begin
+
+            retained =
+              12'd1024;
+
+            exp_field =
+              exp_field + 1;
+
+          end
+
+          if (exp_field >= 31) begin
+
+            result =
+              overflow_value(
+                sum_sign,
+                rnd
+              );
+
+            of = 1'b1;
+            nx = 1'b1;
+
+          end else begin
+
+            result = {
+              sum_sign,
+              exp_field[4:0],
+              retained[9:0]
+            };
+
+            nx = inexact;
 
           end
 
         end
-
       end
 
-
-      /*
-       * DZ is always zero.
-       */
-      flags[3] = 1'b0;
-
       fp16_fma = {
-        flags,
+        nv,
+        1'b0,
+        of,
+        uf,
+        nx,
         result
       };
 
@@ -840,289 +767,195 @@ module fp16_gemm_array #(
 
 
   /*
-   * --------------------------------------------------------------------------
-   * Combinational FMA network.
-   * --------------------------------------------------------------------------
-   *
-   * Stage zero is seeded from either:
-   *
-   *   y_i[row]
-   *
-   * or the row's current registered z value.
-   *
-   * Because stage-zero samples the PRE-EDGE value of the output register,
-   * accumulated feedback is one enabled tick older than stage-zero's current
-   * operands. Combined with d(0), this gives:
-   *
-   *   dfb = d(0) + 1
-   *
-   * exactly as required.
+   * Combinational FMA input for each row/stage.
    */
   genvar gr;
   genvar gk;
 
   generate
-
-    for (gr = 0; gr < WIDTH; gr = gr + 1) begin : GEN_ROW
-
-      assign z_o[gr] =
-          stage_pipe_q[gr][HEIGHT-1][STAGE_DELAY-1];
+    for (
+      gr = 0;
+      gr < WIDTH;
+      gr = gr + 1
+    ) begin : g_row
 
       for (
-          gk = 0;
-          gk < HEIGHT;
-          gk = gk + 1
-      ) begin : GEN_STAGE
+        gk = 0;
+        gk < HEIGHT;
+        gk = gk + 1
+      ) begin : g_stage
 
-        assign status_o[gr][gk] =
-            status_pipe_q[gr][gk][STATUS_DELAY-1];
+        if (gk == 0) begin : g_first
 
-        if (gk == 0) begin : GEN_FIRST_STAGE
+          assign fma_now[gr][gk] =
+            accumulate_i
+              ? fp16_fma(
+                  x_i[gr][gk],
+                  w_i[gk],
+                  data_q[gr][HEIGHT-1][3],
+                  rnd_i
+                )
+              : fp16_fma(
+                  x_i[gr][gk],
+                  w_i[gk],
+                  y_i[gr],
+                  rnd_i
+                );
 
-          assign fma_comb[gr][gk] =
-              fp16_fma(
-                x_i[gr][gk],
-                w_i[gk],
-                accumulate_i
-                  ? stage_pipe_q
-                      [gr]
-                      [HEIGHT-1]
-                      [STAGE_DELAY-1]
-                  : y_i[gr],
-                rnd_i
-              );
+        end else begin : g_rest
 
-        end
-        else begin : GEN_LATER_STAGE
-
-          assign fma_comb[gr][gk] =
-              fp16_fma(
-                x_i[gr][gk],
-                w_i[gk],
-                stage_pipe_q
-                    [gr]
-                    [gk-1]
-                    [STAGE_DELAY-1],
-                rnd_i
-              );
+          assign fma_now[gr][gk] =
+            fp16_fma(
+              x_i[gr][gk],
+              w_i[gk],
+              data_q[gr][gk-1][3],
+              rnd_i
+            );
 
         end
-
       end
-
     end
-
   endgenerate
 
 
-  /*
-   * --------------------------------------------------------------------------
-   * Pipeline/register state.
-   * --------------------------------------------------------------------------
-   *
-   * Reset:
-   *   asynchronous and active-low, clearing z and status.
-   *
-   * Row gate:
-   *   if low, EVERYTHING belonging to that row holds.
-   *
-   * flush:
-   *   acts only when the row clock gate is enabled;
-   *   clears the data/partial-sum pipeline;
-   *   outranks reg_enable_i;
-   *   DOES NOT clear or otherwise alter the status pipeline.
-   *
-   * reg_enable:
-   *   advances both arithmetic and status pipelines when high.
-   */
+  integer r;
+  integer k;
+  integer j;
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
 
     if (!rst_ni) begin
 
-      for (
-          r_idx = 0;
-          r_idx < WIDTH;
-          r_idx = r_idx + 1
-      ) begin
+      data_q       <= '0;
+      flag_q       <= '0;
+      flush_seen_q <= '0;
 
-        for (
-            k_idx = 0;
-            k_idx < HEIGHT;
-            k_idx = k_idx + 1
-        ) begin
-
-          for (
-              d_idx = 0;
-              d_idx < STAGE_DELAY;
-              d_idx = d_idx + 1
-          ) begin
-
-            stage_pipe_q
-                [r_idx]
-                [k_idx]
-                [d_idx]
-                <= 16'h0000;
-
-          end
-
-          for (
-              d_idx = 0;
-              d_idx < STATUS_DELAY;
-              d_idx = d_idx + 1
-          ) begin
-
-            status_pipe_q
-                [r_idx]
-                [k_idx]
-                [d_idx]
-                <= 5'b00000;
-
-          end
-
-        end
-
-      end
-
-    end
-    else begin
+    end else begin
 
       for (
-          r_idx = 0;
-          r_idx < WIDTH;
-          r_idx = r_idx + 1
+        r = 0;
+        r < WIDTH;
+        r = r + 1
       ) begin
 
         /*
-         * Entire row freezes when its clock gate is disabled.
+         * A gated row holds all state. It therefore also ignores flush.
          */
-        if (row_clk_gate_en_i[r_idx]) begin
+        if (row_clk_gate_en_i[r]) begin
 
-          /*
-           * --------------------------------------------------------------
-           * Arithmetic state.
-           * --------------------------------------------------------------
-           *
-           * flush has priority over reg_enable.
-           */
           if (flush_i) begin
 
-            for (
-                k_idx = 0;
-                k_idx < HEIGHT;
-                k_idx = k_idx + 1
+            /*
+             * Flush clears the arithmetic pipeline even if
+             * reg_enable_i is low.
+             */
+            data_q[r] <= '0;
+
+            /*
+             * status advances on the first enabled flush tick.
+             * Enabled tick requires reg_enable_i.
+             *
+             * Later enabled flush ticks hold status.
+             */
+            if (
+              reg_enable_i &&
+              !flush_seen_q[r]
             ) begin
 
               for (
-                  d_idx = 0;
-                  d_idx < STAGE_DELAY;
-                  d_idx = d_idx + 1
+                k = 0;
+                k < HEIGHT;
+                k = k + 1
               ) begin
 
-                stage_pipe_q
-                    [r_idx]
-                    [k_idx]
-                    [d_idx]
-                    <= 16'h0000;
+                flag_q[r][k][0] <=
+                  fma_now[r][k][20:16];
+
+                flag_q[r][k][1] <=
+                  flag_q[r][k][0];
+
+                flag_q[r][k][2] <=
+                  flag_q[r][k][1];
+
+              end
+
+              flush_seen_q[r] <= 1'b1;
+
+            end
+
+          end else begin
+
+            flush_seen_q[r] <= 1'b0;
+
+            /*
+             * Ordinary enabled-tick advancement.
+             */
+            if (reg_enable_i) begin
+
+              for (
+                k = 0;
+                k < HEIGHT;
+                k = k + 1
+              ) begin
+
+                data_q[r][k][0] <=
+                  fma_now[r][k][15:0];
+
+                for (
+                  j = 1;
+                  j < 4;
+                  j = j + 1
+                ) begin
+
+                  data_q[r][k][j] <=
+                    data_q[r][k][j-1];
+
+                end
+
+                flag_q[r][k][0] <=
+                  fma_now[r][k][20:16];
+
+                flag_q[r][k][1] <=
+                  flag_q[r][k][0];
+
+                flag_q[r][k][2] <=
+                  flag_q[r][k][1];
 
               end
 
             end
-
           end
-          else if (reg_enable_i) begin
-
-            for (
-                k_idx = 0;
-                k_idx < HEIGHT;
-                k_idx = k_idx + 1
-            ) begin
-
-              stage_pipe_q
-                  [r_idx]
-                  [k_idx]
-                  [0]
-                  <= fma_comb
-                      [r_idx]
-                      [k_idx]
-                      [15:0];
-
-              for (
-                  d_idx = 1;
-                  d_idx < STAGE_DELAY;
-                  d_idx = d_idx + 1
-              ) begin
-
-                stage_pipe_q
-                    [r_idx]
-                    [k_idx]
-                    [d_idx]
-                    <=
-                stage_pipe_q
-                    [r_idx]
-                    [k_idx]
-                    [d_idx-1];
-
-              end
-
-            end
-
-          end
-
-
-          /*
-           * --------------------------------------------------------------
-           * Status state.
-           * --------------------------------------------------------------
-           *
-           * flush deliberately does not enter this condition.
-           *
-           * An "enabled tick" for status still requires reg_enable_i.
-           */
-          if (reg_enable_i) begin
-
-            for (
-                k_idx = 0;
-                k_idx < HEIGHT;
-                k_idx = k_idx + 1
-            ) begin
-
-              status_pipe_q
-                  [r_idx]
-                  [k_idx]
-                  [0]
-                  <= fma_comb
-                      [r_idx]
-                      [k_idx]
-                      [20:16];
-
-              for (
-                  d_idx = 1;
-                  d_idx < STATUS_DELAY;
-                  d_idx = d_idx + 1
-              ) begin
-
-                status_pipe_q
-                    [r_idx]
-                    [k_idx]
-                    [d_idx]
-                    <=
-                status_pipe_q
-                    [r_idx]
-                    [k_idx]
-                    [d_idx-1];
-
-              end
-
-            end
-
-          end
-
         end
+      end
+    end
+  end
+
+
+  genvar orow;
+  genvar ostage;
+
+  generate
+
+    for (
+      orow = 0;
+      orow < WIDTH;
+      orow = orow + 1
+    ) begin : g_out_row
+
+      assign z_o[orow] =
+        data_q[orow][HEIGHT-1][3];
+
+      for (
+        ostage = 0;
+        ostage < HEIGHT;
+        ostage = ostage + 1
+      ) begin : g_out_stage
+
+        assign status_o[orow][ostage] =
+          flag_q[orow][ostage][2];
 
       end
-
     end
-
-  end
+  endgenerate
 
 endmodule

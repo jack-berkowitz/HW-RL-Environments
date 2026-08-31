@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 24, correct 21, PPA measured 20. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 26, correct 21, PPA measured 20. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -57,12 +57,12 @@ area comparable at all: without it, area can be bought by relaxing timing.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_area_dark.svg">
-  <img alt="Design area relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array at 16.75 ns, reference 708,442 um2: chat fails correctness, claude fails correctness, gemini fails correctness. SDP requantise / convert unit at 33.75 ns, reference 179,943 um2: chat withheld, claude withheld, gemini withheld. non-blocking data cache at 15 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. RISC-V Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude 0.76x, gemini did not build. asynchronous CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. FP32 fused multiply-add at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat 3.28x, claude 1.28x, gemini fails correctness. AXI4 crossbar at 8 ns, reference 147,144 um2: chat 1.17x, claude 1.23x, gemini fails correctness. output-queued AXI-Stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude 0.99x, gemini missed timing." src="docs/assets/design_area_light.svg" width="100%">
+  <img alt="Design area relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array at 16.75 ns, reference 708,442 um2: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit at 33.75 ns, reference 179,943 um2: chat withheld, claude withheld, gemini withheld. non-blocking data cache at 15 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. RISC-V Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude 0.76x, gemini did not build. asynchronous CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. FP32 fused multiply-add at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat 3.28x, claude 1.28x, gemini fails correctness. AXI4 crossbar at 8 ns, reference 147,144 um2: chat 1.17x, claude 1.23x, gemini fails correctness. output-queued AXI-Stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude 0.99x, gemini missed timing." src="docs/assets/design_area_light.svg" width="100%">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_power_dark.svg">
-  <img alt="Total power relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array: chat fails correctness, claude fails correctness, gemini fails correctness. SDP requantise / convert unit: chat withheld, claude withheld, gemini withheld. non-blocking data cache: chat missed timing, claude 4.29x, gemini did not build. RISC-V Sv39 MMU: chat missed timing, claude 1.02x, gemini did not build. asynchronous CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. FP32 fused multiply-add: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat 1.83x, claude 1.47x, gemini fails correctness. AXI4 crossbar: chat 0.90x, claude 0.90x, gemini fails correctness. output-queued AXI-Stream switch: chat missed timing, claude 1.66x, gemini missed timing." src="docs/assets/design_power_light.svg" width="100%">
+  <img alt="Total power relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit: chat withheld, claude withheld, gemini withheld. non-blocking data cache: chat missed timing, claude 4.29x, gemini did not build. RISC-V Sv39 MMU: chat missed timing, claude 1.02x, gemini did not build. asynchronous CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. FP32 fused multiply-add: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat 1.83x, claude 1.47x, gemini fails correctness. AXI4 crossbar: chat 0.90x, claude 0.90x, gemini fails correctness. output-queued AXI-Stream switch: chat missed timing, claude 1.66x, gemini missed timing." src="docs/assets/design_power_light.svg" width="100%">
 </picture>
 
 **Power does not track area.** d_dsp02's `claude` is the clearest case: within
@@ -123,7 +123,7 @@ six that are. That is the result, not a gap in the data.
 |---|---|---|---|---|
 | reference | 708,442 | 278.0 | +2.368 | — |
 | `chat` | **0** | **0** | — | fails correctness |
-| `claude` | **0** | **0** | — | fails correctness |
+| `claude` | **0** | **0** | — | did not build |
 | `gemini` | **0** | **0** | — | fails correctness |
 
 ### d_ai04 — SDP requantise / convert unit, pinned at 33.75 ns
@@ -384,7 +384,7 @@ every seeded fault is findable.
 | Claude Opus 5 | **no** | yes | 0/5 | *withheld* |
 | Gemini 3.1 Pro | yes | yes | 3/5 | *withheld* |
 
-### v_dsp02: FP non-computational ops (ceiling 10/10)
+### v_dsp02: FP non-computational ops (ceiling 13/13)
 
 | Submission | Accepts golden DUT | Rejects broken DUT | Accepts other correct designs | Faults caught |
 |---|---|---|---|---|

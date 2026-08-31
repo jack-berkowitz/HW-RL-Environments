@@ -12,11 +12,11 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | notes |
 |---|---|---|---|---|---|
-| `ChatGPT 5.6 Sol` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `b62c72cf684c1eff` |
-| `Claude Opus 5` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `b62c72cf684c1eff` |
+| `chat` | 0/2 FAIL | — | — | — | scored configuration HEIGHT_4_WIDTH_8 not present in this run |
+| `claude` | **did not build** | **0** | **0** | **0** | **build failure** — 20 error(s); first: sanitised_claude.sv:224:49: error: expected ':'  |
+| `gemini` | 0/2 FAIL | — | — | — | scored configuration HEIGHT_4_WIDTH_8 not present in this run |
 | `claude_nodefault` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
 | `fp16_gemm_array_top` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `b62c72cf684c1eff` |
-| `Gemini 3.1 Pro` | *not scored against this prompt* | — | — | — | last run answered task text `b9ff647ed1ad2810`; the task text is now `b62c72cf684c1eff` |
 | `nc_a_stuck_output` | *not scored against this prompt* | — | — | — | last run answered task text `8ec0b4fd8769d737`; the task text is now `b62c72cf684c1eff` |
 | `nc_b_extra_pipe_stage` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
 | `nc_c_flush_subnormal` | *not scored against this prompt* | — | — | — | last run answered task text `2b7c36c5b08e7965`; the task text is now `b62c72cf684c1eff` |
@@ -207,10 +207,10 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
+| **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 1/1 | **2/10** |  |
 | `Claude Opus 5` | yes | yes | yes | 1/1 | **4/10** |  |
 | `Gemini 3.1 Pro` | yes | yes | yes | 1/1 | **2/10** |  |
-| `stream_realign_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `f8d230ec11bd0372` |
 
 ## v_ca03 — AXI ID-width converter
 
@@ -222,9 +222,9 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
+| **reference testbench** | yes | yes | yes | 5/5 | **11/11** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 | `Claude Opus 5` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `id_width_conv_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `fa23813e5874ef92` |
 | `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
 
 ## v_ca04 — stream crossbar
@@ -297,10 +297,10 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
+| **reference testbench** | yes | yes | yes | 5/5 | **13/13** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 | `Claude Opus 5` | yes | yes | yes | 5/5 | **12/13** |  |
 | `Gemini 3.1 Pro` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `fp_noncomp_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `eacc3c043e2a5767` |
 
 ## v_nw01 — arp engine
 

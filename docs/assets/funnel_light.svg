@@ -7,8 +7,8 @@
 <text x="562" y="78" fill="#1a1a1a" font-size="13" font-weight="600">30 of 30</text>
 <text x="238" y="108" fill="#666" font-size="13" text-anchor="end">compiled</text>
 <rect x="250" y="93" width="300" height="16" rx="3" fill="#e3e3e3"/>
-<rect x="250" y="93" width="240" height="16" rx="3" fill="#2f6feb"/>
-<text x="562" y="108" fill="#1a1a1a" font-size="13" font-weight="600">24 of 30</text>
+<rect x="250" y="93" width="260" height="16" rx="3" fill="#2f6feb"/>
+<text x="562" y="108" fill="#1a1a1a" font-size="13" font-weight="600">26 of 30</text>
 <text x="238" y="138" fill="#666" font-size="13" text-anchor="end">correct</text>
 <rect x="250" y="123" width="300" height="16" rx="3" fill="#e3e3e3"/>
 <rect x="250" y="123" width="210" height="16" rx="3" fill="#2f6feb"/>

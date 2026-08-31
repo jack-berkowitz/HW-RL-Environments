@@ -1,0 +1,14 @@
+{
+  "build_error": "20 error(s); first: sanitised_claude.sv:224:49: error: expected ':' ",
+  "build_status": "slang_rejected",
+  "git_sha": "c56087f7f7f6433c2a0feb5e52c9517b4831e5bc-dirty",
+  "kind": "sim",
+  "label": "claude",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "candidates/d_ai01/claude.sv",
+  "submission_sha256_16": "25add6e35a296412",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "b62c72cf684c1eff",
+  "timestamp_utc": "2026-08-31T20:44:27Z"
+}
