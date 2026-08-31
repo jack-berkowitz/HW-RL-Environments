@@ -342,10 +342,10 @@ prompt is a different question and is not listed.
 
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
+| **reference testbench** | yes | yes | yes | 5/5 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 5/5 | **8/10** |  |
 | `Claude Opus 5` | yes | yes | yes | 5/5 | **9/10** |  |
 | `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `frame_arb_mux_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `839999302366fa24` |
 
 ## v_nw04 — PTP time base
 
