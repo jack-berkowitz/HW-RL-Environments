@@ -148,6 +148,37 @@ fi
 # Take the ABC period line from the task's own config so the candidate is
 # mapped against the same target as the reference. Refuse rather than guess:
 # a silently-empty ABC target is what F24 was.
+# GEOMETRY KEYS COME FROM THE TASK, NOT FROM HERE. They used to be hardcoded
+# below -- CORE_UTILIZATION = 10 in every candidate build regardless of what the
+# task's own config.mk said -- so a candidate could not be built under its
+# reference's configuration.
+#
+# THIS IS F24 ON A DIFFERENT KEY. The comment beside $ABC_LINE below records the
+# same defect: a value hardcoded in the candidate path while the reference used
+# the task's own, making the comparison not like-for-like while this script
+# printed that it was. The geometry keys sat three lines above that comment.
+#
+# Two tasks override: d_ca05 (CORE_UTILIZATION 7, IO_PLACER met3 / met2 met4,
+# because 3,686 IO pins do not fit the default die perimeter) and d_ai01
+# (CORE_UTILIZATION 30). d_ai01 never exercised it -- all three of its
+# candidates fail correctness, so no candidate PPA was ever produced -- so the
+# defect was latent until d_ca05 reached the build stage.
+#
+# The fallbacks reproduce the previous hardcoded values exactly, so the eight
+# tasks that set util=10 and density=0.50 in their own config are unaffected.
+geo_line () {   # key, fallback
+  local v
+  v="$(grep -E "^export $1[[:space:]]*=" "$TASK_DIR/orfs/config.mk" 2>/dev/null | head -1)"
+  if [ -n "$v" ]; then printf '%s\n' "$v"; elif [ -n "$2" ]; then printf 'export %s = %s\n' "$1" "$2"; fi
+}
+GEO_UTIL="$(geo_line CORE_UTILIZATION 10)"
+GEO_DENS="$(geo_line PLACE_DENSITY 0.50)"
+GEO_TNS="$(geo_line TNS_END_PERCENT 100)"
+GEO_IOH="$(geo_line IO_PLACER_H '')"
+GEO_IOV="$(geo_line IO_PLACER_V '')"
+GEO_AR="$(geo_line ASPECT_RATIO '')"
+GEO_CM="$(geo_line CORE_MARGIN '')"
+
 ABC_LINE="$(grep -E '^export ABC_CLOCK_PERIOD_IN_PS' "$TASK_DIR/orfs/config.mk" 2>/dev/null | head -1)"
 if [ -z "$ABC_LINE" ]; then
   echo "REFUSED: $TASK_DIR/orfs/config.mk has no ABC_CLOCK_PERIOD_IN_PS line." >&2
@@ -189,9 +220,13 @@ export SYNTH_HDL_FRONTEND = slang
 # changes nothing for them and the comparison stays like-for-like.
 export SYNTH_MEMORY_MAX_BITS = 65536
 
-export CORE_UTILIZATION = 10
-export PLACE_DENSITY    = 0.50
-export TNS_END_PERCENT  = 100
+$GEO_UTIL
+$GEO_DENS
+$GEO_TNS
+$GEO_IOH
+$GEO_IOV
+$GEO_AR
+$GEO_CM
 # COPIED VERBATIM FROM THE TASK'S OWN config.mk, never re-derived here.
 # This line hardcoded /^set clk_period/, which does not exist in a MULTI-CLOCK
 # SDC: d_ca04 declares wr_period and rd_period, so the awk returned empty and

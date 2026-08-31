@@ -7686,3 +7686,41 @@ send someone to commit a file already committed, or to re-run against bytes
 nobody has.
 
 **Rules:** 17, 20, 24
+
+## F123. Candidates could not be built under their own reference's configuration
+
+`ppa_candidate.sh` generates a fresh ORFS config for every candidate build and
+**hardcoded the geometry keys** into it — `CORE_UTILIZATION = 10`,
+`PLACE_DENSITY = 0.50`, `TNS_END_PERCENT = 100`, and no `IO_PLACER` lines at
+all. The task's own `orfs/config.mk` was consulted for `VERILOG_INCLUDE_DIRS`
+and `ABC_CLOCK_PERIOD_IN_PS` and for nothing else.
+
+**Two tasks override those keys**, and both would have been built wrong:
+
+    d_ca05   CORE_UTILIZATION 7, IO_PLACER_H met3, IO_PLACER_V met2 met4
+    d_ai01   CORE_UTILIZATION 30
+
+d_ca05's candidates would have been built at utilization 10 with the platform's
+default single pin layer — which is the exact configuration whose Fmax sweep
+died at `PPL-0024`, 3,686 IO pins against 3,260 positions. They would have
+failed to floorplan, and had they floorplanned they would have been a different
+build configuration from their reference, which rule 17 refuses to compare.
+
+**This is F24 on a different key, three lines above the comment recording F24.**
+That comment sits beside `$ABC_LINE` and says the ABC target *"hardcoded
+`/^set clk_period/` … every candidate synthesised with ABC unconstrained while
+the reference used 5000 ps. The comparison was not like-for-like, and this
+script printed 'both come from the task's own SDC, so they do' while it was
+false."* The geometry keys were the same defect, unfixed, immediately above it.
+
+**It was latent, not harmless.** d_ai01 has overridden `CORE_UTILIZATION` to 30
+since it was written, and no candidate PPA record exists for it — all three of
+its candidates fail correctness, so the build stage was never reached. The
+defect survived because the only task that could expose it never got that far.
+
+The keys are now read from the task's config with the previous hardcoded values
+as fallbacks, so the eight tasks that set `util=10` and `density=0.50`
+themselves are unaffected, and `IO_PLACER`/`ASPECT_RATIO`/`CORE_MARGIN` are
+emitted only when the task sets them.
+
+**Rules:** 17, 18, 22
