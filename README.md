@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 26, correct 21, PPA measured 20. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 26, correct 21, PPA measured 22. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -45,7 +45,7 @@ area and slower.
 
 ## Design results
 
-**Nine tasks have a pin and a reference built at it.** Every design specification was
+**Ten tasks have a pin and a reference built at it.** Every design specification was
 revised to state its grading criteria — what correctness gates, which PPA axes
 are compared, at what clock, and which levers the contract has already spent —
 and every candidate was re-solicited against the revised prompt.
@@ -57,12 +57,12 @@ area comparable at all: without it, area can be bought by relaxing timing.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_area_dark.svg">
-  <img alt="Design area relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array at 16.75 ns, reference 708,442 um2: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit at 33.75 ns, reference 179,943 um2: chat withheld, claude withheld, gemini withheld. non-blocking data cache at 15 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. RISC-V Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude 0.76x, gemini did not build. asynchronous CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. FP32 fused multiply-add at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat 3.28x, claude 1.28x, gemini fails correctness. AXI4 crossbar at 8 ns, reference 147,144 um2: chat 1.17x, claude 1.23x, gemini fails correctness. output-queued AXI-Stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude 0.99x, gemini missed timing." src="docs/assets/design_area_light.svg" width="100%">
+  <img alt="Design area relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array at 16.75 ns, reference 708,442 um2: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit at 33.75 ns, reference 179,943 um2: chat withheld, claude withheld, gemini withheld. non-blocking data cache at 15 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. RISC-V Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude 0.76x, gemini did not build. asynchronous CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. Multi-requester cache miss handler at 8.75 ns, reference 141,187 um2: chat 0.74x, claude 0.67x, gemini did not build. FP32 fused multiply-add at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat 3.28x, claude 1.28x, gemini fails correctness. AXI4 crossbar at 8 ns, reference 147,144 um2: chat 1.17x, claude 1.23x, gemini fails correctness. output-queued AXI-Stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude 0.99x, gemini missed timing." src="docs/assets/design_area_light.svg" width="100%">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_power_dark.svg">
-  <img alt="Total power relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit: chat withheld, claude withheld, gemini withheld. non-blocking data cache: chat missed timing, claude 4.29x, gemini did not build. RISC-V Sv39 MMU: chat missed timing, claude 1.02x, gemini did not build. asynchronous CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. FP32 fused multiply-add: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat 1.83x, claude 1.47x, gemini fails correctness. AXI4 crossbar: chat 0.90x, claude 0.90x, gemini fails correctness. output-queued AXI-Stream switch: chat missed timing, claude 1.66x, gemini missed timing." src="docs/assets/design_power_light.svg" width="100%">
+  <img alt="Total power relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit: chat withheld, claude withheld, gemini withheld. non-blocking data cache: chat missed timing, claude 4.29x, gemini did not build. RISC-V Sv39 MMU: chat missed timing, claude 1.02x, gemini did not build. asynchronous CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. Multi-requester cache miss handler: chat 0.62x, claude 0.52x, gemini did not build. FP32 fused multiply-add: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat 1.83x, claude 1.47x, gemini fails correctness. AXI4 crossbar: chat 0.90x, claude 0.90x, gemini fails correctness. output-queued AXI-Stream switch: chat missed timing, claude 1.66x, gemini missed timing." src="docs/assets/design_power_light.svg" width="100%">
 </picture>
 
 **Power does not track area.** d_dsp02's `claude` is the clearest case: within
@@ -82,12 +82,14 @@ this chart is where that shows. Two conclusions from the area chart invert:
 - d_ca01's `claude` is 1.32× on raw area and **1.53×** per unit of outstanding
   capacity. The gap widens under normalisation: part of the area it saved was
   bought by tracking fewer outstanding misses.
-- d_nw01's `chat` is 1.36× on area and **1.19×–6.79×** per unit delivered, and
-  *how much* further behind depends entirely on which unit — 1.19× per burst,
-  1.21× per disjoint pair either way, and **6.79×** per outstanding transaction
-  on master 0. The declared metrics disagree by a factor of 5.7 about the same
-  submission, which is the strongest argument on this page against picking one
-  and calling it the capability.
+- d_nw01's `chat` is 1.17× on area and **1.03×–5.87×** per unit delivered, and
+  *how much* further behind depends entirely on which unit — 1.03× per burst,
+  1.04× per disjoint pair either way, and **5.87×** per outstanding transaction
+  on either master. The declared metrics disagree by a factor of **5.7** about
+  the same submission, which is the strongest argument on this page against
+  picking one and calling it the capability. `claude` spans 0.82×–0.86× on the
+  same five metrics, so per-unit separates the two submissions where raw area —
+  1.17× against 1.23× — puts them the wrong way round.
 - d_ca04's three narrow from 0.73–0.74× to 0.89–0.90×. Most of that headline gap
   is two spill registers the reference has and they do not.
 
@@ -109,11 +111,12 @@ declare none, so they are absent rather than shown against an invented axis —
 "more is better and area buys it" is a claim about the contract, not something to
 infer from a metric's name.
 
-**Ten of twenty-seven submissions produce a comparable area number.** Five
-missed timing, six fail correctness, and two were rejected by the synthesis
-frontend without ever running. Four are correct and still waiting on a PPA
-build — a pending build is not a failure, and they are counted apart from the
-six that are. That is the result, not a gap in the data.
+**Thirteen of thirty submissions produce a comparable area number.** Five
+missed timing, five fail correctness, and four were rejected by the synthesis
+frontend without ever running. Three are withheld pending an instrument the task
+does not yet have, counted apart from the failures. Every pinned task now has a
+reference and at least one candidate built at its pin; nothing is waiting on a
+build.
 
 <!-- BEGIN GENERATED: design-tables -->
 
@@ -200,6 +203,16 @@ rather than better implementation — see the like-for-like note below.
 | `chat` | 104,439 | 25.2 | +1.164 | **0.74×** |
 | `claude` | 94,373 | 21.1 | +1.303 | **0.67×** |
 | `gemini` | **0** | **0** | — | did not build |
+
+Both buildable submissions come in well under the reference — **0.74×** and
+**0.67×** — and both close the pin with more slack than it does (+1.16 and +1.30
+against +0.72). The task reached a pin only after its floorplan was fixed: 3,686
+IO pins would not fit the default die perimeter, and the sweep aborted at
+`PPL-0024` until the pin placer was given a second vertical layer.
+
+`gemini` is a frontend rejection rather than a correctness failure — slang
+reports it addressing a struct field that does not exist on the vendored AXI
+type, and `check_transport` finds no paste damage, so it is the model's output.
 
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 

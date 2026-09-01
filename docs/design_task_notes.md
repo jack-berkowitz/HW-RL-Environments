@@ -61,3 +61,14 @@ is a design that works and is nearly four times too slow.
 ten diagnostics, none of them internal errors, and Verilator rejects the same
 construct at the same line. Two independent frontends agreeing makes it a
 genuine build failure rather than a host problem.
+
+## d_ca05
+Both buildable submissions come in well under the reference — **0.74×** and
+**0.67×** — and both close the pin with more slack than it does (+1.16 and +1.30
+against +0.72). The task reached a pin only after its floorplan was fixed: 3,686
+IO pins would not fit the default die perimeter, and the sweep aborted at
+`PPL-0024` until the pin placer was given a second vertical layer.
+
+`gemini` is a frontend rejection rather than a correctness failure — slang
+reports it addressing a struct field that does not exist on the vendored AXI
+type, and `check_transport` finds no paste damage, so it is the model's output.

@@ -81,8 +81,8 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | notes |
 |---|---|---|---|---|---|---|
-| `chat` | **1/1 pass** | — | — | — | — | scored configuration NR_PORTS_4 not present in this run |
-| `claude` | **1/1 pass** | — | — | — | — | scored configuration NR_PORTS_4 not present in this run |
+| `chat` | **1/1 pass** | 104,439 | 25.2 | not swept | — | scored configuration NR_PORTS_4 not present in this run |
+| `claude` | **1/1 pass** | 94,373 | 21.1 | not swept | — | scored configuration NR_PORTS_4 not present in this run |
 | `gemini` | **did not build** | **0** | **0** | **0** | n/a | **build failure** — 12 error(s); first: sanitised_gemini.sv:380:21: error: no member named 'valid' in 'axi_aw_t'  |
 | `miss_handler_arb_ref` | *not scored against this prompt* | — | — | — | — | last run answered task text `ee4cc2172854ca1f`; the task text is now `1ecf57426c98a135` |
 
