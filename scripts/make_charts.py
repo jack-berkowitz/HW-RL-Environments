@@ -37,9 +37,11 @@ OUT = os.path.join(REPO, "docs", "assets")
 # files meant every fix had to be made twice, and once it was not.
 THEMES = {
     "light": dict(fg="#1a1a1a", mute="#666", grid="#d8d8d8", bg="none",
-                  bar="#2f6feb", bar2="#7aa5f0", dead="#e3e3e3", rule="#c00"),
+                  bar="#2f6feb", bar2="#7aa5f0", dead="#e3e3e3", rule="#c00",
+                  f_invalid="#e8663d", f_gate="#d9a520", f_nobuild="#8a8f98"),
     "dark":  dict(fg="#e8e8e8", mute="#9a9a9a", grid="#3a3a3a", bg="none",
-                  bar="#5b8dfb", bar2="#2f4f8f", dead="#333", rule="#ff6b6b"),
+                  bar="#5b8dfb", bar2="#2f4f8f", dead="#333", rule="#ff6b6b",
+                  f_invalid="#ff7a52", f_gate="#e8b53a", f_nobuild="#7d838d"),
 }
 
 
@@ -256,48 +258,76 @@ def funnel_svg(theme):
 
 
 def faults_svg(theme):
+    """Seeded faults per submission, with the FAILURE MODE distinguishable.
+
+    Two defects this rewrite fixes, both raised off the rendered chart rather
+    than off the code.
+
+    THE FAILURE MODES WERE INDISTINGUISHABLE. Every unscored submission drew the
+    same 6px grey stub with a rotated 9pt label, so "rejects the golden DUT",
+    "rejects a conformant design" and "does not compile" -- three different
+    findings about a model -- looked identical at a glance, and the label was the
+    only thing separating them. Half the corpus is in those states, so the chart
+    was illegible exactly where it carried the most information. Each now has its
+    own colour and a legend, and the stub is tall enough to read.
+
+    THE CEILING RAN OFF THE TOP. Gridlines stepped `range(0, maxv+1, 2)`, so with
+    v_dsp02's ceiling at 13 the topmost labelled line was 12 and the dashed rule
+    sat above every gridline, touching the plot edge. The axis now covers the
+    ceiling with headroom and always labels the maximum.
+    """
     c = THEMES[theme]
     rows = verification_rows()
     by_task = {}
     for t, m, n, ceil, st in rows:
         by_task.setdefault(t, []).append((m, n, ceil, st))
-    W, barw, gap, groupgap, base = 900, 26, 8, 46, 210
+
+    STATE = {"invalid":   ("rejects the golden DUT",   "f_invalid", "invalid"),
+             "gate":      ("rejects a correct design", "f_gate",    "gate"),
+             "nobuild":   ("does not compile",         "f_nobuild", "no build"),
+             "unmeasured": ("not measured",            "f_nobuild", "n/m")}
+
+    W, barw, gap, groupgap, base = 900, 26, 8, 46, 250
     x = 60
-    widths = []
-    for t in sorted(by_task):
-        widths.append(len(by_task[t]) * (barw + gap) + groupgap)
-    W = max(W, int(60 + sum(widths) + 40))
-    H = 300
+    W = max(W, int(60 + sum(len(by_task[t]) * (barw + gap) + groupgap
+                            for t in by_task) + 40))
+    H = 360
     p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
          f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">']
     p.append(f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>')
-    maxv = max([ceil for _t, _m, _n, ceil, _s in rows if ceil] + [10])
-    scale = 150.0 / maxv
-    for gv in range(0, maxv + 1, 2):
+
+    # HEADROOM ABOVE THE CEILING so the dashed rule is never the topmost pixel.
+    maxv = max([ceil for _t, _m, _n, ceil, _s in rows if ceil]
+               + [n for _t, _m, n, _c, _s in rows if n] + [10])
+    step = 2 if maxv <= 16 else 4
+    topv = maxv + (step - maxv % step) % step        # round up to a whole step
+    scale = 160.0 / topv
+    for gv in range(0, topv + 1, step):
         yy = base - gv * scale
         p.append(f'<line x1="52" y1="{yy}" x2="{W - 20}" y2="{yy}" '
                  f'stroke="{c["grid"]}" stroke-width="1"/>')
         p.append(f'<text x="44" y="{yy + 4}" fill="{c["mute"]}" font-size="11" '
                  f'text-anchor="end">{gv}</text>')
+
     for t in sorted(by_task):
         grp = by_task[t]
         gx0 = x
         ceil = max([ci for _m, _n, ci, _s in grp] or [0])
         for m, n, ci, st in grp:
-            h = int(n * scale)
-            lab = {"invalid": "invalid", "gate": "gate", "nobuild": "no build",
-                   "unmeasured": "n/m"}.get(st, "")
-            if h:
+            if n:
+                h = int(n * scale)
                 p.append(f'<rect x="{x}" y="{base - h}" width="{barw}" height="{h}" '
                          f'rx="2" fill="{c["bar"]}"/>')
                 p.append(f'<text x="{x + barw / 2}" y="{base - h - 6}" fill="{c["fg"]}" '
                          f'font-size="11" text-anchor="middle">{n}</text>')
             else:
-                p.append(f'<rect x="{x}" y="{base - 6}" width="{barw}" height="6" '
-                         f'rx="2" fill="{c["dead"]}"/>')
-                p.append(f'<text x="{x + barw / 2}" y="{base - 12}" fill="{c["mute"]}" '
+                _lbl, key, short = STATE.get(st, ("", "dead", ""))
+                p.append(f'<rect x="{x}" y="{base - 14}" width="{barw}" height="14" '
+                         f'rx="2" fill="{c[key]}"/>')
+                p.append(f'<text x="{x + barw / 2}" y="{base - 20}" fill="{c[key]}" '
                          f'font-size="9" text-anchor="middle" '
-                         f'transform="rotate(-90 {x + barw / 2} {base - 12})">{esc(lab)}</text>')
+                         f'transform="rotate(-90 {x + barw / 2} {base - 20})">'
+                         f'{esc(short)}</text>')
             p.append(f'<text x="{x + barw / 2}" y="{base + 14}" fill="{c["mute"]}" '
                      f'font-size="9" text-anchor="middle" '
                      f'transform="rotate(-40 {x + barw / 2} {base + 14})">'
@@ -307,14 +337,30 @@ def faults_svg(theme):
             yy = base - ceil * scale
             p.append(f'<line x1="{gx0 - 4}" y1="{yy}" x2="{x - gap + 4}" y2="{yy}" '
                      f'stroke="{c["rule"]}" stroke-width="2" stroke-dasharray="5,3"/>')
+            p.append(f'<text x="{x - gap + 8}" y="{yy + 4}" fill="{c["rule"]}" '
+                     f'font-size="10">{ceil}</text>')
         p.append(f'<text x="{(gx0 + x - gap) / 2}" y="{base + 62}" fill="{c["fg"]}" '
                  f'font-size="12" font-weight="600" text-anchor="middle">'
                  f'{esc(t.split("_")[0] + "_" + t.split("_")[1])}</text>')
         x += groupgap
-    p.append(f'<text x="20" y="20" fill="{c["fg"]}" font-size="14" font-weight="600">'
-             f'Seeded faults detected (dashed line = ceiling the reference achieves)</text>')
+
+    p.append(f'<text x="20" y="22" fill="{c["fg"]}" font-size="14" font-weight="600">'
+             f'Seeded faults detected. Dashed line is the ceiling the reference achieves.</text>')
+
+    # LEGEND. Without it the colours are decoration; with it they are the finding.
+    lx, ly = 20, 40
+    for key, txt in (("bar", "scored: faults caught"),
+                     ("f_invalid", "rejects the golden DUT"),
+                     ("f_gate", "rejects a correct design"),
+                     ("f_nobuild", "does not compile")):
+        p.append(f'<rect x="{lx}" y="{ly - 9}" width="11" height="11" rx="2" '
+                 f'fill="{c[key]}"/>')
+        p.append(f'<text x="{lx + 16}" y="{ly}" fill="{c["mute"]}" font-size="11">'
+                 f'{esc(txt)}</text>')
+        lx += 20 + 7.0 * len(txt)
     p.append('</svg>')
     return "\n".join(p)
+
 
 
 def alt_texts():
