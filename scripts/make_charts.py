@@ -760,98 +760,114 @@ def tradeoff_rows():
 def tradeoff_svg(theme):
     """No free lunch: smaller is easy, smaller without paying for it is not.
 
-    Area alone says the models are doing well -- 9 of 16 scorable submissions
-    are smaller than their reference, which reads as the benchmark being solved.
-    Put area beside power and speed and that inverts: only 3 of 16 beat the
-    reference on all three. The rest buy one axis with another, and d_ca04 is
-    the clearest case, where all three models come in smaller and cooler and
-    every one of them is SLOWER than the reference it is being compared with.
+    Area alone says the models are winning -- 9 of 16 scorable submissions are
+    smaller than their reference. Put area beside power and speed and it
+    inverts: 3 of 16 beat the reference on all three, and d_ca04, the clearest
+    apparent win, has all three submissions smaller AND cooler AND slower while
+    holding 8 beats of capacity to the reference's 10.
+
+    TWO COLUMNS, NOT ONE, because this goes on a slide. Stacked, the 30 rows ran
+    to 886px and the failures sat below the fold; side by side the whole corpus
+    is one glance and the two populations are the same height, which is itself
+    the finding -- 16 measured against 14 that produced nothing to measure.
     """
     c = THEMES[theme]
     rows = tradeoff_rows()
+    scored = [r for r in rows if r[5] != 9]
+    failed = [r for r in rows if r[5] == 9]
     cols = [("area", 2), ("power", 3), ("clock", 4)]
-    W, lab, cw, gap, x0 = 720, 196, 140, 12, 214
-    rowh, cellh, top = 23, 19, 150
-    H = top + rowh * len(rows) + 46
-    # STRICTLY better on all three. A tie is not a win: d_ai04/chat draws
-    # 230.0 mW against the reference's 230.0, exactly, and counting that as
-    # beating the reference turned 3 into 4 in the headline.
-    win = sum(1 for r in rows
-              if r[5] != 9 and all(v < 1.0 for v in r[2:5]))
+    STATE_COL = {"missed timing": "f_gate", "fails correctness": "f_invalid",
+                 "did not build": "f_nobuild", "no result": "f_nobuild"}
+
+    W = 1280
+    lab, x0, cw, gap = 196, 210, 122, 8            # left column
+    rlab, rx0, rcw = 852, 866, 394                 # right column
+    rowh, cellh, top = 26, 20, 168
+    H = top + rowh * max(len(scored), len(failed)) + 40
+    win = sum(1 for r in scored if all(v < 1.0 for v in r[2:5]))
+
     p = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" '
          'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">'
          % (W, H)]
     p.append('<rect width="%d" height="%d" fill="%s"/>' % (W, H, c["bg"]))
-    p.append('<text x="20" y="30" fill="%s" font-size="15" font-weight="700">'
+    p.append('<text x="20" y="34" fill="%s" font-size="19" font-weight="700">'
              'Smaller is easy. Smaller without paying for it is not.</text>' % c["fg"])
-    p.append('<text x="20" y="52" fill="%s" font-size="11.5">'
-             'Every submission with a comparable number, on all three axes at once. '
-             'Each cell is the ratio to that task&#39;s reference;</text>' % c["mute"])
-    p.append('<text x="20" y="69" fill="%s" font-size="11.5">'
-             'under 1.00x is better than the reference. Clock is the period the '
-             'design needs, against the period the reference needs.</text>' % c["mute"])
-    ncomp = sum(1 for r in rows if r[5] != 9)
-    p.append('<text x="20" y="95" fill="%s" font-size="12.5" font-weight="700">'
-             '%d of %d comparable submissions beat the reference on all three. '
-             'The other %d buy one axis with another; %d of %d produce no '
-             'comparable number at all.</text>'
-             % (c["fg"], win, ncomp, ncomp - win, len(rows) - ncomp, len(rows)))
-    p.append('<rect x="20" y="106" width="11" height="11" rx="2" fill="%s"/>' % c["bar"])
-    p.append('<text x="36" y="115" fill="%s" font-size="11">better than the reference</text>'
-             % c["mute"])
-    p.append('<rect x="196" y="106" width="11" height="11" rx="2" fill="%s"/>' % c["f_gate"])
-    p.append('<text x="212" y="115" fill="%s" font-size="11">worse</text>' % c["mute"])
-    p.append('<rect x="266" y="106" width="11" height="11" rx="2" fill="%s"/>' % c["f_nobuild"])
-    p.append('<text x="282" y="115" fill="%s" font-size="11">identical</text>' % c["mute"])
+    p.append('<text x="20" y="60" fill="%s" font-size="13">'
+             'Every design submission. Left: the ones with a comparable number, on all '
+             'three axes at once — each cell is the ratio to that task&#39;s reference, '
+             'under 1.00x is better.</text>' % c["mute"])
+    p.append('<text x="20" y="80" fill="%s" font-size="13">'
+             'Clock is the period the design needs against the period the reference '
+             'needs. Right: the ones that never reached a number.</text>' % c["mute"])
+    p.append('<text x="20" y="110" fill="%s" font-size="15" font-weight="700">'
+             '%d of %d beat the reference on all three. %d buy one axis with another. '
+             '%d of %d produce no comparable number at all.</text>'
+             % (c["fg"], win, len(scored), len(scored) - win, len(failed), len(rows)))
 
+    lgx = 20
+    for key, txt in (("bar", "better than the reference"), ("f_gate", "worse"),
+                     (None, "identical")):
+        if key is None:
+            # OUTLINED, NOT GREY. A grey fill already means "did not build" in
+            # the right-hand column, and one colour carrying two meanings on the
+            # same chart is worse than an extra shape.
+            p.append('<rect x="%d" y="%d" width="12" height="12" rx="2" '
+                     'fill="none" stroke="%s" stroke-width="1.5"/>'
+                     % (lgx, 128, c["mute"]))
+        else:
+            p.append('<rect x="%d" y="%d" width="12" height="12" rx="2" fill="%s"/>'
+                     % (lgx, 128, c[key]))
+        p.append('<text x="%d" y="%d" fill="%s" font-size="12">%s</text>'
+                 % (lgx + 17, 138, c["mute"], esc(txt)))
+        lgx += 30 + 7.0 * len(txt)
+
+    p.append('<text x="%d" y="%d" fill="%s" font-size="13" font-weight="700">'
+             'Comparable — %d of %d</text>' % (20, top - 12, c["fg"], len(scored), len(rows)))
+    p.append('<text x="%d" y="%d" fill="%s" font-size="13" font-weight="700">'
+             'No comparable number — %d of %d</text>'
+             % (676, top - 12, c["fg"], len(failed), len(rows)))
     for j, (name, _i) in enumerate(cols):
-        p.append('<text x="%d" y="%d" fill="%s" font-size="11" font-weight="600" '
+        p.append('<text x="%d" y="%d" fill="%s" font-size="11.5" font-weight="600" '
                  'text-anchor="middle">%s</text>'
-                 % (x0 + j * (cw + gap) + cw / 2, top - 8, c["mute"], name))
-    STATE_COL = {"missed timing": "f_gate", "fails correctness": "f_invalid",
-                 "did not build": "f_nobuild", "no result": "f_nobuild"}
-    seen_fail = False
-    for i, r in enumerate(rows):
+                 % (x0 + j * (cw + gap) + cw / 2, top - 12, c["mute"], name))
+    p.append('<line x1="646" y1="%d" x2="646" y2="%d" stroke="%s" stroke-width="1"/>'
+             % (top - 30, top + rowh * max(len(scored), len(failed)) - 6, c["grid"]))
+
+    for i, r in enumerate(scored):
         y = top + i * rowh
-        if r[5] == 9 and not seen_fail:
-            seen_fail = True
-            p.append('<line x1="20" y1="%d" x2="%d" y2="%d" stroke="%s" '
-                     'stroke-width="1"/>' % (y - 5, W - 20, y - 5, c["grid"]))
-            p.append('<text x="%d" y="%d" fill="%s" font-size="10.5" '
-                     'font-style="italic">no comparable number</text>'
-                     % (x0, y - 9, c["mute"]))
-        p.append('<text x="%d" y="%d" fill="%s" font-size="11" text-anchor="end">'
-                 '%s  %s</text>' % (lab, y + cellh - 5,
-                                    c["mute"] if r[5] == 9 else c["fg"],
+        p.append('<text x="%d" y="%d" fill="%s" font-size="12.5" text-anchor="end">'
+                 '%s  %s</text>' % (lab, y + cellh - 5, c["fg"],
                                     esc(r[0]), esc(RT.short_name(r[1]))))
-        if r[5] == 9:
-            wide = 3 * cw + 2 * gap
-            p.append('<rect x="%d" y="%d" width="%d" height="%d" rx="3" fill="%s"/>'
-                     % (x0, y, wide, cellh, c[STATE_COL.get(r[6], "f_nobuild")]))
-            p.append('<text x="%d" y="%d" fill="#1a1a1a" font-size="11.5" '
-                     'font-weight="600" text-anchor="middle">%s</text>'
-                     % (x0 + wide / 2, y + cellh - 5, esc(r[6])))
-            continue
         for j, (_name, idx) in enumerate(cols):
             v = r[idx]
-            if v == 1.0:
-                fill, txt = c["f_nobuild"], "#1a1a1a"
+            tie = (v == 1.0)
+            if tie:
+                fill, txt = "none", c["fg"]
             elif v > 1.0:
                 fill, txt = c["f_gate"], "#1a1a1a"
             else:
                 fill, txt = c["bar"], c["barlbl"]
-            # THE LABEL MUST AGREE WITH THE COLOUR. Three cells round to 1.00x
-            # at two decimals and sit on three different sides -- 1.0008 worse,
-            # 0.9959 better, and 1.0 exactly equal. Rendered as "1.00x" in three
-            # colours, the chart looks broken rather than precise. A value that
-            # rounds to 1.00 without being 1.00 gets a third decimal.
+            # The label must agree with the colour: three cells round to 1.00x
+            # at two decimals and sit on three different sides.
             lbl = ("%.3fx" % v) if (round(v, 2) == 1.00 and v != 1.0) else ("%.2fx" % v)
             cx = x0 + j * (cw + gap)
-            p.append('<rect x="%d" y="%d" width="%d" height="%d" rx="3" fill="%s"/>'
-                     % (cx, y, cw, cellh, fill))
-            p.append('<text x="%d" y="%d" fill="%s" font-size="11.5" font-weight="600" '
+            stroke = (' stroke="%s" stroke-width="1.5"' % c["mute"]) if tie else ''
+            p.append('<rect x="%d" y="%d" width="%d" height="%d" rx="3" fill="%s"%s/>'
+                     % (cx, y, cw, cellh, fill, stroke))
+            p.append('<text x="%d" y="%d" fill="%s" font-size="12.5" font-weight="600" '
                      'text-anchor="middle">%s</text>'
                      % (cx + cw / 2, y + cellh - 5, txt, lbl))
+
+    for i, r in enumerate(failed):
+        y = top + i * rowh
+        p.append('<text x="%d" y="%d" fill="%s" font-size="12.5" text-anchor="end">'
+                 '%s  %s</text>' % (rlab, y + cellh - 5, c["fg"],
+                                    esc(r[0]), esc(RT.short_name(r[1]))))
+        p.append('<rect x="%d" y="%d" width="%d" height="%d" rx="3" fill="%s"/>'
+                 % (rx0, y, rcw, cellh, c[STATE_COL.get(r[6], "f_nobuild")]))
+        p.append('<text x="%d" y="%d" fill="#1a1a1a" font-size="12.5" '
+                 'font-weight="600" text-anchor="middle">%s</text>'
+                 % (rx0 + rcw / 2, y + cellh - 5, esc(r[6])))
     p.append('</svg>')
     return "\n".join(p)
 
