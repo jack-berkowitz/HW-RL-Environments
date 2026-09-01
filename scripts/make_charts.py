@@ -456,6 +456,118 @@ def faults_svg(theme):
 
 
 
+def timing_rows():
+    """(task, model, pin_ns, wns_ns, need_over_pin) for every CORRECT design.
+
+    need_over_pin = (pin - wns) / pin: the clock period the design actually
+    needs, as a multiple of the period its task pins. 1.00 is exactly at the
+    pin, below it has margin, above it missed.
+
+    WHY A RATIO AND NOT THE SLACK. The pins run from 4.25 ns to 70.5 ns, so a
+    raw slack of -0.27 ns and one of -35.46 ns are not comparable quantities --
+    the first is 6% over on a tight clock, the second is 3.8x over. Dividing by
+    the pin is what makes one axis hold all ten tasks.
+
+    Only correct submissions appear. A design that fails correctness has no
+    timing story worth telling: it is not slow, it is wrong.
+    """
+    d_files = candidate_files("d_")
+    sim = latest_by("sim", lambda r: str(r.get("task", "")).startswith("d_")
+                    and is_submission(r) and answers_current_prompt(r))
+    s_by = {r.get("submission"): r for r in sim.values()}
+    ppa = latest_by("ppa", lambda r: str(r.get("task", "")).startswith("d_")
+                    and is_submission(r))
+    p_by = {r.get("submission"): r for r in ppa.values()}
+    out = []
+    for t, m, path in d_files:
+        if s_by.get(path, {}).get("all_passed") is not True:
+            continue
+        pr = p_by.get(path, {})
+        try:
+            wns = float(pr.get("wns_ns"))
+            pin = float(pr.get("clk_period_ns"))
+        except (TypeError, ValueError):
+            continue
+        if pin <= 0:
+            continue
+        out.append((t, m, pin, wns, (pin - wns) / pin))
+    out.sort(key=lambda r: r[4])
+    return out
+
+
+def timing_svg(theme):
+    """The timing story: correctness is not the filter, the clock is.
+
+    21 of 30 submissions are correct and 16 of those close timing, so the stage
+    that removes the most working designs is the one the funnel used to hide by
+    counting any build with an area field as a measured PPA.
+    """
+    c = THEMES[theme]
+    rows = timing_rows()
+    CAP = 1.25                       # axis top; two bars run past it
+    W, x0, x1 = 900, 250, 840
+    scale = (x1 - x0) / CAP
+    pitch, barh, top = 15, 11, 118
+    H = top + pitch * len(rows) + 56
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
+         f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">']
+    p.append(f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>')
+    met = sum(1 for *_r, rat in rows if rat <= 1.0)
+    p.append(f'<text x="20" y="30" fill="{c["fg"]}" font-size="15" font-weight="700">'
+             f'Correctness is not the filter. The clock is.</text>')
+    p.append(f'<text x="20" y="52" fill="{c["mute"]}" font-size="11.5">'
+             f'{esc(f"Clock period each correct design actually needs, as a multiple of the period its task pins. ")}'
+             f'</text>')
+    p.append(f'<text x="20" y="69" fill="{c["mute"]}" font-size="11.5">'
+             f'{esc(f"{len(rows)} of 30 submissions are correct; {met} of those close timing at the pin.")}</text>')
+    # legend
+    p.append(f'<rect x="20" y="84" width="11" height="11" rx="2" fill="{c["bar"]}"/>')
+    p.append(f'<text x="36" y="93" fill="{c["mute"]}" font-size="11">meets the pinned clock</text>')
+    p.append(f'<rect x="196" y="84" width="11" height="11" rx="2" fill="{c["f_invalid"]}"/>')
+    p.append(f'<text x="212" y="93" fill="{c["mute"]}" font-size="11">misses it</text>')
+
+    ybot = top + pitch * len(rows)
+    for gv in (0.25, 0.5, 0.75, 1.0, 1.25):
+        gx = x0 + gv * scale
+        isPin = abs(gv - 1.0) < 1e-9
+        p.append(f'<line x1="{gx}" y1="{top - 6}" x2="{gx}" y2="{ybot + 2}" '
+                 f'stroke="{c["rule"] if isPin else c["grid"]}" '
+                 f'stroke-width="{2 if isPin else 1}"'
+                 f'{" stroke-dasharray=\"5,3\"" if isPin else ""}/>')
+        p.append(f'<text x="{gx}" y="{ybot + 16}" fill="{c["rule"] if isPin else c["mute"]}" '
+                 f'font-size="10" text-anchor="middle">{gv:g}x</text>')
+    p.append(f'<text x="{x0 + 1.0 * scale}" y="{top - 12}" fill="{c["rule"]}" '
+             f'font-size="10.5" font-weight="600" text-anchor="middle">'
+             f'the pinned clock</text>')
+
+    for i, (t, m, pin, wns, rat) in enumerate(rows):
+        y = top + i * pitch
+        miss = rat > 1.0
+        col = c["f_invalid"] if miss else c["bar"]
+        w = min(rat, CAP) * scale
+        p.append(f'<rect x="{x0}" y="{y}" width="{w:.1f}" height="{barh}" rx="2" fill="{col}"/>')
+        short = t.split("_")[0] + "_" + t.split("_")[1]
+        p.append(f'<text x="{x0 - 8}" y="{y + barh - 1}" fill="{c["mute"]}" '
+                 f'font-size="10.5" text-anchor="end">'
+                 f'{esc(short)}  {esc(RT.short_name(m))}</text>')
+        if rat > CAP:
+            # BROKEN BAR. 2.19x and 3.84x would set the scale for everyone else
+            # and crush the 0.83-1.06 band where sixteen of the twenty-one sit.
+            for k in range(3):
+                zx = x1 - 12 + k * 5
+                p.append(f'<path d="M{zx} {y} l5 {barh/2:.1f} l-5 {barh/2:.1f}" '
+                         f'fill="none" stroke="{c["bg"] if c["bg"]!="none" else "#808080"}" '
+                         f'stroke-width="1.5" opacity="0.55"/>')
+            p.append(f'<text x="{x1 + 6}" y="{y + barh - 1}" fill="{col}" '
+                     f'font-size="10.5" font-weight="700">{rat:.2f}x</text>')
+        else:
+            p.append(f'<text x="{x0 + w + 6:.1f}" y="{y + barh - 1}" '
+                     f'fill="{col if miss else c["mute"]}" font-size="10.5"'
+                     f'{" font-weight=\"700\"" if miss else ""}>{rat:.2f}x</text>')
+    p.append('</svg>')
+    return "\n".join(p)
+
+
 def alt_texts():
     """Alt text derived from the same counts as the bars.
 
@@ -467,6 +579,14 @@ def alt_texts():
     v = ", ".join(f"{lab} {n}" for lab, n in ver)
     funnel = (f"Cumulative stages, design and verification side by side. "
               f"Design: {d}. Verification: {v}.")
+    trows = timing_rows()
+    tmet = sum(1 for *_x, rat in trows if rat <= 1.0)
+    timing = ("Clock period each correct design actually needs, as a multiple of "
+              "the period its task pins; 1.00x is exactly at the pin. "
+              f"{len(trows)} submissions pass correctness and {tmet} of those "
+              "close timing. " + "; ".join(
+                  f"{t.split('_')[0]}_{t.split('_')[1]} {RT.display_name(m)} "
+                  f"{rat:.2f}x" for t, m, _p, _w, rat in trows) + ".")
     rows = verification_rows()
     by = {}
     for task, m, n, ceil, st in rows:
@@ -513,7 +633,7 @@ def alt_texts():
     cap = ("Area per unit of capability, relative to each task's reference. "
            "Where a task declares several capability metrics the bar spans "
            "best to worst. " + " ".join(cparts))
-    return funnel, faults, area, power, cap
+    return funnel, timing, faults, area, power, cap
 
 
 def sync_readme_alt():
@@ -522,9 +642,10 @@ def sync_readme_alt():
     if not os.path.isfile(path):
         return False
     src = open(path, encoding="utf-8").read()
-    funnel, faults, area, power, cap = alt_texts()
+    funnel, timing, faults, area, power, cap = alt_texts()
     out = src
     for asset, alt in (("funnel_light.svg", funnel),
+                       ("timing_light.svg", timing),
                        ("verification_faults_light.svg", faults),
                        ("design_area_light.svg", area),
                        ("design_power_light.svg", power),
@@ -983,7 +1104,8 @@ def main():
     check = "--check" in sys.argv
     os.makedirs(OUT, exist_ok=True)
     stale = []
-    for name, fn in (("funnel", funnel_svg), ("verification_faults", faults_svg),
+    for name, fn in (("funnel", funnel_svg), ("timing", timing_svg),
+                     ("verification_faults", faults_svg),
                      ("design_area", design_svg),
                      ("design_power", lambda th: design_svg(th, "power")),
                      ("design_capability", capability_svg)):

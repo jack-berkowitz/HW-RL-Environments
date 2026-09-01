@@ -16,13 +16,25 @@ The two are reported separately and never averaged. A testbench has no area; a d
   <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 26, correct 21, scorable PPA 16. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
-**Most submissions do not reach a score, and they fail early.** The design half
-of that chart is currently a supersession artefact rather than a result: the
-design specifications were revised to state their grading criteria, so every
-design submission on record answers a prompt that no longer exists and renders
-as unscoreable until the tasks are re-solicited. See *Design results* below.
+**Most submissions do not reach a score, and the two halves fail for opposite
+reasons.** On the design side almost everything compiles and most of it is
+correct — the loss happens at the clock. On the verification side the loss
+happens before any measurement is taken at all.
 
-Of 30 verification submissions, 2 do not compile; of the 28 that build,
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/timing_dark.svg">
+  <img alt="Clock period each correct design actually needs, as a multiple of the period its task pins; 1.00x is exactly at the pin. 21 submissions pass correctness and 16 of those close timing. d_ai04 Opus 5 High 0.83x; d_ca01 Opus 5 High 0.84x; d_ca05 Opus 5 High 0.85x; d_ca04 ChatGPT 5.6 Sol 0.86x; d_ca05 ChatGPT 5.6 Sol 0.87x; d_ca04 Gemini 3.1 Pro Extended thinking 0.89x; d_ca04 Opus 5 High 0.89x; d_ai04 ChatGPT 5.6 Sol 0.92x; d_ca03 Opus 5 High 0.92x; d_dsp02 Opus 5 High 0.93x; d_ai04 Gemini 3.1 Pro Extended thinking 0.93x; d_dsp03 ChatGPT 5.6 Sol 0.94x; d_nw01 ChatGPT 5.6 Sol 0.94x; d_dsp03 Opus 5 High 0.96x; d_nw03 Opus 5 High 0.97x; d_nw01 Opus 5 High 1.00x; d_ca01 ChatGPT 5.6 Sol 1.00x; d_nw03 ChatGPT 5.6 Sol 1.04x; d_nw03 Gemini 3.1 Pro Extended thinking 1.06x; d_dsp02 ChatGPT 5.6 Sol 2.19x; d_ca03 ChatGPT 5.6 Sol 3.84x." src="docs/assets/timing_light.svg" width="100%">
+</picture>
+
+**Correctness is not the discriminator on the design half; the clock is.** 21 of
+30 submissions are correct, and 5 of those 21 cannot be scored for area or power
+because they miss the period their task pins — a design that needs a slower clock
+is not a cheaper design, it is a different one, so its PPA is not comparable
+(rule 22). The misses split in two: three are within 6% of the pin, and two need
+2.19x and 3.84x the period, having answered the functional specification while
+ignoring the clock it was to run at.
+
+Of 33 verification submissions, 2 do not compile; of the 31 that build,
 16 tell a correct design from a deliberately broken one, and 13 end with a
 fault count. **That gate is the binding constraint on this half.** A testbench that
 fails it returns the same verdict on correct and broken hardware, and every one that does so here rejects
