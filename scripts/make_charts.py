@@ -741,10 +741,19 @@ def tradeoff_rows():
             ck = tim.get((short, m))
             rr = ref.get(short)
             if ar is None or pw.get(m) is None or ck is None or not rr:
+                # NO NUMBERS IS ITSELF THE RESULT. Dropping these rows left the
+                # chart showing 16 of 30 submissions and reading as though the
+                # corpus were 16 -- the same denominator loss the funnel was
+                # built to prevent. They carry their state instead of ratios.
+                out.append((short, m, None, None, None, 9, note or "no result"))
                 continue
             trio = (ar, pw[m], ck / rr)
-            out.append((short, m) + trio + (sum(1 for v in trio if v > 1.0),))
-    out.sort(key=lambda r: (-r[5], -max(r[2:5])))
+            out.append((short, m) + trio
+                       + (sum(1 for v in trio if v > 1.0), ""))
+    # scored first, worst-of-the-scored at the top; failures below, grouped.
+    out.sort(key=lambda r: (r[5] == 9, -(r[5] if r[5] != 9 else 0),
+                            -(max(r[2:5]) if r[2] is not None else 0),
+                            r[6], r[0]))
     return out
 
 
@@ -763,11 +772,12 @@ def tradeoff_svg(theme):
     cols = [("area", 2), ("power", 3), ("clock", 4)]
     W, lab, cw, gap, x0 = 720, 196, 140, 12, 214
     rowh, cellh, top = 23, 19, 150
-    H = top + rowh * len(rows) + 40
+    H = top + rowh * len(rows) + 46
     # STRICTLY better on all three. A tie is not a win: d_ai04/chat draws
     # 230.0 mW against the reference's 230.0, exactly, and counting that as
     # beating the reference turned 3 into 4 in the headline.
-    win = sum(1 for r in rows if all(v < 1.0 for v in r[2:5]))
+    win = sum(1 for r in rows
+              if r[5] != 9 and all(v < 1.0 for v in r[2:5]))
     p = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" '
          'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">'
          % (W, H)]
@@ -780,9 +790,12 @@ def tradeoff_svg(theme):
     p.append('<text x="20" y="69" fill="%s" font-size="11.5">'
              'under 1.00x is better than the reference. Clock is the period the '
              'design needs, against the period the reference needs.</text>' % c["mute"])
+    ncomp = sum(1 for r in rows if r[5] != 9)
     p.append('<text x="20" y="95" fill="%s" font-size="12.5" font-weight="700">'
-             '%d of %d beat the reference on all three. The other %d buy one axis '
-             'with another.</text>' % (c["fg"], win, len(rows), len(rows) - win))
+             '%d of %d comparable submissions beat the reference on all three. '
+             'The other %d buy one axis with another; %d of %d produce no '
+             'comparable number at all.</text>'
+             % (c["fg"], win, ncomp, ncomp - win, len(rows) - ncomp, len(rows)))
     p.append('<rect x="20" y="106" width="11" height="11" rx="2" fill="%s"/>' % c["bar"])
     p.append('<text x="36" y="115" fill="%s" font-size="11">better than the reference</text>'
              % c["mute"])
@@ -795,11 +808,30 @@ def tradeoff_svg(theme):
         p.append('<text x="%d" y="%d" fill="%s" font-size="11" font-weight="600" '
                  'text-anchor="middle">%s</text>'
                  % (x0 + j * (cw + gap) + cw / 2, top - 8, c["mute"], name))
+    STATE_COL = {"missed timing": "f_gate", "fails correctness": "f_invalid",
+                 "did not build": "f_nobuild", "no result": "f_nobuild"}
+    seen_fail = False
     for i, r in enumerate(rows):
         y = top + i * rowh
+        if r[5] == 9 and not seen_fail:
+            seen_fail = True
+            p.append('<line x1="20" y1="%d" x2="%d" y2="%d" stroke="%s" '
+                     'stroke-width="1"/>' % (y - 5, W - 20, y - 5, c["grid"]))
+            p.append('<text x="%d" y="%d" fill="%s" font-size="10.5" '
+                     'font-style="italic">no comparable number</text>'
+                     % (x0, y - 9, c["mute"]))
         p.append('<text x="%d" y="%d" fill="%s" font-size="11" text-anchor="end">'
-                 '%s  %s</text>' % (lab, y + cellh - 5, c["fg"],
+                 '%s  %s</text>' % (lab, y + cellh - 5,
+                                    c["mute"] if r[5] == 9 else c["fg"],
                                     esc(r[0]), esc(RT.short_name(r[1]))))
+        if r[5] == 9:
+            wide = 3 * cw + 2 * gap
+            p.append('<rect x="%d" y="%d" width="%d" height="%d" rx="3" fill="%s"/>'
+                     % (x0, y, wide, cellh, c[STATE_COL.get(r[6], "f_nobuild")]))
+            p.append('<text x="%d" y="%d" fill="#1a1a1a" font-size="11.5" '
+                     'font-weight="600" text-anchor="middle">%s</text>'
+                     % (x0 + wide / 2, y + cellh - 5, esc(r[6])))
+            continue
         for j, (_name, idx) in enumerate(cols):
             v = r[idx]
             if v == 1.0:
