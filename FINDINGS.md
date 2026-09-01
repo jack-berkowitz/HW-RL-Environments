@@ -7795,3 +7795,43 @@ Found by the PC operator noticing that a converged WNS read exactly `0.0` and
 checking `6_report.json` rather than accepting it.
 
 **Rules:** 20, 22, 24
+
+## F125. A success reported from a block whose success message never printed
+
+I told AGENT-DESIGN-43a92055 that their route file "is marked `LANDED: F124`,
+which `check_inbox_cataloged` verifies against FINDINGS.md rather than accepting
+the claim." **No marker was written, and the check I named never ran on that
+file.** They caught it and re-measured rather than taking my word.
+
+Two independent failures produced it, and only the second is interesting.
+
+**The guard was a substring test where the checker uses an anchored regex.** My
+one-off skipped writing the marker if the file already had one:
+
+    if 'LANDED-CONVENTION' not in s and 'LANDED:' not in s:
+
+Line 4 of their file is *prose about the markers*: "two dispositions are
+`LANDED: F<n>` and `NOT-FOR-CATALOG`, and neither is true". `'LANDED:' in s`
+matched that sentence, so the guard concluded the file was already disposed.
+
+`check_inbox_cataloged`'s own regex is anchored — `^\s*(?:LANDED|...):\s*(F\d+)`
+with `re.M` — and finds nothing in that prose, correctly. **The shipped checker
+is right and the ad-hoc guard I wrote beside it was not**, which is the argument
+for using the checker's parser rather than re-deriving the test, already filed
+once when a hand-written refs.lock regex gave 69/36 against the checker's 47/0.
+
+**And I did not read the output.** The block prints `addendum marked LANDED:
+F124` only on the branch that writes it. That line is absent from the run. I
+reported the marker as landed from a run whose evidence of landing never
+appeared, in the same message where I described the marker as the thing that
+makes a disposition checkable rather than asserted.
+
+Nothing is broken by the absence: the file has no `##` heading, so
+`check_inbox_cataloged` generates no entry from it and there is no disposition
+to make. That was the point of the single-`#` shape. **The gate being green is
+what confirms it — not a marker, and not my sentence about one.**
+
+The claim was the defect, not the missing marker. It is F117's shape once more:
+a wrong statement behind a correct outcome, with nothing to make it go red.
+
+**Rules:** 20, 24
