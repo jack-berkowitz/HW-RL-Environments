@@ -47,7 +47,7 @@ capability, and nothing here establishes those weights.
 | `chat` | **16/16 pass** | withheld | withheld | not swept | 3 | 226 | 14 | 501 | 315 | **PPA withheld — the build did not meet timing** (slack -0.049 ns at 15.0 ns). Area and power from a design that does not close describe a circuit that cannot run at that clock (rule 22).; **different design point** (latency_min 3 vs reference 2; mem_txns_writebacks 315 vs reference 298): area is correct but not like-for-like; 70,342 um2 per unit of max_outstanding_n, 1.23x the reference per unit |
 | `claude` | **16/16 pass** | 753,599 | 326.0 | not swept | 1 | 20057 | 9 | 493 | 318 | **different design point** (latency_min 1 vs reference 2; mem_txns_writebacks 318 vs reference 298): area is correct but not like-for-like; 83,733 um2 per unit of max_outstanding_n, 1.46x the reference per unit |
 | `gemini` | **did not build** | **0** | **0** | **0** | n/a | n/a | n/a | n/a | n/a | **build failure** — 1 error(s); first: sanitised_gemini.sv:99:7: error: incrementing previous value 2'b11 would overflow enum base type 'logic[1:0]'  |
-| **second source** | 8/16 FAIL | — | — | — | 1 | 20053 | 13 | 519 | 312 |  |
+| **second source** | **16/16 pass** | — | — | — | 1 | 20053 | 16 | 518 | 311 |  |
 | **reference** | **16/16 pass** | 573,055 | 76.0 | 100.0 | 2 | 20113 | 10 | 481 | 298 | 57,306 um2 per unit of max_outstanding_n |
 | `nc_r1_evades_antecedent` | *not scored against this prompt* | — | — | — | — | — | — | — | — | last run answered task text `51337b00b54b64c7`; the task text is now `63385929275747be` |
 

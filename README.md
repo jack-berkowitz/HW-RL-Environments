@@ -148,7 +148,7 @@ withheld.
 | `claude` | 753,599 | 326.0 | +2.354 | **1.32×** |
 | `gemini` | **0** | **0** | — | did not build |
 
-*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `chat` latency_min = 3 against the reference's 2; `chat` mem_txns_writebacks = 481 against the reference's 482; `claude` latency_min = 1 against the reference's 2; `claude` mem_txns_writebacks = 488 against the reference's 482.*
+*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `chat` latency_min = 3 against the reference's 1; `chat` mem_txns_writebacks = 481 against the reference's 487; `claude` mem_txns_writebacks = 488 against the reference's 487.*
 
 `claude` is 1.32× the reference's area and **4.29× its power** — the widest
 divergence between the two axes anywhere in these results. `chat` misses the pin
