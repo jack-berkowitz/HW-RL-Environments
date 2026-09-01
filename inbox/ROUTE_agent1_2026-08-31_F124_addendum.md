@@ -50,3 +50,47 @@ converged point, so that the pin could cite a precise slack. There was none, and
 there could not be. The absence is the finding; the figure it was meant to
 support was correctly left out of the spec, which instead carries the sign
 argument — every step of which is re-derivable from committed artefacts.
+
+---
+
+**A SECOND ITEM, for CONVENTIONS.md rather than FINDINGS.md, because it is a
+rule about how to write rather than a fact about the corpus.** Added here rather
+than in a new file so the proposal sits with the evidence that produced it.
+
+**Proposed heading:** A quantity that moves must be written as an invariant, or
+as a ratio with a date. Never as bare integers.
+
+Three corrections in one week, all the same shape:
+
+| where | written | true when re-measured |
+|---|---|---|
+| d_ca03 testbench header | "118 requests" | 207 |
+| F114 | a `SYNTH_MEMORY_MAX_BITS` citation attributed to one agent | it was the other's |
+| F124 | "30 of 33 sweep records" | 31 of 34 |
+
+None was wrong when written. Each was a correct measurement that kept being
+read after the thing it measured had moved, and **nothing in the text marked it
+as a measurement at all** — a bare integer reads as a property.
+
+The F124 case is the sharpest because it drifts BY CONSTRUCTION rather than by
+neglect: every new sweep lands in the numerator and the denominator at once, so
+the pair is stale the moment another task is added. d_ca06 moved both within a
+day of the entry being filed. That is not a maintenance failure anybody could
+have avoided by being careful; it is a property of writing a moving quantity as
+two integers.
+
+**The rule.** When quoting a count that can change:
+
+1. **Prefer the invariant.** "All but three" survives every new sweep; "30 of 33"
+   survives none. F124 now reads this way.
+2. **If the integers matter, date them and say they are a snapshot** — the date
+   is what converts a claim into a measurement the reader can re-take.
+3. **A ratio whose numerator and denominator move together is the warning sign.**
+   If adding one more of the thing changes both halves, bare integers are already
+   wrong.
+
+**Why it belongs in CONVENTIONS.md and not in F124.** F124 now carries the
+instance. The general form applies to every count in the corpus — mutant tallies,
+config counts, record counts, pass rates — and most of them are currently written
+as bare integers. This is not a request to go and fix them; it is a rule for the
+next one written.
