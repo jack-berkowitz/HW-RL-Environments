@@ -629,6 +629,99 @@ def timing_svg(theme):
     p.append('</svg>')
     return "\n".join(p)
 
+def headroom_rows():
+    """[(short, title, [(model, ratio|None, note)], best, n_scored)] per design task.
+
+    Sorted by how much room is left: fewest scorable submissions first, then
+    largest best-ratio first. That puts the tasks models cannot do yet at the
+    top and the ones they have solved at the bottom.
+    """
+    out = []
+    for task, title, _pin, _ref, areas, _power in design_rows():
+        short = "_".join(task.split("_")[:2])
+        vals = [r for _m, r, _n in areas if r]
+        out.append((short, title, areas, (min(vals) if vals else None), len(vals)))
+    out.sort(key=lambda r: (r[4], -(r[3] or 0)))
+    return out
+
+
+def headroom_svg(theme):
+    """Room left on the design half, per task.
+
+    Two different kinds of headroom, and a chart showing only one of them
+    misleads. RELIABILITY: how many of the three submissions produce a
+    comparable number at all -- 0 of 3 on d_ai01, 3 of 3 on d_ai04 and d_ca04.
+    QUALITY: how the best of them compares with the reference. A task can be
+    solved by every model and still leave nothing to optimise, or be solved by
+    one model that then beats the reference outright.
+    """
+    c = THEMES[theme]
+    rows = headroom_rows()
+    STATE = {"": ("bar", "scored"),
+             "missed timing": ("f_gate", "missed timing"),
+             "fails correctness": ("f_invalid", "fails correctness"),
+             "did not build": ("f_nobuild", "did not build")}
+    CAP = 1.5
+    W, lx, sx, x0, x1 = 900, 196, 208, 300, 828
+    scale = (x1 - x0) / CAP
+    pitch, barh, top = 27, 15, 150
+    H = top + pitch * len(rows) + 44
+    p = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" '
+         'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">'
+         % (W, H)]
+    p.append('<rect width="%d" height="%d" fill="%s"/>' % (W, H, c["bg"]))
+    p.append('<text x="20" y="30" fill="%s" font-size="15" font-weight="700">'
+             'Where the headroom is</text>' % c["fg"])
+    p.append('<text x="20" y="52" fill="%s" font-size="11.5">'
+             'Each design task: which of the three submissions reach a comparable '
+             'number, and how the best of them compares with the reference.</text>' % c["mute"])
+    p.append('<text x="20" y="69" fill="%s" font-size="11.5">'
+             'Squares are the three models in a fixed order. Bar is the best area '
+             'achieved; 1.00x is the reference.</text>' % c["mute"])
+    lgx = 20
+    for key, txt in (("bar", "reaches a number"), ("f_gate", "missed timing"),
+                     ("f_invalid", "fails correctness"), ("f_nobuild", "did not build")):
+        p.append('<rect x="%d" y="83" width="11" height="11" rx="2" fill="%s"/>' % (lgx, c[key]))
+        p.append('<text x="%d" y="92" fill="%s" font-size="11">%s</text>'
+                 % (lgx + 16, c["mute"], esc(txt)))
+        lgx += 26 + 6.6 * len(txt)
+
+    ytop, ybot = top - 10, top + pitch * len(rows) - 6
+    for gv in (0.5, 1.0, 1.5):
+        gx = x0 + gv * scale
+        pin = abs(gv - 1.0) < 1e-9
+        dash = ' stroke-dasharray="5,3"' if pin else ''
+        p.append('<line x1="%.1f" y1="%d" x2="%.1f" y2="%d" stroke="%s" stroke-width="%d"%s/>'
+                 % (gx, ytop, gx, ybot, c["rule"] if pin else c["grid"], 2 if pin else 1, dash))
+        p.append('<text x="%.1f" y="%d" fill="%s" font-size="10" text-anchor="middle">%gx</text>'
+                 % (gx, ybot + 15, c["rule"] if pin else c["mute"], gv))
+    p.append('<text x="%.1f" y="%d" fill="%s" font-size="10.5" font-weight="600" '
+             'text-anchor="middle">the reference</text>' % (x0 + scale, ytop - 5, c["rule"]))
+
+    for i, (short, title, models, best, n) in enumerate(rows):
+        y = top + i * pitch
+        p.append('<text x="%d" y="%d" fill="%s" font-size="11" text-anchor="end">%s</text>'
+                 % (lx, y + barh - 3, c["fg"], esc(short)))
+        for j, (_m, _r, note) in enumerate(models):
+            key, _lab = STATE.get(note, ("f_nobuild", note))
+            p.append('<rect x="%d" y="%d" width="14" height="14" rx="3" fill="%s"/>'
+                     % (sx + j * 18, y, c[key]))
+        if best is None:
+            p.append('<text x="%d" y="%d" fill="%s" font-size="11" font-style="italic">'
+                     'no submission produced a comparable number</text>'
+                     % (x0 + 4, y + barh - 3, c["mute"]))
+            continue
+        w = min(best, CAP) * scale
+        col = c["bar"] if best <= 1.0 else c["f_gate"]
+        p.append('<rect x="%d" y="%d" width="%.1f" height="%d" rx="2" fill="%s"/>'
+                 % (x0, y, w, barh, col))
+        p.append('<text x="%.1f" y="%d" fill="%s" font-size="10.5" font-weight="600">'
+                 '%.2fx</text>' % (x0 + w + 6, y + barh - 3, col, best))
+        p.append('<text x="%d" y="%d" fill="%s" font-size="10">%d of 3</text>'
+                 % (sx + 58, y + barh - 3, c["mute"], n))
+    p.append('</svg>')
+    return "\n".join(p)
+
 
 def alt_texts():
     """Alt text derived from the same counts as the bars.
@@ -641,6 +734,14 @@ def alt_texts():
     v = ", ".join(f"{lab} {n}" for lab, n in ver)
     funnel = (f"Cumulative stages, design and verification side by side. "
               f"Design: {d}. Verification: {v}.")
+    hrows = headroom_rows()
+    hzero = sum(1 for *_x, n in hrows if n == 0)
+    hall = sum(1 for *_x, n in hrows if n == 3)
+    headroom = ("Room left on each design task. " + "; ".join(
+        (f"{short} {n} of 3 submissions comparable, best {best:.2f}x the reference"
+         if best else f"{short} no comparable submission")
+        for short, _t, _m, best, n in hrows)
+        + f". {hzero} task has no comparable submission and {hall} tasks have three.")
     trows = timing_rows()
     tmet = sum(1 for *_x, rat in trows if rat <= 1.0)
     timing = ("Clock period each correct design actually needs, as a multiple of "
@@ -695,7 +796,7 @@ def alt_texts():
     cap = ("Area per unit of capability, relative to each task's reference. "
            "Where a task declares several capability metrics the bar spans "
            "best to worst. " + " ".join(cparts))
-    return funnel, timing, faults, area, power, cap
+    return funnel, timing, headroom, faults, area, power, cap
 
 
 def sync_readme_alt():
@@ -704,10 +805,11 @@ def sync_readme_alt():
     if not os.path.isfile(path):
         return False
     src = open(path, encoding="utf-8").read()
-    funnel, timing, faults, area, power, cap = alt_texts()
+    funnel, timing, headroom, faults, area, power, cap = alt_texts()
     out = src
     for asset, alt in (("funnel_light.svg", funnel),
                        ("timing_light.svg", timing),
+                       ("headroom_light.svg", headroom),
                        ("verification_faults_light.svg", faults),
                        ("design_area_light.svg", area),
                        ("design_power_light.svg", power),
@@ -1167,6 +1269,7 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     stale = []
     for name, fn in (("funnel", funnel_svg), ("timing", timing_svg),
+                     ("headroom", headroom_svg),
                      ("verification_faults", faults_svg),
                      ("design_area", design_svg),
                      ("design_power", lambda th: design_svg(th, "power")),

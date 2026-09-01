@@ -34,6 +34,20 @@ is not a cheaper design, it is a different one, so its PPA is not comparable
 2.19x and 3.84x the period, having answered the functional specification while
 ignoring the clock it was to run at.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/headroom_dark.svg">
+  <img alt="Room left on each design task. d_ai01 no comparable submission; d_ca01 1 of 3 submissions comparable, best 1.32x the reference; d_dsp02 1 of 3 submissions comparable, best 1.02x the reference; d_nw03 1 of 3 submissions comparable, best 0.99x the reference; d_ca03 1 of 3 submissions comparable, best 0.76x the reference; d_dsp03 2 of 3 submissions comparable, best 1.28x the reference; d_nw01 2 of 3 submissions comparable, best 1.17x the reference; d_ca05 2 of 3 submissions comparable, best 0.67x the reference; d_ai04 3 of 3 submissions comparable, best 0.88x the reference; d_ca04 3 of 3 submissions comparable, best 0.73x the reference. 1 task has no comparable submission and 2 tasks have three." src="docs/assets/headroom_light.svg" width="100%">
+</picture>
+
+**The room left is not evenly spread, and it is two different quantities.** One
+is reliability: on `d_ai01` none of the three submissions produces a comparable
+number at all, while `d_ai04` and `d_ca04` are answered by all three. The other
+is quality: where a task is answered, the best submission ranges from 0.67x the
+reference's area to 1.32x. A task can be solved by every model and still leave
+nothing to optimise, or be solved by exactly one model that then beats the
+reference outright — `d_ca03` is the second case, where one of three submissions
+lands at 0.76x. Neither number alone says where the work is.
+
 Of 33 verification submissions, 2 do not compile; of the 31 that build,
 16 tell a correct design from a deliberately broken one, and 13 end with a
 fault count. **That gate is the binding constraint on this half.** A testbench that
