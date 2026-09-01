@@ -90,6 +90,9 @@ capability, and nothing here establishes those weights.
 
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | non-prefix | notes |
 |---|---|---|---|---|---|---|---|
+| `chat` | **6/6 pass** | — | — | — | — | — | scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
+| `claude` | 0/6 FAIL | — | — | — | — | — | scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
+| `gemini` | **6/6 pass** | — | — | — | — | — | scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
 | `nc_a_reads_compact` — *negative control, expected to fail* | 0/6 FAIL | — | — | — | — | — | 6 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
 | `nc_b_accept_uses_valid` — *negative control, expected to fail* | 2/6 FAIL | — | — | — | — | — | 6 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
 | `nc_c_writes_dont_compact` — *negative control, expected to fail* | 0/6 FAIL | — | — | — | — | — | 6 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |

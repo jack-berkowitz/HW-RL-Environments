@@ -13,7 +13,7 @@ The two are reported separately and never averaged. A testbench has no area; a d
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/funnel_dark.svg">
-  <img alt="Cumulative stages, design and verification side by side. Design: submitted 30, compiled 26, correct 21, PPA measured 22. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
+  <img alt="Cumulative stages, design and verification side by side. Design: submitted 33, compiled 29, correct 23, PPA measured 22. Verification: submitted 33, compiled 31, tells correct from broken 16, fault count 13." src="docs/assets/funnel_light.svg" width="100%">
 </picture>
 
 **Most submissions do not reach a score, and they fail early.** The design half
@@ -228,9 +228,9 @@ type, and `check_transport` finds no paste damage, so it is the model's output.
 | | correctness | area µm² | power mW | slack ns |
 |---|---|---|---|---|
 | reference | **6/6 pass** | *not built* | *not built* | *not built* |
-| `chat` | — | *not built* | *not built* | *not built* |
-| `claude` | — | *not built* | *not built* | *not built* |
-| `gemini` | — | *not built* | *not built* | *not built* |
+| `chat` | **6/6 pass** | *not built* | *not built* | *not built* |
+| `claude` | 0/6 FAIL | *not built* | *not built* | *not built* |
+| `gemini` | **6/6 pass** | *not built* | *not built* | *not built* |
 
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 
