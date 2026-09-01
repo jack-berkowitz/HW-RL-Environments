@@ -1,3 +1,50 @@
+# d_ca06 — concurrent multi-port queue
+
+Implement `queue` in synthesisable SystemVerilog.
+
+A FIFO with three write ports and three read ports that may all be active in the
+same cycle. Ordering is global: entries leave in the order they entered,
+regardless of which port carried them.
+
+Five things about this contract are worth reading before choosing an
+architecture:
+
+* **The G clauses set out how you are graded**, in what order, and which
+  optimisation levers are already closed. Read them first.
+* **Reads do not compact, and the skipped entry is destroyed.** `head` advances
+  to one past the *highest-numbered* accepted read, not by the number of reads.
+  With `[11,22,33,44]` and `read_accept = 3'b101`, head moves by **three** and
+  the entry `22` is discarded having never been read. A non-prefix accept is
+  legal, loses data silently, and is not flagged. The obvious design — one that
+  compacts reads and loses nothing — is wrong here.
+* **Writes do compact.** Accepted writes land in consecutive slots from `tail`
+  with no gap for an idle port. Writes compacting while reads do not is the
+  asymmetry the task is built on; a design that treats the two directions alike
+  fails whichever one it gets wrong.
+* **Write acceptance does not depend on `write_valid`.** It is a function of
+  space alone: `write_accept[i] = (i < vacancy)`. With the queue empty and
+  nothing offered on any port, `write_accept` is all ones. Note the consequence
+  — port *i* needs *i+1* free slots even when every lower port is idle.
+* **Full and empty are the same pointer state.** `PTR_WIDTH` fixes the pointer
+  width and `DEPTH` is `1 << PTR_WIDTH`, so the array is exactly full at wrap
+  and you may not tell the two apart by widening the pointers and comparing wrap
+  bits. How you carry the distinction is otherwise yours.
+
+Everything asserted below about acceptance, compaction, discard and the fullness
+flag was **measured** against the reference rather than assumed from convention.
+The two clauses that contradict the usual design are marked where they appear.
+
+**One self-contained file** containing only `module queue`, with the exact
+parameter list and port list below. Declare nothing else outside the module.
+
+`T` is **derived** from `DW` and must stay that way — the build sets the scored
+width through `DW`, and a design that declares `T` as a free type parameter
+cannot be pinned by the flow.
+
+The contract cites a few repository file names in passing; those are provenance
+notes for maintainers, not documents you need.
+
+```systemverilog
 // =============================================================================
 // d_ca06 -- CONCURRENT MULTI-PORT QUEUE
 //
@@ -261,3 +308,4 @@ module queue #(
     // IMPLEMENTATION INTENTIONALLY OMITTED.
 
 endmodule
+```
