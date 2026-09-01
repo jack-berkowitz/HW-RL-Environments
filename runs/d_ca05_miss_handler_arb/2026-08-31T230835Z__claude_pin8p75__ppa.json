@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=miss_handler_arb; CORE_UTILIZATION=7; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=8750; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; IO_PLACER_H=met3; IO_PLACER_V=met2 met4; sdc.clk_period=45.0; override.CLK_PERIOD_NS=8.75; note.abc_runtime_target_ps=8750;",
+  "build_config_hash": "0239fbb18cb6bc9f",
+  "clk_period_ns": "8.75",
+  "correctness_gate": "passed:2026-08-30T043145Z__claude__sim.json",
+  "design_area_um2": "94373",
+  "git_sha": "646c3904cb29483767595e5dc24e64ba79245d0f-dirty",
+  "kind": "ppa",
+  "label": "claude_pin8p75",
+  "orfs_nickname": "d_ca05_cand_claude_pin8p75",
+  "pdk": "sky130hd",
+  "power_w": "2.11e-02",
+  "status": "completed",
+  "submission": "candidates/d_ca05/claude.sv",
+  "submission_sha256_16": "3584001943db7005",
+  "synth_area_um2": "45164.566400",
+  "task": "d_ca05_miss_handler_arb",
+  "timestamp_utc": "2026-08-31T23:08:35Z",
+  "wns_ns": "1.30251"
+}

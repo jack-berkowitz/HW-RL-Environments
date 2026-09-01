@@ -194,14 +194,12 @@ rather than better implementation — see the like-for-like note below.
 
 ### d_ca05 — Multi-requester cache miss handler, pinned at 8.75 ns
 
-*Pinned; no PPA build yet. Correctness stands as below.*
-
-| | correctness | area µm² | power mW | slack ns |
+| | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
-| reference | **1/1 pass** | *not built* | *not built* | *not built* |
-| `chat` | **1/1 pass** | *not built* | *not built* | *not built* |
-| `claude` | **1/1 pass** | *not built* | *not built* | *not built* |
-| `gemini` | did not build (slang_rejected) | *not built* | *not built* | *not built* |
+| reference | 141,187 | 40.6 | +0.720 | — |
+| `chat` | 104,439 | 25.2 | +1.164 | **0.74×** |
+| `claude` | 94,373 | 21.1 | +1.303 | **0.67×** |
+| `gemini` | **0** | **0** | — | did not build |
 
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 
