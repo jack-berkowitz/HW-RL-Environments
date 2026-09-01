@@ -1,0 +1,128 @@
+task: d_ca06_multiport_queue
+title: Concurrent multi-port queue
+kind: design
+domain: comp_arch
+tier: A
+
+# THE ONLY TASK IN THE CORPUS WITH NO VENDORED ANCHOR. Every other design task
+# is built on upstream RTL at a pinned commit, and "correct" means agreeing with
+# hardware that people tape out. This one was written by hand, and the contract
+# was derived FROM the implementation by measurement rather than read off an
+# upstream datasheet.
+#
+# That changes what the reference is evidence of. Elsewhere the anchor is an
+# independent authority; here the reference and the spec were produced by the
+# same author, so a shared misreading cannot be caught by comparing them. The
+# scoring testbench's behavioural model is written from the SPEC and not from
+# the reference RTL, which is the only independent check available, and the
+# three negative controls in controls/ are what establish that the surface
+# discriminates at all.
+anchor: none -- hand-authored reference
+anchor_note: >
+  candidates/golden_soln/queue.sv, hand-written. Copied verbatim to
+  ref/multiport_queue_ref.sv; ref/queue_top.sv is a synthesis shim that pins the
+  scored geometry and flattens the packed-array ports.
+
+dut_module: queue
+synthesis_top: queue_top
+
+scored_configuration:
+  PTR_WIDTH: 4          # DEPTH = 16
+  T: logic[31:0]
+  PORTS: 3
+scored_configuration_note: >
+  Pinned in ref/queue_top.sv rather than in orfs/config.mk. T is a TYPE
+  parameter and ORFS's VERILOG_TOP_PARAMS sets value parameters only, so a
+  config line could not pin the width -- it would silently synthesise the
+  module's default logic[63:0] at DEPTH=128, 8,192 storage flops instead of 512,
+  and label it the scored number.
+
+ppa_status: >
+  THE REFERENCE Fmax SWEEP HAS NOT BEEN RUN. G1 records the pinned period as NOT
+  YET SET and no PPA number may be reported for this task until the sweep has
+  run and the pin is written into the spec.
+
+submissions_status: >
+  NOT YET SOLICITED. candidates/d_ca06/ holds no submission. The pin must be in
+  the spec before solicitation (the pin rule), so this task is not ready to
+  prompt.
+
+# ---------------------------------------------------------------------------
+# The clauses a submission is scored against, and what checks each.
+# ---------------------------------------------------------------------------
+clauses:
+  - {id: V2, what: "port list exact",                       checked_by: "elaboration + every cycle"}
+  - {id: V3, what: "synchronous active-low reset",          checked_by: "T5 reset mid-traffic"}
+  - {id: F2, what: "full/empty share a pointer state",      checked_by: "T3 boundaries, coverage floor >= 10 each"}
+  - {id: F3, what: "write_accept is vacancy alone",         checked_by: "nc_b, every cycle"}
+  - {id: F4, what: "accepted writes compact toward tail",   checked_by: "nc_c, T2 all wv combinations"}
+  - {id: F5, what: "read_valid and read_data from head",    checked_by: "every cycle"}
+  - {id: F6, what: "head advances past the HIGHEST accepted read; skipped entries are discarded",
+     checked_by: "nc_a, coverage floor >= 50 non-prefix accepts"}
+  - {id: F7, what: "fullness flag holds on a balanced cycle", checked_by: "T3 balanced cycles at both boundaries"}
+  - {id: A1, what: "outputs reflect pre-edge state",        checked_by: "model compares before the edge"}
+  - {id: A2, what: "read-before-write within a cycle",      checked_by: "T2 simultaneous traffic"}
+
+configs:
+  # Full cross of the two swept parameters = 6. Kept in step with the case block
+  # in scripts/sim_candidate.sh; if one changes the other must.
+  - {PW: 3, DW: 8}
+  - {PW: 3, DW: 32}
+  - {PW: 4, DW: 8}
+  - {PW: 4, DW: 32}   # the scored point, pinned in ref/queue_top.sv
+  - {PW: 5, DW: 8}
+  - {PW: 5, DW: 32}
+configs_note: >
+  PORTS is not swept. The read-mux count and the write prefix-sum chain both
+  scale with it, so it moves area on every axis at once; and F6's discard rule
+  is only observable at PORTS >= 2, so a PORTS=1 config would score a queue
+  whose defining clause cannot fire.
+
+scored_metrics:
+  - {metric: cycles, label: "cycles", role: reported}
+  - {metric: nonprefix_accepts, label: "non-prefix", role: reported}
+# NO CAPABILITY METRIC, and that is structural rather than an omission. A3 pins
+# throughput at PORTS entries per cycle each way and P2 pins the storage
+# geometry, so there is no quantity where more is better and area buys it. Raw
+# area is compared directly and is like-for-like, because everything free (P3)
+# is structural.
+
+controls:
+  - id: nc_a_reads_compact
+    violates: F6
+    expect: FAIL
+    note: >
+      head advances by the COUNT of accepted reads instead of past the highest
+      accepted index, so a non-prefix accept loses nothing. This is the design a
+      model is most likely to write, and it is the clause the task exists for.
+    measured: "0/6 configs. FAIL, 9367 mismatches, first on write_accept"
+  - id: nc_b_accept_uses_valid
+    violates: F3
+    expect: FAIL
+    measured: "2/6 configs. FAIL, 853 mismatches, first write_accept got 111"
+    measured_note: >
+      It PASSES two of six configs, and that is a property of the stimulus
+      rather than a weak control. Acceptance-uses-valid only diverges when
+      vacancy is low enough that a high port would have been refused, which the
+      random traffic reaches often at PW=3 and rarely at PW=5. Recorded because
+      a control that fails everywhere and one that fails where the clause bites
+      are different evidence, and only the second says where to look.
+  - id: nc_c_writes_dont_compact
+    violates: F4
+    expect: FAIL
+    measured: "0/6 configs. FAIL, 3778 mismatches, first on read_data[1]"
+
+reference_run:
+  verdict: PASS
+  detail: "6/6 configs through scripts/sim_candidate.sh"
+  coverage: "nonprefix_accepts=1310 full_cycles=56 empty_cycles=313 wrap_events=385 allports_cycles=75 (PW=4 DW=32)"
+  comb_loop_configs: 6
+  nonconverged_configs: 0
+  comb_loop_note: >
+    All six configs carry an ALWCOMBORDER warning and ZERO of them fail to
+    converge. The reference builds its write address chain as a prefix sum
+    inside one always_comb -- write_ptrs[i] is read to produce write_ptrs[i+1] --
+    which Verilator flags as an ordering hazard and then iterates to a fixed
+    point. Per F112 that means the verdict stands: UNOPTFLAT with no convergence
+    failure is a performance warning, not an unscorable run. It belongs in the
+    record, not in a decision.
