@@ -38,10 +38,12 @@ OUT = os.path.join(REPO, "docs", "assets")
 THEMES = {
     "light": dict(fg="#1a1a1a", mute="#666", grid="#d8d8d8", bg="none",
                   bar="#2f6feb", bar2="#7aa5f0", dead="#e3e3e3", rule="#c00",
-                  f_invalid="#e8663d", f_gate="#d9a520", f_nobuild="#8a8f98"),
+                  f_invalid="#e8663d", f_gate="#d9a520", f_nobuild="#8a8f98",
+                  barlbl="#ffffff"),
     "dark":  dict(fg="#e8e8e8", mute="#9a9a9a", grid="#3a3a3a", bg="none",
                   bar="#5b8dfb", bar2="#2f4f8f", dead="#333", rule="#ff6b6b",
-                  f_invalid="#ff7a52", f_gate="#e8b53a", f_nobuild="#7d838d"),
+                  f_invalid="#ff7a52", f_gate="#e8b53a", f_nobuild="#7d838d",
+                  barlbl="#0d1b3a"),
 }
 
 
@@ -313,21 +315,33 @@ def faults_svg(theme):
         grp = by_task[t]
         gx0 = x
         ceil = max([ci for _m, _n, ci, _s in grp] or [0])
+        ceil_y = base - ceil * scale if ceil else None
         for m, n, ci, st in grp:
             if n:
                 h = int(n * scale)
                 p.append(f'<rect x="{x}" y="{base - h}" width="{barw}" height="{h}" '
                          f'rx="2" fill="{c["bar"]}"/>')
-                p.append(f'<text x="{x + barw / 2}" y="{base - h - 6}" fill="{c["fg"]}" '
-                         f'font-size="11" text-anchor="middle">{n}</text>')
+                # A bar one fault under the ceiling put its value label straight
+                # through the dashed rule: v_dsp02's 12 was drawn at y=107 with
+                # the 13-line at y=101, so the number read as struck out. When
+                # the two are within a label height, the value goes INSIDE the
+                # bar instead. Only then -- moving every label would cost the
+                # short bars, which have no room inside.
+                ly_ = base - h - 6
+                if ceil_y is not None and abs(ly_ - ceil_y) < 12 and h >= 24:
+                    p.append(f'<text x="{x + barw / 2}" y="{base - h + 15}" '
+                             f'fill="{c["barlbl"]}" font-size="11" font-weight="600" '
+                             f'text-anchor="middle">{n}</text>')
+                else:
+                    p.append(f'<text x="{x + barw / 2}" y="{ly_}" fill="{c["fg"]}" '
+                             f'font-size="11" text-anchor="middle">{n}</text>')
             else:
-                _lbl, key, short = STATE.get(st, ("", "dead", ""))
+                # NO TEXT ABOVE THE STUB. The rotated per-bar label duplicated
+                # what the colour already says and, at 9pt on its side, was the
+                # least readable thing on the chart. Colour + legend carry it.
+                _lbl, key, _short = STATE.get(st, ("", "dead", ""))
                 p.append(f'<rect x="{x}" y="{base - 14}" width="{barw}" height="14" '
                          f'rx="2" fill="{c[key]}"/>')
-                p.append(f'<text x="{x + barw / 2}" y="{base - 20}" fill="{c[key]}" '
-                         f'font-size="9" text-anchor="middle" '
-                         f'transform="rotate(-90 {x + barw / 2} {base - 20})">'
-                         f'{esc(short)}</text>')
             p.append(f'<text x="{x + barw / 2}" y="{base + 14}" fill="{c["mute"]}" '
                      f'font-size="9" text-anchor="middle" '
                      f'transform="rotate(-40 {x + barw / 2} {base + 14})">'
