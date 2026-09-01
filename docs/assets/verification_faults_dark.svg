@@ -18,105 +18,105 @@
 <text x="44" y="94.0" fill="#9a9a9a" font-size="11" text-anchor="end">14</text>
 <rect x="60" y="228" width="26" height="22" rx="2" fill="#5b8dfb"/>
 <text x="73.0" y="222" fill="#e8e8e8" font-size="11" text-anchor="middle">2</text>
-<text x="73.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 73.0 262)">GPT 5.6</text>
+<text x="73.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 73.0 262)">GPT 5.6</text>
 <rect x="94" y="205" width="26" height="45" rx="2" fill="#5b8dfb"/>
 <text x="107.0" y="199" fill="#e8e8e8" font-size="11" text-anchor="middle">4</text>
-<text x="107.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 107.0 262)">Opus 5</text>
+<text x="107.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 107.0 262)">Opus 5</text>
 <rect x="128" y="228" width="26" height="22" rx="2" fill="#5b8dfb"/>
 <text x="141.0" y="222" fill="#e8e8e8" font-size="11" text-anchor="middle">2</text>
-<text x="141.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 141.0 262)">Gemini 3.1</text>
+<text x="141.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 141.0 262)">Gemini 3.1</text>
 <line x1="56" y1="135.71428571428572" x2="158" y2="135.71428571428572" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="162" y="139.71428571428572" fill="#ff6b6b" font-size="10">10</text>
 <text x="107.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ai02</text>
 <rect x="208" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="221.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 221.0 262)">GPT 5.6</text>
+<text x="221.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 221.0 262)">GPT 5.6</text>
 <rect x="242" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="255.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 255.0 262)">Opus 5</text>
+<text x="255.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 255.0 262)">Opus 5</text>
 <text x="238.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca03</text>
 <rect x="322" y="182" width="26" height="68" rx="2" fill="#5b8dfb"/>
 <text x="335.0" y="176" fill="#e8e8e8" font-size="11" text-anchor="middle">6</text>
-<text x="335.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 335.0 262)">GPT 5.6</text>
+<text x="335.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 335.0 262)">GPT 5.6</text>
 <rect x="356" y="159" width="26" height="91" rx="2" fill="#5b8dfb"/>
 <text x="369.0" y="153" fill="#e8e8e8" font-size="11" text-anchor="middle">8</text>
-<text x="369.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 369.0 262)">Opus 5</text>
+<text x="369.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 369.0 262)">Opus 5</text>
 <rect x="390" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="403.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 403.0 262)">Gemini 3.1</text>
+<text x="403.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 403.0 262)">Gemini 3.1</text>
 <line x1="318" y1="135.71428571428572" x2="420" y2="135.71428571428572" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="424" y="139.71428571428572" fill="#ff6b6b" font-size="10">10</text>
 <text x="369.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca04</text>
 <rect x="470" y="182" width="26" height="68" rx="2" fill="#5b8dfb"/>
 <text x="483.0" y="176" fill="#e8e8e8" font-size="11" text-anchor="middle">6</text>
-<text x="483.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 483.0 262)">GPT 5.6</text>
+<text x="483.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 483.0 262)">GPT 5.6</text>
 <rect x="504" y="182" width="26" height="68" rx="2" fill="#5b8dfb"/>
 <text x="517.0" y="176" fill="#e8e8e8" font-size="11" text-anchor="middle">6</text>
-<text x="517.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 517.0 262)">Opus 5</text>
+<text x="517.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 517.0 262)">Opus 5</text>
 <rect x="538" y="236" width="26" height="14" rx="2" fill="#e8b53a"/>
-<text x="551.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 551.0 262)">Gemini 3.1</text>
+<text x="551.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 551.0 262)">Gemini 3.1</text>
 <line x1="466" y1="135.71428571428572" x2="568" y2="135.71428571428572" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="572" y="139.71428571428572" fill="#ff6b6b" font-size="10">10</text>
 <text x="517.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca05</text>
 <rect x="618" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="631.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 631.0 262)">GPT 5.6</text>
+<text x="631.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 631.0 262)">GPT 5.6</text>
 <rect x="652" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="665.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 665.0 262)">Opus 5</text>
+<text x="665.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 665.0 262)">Opus 5</text>
 <rect x="686" y="236" width="26" height="14" rx="2" fill="#7d838d"/>
-<text x="699.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 699.0 262)">Gemini 3.1</text>
+<text x="699.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 699.0 262)">Gemini 3.1</text>
 <text x="665.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca06</text>
 <rect x="766" y="182" width="26" height="68" rx="2" fill="#5b8dfb"/>
 <text x="779.0" y="176" fill="#e8e8e8" font-size="11" text-anchor="middle">6</text>
-<text x="779.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 779.0 262)">GPT 5.6</text>
+<text x="779.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 779.0 262)">GPT 5.6</text>
 <rect x="800" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="813.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 813.0 262)">Opus 5</text>
+<text x="813.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 813.0 262)">Opus 5</text>
 <rect x="834" y="236" width="26" height="14" rx="2" fill="#e8b53a"/>
-<text x="847.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 847.0 262)">Gemini 3.1</text>
+<text x="847.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 847.0 262)">Gemini 3.1</text>
 <line x1="762" y1="135.71428571428572" x2="864" y2="135.71428571428572" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="868" y="139.71428571428572" fill="#ff6b6b" font-size="10">10</text>
 <text x="813.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_ca07</text>
 <rect x="914" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="927.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 927.0 262)">GPT 5.6</text>
+<text x="927.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 927.0 262)">GPT 5.6</text>
 <rect x="948" y="113" width="26" height="137" rx="2" fill="#5b8dfb"/>
 <text x="961.0" y="128" fill="#0d1b3a" font-size="11" font-weight="600" text-anchor="middle">12</text>
-<text x="961.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 961.0 262)">Opus 5</text>
+<text x="961.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 961.0 262)">Opus 5</text>
 <rect x="982" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="995.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 995.0 262)">Gemini 3.1</text>
+<text x="995.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 995.0 262)">Gemini 3.1</text>
 <line x1="910" y1="101.42857142857142" x2="1012" y2="101.42857142857142" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="1016" y="105.42857142857142" fill="#ff6b6b" font-size="10">13</text>
 <text x="961.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_dsp02</text>
 <rect x="1062" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="1075.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1075.0 262)">GPT 5.6</text>
+<text x="1075.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1075.0 262)">GPT 5.6</text>
 <rect x="1096" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="1109.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1109.0 262)">Opus 5</text>
+<text x="1109.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1109.0 262)">Opus 5</text>
 <rect x="1130" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="1143.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1143.0 262)">Gemini 3.1</text>
+<text x="1143.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1143.0 262)">Gemini 3.1</text>
 <text x="1109.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw01</text>
 <rect x="1210" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="1223.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1223.0 262)">GPT 5.6</text>
+<text x="1223.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1223.0 262)">GPT 5.6</text>
 <rect x="1244" y="136" width="26" height="114" rx="2" fill="#5b8dfb"/>
 <text x="1257.0" y="151" fill="#0d1b3a" font-size="11" font-weight="600" text-anchor="middle">10</text>
-<text x="1257.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1257.0 262)">Opus 5</text>
+<text x="1257.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1257.0 262)">Opus 5</text>
 <rect x="1278" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="1291.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1291.0 262)">Gemini 3.1</text>
+<text x="1291.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1291.0 262)">Gemini 3.1</text>
 <line x1="1206" y1="135.71428571428572" x2="1308" y2="135.71428571428572" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="1312" y="139.71428571428572" fill="#ff6b6b" font-size="10">10</text>
 <text x="1257.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw02</text>
 <rect x="1358" y="159" width="26" height="91" rx="2" fill="#5b8dfb"/>
 <text x="1371.0" y="153" fill="#e8e8e8" font-size="11" text-anchor="middle">8</text>
-<text x="1371.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1371.0 262)">GPT 5.6</text>
+<text x="1371.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1371.0 262)">GPT 5.6</text>
 <rect x="1392" y="148" width="26" height="102" rx="2" fill="#5b8dfb"/>
 <text x="1405.0" y="163" fill="#0d1b3a" font-size="11" font-weight="600" text-anchor="middle">9</text>
-<text x="1405.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1405.0 262)">Opus 5</text>
+<text x="1405.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1405.0 262)">Opus 5</text>
 <rect x="1426" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="1439.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1439.0 262)">Gemini 3.1</text>
+<text x="1439.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1439.0 262)">Gemini 3.1</text>
 <line x1="1354" y1="135.71428571428572" x2="1456" y2="135.71428571428572" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="1460" y="139.71428571428572" fill="#ff6b6b" font-size="10">10</text>
 <text x="1405.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw03</text>
 <rect x="1506" y="236" width="26" height="14" rx="2" fill="#e8b53a"/>
-<text x="1519.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1519.0 262)">GPT 5.6</text>
+<text x="1519.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1519.0 262)">GPT 5.6</text>
 <rect x="1540" y="159" width="26" height="91" rx="2" fill="#5b8dfb"/>
 <text x="1553.0" y="153" fill="#e8e8e8" font-size="11" text-anchor="middle">8</text>
-<text x="1553.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1553.0 262)">Opus 5</text>
+<text x="1553.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1553.0 262)">Opus 5</text>
 <rect x="1574" y="236" width="26" height="14" rx="2" fill="#ff7a52"/>
-<text x="1587.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="middle" transform="rotate(-55 1587.0 262)">Gemini 3.1</text>
+<text x="1587.0" y="262" fill="#9a9a9a" font-size="8.5" text-anchor="end" transform="rotate(-55 1587.0 262)">Gemini 3.1</text>
 <line x1="1502" y1="135.71428571428572" x2="1604" y2="135.71428571428572" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,3"/>
 <text x="1608" y="139.71428571428572" fill="#ff6b6b" font-size="10">10</text>
 <text x="1553.0" y="330" fill="#e8e8e8" font-size="12" font-weight="600" text-anchor="middle">v_nw04</text>

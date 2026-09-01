@@ -356,9 +356,18 @@ def faults_svg(theme):
             # setting included, is in the key beneath the legend. Steeper
             # rotation because the longer strings would otherwise reach into the
             # neighbouring bar at this pitch.
-            p.append(f'<text x="{x + barw / 2}" y="{base + 12}" fill="{c["mute"]}" '
-                     f'font-size="8.5" text-anchor="middle" '
-                     f'transform="rotate(-55 {x + barw / 2} {base + 12})">'
+            # ANCHOR AT THE END, NOT THE MIDDLE. A rotation pivots about the
+            # anchor, so text-anchor="middle" sent half of every label back up
+            # across the axis and over the bars -- measured: "Gemini 3.1"
+            # reached y=243 with the axis at y=250, drawn in mute grey on top of
+            # a blue bar, which reads as the label being clipped. With the end
+            # anchored at the tick the whole string hangs below and to the left,
+            # topmost y=262, and its 27px horizontal footprint stays inside the
+            # 34px bar pitch so neighbours cannot overlap either.
+            tx, ty = x + barw / 2, base + 12
+            p.append(f'<text x="{tx}" y="{ty}" fill="{c["mute"]}" '
+                     f'font-size="8.5" text-anchor="end" '
+                     f'transform="rotate(-55 {tx} {ty})">'
                      f'{esc(RT.short_name(m))}</text>')
             x += barw + gap
         if ceil:
