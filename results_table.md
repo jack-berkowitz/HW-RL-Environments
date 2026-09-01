@@ -240,7 +240,7 @@ prompt is a different question and is not listed.
 | **reference testbench** | yes | yes | yes | 5/5 | **11/11** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 | `Opus 5 High` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
 
 ## v_ca04 — stream crossbar
 
