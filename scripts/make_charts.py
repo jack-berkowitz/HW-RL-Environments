@@ -265,7 +265,14 @@ def funnel_counts():
                        ("correct", d_correct), ("scorable PPA", d_ppa)],
                       "design"),
             _monotone([("submitted", v_total), ("compiled", v_built),
-                       ("tells correct from broken", v_disc),
+                       # "discriminates" rather than "tells correct from
+                       # broken": half the characters at the same meaning, and
+                       # it is the name the records already use for the field.
+                       # NOT "rejects correct hardware" -- this stage counts the
+                       # testbenches that SURVIVE it, and the 16 here are
+                       # precisely the ones that do NOT reject correct hardware.
+                       # A funnel stage has to name what got through.
+                       ("discriminates", v_disc),
                        ("fault count", v_scored)],
                       "verification"))
 

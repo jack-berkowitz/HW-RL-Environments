@@ -26,7 +26,7 @@
 <rect x="250" y="245" width="300" height="16" rx="3" fill="#e3e3e3"/>
 <rect x="250" y="245" width="281" height="16" rx="3" fill="#2f6feb"/>
 <text x="562" y="260" fill="#1a1a1a" font-size="13" font-weight="600">31 of 33</text>
-<text x="238" y="290" fill="#666" font-size="13" text-anchor="end">tells correct from broken</text>
+<text x="238" y="290" fill="#666" font-size="13" text-anchor="end">discriminates</text>
 <rect x="250" y="275" width="300" height="16" rx="3" fill="#e3e3e3"/>
 <rect x="250" y="275" width="145" height="16" rx="3" fill="#2f6feb"/>
 <text x="562" y="290" fill="#1a1a1a" font-size="13" font-weight="600">16 of 33</text>
