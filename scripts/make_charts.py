@@ -132,6 +132,12 @@ def candidate_files(prefix):
             # so membership of this directory is the definition of a submission.
             if stem in RT.WITHHELD_MODELS:
                 continue
+            # A task held out of the scored set contributes no submissions to
+            # any denominator. This is the single choke point: funnel_counts,
+            # every design chart and the faults chart all read this function, so
+            # excluding here cannot leave one chart disagreeing with another.
+            if RT.is_excluded(os.path.basename(d)):
+                continue
             out.append((os.path.basename(d), stem,
                         os.path.relpath(f, REPO)))
     return out
@@ -293,7 +299,7 @@ def faults_svg(theme):
     x = 60
     W = max(W, int(60 + sum(len(by_task[t]) * (barw + gap) + groupgap
                             for t in by_task) + 40))
-    H = 360
+    H = 396
     p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
          f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">']
     p.append(f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>')
@@ -342,10 +348,18 @@ def faults_svg(theme):
                 _lbl, key, _short = STATE.get(st, ("", "dead", ""))
                 p.append(f'<rect x="{x}" y="{base - 14}" width="{barw}" height="14" '
                          f'rx="2" fill="{c[key]}"/>')
-            p.append(f'<text x="{x + barw / 2}" y="{base + 14}" fill="{c["mute"]}" '
-                     f'font-size="9" text-anchor="middle" '
-                     f'transform="rotate(-40 {x + barw / 2} {base + 14})">'
-                     f'{esc(RT.display_name(m).split()[0])}</text>')
+            # THE SYSTEM, NOT THE LAB. `.split()[0]` reduced every tick to
+            # "ChatGPT" / "Claude" / "Gemini", so the chart named three vendors
+            # and no models -- a reader could not tell which system produced a
+            # bar, and two of the three names did not even carry a version. The
+            # short form keeps the version; the full configuration, reasoning
+            # setting included, is in the key beneath the legend. Steeper
+            # rotation because the longer strings would otherwise reach into the
+            # neighbouring bar at this pitch.
+            p.append(f'<text x="{x + barw / 2}" y="{base + 12}" fill="{c["mute"]}" '
+                     f'font-size="8.5" text-anchor="middle" '
+                     f'transform="rotate(-55 {x + barw / 2} {base + 12})">'
+                     f'{esc(RT.short_name(m))}</text>')
             x += barw + gap
         if ceil:
             yy = base - ceil * scale
@@ -353,7 +367,7 @@ def faults_svg(theme):
                      f'stroke="{c["rule"]}" stroke-width="2" stroke-dasharray="5,3"/>')
             p.append(f'<text x="{x - gap + 8}" y="{yy + 4}" fill="{c["rule"]}" '
                      f'font-size="10">{ceil}</text>')
-        p.append(f'<text x="{(gx0 + x - gap) / 2}" y="{base + 62}" fill="{c["fg"]}" '
+        p.append(f'<text x="{(gx0 + x - gap) / 2}" y="{base + 80}" fill="{c["fg"]}" '
                  f'font-size="12" font-weight="600" text-anchor="middle">'
                  f'{esc(t.split("_")[0] + "_" + t.split("_")[1])}</text>')
         x += groupgap
@@ -372,6 +386,17 @@ def faults_svg(theme):
         p.append(f'<text x="{lx + 16}" y="{ly}" fill="{c["mute"]}" font-size="11">'
                  f'{esc(txt)}</text>')
         lx += 20 + 7.0 * len(txt)
+
+    # THE KEY. Full names once, rather than under all 32 bars where they would
+    # not fit. Ordering is not claimed: a task missing a submission would make a
+    # "left to right" reading wrong, and one task has only two.
+    seen, names = set(), []
+    for _t, m, _n, _c, _s in rows:
+        if m not in seen:
+            seen.add(m)
+            names.append(f"{RT.short_name(m)} = {RT.display_name(m)}")
+    p.append(f'<text x="20" y="58" fill="{c["mute"]}" font-size="10.5">'
+             f'{esc("   ".join(names))}</text>')
     p.append('</svg>')
     return "\n".join(p)
 

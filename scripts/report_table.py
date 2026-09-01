@@ -57,10 +57,14 @@ def evidence_note(task_dir):
 
 # Submissions are stored under a short slug; the table prints the model as
 # released. One map so the two never drift apart.
+# THE FULL SYSTEM, INCLUDING THE REASONING SETTING. "Claude Opus 5" and
+# "Gemini 3.1 Pro" named the weights and not the configuration that was run, and
+# the same weights at a different thinking budget are a different system to
+# reproduce. Anyone repeating a number needs the whole string.
 DISPLAY_NAME = {
     "chat":     "ChatGPT 5.6 Sol",
-    "claude":   "Claude Opus 5",
-    "gemini":   "Gemini 3.1 Pro",
+    "claude":   "Opus 5 High",
+    "gemini":   "Gemini 3.1 Pro Extended thinking",
     "qwen":     "Qwen 3.7 Plus",
     "deepseek": "DeepSeek V4 Pro",
 }
@@ -69,8 +73,61 @@ DISPLAY_NAME = {
 WITHHELD_MODELS = {"kimi"}
 
 
+# TASKS DELIBERATELY OUT OF THE SCORED SET, with the reason. A task can be
+# finished -- reference, testbench, discriminating controls, a converged sweep,
+# PPA for every submission -- and still not belong in the headline numbers,
+# because what it was built to answer is not the question the corpus measures.
+# Nothing here is a defect in the task.
+#
+# THIS IS NOT DELETION. The task keeps its directory, its records and its row in
+# the not-scored table; it is removed from denominators only. Rule 20: absence
+# renders as absence, so an excluded task states that it was excluded rather
+# than quietly failing to appear.
+EXCLUDED_TASKS = {
+    "d_ca06": ("held out of the metrics — a hand-written probe run to see how a "
+               "task with no upstream anchor behaves, not part of the scored set"),
+}
+
+
+def excluded_key(name):
+    """The EXCLUDED_TASKS key a task name belongs to, or None.
+
+    Task identity arrives in two spellings -- the candidates/ directory
+    (`d_ca06`) and the full task name (`d_ca06_multiport_queue`) -- and the
+    exclusion has to catch both or it silences one table and not another. An
+    earlier version split on a timestamp that is not in either spelling and
+    matched only the short one, so results_table.md would have published the
+    task as scored while the charts dropped it. Prefix match on a `_` boundary,
+    so `d_ca06` never matches a future `d_ca065`.
+    """
+    n = str(name)
+    for k in EXCLUDED_TASKS:
+        if n == k or n.startswith(k + "_"):
+            return k
+    return None
+
+
+def is_excluded(name):
+    return excluded_key(name) is not None
+
+
+# Axis-length forms. A chart tick has room for a version, not for a reasoning
+# setting -- but it must not fall back to the vendor either, which is what
+# display_name().split()[0] used to do: three different systems all rendered as
+# their lab. These keep the version; the full string goes in the chart key.
+SHORT_NAME = {
+    "chat":     "GPT 5.6",
+    "claude":   "Opus 5",
+    "gemini":   "Gemini 3.1",
+}
+
+
 def display_name(slug):
     return DISPLAY_NAME.get(slug, slug)
+
+
+def short_name(slug):
+    return SHORT_NAME.get(slug, display_name(slug))
 
 # Internal metric key -> what a reader should see. Presentation only; the
 # records keep the internal names.
@@ -606,6 +663,13 @@ def main():
 
         mets = scored_metrics(tds.get(task, ""))
         print(f"\n## {TASK_TITLE[task]}\n")
+        # The detailed table KEEPS an excluded task -- the runs happened and the
+        # numbers are real -- but says so above the numbers, where a reader
+        # cannot take them for scored results by scrolling past a caption.
+        if is_excluded(task):
+            print(f"> **NOT IN THE SCORED SET.** "
+                  f"{EXCLUDED_TASKS[excluded_key(task)]}. These numbers "
+                  f"are excluded from every headline count and every chart.\n")
 
         hdr = ["design", "correctness", "area (µm²)", "power (mW)", "Fmax (MHz)"]
         for k, _e, _r in mets:

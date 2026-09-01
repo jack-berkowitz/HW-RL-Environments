@@ -88,6 +88,8 @@ capability, and nothing here establishes those weights.
 
 ## d_ca06 — Concurrent multi-port queue
 
+> **NOT IN THE SCORED SET.** held out of the metrics — a hand-written probe run to see how a task with no upstream anchor behaves, not part of the scored set. These numbers are excluded from every headline count and every chart.
+
 | design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | non-prefix | notes |
 |---|---|---|---|---|---|---|---|
 | `c_a_flag_uses_advance` | **6/6 pass** | — | — | — | — | — | 6 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
@@ -222,8 +224,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 1/1 | **2/10** |  |
-| `Claude Opus 5` | yes | yes | yes | 1/1 | **4/10** |  |
-| `Gemini 3.1 Pro` | yes | yes | yes | 1/1 | **2/10** |  |
+| `Opus 5 High` | yes | yes | yes | 1/1 | **4/10** |  |
+| `Gemini 3.1 Pro Extended thinking` | yes | yes | yes | 1/1 | **2/10** |  |
 
 ## v_ca03 — AXI ID-width converter
 
@@ -237,7 +239,7 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 5/5 | **11/11** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Claude Opus 5` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Opus 5 High` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 | `gemini` | — | *not scored against this prompt* | — | — | — | last run answered task text `18b1288587d371a8` |
 
 ## v_ca04 — stream crossbar
@@ -252,8 +254,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 1/1 | **6/10** |  |
-| `Claude Opus 5` | yes | yes | yes | 1/1 | **8/10** |  |
-| `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Opus 5 High` | yes | yes | yes | 1/1 | **8/10** |  |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 
 ## v_ca05 — tag tracker (out-of-order queue)
 
@@ -266,8 +268,8 @@ prompt is a different question and is not listed.
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 4/4 | **6/10** |  |
-| `Claude Opus 5` | yes | yes | yes | 4/4 | **6/10** |  |
-| `Gemini 3.1 Pro` | yes | yes | yes | 3/4 | *withheld* | accepts the golden DUT but rejects a legal variant or the second DUT, so it rejects some correct hardware — its fault count carries no information |
+| `Opus 5 High` | yes | yes | yes | 4/4 | **6/10** |  |
+| `Gemini 3.1 Pro Extended thinking` | yes | yes | yes | 3/4 | *withheld* | accepts the golden DUT but rejects a legal variant or the second DUT, so it rejects some correct hardware — its fault count carries no information |
 | `tag_tracker_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `fd2ae1ad9bf3719d` |
 
 ## v_ca06 — AXI data-width downsizer
@@ -281,8 +283,8 @@ prompt is a different question and is not listed.
 | testbench | tells correct from broken | accepts correct design | accepts 2nd implementation | accepts legal variants | catches faults | notes |
 |---|---|---|---|---|---|---|
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=CRASH, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Claude Opus 5` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Gemini 3.1 Pro` | **no** | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
+| `Opus 5 High` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **did not compile** | n/a | n/a | n/a | the testbench itself does not build |
 | `dw_downsizer_spec_tb` | — | *not scored against this prompt* | — | — | — | last run answered task text `ae29e2161468aeff` |
 
 ## v_ca07 — Glitch-free integer clock divider
@@ -297,8 +299,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 5/5 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 5/5 | **6/10** |  |
-| `Claude Opus 5` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Gemini 3.1 Pro` | yes | yes | **no** | 3/5 | *withheld* | accepts the golden DUT but rejects a legal variant or the second DUT, so it rejects some correct hardware — its fault count carries no information |
+| `Opus 5 High` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Gemini 3.1 Pro Extended thinking` | yes | yes | **no** | 3/5 | *withheld* | accepts the golden DUT but rejects a legal variant or the second DUT, so it rejects some correct hardware — its fault count carries no information |
 
 ## v_dsp02 — FP non-computational ops
 
@@ -312,8 +314,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 5/5 | **13/13** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Claude Opus 5` | yes | yes | yes | 5/5 | **12/13** |  |
-| `Gemini 3.1 Pro` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Opus 5 High` | yes | yes | yes | 5/5 | **12/13** |  |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **no** | **no** | 1/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 
 ## v_nw01 — arp engine
 
@@ -327,8 +329,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | yes | 1/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Claude Opus 5` | **no** | **no** | yes | 1/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Opus 5 High` | **no** | **no** | yes | 1/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 
 ## v_nw02 — AXI atomic-op filter
 
@@ -342,8 +344,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 1/1 | **11/11** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
-| `Claude Opus 5` | yes | yes | yes | 1/1 | **10/10** |  |
-| `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Opus 5 High` | yes | yes | yes | 1/1 | **10/10** |  |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 
 ## v_nw03 — frame-arbitrating stream mux
 
@@ -357,8 +359,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 5/5 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | yes | 5/5 | **8/10** |  |
-| `Claude Opus 5` | yes | yes | yes | 5/5 | **9/10** |  |
-| `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Opus 5 High` | yes | yes | yes | 5/5 | **9/10** |  |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **no** | **no** | 0/5 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 
 ## v_nw04 — PTP time base
 
@@ -372,8 +374,8 @@ prompt is a different question and is not listed.
 |---|---|---|---|---|---|---|
 | **reference testbench** | yes | yes | yes | 1/1 | **10/10** | establishes the ceiling |
 | `ChatGPT 5.6 Sol` | yes | yes | **no** | 0/1 | *withheld* | accepts the golden DUT but rejects a legal variant or the second DUT, so it rejects some correct hardware — its fault count carries no information |
-| `Claude Opus 5` | yes | yes | yes | 1/1 | **8/10** |  |
-| `Gemini 3.1 Pro` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
+| `Opus 5 High` | yes | yes | yes | 1/1 | **8/10** |  |
+| `Gemini 3.1 Pro Extended thinking` | **no** | **no** | **no** | 0/1 | *withheld* | **INVALID** — same verdict on the golden DUT and on a deliberately broken one (golden=FAIL, broken=FAIL), so it is not measuring the design under test. Excluded from scoring (rule 23) |
 
 - **tells correct from broken** — the gate. Every testbench is run twice:
   once against the correct DUT and once against one with every output tied

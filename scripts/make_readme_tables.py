@@ -62,6 +62,14 @@ def design_pins():
     out = []
     for d in sorted(glob.glob(os.path.join(REPO, "domains", "*", "design", "d_*"))):
         task = os.path.basename(d)
+        # EXCLUDED AT THE SOURCE. Filtering this in design_tables() instead --
+        # one of the four call sites -- dropped the task from the README tables
+        # while the area, power and capability charts, which reach design_pins()
+        # through make_charts._design_pins(), went on drawing it. The charts and
+        # the tables then disagreed about what the scored set was. Anything that
+        # enumerates scored design tasks comes through here.
+        if RT.is_excluded(task):
+            continue
         short = "_".join(task.split("_")[:2])
         try:
             pin = RT._spec_pin(task)
@@ -97,8 +105,11 @@ def unpinned():
         out.append((short, _label(d, short)))
     return out
 MODELS = ("chat", "claude", "gemini")
-DISPLAY = {"chat": "ChatGPT 5.6 Sol", "claude": "Claude Opus 5",
-           "gemini": "Gemini 3.1 Pro"}
+# DERIVED, NOT RESTATED. This was a second copy of report_table's map, and the
+# two were already free to drift: renaming a model in one place would have left
+# the README tables and the results table disagreeing about what was run, with
+# nothing comparing them. One source of truth.
+DISPLAY = {m: RT.display_name(m) for m in MODELS}
 
 
 def load(kind):
@@ -180,6 +191,7 @@ def design_tables():
     out = []
     for short, pin, label in design_pins():
         full = _task_full(short)
+
         # SELECT ON THE FIELD, NOT THE FILENAME -- the same defect that froze
         # the charts at the August records. clk_period_ns is in every record.
         held = withheld()
@@ -491,6 +503,12 @@ def unpinned_table():
     lines = ["| task | state |", "|---|---|"]
     for short, _label in unpinned():
         lines.append(f"| {short} | {reasons.get(short, 'no pin recorded')} |")
+    # Tasks that ARE pinned and DO have results but sit outside the scored set.
+    # They belong in this table for the same reason the unpinned ones do: a
+    # reader who knows the task exists must be able to find out what happened to
+    # it, and "not in the charts" is not an answer.
+    for short, why in sorted(RT.EXCLUDED_TASKS.items()):
+        lines.append(f"| {short} | {why} |")
     return "\n".join(lines)
 
 
