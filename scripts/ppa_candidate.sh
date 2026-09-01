@@ -178,6 +178,24 @@ GEO_IOH="$(geo_line IO_PLACER_H '')"
 GEO_IOV="$(geo_line IO_PLACER_V '')"
 GEO_AR="$(geo_line ASPECT_RATIO '')"
 GEO_CM="$(geo_line CORE_MARGIN '')"
+# VERILOG_TOP_PARAMS IS A GEOMETRY KEY AND WAS MISSING FROM THIS LIST. It is the
+# same defect as the seven above, one key over, and it fails LOUDER than they do
+# because nothing aborts.
+#
+# d_ca06 pins its scored geometry ONLY here -- PTR_WIDTH 4 DW 32 PORTS 3, i.e.
+# 16 entries of 32 bits. Its candidates declare the module's own defaults
+# (DW=64, PTR_WIDTH=7), so a generated config without this line elaborates
+# 128 x 64 = 8,192 storage flops against a 512-flop reference. 8,192 bits is
+# under SYNTH_MEMORY_MAX_BITS, so the build does not abort the way d_ca05's
+# missing IO_PLACER did: it places, routes, closes timing, and reports entirely
+# plausible area and power for a design sixteen times the size of the one being
+# scored. The only signal is the flop count.
+#
+# d_ai01 has the identical shape (HEIGHT 4 WIDTH 8) and has never exercised it,
+# because all three of its candidates fail correctness. Neither task has a
+# candidate PPA record, so no existing digest moves; the nine tasks that do not
+# set the key emit nothing here and hash exactly as before.
+GEO_TOP="$(geo_line VERILOG_TOP_PARAMS '')"
 
 ABC_LINE="$(grep -E '^export ABC_CLOCK_PERIOD_IN_PS' "$TASK_DIR/orfs/config.mk" 2>/dev/null | head -1)"
 if [ -z "$ABC_LINE" ]; then
@@ -227,6 +245,7 @@ $GEO_IOH
 $GEO_IOV
 $GEO_AR
 $GEO_CM
+$GEO_TOP
 # COPIED VERBATIM FROM THE TASK'S OWN config.mk, never re-derived here.
 # This line hardcoded /^set clk_period/, which does not exist in a MULTI-CLOCK
 # SDC: d_ca04 declares wr_period and rd_period, so the awk returned empty and
