@@ -22,6 +22,7 @@ report_table for that, because a second opinion about validity is a second
 source of truth, which is the defect this script exists to remove.
 """
 import glob
+import math
 import json
 import os
 import re
@@ -208,7 +209,35 @@ def funnel_counts():
     ppa = latest_by("ppa", lambda r: str(r.get("task", "")).startswith("d_")
                     and is_submission(r))
     p_by_path = {r.get("submission"): r for r in ppa.values()}
-    d_ppa = sum(1 for _t, _m, p in d_files if p_by_path.get(p, {}).get("design_area_um2"))
+    # A SCORABLE PPA, NOT MERELY A PPA FIELD. This counted every submission
+    # carrying design_area_um2, which made the last stage of a CUMULATIVE funnel
+    # LARGER than the stage above it -- 22 "PPA measured" under 21 "correct" --
+    # and nothing flagged a funnel that went up. Two ways in:
+    #
+    #   * d_ca01/gemini has an area from a synthesis run but is not correct, so
+    #     the number describes hardware that does not do the job.
+    #   * five builds closed with NEGATIVE slack (d_ca01/chat -0.049,
+    #     d_ca03/chat -35.46, d_dsp02/chat -22.92, d_nw03/chat -0.184,
+    #     d_nw03/gemini -0.266). Rule 22: a build that missed timing yields no
+    #     reportable PPA, because area and power at an unmet clock are not
+    #     comparable with area and power at the pin.
+    #
+    # 22 - 1 - 5 = 16, which is what a reader counting the published per-task
+    # tables gets by hand.
+    def _scorable_ppa(path):
+        if d_by_path.get(path, {}).get("all_passed") is not True:
+            return False
+        pr = p_by_path.get(path, {})
+        if not pr.get("design_area_um2"):
+            return False
+        try:
+            w = float(pr.get("wns_ns"))
+        except (TypeError, ValueError):
+            return False
+        # Negative zero is a miss that prints as a pass.
+        return w >= 0 and not (w == 0 and math.copysign(1.0, w) < 0)
+
+    d_ppa = sum(1 for _t, _m, p in d_files if _scorable_ppa(p))
 
     v_files = candidate_files("v_")
     vrows = {(t, m): (n, c, s) for t, m, n, c, s in verification_rows()}
@@ -219,10 +248,26 @@ def funnel_counts():
     v_built = sum(1 for _n, _c, s in got if s not in ("nobuild", "norecord"))
     v_disc = sum(1 for _n, _c, s in got if s in ("scored", "gate"))
     v_scored = sum(1 for _n, _c, s in got if s == "scored")
-    return ([("submitted", d_total), ("compiled", d_built),
-             ("correct", d_correct), ("PPA measured", d_ppa)],
-            [("submitted", v_total), ("compiled", v_built),
-             ("tells correct from broken", v_disc), ("fault count", v_scored)])
+    # A CUMULATIVE FUNNEL CANNOT WIDEN. Every stage is a subset of the one above
+    # it, so a rise is always a counting bug, never data -- and the published
+    # chart carried one (22 "PPA measured" beneath 21 "correct") through many
+    # regenerations because nothing compared adjacent stages. Cheap to check,
+    # and it fails loudly rather than rendering the impossible.
+    def _monotone(stages, kind):
+        for (an, av), (bn, bv) in zip(stages, stages[1:]):
+            if bv > av:
+                raise ValueError(
+                    f"{kind} funnel widens: '{bn}'={bv} exceeds '{an}'={av}. "
+                    f"Each stage must be a subset of the one before it.")
+        return stages
+
+    return (_monotone([("submitted", d_total), ("compiled", d_built),
+                       ("correct", d_correct), ("scorable PPA", d_ppa)],
+                      "design"),
+            _monotone([("submitted", v_total), ("compiled", v_built),
+                       ("tells correct from broken", v_disc),
+                       ("fault count", v_scored)],
+                      "verification"))
 
 
 def _task_of(candidate_dir):
