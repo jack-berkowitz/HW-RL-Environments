@@ -99,6 +99,21 @@ scored_metrics:
 # area is compared directly and is like-for-like, because everything free (P3)
 # is structural.
 
+conformant:
+  - id: c_a_flag_uses_advance
+    reading: F7
+    expect: PASS
+    measured: "6/6, and 0 differing cycles against the reference over 3000 random cycles"
+    note: >
+      F7 says the fullness flag moves only when the write and read counts differ,
+      and "read count" has two readings: the number of ports accepted, or the
+      number of entries actually removed, which F6 makes (highest accepted index
+      + 1). They differ on a non-prefix accept. The reference uses the COUNT;
+      this variant uses the ADVANCE. They are OBSERVABLY EQUIVALENT because the
+      flag is only consulted when tail == head. Recorded so a reader comparing
+      the two does not conclude the task is under-specified, and so a submission
+      choosing either reading is known to be conforming.
+
 controls:
   - id: nc_a_reads_compact
     violates: F6
