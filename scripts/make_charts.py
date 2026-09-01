@@ -722,6 +722,107 @@ def headroom_svg(theme):
     p.append('</svg>')
     return "\n".join(p)
 
+def tradeoff_rows():
+    """[(short, model, area_x, power_x, clock_x, n_worse)] for scorable designs.
+
+    All three ratios are against THE REFERENCE, including the clock: a
+    submission's required period divided by the reference's required period at
+    the same pinned build. Area and power were already reference-relative; the
+    timing chart's ratio is against the PIN, which is the right denominator
+    there and the wrong one here.
+    """
+    ref = _ref_ratio_by_task()
+    tim = {(t, m): rat for t, m, _p, _w, rat in timing_rows()}
+    out = []
+    for task, _title, _pin, _ra, areas, powers in design_rows():
+        short = "_".join(task.split("_")[:2])
+        pw = {m: r for m, r, _n in powers}
+        for m, ar, note in areas:
+            ck = tim.get((short, m))
+            rr = ref.get(short)
+            if ar is None or pw.get(m) is None or ck is None or not rr:
+                continue
+            trio = (ar, pw[m], ck / rr)
+            out.append((short, m) + trio + (sum(1 for v in trio if v > 1.0),))
+    out.sort(key=lambda r: (-r[5], -max(r[2:5])))
+    return out
+
+
+def tradeoff_svg(theme):
+    """No free lunch: smaller is easy, smaller without paying for it is not.
+
+    Area alone says the models are doing well -- 9 of 16 scorable submissions
+    are smaller than their reference, which reads as the benchmark being solved.
+    Put area beside power and speed and that inverts: only 3 of 16 beat the
+    reference on all three. The rest buy one axis with another, and d_ca04 is
+    the clearest case, where all three models come in smaller and cooler and
+    every one of them is SLOWER than the reference it is being compared with.
+    """
+    c = THEMES[theme]
+    rows = tradeoff_rows()
+    cols = [("area", 2), ("power", 3), ("clock", 4)]
+    W, lab, cw, gap, x0 = 720, 196, 140, 12, 214
+    rowh, cellh, top = 23, 19, 150
+    H = top + rowh * len(rows) + 40
+    # STRICTLY better on all three. A tie is not a win: d_ai04/chat draws
+    # 230.0 mW against the reference's 230.0, exactly, and counting that as
+    # beating the reference turned 3 into 4 in the headline.
+    win = sum(1 for r in rows if all(v < 1.0 for v in r[2:5]))
+    p = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" '
+         'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">'
+         % (W, H)]
+    p.append('<rect width="%d" height="%d" fill="%s"/>' % (W, H, c["bg"]))
+    p.append('<text x="20" y="30" fill="%s" font-size="15" font-weight="700">'
+             'Smaller is easy. Smaller without paying for it is not.</text>' % c["fg"])
+    p.append('<text x="20" y="52" fill="%s" font-size="11.5">'
+             'Every submission with a comparable number, on all three axes at once. '
+             'Each cell is the ratio to that task&#39;s reference;</text>' % c["mute"])
+    p.append('<text x="20" y="69" fill="%s" font-size="11.5">'
+             'under 1.00x is better than the reference. Clock is the period the '
+             'design needs, against the period the reference needs.</text>' % c["mute"])
+    p.append('<text x="20" y="95" fill="%s" font-size="12.5" font-weight="700">'
+             '%d of %d beat the reference on all three. The other %d buy one axis '
+             'with another.</text>' % (c["fg"], win, len(rows), len(rows) - win))
+    p.append('<rect x="20" y="106" width="11" height="11" rx="2" fill="%s"/>' % c["bar"])
+    p.append('<text x="36" y="115" fill="%s" font-size="11">better than the reference</text>'
+             % c["mute"])
+    p.append('<rect x="196" y="106" width="11" height="11" rx="2" fill="%s"/>' % c["f_gate"])
+    p.append('<text x="212" y="115" fill="%s" font-size="11">worse</text>' % c["mute"])
+    p.append('<rect x="266" y="106" width="11" height="11" rx="2" fill="%s"/>' % c["f_nobuild"])
+    p.append('<text x="282" y="115" fill="%s" font-size="11">identical</text>' % c["mute"])
+
+    for j, (name, _i) in enumerate(cols):
+        p.append('<text x="%d" y="%d" fill="%s" font-size="11" font-weight="600" '
+                 'text-anchor="middle">%s</text>'
+                 % (x0 + j * (cw + gap) + cw / 2, top - 8, c["mute"], name))
+    for i, r in enumerate(rows):
+        y = top + i * rowh
+        p.append('<text x="%d" y="%d" fill="%s" font-size="11" text-anchor="end">'
+                 '%s  %s</text>' % (lab, y + cellh - 5, c["fg"],
+                                    esc(r[0]), esc(RT.short_name(r[1]))))
+        for j, (_name, idx) in enumerate(cols):
+            v = r[idx]
+            if v == 1.0:
+                fill, txt = c["f_nobuild"], "#1a1a1a"
+            elif v > 1.0:
+                fill, txt = c["f_gate"], "#1a1a1a"
+            else:
+                fill, txt = c["bar"], c["barlbl"]
+            # THE LABEL MUST AGREE WITH THE COLOUR. Three cells round to 1.00x
+            # at two decimals and sit on three different sides -- 1.0008 worse,
+            # 0.9959 better, and 1.0 exactly equal. Rendered as "1.00x" in three
+            # colours, the chart looks broken rather than precise. A value that
+            # rounds to 1.00 without being 1.00 gets a third decimal.
+            lbl = ("%.3fx" % v) if (round(v, 2) == 1.00 and v != 1.0) else ("%.2fx" % v)
+            cx = x0 + j * (cw + gap)
+            p.append('<rect x="%d" y="%d" width="%d" height="%d" rx="3" fill="%s"/>'
+                     % (cx, y, cw, cellh, fill))
+            p.append('<text x="%d" y="%d" fill="%s" font-size="11.5" font-weight="600" '
+                     'text-anchor="middle">%s</text>'
+                     % (cx + cw / 2, y + cellh - 5, txt, lbl))
+    p.append('</svg>')
+    return "\n".join(p)
+
 
 def alt_texts():
     """Alt text derived from the same counts as the bars.
@@ -1270,6 +1371,9 @@ def main():
     stale = []
     for name, fn in (("funnel", funnel_svg), ("timing", timing_svg),
                      ("headroom", headroom_svg),
+                     # Generated so --check keeps it current. Deliberately NOT
+                     # embedded in README.md and so it has no alt text entry.
+                     ("tradeoff", tradeoff_svg),
                      ("verification_faults", faults_svg),
                      ("design_area", design_svg),
                      ("design_power", lambda th: design_svg(th, "power")),
