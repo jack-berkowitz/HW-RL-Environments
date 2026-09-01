@@ -7733,9 +7733,18 @@ emitted only when the task sets them.
 it exactly that way, so `collect()` can never return per-design metrics and the
 `_fallback_from_reports` path fires on **every iteration of every sweep**.
 
-Measured across the corpus: **30 of 33 sweep records recovered WNS from
-`6_finish.rpt` on every iteration.** Only `arbiter`, `d_ca04_cand_chat` and one
-iteration of `d_nw01` ever read the JSON.
+Measured across the corpus: **all but three sweep records recovered WNS from
+`6_finish.rpt` on every iteration** — 31 of 34 as of 2026-09-01, 30 of 33 when
+this was first written. Only `arbiter`, `d_ca04_cand_chat` and one iteration of
+`d_nw01` have ever read the JSON, and that set has not grown.
+
+The absolute pair is dated because it goes stale by construction: every new
+sweep lands in the numerator and the denominator. d_ca06's own sweep took the
+fallback on all 8 iterations and moved both within a day of this entry being
+filed. Third instance of a count quoted from a growing corpus and read later as
+current — after d_ca03's testbench header saying 118 requests where the checker
+counts 207, and the F114 attribution. **The invariant is "all but three"; the
+integers are a snapshot.**
 
 The fallback is deliberate, its comment records it saving d_nw01 from a 14%
 Fmax understatement, and it works. But `6_finish.rpt` rounds to **two
@@ -7768,6 +7777,19 @@ of something genuinely negative.
 `--json <design>` would give every future sweep full-precision slack and remove
 the rounding entirely. That changes what every sweep reads, so it is recorded
 here rather than done in the same commit as the task that surfaced it.
+
+**And it buys nothing retrospective, which a reader planning to go back for the
+real numbers needs to know at the point of reading.** `orfs_runs/` is gitignored
+(`.gitignore:38`); zero `6_report.json` files are tracked and none exists on
+disk. The precise slack behind every converged period in this corpus lived only
+on the build host and is gone. So the fix restores precision going forward, and
+for every sweep already taken the two-decimal figure in the record is not a
+lossy copy of something recoverable — it is the only copy there is.
+
+That is the sharper half of this finding and it was surfaced by
+AGENT-DESIGN-43a92055 declining to write an unsourceable number into d_ca06's
+spec: the +0.00285 ns slack the build host reported cannot be re-derived from
+this repository by anyone.
 
 Found by the PC operator noticing that a converged WNS read exactly `0.0` and
 checking `6_report.json` rather than accepting it.
