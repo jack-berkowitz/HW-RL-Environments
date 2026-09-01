@@ -502,6 +502,48 @@ def timing_rows():
     return out
 
 
+def _ref_ratio_by_task():
+    """{task_short: need/pin} for each task's REFERENCE at its pinned clock.
+
+    Selected exactly as make_readme_tables picks the reference row -- label
+    containing "_ref" or ending "_top", at a clk_period_ns equal to the pin --
+    because guessing is how this goes wrong. A first attempt took "any ppa
+    record that is not a submission" and picked up `qwen.sv` as d_ca04's
+    reference at a 4.50 ns pin the task does not use, and a second-source
+    implementation for d_nw01 at 9.00 ns against its 8.00 ns pin. Neither is the
+    anchor, and both would have drawn a reference marker in the wrong place.
+    """
+    import make_readme_tables as _MT
+    ppa = latest_by("ppa", lambda r: str(r.get("task", "")).startswith("d_"))
+    out = {}
+    for short, pin, _label in _MT.design_pins():
+        try:
+            pinf = float(pin)
+        except (TypeError, ValueError):
+            continue
+        for r in ppa.values():
+            if not str(r.get("task", "")).startswith(short + "_"):
+                continue
+            who = re.split(r"_(?:fx|pin)", str(r.get("label", "")))[0]
+            # "reference" IS ONE OF THE SPELLINGS. make_readme_tables maps the
+            # _ref/_top label forms ONTO the string "reference", so testing only
+            # for those forms matched nothing at all -- every label in ppa
+            # records is already the mapped name. Silent empty result: the
+            # markers simply would not have drawn.
+            if not (who == "reference" or who.endswith("_ref")
+                    or "_ref" in who or who.endswith("_top")):
+                continue
+            try:
+                if abs(float(r.get("clk_period_ns")) - pinf) > 1e-9:
+                    continue
+                w = float(r.get("wns_ns"))
+            except (TypeError, ValueError):
+                continue
+            out[short] = (pinf - w) / pinf
+            break
+    return out
+
+
 def timing_svg(theme):
     """The timing story: correctness is not the filter, the clock is.
 
@@ -511,6 +553,7 @@ def timing_svg(theme):
     """
     c = THEMES[theme]
     rows = timing_rows()
+    refr = _ref_ratio_by_task()
     CAP = 1.25                       # axis top; two bars run past it
     W, x0, x1 = 900, 250, 840
     scale = (x1 - x0) / CAP
@@ -532,6 +575,9 @@ def timing_svg(theme):
     p.append(f'<text x="36" y="93" fill="{c["mute"]}" font-size="11">meets the pinned clock</text>')
     p.append(f'<rect x="196" y="84" width="11" height="11" rx="2" fill="{c["f_invalid"]}"/>')
     p.append(f'<text x="212" y="93" fill="{c["mute"]}" font-size="11">misses it</text>')
+    p.append(f'<line x1="298" y1="82" x2="298" y2="97" stroke="{c["fg"]}" stroke-width="2"/>')
+    p.append(f'<text x="308" y="93" fill="{c["mute"]}" font-size="11">'
+             f'that task&#39;s reference design</text>')
 
     ybot = top + pitch * len(rows)
     for gv in (0.25, 0.5, 0.75, 1.0, 1.25):
@@ -553,6 +599,15 @@ def timing_svg(theme):
         col = c["f_invalid"] if miss else c["bar"]
         w = min(rat, CAP) * scale
         p.append(f'<rect x="{x0}" y="{y}" width="{w:.1f}" height="{barh}" rx="2" fill="{col}"/>')
+        # THE REFERENCE, ON EVERY ROW. Without it a bar at 0.86x reads as
+        # comfortable margin, when 0.86x is about where the reference itself
+        # lands -- so the chart implied the anchor was slow and the submissions
+        # were fast, which is the opposite of what the numbers say.
+        rr = refr.get(t)
+        if rr is not None and rr <= CAP:
+            rx = x0 + rr * scale
+            p.append(f'<line x1="{rx:.1f}" y1="{y - 2}" x2="{rx:.1f}" y2="{y + barh + 2}" '
+                     f'stroke="{c["fg"]}" stroke-width="2"/>')
         short = t.split("_")[0] + "_" + t.split("_")[1]
         p.append(f'<text x="{x0 - 8}" y="{y + barh - 1}" fill="{c["mute"]}" '
                  f'font-size="10.5" text-anchor="end">'
