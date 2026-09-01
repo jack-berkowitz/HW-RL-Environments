@@ -143,6 +143,16 @@ def withheld():
     return out
 
 
+def _submission_metrics(task, label, sims):
+    """The metric dict from a submission's newest sim record."""
+    r = sims.get(label) or {}
+    m = r.get("metrics") or {}
+    for v in m.values():
+        if isinstance(v, dict):
+            return v
+    return {k: v for k, v in m.items() if not isinstance(v, dict)}
+
+
 def _notes():
     """Per-task commentary, hand-edited, keyed by task id.
 
@@ -262,6 +272,51 @@ def design_tables():
                              f"| *withheld — {held[(short, m)]}* |")
                 continue
             lines.append("| `%s` | %s |" % (m, _design_cells(r, ref_area, full, m, sims)))
+        # DISCLOSE A DIVERGENT CHOICE, DO NOT WITHHOLD THE ROW. G5's `choice`
+        # role marks a metric the spec leaves free that still moves PPA, and
+        # d_ai04's P3 states the treatment outright: "a submission choosing
+        # differently from the reference is DISCLOSED, NOT PENALISED."
+        # Withholding the row is penalising it, which is what this generator was
+        # doing to all three d_ai04 submissions -- including the two that made
+        # the SAME choice as the reference and were fully comparable.
+        #
+        # Only divergence is disclosed. Where every submission chose as the
+        # reference did there is nothing to say, and a line saying so on every
+        # task would bury the one case that matters.
+        try:
+            _roles = RT.metric_roles(os.path.join(REPO, "domains", "*", "design", full))
+        except Exception:
+            _roles = {}
+        if not _roles:
+            for _d in glob.glob(os.path.join(REPO, "domains", "*", "design", full)):
+                try:
+                    _roles = RT.metric_roles(_d)
+                except Exception:
+                    _roles = {}
+        _choice = [k for k, v in (_roles or {}).items() if v == "choice"]
+        if _choice:
+            _rm = _submission_metrics(full, "reference", sims)
+            _div = []
+            for m in MODELS:
+                _cm = _submission_metrics(full, m, sims)
+                for k in _choice:
+                    a, b = _rm.get(k), _cm.get(k)
+                    if a is not None and b is not None and str(a) != str(b):
+                        # "reports", not "chose". The schema tags both a
+                        # structural parameter the designer picks (buffer_slots)
+                        # and a measured consequence (total_cycles,
+                        # read_latency_avg) as `choice`, and it does not
+                        # distinguish them. Writing "chose total_cycles = 3446"
+                        # asserts an intent the record cannot support --
+                        # classifying from the metric's name is the tlb_hits
+                        # error. The disclosure G5 requires is the DIVERGENCE;
+                        # what produced it is the reader's inference.
+                        _div.append(f"`{m}` {k} = {b} against the reference's {a}")
+            if _div:
+                lines += ["", "*Choice-role metrics where a submission differs from "
+                          "the reference — disclosed, not penalised (G5): "
+                          + "; ".join(_div) + ".*"]
+
         blk = "\n".join(lines)
         if notes.get(short):
             blk += "\n\n" + notes[short]

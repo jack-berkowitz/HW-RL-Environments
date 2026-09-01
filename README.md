@@ -57,12 +57,12 @@ area comparable at all: without it, area can be bought by relaxing timing.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_area_dark.svg">
-  <img alt="Design area relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array at 16.75 ns, reference 708,442 um2: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit at 33.75 ns, reference 179,943 um2: chat withheld, claude withheld, gemini withheld. non-blocking data cache at 15 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. RISC-V Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude 0.76x, gemini did not build. asynchronous CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. Multi-requester cache miss handler at 8.75 ns, reference 141,187 um2: chat 0.74x, claude 0.67x, gemini did not build. FP32 fused multiply-add at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat 3.28x, claude 1.28x, gemini fails correctness. AXI4 crossbar at 8 ns, reference 147,144 um2: chat 1.17x, claude 1.23x, gemini fails correctness. output-queued AXI-Stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude 0.99x, gemini missed timing." src="docs/assets/design_area_light.svg" width="100%">
+  <img alt="Design area relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array at 16.75 ns, reference 708,442 um2: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit at 33.75 ns, reference 179,943 um2: chat 0.97x, claude 0.88x, gemini 1.00x. non-blocking data cache at 15 ns, reference 573,055 um2: chat missed timing, claude 1.32x, gemini did not build. RISC-V Sv39 MMU at 12.5 ns, reference 279,456 um2: chat missed timing, claude 0.76x, gemini did not build. asynchronous CDC FIFO at 4.25 ns, reference 19,837 um2: chat 0.74x, claude 0.73x, gemini 0.73x. Multi-requester cache miss handler at 8.75 ns, reference 141,187 um2: chat 0.74x, claude 0.67x, gemini did not build. FP32 fused multiply-add at 19.25 ns, reference 60,031 um2: chat missed timing, claude 1.02x, gemini fails correctness. multi-format FMA at 70.5 ns, reference 177,557 um2: chat 3.28x, claude 1.28x, gemini fails correctness. AXI4 crossbar at 8 ns, reference 147,144 um2: chat 1.17x, claude 1.23x, gemini fails correctness. output-queued AXI-Stream switch at 4.25 ns, reference 26,340 um2: chat missed timing, claude 0.99x, gemini missed timing." src="docs/assets/design_area_light.svg" width="100%">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/design_power_dark.svg">
-  <img alt="Total power relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit: chat withheld, claude withheld, gemini withheld. non-blocking data cache: chat missed timing, claude 4.29x, gemini did not build. RISC-V Sv39 MMU: chat missed timing, claude 1.02x, gemini did not build. asynchronous CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. Multi-requester cache miss handler: chat 0.62x, claude 0.52x, gemini did not build. FP32 fused multiply-add: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat 1.83x, claude 1.47x, gemini fails correctness. AXI4 crossbar: chat 0.90x, claude 0.90x, gemini fails correctness. output-queued AXI-Stream switch: chat missed timing, claude 1.66x, gemini missed timing." src="docs/assets/design_power_light.svg" width="100%">
+  <img alt="Total power relative to each task's reference, at its pinned clock. FP16 weight-broadcast multiply-accumulate array: chat fails correctness, claude did not build, gemini fails correctness. SDP requantise / convert unit: chat 1.00x, claude 0.79x, gemini 1.12x. non-blocking data cache: chat missed timing, claude 4.29x, gemini did not build. RISC-V Sv39 MMU: chat missed timing, claude 1.02x, gemini did not build. asynchronous CDC FIFO: chat 0.55x, claude 0.61x, gemini 0.63x. Multi-requester cache miss handler: chat 0.62x, claude 0.52x, gemini did not build. FP32 fused multiply-add: chat missed timing, claude 0.29x, gemini fails correctness. multi-format FMA: chat 1.83x, claude 1.47x, gemini fails correctness. AXI4 crossbar: chat 0.90x, claude 0.90x, gemini fails correctness. output-queued AXI-Stream switch: chat missed timing, claude 1.66x, gemini missed timing." src="docs/assets/design_power_light.svg" width="100%">
 </picture>
 
 **Power does not track area.** d_dsp02's `claude` is the clearest case: within
@@ -111,12 +111,11 @@ declare none, so they are absent rather than shown against an invented axis —
 "more is better and area buys it" is a claim about the contract, not something to
 infer from a metric's name.
 
-**Thirteen of thirty submissions produce a comparable area number.** Five
-missed timing, five fail correctness, and four were rejected by the synthesis
-frontend without ever running. Three are withheld pending an instrument the task
-does not yet have, counted apart from the failures. Every pinned task now has a
-reference and at least one candidate built at its pin; nothing is waiting on a
-build.
+**Sixteen of thirty submissions produce a comparable area number.** Five missed
+timing, five fail correctness, and four were rejected by the synthesis frontend
+without ever running. Every pinned task now has a reference and at least one
+candidate built at its pin; nothing is waiting on a build and nothing is
+withheld.
 
 <!-- BEGIN GENERATED: design-tables -->
 
@@ -134,9 +133,11 @@ build.
 | | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
 | reference | 179,943 | 230.0 | +1.912 | — |
-| `chat` | *withheld* | *withheld* | *withheld* | *withheld — its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
-| `claude` | *withheld* | *withheld* | *withheld* | *withheld — its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
-| `gemini` | *withheld* | *withheld* | *withheld* | *withheld — its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1* |
+| `chat` | 174,421 | 230.0 | +2.743 | **0.97×** |
+| `claude` | 158,486 | 181.0 | +5.886 | **0.88×** |
+| `gemini` | 179,212 | 257.0 | +2.435 | **1.00×** |
+
+*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `gemini` buffer_slots = 4 against the reference's 2.*
 
 ### d_ca01 — non-blocking data cache, pinned at 15 ns
 
@@ -146,6 +147,8 @@ build.
 | `chat` | *withheld* | *withheld* | **−0.049** | missed timing |
 | `claude` | 753,599 | 326.0 | +2.354 | **1.32×** |
 | `gemini` | **0** | **0** | — | did not build |
+
+*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `chat` latency_min = 3 against the reference's 2; `chat` mem_txns_writebacks = 481 against the reference's 482; `claude` latency_min = 1 against the reference's 2; `claude` mem_txns_writebacks = 488 against the reference's 482.*
 
 `claude` is 1.32× the reference's area and **4.29× its power** — the widest
 divergence between the two axes anywhere in these results. `chat` misses the pin
@@ -191,6 +194,8 @@ genuine build failure rather than a host problem.
 | `claude` | 14,520 | 8.2 | +0.479 | **0.73×** |
 | `gemini` | 14,520 | 8.5 | +0.489 | **0.73×** |
 
+*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `chat` crossing_latency_rdclk_min = 2 against the reference's 3; `gemini` crossing_latency_rdclk_min = 2 against the reference's 3.*
+
 The only task where every submission closed timing, and all three are 26–27%
 smaller than the reference. Two of them reach that partly by a design choice
 rather than better implementation — see the like-for-like note below.
@@ -203,6 +208,8 @@ rather than better implementation — see the like-for-like note below.
 | `chat` | 104,439 | 25.2 | +1.164 | **0.74×** |
 | `claude` | 94,373 | 21.1 | +1.303 | **0.67×** |
 | `gemini` | **0** | **0** | — | did not build |
+
+*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `chat` total_cycles = 3446 against the reference's 3947; `claude` total_cycles = 3446 against the reference's 3947.*
 
 Both buildable submissions come in well under the reference — **0.74×** and
 **0.67×** — and both close the pin with more slack than it does (+1.16 and +1.30
@@ -232,6 +239,8 @@ type, and `check_transport` finds no paste damage, so it is the model's output.
 | `claude` | 226,664 | 134.0 | +2.512 | **1.28×** |
 | `gemini` | **0** | **0** | — | fails correctness |
 
+*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `chat` latency_min = 1 against the reference's 0; `gemini` latency_min = 1 against the reference's 0.*
+
 `chat` closes the pin but at **3.28×** the reference's area — the largest
 comparable submission on the page, and a reminder that closing timing and
 spending area are separate axes. `claude` is at 1.28×.
@@ -244,6 +253,8 @@ spending area are separate axes. `claude` is at 1.28×.
 | `chat` | 172,662 | 49.0 | +0.451 | **1.17×** |
 | `claude` | 181,174 | 49.3 | +0.009 | **1.23×** |
 | `gemini` | **0** | **0** | — | fails correctness |
+
+*Choice-role metrics where a submission differs from the reference — disclosed, not penalised (G5): `chat` read_latency_avg = 1082 against the reference's 1344; `claude` read_latency_avg = 1273 against the reference's 1344.*
 
 Both submissions that build now close the pin, at 1.17× and 1.23×, and both draw
 **0.90×** the reference's power. `claude` clears by 9 ps, which counts.

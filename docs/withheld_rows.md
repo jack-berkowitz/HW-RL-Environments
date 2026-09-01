@@ -54,9 +54,6 @@ generator.
 #
 # The other two clauses were and remain sufficient on their own.
 
-d_ai04 chat :: its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
-d_ai04 claude :: its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
-d_ai04 gemini :: its three metrics now EMIT (init_interval 1, latency_cycles 1 for all four) but none is a CAPABILITY -- init_interval is fixed, buffer_slots and latency_cycles are choice -- so no per-unit column exists and gemini chose buffer_slots=4 against 2 for the reference, chat and claude, which by the choice role makes its area not like-for-like with theirs. Pinned at one configuration. The precision axis is NOT the gap -- F2 REQUIRES codes 0/1/3 to be indistinguishable and nc_g_alias_modes catches the float/integer collapse at 0/1
 # RELEASED 2026-08-29 on the user's instruction. The blocker recorded below was
 # that tlb_hits is pinned by P2 and no valid free axis was rendered.
 # AGENT-DESIGN-43a92055 removed the tlb_hits role and declared

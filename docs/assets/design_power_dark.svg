@@ -19,13 +19,16 @@
 <text x="20" y="190" fill="#9a9a9a" font-size="11">d_ai04 @ 33.75 ns</text>
 <text x="200" y="175" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
 <rect x="210" y="164" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="216" y="175" fill="#9a9a9a" font-size="11" font-style="italic">withheld</text>
+<rect x="210" y="164" width="103" height="15" rx="2" fill="#5b8dfb"/>
+<text x="319" y="175" fill="#e8e8e8" font-size="11">1.00×</text>
 <text x="200" y="195" fill="#9a9a9a" font-size="11" text-anchor="end">claude</text>
 <rect x="210" y="184" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="216" y="195" fill="#9a9a9a" font-size="11" font-style="italic">withheld</text>
+<rect x="210" y="184" width="81" height="15" rx="2" fill="#5b8dfb"/>
+<text x="297" y="195" fill="#e8e8e8" font-size="11">0.79×</text>
 <text x="200" y="215" fill="#9a9a9a" font-size="11" text-anchor="end">gemini</text>
 <rect x="210" y="204" width="480" height="15" rx="2" fill="#333" opacity="0.45"/>
-<text x="216" y="215" fill="#9a9a9a" font-size="11" font-style="italic">withheld</text>
+<rect x="210" y="204" width="115" height="15" rx="2" fill="#2f4f8f"/>
+<text x="331" y="215" fill="#e8e8e8" font-size="11">1.12×</text>
 <text x="20" y="260" fill="#e8e8e8" font-size="13" font-weight="600">non-blocking data cache</text>
 <text x="20" y="276" fill="#9a9a9a" font-size="11">d_ca01 @ 15 ns</text>
 <text x="200" y="261" fill="#9a9a9a" font-size="11" text-anchor="end">chat</text>
