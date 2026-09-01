@@ -486,9 +486,7 @@ def unpinned_table():
                    "stalls flat at 260 violations. Retry queued at "
                    "`CORE_UTILIZATION=7` with met5 dropped"),
         "d_dsp01": "no scoring testbench; withdrawn",
-        "d_ca06": ("reference Fmax sweep converged at 4.5312 ns; the pin is not "
-                   "yet written into the spec, and under the pin rule no "
-                   "candidate may be solicited until it is"),
+
     }
     lines = ["| task | state |", "|---|---|"]
     for short, _label in unpinned():

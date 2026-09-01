@@ -1,6 +1,6 @@
 # Cross-model results
 
-10 design tasks. Every design that was run appears, including the
+11 design tasks. Every design that was run appears, including the
 reference implementation each task is anchored on.
 
 **Per-axis only — there is deliberately no combined score.** A single
@@ -85,6 +85,15 @@ capability, and nothing here establishes those weights.
 | `claude` | **1/1 pass** | 94,373 | 21.1 | not swept | — | scored configuration NR_PORTS_4 not present in this run |
 | `gemini` | **did not build** | **0** | **0** | **0** | n/a | **build failure** — 12 error(s); first: sanitised_gemini.sv:380:21: error: no member named 'valid' in 'axi_aw_t'  |
 | `miss_handler_arb_ref` | *not scored against this prompt* | — | — | — | — | last run answered task text `ee4cc2172854ca1f`; the task text is now `1ecf57426c98a135` |
+
+## d_ca06 — Concurrent multi-port queue
+
+| design | correctness | area (µm²) | power (mW) | Fmax (MHz) | cycles | non-prefix | notes |
+|---|---|---|---|---|---|---|---|
+| `nc_a_reads_compact` — *negative control, expected to fail* | 0/6 FAIL | — | — | — | — | — | 6 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
+| `nc_b_accept_uses_valid` — *negative control, expected to fail* | 2/6 FAIL | — | — | — | — | — | 6 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
+| `nc_c_writes_dont_compact` — *negative control, expected to fail* | 0/6 FAIL | — | — | — | — | — | 6 configuration(s) carried a combinational-loop warning; Verilator iterated to a fixed point and every configuration converged, so the verdict stands; scored configuration PTR_WIDTH_4_DW_32_PORTS_3 not present in this run |
+| `multiport_queue_ref` | *not scored against this prompt* | — | — | — | — | — | last run answered task text `4299338a46b27c86`; the task text is now `8e2a1a1dfab1deb7` |
 
 ## d_dsp02 — FP32 fused multiply-add
 

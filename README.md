@@ -221,6 +221,17 @@ IO pins would not fit the default die perimeter, and the sweep aborted at
 reports it addressing a struct field that does not exist on the vendored AXI
 type, and `check_transport` finds no paste damage, so it is the model's output.
 
+### d_ca06 — Concurrent multi-port queue, pinned at 7 ns
+
+*Pinned; no PPA build yet. Correctness stands as below.*
+
+| | correctness | area µm² | power mW | slack ns |
+|---|---|---|---|---|
+| reference | **6/6 pass** | *not built* | *not built* | *not built* |
+| `chat` | — | *not built* | *not built* | *not built* |
+| `claude` | — | *not built* | *not built* | *not built* |
+| `gemini` | — | *not built* | *not built* | *not built* |
+
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 
 | | area µm² | power mW | slack ns | vs reference |
@@ -299,7 +310,6 @@ they say different things about the model. Three submissions never ran at all.
 
 | task | state |
 |---|---|
-| d_ca06 | reference Fmax sweep converged at 4.5312 ns; the pin is not yet written into the spec, and under the pin rule no candidate may be solicited until it is |
 | d_dsp01 | no scoring testbench; withdrawn |
 
 <!-- END GENERATED: unpinned-table -->
