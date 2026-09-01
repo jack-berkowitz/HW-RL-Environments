@@ -373,7 +373,7 @@ every seeded fault is findable.
 |---|---|---|---|---|
 | ChatGPT 5.6 Sol | **no** | yes | 0/5 | *withheld* |
 | Opus 5 High | **no** | yes | 1/5 | *withheld* |
-| Gemini 3.1 Pro Extended thinking | **did not compile** | n/a | n/a | n/a |
+| Gemini 3.1 Pro Extended thinking | *not scored against this prompt* | — | — | *last run answered task text `18b1288587d371a8`* |
 
 ### v_ca04: stream crossbar (ceiling 10/10)
 

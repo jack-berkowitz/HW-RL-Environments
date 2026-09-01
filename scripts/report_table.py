@@ -582,6 +582,44 @@ def _is_reference_file(task, sub):
     return os.path.basename(sub or "") in _REFDIR_CACHE[task]
 
 
+_CUR_TT = None
+
+
+def current_task_hash(task):
+    """The task's CURRENT task_text_hash, or None if it cannot be computed.
+
+    Same map main() builds, lifted to module scope and built once on demand so
+    the README generator can reach it. It could not before: the map was a local
+    inside main(), so make_readme_tables had no way to ask whether a record
+    answered the current prompt, and its verification table was the one place in
+    the corpus that published a verdict without checking. None disables the
+    comparison rather than failing every row -- absence of a current hash is not
+    evidence that a record is stale.
+    """
+    global _CUR_TT
+    if _CUR_TT is None:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from task_text_hash import task_text_hash as _tth
+        _CUR_TT = {}
+        for _p in sorted(glob.glob(os.path.join(REPO, "domains", "*", "*", "*"))):
+            if not os.path.isfile(os.path.join(_p, "task.yaml")):
+                continue
+            try:
+                _CUR_TT[os.path.basename(_p)] = _tth(_p)[0]
+            except Exception:
+                _CUR_TT[os.path.basename(_p)] = None
+    return _CUR_TT.get(str(task))
+
+
+def record_is_stale(rec):
+    """True only when a record DEMONSTRABLY answers a superseded task text."""
+    cur = current_task_hash(rec.get("task") or "")
+    rh = rec.get("task_text_hash")
+    if not cur or rh in (None, "", "unknown"):
+        return False
+    return rh != cur
+
+
 def main():
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from task_text_hash import task_text_hash

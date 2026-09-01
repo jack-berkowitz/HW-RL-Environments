@@ -405,7 +405,7 @@ def faults_svg(theme):
             seen.add(m)
             names.append(f"{RT.short_name(m)} = {RT.display_name(m)}")
     p.append(f'<text x="20" y="58" fill="{c["mute"]}" font-size="10.5">'
-             f'{esc("   ".join(names))}</text>')
+             f'{esc(",   ".join(names))}</text>')
     p.append('</svg>')
     return "\n".join(p)
 

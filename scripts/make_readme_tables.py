@@ -424,13 +424,32 @@ def verification_tables():
 
     subs = tuple(sorted({os.path.basename(f)
                          for f in glob.glob(os.path.join(REPO, "candidates", "*", "*.sv"))}))
-    best = {}
+    # A RECORD ANSWERING A SUPERSEDED TASK TEXT IS NOT A RESULT (rule 17). This
+    # table was the last place in the corpus that skipped the check: the charts
+    # apply it, results_table.md applies it, and this one published whatever the
+    # newest record said. v_ca03/gemini was the live instance -- every one of
+    # its six records answers an older text, so the chart showed 32 submissions
+    # while the table beside it showed 33 and printed "did not compile" for a
+    # run against a prompt the model was never given.
+    #
+    # Stale records are SEPARATED, not discarded. A submission whose only
+    # records are stale still gets a row saying so, because a row removed
+    # outright is indistinguishable from a submission nobody made.
+    best, stale = {}, {}
     for r in recs:
         tk = r.get("task")
         if tk in tasks:
             s = os.path.basename(str(r.get("submission", "?")))
-            if (tk, s) not in best or r["timestamp_utc"] >= best[(tk, s)]["timestamp_utc"]:
-                best[(tk, s)] = r
+            # THE REFERENCE IS EXEMPT. task_text_hash covers spec/ and
+            # probe/PASTE.md -- the text handed to a MODEL. The reference
+            # testbench answers no prompt, so a spec edit cannot make its fault
+            # ceiling stale, and applying the check to it blanked the ceilings
+            # for v_ca05 and v_ca06 on the first attempt. Staleness is a fact
+            # about a submission, not about the anchor it is measured against.
+            is_ref = (s == tasks[tk][1])
+            d = stale if (not is_ref and RT.record_is_stale(r)) else best
+            if (tk, s) not in d or r["timestamp_utc"] >= d[(tk, s)]["timestamp_utc"]:
+                d[(tk, s)] = r
 
     out = []
     for tk, (title, ref) in tasks.items():
@@ -448,6 +467,11 @@ def verification_tables():
         for s in rows:
             lines.append("| %s | %s |" % (DISPLAY.get(s[:-3], f"`{s[:-3]}`"),
                                           _verif_cells(best[(tk, s)])))
+        for s in [x for x in subs if (tk, x) in stale and (tk, x) not in best]:
+            h = stale[(tk, s)].get("task_text_hash")
+            lines.append("| %s | *not scored against this prompt* | — | — | "
+                         "*last run answered task text `%s`* |"
+                         % (DISPLAY.get(s[:-3], f"`{s[:-3]}`"), h))
         out.append("\n".join(lines))
     return "\n\n".join(out)
 
