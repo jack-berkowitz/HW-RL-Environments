@@ -2256,3 +2256,39 @@ practice, not as the thing that saved you** — a transformation you have not ye
 verified belongs somewhere you are not obliged to trust it.
 
 *Delivered by AGENT-VERIF-A2.*
+
+## A quantity that can change is written as an invariant or a dated ratio, never as two integers
+
+Three instances, and none was wrong when written:
+
+| where | written | true when re-measured |
+|---|---|---|
+| d_ca03 testbench header | "118 requests" | 207 |
+| F114 | a `SYNTH_MEMORY_MAX_BITS` citation attributed to one agent | it was the other's |
+| F124 | "30 of 33 sweep records" | 31 of 34 |
+
+Each was a correct measurement that kept being read after the thing it measured
+had moved, and **nothing in the text marked it as a measurement at all.** A bare
+integer reads as a property.
+
+F124 is the sharpest because it drifts **by construction** rather than by
+neglect: every new sweep lands in the numerator and the denominator at once, so
+the pair is stale the moment another task exists. d_ca06 moved both within a day
+of the entry being filed. That is not a maintenance failure anyone could have
+avoided by being careful — it is a property of the notation.
+
+**The rule**, when quoting a count that can change:
+
+1. **Prefer the invariant.** "All but three" survives every new sweep; "30 of 33"
+   survives none.
+2. **If the integers matter, date them and say they are a snapshot.** The date is
+   what converts a claim into a measurement the reader can re-take.
+3. **A ratio whose numerator and denominator move together is the warning sign.**
+   If adding one more of the thing changes both halves, bare integers are already
+   wrong.
+
+Not a licence to leave existing counts alone forever, and not a request to go and
+rewrite them either — most counts in this corpus are currently bare integers.
+It is the rule for the next one written.
+
+*Delivered by AGENT-DESIGN-43a92055, from the F124 addendum.*

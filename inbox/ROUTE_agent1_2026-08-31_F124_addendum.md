@@ -94,3 +94,5 @@ instance. The general form applies to every count in the corpus — mutant talli
 config counts, record counts, pass rates — and most of them are currently written
 as bare integers. This is not a request to go and fix them; it is a rule for the
 next one written.
+
+LANDED-CONVENTION: A quantity that can change is written as an invariant or a dated ratio, never as two integers
