@@ -299,6 +299,7 @@ they say different things about the model. Three submissions never ran at all.
 
 | task | state |
 |---|---|
+| d_ca06 | reference Fmax sweep converged at 4.5312 ns; the pin is not yet written into the spec, and under the pin rule no candidate may be solicited until it is |
 | d_dsp01 | no scoring testbench; withdrawn |
 
 <!-- END GENERATED: unpinned-table -->
