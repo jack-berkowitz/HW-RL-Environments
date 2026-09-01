@@ -282,6 +282,17 @@ case "$TASK_NAME" in
       # parameter is ever added, this list must grow with it or the sweep silently
       # narrows -- the defect the *) branch refuses.
       CFGS=("") ;;
+  d_ca06_multiport_queue)
+        # Full cross of the two swept parameters = 6 configs. Kept in step with
+        # `configs:` in the task's task.yaml; if one changes the other must.
+        #
+        # PORTS IS NOT SWEPT, DELIBERATELY. The read-mux count and the write
+        # prefix-sum chain both scale with it, so it moves area on every axis at
+        # once -- and F6's discard rule is only OBSERVABLE at PORTS >= 2, so a
+        # PORTS=1 config would score a queue whose defining clause cannot fire.
+        # The scored point is PW=4 DW=32, which ref/queue_top.sv pins.
+        CFGS=(); for pw in 3 4 5; do for dw in 8 32; do
+          CFGS+=("PW=$pw DW=$dw"); done; done ;;
   d_nw03_axis_switch_oq)
       # Full cross of the three swept parameters = 8 configs. Kept in step with
       # `configs:` in the task's task.yaml; if one changes the other must.
