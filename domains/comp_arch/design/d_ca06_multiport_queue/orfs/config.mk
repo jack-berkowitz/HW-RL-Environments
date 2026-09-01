@@ -4,11 +4,10 @@
 # the only design task in the corpus with no anchor: the contract was written
 # from a hand-authored implementation rather than derived from an upstream one.
 export PLATFORM        = sky130hd
-export DESIGN_NAME     = queue_top
+export DESIGN_NAME     = queue
 export DESIGN_NICKNAME = d_ca06_multiport_queue
 
-export VERILOG_FILES = /work/domains/comp_arch/design/d_ca06_multiport_queue/ref/queue_top.sv \
-                       /work/domains/comp_arch/design/d_ca06_multiport_queue/ref/multiport_queue_ref.sv
+export VERILOG_FILES = /work/domains/comp_arch/design/d_ca06_multiport_queue/ref/multiport_queue_ref.sv
 export SDC_FILE      = /work/domains/comp_arch/design/d_ca06_multiport_queue/orfs/constraint.sdc
 
 export SYNTH_HDL_FRONTEND = slang
@@ -23,10 +22,16 @@ export SYNTH_HDL_FRONTEND = slang
 # muxes, which is a place-and-route of a memory rather than a measurement of a
 # queue. The checker covers the wider geometries; the PPA point is the small one.
 #
-# PINNED IN ref/queue_top.sv, NOT HERE. VERILOG_TOP_PARAMS sets VALUE parameters
-# only and `T` is a TYPE parameter, so a config line could not pin the width at
-# all -- it would silently synthesise logic[63:0] at DEPTH=128 and label it the
-# scored number. The shim states the geometry once, in a file the build reads.
+# PINNED HERE, by the standard mechanism. The first version could not do this:
+# `T` was a type parameter and VERILOG_TOP_PARAMS sets VALUE parameters only, so
+# the geometry lived in a synthesis shim and DESIGN_NAME was the shim rather
+# than the DUT. That broke the sweep's correctness gate, which resolves the
+# reference by finding the file declaring DESIGN_NAME -- it found the shim,
+# whose module the testbench does not instantiate.
+#
+# Deriving T from a value parameter DW removes the shim entirely and lets
+# DESIGN_NAME be the module candidates actually write.
+export VERILOG_TOP_PARAMS = PTR_WIDTH 4 DW 32 PORTS 3
 
 export CORE_UTILIZATION = 10
 export PLACE_DENSITY    = 0.50

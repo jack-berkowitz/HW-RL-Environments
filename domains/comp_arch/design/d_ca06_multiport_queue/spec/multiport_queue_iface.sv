@@ -15,9 +15,14 @@
 // -----------------------------------------------------------------------------
 // V1. The module is named `queue` and takes these parameters:
 //
-//       parameter type T         = logic[63:0]   entry type
+//       parameter int  DW        = 64            entry width in bits
+//       parameter type T         = logic[DW-1:0] entry type, DERIVED from DW
 //       parameter int  PTR_WIDTH = 7             DEPTH = 1 << PTR_WIDTH
 //       parameter int  PORTS     = 3             write ports AND read ports
+//
+//     T IS DERIVED, NOT INDEPENDENT. A submission must keep it that way: the
+//     build sets the scored width through DW, and a design that declares T as a
+//     free type parameter cannot be pinned by the flow.
 //
 //     A submission may declare additional derived parameters. It may not add a
 //     parameter that changes behaviour, and it may not rename these three.
@@ -216,7 +221,8 @@
 // =============================================================================
 
 module queue #(
-    parameter type T         = logic [63:0],
+    parameter int  DW        = 64,
+    parameter type T         = logic [DW-1:0],
     parameter int  PTR_WIDTH = 7,
     parameter int  PORTS     = 3
 ) (

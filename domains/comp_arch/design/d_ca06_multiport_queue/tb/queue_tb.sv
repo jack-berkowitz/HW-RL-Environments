@@ -27,7 +27,7 @@ module queue_tb;
   logic [PORTS-1:0]         rvalid;
   logic [PORTS-1:0]         raccept;
 
-  queue #(.T(logic[DW-1:0]), .PTR_WIDTH(PW), .PORTS(PORTS)) dut (
+  queue #(.DW(DW), .PTR_WIDTH(PW), .PORTS(PORTS)) dut (
     .clk(clk), .rst_n(rst_n),
     .write_data(wdata), .write_valid(wvalid), .write_accept(waccept),
     .read_data(rdata),  .read_valid(rvalid),  .read_accept(raccept)

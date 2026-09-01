@@ -1,6 +1,13 @@
 
 module queue #(
-    parameter type T         = logic[63:0],
+    // DW is a VALUE parameter and T is DERIVED from it. The hand-written
+    // original declared `T` directly as a type parameter, which ORFS cannot
+    // set: VERILOG_TOP_PARAMS passes value parameters only. Deriving T from DW
+    // keeps the default identical (logic[63:0] at DW=64) and makes the scored
+    // width settable by the standard mechanism, so this task needs no synthesis
+    // shim and DESIGN_NAME can be the DUT module itself.
+    parameter int  DW        = 64,
+    parameter type T         = logic[DW-1:0],
     parameter int  PTR_WIDTH = 7,
     parameter type PTR       = logic[PTR_WIDTH-1:0],
     parameter int  CNT_WIDTH = PTR_WIDTH + 1,

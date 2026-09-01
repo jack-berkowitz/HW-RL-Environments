@@ -5,7 +5,7 @@
 # the reset fanout scale with DEPTH, so the scored geometry is pinned in
 # config.mk and a number at another geometry is not comparable.
 
-current_design queue_top
+current_design queue
 
 set clk_period 4.0
 if {[info exists ::env(CLK_PERIOD_NS)]} { set clk_period $::env(CLK_PERIOD_NS) }

@@ -24,18 +24,30 @@ anchor_note: >
   scored geometry and flattens the packed-array ports.
 
 dut_module: queue
-synthesis_top: queue_top
+synthesis_top: queue          # same module: no shim, see scored_configuration_note
 
 scored_configuration:
   PTR_WIDTH: 4          # DEPTH = 16
-  T: logic[31:0]
+  DW: 32
   PORTS: 3
 scored_configuration_note: >
-  Pinned in ref/queue_top.sv rather than in orfs/config.mk. T is a TYPE
-  parameter and ORFS's VERILOG_TOP_PARAMS sets value parameters only, so a
-  config line could not pin the width -- it would silently synthesise the
-  module's default logic[63:0] at DEPTH=128, 8,192 storage flops instead of 512,
-  and label it the scored number.
+  Pinned in orfs/config.mk by VERILOG_TOP_PARAMS, the standard mechanism.
+
+  IT COULD NOT BE, AT FIRST, AND THE FIX WAS TO THE MODULE RATHER THAN THE FLOW.
+  The hand-written original declared `T` directly as a TYPE parameter, and
+  VERILOG_TOP_PARAMS sets VALUE parameters only -- so the geometry had to live in
+  a synthesis shim, ref/queue_top.sv, and DESIGN_NAME had to be the shim.
+
+  That broke the sweep's correctness gate. build_and_score.sh resolves the
+  reference by finding the file under ref/ that declares DESIGN_NAME; it found
+  the shim, whose module the testbench does not instantiate. The task simulated
+  and synthesised fine and could not be swept.
+
+  T is now DERIVED from a value parameter DW, defaulting to logic[DW-1:0] with
+  DW=64 so the original's behaviour is unchanged. The shim is deleted,
+  DESIGN_NAME is the module candidates actually write, and the gate resolves to
+  exactly one file. Reported by the PC operator at the gate, not by any checker
+  here.
 
 ppa_status: >
   THE REFERENCE Fmax SWEEP HAS NOT BEEN RUN. G1 records the pinned period as NOT
@@ -95,11 +107,11 @@ controls:
       head advances by the COUNT of accepted reads instead of past the highest
       accepted index, so a non-prefix accept loses nothing. This is the design a
       model is most likely to write, and it is the clause the task exists for.
-    measured: "0/6 configs. FAIL, 9367 mismatches, first on write_accept"
+    measured: "0/6 configs (re-measured after the DW change)"
   - id: nc_b_accept_uses_valid
     violates: F3
     expect: FAIL
-    measured: "2/6 configs. FAIL, 853 mismatches, first write_accept got 111"
+    measured: "2/6 configs (re-measured after the DW change)"
     measured_note: >
       It PASSES two of six configs, and that is a property of the stimulus
       rather than a weak control. Acceptance-uses-valid only diverges when
@@ -110,7 +122,7 @@ controls:
   - id: nc_c_writes_dont_compact
     violates: F4
     expect: FAIL
-    measured: "0/6 configs. FAIL, 3778 mismatches, first on read_data[1]"
+    measured: "0/6 configs (re-measured after the DW change)"
 
 reference_run:
   verdict: PASS

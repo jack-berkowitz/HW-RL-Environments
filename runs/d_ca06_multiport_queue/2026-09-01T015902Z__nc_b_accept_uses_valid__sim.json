@@ -1,0 +1,105 @@
+{
+  "all_passed": false,
+  "comb_loop_configs": "6",
+  "compile_configs_built": "6",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ALWCOMBORDER,WIDTHTRUNC",
+  "compile_warnings": "21",
+  "configs_no_verdict": 0,
+  "configs_passed": 2,
+  "configs_total": 6,
+  "coverage": {},
+  "git_sha": "bfd84d99583cd0a7a0fbbc84fe7259811e24d80c-dirty",
+  "kind": "sim",
+  "label": "nc_b_accept_uses_valid",
+  "metrics": {
+    "PW_3_DW_32": {
+      "allports_cycles": "85",
+      "checks": "4588",
+      "cycles": "4588",
+      "empty_cycles": "300",
+      "full_cycles": "188",
+      "nonprefix_accepts": "1280",
+      "wrap_events": "821"
+    },
+    "PW_3_DW_8": {
+      "allports_cycles": "85",
+      "checks": "4588",
+      "cycles": "4588",
+      "empty_cycles": "300",
+      "full_cycles": "188",
+      "nonprefix_accepts": "1280",
+      "wrap_events": "821"
+    },
+    "PW_4_DW_32": {
+      "allports_cycles": "75",
+      "checks": "4652",
+      "cycles": "4652",
+      "empty_cycles": "313",
+      "full_cycles": "56",
+      "nonprefix_accepts": "1310",
+      "wrap_events": "385"
+    },
+    "PW_4_DW_8": {
+      "allports_cycles": "75",
+      "checks": "4652",
+      "cycles": "4652",
+      "empty_cycles": "313",
+      "full_cycles": "56",
+      "nonprefix_accepts": "1310",
+      "wrap_events": "385"
+    },
+    "PW_5_DW_32": {
+      "allports_cycles": "67",
+      "checks": "4780",
+      "cycles": "4780",
+      "empty_cycles": "380",
+      "full_cycles": "100",
+      "nonprefix_accepts": "1308",
+      "wrap_events": "193"
+    },
+    "PW_5_DW_8": {
+      "allports_cycles": "67",
+      "checks": "4780",
+      "cycles": "4780",
+      "empty_cycles": "380",
+      "full_cycles": "100",
+      "nonprefix_accepts": "1308",
+      "wrap_events": "193"
+    }
+  },
+  "nonconverged_configs": "0",
+  "per_config": [
+    {
+      "config": "PW_3_DW_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "PW_3_DW_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "PW_4_DW_32",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "PW_4_DW_8",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "PW_5_DW_32",
+      "verdict": "PASS"
+    },
+    {
+      "config": "PW_5_DW_8",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.046 2026-02-28 rev vUNKNOWN-built20260228",
+  "submission": "domains/comp_arch/design/d_ca06_multiport_queue/controls/nc_b_accept_uses_valid.sv",
+  "submission_sha256_16": "53219f69ce96828e",
+  "task": "d_ca06_multiport_queue",
+  "task_text_hash": "",
+  "timestamp_utc": "2026-09-01T01:59:02Z"
+}
