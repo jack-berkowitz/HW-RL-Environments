@@ -7724,3 +7724,52 @@ themselves are unaffected, and `IO_PLACER`/`ASPECT_RATIO`/`CORE_MARGIN` are
 emitted only when the task sets them.
 
 **Rules:** 17, 18, 22
+
+## F124. Every pinned period in the corpus was derived from two-decimal slack
+
+`scripts/collect_results.py` **ignores its arguments**. It reads
+`ARGS = sys.argv[1:]` and consults it only for `--all` and `--metrics`; a
+`--json <design>` invocation prints the whole corpus table. `find_fmax.py` calls
+it exactly that way, so `collect()` can never return per-design metrics and the
+`_fallback_from_reports` path fires on **every iteration of every sweep**.
+
+Measured across the corpus: **30 of 33 sweep records recovered WNS from
+`6_finish.rpt` on every iteration.** Only `arbiter`, `d_ca04_cand_chat` and one
+iteration of `d_nw01` ever read the JSON.
+
+The fallback is deliberate, its comment records it saving d_nw01 from a 14%
+Fmax understatement, and it works. But `6_finish.rpt` rounds to **two
+decimals**, so every converged period in this benchmark rests on slack measured
+to 0.01 ns while `6_report.json` — which exists and is correct — carries the
+full value.
+
+### And the rounding can invert a verdict
+
+    "pass": wns >= 0 and nviol == 0          find_fmax.py:276
+
+A true slack in (-0.005, 0) prints as `-0.00`, parses to `-0.0`, and **`-0.0 >= 0`
+is `True` in Python.** A period that misses timing is recorded as the converged
+one, and the pin derived from it is 1.5x a frequency the design does not reach.
+
+**It has already happened.** `d_ca03_fmax.json` carries
+`wns_at_converged_ns = -0.0` at converged 8.2031 ns — a negative zero, accepted
+as passing. Whether 8.2031 truly closed is **not recoverable from the record**.
+
+No published number depends on it: d_ca03's pin is 12.5 ns, 52% above the
+converged value, and its reference builds there at +0.989 ns. The margin the pin
+rule leaves is what absorbed it — which is an argument for the rule rather than
+a reason the defect is harmless.
+
+`_wns_ok` now rejects negative zero and accepts exact `+0.0`, since zero slack
+does meet the constraint and the only way to observe `-0.0` here is a rounding
+of something genuinely negative.
+
+**The larger fix is not made.** Teaching `collect_results.py` to honour
+`--json <design>` would give every future sweep full-precision slack and remove
+the rounding entirely. That changes what every sweep reads, so it is recorded
+here rather than done in the same commit as the task that surfaced it.
+
+Found by the PC operator noticing that a converged WNS read exactly `0.0` and
+checking `6_report.json` rather than accepting it.
+
+**Rules:** 20, 22, 24

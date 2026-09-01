@@ -273,7 +273,15 @@ def _fallback_from_reports(nickname, pdk="sky130hd"):
         if os.path.isfile(drc):
             nviol = sum(1 for ln in open(drc, errors="replace") if "violation" in ln.lower())
         rec = {"wns_ns": wns, "tns_ns": tns, "drc": nviol,
-               "pass": wns >= 0 and nviol == 0}
+               # NEGATIVE ZERO IS A FAILURE, and `wns >= 0` accepted it.
+               # The metrics JSON is not being read (collect_results.py ignores
+               # its arguments), so every sweep recovers WNS from 6_finish.rpt,
+               # which rounds to TWO DECIMALS. A true slack in (-0.005, 0) prints
+               # as "-0.00", parses to -0.0, and -0.0 >= 0 is True in Python --
+               # so a period that misses timing is recorded as the converged one.
+               #
+               # d_ca03_fmax.json carries wns_at_converged_ns = -0.0 today.
+               "pass": _wns_ok(wns) and nviol == 0}
 
         # Area and power are sitting in the same completed run and cost nothing
         # to capture here. The d_nw01_ss sweep recorded WNS at seven periods and
@@ -393,7 +401,7 @@ def run_period(design, tier, pdk, period, iteration, log_dir, verbose,
         rec["note"] = f"routed with {rec['drc']} DRC violations"
     elif rec["wns_ns"] is None:
         rec["note"] = "no WNS in the metrics"
-    elif rec["wns_ns"] >= 0:
+    elif _wns_ok(rec["wns_ns"]):
         rec["status"] = STATUS_PASS
         rec["pass"] = True
     else:
@@ -485,6 +493,18 @@ def args_design_to_task(design):
     for d in glob.glob(os.path.join(REPO_DIR, "domains", "*", "design", base + "_*")):
         return os.path.basename(d)
     return None
+
+
+def _wns_ok(w):
+    """True when slack is non-negative AND is not a negative zero.
+
+    Exact +0.0 passes: zero slack meets the constraint. -0.0 does not, because
+    the only way to observe it here is a two-decimal rounding of a genuinely
+    negative slack.
+    """
+    if w is None:
+        return False
+    return w >= 0 and not (w == 0 and math.copysign(1.0, w) < 0)
 
 
 def main():
