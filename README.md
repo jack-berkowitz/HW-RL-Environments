@@ -223,14 +223,12 @@ type, and `check_transport` finds no paste damage, so it is the model's output.
 
 ### d_ca06 — Concurrent multi-port queue, pinned at 7 ns
 
-*Pinned; no PPA build yet. Correctness stands as below.*
-
-| | correctness | area µm² | power mW | slack ns |
+| | area µm² | power mW | slack ns | vs reference |
 |---|---|---|---|---|
-| reference | **6/6 pass** | *not built* | *not built* | *not built* |
-| `chat` | **6/6 pass** | *not built* | *not built* | *not built* |
-| `claude` | 0/6 FAIL | *not built* | *not built* | *not built* |
-| `gemini` | **6/6 pass** | *not built* | *not built* | *not built* |
+| reference | 55,327 | 21.8 | +0.342 | — |
+| `chat` | 49,178 | 20.1 | +0.290 | **0.89×** |
+| `claude` | **0** | **0** | — | fails correctness |
+| `gemini` | 52,748 | 22.0 | +0.804 | **0.95×** |
 
 ### d_dsp02 — FP32 fused multiply-add, pinned at 19.25 ns
 

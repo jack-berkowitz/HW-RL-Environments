@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=queue; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=7000; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; VERILOG_TOP_PARAMS=PTR_WIDTH 4 DW 32 PORTS 3; sdc.clk_period=4.0; override.CLK_PERIOD_NS=7.0; note.abc_runtime_target_ps=7000;",
+  "build_config_hash": "728f68301405c305",
+  "clk_period_ns": "7.0",
+  "correctness_gate": "passed:2026-09-01T051636Z__gemini__sim.json",
+  "design_area_um2": "52748",
+  "git_sha": "daed2b111ce9f4fd4e280d9626f0f4b64e45f9f5-dirty",
+  "kind": "ppa",
+  "label": "gemini_pin7p0",
+  "orfs_nickname": "d_ca06_cand_gemini_pin7p0",
+  "pdk": "sky130hd",
+  "power_w": "2.20e-02",
+  "status": "completed",
+  "submission": "candidates/d_ca06/gemini.sv",
+  "submission_sha256_16": "e2ce9e778e6633c0",
+  "synth_area_um2": "42343.110400",
+  "task": "d_ca06_multiport_queue",
+  "timestamp_utc": "2026-09-01T05:33:31Z",
+  "wns_ns": "0.804079"
+}
