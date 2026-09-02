@@ -38,6 +38,28 @@ PASTE="$TASKDIR/probe/PASTE.md"
 case "$OUT" in "$REPO"|"$REPO"/*) echo "REFUSING: output dir is inside the repo -- attempts must run outside it"; fail=1;; esac
 [ "$fail" = 0 ] || exit 1
 
+# ---- AUTH, BEFORE ANY ATTEMPT. Eleven attempts once ran and failed in 72ms
+# each with "Not logged in - Please run /login", reporting as eleven model
+# failures: rc=1, no submission, zero thinking blocks, and a clean contamination
+# scan. Every one of those readings was true and none of them was about the
+# model. One cheap call up front, and the run refuses rather than producing a
+# directory of confident-looking nothing.
+probe_json="$(cd /tmp && claude -p "ok" --output-format json 2>/dev/null)"
+if printf '%s' "$probe_json" | python3 -c "
+import json,sys
+try: e=json.load(sys.stdin)
+except Exception: print('unparseable'); raise SystemExit(1)
+raise SystemExit(0 if e.get('is_error') else 1)" 2>/dev/null; then
+  echo "REFUSING: the claude CLI is not usable. Its reply was:"
+  printf '%s' "$probe_json" | python3 -c "
+import json,sys
+try: print('   ', json.load(sys.stdin).get('result'))
+except Exception: print('    (no parseable result)')"
+  echo "  If it says 'Not logged in', run 'claude' once interactively and /login."
+  exit 1
+fi
+echo "auth     : ok"
+
 # REASONING DEPTH. Claude Code has no --thinking flag; --effort is the control,
 # and at the default a short task may emit no thinking blocks at all. These
 # traces exist to show the reasoning, so the depth is set deliberately rather
@@ -54,7 +76,11 @@ echo "attempts : $N"
 echo "output   : $OUT"
 mkdir -p "$OUT"
 
-for i in $(seq -w 1 "$N"); do
+for i in $(seq 1 "$N"); do
+  i=$(printf '%02d' "$i")      # seq -w pads by the WIDTH OF N, so n=1 gave
+                               # attempt_1 and n=10 gave attempt_01..10 -- the
+                               # same attempt under two names, and the rerun
+                               # made a duplicate instead of skipping.
   d="$OUT/attempt_$i"
   if [ -e "$d" ]; then echo "[$i] exists, skipping"; continue; fi
   mkdir -p "$d/work"

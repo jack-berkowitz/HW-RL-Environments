@@ -35,6 +35,30 @@ for ln in open(path, errors="replace"):
                (inner.get("delta") or {}).get("type"),
                (inner.get("content_block") or {}).get("type"))] += 1
 
+# THE RUN'S OWN VERDICT, FIRST. Counting content-block types while ignoring
+# is_error reported "no thinking blocks" for three runs whose single text block
+# was "Not logged in - Please run /login". The block census was accurate and the
+# conclusion drawn from it was worthless. A trace that errored is not evidence
+# about thinking, so the error is printed before any census.
+errs = []
+for ln in open(path, errors="replace"):
+    ln = ln.strip()
+    if not ln:
+        continue
+    try:
+        e = json.loads(ln)
+    except Exception:
+        continue
+    if e.get("type") == "result":
+        errs.append((e.get("is_error"), str(e.get("result"))[:200],
+                     e.get("num_turns"), e.get("total_cost_usd")))
+for is_err, res, turns, cost in errs:
+    flag = "*** RUN FAILED ***" if is_err else "run ok"
+    print(f"{flag}  turns={turns} cost={cost}")
+    print(f"   result: {res}")
+if any(e[0] for e in errs):
+    print("   -> Nothing below says anything about the model. Fix the run first.")
+print()
 print(f"lines: {lines}")
 print("EVENT TYPES (type, subtype):")
 for k, v in ev.most_common():
