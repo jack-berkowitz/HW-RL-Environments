@@ -44,7 +44,8 @@ case "$OUT" in "$REPO"|"$REPO"/*) echo "REFUSING: output dir is inside the repo 
 # than inherited. Override with EFFORT=max.
 EFFORT="${EFFORT:-high}"
 
-DUT="$(grep -m1 '^dut_module:' "$TASKDIR/task.yaml" | awk '{print $2}')"
+DUT="$(grep -m1 -E '^(module|dut_module|synthesis_top):' "$TASKDIR/task.yaml" | awk '{print $2}')"
+[ -n "$DUT" ] && DUT="$DUT" || DUT="(not declared in task.yaml)"
 echo "task     : $TASK  ($(basename "$TASKDIR"))"
 echo "module   : $DUT"
 echo "prompt   : $PASTE  ($(wc -c < "$PASTE" | tr -d ' ') bytes)"
@@ -71,8 +72,30 @@ Verilator is available if you want to compile or test your work." \
   rc=$?
   echo "$rc" > "$d/exit_code"
 
+  # ---- THE SESSION TRANSCRIPT IS THE TRACE, NOT STDOUT. Measured on this
+  # machine: a `claude -p` stdout stream carried only text blocks, while an
+  # interactive session's transcript under ~/.claude/projects held 51 thinking
+  # blocks beside 163 tool_use. stdout is a delivery channel; the transcript is
+  # the record. Located by session id across all project dirs rather than by
+  # rebuilding Claude Code's path encoding, which mangles _ . and / alike.
+  sid=$(python3 - "$d/trace.jsonl" <<'PYEOF'
+import json,sys
+sid=""
+for ln in open(sys.argv[1],errors="replace"):
+    try: e=json.loads(ln)
+    except Exception: continue
+    sid=e.get("session_id") or sid
+print(sid)
+PYEOF
+)
+  if [ -n "$sid" ]; then
+    src=$(ls "$HOME"/.claude/projects/*/"$sid".jsonl 2>/dev/null | head -1)
+    [ -n "$src" ] && cp "$src" "$d/session.jsonl" && echo "$sid" > "$d/session_id"
+  fi
+
   # ---- contamination scan. A trace that reached the repo measures nothing.
-  if grep -qiE "hw_rl_benchmark|/ref/|fp_multifmt_fma_ref|_ref\.sv|/tb/|/mutants/" "$d/trace.jsonl" 2>/dev/null; then
+  if grep -qiE "hw_rl_benchmark|/ref/|fp_multifmt_fma_ref|_ref\.sv|/tb/|/mutants/" \
+       "$d/trace.jsonl" "$d/session.jsonl" 2>/dev/null; then
     echo "CONTAMINATED" > "$d/STATUS"
     echo "[$i] *** CONTAMINATED -- trace references the benchmark repo, do not use ***"
   else
@@ -96,7 +119,9 @@ for d in "$OUT"/attempt_*; do
   # whitespace or key-order the emitter chooses, and reports 0 -- which reads as
   # "the model did not think" when it means "the probe did not match". This
   # counts content blocks by type from the parsed JSON.
-  read -r th tu <<<"$(python3 - "$d/trace.jsonl" <<'PYEOF'
+  # Prefer the session transcript; stdout is a fallback that under-reports.
+  rec="$d/session.jsonl"; [ -f "$rec" ] || rec="$d/trace.jsonl"
+  read -r th tu <<<"$(python3 - "$rec" <<'PYEOF'
 import json,sys,collections
 c=collections.Counter()
 for ln in open(sys.argv[1],errors="replace"):
