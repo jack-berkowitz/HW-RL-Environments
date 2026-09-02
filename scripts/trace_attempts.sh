@@ -66,11 +66,21 @@ echo "auth     : ok"
 # than inherited. Override with EFFORT=max.
 EFFORT="${EFFORT:-high}"
 
+# PIN THE MODEL. Left unset, a headless run picked up claude-opus-5[1m], the
+# 1M-context variant, and its thinking blocks came back with an empty `thinking`
+# field and a 373,876-character signature. Every session on this machine that
+# DID record reasoning text -- eight of them, 247k to 1,098k characters -- ran
+# plain claude-opus-5. The [1m] variant is the only thing separating them.
+# Correlation, not documentation, but it is the one variable that differs and it
+# is free to test. Override with MODEL=.
+MODEL="${MODEL:-opus}"
+
 DUT="$(grep -m1 -E '^(module|dut_module|synthesis_top):' "$TASKDIR/task.yaml" | awk '{print $2}')"
 [ -n "$DUT" ] && DUT="$DUT" || DUT="(not declared in task.yaml)"
 echo "task     : $TASK  ($(basename "$TASKDIR"))"
 echo "module   : $DUT"
 echo "prompt   : $PASTE  ($(wc -c < "$PASTE" | tr -d ' ') bytes)"
+echo "model    : $MODEL"
 echo "effort   : $EFFORT"
 echo "attempts : $N"
 echo "output   : $OUT"
@@ -90,7 +100,7 @@ for i in $(seq 1 "$N"); do
 
 Write your final answer to a file named submission.sv in this directory. \
 Verilator is available if you want to compile or test your work." \
-      --effort "$EFFORT" \
+      --model "$MODEL" --effort "$EFFORT" \
       --output-format stream-json --verbose --include-partial-messages \
       --allowedTools "Write,Read,Edit,Bash" \
       --permission-mode acceptEdits \
