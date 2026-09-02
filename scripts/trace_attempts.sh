@@ -38,10 +38,17 @@ PASTE="$TASKDIR/probe/PASTE.md"
 case "$OUT" in "$REPO"|"$REPO"/*) echo "REFUSING: output dir is inside the repo -- attempts must run outside it"; fail=1;; esac
 [ "$fail" = 0 ] || exit 1
 
+# REASONING DEPTH. Claude Code has no --thinking flag; --effort is the control,
+# and at the default a short task may emit no thinking blocks at all. These
+# traces exist to show the reasoning, so the depth is set deliberately rather
+# than inherited. Override with EFFORT=max.
+EFFORT="${EFFORT:-high}"
+
 DUT="$(grep -m1 '^dut_module:' "$TASKDIR/task.yaml" | awk '{print $2}')"
 echo "task     : $TASK  ($(basename "$TASKDIR"))"
 echo "module   : $DUT"
 echo "prompt   : $PASTE  ($(wc -c < "$PASTE" | tr -d ' ') bytes)"
+echo "effort   : $EFFORT"
 echo "attempts : $N"
 echo "output   : $OUT"
 mkdir -p "$OUT"
@@ -56,6 +63,7 @@ for i in $(seq -w 1 "$N"); do
 
 Write your final answer to a file named submission.sv in this directory. \
 Verilator is available if you want to compile or test your work." \
+      --effort "$EFFORT" \
       --output-format stream-json --verbose \
       --allowedTools "Write,Read,Edit,Bash" \
       --permission-mode acceptEdits \
@@ -84,8 +92,24 @@ echo "=== summary ==="
 for d in "$OUT"/attempt_*; do
   [ -d "$d" ] || continue
   n=$(basename "$d")
-  th=$(grep -c '"type":"thinking"' "$d/trace.jsonl" 2>/dev/null || echo 0)
-  tu=$(grep -c '"type":"tool_use"' "$d/trace.jsonl" 2>/dev/null || echo 0)
+  # PARSED, NOT GREPPED. A byte-pattern like '"type":"thinking"' fails on any
+  # whitespace or key-order the emitter chooses, and reports 0 -- which reads as
+  # "the model did not think" when it means "the probe did not match". This
+  # counts content blocks by type from the parsed JSON.
+  read -r th tu <<<"$(python3 - "$d/trace.jsonl" <<'PYEOF'
+import json,sys,collections
+c=collections.Counter()
+for ln in open(sys.argv[1],errors="replace"):
+    ln=ln.strip()
+    if not ln: continue
+    try: ev=json.loads(ln)
+    except Exception: continue
+    msg=ev.get("message") or {}
+    for b in (msg.get("content") or []):
+        if isinstance(b,dict): c[b.get("type")]+=1
+print(c.get("thinking",0)+c.get("redacted_thinking",0), c.get("tool_use",0))
+PYEOF
+)"
   sub=$([ -f "$d/submission.sv" ] && echo yes || echo NO)
   printf "  %-12s thinking_blocks=%-4s tool_calls=%-4s submission=%-4s %s\n" \
          "$n" "$th" "$tu" "$sub" "$(cat "$d/STATUS" 2>/dev/null)"
