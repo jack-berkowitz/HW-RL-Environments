@@ -91,7 +91,7 @@ for i in $(seq 1 "$N"); do
 Write your final answer to a file named submission.sv in this directory. \
 Verilator is available if you want to compile or test your work." \
       --effort "$EFFORT" \
-      --output-format stream-json --verbose \
+      --output-format stream-json --verbose --include-partial-messages \
       --allowedTools "Write,Read,Edit,Bash" \
       --permission-mode acceptEdits \
   ) > "$d/trace.jsonl" 2> "$d/stderr.log"
@@ -146,8 +146,13 @@ for d in "$OUT"/attempt_*; do
   # "the model did not think" when it means "the probe did not match". This
   # counts content blocks by type from the parsed JSON.
   # Prefer the session transcript; stdout is a fallback that under-reports.
-  rec="$d/session.jsonl"; [ -f "$rec" ] || rec="$d/trace.jsonl"
-  read -r th tu <<<"$(python3 - "$rec" <<'PYEOF'
+  # trace.jsonl FIRST. The assembled thinking blocks in both the stream and the
+  # transcript carry an empty `thinking` field and a large signature -- measured
+  # 373,876 signature chars against 0 text chars. If the reasoning text exists
+  # anywhere it is in the partial-message thinking_delta events, which only the
+  # stdout stream carries.
+  rec="$d/trace.jsonl"; [ -s "$rec" ] || rec="$d/session.jsonl"
+  read -r th tu tx <<<"$(python3 - "$rec" <<'PYEOF'
 import json,sys,collections
 c=collections.Counter()
 for ln in open(sys.argv[1],errors="replace"):
@@ -158,12 +163,18 @@ for ln in open(sys.argv[1],errors="replace"):
     msg=ev.get("message") or {}
     for b in (msg.get("content") or []):
         if isinstance(b,dict): c[b.get("type")]+=1
-print(c.get("thinking",0)+c.get("redacted_thinking",0), c.get("tool_use",0))
+    inner=ev.get("event") or {}
+    d=(inner.get("delta") or {})
+    if d.get("type")=="thinking_delta": c["think_text"]+=len(d.get("thinking") or "")
+    for b in (msg.get("content") or []):
+        if isinstance(b,dict) and b.get("type")=="thinking":
+            c["think_text"]+=len(b.get("thinking") or "")
+print(c.get("thinking",0)+c.get("redacted_thinking",0), c.get("tool_use",0), c.get("think_text",0))
 PYEOF
 )"
   sub=$([ -f "$d/submission.sv" ] && echo yes || echo NO)
-  printf "  %-12s thinking_blocks=%-4s tool_calls=%-4s submission=%-4s %s\n" \
-         "$n" "$th" "$tu" "$sub" "$(cat "$d/STATUS" 2>/dev/null)"
+  printf "  %-12s thinking=%-4s reasoning_chars=%-8s tools=%-4s submission=%-4s %s\n" \
+         "$n" "$th" "$tx" "$tu" "$sub" "$(cat "$d/STATUS" 2>/dev/null)"
 done
 echo
 echo "Next: score them with"
