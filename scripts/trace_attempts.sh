@@ -75,12 +75,19 @@ EFFORT="${EFFORT:-high}"
 # is free to test. Override with MODEL=.
 MODEL="${MODEL:-opus}"
 
+# OUTPUT CAP. Thinking tokens count toward the output budget, so high effort on
+# a 590-line spec hits the 64,000 default and the run dies with
+# "Claude's response exceeded the 64000 output token maximum" -- after minutes of
+# work, with nothing written. Raised here; override with MAX_OUT.
+export CLAUDE_CODE_MAX_OUTPUT_TOKENS="${MAX_OUT:-200000}"
+
 DUT="$(grep -m1 -E '^(module|dut_module|synthesis_top):' "$TASKDIR/task.yaml" | awk '{print $2}')"
 [ -n "$DUT" ] && DUT="$DUT" || DUT="(not declared in task.yaml)"
 echo "task     : $TASK  ($(basename "$TASKDIR"))"
 echo "module   : $DUT"
 echo "prompt   : $PASTE  ($(wc -c < "$PASTE" | tr -d ' ') bytes)"
 echo "model    : $MODEL"
+echo "max out  : $CLAUDE_CODE_MAX_OUTPUT_TOKENS tokens"
 echo "effort   : $EFFORT"
 echo "attempts : $N"
 echo "output   : $OUT"
@@ -130,12 +137,42 @@ PYEOF
   fi
 
   # ---- contamination scan. A trace that reached the repo measures nothing.
-  if grep -qiE "hw_rl_benchmark|/ref/|fp_multifmt_fma_ref|_ref\.sv|/tb/|/mutants/" \
-       "$d/trace.jsonl" "$d/session.jsonl" 2>/dev/null; then
-    echo "CONTAMINATED" > "$d/STATUS"
+  # SCAN THE READABLE FIELDS, NOT THE RAW BYTES. Grepping whole lines
+  # case-insensitively flagged a clean run CONTAMINATED on a single "/Tb/" that
+  # occurred inside a base64 signature -- thinking blocks carry 189KB of base64
+  # each, so a three-character pattern appearing by chance is not unlikely, it is
+  # expected. A false CONTAMINATED discards a good attempt; a false clean ships a
+  # leaked reference. Parse, then scan only text, thinking, tool inputs and tool
+  # results, which are the only places a real leak can appear.
+  python3 - "$d/trace.jsonl" "$d/session.jsonl" > "$d/STATUS" <<'PYEOF'
+import json,re,sys,os
+pat=re.compile(r"hw_rl_benchmark|fp_multifmt_fma_ref|/ref/|/tb/|/mutants/|/controls/",re.I)
+hits=[]
+def walk(v):
+    if isinstance(v,str):
+        m=pat.search(v)
+        if m: hits.append(v[max(0,m.start()-60):m.start()+60])
+    elif isinstance(v,list):
+        for x in v: walk(x)
+    elif isinstance(v,dict):
+        for k,x in v.items():
+            if k in ("signature","data"): continue      # opaque base64, not prose
+            walk(x)
+for p in sys.argv[1:]:
+    if not os.path.isfile(p): continue
+    for ln in open(p,errors="replace"):
+        ln=ln.strip()
+        if not ln: continue
+        try: e=json.loads(ln)
+        except Exception: continue
+        for b in (e.get("message") or {}).get("content") or []:
+            if isinstance(b,dict) and b.get("type") in ("text","thinking","tool_use","tool_result"):
+                walk({k:v for k,v in b.items() if k!="signature"})
+print("CONTAMINATED" if hits else "clean")
+if hits: print(hits[0], file=sys.stderr)
+PYEOF
+  if [ "$(cat "$d/STATUS")" = "CONTAMINATED" ]; then
     echo "[$i] *** CONTAMINATED -- trace references the benchmark repo, do not use ***"
-  else
-    echo "clean" > "$d/STATUS"
   fi
 
   if [ -f "$d/work/submission.sv" ]; then
