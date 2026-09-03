@@ -104,6 +104,11 @@ async def main():
     ap.add_argument("--effort", default="high")
     ap.add_argument("--budget", type=int, default=32000)
     ap.add_argument("--max-usd", dest="max_usd", type=float, default=None)
+    ap.add_argument("--concurrency", type=int, default=3,
+                    help="attempts to run at once. Each has its own scratch dir "
+                         "and its own CLI process, so there is nothing shared to "
+                         "conflict over; the limits are rate limiting and RAM "
+                         "(~250MB per process). 1 restores serial behaviour.")
     args = ap.parse_args()
 
     try:
@@ -131,40 +136,57 @@ async def main():
               "test your work.")
     print(f"task     : {args.task}\nmodel    : {args.model}\neffort   : {args.effort}")
     print(f"thinking : enabled, budget {args.budget}, display=summarized")
-    print(f"prompt   : {paste} ({len(task_text):,} bytes)\noutput   : {out}\n")
+    print(f"prompt   : {paste} ({len(task_text):,} bytes)")
+    print(f"output   : {out}\nparallel : {args.concurrency} at a time\n")
     os.makedirs(out, exist_ok=True)
 
+    todo = []
     for i in range(1, args.n + 1):
         d = os.path.join(out, f"attempt_{i:02d}")
         if os.path.exists(d):
             print(f"[{i:02d}] exists, skipping")
             continue
-        work = os.path.join(d, "work")
-        os.makedirs(work)
-        shutil.copy(paste, os.path.join(work, "TASK.md"))
-        print(f"[{i:02d}] running...", flush=True)
-        try:
-            msgs, chars, tools, leaks, result = await one_attempt(sdk, prompt, work, args)
-        except Exception as e:                      # one bad attempt must not end the batch
-            print(f"[{i:02d}] ERROR: {type(e).__name__}: {e}")
-            open(os.path.join(d, "STATUS"), "w").write("ERROR")
-            continue
-        with open(os.path.join(d, "trace.jsonl"), "w") as fh:
-            for m in msgs:
-                fh.write(json.dumps(m) + "\n")
-        status = "CONTAMINATED" if leaks else "clean"
-        open(os.path.join(d, "STATUS"), "w").write(status)
-        if leaks:
-            open(os.path.join(d, "LEAKS.txt"), "w").write("\n".join(leaks[:20]))
-        sub = os.path.join(work, "submission.sv")
-        have = os.path.isfile(sub)
-        if have:
-            shutil.copy(sub, os.path.join(d, "submission.sv"))
-        err = (result or {}).get("is_error")
-        cost = (result or {}).get("total_cost_usd")
-        print(f"[{i:02d}] reasoning_chars={chars:,} tools={tools} "
-              f"submission={'yes' if have else 'NO'} cost={cost} "
-              f"error={err} {status}")
+        todo.append((i, d))
+    if not todo:
+        print("nothing to run")
+    else:
+        print(f"running {len(todo)} attempt(s), {args.concurrency} at a time\n")
+
+    sem = asyncio.Semaphore(max(1, args.concurrency))
+
+    async def run_one(i, d):
+        # EACH ATTEMPT IS SELF-CONTAINED, which is what makes concurrency safe:
+        # its own scratch directory, its own CLI process, no shared state and no
+        # ordering between them. They are independent samples by design.
+        async with sem:
+            work = os.path.join(d, "work")
+            os.makedirs(work, exist_ok=True)
+            shutil.copy(paste, os.path.join(work, "TASK.md"))
+            print(f"[{i:02d}] started", flush=True)
+            try:
+                msgs, chars, tools, leaks, result = await one_attempt(sdk, prompt, work, args)
+            except Exception as e:              # one bad attempt must not end the batch
+                print(f"[{i:02d}] ERROR: {type(e).__name__}: {e}", flush=True)
+                open(os.path.join(d, "STATUS"), "w").write("ERROR")
+                return
+            with open(os.path.join(d, "trace.jsonl"), "w") as fh:
+                for m in msgs:
+                    fh.write(json.dumps(m) + "\n")
+            status = "CONTAMINATED" if leaks else "clean"
+            open(os.path.join(d, "STATUS"), "w").write(status)
+            if leaks:
+                open(os.path.join(d, "LEAKS.txt"), "w").write("\n".join(leaks[:20]))
+            sub = os.path.join(work, "submission.sv")
+            have = os.path.isfile(sub)
+            if have:
+                shutil.copy(sub, os.path.join(d, "submission.sv"))
+            err = (result or {}).get("is_error")
+            cost = (result or {}).get("total_cost_usd")
+            print(f"[{i:02d}] done  reasoning_chars={chars:,} tools={tools} "
+                  f"submission={'yes' if have else 'NO'} cost={cost} "
+                  f"error={err} {status}", flush=True)
+
+    await asyncio.gather(*(run_one(i, d) for i, d in todo))
 
     print("\n=== summary ===")
     for d in sorted(glob.glob(os.path.join(out, "attempt_*"))):
