@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=fp_multifmt_fma; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=70500; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=65.0; override.CLK_PERIOD_NS=70.5; note.abc_runtime_target_ps=70500;",
+  "build_config_hash": "fbb87c306247866a",
+  "clk_period_ns": "70.5",
+  "correctness_gate": "passed:2026-09-03T224711Z__attempt_01__sim.json",
+  "design_area_um2": "209973",
+  "git_sha": "6d7c82656c45fc10fecf22af943831ff27489b93-dirty",
+  "kind": "ppa",
+  "label": "sdk01",
+  "orfs_nickname": "d_dsp03_cand_sdk01",
+  "pdk": "sky130hd",
+  "power_w": "5.21e-02",
+  "status": "completed",
+  "submission": "experiments/d_dsp03_sdk_attempts/attempt_01.sv",
+  "submission_sha256_16": "c685c0b59acea4cb",
+  "synth_area_um2": "176840.854400",
+  "task": "d_dsp03_multifmt_fma",
+  "timestamp_utc": "2026-09-03T23:01:15Z",
+  "wns_ns": "5.94288"
+}
