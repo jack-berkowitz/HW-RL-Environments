@@ -1,0 +1,56 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "2",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ASCRANGE,WIDTHEXPAND",
+  "compile_warnings": "22",
+  "configs_no_verdict": 0,
+  "configs_passed": 2,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "git_sha": "ce791a0d52228454fa6d12080da2d5d0de973c9f-dirty",
+  "kind": "sim",
+  "label": "claude_new",
+  "metrics": {
+    "+HH_4": {
+      "H": "4",
+      "expected": "16",
+      "latency_ticks": "16",
+      "ok": "yes",
+      "v2_array_nonzero_before_reset": "1"
+    },
+    "+HH_8": {
+      "H": "8",
+      "expected": "32",
+      "latency_ticks": "32",
+      "ok": "yes",
+      "v2_array_nonzero_before_reset": "1"
+    }
+  },
+  "nonconverged_configs": "0",
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "PASS"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "candidates/d_ai01/claude_new.sv",
+  "submission_sha256_16": "0117a66b00d3b0c6",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "b62c72cf684c1eff",
+  "timestamp_utc": "2026-09-25T13:36:27Z"
+}

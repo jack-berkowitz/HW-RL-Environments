@@ -1,0 +1,36 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "",
+  "compile_warnings": "0",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "ce791a0d52228454fa6d12080da2d5d0de973c9f-dirty",
+  "kind": "sim",
+  "label": "claude_new",
+  "metrics": {
+    "": {
+      "buffer_slots": "2",
+      "init_interval": "1",
+      "latency_cycles": "1"
+    }
+  },
+  "nonconverged_configs": "0",
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "candidates/d_ai04/claude_new.sv",
+  "submission_sha256_16": "43d5fd5fa328a36b",
+  "task": "d_ai04_sdp_requant",
+  "task_text_hash": "203bc8a580aa44d4",
+  "timestamp_utc": "2026-09-25T13:36:40Z"
+}
