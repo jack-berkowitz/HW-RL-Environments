@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=sv39_mmu; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=12500; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=25.0; override.CLK_PERIOD_NS=12.5; note.abc_runtime_target_ps=12500;",
+  "build_config_hash": "3a99ba1a6d0347da",
+  "clk_period_ns": "12.5",
+  "correctness_gate": "passed:2026-08-29T021441Z__sv39_mmu_top__sim.json 1/1 configs",
+  "design_area_um2": "279456",
+  "git_sha": "a5a7d5726619fb1e8a001d926324193b1424303c-dirty",
+  "kind": "ppa",
+  "label": "reference_pin12p5",
+  "orfs_nickname": "d_ca03_sv39_mmu",
+  "pdk": "sky130hd",
+  "power_w": "3.26e-02",
+  "status": "completed",
+  "submission": "domains/comp_arch/design/d_ca03_sv39_mmu/ref/sv39_mmu_top.sv",
+  "submission_sha256_16": "e66009f6491b253b",
+  "synth_area_um2": "210923.542400",
+  "task": "d_ca03_sv39_mmu",
+  "timestamp_utc": "2026-09-26T18:01:18Z",
+  "wns_ns": "0.988925"
+}

@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=fp16_gemm_array; CORE_UTILIZATION=30; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=16750; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; VERILOG_TOP_PARAMS=HEIGHT 4 WIDTH 8; sdc.clk_period=50.0; override.CLK_PERIOD_NS=16.75; note.abc_runtime_target_ps=16750;",
+  "build_config_hash": "0ff683c2c8e8f843",
+  "clk_period_ns": "16.75",
+  "correctness_gate": "passed:2026-09-25T133627Z__claude_new__sim.json",
+  "design_area_um2": "626832",
+  "git_sha": "a5a7d5726619fb1e8a001d926324193b1424303c-dirty",
+  "kind": "ppa",
+  "label": "claude_new_pin16p75",
+  "orfs_nickname": "d_ai01_cand_claude_new_pin16p75",
+  "pdk": "sky130hd",
+  "power_w": "9.68e-02",
+  "status": "completed",
+  "submission": "candidates/d_ai01/claude_new.sv",
+  "submission_sha256_16": "0117a66b00d3b0c6",
+  "synth_area_um2": "566455.776000",
+  "task": "d_ai01_fp16_gemm_array",
+  "timestamp_utc": "2026-09-26T17:50:26Z",
+  "wns_ns": "1.62109"
+}
