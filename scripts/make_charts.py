@@ -563,13 +563,18 @@ def timing_svg(theme):
          f'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif">']
     p.append(f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>')
     met = sum(1 for *_r, rat in rows if rat <= 1.0)
+    # THE DENOMINATOR IS COUNTED, NOT WRITTEN. This read "of 30" as a literal,
+    # which stayed true only while the corpus was exactly 30 files: any chart
+    # rendered over a different submission set -- a new model generation, a
+    # filtered comparison -- would have kept printing 30 over the wrong count.
+    n_design = len(candidate_files("d_"))
     p.append(f'<text x="20" y="30" fill="{c["fg"]}" font-size="15" font-weight="700">'
              f'Correctness is not the filter. The clock is.</text>')
     p.append(f'<text x="20" y="52" fill="{c["mute"]}" font-size="11.5">'
              f'{esc(f"Clock period each correct design actually needs, as a multiple of the period its task pins. ")}'
              f'</text>')
     p.append(f'<text x="20" y="69" fill="{c["mute"]}" font-size="11.5">'
-             f'{esc(f"{len(rows)} of 30 submissions are correct; {met} of those close timing at the pin.")}</text>')
+             f'{esc(f"{len(rows)} of {n_design} submissions are correct; {met} of those close timing at the pin.")}</text>')
     # legend
     p.append(f'<rect x="20" y="84" width="11" height="11" rx="2" fill="{c["bar"]}"/>')
     p.append(f'<text x="36" y="93" fill="{c["mute"]}" font-size="11">meets the pinned clock</text>')
