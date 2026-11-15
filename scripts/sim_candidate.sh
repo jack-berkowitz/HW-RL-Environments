@@ -130,6 +130,20 @@ for a in "$@"; do
   esac
 done
 
+# ONE PRIVATE SCRATCH DIRECTORY PER RUN. Three paths used to be shared between
+# concurrent runs, and each produced false verdicts:
+#   obj_cand_<config>       built INSIDE the task dir -- two candidates of one
+#                           task deleted each other's builds mid-compile.
+#   /tmp/sanitised_<base>   keyed by basename only -- d_ca01/claude_new.sv and
+#                           d_ca03/claude_new.sv overwrote each other, so one
+#                           task compiled the OTHER task's design: the
+#                           "MODMISSING into domains/comp_arch/design/..."
+#                           cross-task failure of 2026-09-24.
+#   /tmp/cand_<tag>.vvp     the iverilog image, keyed by config only.
+# All three now live here, and the directory goes when the run does.
+RUN_TMP="$(mktemp -d "${TMPDIR:-/tmp}/simcand.XXXXXX")" || exit 2
+trap 'rm -rf "$RUN_TMP"' EXIT
+
 # --- resolve the task: id shorthand or path ----------------------------------
 if [ -d "$TASK_ARG" ]; then
   TASK_DIR="$(cd "$TASK_ARG" && pwd)"
@@ -427,7 +441,7 @@ if [ "$SIM" = "verilator" ] \
       else
         _probe_bad=0
       fi
-      printf '%s' "$_probe_bad" > "$_probe_cache" 2>/dev/null || true
+      printf '%s' "$_probe_bad" > "$_probe_cache.$$" 2>/dev/null && mv -f "$_probe_cache.$$" "$_probe_cache" 2>/dev/null || true
     fi
     if [ "$_probe_bad" = "1" ]; then
       echo "REFUSED: $SIM_VERILATOR_EXE ($VERILATOR_VERSION) reports BLKANDNBLK on" >&2
@@ -463,12 +477,12 @@ run_one() {
           *)  pargs="$pargs -P${TB_MOD}.${kv%%=*}=${kv##*=}" ;;
         esac
       done
-      rm -f "/tmp/cand_${tag}.vvp"
-      cerr="$(iverilog -g2012 -o "/tmp/cand_${tag}.vvp" $pargs ${EXTRA[@]+"${EXTRA[@]}"} "$TB" "$cand" 2>&1)"
-      if [ -f "/tmp/cand_${tag}.vvp" ]; then out="$(timeout 600 vvp "/tmp/cand_${tag}.vvp" 2>&1)"
+      rm -f "$RUN_TMP/cand_${tag}.vvp"
+      cerr="$(iverilog -g2012 -o "$RUN_TMP/cand_${tag}.vvp" $pargs ${EXTRA[@]+"${EXTRA[@]}"} "$TB" "$cand" 2>&1)"
+      if [ -f "$RUN_TMP/cand_${tag}.vvp" ]; then out="$(timeout 600 vvp "$RUN_TMP/cand_${tag}.vvp" 2>&1)"
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -viE "warning" | grep -m1 . | cut -c1-90)"; fi
     else
-      local gargs="" d="obj_cand_${tag}"
+      local gargs="" d="$RUN_TMP/obj_cand_${tag}"   # absolute: cwd stays $TASK_DIR for vectors
       # A token written `+NAME=value` is a DEFINE, not a parameter. Most tasks
       # sweep elaboration parameters, but a testbench whose recorded-vector type
       # is sized by a macro cannot: d_ai01's `rec_t` is `[`VW-1:0][`VH-1:0]`, so
@@ -483,7 +497,7 @@ run_one() {
       rm -rf "$d"
       cerr="$(verilator --binary --timing -j 0 -Wno-fatal --x-assign unique --x-initial unique \
         --top-module "$TB_MOD" $gargs ${EXTRA[@]+"${EXTRA[@]}"} "$TB" "$cand" -o sim --Mdir "$d" 2>&1)"
-      if [ -x "$d/sim" ]; then out="$(timeout 600 "./$d/sim" 2>&1)"
+      if [ -x "$d/sim" ]; then out="$(timeout 600 "$d/sim" 2>&1)"
       else out="COMPILE_ERROR"; CERR="$(echo "$cerr" | grep -m1 "%Error" | sed "s|.*/candidates/|candidates/|" | cut -c1-90)"; fi
       rm -rf "$d"
       # COMPILE WARNINGS WERE DISCARDED ENTIRELY ON A SUCCESSFUL BUILD. cerr was
@@ -813,7 +827,7 @@ for cand in "${CANDS[@]}"; do
   nbsp="$(LC_ALL=C grep -c $'\xc2\xa0' "$cand" 2>/dev/null)"; nbsp="${nbsp:-0}"
   runfile="$cand"
   if [ "$nbsp" -gt 0 ] || [ -n "$(tail -c 1 "$cand")" ]; then
-    runfile="/tmp/sanitised_$(basename "$cand")"
+    runfile="$RUN_TMP/sanitised_$(basename "$cand")"
     LC_ALL=C sed $'s/\xc2\xa0/ /g' "$cand" > "$runfile"
     printf '\n' >> "$runfile"
     [ "$nbsp" -gt 0 ] && echo "  note: $name had non-breaking spaces on $nbsp lines; ran a normalised copy"

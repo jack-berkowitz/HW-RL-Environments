@@ -253,6 +253,10 @@ def main():
     # problem must not fail a build that already produced its result. A failure
     # here leaves the gate red, which is the status quo it improves on, and says
     # so on stderr rather than silently.
+    # OPT-OUT FOR SWEEPS. Concurrent runs each regenerating README.md race on
+    # one file, and a sweep of non-corpus submissions has nothing to publish.
+    if os.environ.get("HWRL_NO_README_REGEN"):
+        return
     try:
         import subprocess
         r = subprocess.run([sys.executable,
