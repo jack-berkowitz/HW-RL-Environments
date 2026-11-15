@@ -4,12 +4,25 @@
     "temperature": 0.6,
     "top_p": 0.95,
     "max_tokens": 64000,
-    "reasoning": {"effort": "high"},
-    "provider": {"require_parameters": true}
+    "reasoning": {
+      "effort": "high"
+    },
+    "provider": {
+      "require_parameters": true
+    }
   },
   "models": {
-    "kimi31pro": {"slug": "moonshotai/kimi-k3.1-pro",     "label": "Kimi K3.1 Pro"},
-    "dsv41":     {"slug": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash (reasoning high)"},
-    "glm53":     {"slug": "z-ai/glm-5.3",                 "label": "GLM 5.3 (reasoning high)"}
+    "kimi31pro": {
+      "slug": "moonshotai/kimi-k3.1-pro",
+      "label": "Kimi K3.1 Pro"
+    },
+    "dsv41": {
+      "slug": "deepseek/deepseek-v4.1-flash-1017",
+      "label": "DeepSeek V4.1 Flash 1017 (reasoning high)"
+    },
+    "glm53": {
+      "slug": "z-ai/glm-5.3",
+      "label": "GLM 5.3 (reasoning high)"
+    }
   }
 }
