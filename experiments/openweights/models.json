@@ -1,14 +1,18 @@
 {
-  "_note": "Edit here, not in code. Every value below is copied into each response's sidecar JSON, so a result always says exactly what produced it. 'Max' was read as the reasoning setting: OpenRouter lists no Max variant of DeepSeek V4.1 or GLM 5.3.",
+  "_note": "Edit here, not in code. Every value below is copied into each response's sidecar JSON. v2 after the pilot (2026-11-15): 30 of 63 pilot answers were cut off at the 64k max_tokens cap with the whole budget spent reasoning, and requests were served at fp4/mxfp4/nvfp4/fp8/bf16 by whichever provider answered. Now: one explicit reasoning budget for every model (effort levels mean different budgets per vendor), room left for the answer, and precision pinned to fp8 or better.",
   "defaults": {
     "temperature": 0.6,
     "top_p": 0.95,
-    "max_tokens": 64000,
+    "max_tokens": 160000,
     "reasoning": {
-      "effort": "high"
+      "max_tokens": 128000
     },
     "provider": {
-      "require_parameters": true
+      "require_parameters": true,
+      "quantizations": [
+        "bf16",
+        "fp8"
+      ]
     }
   },
   "models": {
@@ -18,11 +22,11 @@
     },
     "dsv41": {
       "slug": "deepseek/deepseek-v4.1-flash-1017",
-      "label": "DeepSeek V4.1 Flash 1017 (reasoning high)"
+      "label": "DeepSeek V4.1 Flash 1017"
     },
     "glm53": {
       "slug": "z-ai/glm-5.3",
-      "label": "GLM 5.3 (reasoning high)"
+      "label": "GLM 5.3"
     }
   }
 }

@@ -213,7 +213,7 @@ def price_table():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--samples", type=int, default=8)
+    ap.add_argument("--samples", type=int, default=3)
     ap.add_argument("--models", default="", help="comma-separated tags (default: all in models.json)")
     ap.add_argument("--tasks", default="", help="comma-separated task ids, e.g. d_ca01,v_ai02")
     ap.add_argument("--include", default="", help="also run normally-skipped tasks (d_ca06, d_dsp01)")

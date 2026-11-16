@@ -104,8 +104,8 @@ def summarize(rows, k):
     for kind in ("design", "verification"):
         good = "pass" if kind == "design" else "valid"
         lines.append(f"\n## {kind.capitalize()}\n")
-        hdr = ["model", "answers", "API errors", "extracted", "built", f"{good}@1", f"{good}@{k}",
-               f"tasks with ≥1 {good}"]
+        hdr = ["model", "answers", "API errors", "extracted", "built", f"{good}@1"] + \
+              ([f"{good}@{k}"] if k > 1 else []) + [f"tasks with ≥1 {good}"]
         if kind == "verification":
             hdr.append("faults caught (valid only)")
         lines.append("| " + " | ".join(hdr) + " |")
@@ -132,7 +132,8 @@ def summarize(rows, k):
             hit = sum(c > 0 for n, c in per_task.values())
             cells = [lab[m], str(len(done)), str(len(rs) - len(done)), f"{ext}/{len(done)}",
                      f"{built}/{len(done)}" + (f" ({unscored} unscored)" if unscored else ""),
-                     f"{p1:.2f}", "—" if pk is None else f"{pk:.2f}", f"{hit}/{len(per_task)}"]
+                     f"{p1:.2f}"] + (["—" if pk is None else f"{pk:.2f}"] if k > 1 else []) + \
+                    [f"{hit}/{len(per_task)}"]
             if kind == "verification":
                 fr = []
                 for r in done:
@@ -185,7 +186,7 @@ def ppa_plan(rows):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--k", type=int, default=8)
+    ap.add_argument("--k", type=int, default=3)
     ap.add_argument("--ppa-plan", action="store_true")
     a = ap.parse_args()
     rows = load()
