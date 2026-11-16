@@ -149,51 +149,72 @@ def one(job, cfg, key, budget, timeout):
            "task_text_hash": t["task_text_hash"],
            "params_sent": {k: v for k, v in payload.items() if k not in ("messages",)},
            "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    resp, err = None, None
-    for attempt in range(5):
-        try:
-            resp = call(payload, key, timeout)
-            break
-        except urllib.error.HTTPError as e:
-            body = e.read().decode(errors="replace")[:500]
-            err = f"HTTP {e.code}: {body}"
-            if e.code not in (408, 429, 500, 502, 503, 504):
-                break                                   # a bad request will not improve
-        except Exception as e:                          # timeouts, resets
-            err = f"{type(e).__name__}: {e}"
-        time.sleep(min(15 * 2 ** attempt, 240))
-    rec["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    cost = 0.0
-    if resp is None:
-        rec.update(status="api_error", error=err)
-    elif "error" in resp and not resp.get("choices"):
-        rec.update(status="api_error", error=json.dumps(resp["error"])[:500])
-    else:
-        ch = (resp.get("choices") or [{}])[0]
-        msg = ch.get("message") or {}
-        content = msg.get("content") or ""
-        status, code = extract(content, t["module"])
-        usage = resp.get("usage") or {}
-        if ch.get("finish_reason") == "length" and status != "ok":
-            status = "truncated"
-            # A PROVIDER CAP IS NOT THE MODEL RUNNING OUT OF ROOM. SiliconFlow
-            # listed 262144 output tokens for GLM and stopped at 32768; scored as
-            # truncated, that is a model failure caused by routing. Stopping well
-            # short of the budget we asked for marks it, and it is retried.
-            got, asked = usage.get("completion_tokens") or 0, params.get("max_tokens") or 0
-            if asked and got < 0.9 * asked:
-                status = "provider_cap"
-        cost = float(usage.get("cost") or 0.0)
-        rec.update(status=status, finish_reason=ch.get("finish_reason"),
-                   provider=resp.get("provider"), response_model=resp.get("model"),
-                   response_id=resp.get("id"), usage=usage, content=content,
-                   reasoning=msg.get("reasoning"))
-        if code:
-            sv = os.path.join(d, f"{tag}__s{n:02d}.sv")
-            with open(sv, "w", encoding="utf-8") as fh:
-                fh.write(code)
-            rec["sv"] = os.path.relpath(sv, REPO)
-            rec["sv_sha256_16"] = hashlib.sha256(code.encode()).hexdigest()[:16]
+    # A PROVIDER THAT STOPS SHORT OF ITS LISTED CAP is routed around inside the
+    # same run: the next hop ignores it. Without this, a capped sample waited for
+    # a manual re-run -- which could land on the same provider again.
+    cost, capped = 0.0, []
+    for hop in range(3):
+      resp, err = None, None
+      for attempt in range(5):
+          try:
+              resp = call(payload, key, timeout)
+              break
+          except urllib.error.HTTPError as e:
+              body = e.read().decode(errors="replace")[:500]
+              err = f"HTTP {e.code}: {body}"
+              if e.code not in (408, 429, 500, 502, 503, 504):
+                  break                                   # a bad request will not improve
+          except Exception as e:                          # timeouts, resets
+              err = f"{type(e).__name__}: {e}"
+          time.sleep(min(15 * 2 ** attempt, 240))
+      rec["finished_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+      if resp is None:
+          rec.update(status="api_error", error=err)
+      elif "error" in resp and not resp.get("choices"):
+          rec.update(status="api_error", error=json.dumps(resp["error"])[:500])
+      else:
+          ch = (resp.get("choices") or [{}])[0]
+          msg = ch.get("message") or {}
+          content = msg.get("content") or ""
+          status, code = extract(content, t["module"])
+          usage = resp.get("usage") or {}
+          if ch.get("finish_reason") == "length" and status != "ok":
+              status = "truncated"
+              # A PROVIDER CAP IS NOT THE MODEL RUNNING OUT OF ROOM. SiliconFlow
+              # listed 262144 output tokens for GLM and stopped at 32768; scored as
+              # truncated, that is a model failure caused by routing. Stopping well
+              # short of the budget we asked for marks it, and it is retried.
+              got, asked = usage.get("completion_tokens") or 0, params.get("max_tokens") or 0
+              if asked and got < 0.9 * asked:
+                  status = "provider_cap"
+          cost += float(usage.get("cost") or 0.0)
+          rec.update(status=status, finish_reason=ch.get("finish_reason"),
+                     provider=resp.get("provider"), response_model=resp.get("model"),
+                     response_id=resp.get("id"), usage=usage, content=content,
+                     reasoning=msg.get("reasoning"))
+          if code:
+              sv = os.path.join(d, f"{tag}__s{n:02d}.sv")
+              with open(sv, "w", encoding="utf-8") as fh:
+                  fh.write(code)
+              rec["sv"] = os.path.relpath(sv, REPO)
+              rec["sv_sha256_16"] = hashlib.sha256(code.encode()).hexdigest()[:16]
+      prov = rec.get("provider")
+      if rec.get("status") != "provider_cap" or not prov or hop == 2:
+          break
+      capped.append(prov)
+      pv = dict(payload.get("provider") or {})
+      pv["ignore"] = sorted(set(pv.get("ignore", [])) | {prov})
+      if "only" in pv:
+          pv["only"] = [x for x in pv["only"] if x != prov]
+          if not pv["only"]:
+              break                                   # nowhere left to route
+      payload["provider"] = pv
+      rec["params_sent"]["provider"] = pv           # the routing that answered
+      for k in ("sv", "sv_sha256_16", "error", "content", "reasoning", "usage"):
+          rec.pop(k, None)
+    if capped:
+      rec["capped_providers"] = capped              # paid for, routed around
+    rec["cost_usd"] = cost
     budget.add(cost)
     tmp = side + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
