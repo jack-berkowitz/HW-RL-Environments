@@ -173,9 +173,16 @@ def one(job, cfg, key, budget, timeout):
         msg = ch.get("message") or {}
         content = msg.get("content") or ""
         status, code = extract(content, t["module"])
+        usage = resp.get("usage") or {}
         if ch.get("finish_reason") == "length" and status != "ok":
             status = "truncated"
-        usage = resp.get("usage") or {}
+            # A PROVIDER CAP IS NOT THE MODEL RUNNING OUT OF ROOM. SiliconFlow
+            # listed 262144 output tokens for GLM and stopped at 32768; scored as
+            # truncated, that is a model failure caused by routing. Stopping well
+            # short of the budget we asked for marks it, and it is retried.
+            got, asked = usage.get("completion_tokens") or 0, params.get("max_tokens") or 0
+            if asked and got < 0.9 * asked:
+                status = "provider_cap"
         cost = float(usage.get("cost") or 0.0)
         rec.update(status=status, finish_reason=ch.get("finish_reason"),
                    provider=resp.get("provider"), response_model=resp.get("model"),
@@ -198,9 +205,16 @@ def one(job, cfg, key, budget, timeout):
 def done_already(t, tag, n):
     side = os.path.join(OUT, t["short"], f"{tag}__s{n:02d}.json")
     try:
-        return json.load(open(side)).get("status") in DONE
+        r = json.load(open(side))
     except Exception:
         return False
+    # Sidecars written before provider_cap existed: re-judge a "truncated" one.
+    if r.get("status") == "truncated":
+        got = (r.get("usage") or {}).get("completion_tokens") or 0
+        asked = (r.get("params_sent") or {}).get("max_tokens") or 0
+        if asked and got < 0.9 * asked:
+            return False
+    return r.get("status") in DONE
 
 
 def price_table():
