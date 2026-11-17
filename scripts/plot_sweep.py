@@ -54,10 +54,13 @@ def counts(rows, kind):
 def panel(rows, kind, labels, x0, y0, w):
     cnt = counts(rows, kind)
     models = [m for m in labels if m in cnt]
-    n_tasks = max(sum(v.values()) for v in cnt.values())
+    mine = [r for r in rows if r["side"]["kind"] == kind and r["outcome"] != "api error"]
+    n_tasks = len({r["side"]["task_short"] for r in mine})
+    n_samp = max(r["side"]["sample"] for r in mine)
+    each = "one answer each" if n_samp == 1 else f"{n_samp} answers each"
     title = "Design" if kind == "design" else "Verification"
     p = [f'<text x="{x0}" y="{y0}" font-size="15" font-weight="600" fill="{C["fg"]}">'
-         f'{title} <tspan fill="{C["mute"]}" font-weight="400">· {n_tasks} tasks, one answer each</tspan></text>']
+         f'{title} <tspan fill="{C["mute"]}" font-weight="400">· {n_tasks} tasks, {each}</tspan></text>']
     lab_w, bar_x, bar_w, bh, gap = 150, x0 + 150, w - 150, 30, 18
     y = y0 + 22
     for m in models:
@@ -133,7 +136,7 @@ def main():
            f'<line x1="0" y1="0" x2="0" y2="6" stroke="{C["nobuild"]}" stroke-width="2"/></pattern></defs>'
            f'{d}{v}</svg>')
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Open-Weight Pilot</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Open-Weight Sweep</title>
 <style>
 :root{{--bg:#fcfcfb;--fg:#1a1a1a;--mute:#666;--rule:#ddd}}
 body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}}

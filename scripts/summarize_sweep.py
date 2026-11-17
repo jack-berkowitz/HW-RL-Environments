@@ -27,6 +27,12 @@ from math import comb
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(REPO, "experiments", "openweights")
 DONE = {"ok", "no_code", "wrong_module", "truncated"}
+# TASKS WHOSE PROMPT CONTRADICTS THEIR HARNESS are left out of the comparison.
+# Both PASTE.md files tell the model to write `id_width_conv_tb` (copied from
+# v_ca03) while task.yaml expects another tb_module, so the model that follows
+# the instruction is scored "wrong module". Answers are still sampled and kept.
+EXCLUDED = {"v_ca06": "prompt names id_width_conv_tb; harness expects dw_downsizer_tb",
+            "v_ca07": "prompt names id_width_conv_tb; harness expects clk_ratio_div_tb"}
 
 
 def truthy(v):
@@ -87,6 +93,8 @@ def load():
     rows = []
     for side_path in sorted(glob.glob(os.path.join(OUT, "*", "*__s[0-9][0-9].json"))):
         side = json.load(open(side_path))
+        if side.get("task_short") in EXCLUDED:
+            continue
         if side.get("status") not in DONE:
             rows.append(dict(side=side, outcome="api error", rec=None))
             continue
@@ -196,7 +204,8 @@ def main():
         cmds = ppa_plan(rows)
         print("\n".join(cmds) if cmds else "# no passing design answers yet")
         return 0
-    text = "# Open-weight sweep\n" + summarize(rows, a.k)
+    text = "# Open-weight sweep\n" + summarize(rows, a.k) + "\n\nExcluded from this comparison: " + \
+        "; ".join(f"{t} ({why})" for t, why in sorted(EXCLUDED.items()))
     print(text)
     open(os.path.join(OUT, "summary.md"), "w").write(text + "\n")
     return 0
