@@ -193,6 +193,12 @@ def one(job, cfg, key, budget, timeout):
           # model. Billed-but-codeless replies stay no_code: those are real.
           if not content.strip() and not float(usage.get("cost") or 0.0):
               status = "empty_response"
+          # A STREAM THAT BROKE MID-ANSWER is the provider failing too: GMICloud
+          # returned finish_reason "error" at 23k and 71k tokens, unbilled, with
+          # half an answer that scored no_code. Retried whatever was extracted --
+          # an answer cut mid-file says nothing about the model.
+          if ch.get("finish_reason") == "error":
+              status = "provider_error"
           cost += float(usage.get("cost") or 0.0)
           rec.update(status=status, finish_reason=ch.get("finish_reason"),
                      provider=resp.get("provider"), response_model=resp.get("model"),
@@ -241,6 +247,9 @@ def done_already(t, tag, n):
         asked = (r.get("params_sent") or {}).get("max_tokens") or 0
         if asked and got < 0.9 * asked:
             return False
+    # Sidecars written before provider_error existed: a broken stream.
+    if r.get("finish_reason") == "error":
+        return False
     # Sidecars written before empty_response existed: an unbilled empty reply.
     if r.get("status") == "no_code" and not (r.get("content") or "").strip() \
             and not float((r.get("usage") or {}).get("cost") or 0.0):
