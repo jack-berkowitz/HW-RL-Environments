@@ -187,6 +187,12 @@ def one(job, cfg, key, budget, timeout):
               got, asked = usage.get("completion_tokens") or 0, params.get("max_tokens") or 0
               if asked and got < 0.9 * asked:
                   status = "provider_cap"
+          # AN EMPTY, UNBILLED REPLY IS THE PROVIDER FAILING, NOT THE MODEL. Five
+          # GLM answers in the first full sweep came back with no text at $0.0000
+          # and were scored no_code -- a routing failure counted against the
+          # model. Billed-but-codeless replies stay no_code: those are real.
+          if not content.strip() and not float(usage.get("cost") or 0.0):
+              status = "empty_response"
           cost += float(usage.get("cost") or 0.0)
           rec.update(status=status, finish_reason=ch.get("finish_reason"),
                      provider=resp.get("provider"), response_model=resp.get("model"),
@@ -235,6 +241,10 @@ def done_already(t, tag, n):
         asked = (r.get("params_sent") or {}).get("max_tokens") or 0
         if asked and got < 0.9 * asked:
             return False
+    # Sidecars written before empty_response existed: an unbilled empty reply.
+    if r.get("status") == "no_code" and not (r.get("content") or "").strip() \
+            and not float((r.get("usage") or {}).get("cost") or 0.0):
+        return False
     return r.get("status") in DONE
 
 
