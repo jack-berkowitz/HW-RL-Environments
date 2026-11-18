@@ -1,0 +1,34 @@
+task=v_ca05_id_queue  golden=tag_tracker  tb=tag_tracker_tb  duts=17  submissions=1
+================================================================================
+---- kimi31pro__s03 ----
+  golden                     PASS
+  gate-mutant                rejected (gate)
+  tt_c1_match_gnt_freerun    PASS
+  tt_c2_pop_data_garbage     PASS
+  tt_c3_push_gnt_throttled   PASS
+  tt_c4_pop_gnt_delayed      PASS
+  dut2                       PASS
+  tt_m1_capacity_off_by_one  killed
+  tt_m2_lifo_within_tag      killed
+  tt_m3_half_capacity        killed
+  tt_m4_tag0_starved         killed
+  tt_m5_match_ignores_high_byte killed
+  tt_m6_empty_wrong_at_one   killed
+  tt_m7_per_tag_cap          killed
+  tt_m8_peek_removes_last    killed
+  tt_m9_zero_mask_no_hit     killed
+  tt_m10_full_asserts_late   killed
+  => ACCEPTED: passes the validity gate and catches all 10/10 faults.
+     This is the ceiling the reference testbench establishes.
+
+================================================================================
+1 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+Kill rate is reported PER MUTANT above, not as a total. Which mutant
+survived is the informative part; a rate averages that away.
+
+A kill from a submission that FAILED the golden carries no information --
+a testbench that rejects everything appears to kill everything (rule 16).
+exit=0

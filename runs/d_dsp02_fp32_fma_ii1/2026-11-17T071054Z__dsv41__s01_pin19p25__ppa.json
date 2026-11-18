@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=fp32_fma_ii1; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=19250; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10; override.CLK_PERIOD_NS=19.25; note.abc_runtime_target_ps=19250;",
+  "build_config_hash": "e5c0a528174ebbbf",
+  "clk_period_ns": "19.25",
+  "correctness_gate": "passed:2026-11-17T044453Z__dsv41__s01__sim.json",
+  "design_area_um2": "164809",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "ppa",
+  "label": "dsv41__s01_pin19p25",
+  "orfs_nickname": "d_dsp02_cand_dsv41__s01_pin19p25",
+  "pdk": "sky130hd",
+  "power_w": "3.18e-01",
+  "status": "completed",
+  "submission": "experiments/openweights/d_dsp02/dsv41__s01.sv",
+  "submission_sha256_16": "c4c2052cd7a20eb4",
+  "synth_area_um2": "96769.059200",
+  "task": "d_dsp02_fp32_fma_ii1",
+  "timestamp_utc": "2026-11-17T07:10:54Z",
+  "wns_ns": "-14.9595"
+}

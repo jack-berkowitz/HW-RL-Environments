@@ -1,0 +1,42 @@
+{
+  "all_passed": false,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "IMPLICITSTATIC,SELRANGE,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "27",
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 1,
+  "coverage": {
+    "": {
+      "_unparsed": "COVERAGE over 207 requests: hit=1 walk=1 superpage=1"
+    }
+  },
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "glm53__s03",
+  "metrics": {
+    "": {
+      "hit_pct": "3",
+      "pte_reads": "402",
+      "requests_per_1000cyc": "341",
+      "tlb_hits": "7",
+      "total_cycles": "606"
+    }
+  },
+  "nonconverged_configs": "0",
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "FAIL"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_ca03/glm53__s03.sv",
+  "submission_sha256_16": "aa7d5e1689a51337",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "5c30f59627bedc60",
+  "timestamp_utc": "2026-11-17T04:42:21Z"
+}

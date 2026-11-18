@@ -1,0 +1,14 @@
+{
+  "build_error": "TOOLFAIL slang rejected this and verilator --lint-only accepts the same bytes; an uncorroborated rejection is not a verdict -- 14 error(s); first: glm53__s02.sv:52:18: error: expected a declaration name",
+  "build_status": "slang_tool_error",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "glm53__s02",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_ca03/glm53__s02.sv",
+  "submission_sha256_16": "bef3706e1037f7c8",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "5c30f59627bedc60",
+  "timestamp_utc": "2026-11-17T04:42:12Z"
+}

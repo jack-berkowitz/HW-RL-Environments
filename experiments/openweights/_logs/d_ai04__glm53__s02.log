@@ -1,0 +1,10 @@
+task=d_ai04_sdp_requant  dut=sdp_requant  sim=verilator  configs=1  candidates=1  extra_flags=2
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+glm53__s02.sv              1/1       
+  compile: warnings=0 over 1 config(s) that built
+  record: runs/d_ai04_sdp_requant/2026-11-17T044033Z__glm53__s02__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

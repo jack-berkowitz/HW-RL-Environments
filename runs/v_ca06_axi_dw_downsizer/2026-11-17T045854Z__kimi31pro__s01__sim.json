@@ -1,0 +1,12 @@
+{
+  "build_error": "does not declare module dw_downsizer_tb",
+  "build_status": "wrong_module_name",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "kimi31pro__s01",
+  "submission": "experiments/openweights/v_ca06/kimi31pro__s01.sv",
+  "submission_sha256_16": "ae568ae3bc47ab6c",
+  "task": "v_ca06_axi_dw_downsizer",
+  "task_text_hash": "2f63b738ee5baf99",
+  "timestamp_utc": "2026-11-17T04:58:54Z"
+}

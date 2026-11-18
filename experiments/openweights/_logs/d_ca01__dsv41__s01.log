@@ -1,0 +1,10 @@
+task=d_ca01_nonblocking_dcache  dut=nonblocking_dcache  sim=verilator  configs=16  candidates=1  extra_flags=15
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+dsv41__s01.sv              16/16     
+  compile: warnings=296 over 16 config(s) that built classes=CASEINCOMPLETE,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_ca01_nonblocking_dcache/2026-11-17T044155Z__dsv41__s01__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

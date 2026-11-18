@@ -1,0 +1,10 @@
+task=d_ca05_miss_handler_arb  dut=miss_handler_arb  sim=verilator  configs=1  candidates=1  extra_flags=14
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+glm53__s01.sv              0/1        -> FAIL: T2 all four: p0 grants: got 60, the anchor gives 20
+  compile: warnings=51 over 1 config(s) that built classes=MULTIDRIVEN,TIMESCALEMOD,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_ca05_miss_handler_arb/2026-11-17T044422Z__glm53__s01__sim.json
+--------------------------------------------------------------------------------
+0/1 candidates passed every config
+exit=1

@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=sv39_mmu; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=12500; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=25.0; override.CLK_PERIOD_NS=12.5; note.abc_runtime_target_ps=12500;",
+  "build_config_hash": "3a99ba1a6d0347da",
+  "clk_period_ns": "12.5",
+  "correctness_gate": "passed:2026-11-17T044220Z__glm53__s01__sim.json",
+  "design_area_um2": "307389",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "ppa",
+  "label": "glm53__s01_pin12p5",
+  "orfs_nickname": "d_ca03_cand_glm53__s01_pin12p5",
+  "pdk": "sky130hd",
+  "power_w": "4.62e-02",
+  "status": "completed",
+  "submission": "experiments/openweights/d_ca03/glm53__s01.sv",
+  "submission_sha256_16": "19299fdaf435ea9f",
+  "synth_area_um2": "224899.446400",
+  "task": "d_ca03_sv39_mmu",
+  "timestamp_utc": "2026-11-17T18:26:23Z",
+  "wns_ns": "0.0990417"
+}

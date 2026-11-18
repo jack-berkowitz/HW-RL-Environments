@@ -1,0 +1,24 @@
+task=v_ca06_axi_dw_downsizer  golden=dw_downsizer  tb=dw_downsizer_tb  duts=20  submissions=1
+================================================================================
+---- glm53__s02 ----
+  DID NOT COMPILE (same on every DUT -- the submission does not build):
+      %Error-PROCASSWIRE: <submission>:164:43: Procedural assignment to wire, perhaps intended var (IEEE 1800-2023 6.5): 's_arvalid'
+      %Error-PROCASSWIRE: <submission>:170:20: Procedural assignment to wire, perhaps intended var (IEEE 1800-2023 6.5): 's_arvalid'
+      %Error-PROCASSWIRE: <submission>:671:21: Procedural assignment to wire, perhaps intended var (IEEE 1800-2023 6.5): 's_arvalid'
+      %Error: Exiting due to 3 error(s)
+  => DID NOT COMPILE. This is NOT a verdict about the testbench's
+     checking: nothing ran, so nothing was measured. Line numbers above
+     refer to the submission.
+     Common causes seen here: a SystemVerilog RESERVED WORD used as an
+     identifier (context, do, ref, expect, this, final, table), and
+     transport corruption from the paste (see the note below).
+
+================================================================================
+0 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+MUTANT KILL RATE NOT MEASURED -- v_ca06_axi_dw_downsizer has no mutant set.
+This score says the testbench does not reject correct hardware and relies
+on nothing unpromised, and NOTHING about whether it finds bugs.
+exit=0

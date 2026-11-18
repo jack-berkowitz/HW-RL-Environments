@@ -1,0 +1,10 @@
+task=d_nw03_axis_switch_oq  dut=axis_switch_oq  sim=verilator  configs=8  candidates=1  extra_flags=4
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+glm53__s03.sv              8/8       
+  compile: warnings=136 over 8 config(s) that built classes=LATCH,MULTIDRIVEN,WIDTHEXPAND
+  record: runs/d_nw03_axis_switch_oq/2026-11-17T045027Z__glm53__s03__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

@@ -1,0 +1,14 @@
+{
+  "build_error": "3 error(s); first: glm53__s01.sv:209:34: error: reference to non-constant variable 'tt' is not allowed in a constant expression ",
+  "build_status": "slang_rejected",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "glm53__s01",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_dsp03/glm53__s01.sv",
+  "submission_sha256_16": "01a27878ac7f8561",
+  "task": "d_dsp03_multifmt_fma",
+  "task_text_hash": "ec21554692b610a5",
+  "timestamp_utc": "2026-11-17T04:45:05Z"
+}

@@ -1,0 +1,19 @@
+task=d_ca03_sv39_mmu  dut=sv39_mmu  sim=verilator  configs=1  candidates=1  extra_flags=18
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+glm53__s02.sv              TOOLFAIL  TOOLFAIL slang rejected this and verilator --lint-only accepts the same 
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+1 candidate(s) FAILED THE SYNTHESIS FRONTEND (slang) and were not simulated.
+USUALLY this is a result about the submission -- the design does not build, so
+it has no correctness, capability or PPA numbers.
+BUT CHECK FIRST: a damaged paste produces the identical symptom, and
+attributing that to the model is wrong. d_dsp02/gemini.sv failed here for
+exactly that reason -- one injected fragment, 'sum_is_zero = 1 me;'.
+    python3 scripts/check_transport.py <candidate file>
+Verilator and slang disagree about what is legal; ORFS synthesis uses slang, so a
+design rejected here could never have produced a PPA number. Re-run with
+--no-slang to simulate anyway and see how far it gets.
+0/0 candidates passed every config
+exit=1

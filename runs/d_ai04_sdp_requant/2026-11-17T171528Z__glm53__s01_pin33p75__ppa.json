@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=sdp_requant; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=33750; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=40.0; override.CLK_PERIOD_NS=33.75; note.abc_runtime_target_ps=33750;",
+  "build_config_hash": "83088234b2c846ea",
+  "clk_period_ns": "33.75",
+  "correctness_gate": "passed:2026-11-17T044032Z__glm53__s01__sim.json",
+  "design_area_um2": "142304",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "ppa",
+  "label": "glm53__s01_pin33p75",
+  "orfs_nickname": "d_ai04_cand_glm53__s01_pin33p75",
+  "pdk": "sky130hd",
+  "power_w": "4.68e-01",
+  "status": "completed",
+  "submission": "experiments/openweights/d_ai04/glm53__s01.sv",
+  "submission_sha256_16": "8f8e128a7fd6a103",
+  "synth_area_um2": "118492.393600",
+  "task": "d_ai04_sdp_requant",
+  "timestamp_utc": "2026-11-17T17:15:28Z",
+  "wns_ns": "3.9087"
+}

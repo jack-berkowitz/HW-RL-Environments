@@ -1,0 +1,14 @@
+{
+  "build_error": "TOOLFAIL slang rejected this and verilator --lint-only accepts the same bytes; an uncorroborated rejection is not a verdict -- 1 error(s); first: glm53__s03.sv:62:30: error: identifier 'rgray' used before its declaration",
+  "build_status": "slang_tool_error",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "glm53__s03",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_ca04/glm53__s03.sv",
+  "submission_sha256_16": "1373ea50a9b86220",
+  "task": "d_ca04_async_fifo_cdc",
+  "task_text_hash": "758f205c499c7fd1",
+  "timestamp_utc": "2026-11-17T04:43:26Z"
+}

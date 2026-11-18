@@ -1,0 +1,14 @@
+{
+  "build_error": "9 error(s); first: dsv41__s02.sv:234:39: error: reference to non-constant variable 'E' is not allowed in a constant expression ",
+  "build_status": "slang_rejected",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "dsv41__s02",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_dsp03/dsv41__s02.sv",
+  "submission_sha256_16": "b5ab0e732c8d53c3",
+  "task": "d_dsp03_multifmt_fma",
+  "task_text_hash": "ec21554692b610a5",
+  "timestamp_utc": "2026-11-17T04:45:04Z"
+}

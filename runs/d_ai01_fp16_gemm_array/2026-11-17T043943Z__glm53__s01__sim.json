@@ -1,0 +1,14 @@
+{
+  "build_error": "15 error(s); first: glm53__s01.sv:278:22: error: expected statement ",
+  "build_status": "slang_rejected",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "glm53__s01",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_ai01/glm53__s01.sv",
+  "submission_sha256_16": "0b2535e88fd6eda9",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "b62c72cf684c1eff",
+  "timestamp_utc": "2026-11-17T04:39:43Z"
+}

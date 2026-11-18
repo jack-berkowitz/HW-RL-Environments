@@ -1,0 +1,12 @@
+{
+  "build_error": "does not declare module clk_ratio_div_tb",
+  "build_status": "wrong_module_name",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "kimi31pro__s03",
+  "submission": "experiments/openweights/v_ca07/kimi31pro__s03.sv",
+  "submission_sha256_16": "befa980f479e60db",
+  "task": "v_ca07_clk_int_div",
+  "task_text_hash": "0d5cc8575568fdb1",
+  "timestamp_utc": "2026-11-17T05:00:56Z"
+}

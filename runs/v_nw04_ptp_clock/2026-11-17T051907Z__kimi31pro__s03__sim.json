@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/1",
+  "did_not_compile": "0",
+  "discriminates": "false",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "golden_accepted": "FAIL",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "kimi31pro__s03",
+  "second_dut_accepted": "FAIL",
+  "status": "rejected",
+  "submission": "experiments/openweights/v_nw04/kimi31pro__s03.sv",
+  "submission_sha256_16": "740ff0db2e7804b1",
+  "task": "v_nw04_ptp_clock",
+  "task_text_hash": "b963a88053bae3da",
+  "timestamp_utc": "2026-11-17T05:19:07Z"
+}

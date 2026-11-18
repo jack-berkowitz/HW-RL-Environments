@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/0",
+  "did_not_compile": "1",
+  "discriminates": "false",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "0",
+  "gate_mutant_verdict": "not-run",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "golden_accepted": "unknown",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "glm53__s01",
+  "second_dut_accepted": "not-run",
+  "status": "rejected",
+  "submission": "experiments/openweights/v_nw04/glm53__s01.sv",
+  "submission_sha256_16": "f18b46d784a430bd",
+  "task": "v_nw04_ptp_clock",
+  "task_text_hash": "b963a88053bae3da",
+  "timestamp_utc": "2026-11-17T05:16:57Z"
+}

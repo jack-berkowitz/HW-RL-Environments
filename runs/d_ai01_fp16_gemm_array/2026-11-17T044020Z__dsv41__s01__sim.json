@@ -1,0 +1,54 @@
+{
+  "all_passed": false,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "2",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "ASCRANGE,LATCH,WIDTHEXPAND,WIDTHTRUNC",
+  "compile_warnings": "108",
+  "configs_no_verdict": 0,
+  "configs_passed": 0,
+  "configs_total": 2,
+  "coverage": {
+    "+HH_4": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    },
+    "+HH_8": {
+      "_unparsed": "COVERAGE (tallied over 3400 cycles)"
+    }
+  },
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "dsv41__s01",
+  "metrics": {
+    "+HH_4": {
+      "H": "4",
+      "expected": "16",
+      "latency_ticks": "15",
+      "v2_array_nonzero_before_reset": "1"
+    },
+    "+HH_8": {
+      "H": "8",
+      "expected": "32",
+      "latency_ticks": "31",
+      "v2_array_nonzero_before_reset": "1"
+    }
+  },
+  "nonconverged_configs": "0",
+  "per_config": [
+    {
+      "config": "+HH_4",
+      "verdict": "FAIL"
+    },
+    {
+      "config": "+HH_8",
+      "verdict": "FAIL"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_ai01/dsv41__s01.sv",
+  "submission_sha256_16": "4e8e7d7887cc08a4",
+  "task": "d_ai01_fp16_gemm_array",
+  "task_text_hash": "b62c72cf684c1eff",
+  "timestamp_utc": "2026-11-17T04:40:20Z"
+}

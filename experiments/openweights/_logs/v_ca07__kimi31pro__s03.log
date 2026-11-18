@@ -1,0 +1,14 @@
+task=v_ca07_clk_int_div  golden=clk_ratio_div  tb=clk_ratio_div_tb  duts=18  submissions=1
+================================================================================
+---- kimi31pro__s03 ----
+  REJECTED: does not declare module clk_ratio_div_tb
+
+================================================================================
+0 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+MUTANT KILL RATE NOT MEASURED -- v_ca07_clk_int_div has no mutant set.
+This score says the testbench does not reject correct hardware and relies
+on nothing unpromised, and NOTHING about whether it finds bugs.
+exit=0

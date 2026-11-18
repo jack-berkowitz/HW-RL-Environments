@@ -1,0 +1,10 @@
+task=d_ca01_nonblocking_dcache  dut=nonblocking_dcache  sim=verilator  configs=16  candidates=1  extra_flags=15
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+dsv41__s02.sv              8/16      DATA_W=32 SETS=8 WAYS=2 MAX_MISSES=8 -> FAIL: phase 7: R3/R5: a LOAD returned the wrong value for its id
+  compile: warnings=144 over 16 config(s) that built classes=WIDTHEXPAND
+  record: runs/d_ca01_nonblocking_dcache/2026-11-17T044155Z__dsv41__s02__sim.json
+--------------------------------------------------------------------------------
+0/1 candidates passed every config
+exit=1

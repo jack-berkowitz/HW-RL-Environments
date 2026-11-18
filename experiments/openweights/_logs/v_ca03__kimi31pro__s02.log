@@ -1,0 +1,46 @@
+task=v_ca03_axi_iw_converter  golden=id_width_conv  tb=id_width_conv_tb  duts=19  submissions=1
+================================================================================
+---- kimi31pro__s02 ----
+  golden                     FAIL
+  gate-mutant                rejected (gate)
+  iw_c1_permuted_allocation  FAIL
+  iw_c2_extra_latency        FAIL
+  iw_c3_ready_withheld       FAIL
+  iw_c4_garbage_when_invalid FAIL
+  iw_c5_channel_arbitration  FAIL
+  dut2                       FAIL
+  iw_m1_blocks_one_early_on_long_bursts killed
+  iw_m2_depth_one_short_when_two_ids killed
+  iw_m3_entry_freed_late_after_busy_retire killed
+  iw_m4_blocks_known_id_when_full_has_aged killed
+  iw_m5_reads_and_writes_share_when_deep killed
+  iw_m6_rid_wrong_deep_in_burst killed
+  iw_m7_rdata_corrupt_every_thirty_second killed
+  iw_m8_bresp_wrong_when_full killed
+  iw_m9_rlast_early_on_long_bursts killed
+  iw_m10_extra_b_after_sixteen killed
+  iw_m11_decerr_normalised_to_slverr_from_second killed
+  -- fault-detection result SUPPRESSED: this testbench REJECTS CORRECT
+     HARDWARE (golden, second DUT, or a legal variant), so it rejects
+     correct and faulty designs alike and its 11/11 tells you
+     nothing (rule 16). Hangs likewise: a hang is not detection, and
+     0 of these hung.
+  => INVALID: this submission does not DISCRIMINATE.
+     It must PASS the golden DUT and FAIL a DUT with every output tied
+     to '1. It did not, so it is not measuring the design under test.
+     golden=FAIL  gate-mutant=FAIL
+     Rejecting both means it rejects anything, which is the same
+     non-measurement pointing the other way.
+     EXCLUDED FROM SCORING. Its fault-detection numbers are not a score.
+
+================================================================================
+0 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+Kill rate is reported PER MUTANT above, not as a total. Which mutant
+survived is the informative part; a rate averages that away.
+
+A kill from a submission that FAILED the golden carries no information --
+a testbench that rejects everything appears to kill everything (rule 16).
+exit=0

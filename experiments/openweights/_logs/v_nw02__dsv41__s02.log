@@ -1,0 +1,43 @@
+task=v_nw02_axi_atop_filter  golden=atop_filter  tb=atop_filter_tb  duts=16  submissions=1
+================================================================================
+---- dsv41__s02 ----
+  golden                     FAIL
+  gate-mutant                rejected (gate)
+  af_c1_b_before_r           FAIL
+  dut2                       FAIL
+  af_m1_admits_fifth_once_full_has_aged killed
+  af_m2_debt_frees_on_b_when_deep killed
+  af_m3_rresp_class_on_bit4_multibeat killed
+  af_m4_rbeats_short_on_long_bursts killed
+  af_m5_rlast_early_from_second_atomic killed
+  af_m6_rresp_okay_on_final_beat killed
+  af_m7_last_absorbed_w_leaks killed
+  af_m8_stale_id_when_atomics_close killed
+  af_m9_b_okay_on_first_atomic killed
+  af_m10_extra_rbeat_on_two_beat_burst killed
+  af_m11_stalls_aw_below_bound killed
+  af_m12_stalls_aw_with_no_debt killed
+  -- fault-detection result SUPPRESSED: this testbench REJECTS CORRECT
+     HARDWARE (golden, second DUT, or a legal variant), so it rejects
+     correct and faulty designs alike and its 12/12 tells you
+     nothing (rule 16). Hangs likewise: a hang is not detection, and
+     0 of these hung.
+  => INVALID: this submission does not DISCRIMINATE.
+     It must PASS the golden DUT and FAIL a DUT with every output tied
+     to '1. It did not, so it is not measuring the design under test.
+     golden=FAIL  gate-mutant=FAIL
+     Rejecting both means it rejects anything, which is the same
+     non-measurement pointing the other way.
+     EXCLUDED FROM SCORING. Its fault-detection numbers are not a score.
+
+================================================================================
+0 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+Kill rate is reported PER MUTANT above, not as a total. Which mutant
+survived is the informative part; a rate averages that away.
+
+A kill from a submission that FAILED the golden carries no information --
+a testbench that rejects everything appears to kill everything (rule 16).
+exit=0

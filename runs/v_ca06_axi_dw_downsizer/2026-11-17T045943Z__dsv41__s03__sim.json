@@ -1,0 +1,21 @@
+{
+  "all_passed": "false",
+  "conformant_accepted": "0/5",
+  "did_not_compile": "0",
+  "discriminates": "false",
+  "faults_caught": "SUPPRESSED-gate-failed",
+  "faults_hung": "12",
+  "gate_mutant_verdict": "FAIL",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "golden_accepted": "CRASH",
+  "kind": "sim",
+  "kind_note": "verification: per-mutant results are in the log; a rate is not reported",
+  "label": "dsv41__s03",
+  "second_dut_accepted": "FAIL",
+  "status": "rejected",
+  "submission": "experiments/openweights/v_ca06/dsv41__s03.sv",
+  "submission_sha256_16": "da0bc59a260262f2",
+  "task": "v_ca06_axi_dw_downsizer",
+  "task_text_hash": "2f63b738ee5baf99",
+  "timestamp_utc": "2026-11-17T04:59:43Z"
+}

@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=axis_switch_oq; CORE_UTILIZATION=10; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=4250; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; sdc.clk_period=10.0; override.CLK_PERIOD_NS=4.25; note.abc_runtime_target_ps=4250;",
+  "build_config_hash": "c4159e8f0a80fcbd",
+  "clk_period_ns": "4.25",
+  "correctness_gate": "passed:2026-11-17T045036Z__kimi31pro__s01__sim.json",
+  "design_area_um2": "144987",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "ppa",
+  "label": "kimi31pro__s01_pin4p25",
+  "orfs_nickname": "d_nw03_cand_kimi31pro__s01_pin4p25",
+  "pdk": "sky130hd",
+  "power_w": "6.70e-02",
+  "status": "completed",
+  "submission": "experiments/openweights/d_nw03/kimi31pro__s01.sv",
+  "submission_sha256_16": "5ecd4fea90fdecd6",
+  "synth_area_um2": "106955.078400",
+  "task": "d_nw03_axis_switch_oq",
+  "timestamp_utc": "2026-11-18T00:57:17Z",
+  "wns_ns": "-0.701724"
+}

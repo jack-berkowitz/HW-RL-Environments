@@ -1,0 +1,19 @@
+task=d_dsp03_multifmt_fma  dut=fp_multifmt_fma  sim=verilator  configs=2  candidates=1  extra_flags=14
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+dsv41__s02.sv              SLANG     9 error(s); first: dsv41__s02.sv:234:39: error: reference to non-constan
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+1 candidate(s) FAILED THE SYNTHESIS FRONTEND (slang) and were not simulated.
+USUALLY this is a result about the submission -- the design does not build, so
+it has no correctness, capability or PPA numbers.
+BUT CHECK FIRST: a damaged paste produces the identical symptom, and
+attributing that to the model is wrong. d_dsp02/gemini.sv failed here for
+exactly that reason -- one injected fragment, 'sum_is_zero = 1 me;'.
+    python3 scripts/check_transport.py <candidate file>
+Verilator and slang disagree about what is legal; ORFS synthesis uses slang, so a
+design rejected here could never have produced a PPA number. Re-run with
+--no-slang to simulate anyway and see how far it gets.
+0/0 candidates passed every config
+exit=1

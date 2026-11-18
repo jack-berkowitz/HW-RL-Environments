@@ -1,0 +1,10 @@
+task=d_dsp03_multifmt_fma  dut=fp_multifmt_fma  sim=verilator  configs=2  candidates=1  extra_flags=14
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+kimi31pro__s03.sv          2/2       
+  compile: warnings=46 over 2 config(s) that built classes=ASCRANGE,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_dsp03_multifmt_fma/2026-11-17T044538Z__kimi31pro__s03__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

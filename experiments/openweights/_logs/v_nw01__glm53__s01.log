@@ -1,0 +1,40 @@
+task=v_nw01_arp_engine  golden=arp_engine  tb=arp_engine_tb  duts=14  submissions=1
+================================================================================
+---- glm53__s01 ----
+  golden                     PASS
+  gate-mutant                rejected (gate)
+  ae_c1_assoc_cache_rr       FAIL
+  dut2                       FAIL
+  ae_m1_three_requests_from_second_lookup SURVIVED  <- defect not caught
+  ae_m2_last_request_wrong_target SURVIVED  <- defect not caught
+  ae_m3_cached_mac_wrong_when_full killed
+  ae_m4_insert_dropped_when_full killed
+  ae_m5_requests_not_learned_after_two killed
+  ae_m6_reply_target_wrong_while_busy SURVIVED  <- defect not caught
+  ae_m7_answers_foreign_target_while_busy SURVIVED  <- defect not caught
+  ae_m8_ethtype_low_nibble_ignored killed
+  ae_m9_clear_ignored_when_full killed
+  ae_m10_five_requests_on_third_lookup killed
+  -- fault-detection result SUPPRESSED: this testbench REJECTS CORRECT
+     HARDWARE (golden, second DUT, or a legal variant), so it rejects
+     correct and faulty designs alike and its 6/10 tells you
+     nothing (rule 16). Hangs likewise: a hang is not detection, and
+     0 of these hung.
+  => REJECTED: failed the VALIDITY GATE.
+     - rejects 1 of 1 conformant perturbation(s): ae_c1_assoc_cache_rr
+       These differ from the golden only where the spec is silent, so
+       rejecting one means relying on unpromised behaviour.
+     - rejects the SECOND DUT: an independent correct implementation.
+       The testbench is fitted to the golden rather than the contract.
+
+================================================================================
+0 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+Kill rate is reported PER MUTANT above, not as a total. Which mutant
+survived is the informative part; a rate averages that away.
+
+A kill from a submission that FAILED the golden carries no information --
+a testbench that rejects everything appears to kill everything (rule 16).
+exit=0

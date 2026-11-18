@@ -1,0 +1,70 @@
+{
+ "task": "d_ca04_async_fifo_cdc",
+ "task_short": "d_ca04",
+ "kind": "design",
+ "model_tag": "glm53",
+ "model_slug": "z-ai/glm-5.3",
+ "model_label": "GLM 5.3",
+ "sample": 2,
+ "expected_module": "async_fifo_cdc",
+ "prompt_sha256": "5d792731673c38cf32a369a0c37fef892c7f16de8caa75de385ec99725e93d86",
+ "task_text_hash": "758f205c499c7fd1",
+ "params_sent": {
+  "model": "z-ai/glm-5.3",
+  "usage": {
+   "include": true
+  },
+  "temperature": 0.6,
+  "top_p": 0.95,
+  "max_tokens": 160000,
+  "reasoning": {
+   "max_tokens": 128000
+  },
+  "provider": {
+   "require_parameters": true,
+   "quantizations": [
+    "bf16",
+    "fp8"
+   ],
+   "only": [
+    "GMICloud",
+    "Sail Research",
+    "Morph"
+   ]
+  }
+ },
+ "started_utc": "2026-11-16T19:33:08Z",
+ "finished_utc": "2026-11-16T19:33:32Z",
+ "status": "ok",
+ "finish_reason": "stop",
+ "provider": "GMICloud",
+ "response_model": "z-ai/glm-5.3",
+ "response_id": "gen-1794857588-tcoB92e6k4rMebfbIrWL",
+ "usage": {
+  "prompt_tokens": 5269,
+  "completion_tokens": 2180,
+  "total_tokens": 7449,
+  "cost": 0.0084843,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0.0084843,
+   "upstream_inference_prompt_cost": 0.0036883,
+   "upstream_inference_completions_cost": 0.004796
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 845,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "content": "```systemverilog\nmodule async_fifo_cdc #(\n    parameter int DATA_W      = 32,\n    parameter int LOG_DEPTH   = 3,\n    parameter int SYNC_STAGES = 2\n) (\n    input  logic              wr_clk,\n    input  logic              wr_rst_n,\n    input  logic              wr_valid,\n    output logic              wr_ready,\n    input  logic [DATA_W-1:0] wr_data,\n\n    input  logic              rd_clk,\n    input  logic              rd_rst_n,\n    output logic              rd_valid,\n    input  logic              rd_ready,\n    output logic [DATA_W-1:0] rd_data\n);\n\n    localparam int PTR_W = LOG_DEPTH + 1;\n\n    // ---------------- write domain ----------------\n    logic [PTR_W-1:0] wbin_q, wbin_next;\n    logic [PTR_W-1:0] wgray_q, wgray_next;\n    logic             full_q;\n\n    // read-pointer gray value resynchronised into write domain\n    logic [PTR_W-1:0] rgray_wsync [SYNC_STAGES];\n\n    // ---------------- read domain ----------------\n    logic [PTR_W-1:0] rbin_q, rbin_next;\n    logic [PTR_W-1:0] rgray_q, rgray_next;\n    logic             empty_q;\n\n    // write-pointer gray value resynchronised into read domain\n    logic [PTR_W-1:0] wgray_rsync [SYNC_STAGES];\n\n    // ---------------- storage ----------------\n    logic [DATA_W-1:0] mem [0:(1<<LOG_DEPTH)-1];\n\n    // gray encode helper\n    function automatic logic [PTR_W-1:0] bin2gray(\n        input logic [PTR_W-1:0] b\n    );\n        bin2gray = b ^ (b >> 1);\n    endfunction\n\n    // ================= write domain logic =================\n    always_comb begin\n        wbin_next  = wbin_q + PTR_W'(wr_valid && !full_q);\n        wgray_next = bin2gray(wbin_next);\n    end\n\n    always_ff @(posedge wr_clk or negedge wr_rst_n) begin\n        if (!wr_rst_n) begin\n            wbin_q  <= '0;\n            wgray_q <= '0;\n            full_q  <= 1'b0;\n            for (int i = 0; i < SYNC_STAGES; i++)\n                rgray_wsync[i] <= '0;\n        end else begin\n            wbin_q  <= wbin_next;\n            wgray_q <= wgray_next;\n            full_q  <= (wgray_next[PTR_W-1:PTR_W-2] ==\n                        ~rgray_wsync[SYNC_STAGES-1][PTR_W-1:PTR_W-2]) &&\n                       (wgray_next[PTR_W-3:0] ==\n                        rgray_wsync[SYNC_STAGES-1][PTR_W-3:0]);\n            rgray_wsync[0] <= rgray_q;\n            for (int i = 1; i < SYNC_STAGES; i++)\n                rgray_wsync[i] <= rgray_wsync[i-1];\n            if (wr_valid && !full_q)\n                mem[wbin_q[LOG_DEPTH-1:0]] <= wr_data;\n        end\n    end\n\n    assign wr_ready = ~full_q;   // registered, no comb dependence on wr_valid\n\n    // ================= read domain logic =================\n    always_comb begin\n        rbin_next  = rbin_q + PTR_W'(rd_ready && !empty_q);\n        rgray_next = bin2gray(rbin_next);\n    end\n\n    always_ff @(posedge rd_clk or negedge rd_rst_n) begin\n        if (!rd_rst_n) begin\n            rbin_q  <= '0;\n            rgray_q <= '0;\n            empty_q <= 1'b1;\n            for (int i = 0; i < SYNC_STAGES; i++)\n                wgray_rsync[i] <= '0;\n        end else begin\n            rbin_q  <= rbin_next;\n            rgray_q <= rgray_next;\n            empty_q <= (rgray_next == wgray_rsync[SYNC_STAGES-1]);\n            wgray_rsync[0] <= wgray_q;\n            for (int i = 1; i < SYNC_STAGES; i++)\n                wgray_rsync[i] <= wgray_rsync[i-1];\n        end\n    end\n\n    assign rd_valid = ~empty_q;\n    assign rd_data  = mem[rbin_q[LOG_DEPTH-1:0]];\n\nendmodule\n```\n\nDesign notes:\n\n- **Gray-coded pointers** (`LOG_DEPTH+1` bits) cross in both directions; only one bit changes per increment, so a mid-change sample can never produce an architecturally impossible pointer value.\n- **`SYNC_STAGES`-deep synchroniser chains** in each receiving domain, indexed by a loop so the required depth is honoured exactly (a beat cannot appear before the write pointer has propagated through all `SYNC_STAGES` `rd_clk` flops).\n- **Full/empty are registered flags** (`full_q`, `empty_q`), so `wr_ready` has no combinational path from `wr_valid` (H1) and `rd_valid`/`rd_data` remain stable while stalled (H3), since `rbin_q` only advances on an accepted beat.\n- **Capacity is exactly `2**LOG_DEPTH`**: the full comparison (top two Gray bits inverted, lower bits equal) trips precisely when the write pointer is `depth` ahead of the synchronised read pointer, and no skid/output registers are added \u2014 total storage beyond the array is zero.\n- **Reset**: both domains clear pointers, flags, and synchronisers; `empty_q` resets to 1 so `rd_valid` stays low while `rd_rst_n` is low (R5), and `full_q` resets to 0 so `wr_ready` asserts immediately on release (R4). Staggered release is safe: whichever side exits first sees an all-zero synchronised pointer, i.e. an empty, consistent FIFO.\n- All declarations precede all statements in every procedural block (T2), and the file is a single self-contained module (T4).",
+ "reasoning": "Classic async FIFO with Gray-coded pointers, SYNC_STAGES parameterized synchronizer chain. Write it carefully.\n\nKey points: wr_ready within 16 cycles of reset release \u2014 fine. rd_valid low during reset. No combinational dependency of ready on valid.\n\nUse standard Cummings design. Pointers LOG_DEPTH+1 bits.\n\nWrite side: bin pointer, gray pointer, registered full flag. wr_ready = ~full (registered). Accept when wr_valid && !full.\n\nRead side: rd_valid = registered (rd_ptr != sync'd wr gray). Compute empty = (rd_gray == wr_gray_sync). rd_valid registered: rd_valid <= ~empty_next. Need rd_data stable while rd_valid && !rd_ready \u2014 data from mem indexed by rd_bin, which doesn't advance until accepted, so stable. rd_valid must remain high: since rd pointer doesn't advance when not accepted, and wr pointer sync only adds, empty stays false \u2014 fine.\n\nrd_data directly from mem[rd_bin[LOG_DEPTH-1:0]] \u2014 combinational read from flop array; stable. Fine.\n\nSynchronizer: arrays of SYNC_STAGES flops. Verilator/slang: use unpacked arrays or generate. Use logic [PTR_W-1:0] sync_ff [SYNC_STAGES]. Fine.\n\nWrite:\n\n```\nlocalparam PTR_W = LOG_DEPTH+1;\nlogic [PTR_W-1:0] wbin, wgray, wnext_bin, wnext_gray;\nlogic full_q;\nlogic [PTR_W-1:0] rgray_sync [SYNC_STAGES];\n...\n```\n\nfull logic: full when wnext_gray == rgray_sync[SYNC_STAGES-1] with top bits equal, next bit... standard: full = (wnext_gray == {~rgray_sync[MSB:MSB-1], rgray_sync[MSB-2:0]}). Compute wnext_bin = wbin + (wr_valid && !full_q); wnext_gray = bin2gray(wnext_bin); full_q <= (wnext_gray == inv_gray).\n\nRead: rbin, rgray; wgray_sync chain; empty_q <= (rnext_gray == wgray_sync[last]); rnext_bin = rbin + (rd_valid && rd_ready).\n\nbin2gray: g = b ^ (b>>1). Function or inline. Use function \u2014 fine in both tools.\n\nrd_valid = ~empty_q. rd_data = mem[rbin[LOG_DEPTH-1:0]].\n\nwr_ready = ~full_q.\n\nReset: pointers to 0, full_q to 0, sync flops to 0, empty_q to 1.\n\nStaggered reset: read side out of reset while write still in reset \u2014 sync chain holds zeros, empty stays. Write side out first: wr_ready high, accepts beats; read side still in reset won't read \u2014 data waits. Fine.\n\nCapacity check: at rest, reader stopped, writer fills until refuses for 64 cycles. Depth = 2**LOG_DEPTH. Full flag: full_q set when pointers differ by depth. Gray full detection standard: full when wnext_gray == {~rsync[MSB], r... } wait: full condition compares top two bits inverted: full = (wnext_gray[PTR_W-1:PTR_W-2] == ~rsync[PTR_W-1:PTR_W-2]) && (wnext_gray[PTR_W-3:0] == rsync[PTR_W-3:0]). Equivalent to comparing wnext_gray with rsync inverted in top two bits. I'll do that explicitly.\n\nAccepts exactly depth beats then full \u2014 good. Extra storage: none beyond FIFO. Good.\n\nLatency min: beat visible after write pointer crosses SYNC_STAGES rd_clk flops \u2014 yes, sync chain of SYNC_STAGES. Minimum observed latency \u2265 SYNC_STAGES rd cycles: write happens, wgray updates on wr_clk, then SYNC_STAGES rd_clk to sync, then empty_q updates next rd edge, rd_valid after SYNC_STAGES+1... at least SYNC_STAGES. Good.\n\nWrite code.",
+ "sv": "experiments/openweights/d_ca04/glm53__s02.sv",
+ "sv_sha256_16": "9ebc46548f3d6147"
+}

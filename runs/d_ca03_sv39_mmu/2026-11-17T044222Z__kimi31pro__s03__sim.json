@@ -1,0 +1,14 @@
+{
+  "build_error": "20 error(s); first: kimi31pro__s03.sv:55:18: error: expected a declaration name ",
+  "build_status": "slang_rejected",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "kimi31pro__s03",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_ca03/kimi31pro__s03.sv",
+  "submission_sha256_16": "bc73112b8034df6a",
+  "task": "d_ca03_sv39_mmu",
+  "task_text_hash": "5c30f59627bedc60",
+  "timestamp_utc": "2026-11-17T04:42:22Z"
+}

@@ -1,0 +1,10 @@
+task=d_nw03_axis_switch_oq  dut=axis_switch_oq  sim=verilator  configs=8  candidates=1  extra_flags=4
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+kimi31pro__s01.sv          8/8       
+  compile: warnings=20 over 8 config(s) that built classes=WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_nw03_axis_switch_oq/2026-11-17T045036Z__kimi31pro__s01__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

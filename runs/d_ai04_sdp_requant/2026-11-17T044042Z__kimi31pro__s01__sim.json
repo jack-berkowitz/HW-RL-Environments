@@ -1,0 +1,36 @@
+{
+  "all_passed": true,
+  "comb_loop_configs": "0",
+  "compile_configs_built": "1",
+  "compile_configs_failed": "0",
+  "compile_warning_classes": "",
+  "compile_warnings": "0",
+  "configs_no_verdict": 0,
+  "configs_passed": 1,
+  "configs_total": 1,
+  "coverage": {},
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "kimi31pro__s01",
+  "metrics": {
+    "": {
+      "buffer_slots": "2",
+      "init_interval": "1",
+      "latency_cycles": "1"
+    }
+  },
+  "nonconverged_configs": "0",
+  "per_config": [
+    {
+      "config": "",
+      "verdict": "PASS"
+    }
+  ],
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_ai04/kimi31pro__s01.sv",
+  "submission_sha256_16": "9e31c24147af3104",
+  "task": "d_ai04_sdp_requant",
+  "task_text_hash": "203bc8a580aa44d4",
+  "timestamp_utc": "2026-11-17T04:40:42Z"
+}

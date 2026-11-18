@@ -1,0 +1,20 @@
+{
+  "build_config_fields": " PLATFORM=sky130hd; DESIGN_NAME=miss_handler_arb; CORE_UTILIZATION=7; PLACE_DENSITY=0.50; TNS_END_PERCENT=100; SYNTH_HDL_FRONTEND=slang; SYNTH_MEMORY_MAX_BITS=65536; ABC_CLOCK_PERIOD_IN_PS=8750; ASPECT_RATIO=<unset>; CORE_MARGIN=<unset>; IO_PLACER_H=met3; IO_PLACER_V=met2 met4; sdc.clk_period=45.0; override.CLK_PERIOD_NS=8.75; note.abc_runtime_target_ps=8750;",
+  "build_config_hash": "0239fbb18cb6bc9f",
+  "clk_period_ns": "8.75",
+  "correctness_gate": "passed:2026-11-17T044447Z__kimi31pro__s03__sim.json",
+  "design_area_um2": "208461",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "ppa",
+  "label": "kimi31pro__s03_pin8p75",
+  "orfs_nickname": "d_ca05_cand_kimi31pro__s03_pin8p75",
+  "pdk": "sky130hd",
+  "power_w": "3.06e-02",
+  "status": "completed",
+  "submission": "experiments/openweights/d_ca05/kimi31pro__s03.sv",
+  "submission_sha256_16": "3e126bbb81d1a366",
+  "synth_area_um2": "127543.574400",
+  "task": "d_ca05_miss_handler_arb",
+  "timestamp_utc": "2026-11-17T22:45:55Z",
+  "wns_ns": "0.803704"
+}

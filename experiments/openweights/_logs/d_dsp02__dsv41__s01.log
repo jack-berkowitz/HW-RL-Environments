@@ -1,0 +1,10 @@
+task=d_dsp02_fp32_fma_ii1  dut=fp32_fma_ii1  sim=verilator  configs=1  candidates=1  extra_flags=9
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+dsv41__s01.sv              1/1       
+  compile: warnings=45 over 1 config(s) that built classes=ASCRANGE,LATCH,MULTIDRIVEN,TIMESCALEMOD,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_dsp02_fp32_fma_ii1/2026-11-17T044453Z__dsv41__s01__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

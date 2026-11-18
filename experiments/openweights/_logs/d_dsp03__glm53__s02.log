@@ -1,0 +1,10 @@
+task=d_dsp03_multifmt_fma  dut=fp_multifmt_fma  sim=verilator  configs=2  candidates=1  extra_flags=14
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+glm53__s02.sv              0/2       WIDTH=32 -> FAIL: vec 5 fmt=0 vec=0 rnd=0 lanes=1: result 34000000 expected 3f800001
+  compile: warnings=16 over 2 config(s) that built classes=ASCRANGE,WIDTHEXPAND
+  record: runs/d_dsp03_multifmt_fma/2026-11-17T044517Z__glm53__s02__sim.json
+--------------------------------------------------------------------------------
+0/1 candidates passed every config
+exit=1

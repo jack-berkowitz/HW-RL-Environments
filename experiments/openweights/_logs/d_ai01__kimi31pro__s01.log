@@ -1,0 +1,10 @@
+task=d_ai01_fp16_gemm_array  dut=fp16_gemm_array  sim=verilator  configs=2  candidates=1  extra_flags=20
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+kimi31pro__s01.sv          0/2       +HH=4 -> FAIL: 0 z mismatches, 13 status mismatches over 3034 scored cycles (H=4)
+  compile: warnings=30 over 2 config(s) that built classes=ASCRANGE,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_ai01_fp16_gemm_array/2026-11-17T044020Z__kimi31pro__s01__sim.json
+--------------------------------------------------------------------------------
+0/1 candidates passed every config
+exit=1

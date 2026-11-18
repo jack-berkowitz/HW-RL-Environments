@@ -1,0 +1,10 @@
+task=d_ca04_async_fifo_cdc  dut=async_fifo_cdc  sim=verilator  configs=18  candidates=1  extra_flags=6
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+dsv41__s03.sv              18/18     
+  compile: warnings=138 over 18 config(s) that built classes=MULTIDRIVEN,SELRANGE,TIMESCALEMOD,ZERODLY
+  record: runs/d_ca04_async_fifo_cdc/2026-11-17T044403Z__dsv41__s03__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

@@ -1,0 +1,10 @@
+task=d_nw01_axi4_xbar  dut=axi4_xbar  sim=verilator  configs=16  candidates=1  extra_flags=11
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+dsv41__s02.sv              16/16     
+  compile: warnings=2136 over 16 config(s) that built classes=LATCH,MULTIDRIVEN,TIMESCALEMOD,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_nw01_axi4_xbar/2026-11-17T044834Z__dsv41__s02__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

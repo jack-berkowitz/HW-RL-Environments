@@ -1,0 +1,10 @@
+task=d_ca04_async_fifo_cdc  dut=async_fifo_cdc  sim=verilator  configs=18  candidates=1  extra_flags=6
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+dsv41__s01.sv              0/18      DATA_W=8 LOG_DEPTH=2 SYNC_STAGES=2 -> FAIL: t=131811000 phase=capacity : accepted only 3 beats with the reader stopped; LOG_DEPTH=2 re
+  compile: warnings=138 over 18 config(s) that built classes=MULTIDRIVEN,SELRANGE,TIMESCALEMOD,ZERODLY
+  record: runs/d_ca04_async_fifo_cdc/2026-11-17T044354Z__dsv41__s01__sim.json
+--------------------------------------------------------------------------------
+0/1 candidates passed every config
+exit=1

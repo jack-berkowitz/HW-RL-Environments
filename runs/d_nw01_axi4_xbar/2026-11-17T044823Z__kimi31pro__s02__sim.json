@@ -1,0 +1,14 @@
+{
+  "build_error": "20 error(s); first: kimi31pro__s02.sv:10:12: error: use of undeclared identifier 'slv_req_t' ",
+  "build_status": "slang_rejected",
+  "git_sha": "1958ca7fcaaf6d27944d6a3b64e569ec5506fa72-dirty",
+  "kind": "sim",
+  "label": "kimi31pro__s02",
+  "simulator": "verilator",
+  "simulator_version": "Verilator 5.051 devel rev v5.050-124-ga3e7f5103 (mod)",
+  "submission": "experiments/openweights/d_nw01/kimi31pro__s02.sv",
+  "submission_sha256_16": "2dcf09290b7e4497",
+  "task": "d_nw01_axi4_xbar",
+  "task_text_hash": "0d484a57107f3502",
+  "timestamp_utc": "2026-11-17T04:48:23Z"
+}

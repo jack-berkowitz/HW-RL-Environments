@@ -1,0 +1,10 @@
+task=d_dsp02_fp32_fma_ii1  dut=fp32_fma_ii1  sim=verilator  configs=1  candidates=1  extra_flags=9
+================================================================================
+candidate                  configs   first failure
+--------------------------------------------------------------------------------
+kimi31pro__s02.sv          1/1       
+  compile: warnings=26 over 1 config(s) that built classes=ASCRANGE,MULTIDRIVEN,TIMESCALEMOD,WIDTHEXPAND,WIDTHTRUNC
+  record: runs/d_dsp02_fp32_fma_ii1/2026-11-17T044504Z__kimi31pro__s02__sim.json
+--------------------------------------------------------------------------------
+1/1 candidates passed every config
+exit=0

@@ -1,0 +1,25 @@
+task=v_nw04_ptp_clock  golden=ptp_time_base  tb=ptp_time_base_tb  duts=14  submissions=1
+================================================================================
+---- dsv41__s03 ----
+  DID NOT COMPILE (same on every DUT -- the submission does not build):
+      %Error: <submission>:159:36: Unsupported in C: Function has the same name as variable: 'period_fns'
+      %Error: <submission>:36:44: Found definition of 'period_fns' as a FUNC but expected a variable
+      %Error: <submission>:45:37: Found definition of 'period_fns' as a FUNC but expected a variable
+      %Error: <submission>:76:21: Found definition of 'period_fns' as a FUNC but expected a variable
+      %Error: Exiting due to 4 error(s)
+  => DID NOT COMPILE. This is NOT a verdict about the testbench's
+     checking: nothing ran, so nothing was measured. Line numbers above
+     refer to the submission.
+     Common causes seen here: a SystemVerilog RESERVED WORD used as an
+     identifier (context, do, ref, expect, this, final, table), and
+     transport corruption from the paste (see the note below).
+
+================================================================================
+0 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+MUTANT KILL RATE NOT MEASURED -- v_nw04_ptp_clock has no mutant set.
+This score says the testbench does not reject correct hardware and relies
+on nothing unpromised, and NOTHING about whether it finds bugs.
+exit=0

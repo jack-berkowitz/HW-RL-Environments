@@ -1,0 +1,22 @@
+task=v_ca07_clk_int_div  golden=clk_ratio_div  tb=clk_ratio_div_tb  duts=18  submissions=1
+================================================================================
+---- glm53__s03 ----
+  DID NOT COMPILE (same on every DUT -- the submission does not build):
+      %Error: <submission>:256:5: syntax error, unexpected else
+      %Error: Exiting due to 1 error(s)
+  => DID NOT COMPILE. This is NOT a verdict about the testbench's
+     checking: nothing ran, so nothing was measured. Line numbers above
+     refer to the submission.
+     Common causes seen here: a SystemVerilog RESERVED WORD used as an
+     identifier (context, do, ref, expect, this, final, table), and
+     transport corruption from the paste (see the note below).
+
+================================================================================
+0 of 1 submission(s) DISCRIMINATE: they pass the golden DUT
+and reject a DUT with every output tied to '1. One that does not is INVALID
+and is excluded from scoring, whatever else it reports.
+
+MUTANT KILL RATE NOT MEASURED -- v_ca07_clk_int_div has no mutant set.
+This score says the testbench does not reject correct hardware and relies
+on nothing unpromised, and NOTHING about whether it finds bugs.
+exit=0
