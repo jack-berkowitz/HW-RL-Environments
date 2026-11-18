@@ -38,13 +38,21 @@ Reference = newest completed `reference*` PPA record for the task at the same cl
 
 - **d_dsp03 / DeepSeek V4.1 Flash s01 (70.5 ns):** never finished synthesis. About 4.5 h in Yosys passes before ABC,
   then 4 h 53 min in ABC at 100% CPU (Yosys 9 GB RSS). Stopped by hand after 9.5 h. Other d_dsp03 builds
-  take 15–70 min. No record.
+  take 15–70 min. No record. Not retried: the answer computes each FMA exactly in 1024-bit-wide
+  datapaths (two variable shifters, add/subtract, compare, leading-one search and rounding shifts, all 1024
+  bits wide), and at WIDTH=64 that is replicated in ~10 lanes (4 FP16 + 4 BF16 + 2 FP32). It passes
+  simulation, but it does not synthesize in practical time. DeepSeek has no other passing d_dsp03 sample.
 - **d_ai01 / Kimi K3.1 Pro s03 (16.75 ns):** OpenROAD detailed routing reached 14.7 GB RSS (PC has 15.5 GB), and
   the build runner was killed for memory pressure about 1 h 55 min in. No record.
 
-Both are to be retried.
+d_ai01 was retried once with the container pinned to 6 CPUs and capped at 11 GB
+(`DOCKER_PLATFORM_ARGS="--platform linux/amd64 --cpuset-cpus=0-5 --memory=11g --memory-swap=11g"`). The kernel OOM-killed
+OpenROAD at the cap (peak 11.49 GB), 10% into the first detailed-routing pass, 1 h 36 min in: memory was already 6.6 GB
+before routing began. Routing this answer needs more memory than the PC (15.5 GB) can give it, so it is left
+unbuilt here and can be built on the Mac. No record.
 
 ## Logs
 
 - `_logs/ppa_20261117_002041.log`: builds 1–16 of `ppa_plan.sh` (build 16 interrupted).
 - `_logs/ppa_20261117_155832.log`: the remaining 9 Kimi builds (plan lines 17–25), run after the interruption.
+- `_logs/ppa_20261117_202946_retry_d_ai01.log`: the d_ai01 retry (OOM-killed).
